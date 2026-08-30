@@ -9,6 +9,7 @@
 #include "imgui.h"
 #include <glm/gtc/quaternion.hpp>
 
+#include "mesh_source_exclusion.h"
 #include "core/containers/arena_array.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
@@ -16,6 +17,7 @@
 #include "engine/logging/engine_log.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
+#include "game/editor/editor_materials.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 #include "game/components/render/static_mesh_component.h"
@@ -65,7 +67,7 @@ void StaticMeshPrimitiveComponent::OnDestroy(entt::registry& registry, entt::ent
 
 bool StaticMeshPrimitiveComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<StaticMeshComponent>(entity);
+    return MeshSources::NoneOtherThan<StaticMeshPrimitiveComponent>(registry, entity);
 }
 
 void StaticMeshPrimitiveComponent::Serialize(const StaticMeshPrimitiveComponent& comp, Engine::TextWriter& w)
@@ -192,15 +194,14 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         Engine::MaterialID pendingMat{};
         bool changed = false;
         bool clear = false;
-        if (ImGui::BeginCombo("Material", currentLabel)) {
+        if (ImGui::BeginCombo("Material", currentLabel, ImGuiComboFlags_HeightLarge)) {
             if (ImGui::Selectable("(original)", !component.materialOverride.IsValid())) {
                 if (component.materialOverride.IsValid()) { clear = true; }
             }
-            for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                if (mat.bSynthesized) { continue; }
-                if (ImGui::Selectable(mat.name.c_str(), matId == component.materialOverride)) {
-                    if (matId != component.materialOverride) { pendingMat = matId; changed = true; }
-                }
+            const Engine::MaterialID picked = Game::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.materialOverride);
+            if (picked.IsValid() && picked != component.materialOverride) {
+                pendingMat = picked;
+                changed = true;
             }
             ImGui::EndCombo();
         }

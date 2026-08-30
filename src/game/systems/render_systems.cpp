@@ -589,8 +589,10 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
         Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
 
+        const auto* overrides = state->registry.try_get<Component::StaticMeshOverridesComponent>(entity);
+
         auto included = [&](uint32_t ordinal) -> bool {
-            return !meshComponent.primitiveBlacklist.Contains(ordinal);
+            return !overrides || !overrides->primitiveBlacklist.Contains(ordinal);
         };
 
         uint32_t totalPrimitives = 0;
@@ -670,7 +672,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                     matID = materialManager->GetDefaultMaterialID();
                 }
                 else {
-                    Engine::MaterialID materialOverride = meshComponent.GetMaterialOverride(static_cast<uint32_t>(primitive.materialIndex));
+                    Engine::MaterialID materialOverride = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(primitive.materialIndex)) : Engine::MaterialID::INVALID;
                     if (materialOverride.IsValid()) {
                         if (materialManager->DoesMutableMaterialExist(materialOverride)) {
                             matID = materialOverride;

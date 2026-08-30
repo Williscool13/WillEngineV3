@@ -36,7 +36,7 @@ bool ContainsNameToken(const char* s);
  * separator, so `Crate_S` -> `Crate_0` and `Enemy_R(0,5)` -> `Enemy_3`. `_S` only counts when the S is standalone (followed
  * by end or a non-letter), so ordinary names like `weapon_Sword` are untouched. Result is written into dst (truncated to capacity).
  */
-void ExpandNameTemplate(Core::InlineString<256>& dst, const char* templ, int index, std::mt19937_64& rng);
+void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, std::mt19937_64& rng);
 
 /**
  * Evaluates a transform-field expression for one entity. Grammar: field := term [op term], op := + - * /,

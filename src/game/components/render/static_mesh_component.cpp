@@ -9,6 +9,8 @@
 #include "imgui.h"
 #include <glm/gtc/type_ptr.hpp>
 
+#include "mesh_source_exclusion.h"
+
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -54,7 +56,15 @@ void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, en
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
-Engine::MaterialID StaticMeshComponent::GetMaterialOverride(uint32_t slot) const
+void PruneStaticMeshOverrides(entt::registry& registry, entt::entity entity)
+{
+    const auto* overrides = registry.try_get<StaticMeshOverridesComponent>(entity);
+    if (overrides && overrides->materialOverrides.IsEmpty() && overrides->primitiveBlacklist.IsEmpty()) {
+        registry.remove<StaticMeshOverridesComponent>(entity);
+    }
+}
+
+Engine::MaterialID StaticMeshOverridesComponent::GetMaterialOverride(uint32_t slot) const
 {
     for (const auto& ov : materialOverrides) {
         if (ov.slot == slot) { return ov.id; }
@@ -62,7 +72,7 @@ Engine::MaterialID StaticMeshComponent::GetMaterialOverride(uint32_t slot) const
     return Engine::MaterialID::INVALID;
 }
 
-void StaticMeshComponent::SetMaterialOverride(uint32_t slot, Engine::MaterialID id)
+void StaticMeshOverridesComponent::SetMaterialOverride(uint32_t slot, Engine::MaterialID id)
 {
     for (size_t i = 0; i < materialOverrides.Size(); ++i) {
         if (materialOverrides[i].slot == slot) {
@@ -90,6 +100,7 @@ void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entit
 {
     UnloadStaticMesh(registry, entity);
     registry.remove<RenderTransformComponent>(entity);
+    registry.remove<StaticMeshOverridesComponent>(entity);
 }
 }
 
@@ -98,14 +109,35 @@ namespace Game
 {
 bool Component::StaticMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<ProceduralMeshComponent, SplineMeshComponent, Text3DComponent>(entity);
+    return MeshSources::NoneOtherThan<StaticMeshComponent>(registry, entity);
 }
 
 void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, Engine::TextWriter& w)
 {
     static const StaticMeshComponent DEF{};
     w.Key("modelId", comp.modelId.id);
+    w.KeyOpt("shadingShaderOverride", comp.shadingShaderOverride.id, uint64_t{0});
+    w.KeyOpt("lightingShaderOverride", comp.lightingShaderOverride.id, uint64_t{0});
+    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
+    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
+}
 
+void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const Engine::TextReader& r)
+{
+    comp.modelId = Engine::ModelID(r.U64("modelId", comp.modelId.id));
+    comp.shadingShaderOverride = StringID(r.U64("shadingShaderOverride", comp.shadingShaderOverride.id));
+    comp.lightingShaderOverride = StringID(r.U64("lightingShaderOverride", comp.lightingShaderOverride.id));
+    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
+    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
+}
+
+bool Component::StaticMeshOverridesComponent::CanAdd(const entt::registry& registry, entt::entity entity)
+{
+    return registry.all_of<StaticMeshComponent>(entity);
+}
+
+void Component::StaticMeshOverridesComponent::Serialize(const StaticMeshOverridesComponent& comp, Engine::TextWriter& w)
+{
     if (!comp.materialOverrides.IsEmpty()) {
         w.Count("materialOverrides", static_cast<uint32_t>(comp.materialOverrides.Size()));
         for (const auto& ov : comp.materialOverrides) {
@@ -118,26 +150,16 @@ void Component::StaticMeshComponent::Serialize(const StaticMeshComponent& comp, 
     if (!comp.primitiveBlacklist.IsEmpty()) {
         w.KeyUInts("primitiveBlacklist", comp.primitiveBlacklist.Data(), comp.primitiveBlacklist.Size());
     }
-    w.KeyOpt("shadingShaderOverride", comp.shadingShaderOverride.id, uint64_t{0});
-    w.KeyOpt("lightingShaderOverride", comp.lightingShaderOverride.id, uint64_t{0});
-    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
-    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 }
 
-void Component::StaticMeshComponent::Deserialize(StaticMeshComponent& comp, const Engine::TextReader& r)
+void Component::StaticMeshOverridesComponent::Deserialize(StaticMeshOverridesComponent& comp, const Engine::TextReader& r)
 {
-    comp.modelId = Engine::ModelID(r.U64("modelId", comp.modelId.id));
-
     r.ForEachRecord("materialOverrides", [&](const Engine::TextReader& m) {
         comp.SetMaterialOverride(m.UInt("slot"), Engine::MaterialID(m.U64("id")));
     });
     r.ForEachUInt("primitiveBlacklist", [&](uint32_t ord) {
         if (comp.primitiveBlacklist.Size() < MaxBlacklist) { comp.primitiveBlacklist.PushBack(ord); }
     });
-    comp.shadingShaderOverride = StringID(r.U64("shadingShaderOverride", comp.shadingShaderOverride.id));
-    comp.lightingShaderOverride = StringID(r.U64("lightingShaderOverride", comp.lightingShaderOverride.id));
-    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
-    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
 }
 
 Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
@@ -244,11 +266,14 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         const uint32_t primCount = runtime->range.count;
         ImGui::Text("Primitive Count: %u", primCount);
 
-        if (!component.primitiveBlacklist.IsEmpty()) {
-            ImGui::Text("Split off: %u", static_cast<uint32_t>(component.primitiveBlacklist.Size()));
+        auto* overrides = registry.try_get<StaticMeshOverridesComponent>(entity);
+
+        if (overrides && !overrides->primitiveBlacklist.IsEmpty()) {
+            ImGui::Text("Split off: %u", static_cast<uint32_t>(overrides->primitiveBlacklist.Size()));
             ImGui::SameLine();
             if (ImGui::SmallButton("Restore##hidden")) {
-                component.primitiveBlacklist.Clear();
+                overrides->primitiveBlacklist.Clear();
+                PruneStaticMeshOverrides(registry, entity);
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                 state->assetLoad.bPendingModelResolve |= true;
                 return {.bRequestRemoval = remove, .bModified = true};
@@ -310,7 +335,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 for (const auto& slot : slots) {
                     ImGui::PushID(slot.origIdx);
 
-                    Engine::MaterialID current = component.GetMaterialOverride(static_cast<uint32_t>(slot.origIdx));
+                    Engine::MaterialID current = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(slot.origIdx)) : Engine::MaterialID::INVALID;
                     const char* currentLabel = "(original)";
                     if (current.IsValid()) {
                         if (const Engine::Material* m = ctx->materialManager->GetMaterial(current)) {
@@ -340,7 +365,8 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 }
 
                 if (pendingChangeIdx >= 0) {
-                    component.SetMaterialOverride(static_cast<uint32_t>(pendingChangeIdx), pendingChangeMat);
+                    registry.get_or_emplace<StaticMeshOverridesComponent>(entity).SetMaterialOverride(static_cast<uint32_t>(pendingChangeIdx), pendingChangeMat);
+                    PruneStaticMeshOverrides(registry, entity);
                     registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
                     state->assetLoad.bPendingModelResolve |= true;
                     modified = true;

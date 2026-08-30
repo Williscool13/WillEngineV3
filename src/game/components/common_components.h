@@ -21,7 +21,7 @@ struct NameComponent
 {
     static constexpr const char* COMPONENT_NAME = "NameComponent";
 
-    Core::InlineString<256> name;
+    Core::InlineString<128> name;
 
     static void Serialize(const NameComponent& comp, Engine::TextWriter& w);
     static void Deserialize(NameComponent& comp, const Engine::TextReader& r);

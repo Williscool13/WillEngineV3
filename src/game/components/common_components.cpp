@@ -74,11 +74,11 @@ Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFa
 
     bool modified = false;
     if (open) {
-        char buf[256];
+        char buf[128];
         strncpy_s(buf, component.name.c_str(), sizeof(buf) - 1);
         buf[sizeof(buf) - 1] = '\0';
         if (ImGui::InputText("Name", buf, sizeof(buf))) {
-            component.name = Core::InlineString<256>(buf);
+            component.name = Core::InlineString<128>(buf);
             modified = true;
         }
     }

@@ -533,7 +533,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
                 if (committed || ImGui::IsItemDeactivated()) {
                     auto& nc = state->registry.get_or_emplace<Component::NameComponent>(e.entity);
                     if (strcmp(nc.name.c_str(), state->editor.renameBuffer) != 0) {
-                        nc.name = Core::InlineString<256>(state->editor.renameBuffer);
+                        nc.name = Core::InlineString<128>(state->editor.renameBuffer);
                         MarkSceneModified(state, state->scene.currentSceneId);
                     }
                     state->editor.renamingEntity = entt::null;

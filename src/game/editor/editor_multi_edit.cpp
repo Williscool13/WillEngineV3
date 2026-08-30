@@ -181,7 +181,7 @@ bool ContainsNameToken(const char* s)
     return false;
 }
 
-void ExpandNameTemplate(Core::InlineString<256>& dst, const char* templ, int index, std::mt19937_64& rng)
+void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, std::mt19937_64& rng)
 {
     dst.Clear();
     const char* p = templ;

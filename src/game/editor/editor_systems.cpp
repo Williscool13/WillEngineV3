@@ -104,7 +104,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         if (allHaveName && firstName) {
-            char buf[256];
+            char buf[128];
             if (allSame) {
                 strncpy_s(buf, firstName, sizeof(buf) - 1);
             }
@@ -122,7 +122,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
                         MultiEdit::ExpandNameTemplate(name, buf, index, state->rng);
                     }
                     else {
-                        name = Core::InlineString<256>(buf);
+                        name = Core::InlineString<128>(buf);
                     }
                     ++index;
                 }

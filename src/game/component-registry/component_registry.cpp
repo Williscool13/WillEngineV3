@@ -47,6 +47,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::RenderFlagsComponent>(componentRegistry, true, true);
     RegisterComponent<Component::FreeCameraComponent>(componentRegistry, false, false);
     RegisterComponent<Component::StaticMeshComponent>(componentRegistry, false, false);
+    RegisterComponent<Component::StaticMeshOverridesComponent>(componentRegistry, true, true);
     RegisterComponent<Component::StaticMeshPrimitiveComponent>(componentRegistry, false, false);
     RegisterComponent<Component::TextComponent>(componentRegistry, false, false);
     RegisterComponent<Component::AreaLightComponent>(componentRegistry, false, false);

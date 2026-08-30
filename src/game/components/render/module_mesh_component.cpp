@@ -6,6 +6,7 @@
 
 #include "imgui.h"
 
+#include "mesh_source_exclusion.h"
 #include "procedural_mesh_component.h"
 #include "spline_mesh_component.h"
 #include "static_mesh_component.h"
@@ -15,6 +16,7 @@
 #include "engine/engine_api.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
+#include "game/editor/editor_materials.h"
 #include "game/components/core_components.h"
 
 namespace Game::Component
@@ -49,7 +51,7 @@ namespace Game
 {
 bool Component::ModuleMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent, Component::SplineMeshComponent, Component::Text3DComponent>(entity);
+    return Component::MeshSources::NoneOtherThan<Component::ModuleMeshComponent>(registry, entity);
 }
 
 void Component::ModuleMeshComponent::Serialize(const ModuleMeshComponent& comp, Engine::TextWriter& w)
@@ -145,7 +147,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                 }
             }
             Core::InlineString<32> label = Core::InlineString<32>::Format("Slot %d", slot);
-            if (ImGui::BeginCombo(label.c_str(), currentLabel)) {
+            if (ImGui::BeginCombo(label.c_str(), currentLabel, ImGuiComboFlags_HeightLarge)) {
                 if (ImGui::Selectable("(default)", !component.slotMaterials[slot].IsValid())) {
                     if (component.slotMaterials[slot].IsValid()) {
                         component.slotMaterials[slot] = Engine::MaterialID{};
@@ -154,16 +156,12 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                         modified = true;
                     }
                 }
-                for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                    if (mat.bSynthesized) { continue; }
-                    if (ImGui::Selectable(mat.name.c_str(), matId == component.slotMaterials[slot])) {
-                        if (matId != component.slotMaterials[slot]) {
-                            component.slotMaterials[slot] = matId;
-                            registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-                            state->assetLoad.bPendingModelResolve = true;
-                            modified = true;
-                        }
-                    }
+                const Engine::MaterialID picked = Game::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.slotMaterials[slot]);
+                if (picked.IsValid() && picked != component.slotMaterials[slot]) {
+                    component.slotMaterials[slot] = picked;
+                    registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
+                    state->assetLoad.bPendingModelResolve = true;
+                    modified = true;
                 }
                 ImGui::EndCombo();
             }

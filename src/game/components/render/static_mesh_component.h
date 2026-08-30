@@ -22,21 +22,11 @@ struct StaticMeshComponent
 {
     static constexpr const char* COMPONENT_NAME = "StaticMeshComponent";
 
-    static constexpr size_t MaxMaterialOverrides = 32;
-    static constexpr size_t MaxBlacklist = 64;
-
-    struct MaterialOverride { uint32_t slot; Engine::MaterialID id; };
-
     Engine::ModelID modelId{};
-    Core::InlineVector<MaterialOverride, MaxMaterialOverrides> materialOverrides{};
-    Core::InlineVector<uint32_t, MaxBlacklist> primitiveBlacklist{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Vec3 renderOffset{0.0f};
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
-
-    [[nodiscard]] Engine::MaterialID GetMaterialOverride(uint32_t slot) const;
-    void SetMaterialOverride(uint32_t slot, Engine::MaterialID id);
 
     static void Serialize(const StaticMeshComponent& comp, Engine::TextWriter& w);
     static void Deserialize(StaticMeshComponent& comp, const Engine::TextReader& r);
@@ -44,6 +34,29 @@ struct StaticMeshComponent
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+};
+
+/**
+ * Per-primitive deviations from a StaticMeshComponent's model defaults.
+ */
+struct StaticMeshOverridesComponent
+{
+    static constexpr const char* COMPONENT_NAME = "StaticMeshOverridesComponent";
+
+    static constexpr size_t MaxMaterialOverrides = 32;
+    static constexpr size_t MaxBlacklist = 64;
+
+    struct MaterialOverride { uint32_t slot; Engine::MaterialID id; };
+
+    Core::InlineVector<MaterialOverride, MaxMaterialOverrides> materialOverrides{};
+    Core::InlineVector<uint32_t, MaxBlacklist> primitiveBlacklist{};
+
+    [[nodiscard]] Engine::MaterialID GetMaterialOverride(uint32_t slot) const;
+    void SetMaterialOverride(uint32_t slot, Engine::MaterialID id);
+
+    static void Serialize(const StaticMeshOverridesComponent& comp, Engine::TextWriter& w);
+    static void Deserialize(StaticMeshOverridesComponent& comp, const Engine::TextReader& r);
+    static bool CanAdd(const entt::registry& registry, entt::entity entity);
 };
 
 /** Load requested; StartStaticMeshLoads kicks the model load (when not frozen). */
@@ -56,6 +69,8 @@ struct StaticMeshLoadingTag
 
 void UnloadStaticMesh(entt::registry& registry, entt::entity entity);
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+
+void PruneStaticMeshOverrides(entt::registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_STATIC_MESH_COMPONENT_H

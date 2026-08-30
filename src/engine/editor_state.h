@@ -106,7 +106,7 @@ struct EditorState
 
     // Inline hierarchy rename (F2)
     entt::entity renamingEntity{entt::null};
-    char renameBuffer[256]{};
+    char renameBuffer[128]{};
     bool renameRequestFocus{false};
     bool bExposeAllComponents{false};
 

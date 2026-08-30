@@ -471,7 +471,7 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
     entt::entity entity = CreateSceneEntity(state);
 
     if (cached->name.Size() > 0) {
-        registry.get<Component::NameComponent>(entity).name = Core::InlineString<256>(cached->name.c_str());
+        registry.get<Component::NameComponent>(entity).name = cached->name;
     }
 
     auto& transform = registry.get<Component::TransformComponent>(entity);
@@ -492,7 +492,7 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
     auto& parentComp = registry.get<Component::StaticMeshComponent>(parent);
 
     entt::entity child = CreateSceneEntity(state);
-    registry.get<Component::NameComponent>(child).name = Core::InlineString<256>::Format("Primitive %u", primitiveOrdinal);
+    registry.get<Component::NameComponent>(child).name = Core::InlineString<128>::Format("Primitive %u", primitiveOrdinal);
 
     glm::vec3 scale, translation, skew;
     glm::quat rotation;
@@ -515,7 +515,10 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
         registry.emplace_or_replace<Component::RenderFlagsComponent>(child, *parentFlags);
     }
 
-    if (!parentComp.primitiveBlacklist.Contains(primitiveOrdinal)) { parentComp.primitiveBlacklist.PushBack(primitiveOrdinal); }
+    auto& parentOverrides = registry.get_or_emplace<Component::StaticMeshOverridesComponent>(parent);
+    if (!parentOverrides.primitiveBlacklist.Contains(primitiveOrdinal) && parentOverrides.primitiveBlacklist.Size() < Component::StaticMeshOverridesComponent::MaxBlacklist) {
+        parentOverrides.primitiveBlacklist.PushBack(primitiveOrdinal);
+    }
     registry.emplace_or_replace<Component::StaticMeshLoadingTag>(parent);
     state->assetLoad.bPendingModelResolve = true;
 
@@ -535,7 +538,7 @@ uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId)
     return maxSortOrder;
 }
 
-Core::InlineString<256> GenerateIncrementedName(entt::registry& registry, StringID sceneId, const Core::InlineString<256>& sourceName)
+Core::InlineString<128> GenerateIncrementedName(entt::registry& registry, StringID sceneId, const Core::InlineString<128>& sourceName)
 {
     const std::string_view src = sourceName.View();
 
@@ -570,7 +573,7 @@ Core::InlineString<256> GenerateIncrementedName(entt::registry& registry, String
         highest = std::max(highest, index);
     }
 
-    return Core::InlineString<256>::Format("%.*s%u", static_cast<int>(base.size()), base.data(), highest + 1);
+    return Core::InlineString<128>::Format("%.*s%u", static_cast<int>(base.size()), base.data(), highest + 1);
 }
 
 entt::entity CreateSceneEntity(Engine::EngineState* state)
@@ -583,7 +586,7 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
     state->registry.emplace<Component::EntityFolderComponent>(newEntity);
     static int32_t runningNameTally = 0;
     auto newName = fmt::format("New Entity {}", runningNameTally++);
-    state->registry.emplace<Component::NameComponent>(newEntity, Core::InlineString<256>(newName.c_str()));
+    state->registry.emplace<Component::NameComponent>(newEntity, Core::InlineString<128>(newName.c_str()));
     LOG_TRACE(Game, "Created new entity {}", entt::to_integral(newEntity));
     return newEntity;
 }
@@ -865,7 +868,10 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    state->editor.pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes); {
+#if WILL_EDITOR
+    state->editor.pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
+#endif
+    {
         auto view = state->registry.view<Component::PrefabInstanceComponent>();
         if (view.size() > 0) {
             auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size());
@@ -907,6 +913,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
         playerController.Shutdown(ctx->physicsSystem);
     }
 
+#if WILL_EDITOR
     Core::InlineVector<StringID, 8> scenesToUnload;
     for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);
@@ -914,6 +921,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
     UnloadScenes(state, scenesToUnload);
     DeserializeAll(state, state->editor.pieSnapshot);
     state->editor.pieSnapshot = {};
+#endif
 
     state->inputContext = Engine::InputContext::Editor;
     ctx->setCursorHiddenFn(false); {

@@ -8,6 +8,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "imgui.h"
 
+#include "mesh_source_exclusion.h"
 #include "static_mesh_component.h"
 #include "spline_mesh_component.h"
 #include "procedural_mesh_component.h"
@@ -17,6 +18,7 @@
 #include "engine/engine_api.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
+#include "game/editor/editor_materials.h"
 #include "game/component-registry/component_editor.h"
 #include "game/components/core_components.h"
 #include "game/components/render_components.h"
@@ -76,7 +78,7 @@ namespace Game
 {
 bool Component::Text3DComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<Component::StaticMeshComponent, Component::SplineMeshComponent, Component::ProceduralMeshComponent>(entity);
+    return Component::MeshSources::NoneOtherThan<Component::Text3DComponent>(registry, entity);
 }
 
 void Component::Text3DComponent::Serialize(const Text3DComponent& comp, Engine::TextWriter& w)
@@ -233,21 +235,19 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                 currentLabel = m->name.c_str();
             }
         }
-        if (ImGui::BeginCombo("Material", currentLabel)) {
+        if (ImGui::BeginCombo("Material", currentLabel, ImGuiComboFlags_HeightLarge)) {
             if (ImGui::Selectable("(none)", !comp.material.IsValid()) && comp.material.IsValid()) {
                 comp.material = Engine::MaterialID{};
                 registry.emplace_or_replace<Text3DLoadingTag>(entity);
                 state->assetLoad.bPendingModelResolve |= true;
                 modified = true;
             }
-            for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                if (mat.bSynthesized) { continue; }
-                if (ImGui::Selectable(mat.name.c_str(), matId == comp.material) && matId != comp.material) {
-                    comp.material = matId;
-                    registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                    state->assetLoad.bPendingModelResolve |= true;
-                    modified = true;
-                }
+            const Engine::MaterialID picked = Game::DrawMaterialSelector(ctx, state, state->editor.materialSelector, comp.material);
+            if (picked.IsValid() && picked != comp.material) {
+                comp.material = picked;
+                registry.emplace_or_replace<Text3DLoadingTag>(entity);
+                state->assetLoad.bPendingModelResolve |= true;
+                modified = true;
             }
             ImGui::EndCombo();
         }

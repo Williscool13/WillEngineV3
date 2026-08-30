@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "ImGuizmo.h"
 
+#include "mesh_source_exclusion.h"
 #include "static_mesh_component.h"
 #include "text3d_component.h"
 #include "engine/include/engine_context.h"
@@ -18,6 +19,7 @@
 #include "engine/spline/spline.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
+#include "game/editor/editor_materials.h"
 #include "game/component-registry/editor_gizmo_helpers.h"
 #include "game/components/component_types.h"
 #include "game/components/core_components.h"
@@ -83,7 +85,7 @@ namespace Game
 {
 bool Component::SplineMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
 {
-    return !registry.any_of<Component::StaticMeshComponent, Component::ProceduralMeshComponent, Component::Text3DComponent>(entity);
+    return Component::MeshSources::NoneOtherThan<Component::SplineMeshComponent>(registry, entity);
 }
 
 void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, Engine::TextWriter& w)
@@ -543,7 +545,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     currentLabel = m->name.c_str();
                 }
             }
-            if (ImGui::BeginCombo("Material##spline", currentLabel)) {
+            if (ImGui::BeginCombo("Material##spline", currentLabel, ImGuiComboFlags_HeightLarge)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     if (component.material.IsValid()) {
                         component.material = Engine::MaterialID{};
@@ -552,16 +554,12 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                         modified = true;
                     }
                 }
-                for (const auto& [matId, mat] : ctx->materialManager->GetMaterials()) {
-                    if (mat.bSynthesized) { continue; }
-                    if (ImGui::Selectable(mat.name.c_str(), matId == component.material)) {
-                        if (matId != component.material) {
-                            component.material = matId;
-                            registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                            state->assetLoad.bPendingModelResolve = true;
-                            modified = true;
-                        }
-                    }
+                const Engine::MaterialID picked = Game::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.material);
+                if (picked.IsValid() && picked != component.material) {
+                    component.material = picked;
+                    registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
+                    state->assetLoad.bPendingModelResolve = true;
+                    modified = true;
                 }
                 ImGui::EndCombo();
             }
