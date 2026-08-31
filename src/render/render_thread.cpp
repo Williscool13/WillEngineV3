@@ -1688,28 +1688,23 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     const uint32_t totalLightLimit = triLightCount > 0 ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightCount : analyticLightCount;
     const size_t emissiveGroupCount = glm::min(viewFamily.emissiveTriWork.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
 
-    auto* lightData = static_cast<LightData*>(renderGraph->OpenHostBuffer(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE));
-    //
+    const HostBufferWrite lightDst = renderGraph->OpenHostBufferMirrored(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE);
     {
         ZoneScopedN("Lights");
         const glm::vec3& dir = viewFamily.directionalLight.direction;
-        lightData->directionalLight.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
-        lightData->directionalLight.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
-        lightData->directionalLight.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
-        lightData->directionalLight._pad1 = 0.0f;
-        lightData->directionalLight._pad2 = 0.0f;
-        lightData->analyticLightCount = static_cast<int32_t>(viewFamily.analyticLightCount);
-        lightData->_pad1 = 0.0f;
+        DirectionalLightData directional{};
+        directional.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
+        directional.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
+        directional.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
+        lightDst.Write(offsetof(LightData, directionalLight), &directional, sizeof(directional));
 
-
-        // lightData is write-combined upload memory: never read through it (loop bounds included), only stream writes
-        lightData->lightCount = static_cast<int32_t>(totalLightLimit);
-        lightData->emissiveGroupCount = static_cast<int32_t>(emissiveGroupCount);
+        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.analyticLightCount), static_cast<int32_t>(emissiveGroupCount), 0};
+        lightDst.Write(offsetof(LightData, lightCount), counts, sizeof(counts));
 
         const LightInfo* payload = viewFamily.lightPayload.Data();
         size_t cursor = 0;
         for (const Core::DirtyRun& run : viewFamily.lightRuns) {
-            memcpy(lightData->lights + run.offset, payload + cursor, run.count * sizeof(LightInfo));
+            lightDst.Write(offsetof(LightData, lights) + run.offset * sizeof(LightInfo), payload + cursor, run.count * sizeof(LightInfo));
             cursor += run.count;
         }
     }
