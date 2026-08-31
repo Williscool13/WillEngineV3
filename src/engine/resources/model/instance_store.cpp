@@ -76,6 +76,21 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
     return range;
 }
 
+void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range)
+{
+    if (!range.IsValid()) { return; }
+    for (uint32_t i = 0; i < range.count; ++i) {
+        InstanceSource& instance = instances_[range.offset + i];
+        materialManager->ReleaseMaterial(instance.materialID);
+        if (instance.triLightRange.IsValid()) {
+            triLightStore->Release(range.offset + i);
+            instance.triLightRange = {};
+        }
+    }
+    Free(range);
+    range = {};
+}
+
 void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill)
 {
     materialManager->AcquireMaterial(fill.material);
@@ -163,18 +178,5 @@ void InstanceStore::SetRenderState(Range range, bool bVisible, uint32_t flags, u
     }
 }
 
-void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range)
-{
-    if (!range.IsValid()) { return; }
-    for (uint32_t i = 0; i < range.count; ++i) {
-        InstanceSource& instance = instances_[range.offset + i];
-        materialManager->ReleaseMaterial(instance.materialID);
-        if (instance.triLightRange.IsValid()) {
-            triLightStore->Release(range.offset + i);
-            instance.triLightRange = {};
-        }
-    }
-    Free(range);
-    range = {};
-}
+
 } // Engine

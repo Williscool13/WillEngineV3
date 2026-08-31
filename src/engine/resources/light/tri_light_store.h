@@ -17,7 +17,8 @@ namespace Engine
 struct StaticModel;
 
 /**
- * Stable range space for emissive-triangle lights, and the registry of who holds one. A range covers one emissive primitive's full triangle set, so base + PrimitiveIndex() resolves a ray hit to its own light, and the GPU light index is MAX_ANALYTIC_LIGHTS + range offset.
+ * Stable range space for emissive-triangle lights, and the registry of who holds one.
+ * A range covers one emissive primitive's full triangle set, so base + PrimitiveIndex() resolves a ray hit to its own light, and the GPU light index is MAX_ANALYTIC_LIGHTS + range offset.
  * Two budgets, both enforced here: MAX_EMISSIVE_GROUPS reservations (one GPU work item each) and the shared triangle capacity.
  */
 class TriLightStore

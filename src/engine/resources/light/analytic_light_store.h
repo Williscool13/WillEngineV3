@@ -16,7 +16,9 @@
 namespace Engine
 {
 /**
- * Stable slot space for analytic (area/sphere) lights over [0, MAX_ANALYTIC_LIGHTS), plus the LightInfo payload per slot. The slot is the GPU light index and a dead slot holds a zeroed LightInfo. Owners write the payload in place on dirty; consumers snapshot [0, watermark).
+ * Stable slot space for analytic (area/sphere) lights over [0, MAX_ANALYTIC_LIGHTS), plus the LightInfo payload per slot.
+ * The slot is the GPU light index and a dead slot holds a zeroed LightInfo.
+ * Owners write the payload in place on dirty; consumers snapshot [0, watermark).
  * Freed slots are quarantined for REUSE_DELAY_FRAMES ticks so carried ReSTIR/ReGIR reservoirs (history depth <= 2 with checkerboarding) re-evaluate them as dead instead of aliasing a newly spawned light. Not thread-safe.
  */
 class AnalyticLightStore

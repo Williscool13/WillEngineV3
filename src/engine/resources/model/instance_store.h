@@ -70,38 +70,26 @@ class InstanceStore
 {
 public:
     using Range = Core::RangeAllocator::Range;
-
-    /** Unallocated, freed and hidden slots. */
     static constexpr Instance DEAD_INSTANCE{.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
 
     void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
     Range Allocate(uint32_t count);
 
-    /** Range over model mesh[0]'s primitives with a uniform material (acquired per entry), identity transforms, a shared ModelStore slot, and a tri-light range per emissive primitive. Invalid range on an empty model or full store. Null triLightStore suppresses tri-light allocation (light proxy surfaces resolve BRDF hits via their analytic light). */
     Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
 
-    /** The single writer for InstanceSource entries: acquires the material, stamps the stable material index, and allocates the primitive's tri-light range (skipped when triLightStore is null). */
-    void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
-
-    /** Releases each entry's material ref and tri-light range, frees the range, and invalidates it. No-op on an invalid range. */
     void ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range);
 
-    /** Repoints a filled slot at another material. Leaves the material refs to the caller, unlike FillEntry. */
+    // Writes
+    void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
+
     void SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material);
 
     void SetLightIndex(uint32_t slot, uint32_t lightIndex);
 
-    /** Per-frame render state for a whole entity range. Hidden slots project to DEAD_INSTANCE and keep their source record for the next reveal. */
     void SetRenderState(Range range, bool bVisible, uint32_t flags, uint64_t stableId);
 
-    const InstanceSource* Get(Range range) const { return range.IsValid() ? &instances_[range.offset] : nullptr; }
-
     const InstanceSource& operator[](uint32_t i) const { return instances_[i]; }
-
-    const InstanceSource* Data() const { return instances_.Data(); }
-
-    const Instance& GetInstance(uint32_t i) const { return gpuInstances_[i]; }
 
     const Instance* Instances() const { return gpuInstances_.Data(); }
 

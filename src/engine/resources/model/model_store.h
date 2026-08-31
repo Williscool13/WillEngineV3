@@ -17,7 +17,9 @@ namespace Engine
 inline constexpr uint32_t MAX_MODEL_SLOTS = 1024 * 1024;
 
 /**
- * Persistent store of model matrices in a stable slot space, independent of the instance slot space. A RangeAllocator hands out contiguous runs (one slot per unique source node for meshes; anything may hold slots with no instance attached). Owners write matrices through SetModel and consumers upload only the slots that changed. Not thread-safe.
+ * Persistent store of model matrices in a stable slot space, independent of the instance slot space.
+ * A RangeAllocator hands out contiguous runs (one slot per unique source node for meshes; anything may hold slots with no instance attached).
+ * Owners write matrices through SetModel and consumers upload only the slots that changed. Not thread-safe.
  */
 class ModelStore
 {
@@ -26,10 +28,8 @@ public:
 
     void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
-    /** Invalid range (and an error log) when full. Slots come back zeroed, which collapses their geometry until an owner writes them. */
     Range Allocate(uint32_t count);
 
-    /** Zeroes, frees and invalidates. No-op on an invalid range. */
     void Free(Range& range);
 
     void SetModel(uint32_t slot, const Model& model)
