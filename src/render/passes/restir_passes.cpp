@@ -52,7 +52,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const bool bAntilag = bTemporalReuse && RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
     const bool bShadowVis = bAntilag;
 
-    const bool bReGIRProposal = Core::ReSTIRParams::REGIR_AVAILABLE && restirParams.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
+    const bool bReGIRProposal = restirParams.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
 
     // Temporal-gradient confidence runs at 1/GRAD_FACTOR of the half-res ReSTIR grid (must match GRAD_FACTOR in the confidence shaders).
@@ -147,20 +147,38 @@ void SetupReSTIRPasses(RenderGraph& graph,
         });
 
         const uint32_t analyticLightCount = viewFamily.analyticLightCount;
-        // Matches the alias table, which is analytic-only until its build moves to the GPU
-        const uint32_t fillLightCount = analyticLightCount;
+        const uint32_t fillLightCount = liveLightCount;
+
+        graph.CreateBuffer(SID("light_power_cdf"), MAX_LIGHTS * sizeof(float), false);
+
+        RenderPass& cdfPass = graph.AddPass(SID("[ReGIR] Light Power CDF"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+        cdfPass.ReadBuffer(SID("light_data"));
+        cdfPass.WriteBuffer(SID("light_power_cdf"));
+        cdfPass.Execute([pipelineManager, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("light_power_cdf"));
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            LightPowerCDFPushConstant pc{
+                .lightData = graph.GetBufferAddress(SID("light_data")),
+                .cdf = graph.GetBufferAddress(SID("light_power_cdf")),
+                .liveCount = fillLightCount,
+                .analyticCount = static_cast<int32_t>(analyticLightCount),
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, 1, 1, 1);
+        });
 
         // Presample tiles
         {
             RenderPass& presamplePass = graph.AddPass(SID("[ReGIR] Presample Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
-            presamplePass.ReadBuffer(LIGHT_ALIAS_BUFFER);
+            presamplePass.ReadBuffer(SID("light_power_cdf"));
             presamplePass.WriteBuffer(SID("regir_tiles"));
             presamplePass.Execute([pipelineManager, frameNumber, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_presample_tiles"));
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 ReGIRPresampleTilesPushConstant pc{
-                    .aliasEntries = graph.GetBufferAddress(LIGHT_ALIAS_BUFFER),
+                    .cdf = graph.GetBufferAddress(SID("light_power_cdf")),
                     .tiles = graph.GetBufferAddress(SID("regir_tiles")),
                     .liveCount = fillLightCount,
                     .analyticCount = static_cast<int32_t>(analyticLightCount),

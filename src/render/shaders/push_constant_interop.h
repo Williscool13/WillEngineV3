@@ -492,9 +492,17 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC float wClamp;
 };
 
+SHADER_PUBLIC struct LightPowerCDFPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(float) cdf;
+    SHADER_PUBLIC uint32_t liveCount;
+    SHADER_PUBLIC int32_t analyticCount;
+};
+
 SHADER_PUBLIC struct ReGIRPresampleTilesPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(LightAliasEntry) aliasEntries;
+    SHADER_PUBLIC SHADER_PTR(float) cdf;
     SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles;
     SHADER_PUBLIC uint32_t liveCount;
     SHADER_PUBLIC int32_t analyticCount;

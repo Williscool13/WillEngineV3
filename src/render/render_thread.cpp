@@ -26,7 +26,6 @@
 #include "platform/paths.h"
 #include "render-graph/render_graph.h"
 #include "render-graph/render_pass.h"
-#include "light_bvh.h"
 #include "shaders/constants_interop.h"
 #include "shaders/push_constant_interop.h"
 #include "shaders/flags_interop.h"
@@ -564,7 +563,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             const bool bNeedsWorldGrid = viewFamily.lightingMode == Core::LightingMode::Default
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
-                                         || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && (!Core::ReSTIRParams::REGIR_AVAILABLE || frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin))
+                                         || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin)
                                          || frameBuffer.ddgi.bEnabled
                                          || viewFamily.reflectionProbes.Size() > 0u;
 

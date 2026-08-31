@@ -37,7 +37,6 @@ inline constexpr int32_t RDG_MAX_TLAS = 16;
 
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
-inline const StringID LIGHT_ALIAS_BUFFER = SID("light_alias");
 inline const StringID EMISSIVE_TRI_WORK_BUFFER = SID("emissive_tri_work");
 inline const StringID REFLECTION_PROBE_BUFFER = SID("reflection_probes");
 inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
@@ -101,8 +100,6 @@ inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
 inline constexpr int32_t REFLECTION_PROBE_BUFFER_SIZE = sizeof(ReflectionProbeGPU) * MAX_REFLECTION_PROBES;
 
-// Alias Table
-inline constexpr int32_t LIGHT_ALIAS_BUFFER_SIZE = MAX_LIGHTS * static_cast<int32_t>(sizeof(LightAliasEntry));
 // Pre-sampled lights
 inline constexpr int32_t REGIR_TILE_BUFFER_SIZE = REGIR_TILE_COUNT * REGIR_TILE_SIZE * sizeof(ReGIRTileSlot);
 

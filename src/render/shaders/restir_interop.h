@@ -68,17 +68,6 @@ SHADER_PUBLIC struct ReGIRReservoir
 };
 
 /**
- * Vose alias-table entry
- */
-SHADER_PUBLIC struct LightAliasEntry
-{
-    SHADER_PUBLIC float prob;     // Vose split threshold for the primary light (this bin)
-    SHADER_PUBLIC uint alias;     // alias light index drawn when u >= prob
-    SHADER_PUBLIC float pdf;      // p(primary) = power(primary) / totalPower
-    SHADER_PUBLIC float pdfAlias; // p(alias)   = power(alias)   / totalPower
-};
-
-/**
  * One presampled-tile slot
  */
 SHADER_PUBLIC struct ReGIRTileSlot

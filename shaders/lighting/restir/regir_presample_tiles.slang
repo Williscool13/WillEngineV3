@@ -24,15 +24,22 @@ void ComputeReGIRPresampleTiles(uniform ReGIRPresampleTilesPushConstant pc, uint
 
     uint h = SeedRng(uint2(slotIdx & 0xFFFFu, slotIdx >> 16u), pc.frameIndex, 0x9E3779B9u);
 
-    uint bin = min(uint(HashStep(h) * float(count)), count - 1u);
-    LightAliasEntry e = pc.aliasEntries[bin];
+    float total = pc.cdf[count - 1u];
     float u = HashStep(h);
-    if (u < e.prob) {
-        slot.lightIdx = LiveLightIndex(bin, pc.analyticCount);
-        slot.sourcePdf = e.pdf;
+    if (total <= 0.0) {
+        slot.lightIdx = LiveLightIndex(min(uint(u * float(count)), count - 1u), pc.analyticCount);
+        slot.sourcePdf = 1.0 / float(count);
     } else {
-        slot.lightIdx = LiveLightIndex(e.alias, pc.analyticCount);
-        slot.sourcePdf = e.pdfAlias;
+        float target = u * total;
+        uint lo = 0u;
+        uint hi = count - 1u;
+        while (lo < hi) {
+            uint mid = (lo + hi) >> 1u;
+            if (pc.cdf[mid] > target) { hi = mid; } else { lo = mid + 1u; }
+        }
+        float lower = lo > 0u ? pc.cdf[lo - 1u] : 0.0;
+        slot.lightIdx = LiveLightIndex(lo, pc.analyticCount);
+        slot.sourcePdf = (pc.cdf[lo] - lower) / total;
     }
 
     pc.tiles[slotIdx] = slot;
