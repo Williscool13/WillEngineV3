@@ -463,7 +463,14 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         }
     }
 
-    float3 virtualWorldPos = RelaxGetXvirtual(hitDist, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness);
+    float3 hitDelta = float3(0.0);
+    float3 hitDeltaVirtual = float3(0.0);
+    if (pc.hitDeltaIndex != ~0u) {
+        hitDelta = rdgTexturesFloat4[pc.hitDeltaIndex].Load(int3(pixelPos, 0)).xyz;
+        hitDeltaVirtual = hitDelta - 2.0 * dot(hitDelta, currentNormal) * currentNormal;
+    }
+
+    float3 virtualWorldPos = RelaxGetXvirtual(hitDist, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness) + hitDeltaVirtual;
 
     // Virtual motion reprojection for specular
     float4 prevSpecIllumVMB;
@@ -537,13 +544,26 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     hitDistConfidence = lerp(hitDistConfidence, 1.0, SMC);
 
     float hitDistForTrackingPrev = prevSpecResponsiveVMB.a;
-    float3 prevVirtualWorldPos = RelaxGetXvirtual(hitDistForTrackingPrev, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness);
+    float3 prevVirtualWorldPos = RelaxGetXvirtual(hitDistForTrackingPrev, curvature, currentWorldPos, prevWorldPos, currentNormal, V, currentRoughness) + hitDeltaVirtual;
     float2 prevUVVMBTest = MLGetScreenUv(rc.gWorldToClipPrev, prevVirtualWorldPos);
     float lobeTanHalfAngle = max(RelaxGetSpecLobeTanHalfAngle(currentRoughness, 0.6), 0.5 * rc.gRectSizeInv.x);
     float unproj1 = min(hitDist, hitDistForTrackingPrev) / RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, max(length(virtualWorldPos), length(prevVirtualWorldPos)));
     float lobeRadiusInPixels = lobeTanHalfAngle * unproj1;
     float deltaParallaxInPixels = length((prevUVVMBTest - prevUVVMB) * float2(rc.gRectSize));
     hitDistConfidence *= MLSmoothStep(lobeRadiusInPixels + 0.25, 0.0, deltaParallaxInPixels);
+
+    float smbDeltaConfidence = 1.0;
+    float vmbDeltaConfidence = 1.0;
+    if (pc.hitDeltaIndex != ~0u && pc.hitDeltaHistoryIndex != ~0u && rc.gResetHistory == 0) {
+        float2 prevScale = rc.gRectSizePrev * rc.gResourceSizeInvPrev;
+        float3 prevDeltaSMB = rdgTexturesFloat4[pc.hitDeltaHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], prevUVSMB * prevScale, 0).xyz;
+        float3 prevDeltaVMB = rdgTexturesFloat4[pc.hitDeltaHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], prevUVVMB * prevScale, 0).xyz;
+        float deltaTolerancePixels = 2.0 + lobeRadiusInPixels;
+        float mismatchPixelsSMB = length(hitDelta - prevDeltaSMB) / RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, currentLinearZ + min(hitDist, prevReflectionHitTSMB));
+        float mismatchPixelsVMB = length(hitDelta - prevDeltaVMB) / RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, 1.0, currentLinearZ + min(hitDist, prevReflectionHitTVMB));
+        smbDeltaConfidence = MLSmoothStep(deltaTolerancePixels, 0.0, mismatchPixelsSMB);
+        vmbDeltaConfidence = MLSmoothStep(deltaTolerancePixels, 0.0, mismatchPixelsVMB);
+    }
 
     // Surface motion confidence
     float specSMBConfidence = (SMBReprojectionFound > 0 ? 1.0 : 0.0) * RelaxGetEncodingAwareNormalWeight(V, Vprev, lobeHalfAngle * NoV / rc.gFramerateScale, 0.0, 0.0);
@@ -558,6 +578,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float specSMBCb = (specHole && smbParallaxInPixelsMax < 0.5) ? (1.0 - rc.gCheckerboardResolveAccumSpeed * (SMBReprojectionFound > 0 ? 1.0 : 0.0)) : 1.0;
     specSMBAlpha *= specSMBCb;
     specSMBResponsiveAlpha *= specSMBCb;
+    specSMBAlpha = max(specSMBAlpha, 1.0 - smbDeltaConfidence);
+    specSMBResponsiveAlpha = max(specSMBResponsiveAlpha, 1.0 - smbDeltaConfidence);
 
     // SMB accumulation
     float4 accSpecSMB;
@@ -574,6 +596,9 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     specVMBAlpha *= specVMBCb;
     specVMBResponsiveAlpha *= specVMBCb;
     specVMBHitTAlpha *= specVMBCb;
+    specVMBAlpha = max(specVMBAlpha, 1.0 - vmbDeltaConfidence);
+    specVMBResponsiveAlpha = max(specVMBResponsiveAlpha, 1.0 - vmbDeltaConfidence);
+    specVMBHitTAlpha = max(specVMBHitTAlpha, 1.0 - vmbDeltaConfidence);
 
     float4 accSpecVMB;
     accSpecVMB.rgb = lerp(prevSpecIllumVMB.rgb, specularIllumination.rgb, specVMBAlpha);

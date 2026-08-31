@@ -309,6 +309,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(SID("relax_viewz"));
         }
         if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
+        if (graph.HasTexture(REFLECTION_HIT_DELTA_TARGET)) { pass.ReadSampledImage(REFLECTION_HIT_DELTA_TARGET); }
+        if (graph.HasTexture(REFLECTION_HIT_DELTA_HISTORY)) { pass.ReadSampledImage(REFLECTION_HIT_DELTA_HISTORY); }
         pass.WriteStorageImage(SID("relax_spec_illum"));
         pass.WriteStorageImage(SID("relax_diff_illum"));
         pass.WriteStorageImage(SID("relax_spec_fast"));
@@ -353,6 +355,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_reproj_confidence")),
                 .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_prev_nr")),
                 .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
+                .hitDeltaIndex = graph.HasTexture(REFLECTION_HIT_DELTA_TARGET) ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_HIT_DELTA_TARGET) : ~0u,
+                .hitDeltaHistoryIndex = graph.HasTexture(REFLECTION_HIT_DELTA_HISTORY) ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_HIT_DELTA_HISTORY) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_temporal_accumulation"));
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

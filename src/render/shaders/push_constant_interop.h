@@ -973,6 +973,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
@@ -1003,6 +1004,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC uint32_t bAlphaTest;
     SHADER_PUBLIC uint32_t hitLocalShadowRays;
     SHADER_PUBLIC float hitTextureLod;
+    SHADER_PUBLIC uint32_t hitDeltaIndex;
 };
 
 SHADER_PUBLIC struct TemporalAntialiasingPushConstant
@@ -1903,6 +1905,8 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t outSpecReprojConfidenceIndex;
     SHADER_PUBLIC uint32_t outPrevNRIndex;
     SHADER_PUBLIC uint32_t confidenceIndex;
+    SHADER_PUBLIC uint32_t hitDeltaIndex;
+    SHADER_PUBLIC uint32_t hitDeltaHistoryIndex;
 };
 
 SHADER_PUBLIC struct RelaxHistoryFixPushConstant

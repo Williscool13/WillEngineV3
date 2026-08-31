@@ -161,6 +161,26 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
 
             float3 hitWorldPos = rayOrigin + hit.hitT * hit.rayDir;
 
+            if (pc.hitDeltaIndex != ~0u) {
+                Primitive primitive = pc.primitiveBuffer[inst.primitiveIndex];
+                uint firstIndex = primitive.indexOffset + hit.primIndex * 3;
+                VertexPosition p0 = pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 0]];
+                VertexPosition p1 = pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 1]];
+                VertexPosition p2 = pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 2]];
+                float3 hitBary = float3(1.0 - hit.bary.x - hit.bary.y, hit.bary.x, hit.bary.y);
+                Model model = pc.modelBuffer[inst.modelIndex];
+                float3 boundsExtent = primitive.boundingBoxMax - primitive.boundingBoxMin;
+                float3 hitDelta = InterpolatePosition(hitBary, p0, p1, p2, model.prevModelMatrix, primitive.boundingBoxMin, boundsExtent)
+                    - InterpolatePosition(hitBary, p0, p1, p2, model.modelMatrix, primitive.boundingBoxMin, boundsExtent);
+                rdgStorageFloat4[pc.hitDeltaIndex][pixel] = float4(hitDelta, 0.0);
+                if (field != 0u) {
+                    int2 o = OppositeFieldPixel(pixel, field);
+                    if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
+                        rdgStorageFloat4[pc.hitDeltaIndex][uint2(o)] = float4(hitDelta, 0.0);
+                    }
+                }
+            }
+
             // Prefer last frame's lit color at the hit (fully shadowed lighting); analytic fallback shades local lights with no visibility.
             bool bShaded = false;
             if (pc.litHistoryIndex != ~0u) {
