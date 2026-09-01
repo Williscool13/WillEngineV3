@@ -81,6 +81,11 @@ public:
 
     RenderPass& ReadASInputBuffer(StringID bufferId);
 
+    RenderPass& AsyncCompute()
+    {
+        bAsyncCompute = true;
+        return *this;
+    }
 
     template<typename F>
     RenderPass& Execute(F&& func)
@@ -96,6 +101,7 @@ public:
     StringID renderPassId;
     VkPipelineStageFlags2 stages;
     RenderCategory category{RenderCategory::Untagged};
+    bool bAsyncCompute{false};
 
 public: // DAG compile-time fields
     uint32_t passIndex{UINT_MAX};

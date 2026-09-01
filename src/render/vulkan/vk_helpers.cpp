@@ -187,6 +187,18 @@ VkSemaphoreSubmitInfo VkHelpers::SemaphoreSubmitInfo(VkSemaphore semaphore, VkPi
     };
 }
 
+VkSemaphoreSubmitInfo VkHelpers::TimelineSemaphoreSubmitInfo(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stageMask)
+{
+    return {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .pNext = nullptr,
+        .semaphore = semaphore,
+        .value = value,
+        .stageMask = stageMask,
+        .deviceIndex = 0,
+    };
+}
+
 VkPresentInfoKHR VkHelpers::PresentInfo(VkSwapchainKHR* swapchain, VkSemaphore* waitSemaphore, uint32_t* imageIndices)
 {
     return {

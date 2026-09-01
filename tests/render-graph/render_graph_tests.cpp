@@ -1539,7 +1539,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute runs passes and descriptor indices re
             });
 
     Compile();
-    rdg.Execute(reinterpret_cast<VkCommandBuffer>(uintptr_t{1}));
+    rdg.Execute(reinterpret_cast<VkCommandBuffer>(uintptr_t{2}), reinterpret_cast<VkCommandBuffer>(uintptr_t{1}));
 
     CHECK(ran);
     const uint32_t physIdx = inspector.TexturePhysicalIndex(SID("tex"));
@@ -1563,7 +1563,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: Execute resolves buffer device address inside
             });
 
     Compile();
-    rdg.Execute(reinterpret_cast<VkCommandBuffer>(uintptr_t{1}));
+    rdg.Execute(reinterpret_cast<VkCommandBuffer>(uintptr_t{2}), reinterpret_cast<VkCommandBuffer>(uintptr_t{1}));
 
     CHECK(ran);
     CHECK(resolvedAddress != 0);

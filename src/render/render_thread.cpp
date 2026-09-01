@@ -80,6 +80,15 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
         frameSync.Initialize();
     }
 
+    //
+    {
+        VkSemaphoreTypeCreateInfo timelineTypeInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
+        timelineTypeInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+        timelineTypeInfo.initialValue = 0;
+        VkSemaphoreCreateInfo semaphoreCreateInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = &timelineTypeInfo};
+        VK_CHECK(vkCreateSemaphore(context->device, &semaphoreCreateInfo, context->HostAllocCallbacks(), &asyncComputeTimelineSemaphore));
+    }
+
     renderArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Render, "render");
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
@@ -99,6 +108,8 @@ RenderThread::~RenderThread()
     for (auto& sync : frameSynchronization) {
         sync = RenderSynchronization{};
     }
+
+    vkDestroySemaphore(context->device, asyncComputeTimelineSemaphore, context->HostAllocCallbacks());
 
     nrdDenoiser->~NrdDenoiser();
     pipelineManager->~PipelineManager();
@@ -261,8 +272,10 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     screenCapture->ResolveProbeCapture(currentFrameIndex);
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
+    VK_CHECK(vkResetCommandBuffer(renderSync.asyncComputeCommandBuffer, 0));
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
     VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
+    VK_CHECK(vkBeginCommandBuffer(renderSync.asyncComputeCommandBuffer, &beginInfo));
     pipelineStatsQuery.Begin(renderSync.commandBuffer, currentFrameIndex);
 
 #ifdef ENABLE_VULKAN_VALIDATION
@@ -275,32 +288,63 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     vkSetDebugUtilsObjectNameEXT(context->device, &nameInfo);
 #endif
 
+#ifdef WDEBUG
+    Core::InlineString<32> asyncCutLabelName = Core::InlineString<32>::Format("Async Cut F%llu", static_cast<unsigned long long>(frameNumber));
+    Core::InlineString<32> frameLabelName = Core::InlineString<32>::Format("Frame F%llu", static_cast<unsigned long long>(frameNumber));
+    VkDebugUtilsLabelEXT asyncCutLabel = {.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, .pLabelName = asyncCutLabelName.c_str()};
+    VkDebugUtilsLabelEXT frameLabel = {.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, .pLabelName = frameLabelName.c_str()};
+    vkCmdBeginDebugUtilsLabelEXT(renderSync.asyncComputeCommandBuffer, &asyncCutLabel);
+    vkCmdBeginDebugUtilsLabelEXT(renderSync.commandBuffer, &frameLabel);
+#endif
+
     RenderResponse res;
     //
     {
         TracyVkZone(context->tracyContext, renderSync.commandBuffer, "Frame");
-        ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
-        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.swapchainSemaphore, frameBuffer, imguiSnapshot);
+        // Acquisitions ride the async command buffer: it is the first submission of the frame, so they still precede all frame work
+        ProcessAcquisitions(renderSync.asyncComputeCommandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
+        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.asyncComputeCommandBuffer, renderSync.swapchainSemaphore, frameBuffer, imguiSnapshot);
     }
     // ends if not already ended
     pipelineStatsQuery.End(renderSync.commandBuffer, currentFrameIndex);
     statisticsManager.Publish();
     TracyVkCollect(context->tracyContext, renderSync.commandBuffer);
+#ifdef WDEBUG
+    vkCmdEndDebugUtilsLabelEXT(renderSync.commandBuffer);
+    vkCmdEndDebugUtilsLabelEXT(renderSync.asyncComputeCommandBuffer);
+#endif
     VK_CHECK(vkEndCommandBuffer(renderSync.commandBuffer));
+    VK_CHECK(vkEndCommandBuffer(renderSync.asyncComputeCommandBuffer));
+
+    //
+    {
+        ZoneScopedN("AsyncComputeSubmit");
+        ++asyncComputeTimelineValue;
+        VkCommandBufferSubmitInfo asyncCmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.asyncComputeCommandBuffer);
+        VkSemaphoreSubmitInfo timelineSignalInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+        VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&asyncCmdSubmitInfo, nullptr, &timelineSignalInfo);
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
+    }
 
     switch (res.code) {
         case RENDER_REQUESTED_RECREATE:
         {
             VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, nullptr);
+            VkSemaphoreSubmitInfo timelineWaitInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &timelineWaitInfo, nullptr);
             VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
         }
         break;
         case SWAPCHAIN_OUTDATED:
         {
             VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-            VkSemaphoreSubmitInfo waitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
-            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, &waitInfo, nullptr);
+            VkSemaphoreSubmitInfo waitInfos[2] = {
+                VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
+                VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
+            };
+            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, nullptr, nullptr);
+            submitInfo.waitSemaphoreInfoCount = 2;
+            submitInfo.pWaitSemaphoreInfos = waitInfos;
             VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
             bRenderRequestsRecreate = true;
         }
@@ -324,9 +368,14 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
             {
                 ZoneScopedN("QueueSubmit");
                 VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-                VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
+                VkSemaphoreSubmitInfo waitInfos[2] = {
+                    VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT),
+                    VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
+                };
                 VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
-                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainSemaphoreWaitInfo, &renderSemaphoreSignalInfo);
+                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, &renderSemaphoreSignalInfo);
+                submitInfo.waitSemaphoreInfoCount = 2;
+                submitInfo.pWaitSemaphoreInfos = waitInfos;
                 VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
                 VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
             }
@@ -347,7 +396,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     }
 }
 
-RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
+RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
 {
     ZoneScoped;
 
@@ -1295,7 +1344,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }
     } {
         ZoneScopedN("RenderGraphExecute");
-        renderGraph->Execute(cmd);
+        renderGraph->Execute(asyncCmd, cmd);
         renderGraph->PrepareSwapchain(cmd, SID("swapchain_image"));
     }
 

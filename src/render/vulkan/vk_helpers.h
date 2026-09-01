@@ -45,6 +45,8 @@ VkSubmitInfo2 SubmitInfo(VkCommandBufferSubmitInfo* commandBufferSubmitInfo, con
 
 VkSemaphoreSubmitInfo SemaphoreSubmitInfo(VkSemaphore semaphore, VkPipelineStageFlags2 stageMask);
 
+VkSemaphoreSubmitInfo TimelineSemaphoreSubmitInfo(VkSemaphore semaphore, uint64_t value, VkPipelineStageFlags2 stageMask);
+
 VkPresentInfoKHR PresentInfo(VkSwapchainKHR* swapchain, VkSemaphore* waitSemaphore, uint32_t* imageIndices);
 
 VkDeviceSize GetAlignedSize(VkDeviceSize value, VkDeviceSize alignment);

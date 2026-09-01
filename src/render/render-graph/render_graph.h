@@ -205,6 +205,11 @@ public: // Compile and execute
 
     void BuildDependencyEdges();
 
+    /**
+     * Pulls graph-synthesized upload passes into the async cut of their consumer and rejects any async pass that depends on a graphics pass.
+     */
+    void PropagateAsyncPasses();
+
     void TopologicalSortPasses();
 
     void AssignWaveIndices();
@@ -229,7 +234,7 @@ public: // Compile and execute
      */
     void Compile(uint64_t currentFrame);
 
-    void Execute(VkCommandBuffer cmd);
+    void Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd);
 
     /**
      * Transitions the named texture to present-src layout; call after Execute
@@ -343,6 +348,9 @@ private:
     // Generated at compile time
     Core::ArenaFixedVector<RenderPass*> sortedPasses;
     Core::Vector<uint32_t> waveOffsets;
+
+    uint32_t asyncPassCount{0};
+    uint32_t asyncWaveCount{0};
 
     struct WaveBarrierRange
     {

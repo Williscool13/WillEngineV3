@@ -355,33 +355,70 @@ void RenderGraph::BuildDependencyEdges()
     }
 }
 
+void RenderGraph::PropagateAsyncPasses()
+{
+    bool bChanged = true;
+    while (bChanged) {
+        bChanged = false;
+        for (uint32_t passIdx = 0; passIdx < passes.Size(); passIdx++) {
+            const auto& pass = passes[passIdx];
+            if (!pass->bAsyncCompute) { continue; }
+            for (const uint32_t predIdx : pass->inEdges) {
+                auto& pred = passes[predIdx];
+                if (pred->bAsyncCompute) { continue; }
+                ENGINE_ASSERT(Renderer, pred->category == RenderCategory::Upload, "[RDG] Async pass '{}' depends on graphics pass '{}'; async passes may only consume CPU-written or prior-frame inputs", pass->renderPassId.ToString(), pred->renderPassId.ToString());
+                pred->bAsyncCompute = true;
+                bChanged = true;
+            }
+        }
+    }
+}
+
 void RenderGraph::TopologicalSortPasses()
 {
+    Core::InlineQueue<uint32_t, RDG_MAX_PASSES> asyncZeroDegreeQueue;
     Core::InlineQueue<uint32_t, RDG_MAX_PASSES> zeroDegreeQueue;
 
     for (uint32_t passIdx = 0; passIdx < passes.Size(); passIdx++) {
         auto& pass = passes[passIdx];
         pass->passIndex = passIdx;
         if (pass->inDegree == 0) {
-            zeroDegreeQueue.Push(passIdx);
-        }
-    }
-
-    // Kahn's Topolohical Sort
-    while (zeroDegreeQueue.Size() > 0) {
-        const uint32_t currPassIdx = zeroDegreeQueue.Pop();
-        const auto& currPass = passes[currPassIdx];
-        sortedPasses.PushBack(currPass);
-
-        for (const uint32_t neighborIdx : currPass->outEdges) {
-            passes[neighborIdx]->inDegree--;
-            if (passes[neighborIdx]->inDegree == 0) {
-                zeroDegreeQueue.Push(neighborIdx);
+            if (pass->bAsyncCompute) {
+                asyncZeroDegreeQueue.Push(passIdx);
+            }
+            else {
+                zeroDegreeQueue.Push(passIdx);
             }
         }
     }
 
+    // Kahn's Topolohical Sort
+    auto drain = [&](Core::InlineQueue<uint32_t, RDG_MAX_PASSES>& queue) {
+        while (queue.Size() > 0) {
+            const uint32_t currPassIdx = queue.Pop();
+            const auto& currPass = passes[currPassIdx];
+            sortedPasses.PushBack(currPass);
+
+            for (const uint32_t neighborIdx : currPass->outEdges) {
+                passes[neighborIdx]->inDegree--;
+                if (passes[neighborIdx]->inDegree == 0) {
+                    if (passes[neighborIdx]->bAsyncCompute) {
+                        asyncZeroDegreeQueue.Push(neighborIdx);
+                    }
+                    else {
+                        zeroDegreeQueue.Push(neighborIdx);
+                    }
+                }
+            }
+        }
+    };
+
+    drain(asyncZeroDegreeQueue);
+    asyncPassCount = static_cast<uint32_t>(sortedPasses.Size());
+    drain(zeroDegreeQueue);
+
     ENGINE_ASSERT(Renderer, sortedPasses.Size() == passes.Size(), "Render graph cycle detected");
+    ENGINE_ASSERT(Renderer, asyncZeroDegreeQueue.Size() == 0, "[RDG] Async pass became ready after the async cut was sealed");
 
     if (bDebugLogging) {
         LOG_INFO(Renderer, "=== RDG Topological Sort ===");
@@ -411,6 +448,7 @@ void RenderGraph::TopologicalSortPasses()
 void RenderGraph::AssignWaveIndices()
 {
     waveOffsets.Clear();
+    asyncWaveCount = 0;
 
     for (uint32_t i = 0; i < sortedPasses.Size(); i++) {
         RenderPass* pass = sortedPasses[i];
@@ -419,6 +457,12 @@ void RenderGraph::AssignWaveIndices()
         uint32_t wave = 0;
         for (const uint32_t predIdx : pass->inEdges) {
             wave = std::max(wave, passes[predIdx]->waveIndex + 1);
+        }
+        if (pass->bAsyncCompute) {
+            asyncWaveCount = std::max(asyncWaveCount, wave + 1);
+        }
+        else {
+            wave = std::max(wave, asyncWaveCount);
         }
         pass->waveIndex = wave;
 
@@ -1284,6 +1328,8 @@ void RenderGraph::Compile(uint64_t currentFrame)
 
     BuildDependencyEdges();
 
+    PropagateAsyncPasses();
+
     TopologicalSortPasses();
 
     CalculateLifetimes();
@@ -1295,7 +1341,7 @@ void RenderGraph::Compile(uint64_t currentFrame)
     PrecomputeBarriers();
 }
 
-void RenderGraph::Execute(VkCommandBuffer cmd)
+void RenderGraph::Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd)
 {
     ZoneScoped;
 
@@ -1316,9 +1362,11 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
         const uint32_t waveStart = waveOffsets[waveIdx];
         const uint32_t waveEnd = waveOffsets[waveIdx + 1];
         const WaveBarrierRange& range = compiledWaveRanges[waveIdx];
+        const bool bAsyncWave = waveIdx < asyncWaveCount;
+        VkCommandBuffer waveCmd = bAsyncWave ? asyncCmd : cmd;
 
         if (bDebugLogging) {
-            LOG_INFO(Renderer, "[WAVE {}] passes {}-{}", waveIdx, waveStart, waveEnd - 1);
+            LOG_INFO(Renderer, "[WAVE {}]{} passes {}-{}", waveIdx, bAsyncWave ? " (async)" : "", waveStart, waveEnd - 1);
         }
 
         // AutoClears: one barrier batch for the whole wave, then issue clear commands
@@ -1327,7 +1375,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
             depInfo.imageMemoryBarrierCount = range.preClearImageCount;
             depInfo.pImageMemoryBarriers = compiledImageBarriers.Data() + range.preClearImageStart;
-            allocFns.cmdPipelineBarrier2(cmd, &depInfo);
+            allocFns.cmdPipelineBarrier2(waveCmd, &depInfo);
 
             for (uint32_t pi = waveStart; pi < waveEnd; pi++) {
                 RenderPass* pass = sortedPasses[pi];
@@ -1336,10 +1384,10 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                     auto& phys = GetPhysical(texIndex);
                     VkImageSubresourceRange subRange = VkHelpers::SubresourceRange(phys.aspect);
                     if (phys.aspect & VK_IMAGE_ASPECT_DEPTH_BIT) {
-                        allocFns.cmdClearDepthStencilImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().depthStencil, 1, &subRange);
+                        allocFns.cmdClearDepthStencilImage(waveCmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().depthStencil, 1, &subRange);
                     }
                     else {
-                        allocFns.cmdClearColorImage(cmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().color, 1, &subRange);
+                        allocFns.cmdClearColorImage(waveCmd, phys.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &tex.clear.value().color, 1, &subRange);
                     }
                 }
             }
@@ -1356,7 +1404,7 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
             depInfo.pImageMemoryBarriers = compiledImageBarriers.Data() + range.imageStart;
             depInfo.bufferMemoryBarrierCount = range.bufferCount;
             depInfo.pBufferMemoryBarriers = compiledBufferBarriers.Data() + range.bufferStart;
-            allocFns.cmdPipelineBarrier2(cmd, &depInfo);
+            allocFns.cmdPipelineBarrier2(waveCmd, &depInfo);
         }
 
         // Execute all passes in this wave
@@ -1372,15 +1420,19 @@ void RenderGraph::Execute(VkCommandBuffer cmd)
                 VkDebugUtilsLabelEXT label = {};
                 label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
                 label.pLabelName = pass->renderPassId.ToString();
-                allocFns.cmdBeginDebugUtilsLabel(cmd, &label);
+                allocFns.cmdBeginDebugUtilsLabel(waveCmd, &label);
 #endif
-                gpuTimestampQuery.BeginPass(cmd, currentFrameIndex, pass->category);
+                if (!bAsyncWave) {
+                    gpuTimestampQuery.BeginPass(waveCmd, currentFrameIndex, pass->category);
+                }
                 currentRecordingPass = pass;
-                pass->executeFunc(cmd, context, *this);
+                pass->executeFunc(waveCmd, context, *this);
                 currentRecordingPass = nullptr;
-                gpuTimestampQuery.EndPass(cmd, currentFrameIndex);
+                if (!bAsyncWave) {
+                    gpuTimestampQuery.EndPass(waveCmd, currentFrameIndex);
+                }
 #ifdef WDEBUG
-                allocFns.cmdEndDebugUtilsLabel(cmd);
+                allocFns.cmdEndDebugUtilsLabel(waveCmd);
 #endif
             }
         }
@@ -1530,6 +1582,8 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
         arena->Reset();
         passes = Core::ArenaFixedVector<RenderPass*>(arena, RDG_MAX_PASSES);
         sortedPasses = Core::ArenaFixedVector<RenderPass*>(arena, RDG_MAX_PASSES);
+        asyncPassCount = 0;
+        asyncWaveCount = 0;
         textures = Core::ArenaFixedVector<TextureResource>(arena, RDG_MAX_TEXTURES);
         textureNameToIndex = Core::ArenaFixedMap<StringID, uint32_t>(arena, RDG_MAX_TEXTURES);
         buffers = Core::ArenaFixedVector<BufferResource>(arena, RDG_MAX_BUFFERS);

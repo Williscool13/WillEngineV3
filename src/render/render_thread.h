@@ -111,7 +111,7 @@ public:
 
     void RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
-    RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
+    RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::BufferAcquireOperation> bufferAcquireOperations, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations);
 
@@ -186,6 +186,9 @@ private:
     RenderGraph* renderGraph{};
 
     Core::Array<RenderSynchronization, Core::FRAME_BUFFER_COUNT> frameSynchronization;
+    VkSemaphore asyncComputeTimelineSemaphore{};
+    uint64_t asyncComputeTimelineValue{0};
+
     PipelineStatsQueryPool pipelineStatsQuery{};
     RendererStatisticsManager statisticsManager{};
     std::atomic<bool> bVRAMReportShouldWrite{false};

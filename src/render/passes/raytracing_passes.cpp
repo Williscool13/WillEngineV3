@@ -64,6 +64,7 @@ void SetupTLASBuild(RenderGraph& graph,
     graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false);
 
     RenderPass& fillPass = graph.AddPass(SID("RT TLAS Instances"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
+    fillPass.AsyncCompute();
     fillPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     fillPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     fillPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
@@ -87,6 +88,7 @@ void SetupTLASBuild(RenderGraph& graph,
     graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);
 
     RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, RenderCategory::Untagged);
+    buildPass.AsyncCompute();
     buildPass.ReadASInputBuffer(RT_TLAS_INSTANCE_BUFFER);
     buildPass.WriteTLASBuffer(RT_TLAS_BUFFER);
     buildPass.WriteScratchBuffer(RT_TLAS_SCRATCH_BUFFER);
