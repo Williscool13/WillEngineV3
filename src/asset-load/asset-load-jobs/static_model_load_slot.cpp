@@ -566,54 +566,6 @@ void StaticModelLoadSlot::UploadGeometry(VkCommandBuffer cmd, const Core::Inline
     uploadBuffer(rawData.indices.Data(), rawData.indices.Size(),
                  sizeof(uint32_t), 0, sizeof(uint32_t),
                  resourceManager->megaIndexBuffer.handle, outputModel->modelData.indexAllocation.offset);
-
-    // Queue family transfer barriers
-    VkBufferMemoryBarrier2 releaseBarriers[7];
-    uint32_t barrierCount = 0;
-
-    auto createBufferBarrier = [&](VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size) {
-        VkBufferMemoryBarrier2 barrier{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
-            .srcQueueFamilyIndex = context->transferQueueFamily,
-            .dstQueueFamilyIndex = context->graphicsQueueFamily,
-            .buffer = buffer,
-            .offset = offset,
-            .size = size
-        };
-        if (context->bMaintenance9Enabled) {
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        }
-        return barrier;
-    };
-
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexPositionBuffer.handle,
-                                                          positionBufOffset, rawData.vertices.Size() * sizeof(VertexPosition));
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaVertexAttributeBuffer.handle,
-                                                          attributeBufOffset, rawData.vertices.Size() * sizeof(VertexAttribute));
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletVerticesBuffer.handle,
-                                                          outputModel->modelData.meshletVertexAllocation.offset, rawData.meshletVertices.Size() * sizeof(uint32_t));
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletTrianglesBuffer.handle,
-                                                          outputModel->modelData.meshletTriangleAllocation.offset, rawData.meshletTriangles.Size() / 3 * sizeof(uint32_t));
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaMeshletBuffer.handle,
-                                                          outputModel->modelData.meshletAllocation.offset, rawData.meshlets.Size() * sizeof(Meshlet));
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->primitiveBuffer.handle,
-                                                          outputModel->modelData.primitiveAllocation.offset, rawData.primitives.Size() * sizeof(Primitive));
-    releaseBarriers[barrierCount++] = createBufferBarrier(resourceManager->megaIndexBuffer.handle,
-                                                          outputModel->modelData.indexAllocation.offset, rawData.indices.Size() * sizeof(uint32_t));
-
-    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.bufferMemoryBarrierCount = barrierCount;
-    depInfo.pBufferMemoryBarriers = releaseBarriers;
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-
-    for (uint32_t i = 0; i < barrierCount; ++i) {
-        outputModel->bufferAcquireOps.PushBack(Render::VkHelpers::FromVkBarrier(releaseBarriers[i]));
-    }
 }
 
 bool StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait)
@@ -625,19 +577,7 @@ bool StaticModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineFunct
     const VkDeviceAddress vertexBase = resourceManager->megaVertexPositionBuffer.address;
     const VkDeviceAddress indexBase = resourceManager->megaIndexBuffer.address;
     const uint32_t vertexOffsetCount = outputModel->modelData.vertexPositionAllocation.offset / sizeof(VertexPosition);
-    const uint32_t indexOffsetCount = outputModel->modelData.indexAllocation.offset / sizeof(uint32_t); {
-        Core::InlineVector<VkBufferMemoryBarrier2, 8> acquireBarriers;
-        for (const auto& op : outputModel->bufferAcquireOps) {
-            acquireBarriers.PushBack(Render::VkHelpers::ToVkBarrier(op));
-        }
-        if (!acquireBarriers.IsEmpty()) {
-            VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-            depInfo.bufferMemoryBarrierCount = acquireBarriers.Size();
-            depInfo.pBufferMemoryBarriers = acquireBarriers.Data();
-            vkCmdPipelineBarrier2(cmd, &depInfo);
-        }
-    }
-    outputModel->bufferAcquireOps.Clear();
+    const uint32_t indexOffsetCount = outputModel->modelData.indexAllocation.offset / sizeof(uint32_t);
 
     Core::LinearAllocator& stagingAllocator = uploadStaging->GetStagingAllocator();
     Render::AllocatedBuffer& stagingBuffer = uploadStaging->GetStagingBuffer();

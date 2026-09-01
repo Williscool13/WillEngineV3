@@ -108,7 +108,6 @@ public:
 
     // Populated in AssetLoadThread
     StaticModelData modelData{};
-    Core::InlineVector<Core::BufferAcquireOperation, 8> bufferAcquireOps{};
     Core::InlineVector<Core::ImageAcquireOperation, 4> imageAcquireOps{};
 
     // Populated by AssetManager, Only for spline models

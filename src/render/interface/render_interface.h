@@ -258,19 +258,6 @@ struct DebugCylinder
 #endif
 
 
-struct BufferAcquireOperation
-{
-    uint64_t buffer;
-    uint64_t srcStageMask;
-    uint64_t srcAccessMask;
-    uint64_t dstStageMask;
-    uint64_t dstAccessMask;
-    uint64_t offset;
-    uint64_t size;
-    uint32_t srcQueueFamilyIndex;
-    uint32_t dstQueueFamilyIndex;
-};
-
 struct ImageAcquireOperation
 {
     uint64_t image;
@@ -588,7 +575,6 @@ struct FrameBuffer
     SwapchainRecreateCommand swapchainRecreateCommand{};
     ViewportResizeCommand viewportResizeCommand{};
 
-    ArenaVector<BufferAcquireOperation> bufferAcquireOperations;
     ArenaVector<ImageAcquireOperation> imageAcquireOperations;
 
     /** The one member that flows render -> game; read FRAMES_IN_FLIGHT frames later, so always stale. */

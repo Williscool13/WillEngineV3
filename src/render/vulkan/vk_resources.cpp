@@ -386,7 +386,8 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedBuffer(const VulkanContext* cont
 {
     AllocatedBuffer buffer;
     buffer.context = context;
-    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
+    const VkBufferCreateInfo sharedInfo = context->ApplyBufferSharing(bufferInfo);
+    VK_CHECK(vmaCreateBuffer(context->allocator, &sharedInfo, &vmaAllocInfo, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
     buffer.size = bufferInfo.size;
     if (bufferInfo.usage & VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT) {
         buffer.address = VkHelpers::GetDeviceAddress(context->device, buffer.handle);
@@ -398,7 +399,8 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedBufferAligned(const VulkanContex
 {
     AllocatedBuffer buffer;
     buffer.context = context;
-    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &bufferInfo, &vmaAllocInfo, minAlignment, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
+    const VkBufferCreateInfo sharedInfo = context->ApplyBufferSharing(bufferInfo);
+    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &sharedInfo, &vmaAllocInfo, minAlignment, &buffer.handle, &buffer.allocation, &buffer.allocationInfo));
     buffer.size = bufferInfo.size;
     if (bufferInfo.usage & VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT) {
         buffer.address = VkHelpers::GetDeviceAddress(context->device, buffer.handle);
@@ -408,12 +410,11 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedBufferAligned(const VulkanContex
 
 AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages, size_t minAlignment)
 {
-    const VkBufferCreateInfo bufferInfo{
+    const VkBufferCreateInfo bufferInfo = context->ApplyBufferSharing({
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = bufferSize,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | additionalUsages,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
-    };
+    });
 
     constexpr VmaAllocationCreateInfo allocInfo{
         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
@@ -432,12 +433,11 @@ AllocatedBuffer AllocatedBuffer::CreateAllocatedStagingBuffer(const VulkanContex
 
 AllocatedBuffer AllocatedBuffer::CreateAllocatedReceivingBuffer(const VulkanContext* context, size_t bufferSize, VkBufferUsageFlags additionalUsages)
 {
-    const VkBufferCreateInfo bufferInfo{
+    const VkBufferCreateInfo bufferInfo = context->ApplyBufferSharing({
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = bufferSize,
         .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | additionalUsages,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
-    };
+    });
 
     constexpr VmaAllocationCreateInfo allocInfo{
         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,

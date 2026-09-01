@@ -105,23 +105,6 @@ static VkImageAspectFlags GetImageAspect(VkFormat format)
     }
 }
 
-inline VkBufferMemoryBarrier2 ToVkBarrier(const Core::BufferAcquireOperation& op)
-{
-    return VkBufferMemoryBarrier2{
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-        .pNext = nullptr,
-        .srcStageMask = op.srcStageMask,
-        .srcAccessMask = op.srcAccessMask,
-        .dstStageMask = op.dstStageMask,
-        .dstAccessMask = op.dstAccessMask,
-        .srcQueueFamilyIndex = op.srcQueueFamilyIndex,
-        .dstQueueFamilyIndex = op.dstQueueFamilyIndex,
-        .buffer = reinterpret_cast<VkBuffer>(op.buffer),
-        .offset = op.offset,
-        .size = op.size
-    };
-}
-
 inline VkImageMemoryBarrier2 ToVkBarrier(const Core::ImageAcquireOperation& op)
 {
     return VkImageMemoryBarrier2{
@@ -143,21 +126,6 @@ inline VkImageMemoryBarrier2 ToVkBarrier(const Core::ImageAcquireOperation& op)
             .baseArrayLayer = op.baseArrayLayer,
             .layerCount = op.layerCount
         }
-    };
-}
-
-inline Core::BufferAcquireOperation FromVkBarrier(const VkBufferMemoryBarrier2& barrier)
-{
-    return Core::BufferAcquireOperation{
-        .buffer = reinterpret_cast<uint64_t>(barrier.buffer),
-        .srcStageMask = barrier.srcStageMask,
-        .srcAccessMask = barrier.srcAccessMask,
-        .dstStageMask = barrier.dstStageMask,
-        .dstAccessMask = barrier.dstAccessMask,
-        .offset = barrier.offset,
-        .size = barrier.size,
-        .srcQueueFamilyIndex = barrier.srcQueueFamilyIndex,
-        .dstQueueFamilyIndex = barrier.dstQueueFamilyIndex
     };
 }
 

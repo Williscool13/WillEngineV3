@@ -54,7 +54,6 @@ void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char*
 {
     frameArena = VirtualArena(vm, FRAME_ARENA_RESERVE_BYTES, tag, name);
     mainViewFamily = ViewFamily(frameArena.Get());
-    bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
 }
 
@@ -143,14 +142,12 @@ void FrameBuffer::Reinitialize()
     }
 
     mainViewFamily = ViewFamily{};
-    bufferAcquireOperations = ArenaVector<BufferAcquireOperation>{};
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>{};
     frameArena.Get().Reset();
     if (trimTo) {
         frameArena.Get().Trim(trimTo);
     }
     mainViewFamily = ViewFamily(frameArena.Get(), maxWatermarks);
-    bufferAcquireOperations = ArenaVector<BufferAcquireOperation>(&frameArena.Get(), 2048);
     imageAcquireOperations = ArenaVector<ImageAcquireOperation>(&frameArena.Get(), 2048);
 }
 } // Core

@@ -72,7 +72,6 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     pipelineManager = new(memoryManager.RenderAllocRaw(sizeof(PipelineManager))) PipelineManager(context, resourceManager, renderAlloc, assetScratchAlloc, layouts);
     imgui = new(memoryManager.RenderAllocRaw(sizeof(ImguiWrapper))) ImguiWrapper(context, window, Core::FRAME_BUFFER_COUNT, swapchain->format, pipelineManager->GetPipelineCache());
 
-    tempBufferBarriers = Core::Vector<VkBufferMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
     tempImageBarriers = Core::Vector<VkImageMemoryBarrier2>(&renderAlloc, Core::AllocTag::Render);
 
     for (RenderSynchronization& frameSync : frameSynchronization) {
@@ -302,7 +301,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     {
         TracyVkZone(context->tracyContext, renderSync.commandBuffer, "Frame");
         // Acquisitions ride the async command buffer: it is the first submission of the frame, so they still precede all frame work
-        ProcessAcquisitions(renderSync.asyncComputeCommandBuffer, frameBuffer.bufferAcquireOperations, frameBuffer.imageAcquireOperations);
+        ProcessAcquisitions(renderSync.asyncComputeCommandBuffer, frameBuffer.imageAcquireOperations);
         res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.asyncComputeCommandBuffer, renderSync.swapchainSemaphore, frameBuffer, imguiSnapshot);
     }
     // ends if not already ended
@@ -1354,29 +1353,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     return {SUCCESS, swapchainImageIndex};
 }
 
-void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::BufferAcquireOperation> bufferAcquireOperations, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations)
+void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations)
 {
     ZoneScoped;
-    if (bufferAcquireOperations.IsEmpty() && imageAcquireOperations.IsEmpty()) {
+    if (imageAcquireOperations.IsEmpty()) {
         return;
-    }
-
-    tempBufferBarriers.Clear();
-    tempBufferBarriers.Reserve(bufferAcquireOperations.Size());
-    for (const auto& op : bufferAcquireOperations) {
-        VkBufferMemoryBarrier2 barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-        barrier.pNext = nullptr;
-        barrier.srcStageMask = op.srcStageMask;
-        barrier.srcAccessMask = op.srcAccessMask;
-        barrier.dstStageMask = op.dstStageMask;
-        barrier.dstAccessMask = op.dstAccessMask;
-        barrier.srcQueueFamilyIndex = op.srcQueueFamilyIndex;
-        barrier.dstQueueFamilyIndex = op.dstQueueFamilyIndex;
-        barrier.buffer = reinterpret_cast<VkBuffer>(op.buffer);
-        barrier.offset = op.offset;
-        barrier.size = op.size;
-        tempBufferBarriers.PushBack(barrier);
     }
 
     tempImageBarriers.Clear();
@@ -1406,8 +1387,6 @@ void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::Buf
     depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
     depInfo.pNext = nullptr;
     depInfo.dependencyFlags = 0;
-    depInfo.bufferMemoryBarrierCount = tempBufferBarriers.Size();
-    depInfo.pBufferMemoryBarriers = tempBufferBarriers.Data();
     depInfo.imageMemoryBarrierCount = tempImageBarriers.Size();
     depInfo.pImageMemoryBarriers = tempImageBarriers.Data();
     vkCmdPipelineBarrier2(cmd, &depInfo);

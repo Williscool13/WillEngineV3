@@ -956,15 +956,10 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     int32_t modelsThisTick{0};
     while (assetLoadManager->TryDequeueModelComplete(complete)) {
         if (complete.bSuccess) {
-            stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
-                                                              complete.model->bufferAcquireOps.begin(),
-                                                              complete.model->bufferAcquireOps.end());
-
             stagingFrameBuffer.imageAcquireOperations.Insert(stagingFrameBuffer.imageAcquireOperations.end(),
                                                              complete.model->imageAcquireOps.begin(),
                                                              complete.model->imageAcquireOps.end());
 
-            complete.model->bufferAcquireOps.Clear();
             complete.model->imageAcquireOps.Clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             complete.model->acquireFrame = ctx->currentRenderFrame;
@@ -975,7 +970,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             modelsThisTick++;
         }
         else {
-            complete.model->bufferAcquireOps.Clear();
             complete.model->imageAcquireOps.Clear();
             complete.model->modelLoadState = StaticModel::ModelLoadState::FailedToLoad;
             LOG_ERROR(Asset, "Model load failed: {}", complete.model->name.c_str());
@@ -985,11 +979,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     AssetLoad::StaticModelLoadComplete proceduralComplete{};
     while (assetLoadManager->TryDequeueProceduralModelComplete(proceduralComplete)) {
         if (proceduralComplete.bSuccess) {
-            stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
-                                                              proceduralComplete.model->bufferAcquireOps.begin(),
-                                                              proceduralComplete.model->bufferAcquireOps.end());
-
-            proceduralComplete.model->bufferAcquireOps.Clear();
             proceduralComplete.model->imageAcquireOps.Clear();
             proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::Loaded;
             proceduralComplete.model->acquireFrame = ctx->currentRenderFrame;
@@ -1000,7 +989,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             modelsThisTick++;
         }
         else {
-            proceduralComplete.model->bufferAcquireOps.Clear();
             proceduralComplete.model->imageAcquireOps.Clear();
             proceduralComplete.model->modelLoadState = StaticModel::ModelLoadState::FailedToLoad;
             LOG_ERROR(Asset, "Procedural model generation failed: {}", proceduralComplete.model->name.c_str());
@@ -1157,10 +1145,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     while (assetLoadManager->TryDequeueFontCurveComplete(fontComplete)) {
         Font* font = fontComplete.font;
         if (fontComplete.bSuccess) {
-            stagingFrameBuffer.bufferAcquireOperations.Insert(stagingFrameBuffer.bufferAcquireOperations.end(),
-                                                              font->bufferAcquireOps.begin(),
-                                                              font->bufferAcquireOps.end());
-            font->bufferAcquireOps.Clear();
             if (font->atlasAcquireBarrier.image != 0) {
                 stagingFrameBuffer.imageAcquireOperations.PushBack(font->atlasAcquireBarrier);
                 font->atlasAcquireBarrier = {};
@@ -1173,7 +1157,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
             fontsThisTick++;
         }
         else {
-            font->bufferAcquireOps.Clear();
             font->loadState = Font::LoadState::FailedToLoad;
             LOG_ERROR(Asset, "Font curve upload failed: {}", font->name.c_str());
         }
@@ -2206,7 +2189,6 @@ FontHandle AssetManager::LoadFont(FontID id)
 
     font.curveAllocation = {};
     font.curveByteOffset = 0;
-    font.bufferAcquireOps.Clear();
     font.atlasAcquireBarrier = {};
     if (font.header.sdfUncompressedSize > 0) {
         font.atlasBindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();

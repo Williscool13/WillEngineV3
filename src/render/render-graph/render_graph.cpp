@@ -2809,7 +2809,8 @@ RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBuffer(const 
     VkBuffer buffer = VK_NULL_HANDLE;
     VmaAllocation alloc = VK_NULL_HANDLE;
     VmaAllocationInfo allocInfo;
-    VK_CHECK(vmaCreateBuffer(context->allocator, &bufferInfo, &vmaAllocInfo, &buffer, &alloc, &allocInfo));
+    const VkBufferCreateInfo sharedInfo = context->ApplyBufferSharing(bufferInfo);
+    VK_CHECK(vmaCreateBuffer(context->allocator, &sharedInfo, &vmaAllocInfo, &buffer, &alloc, &allocInfo));
     return {buffer, alloc, allocInfo.pMappedData};
 }
 
@@ -2818,7 +2819,8 @@ RenderGraphAllocFns::BufferAlloc RenderGraphAllocFns::DefaultCreateBufferAligned
     VkBuffer buffer = VK_NULL_HANDLE;
     VmaAllocation alloc = VK_NULL_HANDLE;
     VmaAllocationInfo allocInfo;
-    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &bufferInfo, &vmaAllocInfo, minAlignment, &buffer, &alloc, &allocInfo));
+    const VkBufferCreateInfo sharedInfo = context->ApplyBufferSharing(bufferInfo);
+    VK_CHECK(vmaCreateBufferWithAlignment(context->allocator, &sharedInfo, &vmaAllocInfo, minAlignment, &buffer, &alloc, &allocInfo));
     return {buffer, alloc, allocInfo.pMappedData};
 }
 

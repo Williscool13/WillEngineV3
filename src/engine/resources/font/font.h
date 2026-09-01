@@ -42,7 +42,6 @@ struct Font
     OffsetAllocator::Allocation curveAllocation{};
     /** 8-aligned byte offset of the blob inside megaFontCurveBuffer. */
     uint32_t curveByteOffset{0};
-    Core::InlineVector<Core::BufferAcquireOperation, 1> bufferAcquireOps{};
 
     /** Effects SDF atlas; only present when header.sdfUncompressedSize > 0, bindless handle reserved in LoadFont. */
     Render::AllocatedImage atlasImage{};

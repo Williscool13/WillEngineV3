@@ -309,30 +309,6 @@ void FontCurveLoadSlot::UploadCurves(VkCommandBuffer cmd, const Core::InlineFunc
         bytesDone += chunk;
     }
 
-    VkBufferMemoryBarrier2 releaseBarrier{
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-        .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
-        .srcQueueFamilyIndex = context->transferQueueFamily,
-        .dstQueueFamilyIndex = context->graphicsQueueFamily,
-        .buffer = resourceManager->megaFontCurveBuffer.handle,
-        .offset = outputFont->curveByteOffset,
-        .size = totalBytes,
-    };
-    if (context->bMaintenance9Enabled) {
-        releaseBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        releaseBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    }
-
-    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    depInfo.bufferMemoryBarrierCount = 1;
-    depInfo.pBufferMemoryBarriers = &releaseBarrier;
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-
-    outputFont->bufferAcquireOps.PushBack(Render::VkHelpers::FromVkBarrier(releaseBarrier));
-
     blobData = {};
 }
 } // AssetLoad

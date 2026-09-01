@@ -50,6 +50,24 @@ struct VulkanContext
     VkQueue computeQueue{};
     uint32_t computeQueueFamily{UINT32_MAX};
 
+    uint32_t bufferSharingFamilies[3]{};
+    uint32_t bufferSharingFamilyCount{0};
+
+    /**
+     * Buffers are always VK_SHARING_MODE_CONCURRENT engine-wide across all distinct queue families.
+     * @param info buffer create info to patch
+     * @returns the info with sharingMode and the family list applied (EXCLUSIVE fallback if fewer than 2 distinct families)
+     */
+    [[nodiscard]] VkBufferCreateInfo ApplyBufferSharing(VkBufferCreateInfo info) const
+    {
+        if (bufferSharingFamilyCount >= 2) {
+            info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+            info.queueFamilyIndexCount = bufferSharingFamilyCount;
+            info.pQueueFamilyIndices = bufferSharingFamilies;
+        }
+        return info;
+    }
+
     // Optional Extensions
     bool bMaintenance9Enabled{false};
     bool bMeshShaderQueriesEnabled{false};

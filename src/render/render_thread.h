@@ -113,7 +113,7 @@ public:
 
     RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
-    void ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::BufferAcquireOperation> bufferAcquireOperations, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations);
+    void ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations);
 
 public:
     VulkanContext* GetVulkanContext() const { return context; }
@@ -195,7 +195,6 @@ private:
     std::atomic<bool> bVRAMReportShouldRead{false};
     Render::VRAMReport vramReport{};
 
-    Core::Vector<VkBufferMemoryBarrier2> tempBufferBarriers;
     Core::Vector<VkImageMemoryBarrier2> tempImageBarriers;
 
     uint32_t currentFrameInFlight{0};
