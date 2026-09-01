@@ -372,6 +372,16 @@ void RenderGraph::PropagateAsyncPasses()
             }
         }
     }
+
+    for (const auto& pass : passes) {
+        if (!pass->bAsyncCompute) { continue; }
+        for (auto& buf : buffers) {
+            if (pass->DeclaresBuffer(buf.index)) {
+                buf.bAsyncTouched = true;
+                buf.bCanUseAliasedBuffer = false;
+            }
+        }
+    }
 }
 
 void RenderGraph::TopologicalSortPasses()
@@ -662,6 +672,11 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
 
                 // Cross-frame resources can't alias at all.
                 if (!buf.bCanUseAliasedBuffer && !phys.logicalResourceIndices.IsEmpty()) {
+                    continue;
+                }
+
+                // Async resources should be considered untouchable until this FIF rolls over again.
+                if (buf.bAsyncTouched && currentFrame - phys.lastUsedFrame < Core::FRAME_BUFFER_COUNT) {
                     continue;
                 }
 
@@ -1802,7 +1817,7 @@ void RenderGraph::CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory 
 
     buf->bufferInfo.size = asSize;
     buf->bIsAccelerationStructure = true;
-    // The AS backing memory must never be aliased; each frame gets a fresh physical and the previous one becomes the carried history.
+    // The AS backing memory must never be aliased
     buf->bCanUseAliasedBuffer = false;
     buf->bIsViewportScaled = false;
     buf->category |= category;

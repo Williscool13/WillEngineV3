@@ -58,12 +58,12 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize alignedTLASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
     const VkDeviceSize scratchSize = sizeInfo.buildScratchSize;
 
-    graph.CreateTLAS(RT_TLAS_BUFFER, alignedTLASSize);
+    graph.CreateTLAS(RT_TLAS_BUFFER, alignedTLASSize, RenderCategory::RayTracing);
 
     const VkDeviceSize instanceBufferSize = static_cast<VkDeviceSize>(maxPrimitiveCount) * sizeof(VkAccelerationStructureInstanceKHR);
     graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false);
 
-    RenderPass& fillPass = graph.AddPass(SID("RT TLAS Instances"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
+    RenderPass& fillPass = graph.AddPass(SID("RT TLAS Instances"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RayTracing);
     fillPass.AsyncCompute();
     fillPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     fillPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -87,7 +87,7 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
     graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);
 
-    RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, RenderCategory::Untagged);
+    RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, RenderCategory::RayTracing);
     buildPass.AsyncCompute();
     buildPass.ReadASInputBuffer(RT_TLAS_INSTANCE_BUFFER);
     buildPass.WriteTLASBuffer(RT_TLAS_BUFFER);

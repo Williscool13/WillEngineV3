@@ -59,9 +59,10 @@ enum class RenderCategory : uint64_t
     NRD                 = 1ull << 21,
     GeometryPhase2      = 1ull << 22,
     Upload              = 1ull << 23,
+    RayTracing          = 1ull << 24,
 };
 
-inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 24;
+inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 25;
 inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = {
     "Geometry",
     "WorldGridBinning",
@@ -87,6 +88,7 @@ inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = 
     "NRD",
     "Geometry P2",
     "Upload",
+    "Ray Tracing",
 };
 
 inline RenderCategory operator|(RenderCategory a, RenderCategory b)
@@ -160,6 +162,7 @@ inline constexpr RenderCategoryGroup RENDER_CATEGORY_GROUP_OF[RENDER_CATEGORY_BI
     /*NRD*/ RenderCategoryGroup::ReSTIR,
     /*GeometryPhase2*/ RenderCategoryGroup::Geometry,
     /*Upload*/ RenderCategoryGroup::Upload,
+    /*RayTracing*/ RenderCategoryGroup::Lighting,
 };
 
 struct VRAMReport
@@ -425,6 +428,7 @@ struct BufferResource
     bool bCanUseAliasedBuffer = true;
     bool bIsViewportScaled = false;
     bool bIsAccelerationStructure = false;
+    bool bAsyncTouched = false;
 
     uint32_t carriedCount = 0;
 
