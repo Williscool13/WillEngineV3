@@ -973,14 +973,23 @@ void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
                 b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             }
             const bool bAsyncWave = waveIdx < asyncWaveCount;
-            if (bAsyncWave != physRes.bAsyncEvent) {
-                if (!bAsyncWave) {
-                    crossCutWaitStageMask |= b.dstStageMask;
-                }
-                if (b.oldLayout == b.newLayout) { return; }
+            const bool bGraphicsAfterCompute = !bAsyncWave && physRes.bAsyncEvent;
+            const bool bComputeAfterGraphics = bAsyncWave && !physRes.bAsyncEvent;
+            if (bGraphicsAfterCompute) {
+                // Timeline wait is enough, GENERAL->GENERAL so nothing else needed
+                crossCutWaitStageMask |= b.dstStageMask;
+                ENGINE_ASSERT(Renderer, b.oldLayout == b.newLayout, "[RDG] Image '{}' needs a layout transition across the async cut", tex.textureId.ToString());
+                return;
+            }
 
-                // Compute takes control over a graphics resource (that is no longer in use). OK to discard the contents. 
-                ENGINE_ASSERT(Renderer, b.oldLayout == VK_IMAGE_LAYOUT_UNDEFINED, "[RDG] Image '{}' needs a layout transition across the async cut", tex.textureId.ToString());
+            if (bComputeAfterGraphics) {
+                // Case 1: Graphics -> Compute is GENERAL->GENERAL so nothing else needed.
+                // Case 2: Compute acquires a new image
+                const bool bFreshLife = b.oldLayout == VK_IMAGE_LAYOUT_UNDEFINED;
+                if (!bFreshLife) {
+                    ENGINE_ASSERT(Renderer, b.oldLayout == b.newLayout, "[RDG] Image '{}' needs a layout transition across the async cut", tex.textureId.ToString());
+                    return;
+                }
                 b.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
                 b.srcAccessMask = VK_ACCESS_2_NONE;
             }
@@ -1001,10 +1010,15 @@ void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
 
         auto addBufferBarrier = [&](const PhysicalResource& physRes, const VkBufferMemoryBarrier2& b) {
             const bool bAsyncWave = waveIdx < asyncWaveCount;
-            if (bAsyncWave != physRes.bAsyncEvent) {
-                if (!bAsyncWave) {
-                    crossCutWaitStageMask |= b.dstStageMask;
-                }
+            const bool bGraphicsAfterCompute = !bAsyncWave && physRes.bAsyncEvent;
+            const bool bComputeAfterGraphics = bAsyncWave && !physRes.bAsyncEvent;
+            if (bGraphicsAfterCompute) {
+                // Timeline wait is enough
+                crossCutWaitStageMask |= b.dstStageMask;
+                return;
+            }
+            if (bComputeAfterGraphics) {
+                // Just acquire (CONCURRENT w/ no layouts, nothing needed)
                 return;
             }
             for (uint32_t i = bufferStart; i < compiledBufferBarriers.Size(); i++) {

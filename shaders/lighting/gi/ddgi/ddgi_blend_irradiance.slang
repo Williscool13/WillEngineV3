@@ -30,6 +30,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
     bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
     if (bInactive && pc.bHistoryValid != 0) {
+        rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + int2(gtid.xy))] = rdgStorageFloat4[pc.atlasInIndex][uint2(tileOrigin + int2(gtid.xy))];
         return;
     }
     uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
@@ -85,7 +86,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
 
         if (pc.bHistoryValid != 0) {
             if (bSameCellPrev) {
-                float4 previous = rdgStorageFloat4[pc.atlasOutIndex][uint2(tileOrigin + texel)];
+                float4 previous = rdgStorageFloat4[pc.atlasInIndex][uint2(tileOrigin + texel)];
 
                 if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
                     // Relocation teleport or revival is a real change, not noise; skip the anti-flicker clamps.

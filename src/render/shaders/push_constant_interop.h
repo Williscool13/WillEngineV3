@@ -745,6 +745,9 @@ SHADER_PUBLIC struct RadianceCacheCarryForwardPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t bFreeze;
     SHADER_PUBLIC SHADER_PTR(RadianceCacheStats) stats;
+    SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
+    SHADER_PUBLIC uint32_t touchFrame;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct RadianceCacheBuildIndirectPushConstant
@@ -827,6 +830,8 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t giHistoryIndex;
     SHADER_PUBLIC uint32_t varGuideOutIndex;
     SHADER_PUBLIC uint32_t gatherScale;
+    SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
+    SHADER_PUBLIC SHADER_PTR(uint2) touchKeys;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -1619,7 +1624,7 @@ SHADER_PUBLIC struct DDGIProbeBlendPushConstant
     SHADER_PUBLIC SHADER_PTR(float4) rayData;
     SHADER_PUBLIC SHADER_PTR(uint32_t) probeRestart;
     SHADER_PUBLIC uint32_t atlasOutIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t atlasInIndex;
     SHADER_PUBLIC uint32_t raysPerProbe;
     SHADER_PUBLIC float hysteresis;
     SHADER_PUBLIC float distanceExponent;

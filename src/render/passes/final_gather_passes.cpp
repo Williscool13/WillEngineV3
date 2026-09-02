@@ -78,7 +78,14 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(RADIANCE_CACHE_ENTRIES);
     pass.ReadBuffer(RADIANCE_CACHE_KEYS);
-    pass.ReadWriteBuffer(RADIANCE_CACHE_CELLS);
+    pass.ReadBuffer(RADIANCE_CACHE_CELLS);
+    const StringID touchEntries = RadianceCacheTouchEntries(frameNumber);
+    const StringID touchKeys = RadianceCacheTouchKeys(frameNumber);
+    const bool bTouch = graph.HasBuffer(touchEntries) && graph.HasBuffer(touchKeys);
+    if (bTouch) {
+        pass.ReadWriteBuffer(touchEntries);
+        pass.WriteBuffer(touchKeys);
+    }
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
     pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -108,7 +115,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute,
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, touchKeys,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gi_gather"));
@@ -157,6 +164,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .giHistoryIndex = bDemodulate ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_HISTORY) : ~0x0u,
             .varGuideOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
             .gatherScale = gatherScale,
+            .touchEntries = bTouch ? graph.GetBufferAddress(touchEntries) : 0,
+            .touchKeys = bTouch ? graph.GetBufferAddress(touchKeys) : 0,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);

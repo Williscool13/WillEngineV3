@@ -25,6 +25,12 @@ inline const StringID RADIANCE_CACHE_SHADE_ARGS = SID("radiance_cache_shade_args
 inline const StringID RADIANCE_CACHE_DESCRIPTORS = SID("radiance_cache_descriptors");
 inline const StringID RADIANCE_CACHE_BUFFERS_CURRENT = SID("radiance_cache_buffers_current");
 inline const StringID RADIANCE_CACHE_STATS = SID("radiance_cache_stats");
+static_assert(Core::FRAME_BUFFER_COUNT == 3);
+inline const StringID RADIANCE_CACHE_TOUCH_ENTRIES[3] = {SID("radiance_cache_touch_entries_0"), SID("radiance_cache_touch_entries_1"), SID("radiance_cache_touch_entries_2")};
+inline const StringID RADIANCE_CACHE_TOUCH_KEYS[3] = {SID("radiance_cache_touch_keys_0"), SID("radiance_cache_touch_keys_1"), SID("radiance_cache_touch_keys_2")};
+
+inline StringID RadianceCacheTouchEntries(uint64_t frameNumber) { return RADIANCE_CACHE_TOUCH_ENTRIES[frameNumber % Core::FRAME_BUFFER_COUNT]; }
+inline StringID RadianceCacheTouchKeys(uint64_t frameNumber) { return RADIANCE_CACHE_TOUCH_KEYS[frameNumber % Core::FRAME_BUFFER_COUNT]; }
 
 inline constexpr VkDeviceSize RADIANCE_CACHE_ENTRIES_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint32_t);
 inline constexpr VkDeviceSize RADIANCE_CACHE_KEYS_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint2);

@@ -21,6 +21,9 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
 
     RadianceCacheCell cell = pc.prevCells[i];
     RadianceCacheKey key = RadianceCacheUnpackKey(pc.prevKeys[i]);
+    if (pc.touchEntries != nullptr && RadianceCacheHashFind(pc.touchEntries, key) != RADIANCE_CACHE_HASH_INVALID) {
+        cell.lastTouched = max(cell.lastTouched, pc.touchFrame);
+    }
     if (pc.bFreeze != 0u) {
         cell.lastTouched = pc.frameIndex;
     } else {

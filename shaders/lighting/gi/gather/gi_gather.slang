@@ -108,6 +108,16 @@ static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, 
     return indirectDiffuse;
 }
 
+/** Reader keep-alive: the cell lands in this frame's touch set and carry forward stamps it later, once no graphics work can still be reading the table it rebuilds. */
+static void GatherTouchCell(GIGatherPushConstant pc, uint slot)
+{
+    if (pc.touchEntries == nullptr) {
+        return;
+    }
+    bool isNew;
+    RadianceCacheHashInsert(pc.touchEntries, pc.touchKeys, nullptr, RadianceCacheUnpackKey(pc.cacheKeys[slot]), isNew);
+}
+
 /** Cache-then-probe resolution at a ray hit; shared by front-face hits whose screen tier failed and backface hits. */
 static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos, float3 hitWorldPos, GatherHitSurface hit, float3 direction, float hitT, uint2 originCellKey, out uint tier)
 {
@@ -133,7 +143,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
                 radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeBlend.coverage);
             }
         }
-        pc.cacheCells[slot].lastTouched = pc.frameIndex;
+        GatherTouchCell(pc, slot);
     } else {
         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
         radiance = hit.diffuseColor * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
@@ -213,7 +223,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                     }
                 }
                 // Reader keeps the cell resident: probe rays alone can let a gather-consumed sparse cell age past the LRU window.
-                pc.cacheCells[slot].lastTouched = pc.frameIndex;
+                GatherTouchCell(pc, slot);
             } else {
                 float3 indirectDiffuse = float3(0.0);
                 float giW = 0.0;

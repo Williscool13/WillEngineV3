@@ -24,6 +24,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     bool bSameCellPrev = all(DDGICellFromSlot(slot, previousVolume) == DDGICellFromSlot(slot, pc.volume));
     bool bInactive = pc.bActiveValid != 0 && bSameCellPrev && pc.probeActive[probeIndex] == 0;
     if (bInactive && pc.bHistoryValid != 0) {
+        rdgStorageFloat2[pc.atlasOutIndex][uint2(tileOrigin + int2(gtid.xy))] = rdgStorageFloat2[pc.atlasInIndex][uint2(tileOrigin + int2(gtid.xy))];
         return;
     }
     uint rayBudget = bInactive ? min(DDGI_SENTINEL_RAYS, pc.raysPerProbe) : pc.raysPerProbe;
@@ -52,7 +53,7 @@ void ComputeDDGIBlendVisibility(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         float2 result = weightSum > 1e-4 ? momentsSum / weightSum : float2(0.0);
 
         if (pc.bHistoryValid != 0 && bSameCellPrev) {
-            float2 previous = rdgStorageFloat2[pc.atlasOutIndex][uint2(tileOrigin + texel)];
+            float2 previous = rdgStorageFloat2[pc.atlasInIndex][uint2(tileOrigin + texel)];
             float hysteresis = pc.hysteresis;
             if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
                 hysteresis = max(hysteresis - 0.75, 0.0);
