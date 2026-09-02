@@ -11,6 +11,8 @@
 
 #include "asset-load/asset_load_types.h"
 #include "core/containers/inline_function.h"
+#include "render/descriptors/procedural_texture_generate_resources.h"
+#include "render/vulkan/vk_resources.h"
 
 namespace Render
 {
@@ -50,6 +52,10 @@ public:
 private:
     void Generate(VkCommandBuffer cmd, const Core::InlineFunction<void(bool)>& submitAndWait);
     void PostGenerateSetup();
+    /**
+     * Storage scratch the generate/downsample passes write; the output texture is a SAMPLED-only copy so it keeps DCC.
+     */
+    void EnsureScratch(uint32_t width, uint32_t height, uint32_t mipCount, VkFormat format);
 
     struct GenerateTask : enki::ITaskSet
     {
@@ -68,6 +74,8 @@ private:
     Render::ResourceManager* resourceManager{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
     SubmitContext computeSubmit{};
+    Render::AllocatedImage scratchImage{};
+    Render::ImageView scratchViews[Render::ProceduralTextureGenerateResources::MAX_MIPS_PER_SLOT]{};
 
     Core::InlineFunction<void(VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* completionSignal)> _dispatchCallback;
     Core::InlineFunction<void(bool success, ProceduralTextureSlotHandle slotHandle)> _notifyCallback;

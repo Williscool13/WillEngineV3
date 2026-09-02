@@ -115,7 +115,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     VkImageCreateInfo imageCreateInfo = Render::VkHelpers::ImageCreateInfo(
         format,
         {width, height, 1},
-        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
     imageCreateInfo.mipLevels = mipCount;
     tex->image = Render::AllocatedImage::CreateAllocatedImage(loadSlot->context, imageCreateInfo);
@@ -124,19 +124,14 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     sampledViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1);
     tex->imageView = Render::ImageView::CreateImageView(loadSlot->context, sampledViewInfo);
 
-    Core::Array<Render::ImageView, Render::ProceduralTextureGenerateResources::MAX_MIPS_PER_SLOT> storageViews{};
+    loadSlot->EnsureScratch(width, height, mipCount, format);
+    const VkImage scratch = loadSlot->scratchImage.handle;
     const uint32_t baseIndex = loadSlot->slotHandle.index * Render::ProceduralTextureGenerateResources::MAX_MIPS_PER_SLOT;
-    for (uint32_t mip = 0; mip < mipCount; mip++) {
-        VkImageViewCreateInfo storageViewInfo = Render::VkHelpers::ImageViewCreateInfo(tex->image.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);
-        storageViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1);
-        storageViews[mip] = Render::ImageView::CreateImageView(loadSlot->context, storageViewInfo);
-        loadSlot->resourceManager->proceduralTextureGenerateResources.SetRWTexture({nullptr, storageViews[mip].handle, VK_IMAGE_LAYOUT_GENERAL}, baseIndex + mip);
-    }
 
     // Transition mip 0: UNDEFINED -> GENERAL
     {
         VkImageMemoryBarrier2 barrier = Render::VkHelpers::ImageMemoryBarrier(
-            tex->image.handle,
+            scratch,
             Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
             VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
@@ -167,13 +162,13 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
         for (uint32_t mip = 1; mip < mipCount; mip++) {
             VkImageMemoryBarrier2 barriers[2];
             barriers[0] = Render::VkHelpers::ImageMemoryBarrier(
-                tex->image.handle,
+                scratch,
                 Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip - 1, 1, 0, 1),
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL
             );
             barriers[1] = Render::VkHelpers::ImageMemoryBarrier(
-                tex->image.handle,
+                scratch,
                 Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1),
                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL
@@ -189,11 +184,40 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
         }
     }
 
-    // All mips GENERAL -> SHADER_READ_ONLY_OPTIMAL; queue family release to graphics when generated on a separate compute family
+    //
+    {
+        VkImageMemoryBarrier2 copyBarriers[2];
+        copyBarriers[0] = Render::VkHelpers::ImageMemoryBarrier(
+            scratch,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1),
+            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        );
+        copyBarriers[1] = Render::VkHelpers::ImageMemoryBarrier(
+            tex->image.handle,
+            Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1),
+            VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+        );
+        VkDependencyInfo copyDep{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 2, .pImageMemoryBarriers = copyBarriers};
+        vkCmdPipelineBarrier2(cmd, &copyDep);
+
+        VkImageCopy regions[Render::ProceduralTextureGenerateResources::MAX_MIPS_PER_SLOT];
+        for (uint32_t mip = 0; mip < mipCount; mip++) {
+            regions[mip] = VkImageCopy{
+                .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1},
+                .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1},
+                .extent = {std::max(1u, width >> mip), std::max(1u, height >> mip), 1},
+            };
+        }
+        vkCmdCopyImage(cmd, scratch, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, tex->image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipCount, regions);
+    }
+
+    // All mips TRANSFER_DST -> SHADER_READ_ONLY_OPTIMAL; queue family release to graphics when generated on a separate compute family
     VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
         tex->image.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1),
-        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
     const uint32_t submitFamily = loadSlot->context->computeQueue != VK_NULL_HANDLE ? loadSlot->context->computeQueueFamily : loadSlot->context->graphicsQueueFamily;
@@ -216,6 +240,24 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     loadSlot->computeSubmit.Reset(loadSlot->context);
 
     loadSlot->_notifyCallback(true, loadSlot->slotHandle);
+}
+
+void ProceduralTextureLoadSlot::EnsureScratch(uint32_t width, uint32_t height, uint32_t mipCount, VkFormat format)
+{
+    const bool bMatches = scratchImage.handle != VK_NULL_HANDLE && scratchImage.format == format && scratchImage.extent.width == width && scratchImage.extent.height == height && scratchImage.mipLevels == mipCount;
+    if (bMatches) { return; }
+
+    VkImageCreateInfo scratchInfo = Render::VkHelpers::ImageCreateInfo(format, {width, height, 1}, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    scratchInfo.mipLevels = mipCount;
+    scratchImage = Render::AllocatedImage::CreateAllocatedImage(context, scratchInfo);
+
+    const uint32_t baseIndex = slotHandle.index * Render::ProceduralTextureGenerateResources::MAX_MIPS_PER_SLOT;
+    for (uint32_t mip = 0; mip < mipCount; mip++) {
+        VkImageViewCreateInfo storageViewInfo = Render::VkHelpers::ImageViewCreateInfo(scratchImage.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);
+        storageViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, mip, 1, 0, 1);
+        scratchViews[mip] = Render::ImageView::CreateImageView(context, storageViewInfo);
+        resourceManager->proceduralTextureGenerateResources.SetRWTexture({nullptr, scratchViews[mip].handle, VK_IMAGE_LAYOUT_GENERAL}, baseIndex + mip);
+    }
 }
 
 void ProceduralTextureLoadSlot::PostGenerateSetup()
