@@ -375,17 +375,24 @@ void RenderGraph::PropagateAsyncPasses()
 
     for (const auto& pass : passes) {
         if (!pass->bAsyncCompute) { continue; }
-        const bool bDeclaresImages = !pass->colorAttachments.IsEmpty() || pass->depthStencilAttachment != UINT_MAX
-                                     || !pass->storageImageReads.IsEmpty() || !pass->storageImageWrites.IsEmpty() || !pass->sampledImageReads.IsEmpty()
-                                     || !pass->imageReadWrite.IsEmpty() || !pass->clearImageWrites.IsEmpty() || !pass->autoClearTextures.IsEmpty()
-                                     || !pass->blitImageReads.IsEmpty() || !pass->blitImageWrites.IsEmpty() || !pass->copyImageReads.IsEmpty() || !pass->copyImageWrites.IsEmpty();
-        ENGINE_ASSERT(Renderer, !bDeclaresImages, "[RDG] Async pass '{}' declares image accesses; images may not cross the async cut", pass->renderPassId.ToString());
+        const bool bDeclaresAttachments = !pass->colorAttachments.IsEmpty() || pass->depthStencilAttachment != UINT_MAX;
+        const bool bDeclaresTransferImages = !pass->clearImageWrites.IsEmpty() || !pass->blitImageReads.IsEmpty() || !pass->blitImageWrites.IsEmpty()
+                                             || !pass->copyImageReads.IsEmpty() || !pass->copyImageWrites.IsEmpty();
+        ENGINE_ASSERT(Renderer, !bDeclaresAttachments && !bDeclaresTransferImages, "[RDG] Async pass '{}' declares attachment or transfer image accesses; only storage and sampled images may cross the async cut", pass->renderPassId.ToString());
         for (auto& buf : buffers) {
             if (pass->DeclaresBuffer(buf.index)) {
                 buf.bAsyncTouched = true;
                 buf.bCanUseAliasedBuffer = false;
             }
         }
+        auto markTexture = [&](uint32_t texIndex) {
+            textures[texIndex].bAsyncTouched = true;
+            textures[texIndex].bCanUseAliasedTexture = false;
+        };
+        for (const uint32_t texIndex : pass->storageImageWrites) { markTexture(texIndex); }
+        for (const uint32_t texIndex : pass->storageImageReads) { markTexture(texIndex); }
+        for (const uint32_t texIndex : pass->sampledImageReads) { markTexture(texIndex); }
+        for (const uint32_t texIndex : pass->imageReadWrite) { markTexture(texIndex); }
     }
 }
 
@@ -537,6 +544,7 @@ void RenderGraph::PopulateAutoClearTextures()
     for (auto& tex : textures) {
         if (!tex.clear.has_value()) { continue; }
         if (tex.firstPass == UINT32_MAX) { continue; }
+        ENGINE_ASSERT(Renderer, !sortedPasses[tex.firstPass]->bAsyncCompute, "[RDG] Texture '{}' has a clear value but is first used by async pass '{}'; clears may not cross the async cut", tex.textureId.ToString(), sortedPasses[tex.firstPass]->renderPassId.ToString());
         sortedPasses[tex.firstPass]->autoClearTextures.PushBack(tex.index);
     }
 }
@@ -564,6 +572,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
             desiredDim.layers = 1;
             desiredDim.samples = 1;
             desiredDim.imageUsage = tex.accumulatedUsage;
+            desiredDim.bConcurrent = tex.bAsyncTouched;
             desiredDim.resourceId = tex.textureId;
 
             // Try to find existing physical resource with matching dimensions
@@ -578,6 +587,11 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
                 // Well, not strictly true. If a texture is carried over to next frame, it can be aliased if the other use is before the texture's first pass.
                 // But we can't reasonably infer that information from the current frame, so we will reject cross-frame aliasing.
                 if (!tex.bCanUseAliasedTexture && !phys.logicalResourceIndices.IsEmpty()) {
+                    continue;
+                }
+
+                // Async passes may not touch memory graphics used within the frames still in flight.
+                if (tex.bAsyncTouched && currentFrame - phys.lastGraphicsFrame < Core::FRAME_BUFFER_COUNT) {
                     continue;
                 }
 
@@ -645,6 +659,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
         if (!phys.IsAllocated() && tex.textureInfo.format != VK_FORMAT_UNDEFINED) {
             CreatePhysicalImage(phys, phys.dimensions);
         }
+        ENGINE_ASSERT(Renderer, !tex.bAsyncTouched || phys.dimensions.bConcurrent, "[RDG] Texture '{}' is async-touched but its physical was created EXCLUSIVE", tex.textureId.ToString());
         phys.lastUsedFrame = currentFrame;
     }
 
@@ -680,8 +695,8 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
                     continue;
                 }
 
-                // Async resources should be considered untouchable until this FIF rolls over again.
-                if (buf.bAsyncTouched && currentFrame - phys.lastUsedFrame < Core::FRAME_BUFFER_COUNT) {
+                // Async passes may not touch memory graphics used within the frames still in flight.
+                if (buf.bAsyncTouched && currentFrame - phys.lastGraphicsFrame < Core::FRAME_BUFFER_COUNT) {
                     continue;
                 }
 
@@ -901,7 +916,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
     }
 }
 
-void RenderGraph::PrecomputeBarriers()
+void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
 {
     compiledImageBarriers.Clear();
     compiledBufferBarriers.Clear();
@@ -952,7 +967,23 @@ void RenderGraph::PrecomputeBarriers()
         const uint32_t imageStart = static_cast<uint32_t>(compiledImageBarriers.Size());
         const uint32_t bufferStart = static_cast<uint32_t>(compiledBufferBarriers.Size());
 
-        auto addImageBarrier = [&](const VkImageMemoryBarrier2& b) {
+        auto addImageBarrier = [&](const TextureResource& tex, const PhysicalResource& physRes, VkImageMemoryBarrier2 b) {
+            if (physRes.dimensions.bConcurrent) {
+                ENGINE_ASSERT(Renderer, b.newLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && b.newLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, "[RDG] GENERAL-pinned image '{}' used as an attachment", tex.textureId.ToString());
+                b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            }
+            const bool bAsyncWave = waveIdx < asyncWaveCount;
+            if (bAsyncWave != physRes.bAsyncEvent) {
+                if (!bAsyncWave) {
+                    crossCutWaitStageMask |= b.dstStageMask;
+                }
+                if (b.oldLayout == b.newLayout) { return; }
+
+                // Compute takes control over a graphics resource (that is no longer in use). OK to discard the contents. 
+                ENGINE_ASSERT(Renderer, b.oldLayout == VK_IMAGE_LAYOUT_UNDEFINED, "[RDG] Image '{}' needs a layout transition across the async cut", tex.textureId.ToString());
+                b.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                b.srcAccessMask = VK_ACCESS_2_NONE;
+            }
             for (uint32_t i = imageStart; i < compiledImageBarriers.Size(); i++) {
                 auto& e = compiledImageBarriers[i];
                 if (e.image == b.image && e.newLayout == b.newLayout) {
@@ -960,10 +991,12 @@ void RenderGraph::PrecomputeBarriers()
                     e.srcAccessMask |= b.srcAccessMask;
                     e.dstStageMask |= b.dstStageMask;
                     e.dstAccessMask |= b.dstAccessMask;
+                    LogImageBarrier(tex.textureId, e, tex.physicalIndex);
                     return;
                 }
             }
             compiledImageBarriers.PushBack(b);
+            LogImageBarrier(tex.textureId, b, tex.physicalIndex);
         };
 
         auto addBufferBarrier = [&](const PhysicalResource& physRes, const VkBufferMemoryBarrier2& b) {
@@ -994,12 +1027,11 @@ void RenderGraph::PrecomputeBarriers()
             for (const uint32_t texIndex : pass->colorAttachments) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                                              VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
-                                                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                                         VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+                                                                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL));
             }
 
             if (pass->depthStencilAttachment != UINT_MAX) {
@@ -1009,93 +1041,83 @@ void RenderGraph::PrecomputeBarriers()
                 VkPipelineStageFlags2 dstStages = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
                 VkAccessFlags2 dstAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
                 if ((pass->depthAccessType & DepthAccessType::Write) != DepthAccessType::None) { dstAccess |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT; }
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout, dstStages, dstAccess,
-                                                              VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout, dstStages, dstAccess,
+                                                                         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
             }
 
             for (const uint32_t texIndex : pass->storageImageWrites) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL));
             }
 
             for (const uint32_t texIndex : pass->storageImageReads) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_IMAGE_LAYOUT_GENERAL));
             }
 
             for (const uint32_t texIndex : pass->sampledImageReads) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
             }
 
             for (const uint32_t texIndex : pass->imageReadWrite) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              pass->stages,
-                                                              VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                                                              VK_IMAGE_LAYOUT_GENERAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         pass->stages,
+                                                                         VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                                         VK_IMAGE_LAYOUT_GENERAL));
             }
 
             for (const uint32_t texIndex : pass->blitImageReads) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
             }
 
             for (const uint32_t texIndex : pass->clearImageWrites) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
             }
 
             for (const uint32_t texIndex : pass->blitImageWrites) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
             }
 
             for (const uint32_t texIndex : pass->copyImageReads) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
             }
 
             for (const uint32_t texIndex : pass->copyImageWrites) {
                 auto& tex = textures[texIndex];
                 auto& phys = GetPhysical(texIndex);
-                addImageBarrier(VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
-                                                              phys.event.stages, phys.event.access, tex.layout,
-                                                              VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
-                LogImageBarrier(tex.textureId, compiledImageBarriers.Back(), tex.physicalIndex);
+                addImageBarrier(tex, phys, VkHelpers::ImageMemoryBarrier(phys.image, VkHelpers::SubresourceRange(phys.aspect),
+                                                                         phys.event.stages, phys.event.access, tex.layout,
+                                                                         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
             }
 
             for (const uint32_t bufIndex : pass->bufferWrites) {
@@ -1270,6 +1292,9 @@ void RenderGraph::PrecomputeBarriers()
                     waveState[physIdx].access |= access;
                 }
             };
+            auto setLayout = [&](uint32_t texIdx, VkImageLayout layout) {
+                textures[texIdx].layout = physicalResources[textures[texIdx].physicalIndex].dimensions.bConcurrent ? VK_IMAGE_LAYOUT_GENERAL : layout;
+            };
 
             for (const uint32_t i : pass->colorAttachments) {
                 textures[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1288,40 +1313,40 @@ void RenderGraph::PrecomputeBarriers()
             }
 
             for (const uint32_t i : pass->storageImageWrites) {
-                textures[i].layout = VK_IMAGE_LAYOUT_GENERAL;
+                setLayout(i, VK_IMAGE_LAYOUT_GENERAL);
                 stampWrite(textures[i].physicalIndex, pass->stages, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
             }
             for (const uint32_t i : pass->imageReadWrite) {
-                textures[i].layout = VK_IMAGE_LAYOUT_GENERAL;
+                setLayout(i, VK_IMAGE_LAYOUT_GENERAL);
                 stampWrite(textures[i].physicalIndex, pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
             }
             for (const uint32_t i : pass->clearImageWrites) {
-                textures[i].layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                setLayout(i, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 stampWrite(textures[i].physicalIndex, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
             }
             for (const uint32_t i : pass->blitImageWrites) {
-                textures[i].layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                setLayout(i, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 stampWrite(textures[i].physicalIndex, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
             }
             for (const uint32_t i : pass->copyImageWrites) {
-                textures[i].layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                setLayout(i, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 stampWrite(textures[i].physicalIndex, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
             }
 
             for (const uint32_t i : pass->storageImageReads) {
-                textures[i].layout = VK_IMAGE_LAYOUT_GENERAL;
+                setLayout(i, VK_IMAGE_LAYOUT_GENERAL);
                 stampRead(textures[i].physicalIndex, pass->stages, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
             }
             for (const uint32_t i : pass->sampledImageReads) {
-                textures[i].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                setLayout(i, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 stampRead(textures[i].physicalIndex, pass->stages, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
             }
             for (const uint32_t i : pass->blitImageReads) {
-                textures[i].layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                setLayout(i, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
                 stampRead(textures[i].physicalIndex, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
             }
             for (const uint32_t i : pass->copyImageReads) {
-                textures[i].layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                setLayout(i, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
                 stampRead(textures[i].physicalIndex, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
             }
 
@@ -1346,6 +1371,9 @@ void RenderGraph::PrecomputeBarriers()
                 physicalResources[physIdx].event.stages = s.stages;
                 physicalResources[physIdx].event.access = s.access;
                 physicalResources[physIdx].bAsyncEvent = waveIdx < asyncWaveCount;
+                if (waveIdx >= asyncWaveCount) {
+                    physicalResources[physIdx].lastGraphicsFrame = currentFrame;
+                }
             }
         }
     }
@@ -1367,7 +1395,7 @@ void RenderGraph::Compile(uint64_t currentFrame)
 
     AssignPhysicalResources(currentFrame);
 
-    PrecomputeBarriers();
+    PrecomputeBarriers(currentFrame);
 }
 
 void RenderGraph::Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd)
@@ -3027,6 +3055,9 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     imageInfo.mipLevels = dim.levels;
     imageInfo.arrayLayers = dim.layers;
     imageInfo.samples = static_cast<VkSampleCountFlagBits>(dim.samples);
+    if (dim.bConcurrent) {
+        imageInfo = context->ApplyImageSharing(imageInfo, false);
+    }
 
     auto imageAlloc = allocFns.createImage(context, imageInfo);
     resource.image = imageAlloc.image;

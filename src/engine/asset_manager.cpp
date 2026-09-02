@@ -1033,7 +1033,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     int32_t texturesThisTick{0};
     while (assetLoadManager->TryDequeueTextureComplete(textureComplete)) {
         if (textureComplete.bSuccess) {
-            stagingFrameBuffer.imageAcquireOperations.PushBack(textureComplete.texture->acquireBarrier);
             textureComplete.texture->loadState = Texture::LoadState::Loaded;
             textureComplete.texture->acquireFrame = ctx->currentRenderFrame;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
@@ -1061,7 +1060,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     int32_t cubemapsThisTick{0};
     while (assetLoadManager->TryDequeueCubemapComplete(cubemapComplete)) {
         if (cubemapComplete.bSuccess) {
-            stagingFrameBuffer.imageAcquireOperations.PushBack(cubemapComplete.cubemap->acquireBarrier);
             cubemapComplete.cubemap->loadState = Render::Cubemap::LoadState::Loaded;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Cubemap load succeeded: {} (bindless index: {})", cubemapComplete.cubemap->name.c_str(), static_cast<uint32_t>(cubemapComplete.cubemap->bindlessHandle.index));
@@ -1114,10 +1112,6 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
     int32_t proceduralTexturesThisTick{0};
     while (assetLoadManager->TryDequeueProceduralTextureComplete(proceduralTexComplete)) {
         if (proceduralTexComplete.bSuccess) {
-            // Only if generated through compute
-            if (proceduralTexComplete.texture->acquireBarrier.image != 0) {
-                stagingFrameBuffer.imageAcquireOperations.PushBack(proceduralTexComplete.texture->acquireBarrier);
-            }
             proceduralTexComplete.texture->loadState = Texture::LoadState::Loaded;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Procedural texture generation succeeded (bindless index: {})", static_cast<uint32_t>(proceduralTexComplete.texture->bindlessHandle.index));

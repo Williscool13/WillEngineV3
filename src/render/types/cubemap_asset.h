@@ -42,8 +42,6 @@ struct Cubemap
 
     AllocatedImage image;
     ImageView imageView;
-
-    Core::ImageAcquireOperation acquireBarrier{};
 };
 } // Render
 

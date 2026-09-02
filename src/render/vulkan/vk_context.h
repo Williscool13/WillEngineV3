@@ -52,6 +52,26 @@ struct VulkanContext
 
     uint32_t bufferSharingFamilies[3]{};
     uint32_t bufferSharingFamilyCount{0};
+    uint32_t imageSharingFamilies[2]{};
+    uint32_t imageSharingFamilyCount{0};
+
+    /**
+     * Images opt in per image: graphics+compute for RDG images the async cut touches, plus transfer for asset images uploaded on the transfer queue.
+     * @param info image create info to patch
+     * @param bTransfer include the transfer family
+     * @returns the info with sharingMode and the family list applied (EXCLUSIVE if fewer than 2 distinct families)
+     */
+    [[nodiscard]] VkImageCreateInfo ApplyImageSharing(VkImageCreateInfo info, bool bTransfer) const
+    {
+        const uint32_t* families = bTransfer ? bufferSharingFamilies : imageSharingFamilies;
+        const uint32_t count = bTransfer ? bufferSharingFamilyCount : imageSharingFamilyCount;
+        if (count >= 2) {
+            info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+            info.queueFamilyIndexCount = count;
+            info.pQueueFamilyIndices = families;
+        }
+        return info;
+    }
 
     /**
      * Buffers are always VK_SHARING_MODE_CONCURRENT engine-wide across all distinct queue families.

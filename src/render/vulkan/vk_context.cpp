@@ -629,6 +629,10 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     if (computeQueueFamily != UINT32_MAX && computeQueueFamily != graphicsQueueFamily && computeQueueFamily != transferQueueFamily) {
         bufferSharingFamilies[bufferSharingFamilyCount++] = computeQueueFamily;
     }
+    imageSharingFamilies[imageSharingFamilyCount++] = graphicsQueueFamily;
+    if (computeQueueFamily != UINT32_MAX && computeQueueFamily != graphicsQueueFamily) {
+        imageSharingFamilies[imageSharingFamilyCount++] = computeQueueFamily;
+    }
 
     VmaAllocatorCreateInfo allocatorInfo = {};
     allocatorInfo.physicalDevice = physicalDevice;

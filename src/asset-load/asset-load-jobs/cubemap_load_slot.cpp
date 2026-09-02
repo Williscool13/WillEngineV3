@@ -201,7 +201,7 @@ bool CubemapLoadSlot::AllocateGPUResources()
     imageCreateInfo.arrayLayers = 6;
     imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    outputCubemap->image = Render::AllocatedImage::CreateAllocatedImage(context, imageCreateInfo);
+    outputCubemap->image = Render::AllocatedImage::CreateAllocatedImage(context, context->ApplyImageSharing(imageCreateInfo, true));
 
     VkImageViewCreateInfo viewInfo = Render::VkHelpers::ImageViewCreateInfo(
         outputCubemap->image.handle,
@@ -298,20 +298,16 @@ void CubemapLoadSlot::UploadCubemap(VkCommandBuffer cmd, const Core::InlineFunct
         }
     }
 
-    // Final barrier: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL with queue family transfer
+    // Final barrier: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
     VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
         outputCubemap->image.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, blobView.levelCount, 0, 6),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
-    finalBarrier.srcQueueFamilyIndex = context->transferQueueFamily;
-    finalBarrier.dstQueueFamilyIndex = context->graphicsQueueFamily;
 
     depInfo.pImageMemoryBarriers = &finalBarrier;
     vkCmdPipelineBarrier2(cmd, &depInfo);
-
-    outputCubemap->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
 
     blobData = {};
     blobView = {};

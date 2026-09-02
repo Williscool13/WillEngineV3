@@ -30,7 +30,6 @@ struct Texture
 
     Render::AllocatedImage image{};
     Render::ImageView imageView{};
-    Core::ImageAcquireOperation acquireBarrier{};
 
     Core::Path source{};
     Core::InlineString<128> name;

@@ -118,7 +118,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
     );
     imageCreateInfo.mipLevels = mipCount;
-    tex->image = Render::AllocatedImage::CreateAllocatedImage(loadSlot->context, imageCreateInfo);
+    tex->image = Render::AllocatedImage::CreateAllocatedImage(loadSlot->context, loadSlot->context->ApplyImageSharing(imageCreateInfo, false));
 
     VkImageViewCreateInfo sampledViewInfo = Render::VkHelpers::ImageViewCreateInfo(tex->image.handle, format, VK_IMAGE_ASPECT_COLOR_BIT);
     sampledViewInfo.subresourceRange = Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1);
@@ -213,23 +213,13 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
         vkCmdCopyImage(cmd, scratch, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, tex->image.handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipCount, regions);
     }
 
-    // All mips TRANSFER_DST -> SHADER_READ_ONLY_OPTIMAL; queue family release to graphics when generated on a separate compute family
+    // All mips TRANSFER_DST -> SHADER_READ_ONLY_OPTIMAL
     VkImageMemoryBarrier2 finalBarrier = Render::VkHelpers::ImageMemoryBarrier(
         tex->image.handle,
         Render::VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT, 0, mipCount, 0, 1),
         VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
-    const uint32_t submitFamily = loadSlot->context->computeQueue != VK_NULL_HANDLE ? loadSlot->context->computeQueueFamily : loadSlot->context->graphicsQueueFamily;
-    if (submitFamily != loadSlot->context->graphicsQueueFamily) {
-        finalBarrier.srcQueueFamilyIndex = submitFamily;
-        finalBarrier.dstQueueFamilyIndex = loadSlot->context->graphicsQueueFamily;
-        tex->acquireBarrier = Render::VkHelpers::FromVkBarrier(finalBarrier);
-    }
-    else {
-        finalBarrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-        finalBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
-    }
     VkDependencyInfo finalDep{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &finalBarrier};
     vkCmdPipelineBarrier2(cmd, &finalDep);
 

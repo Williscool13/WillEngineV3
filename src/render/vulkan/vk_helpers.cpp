@@ -30,6 +30,8 @@ VkImageMemoryBarrier2 VkHelpers::ImageMemoryBarrier(
         .dstAccessMask = dstAccessMask,
         .oldLayout = oldLayout,
         .newLayout = newLayout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = image,
         .subresourceRange = subresourceRange,
     };

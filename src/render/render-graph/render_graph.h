@@ -226,7 +226,7 @@ public: // Compile and execute
     /**
      * Precomputes per-wave and per-pass barriers into flat arrays; call after Compile
      */
-    void PrecomputeBarriers();
+    void PrecomputeBarriers(uint64_t currentFrame);
 
     /**
      * Allocates/aliases physical resources and writes descriptors; call after CalculateLifetimes

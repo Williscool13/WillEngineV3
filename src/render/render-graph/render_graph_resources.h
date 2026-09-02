@@ -292,6 +292,8 @@ struct ResourceDimensions
     uint32_t layers = 1;
     uint32_t samples = 1;
     VkImageUsageFlags imageUsage = 0;
+    // Forced to be CONCURRENT and always GENERAL
+    bool bConcurrent = false;
 
     // Buffer fields
     VkDeviceSize bufferSize = 0;
@@ -318,7 +320,8 @@ struct ResourceDimensions
                depth == other.depth &&
                levels == other.levels &&
                layers == other.layers &&
-               samples == other.samples;
+               samples == other.samples &&
+               bConcurrent == other.bConcurrent;
     }
 };
 
@@ -332,6 +335,7 @@ struct PhysicalResource
     ResourceDimensions dimensions;
     PipelineEvent event;
     bool bAsyncEvent = false;
+    uint64_t lastGraphicsFrame = 0;
     bool bIsImported = false;
     bool bDisableBarriers = false;
 
@@ -393,6 +397,7 @@ struct TextureResource
     uint32_t index;
     uint32_t physicalIndex = UINT32_MAX;
     bool bCanUseAliasedTexture = true;
+    bool bAsyncTouched = false;
 
     RenderCategory category{RenderCategory::Untagged};
 

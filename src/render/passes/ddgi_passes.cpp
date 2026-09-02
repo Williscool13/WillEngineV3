@@ -28,13 +28,6 @@ static StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_RELOCATE_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_DEBUG_PASS[DDGI_MAX_VOLUME_SLOTS];
-static constexpr uint32_t DDGI_ATLAS_BUCKETS = DDGI_MAX_RESIDENT_LOCAL_VOLUMES / DDGI_ATLAS_ROW_BUCKET;
-static StringID DDGI_LOCAL_IRRADIANCE_BUCKET[DDGI_ATLAS_BUCKETS];
-static StringID DDGI_LOCAL_VISIBILITY_BUCKET[DDGI_ATLAS_BUCKETS];
-
-static StringID DDGILocalIrradianceId(uint32_t rows) { return DDGI_LOCAL_IRRADIANCE_BUCKET[rows / DDGI_ATLAS_ROW_BUCKET - 1u]; }
-
-static StringID DDGILocalVisibilityId(uint32_t rows) { return DDGI_LOCAL_VISIBILITY_BUCKET[rows / DDGI_ATLAS_ROW_BUCKET - 1u]; }
 
 static StringID DDGISlotName(const char* format, uint32_t slot)
 {
@@ -53,11 +46,6 @@ static bool InitDDGISlotNames()
         DDGI_BLEND_VISIBILITY_PASS[k] = DDGISlotName("DDGI Blend Visibility %u", k);
         DDGI_RELOCATE_PASS[k] = DDGISlotName("DDGI Probe Relocate %u", k);
         DDGI_DEBUG_PASS[k] = DDGISlotName("DDGI Probe Debug %u", k);
-    }
-    for (uint32_t b = 0; b < DDGI_ATLAS_BUCKETS; ++b) {
-        const uint32_t rows = (b + 1u) * DDGI_ATLAS_ROW_BUCKET;
-        DDGI_LOCAL_IRRADIANCE_BUCKET[b] = DDGISlotName("ddgi_local_irradiance_%u", rows);
-        DDGI_LOCAL_VISIBILITY_BUCKET[b] = DDGISlotName("ddgi_local_visibility_%u", rows);
     }
     return true;
 }
@@ -98,8 +86,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
         cascades.volumes[k] = volume;
     }
 
-    cascades.localAtlasRows = DDGIAtlasRows(static_cast<uint32_t>(glm::max(params.maxResidentWorldVolumes, 1)));
-    const uint32_t maxResident = glm::min(glm::min(static_cast<uint32_t>(glm::max(params.maxResidentWorldVolumes, 1)), cascades.localAtlasRows), DDGI_MAX_VOLUME_SLOTS - cascades.count);
+    const uint32_t maxResident = glm::min(glm::min(static_cast<uint32_t>(glm::max(params.maxResidentWorldVolumes, 1)), DDGI_MAX_RESIDENT_LOCAL_VOLUMES), DDGI_MAX_VOLUME_SLOTS - cascades.count);
     if (localVolumeCount > 0 && maxResident > 0) {
         const uint32_t candidates = glm::min(localVolumeCount, static_cast<uint32_t>(Core::MAX_LOCAL_DDGI_VOLUMES));
         bool taken[Core::MAX_LOCAL_DDGI_VOLUMES]{};
@@ -200,8 +187,8 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             volume.viewBias = glm::max(params.viewBias, 0.0f);
             volume.irradianceGamma = glm::max(params.irradianceGamma, 1.0f);
             volume.edgeFadeCells = 1.0f;
-            volume.atlasSlot = k - localBase;
-            volume.atlasRows = cascades.localAtlasRows;
+            volume.atlasSlot = 0u;
+            volume.atlasRows = 1u;
             volume.baseCell = glm::ivec3(0);
 
             cascades.volumes[k] = volume;
@@ -312,9 +299,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     const uint32_t total = cascades.count + cascades.localCount;
     const uint32_t prevTotal = previous.count + previous.localCount;
 
-    const StringID sharedIrradianceId = DDGILocalIrradianceId(cascades.localAtlasRows);
-    const StringID sharedVisibilityId = DDGILocalVisibilityId(cascades.localAtlasRows);
-
     const bool bClassify = params.bClassification && params.bRelocation;
 
     const bool bLayoutStable = prevTotal > 0 && previous.count == cascades.count && previous.volumes[0].probeCount == cascades.volumes[0].probeCount;
@@ -330,9 +314,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const bool bSameWindow = k < prevTotal && previous.localIds[k] == cascades.localIds[k] && previous.volumes[k].probeCount == cascades.volumes[k].probeCount
             && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].origin == cascades.volumes[k].origin && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
         const bool bWritten = k < cascades.count || previous.localWarmup[k] > 0;
-        bHistoryValid[k] = bSameWindow && bWritten && (k >= cascades.count
-                                                          ? graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)
-                                                          : graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k]));
+        bHistoryValid[k] = bSameWindow && bWritten && graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k]);
         bOffsetsHistoryValid[k] = bSameWindow && bWritten && params.bRelocation && bOffsetsCarried;
         bRestartHistoryValid[k] = bSameWindow && bWritten && params.bRelocation && bRestartCarried;
         bActiveHistoryValid[k] = bSameWindow && bWritten && bClassify && bActiveCarried;
@@ -364,8 +346,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             } else if (bHistoryValid[k]) {
                 prevSources->entries[k] = DDGICascadeDescSource{
                     .volume = previous.volumes[k],
-                    .irradiance = k >= cascades.count ? sharedIrradianceId : DDGI_IRRADIANCE[k],
-                    .visibility = k >= cascades.count ? sharedVisibilityId : DDGI_VISIBILITY[k],
+                    .irradiance = DDGI_IRRADIANCE[k],
+                    .visibility = DDGI_VISIBILITY[k],
                     .offsets = bOffsetsHistoryValid[k] ? DDGI_PROBE_OFFSETS_BUFFER : StringID{},
                     .offsetsByteOffset = DDGIProbeDataElemOffset(cascades, k) * static_cast<uint32_t>(sizeof(glm::vec4)),
                     .bValid = true,
@@ -378,19 +360,12 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     }
 
     constexpr VkImageUsageFlags atlasUsage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-    for (uint32_t k = 0; k < cascades.count; ++k) {
+    for (uint32_t k = 0; k < total; ++k) {
         const glm::uvec3 probeCount = cascades.volumes[k].probeCount;
         graph.CreateTexture(DDGI_IRRADIANCE[k], TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, probeCount.x * probeCount.y * DDGI_IRRADIANCE_TILE, probeCount.z * DDGI_IRRADIANCE_TILE, 1}, {std::nullopt}, false);
         graph.CreateTexture(DDGI_VISIBILITY[k], TextureInfo{VK_FORMAT_R16G16_SFLOAT, probeCount.x * probeCount.y * DDGI_VISIBILITY_TILE, probeCount.z * DDGI_VISIBILITY_TILE, 1}, {std::nullopt}, false);
         graph.CarryTextureToNextFrame(DDGI_IRRADIANCE[k], DDGI_IRRADIANCE[k], atlasUsage);
         graph.CarryTextureToNextFrame(DDGI_VISIBILITY[k], DDGI_VISIBILITY[k], atlasUsage);
-    }
-    if (cascades.localCount > 0) {
-        const uint32_t localProbes = static_cast<uint32_t>(Core::LOCAL_DDGI_PROBES_PER_AXIS);
-        graph.CreateTexture(sharedIrradianceId, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, localProbes * localProbes * DDGI_IRRADIANCE_TILE, localProbes * DDGI_IRRADIANCE_TILE * cascades.localAtlasRows, 1}, {std::nullopt}, false);
-        graph.CreateTexture(sharedVisibilityId, TextureInfo{VK_FORMAT_R16G16_SFLOAT, localProbes * localProbes * DDGI_VISIBILITY_TILE, localProbes * DDGI_VISIBILITY_TILE * cascades.localAtlasRows, 1}, {std::nullopt}, false);
-        graph.CarryTextureToNextFrame(sharedIrradianceId, sharedIrradianceId, atlasUsage);
-        graph.CarryTextureToNextFrame(sharedVisibilityId, sharedVisibilityId, atlasUsage);
     }
 
     for (uint32_t k = 0; k < total; ++k) {
@@ -398,8 +373,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const bool bLocal = k >= cascades.count;
         const uint32_t probeCountTotal = volume.probeCount.x * volume.probeCount.y * volume.probeCount.z;
 
-        const StringID irradianceId = bLocal ? sharedIrradianceId : DDGI_IRRADIANCE[k];
-        const StringID visibilityId = bLocal ? sharedVisibilityId : DDGI_VISIBILITY[k];
+        const StringID irradianceId = DDGI_IRRADIANCE[k];
+        const StringID visibilityId = DDGI_VISIBILITY[k];
 
         if (!cascades.bUpdated[k]) {
             continue;
@@ -449,12 +424,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (bFeedback) {
             tracePass.ReadBuffer(DDGI_CASCADES_PREV_BUFFER);
             DeclareDDGIVolumeGridReads(graph, tracePass);
-            if (graph.HasTexture(sharedIrradianceId) && graph.HasTexture(sharedVisibilityId)) {
-                tracePass.ReadSampledImage(sharedIrradianceId);
-                tracePass.ReadSampledImage(sharedVisibilityId);
-            }
             for (uint32_t j = 0; j < total; ++j) {
-                if (bHistoryValid[j] && j < cascades.count) {
+                if (bHistoryValid[j]) {
                     tracePass.ReadSampledImage(DDGI_IRRADIANCE[j]);
                     tracePass.ReadSampledImage(DDGI_VISIBILITY[j]);
                 }
@@ -624,15 +595,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     for (uint32_t k = 0; k < total; ++k) {
         if (!params.bCascadeSampling && k < cascades.count) {
             sources->entries[k].volume = cascades.volumes[k];
-        } else if (k >= cascades.count) {
-            sources->entries[k] = DDGICascadeDescSource{
-                .volume = cascades.volumes[k],
-                .irradiance = sharedIrradianceId,
-                .visibility = sharedVisibilityId,
-                .offsets = params.bRelocation && (cascades.bUpdated[k] || bOffsetsHistoryValid[k]) ? DDGI_PROBE_OFFSETS_BUFFER : StringID{},
-                .offsetsByteOffset = DDGIProbeDataElemOffset(cascades, k) * static_cast<uint32_t>(sizeof(glm::vec4)),
-                .bValid = cascades.bUpdated[k] || bHistoryValid[k],
-            };
         } else if (cascades.bUpdated[k] || bHistoryValid[k]) {
             sources->entries[k] = DDGICascadeDescSource{
                 .volume = cascades.volumes[k],
@@ -657,19 +619,10 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
     pass.ReadBuffer(DDGI_CASCADES_BUFFER);
     DeclareDDGIVolumeGridReads(graph, pass);
 
-    for (uint32_t b = 0; b < DDGI_ATLAS_BUCKETS; ++b) {
-        const uint32_t rows = (b + 1u) * DDGI_ATLAS_ROW_BUCKET;
-        if (graph.HasTexture(DDGILocalIrradianceId(rows)) && graph.HasTexture(DDGILocalVisibilityId(rows))) {
-            pass.ReadSampledImage(DDGILocalIrradianceId(rows));
-            pass.ReadSampledImage(DDGILocalVisibilityId(rows));
-        }
-    }
-
-    for (uint32_t k = 0; k < DDGI_MAX_CAMERA_CASCADES; ++k) {
-        if (graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k])) {
-            pass.ReadSampledImage(DDGI_IRRADIANCE[k]);
-            pass.ReadSampledImage(DDGI_VISIBILITY[k]);
-        }
+    for (uint32_t k = 0; k < DDGI_MAX_VOLUME_SLOTS; ++k) {
+        if (!graph.HasTexture(DDGI_IRRADIANCE[k]) || !graph.HasTexture(DDGI_VISIBILITY[k])) { break; }
+        pass.ReadSampledImage(DDGI_IRRADIANCE[k]);
+        pass.ReadSampledImage(DDGI_VISIBILITY[k]);
     }
     if (graph.HasBuffer(DDGI_PROBE_OFFSETS_BUFFER)) {
         pass.ReadBuffer(DDGI_PROBE_OFFSETS_BUFFER);
@@ -730,11 +683,11 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
             continue;
         }
         const bool bLocal = k >= cascades.count;
-        const StringID atlasId = bLocal ? DDGILocalIrradianceId(cascades.localAtlasRows) : DDGI_IRRADIANCE[k];
+        const StringID atlasId = DDGI_IRRADIANCE[k];
         if (!graph.HasTexture(atlasId)) {
             continue;
         }
-        const StringID visibilityId = bLocal ? DDGILocalVisibilityId(cascades.localAtlasRows) : DDGI_VISIBILITY[k];
+        const StringID visibilityId = DDGI_VISIBILITY[k];
         const bool bVisibility = graph.HasTexture(visibilityId);
         // Flat buffers; a cold slot's region can be stale, acceptable for the debug draw.
         const bool bOffsets = graph.HasBuffer(DDGI_PROBE_OFFSETS_BUFFER);
