@@ -236,6 +236,9 @@ public: // Compile and execute
 
     void Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd);
 
+    /** Accumulated dst stages of the suppressed async->graphics barriers */
+    [[nodiscard]] VkPipelineStageFlags2 GetCrossCutWaitStageMask() const { return crossCutWaitStageMask; }
+
     /**
      * Transitions the named texture to present-src layout; call after Execute
      * @param cmd
@@ -351,6 +354,7 @@ private:
 
     uint32_t asyncPassCount{0};
     uint32_t asyncWaveCount{0};
+    VkPipelineStageFlags2 crossCutWaitStageMask{0};
 
     struct WaveBarrierRange
     {

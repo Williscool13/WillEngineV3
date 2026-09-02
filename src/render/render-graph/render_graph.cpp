@@ -375,6 +375,11 @@ void RenderGraph::PropagateAsyncPasses()
 
     for (const auto& pass : passes) {
         if (!pass->bAsyncCompute) { continue; }
+        const bool bDeclaresImages = !pass->colorAttachments.IsEmpty() || pass->depthStencilAttachment != UINT_MAX
+                                     || !pass->storageImageReads.IsEmpty() || !pass->storageImageWrites.IsEmpty() || !pass->sampledImageReads.IsEmpty()
+                                     || !pass->imageReadWrite.IsEmpty() || !pass->clearImageWrites.IsEmpty() || !pass->autoClearTextures.IsEmpty()
+                                     || !pass->blitImageReads.IsEmpty() || !pass->blitImageWrites.IsEmpty() || !pass->copyImageReads.IsEmpty() || !pass->copyImageWrites.IsEmpty();
+        ENGINE_ASSERT(Renderer, !bDeclaresImages, "[RDG] Async pass '{}' declares image accesses; images may not cross the async cut", pass->renderPassId.ToString());
         for (auto& buf : buffers) {
             if (pass->DeclaresBuffer(buf.index)) {
                 buf.bAsyncTouched = true;
@@ -901,6 +906,7 @@ void RenderGraph::PrecomputeBarriers()
     compiledImageBarriers.Clear();
     compiledBufferBarriers.Clear();
     compiledWaveRanges.Clear();
+    crossCutWaitStageMask = 0;
 
     if (physicalResources.IsEmpty()) { return; }
 
@@ -960,7 +966,14 @@ void RenderGraph::PrecomputeBarriers()
             compiledImageBarriers.PushBack(b);
         };
 
-        auto addBufferBarrier = [&](const VkBufferMemoryBarrier2& b) {
+        auto addBufferBarrier = [&](const PhysicalResource& physRes, const VkBufferMemoryBarrier2& b) {
+            const bool bAsyncWave = waveIdx < asyncWaveCount;
+            if (bAsyncWave != physRes.bAsyncEvent) {
+                if (!bAsyncWave) {
+                    crossCutWaitStageMask |= b.dstStageMask;
+                }
+                return;
+            }
             for (uint32_t i = bufferStart; i < compiledBufferBarriers.Size(); i++) {
                 auto& e = compiledBufferBarriers[i];
                 if (e.buffer == b.buffer) {
@@ -1089,11 +1102,11 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_SHADER_WRITE_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_SHADER_WRITE_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_SHADER_WRITE_BIT);
             }
 
@@ -1101,11 +1114,11 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT);
             }
 
@@ -1113,11 +1126,11 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_TRANSFER_WRITE_BIT);
             }
 
@@ -1125,11 +1138,11 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_TRANSFER_READ_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_TRANSFER_READ_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_TRANSFER_READ_BIT);
             }
 
@@ -1137,11 +1150,11 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_SHADER_READ_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access, pass->stages, VK_ACCESS_2_SHADER_READ_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_SHADER_READ_BIT);
             }
 
@@ -1149,11 +1162,11 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access, VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT, VK_ACCESS_2_INDEX_READ_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access, VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT, VK_ACCESS_2_INDEX_READ_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_INDEX_READ_BIT);
             }
 
@@ -1161,13 +1174,13 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access,
-                    pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access,
+                                     pass->stages | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                                     VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT);
             }
 
@@ -1175,12 +1188,12 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access,
-                    VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access,
+                                     VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT);
             }
 
@@ -1188,12 +1201,12 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access,
-                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access,
+                                     VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
             }
 
@@ -1201,12 +1214,12 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access,
-                    pass->stages, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access,
+                                     pass->stages, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
             }
 
@@ -1214,12 +1227,12 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access,
-                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access,
+                                     VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR);
             }
 
@@ -1227,12 +1240,12 @@ void RenderGraph::PrecomputeBarriers()
                 auto& buf = buffers[bufIndex];
                 auto& phys = physicalResources[buf.physicalIndex];
                 if (phys.bDisableBarriers) { continue; }
-                addBufferBarrier({
-                    VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
-                    phys.event.stages, phys.event.access,
-                    VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT,
-                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
-                });
+                addBufferBarrier(phys, {
+                                     VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2, nullptr,
+                                     phys.event.stages, phys.event.access,
+                                     VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT,
+                                     VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, phys.buffer, 0, VK_WHOLE_SIZE
+                                 });
                 LogBufferBarrier(buf.bufferId, VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR);
             }
         }
@@ -1332,6 +1345,7 @@ void RenderGraph::PrecomputeBarriers()
             if (s.stages != 0) {
                 physicalResources[physIdx].event.stages = s.stages;
                 physicalResources[physIdx].event.access = s.access;
+                physicalResources[physIdx].bAsyncEvent = waveIdx < asyncWaveCount;
             }
         }
     }

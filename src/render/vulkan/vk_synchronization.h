@@ -17,6 +17,7 @@ struct RenderSynchronization
     VulkanContext* context{};
 
     VkCommandPool commandPool{};
+    VkCommandPool asyncComputeCommandPool{};
     VkCommandBuffer commandBuffer{};
     VkCommandBuffer asyncComputeCommandBuffer{};
     VkFence renderFence{};

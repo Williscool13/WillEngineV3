@@ -275,6 +275,21 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     VkCommandBufferBeginInfo beginInfo = VkHelpers::CommandBufferBeginInfo();
     VK_CHECK(vkBeginCommandBuffer(renderSync.commandBuffer, &beginInfo));
     VK_CHECK(vkBeginCommandBuffer(renderSync.asyncComputeCommandBuffer, &beginInfo));
+
+    //
+    {
+        VkMemoryBarrier2 cutHeadBarrier{
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
+        };
+        VkDependencyInfo cutHeadDepInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        cutHeadDepInfo.memoryBarrierCount = 1;
+        cutHeadDepInfo.pMemoryBarriers = &cutHeadBarrier;
+        vkCmdPipelineBarrier2(renderSync.asyncComputeCommandBuffer, &cutHeadDepInfo);
+    }
     pipelineStatsQuery.Begin(renderSync.commandBuffer, currentFrameIndex);
 
 #ifdef ENABLE_VULKAN_VALIDATION
@@ -300,8 +315,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     //
     {
         TracyVkZone(context->tracyContext, renderSync.commandBuffer, "Frame");
-        // Acquisitions ride the async command buffer: it is the first submission of the frame, so they still precede all frame work
-        ProcessAcquisitions(renderSync.asyncComputeCommandBuffer, frameBuffer.imageAcquireOperations);
+        ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.imageAcquireOperations);
         res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.asyncComputeCommandBuffer, renderSync.swapchainSemaphore, frameBuffer, imguiSnapshot);
     }
     // ends if not already ended
@@ -322,14 +336,18 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         VkCommandBufferSubmitInfo asyncCmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.asyncComputeCommandBuffer);
         VkSemaphoreSubmitInfo timelineSignalInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
         VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&asyncCmdSubmitInfo, nullptr, &timelineSignalInfo);
-        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
+        VkQueue asyncQueue = context->computeQueue != VK_NULL_HANDLE ? context->computeQueue : context->graphicsQueue;
+        VK_CHECK(vkQueueSubmit2(asyncQueue, 1, &submitInfo, VK_NULL_HANDLE));
     }
+
+    const VkPipelineStageFlags2 crossCutMask = renderGraph->GetCrossCutWaitStageMask();
+    const VkPipelineStageFlags2 timelineWaitStageMask = crossCutMask != 0 ? crossCutMask : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 
     switch (res.code) {
         case RENDER_REQUESTED_RECREATE:
         {
             VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-            VkSemaphoreSubmitInfo timelineWaitInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+            VkSemaphoreSubmitInfo timelineWaitInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, timelineWaitStageMask);
             VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &timelineWaitInfo, nullptr);
             VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
         }
@@ -339,7 +357,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
             VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
             VkSemaphoreSubmitInfo waitInfos[2] = {
                 VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
-                VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
+                VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, timelineWaitStageMask),
             };
             VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, nullptr, nullptr);
             submitInfo.waitSemaphoreInfoCount = 2;
@@ -369,7 +387,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
                 VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
                 VkSemaphoreSubmitInfo waitInfos[2] = {
                     VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT),
-                    VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
+                    VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, timelineWaitStageMask),
                 };
                 VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
                 VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, &renderSemaphoreSignalInfo);

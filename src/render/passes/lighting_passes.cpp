@@ -65,6 +65,7 @@ void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineMana
     if (viewFamily.triLightCount == 0 || !graph.HasBuffer(LIGHT_DATA_BUFFER)) { return; }
 
     RenderPass& clearPass = graph.AddPass(SID("Emissive Tri Lights Clear"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::ReSTIRDI);
+    clearPass.AsyncCompute();
     clearPass.WriteBuffer(LIGHT_DATA_BUFFER);
     clearPass.Execute([pipelineManager, lightCount = viewFamily.triLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("emissive_tri_lights_clear"));
@@ -84,6 +85,7 @@ void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineMana
     if (!graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
 
     RenderPass& pass = graph.AddPass(SID("Emissive Tri Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::ReSTIRDI);
+    pass.AsyncCompute();
     pass.ReadBuffer(EMISSIVE_TRI_WORK_BUFFER);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -148,6 +150,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
         }
         const VkDeviceSize windowBytes = sizeof(DDGIVolumeParams) * volumeCount;
         RenderPass& upload = graph.AddPass(SID("DDGI Volume Windows"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::WorldGridBinning);
+        upload.AsyncCompute();
         upload.WriteTransferBuffer(SID("ddgi_volume_windows"));
         upload.Execute([windows, windowBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("ddgi_volume_windows")), 0, windowBytes, windows);
@@ -157,6 +160,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
     const uint32_t probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
 
     RenderPass& binning = graph.AddPass(SID("World Grid Binning"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::WorldGridBinning);
+    binning.AsyncCompute();
     binning.ReadBuffer(SCENE_DATA_BUFFER);
     binning.ReadBuffer(LIGHT_DATA_BUFFER);
     binning.ReadBuffer(REFLECTION_PROBE_BUFFER);

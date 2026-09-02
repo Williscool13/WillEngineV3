@@ -33,7 +33,7 @@ inline constexpr int32_t RDG_MAX_STORAGE_FLOAT = 256;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT4 = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT2 = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT = 64;
-inline constexpr int32_t RDG_MAX_TLAS = 16;
+inline constexpr int32_t RDG_MAX_TLAS = 64;
 
 inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
 inline const StringID LIGHT_DATA_BUFFER = SID("light_data");

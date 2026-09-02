@@ -331,6 +331,7 @@ struct PhysicalResource
 
     ResourceDimensions dimensions;
     PipelineEvent event;
+    bool bAsyncEvent = false;
     bool bIsImported = false;
     bool bDisableBarriers = false;
 

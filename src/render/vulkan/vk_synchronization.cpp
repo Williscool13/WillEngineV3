@@ -19,6 +19,7 @@ RenderSynchronization::~RenderSynchronization()
     if (context && commandPool != VK_NULL_HANDLE) {
         // Command buffer is freed when pool is destroyed.
         vkDestroyCommandPool(context->device, commandPool, context->HostAllocCallbacks());
+        vkDestroyCommandPool(context->device, asyncComputeCommandPool, context->HostAllocCallbacks());
         vkDestroyFence(context->device, renderFence, context->HostAllocCallbacks());
         vkDestroySemaphore(context->device, swapchainSemaphore, context->HostAllocCallbacks());
         vkDestroySemaphore(context->device, renderSemaphore, context->HostAllocCallbacks());
@@ -29,6 +30,7 @@ RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noex
 {
     context = other.context;
     commandPool = other.commandPool;
+    asyncComputeCommandPool = other.asyncComputeCommandPool;
     commandBuffer = other.commandBuffer;
     asyncComputeCommandBuffer = other.asyncComputeCommandBuffer;
     renderFence = other.renderFence;
@@ -37,6 +39,7 @@ RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noex
 
     other.context = nullptr;
     other.commandPool = VK_NULL_HANDLE;
+    other.asyncComputeCommandPool = VK_NULL_HANDLE;
     other.commandBuffer = VK_NULL_HANDLE;
     other.asyncComputeCommandBuffer = VK_NULL_HANDLE;
     other.renderFence = VK_NULL_HANDLE;
@@ -49,6 +52,7 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
     if (this != &other) {
         if (context && commandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(context->device, commandPool, context->HostAllocCallbacks());
+            vkDestroyCommandPool(context->device, asyncComputeCommandPool, context->HostAllocCallbacks());
             vkDestroyFence(context->device, renderFence, context->HostAllocCallbacks());
             vkDestroySemaphore(context->device, swapchainSemaphore, context->HostAllocCallbacks());
             vkDestroySemaphore(context->device, renderSemaphore, context->HostAllocCallbacks());
@@ -56,6 +60,7 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
 
         context = other.context;
         commandPool = other.commandPool;
+        asyncComputeCommandPool = other.asyncComputeCommandPool;
         commandBuffer = other.commandBuffer;
         asyncComputeCommandBuffer = other.asyncComputeCommandBuffer;
         renderFence = other.renderFence;
@@ -64,6 +69,7 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
 
         other.context = nullptr;
         other.commandPool = VK_NULL_HANDLE;
+        other.asyncComputeCommandPool = VK_NULL_HANDLE;
         other.commandBuffer = VK_NULL_HANDLE;
         other.asyncComputeCommandBuffer = VK_NULL_HANDLE;
         other.renderFence = VK_NULL_HANDLE;
@@ -77,11 +83,23 @@ void RenderSynchronization::Initialize()
 {
     VkCommandPoolCreateInfo commandPoolCreateInfo = VkHelpers::CommandPoolCreateInfo(context->graphicsQueueFamily);
     VK_CHECK(vkCreateCommandPool(context->device, &commandPoolCreateInfo, context->HostAllocCallbacks(), &commandPool));
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(2, commandPool);
-    VkCommandBuffer commandBuffers[2]{};
-    VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, commandBuffers));
-    commandBuffer = commandBuffers[0];
-    asyncComputeCommandBuffer = commandBuffers[1];
+
+    if (context->computeQueue != VK_NULL_HANDLE) {
+        VkCommandPoolCreateInfo asyncPoolCreateInfo = VkHelpers::CommandPoolCreateInfo(context->computeQueueFamily);
+        VK_CHECK(vkCreateCommandPool(context->device, &asyncPoolCreateInfo, context->HostAllocCallbacks(), &asyncComputeCommandPool));
+
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(1, commandPool);
+        VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, &commandBuffer));
+        VkCommandBufferAllocateInfo asyncAllocateInfo = VkHelpers::CommandBufferAllocateInfo(1, asyncComputeCommandPool);
+        VK_CHECK(vkAllocateCommandBuffers(context->device, &asyncAllocateInfo, &asyncComputeCommandBuffer));
+    }
+    else {
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(2, commandPool);
+        VkCommandBuffer commandBuffers[2]{};
+        VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, commandBuffers));
+        commandBuffer = commandBuffers[0];
+        asyncComputeCommandBuffer = commandBuffers[1];
+    }
 
     const VkFenceCreateInfo fenceCreateInfo = VkHelpers::FenceCreateInfo();
     const VkSemaphoreCreateInfo semaphoreCreateInfo = VkHelpers::SemaphoreCreateInfo();
