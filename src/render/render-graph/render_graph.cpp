@@ -35,8 +35,7 @@ RenderGraph::RenderGraph(VulkanContext* context, ResourceManager* resourceManage
       compiledImageBarriers(&alloc, Core::AllocTag::Render),
       compiledBufferBarriers(&alloc, Core::AllocTag::Render),
       compiledWaveRanges(&alloc, Core::AllocTag::Render),
-      textureCarryovers(&alloc, Core::AllocTag::Render),
-      bufferCarryovers(&alloc, Core::AllocTag::Render)
+      rings(&alloc, Core::AllocTag::Render)
 {
     ENGINE_ASSERT(Renderer, context != nullptr, "RenderGraph requires a valid VulkanContext");
     ENGINE_ASSERT(Renderer, context->allocator != nullptr, "RenderGraph requires an initialized VMA allocator");
@@ -551,11 +550,50 @@ void RenderGraph::PopulateAutoClearTextures()
 
 void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
 {
+    for (ResourceRing& ring : rings) {
+        if (!ring.bDeclaredThisFrame) { continue; }
+
+        // Do not let GC ever clear any ring physicals.
+        for (uint32_t d = 0; d <= ring.depth; ++d) {
+            if (ring.versions[d].IsValid()) { physicalResources[ring.versions[d].physicalIndex].lastUsedFrame = currentFrame; }
+        }
+
+        if (ring.emplaceSource.IsValid()) {
+            if (ring.bImage) { if (TextureResource* src = GetTexture(ring.emplaceSource)) { src->bCanUseAliasedTexture = false; } }
+            else if (BufferResource* src = GetBuffer(ring.emplaceSource)) { src->bCanUseAliasedBuffer = false; }
+        }
+
+#ifdef WDEBUG
+        {
+            bool bWritten = false;
+            if (ring.bImage) { if (const TextureResource* tex = GetTexture(ring.name)) { bWritten = tex->bWrittenThisFrame; } }
+            else if (const BufferResource* buf = GetBuffer(ring.name)) { bWritten = buf->bWrittenThisFrame; }
+            switch (ring.source) {
+                case VersionSource::Fresh:
+                    if (!bWritten) {
+                        LOG_ERROR(Renderer, "[RDG] Versioned '{}' declared Fresh but no pass writes it this frame; the version will be missing", ring.name.ToString());
+                    }
+                    break;
+                case VersionSource::Emplaced:
+                    if (!ring.emplaceSource.IsValid()) {
+                        LOG_ERROR(Renderer, "[RDG] Versioned '{}' declared Emplaced but EmplaceVersion was never called; the version will be missing", ring.name.ToString());
+                    }
+                    break;
+                case VersionSource::NoShiftReadOnly:
+                    ENGINE_ASSERT(Renderer, !bWritten, "[RDG] Versioned '{}' declared NoShiftReadOnly but a pass writes it", ring.name.ToString());
+                    break;
+                case VersionSource::NoShiftReadWrite:
+                    break;
+            }
+        }
+#endif
+    }
+
     ReconcileDetachedPhysicals();
 
     for (auto& tex : textures) {
         if (tex.accumulatedUsage == 0) {
-            if (bDebugLogging) {
+            if (bDebugLogging && !tex.HasPhysical()) {
                 LOG_WARN(Renderer, "Texture '{}' created but never used", tex.textureId.ToString());
             }
             continue;
@@ -563,6 +601,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
         if (!tex.HasPhysical()) {
             // Build desired dimensions for this texture
             ResourceDimensions desiredDim;
+            ENGINE_ASSERT(Renderer, tex.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' is used by a pass but was never declared this frame", tex.textureId.ToString());
             desiredDim.type = ResourceDimensions::Type::Image;
             desiredDim.format = tex.textureInfo.format;
             desiredDim.width = tex.textureInfo.width;
@@ -591,7 +630,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
                 }
 
                 // Async passes may not touch memory graphics used within the frames still in flight.
-                if (tex.bAsyncTouched && currentFrame - phys.lastGraphicsFrame < Core::FRAME_BUFFER_COUNT) {
+                if (tex.bAsyncTouched && RdgFrameInFlight(currentFrame, phys.lastGraphicsFrame)) {
                     continue;
                 }
 
@@ -665,7 +704,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
 
     for (auto& buf : buffers) {
         if (buf.accumulatedUsage == 0) {
-            if (bDebugLogging) {
+            if (bDebugLogging && !buf.HasPhysical()) {
                 LOG_WARN(Renderer, "Buffer '{}' created but never used", buf.bufferId.ToString());
             }
             continue;
@@ -696,7 +735,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
                 }
 
                 // Async passes may not touch memory graphics used within the frames still in flight.
-                if (buf.bAsyncTouched && currentFrame - phys.lastGraphicsFrame < Core::FRAME_BUFFER_COUNT) {
+                if (buf.bAsyncTouched && RdgFrameInFlight(currentFrame, phys.lastGraphicsFrame)) {
                     continue;
                 }
 
@@ -1387,6 +1426,9 @@ void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
                 physicalResources[physIdx].bAsyncEvent = waveIdx < asyncWaveCount;
                 if (waveIdx >= asyncWaveCount) {
                     physicalResources[physIdx].lastGraphicsFrame = currentFrame;
+                    if (s.wasWritten) {
+                        physicalResources[physIdx].lastGraphicsWriteFrame = currentFrame;
+                    }
                 }
             }
         }
@@ -1408,6 +1450,8 @@ void RenderGraph::Compile(uint64_t currentFrame)
     PopulateAutoClearTextures();
 
     AssignPhysicalResources(currentFrame);
+
+    ValidateAsyncHazards(currentFrame);
 
     PrecomputeBarriers(currentFrame);
 }
@@ -1588,48 +1632,9 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     }
 
     //
-    if (bDestroyViewportAssociated || bDropAllCarryovers) {
-        ZoneScopedN("DestroyViewportScaledResources");
-
-        for (int32_t i = static_cast<int32_t>(textureCarryovers.Size()) - 1; i >= 0; --i) {
-            const TextureFrameCarryover& carryover = textureCarryovers[i];
-            const TextureResource* tex = GetTexture(carryover.srcName);
-            if (bDropAllCarryovers || (tex && tex->HasPhysical() && physicalResources[tex->physicalIndex].bIsViewportScaled)) {
-                textureCarryovers.SwapRemove(i);
-            }
-        }
-
-        for (int32_t i = static_cast<int32_t>(bufferCarryovers.Size()) - 1; i >= 0; --i) {
-            const BufferFrameCarryover& carryover = bufferCarryovers[i];
-            const BufferResource* buf = GetBuffer(carryover.srcName);
-            if (bDropAllCarryovers || (buf && buf->HasPhysical() && physicalResources[buf->physicalIndex].bIsViewportScaled)) {
-                bufferCarryovers.SwapRemove(i);
-            }
-        }
-    }
-
-    //
     {
-        ZoneScopedN("CarryoverCapture");
-        for (TextureFrameCarryover& carryover : textureCarryovers) {
-            if (const TextureResource* tex = GetTexture(carryover.srcName)) {
-                if (!tex->HasPhysical()) { continue; }
-                const PhysicalResource& phys = physicalResources[tex->physicalIndex];
-                carryover.physicalImage = phys.image;
-                carryover.textInfo = tex->textureInfo;
-                carryover.layout = tex->layout;
-                carryover.accumulatedUsage = tex->accumulatedUsage;
-            }
-        }
-        for (BufferFrameCarryover& carryover : bufferCarryovers) {
-            if (const BufferResource* buf = GetBuffer(carryover.srcName)) {
-                if (!buf->HasPhysical()) { continue; }
-                const PhysicalResource& phys = physicalResources[buf->physicalIndex];
-                carryover.buffer = phys.buffer;
-                carryover.bufferInfo = buf->bufferInfo;
-                carryover.accumulatedUsage = buf->accumulatedUsage;
-            }
-        }
+        ZoneScopedN("CaptureRingVersions");
+        CaptureRingVersions();
         for (auto& entry : hostBuffers) {
             HostBuffer& slot = entry.slots[currentFrameIndex];
             if (slot.buffer == VK_NULL_HANDLE) { continue; }
@@ -1690,6 +1695,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
 
             if (bRemoveSwapchainPhysicals && phys.bIsSwapchain) {
                 physicalResources.RemoveAt(i);
+                OnPhysicalRemoved(static_cast<uint32_t>(i));
                 continue;
             }
 
@@ -1699,81 +1705,377 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
             if (bDestroyViewportAssociated && phys.bIsViewportScaled) {
                 DestroyPhysicalResource(phys);
                 physicalResources.RemoveAt(i);
+                OnPhysicalRemoved(static_cast<uint32_t>(i));
             }
             else if (currentFrame - phys.lastUsedFrame > maxFramesUnused) {
                 DestroyPhysicalResource(phys);
                 physicalResources.RemoveAt(i);
+                OnPhysicalRemoved(static_cast<uint32_t>(i));
             }
         }
-    }
-
-    //
-    {
-        ZoneScopedN("CarryoverTextureRestoration");
-        for (auto& carryover : textureCarryovers) {
-            uint32_t physicalIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < physicalResources.Size(); i++) {
-                if (carryover.physicalImage != VK_NULL_HANDLE && physicalResources[i].image == carryover.physicalImage) {
-                    physicalIndex = i;
-                    break;
-                }
-            }
-
-            if (physicalIndex == UINT32_MAX) {
-                LOG_ERROR(Renderer, "Carryover texture '{}' physical resource not found", carryover.dstName.ToString());
-                continue;
-            }
-
-            TextureResource* newTex = GetOrCreateTexture(carryover.dstName);
-            newTex->textureInfo = carryover.textInfo;
-            newTex->layout = carryover.layout;
-            newTex->accumulatedUsage = carryover.accumulatedUsage;
-            newTex->physicalIndex = physicalIndex;
-
-            PhysicalResource& phys = physicalResources[physicalIndex];
-            phys.logicalResourceIndices.PushBack(newTex->index);
-            phys.usageChain.Clear();
-            AppendUsageChain(phys, newTex->textureId, newTex->bCanUseAliasedTexture, bDebugLogging);
-            phys.bCanAlias = false;
-        }
-        textureCarryovers.Clear();
-    }
-
-    //
-    {
-        ZoneScopedN("CarryoverBufferRestoration");
-        for (auto& carryover : bufferCarryovers) {
-            uint32_t physicalIndex = UINT32_MAX;
-            for (uint32_t i = 0; i < physicalResources.Size(); i++) {
-                if (carryover.buffer != VK_NULL_HANDLE && physicalResources[i].buffer == carryover.buffer) {
-                    physicalIndex = i;
-                    break;
-                }
-            }
-
-            if (physicalIndex == UINT32_MAX) {
-                LOG_ERROR(Renderer, "Carryover buffer '{}' physical resource not found", carryover.dstName.ToString());
-                continue;
-            }
-
-            BufferResource* newBuf = GetOrCreateBuffer(carryover.dstName);
-            newBuf->bufferInfo = carryover.bufferInfo;
-            newBuf->accumulatedUsage = carryover.accumulatedUsage;
-            newBuf->physicalIndex = physicalIndex;
-            newBuf->carriedCount = carryover.srcCarriedCount + 1;
-
-            PhysicalResource& phys = physicalResources[physicalIndex];
-            phys.logicalResourceIndices.PushBack(newBuf->index);
-            phys.usageChain.Clear();
-            AppendUsageChain(phys, newBuf->bufferId, newBuf->bCanUseAliasedBuffer, bDebugLogging);
-            phys.bCanAlias = false;
-        }
-        bufferCarryovers.Clear();
     }
 
     bDestroyViewportAssociated = false;
     bRemoveSwapchainPhysicals = false;
-    bDropAllCarryovers = false;
+    bDropAllRings = false;
+}
+
+void RenderGraph::OnPhysicalRemoved(uint32_t physicalIndex)
+{
+    for (ResourceRing& ring : rings) {
+        for (ResourceRingVersion& version : ring.versions) {
+            if (version.physicalIndex == physicalIndex) {
+                LOG_ERROR(Renderer, "[RDG] Versioned '{}' lost a physical to garbage collection", ring.name.ToString());
+                version = {};
+            }
+            else if (version.IsValid() && version.physicalIndex > physicalIndex) {
+                version.physicalIndex--;
+            }
+        }
+    }
+}
+
+ResourceRing* RenderGraph::FindRing(StringID name)
+{
+    for (ResourceRing& ring : rings) {
+        if (ring.name == name) { return &ring; }
+    }
+    return nullptr;
+}
+
+static StringID RingVersionName(StringID name, uint32_t age)
+{
+    if (age == 0) { return name; }
+#ifdef WDEBUG
+    const Core::InlineString<128> str = Core::InlineString<128>::Format("%s@%u", name.ToString(), age);
+    return StringID(str.c_str(), str.Size());
+#else
+    return StringID(name.id ^ (0x9E3779B97F4A7C15ull * (static_cast<uint64_t>(age) + 1ull)));
+#endif
+}
+
+void RenderGraph::ResetRing(ResourceRing& ring)
+{
+    for (uint32_t d = 0; d <= ring.depth; ++d) {
+        ResourceRingVersion& version = ring.versions[d];
+        if (!version.IsValid()) { continue; }
+        if (ring.bImage) {
+            if (TextureResource* tex = GetTexture(ring.versionNames[d])) {
+                if (tex->physicalIndex == version.physicalIndex) {
+                    DetachTexture(*tex);
+                }
+            }
+        }
+        else if (BufferResource* buf = GetBuffer(ring.versionNames[d])) {
+            if (buf->physicalIndex == version.physicalIndex) {
+                DetachBuffer(*buf);
+            }
+        }
+        version = {};
+    }
+}
+
+void RenderGraph::BindRingLogicals(ResourceRing& ring)
+{
+    auto attach = [&](uint32_t physicalIndex, uint32_t logicalIndex, StringID id) {
+        PhysicalResource& phys = physicalResources[physicalIndex];
+        phys.logicalResourceIndices.PushBack(logicalIndex);
+        phys.bCanAlias = false;
+        phys.usageChain.Clear();
+        AppendUsageChain(phys, id, false, bDebugLogging);
+    };
+    auto bindTexture = [&](StringID id, const ResourceRingVersion& version) {
+        TextureResource* tex = GetOrCreateTexture(id);
+        tex->textureInfo = ring.texInfo;
+        tex->bCanUseAliasedTexture = false;
+        tex->bIsViewportScaled = ring.bViewportScaled;
+        tex->bAsyncTouched |= ring.bConcurrent;
+        tex->bDeclaredThisFrame = true;
+        tex->accumulatedUsage |= ring.extraUsage;
+        if (version.IsValid()) {
+            tex->layout = version.layout;
+            tex->physicalIndex = version.physicalIndex;
+            attach(version.physicalIndex, tex->index, id);
+        }
+    };
+    auto bindBuffer = [&](StringID id, const ResourceRingVersion& version) {
+        BufferResource* buf = GetOrCreateBuffer(id);
+        buf->bufferInfo.size = ring.bufferSize;
+        buf->minAlignment = ring.minAlignment;
+        buf->bIsAccelerationStructure = ring.bTLAS;
+        buf->category |= ring.category;
+        buf->bCanUseAliasedBuffer = false;
+        buf->bDeclaredThisFrame = true;
+        buf->accumulatedUsage |= ring.extraUsage;
+        if (version.IsValid()) {
+            buf->physicalIndex = version.physicalIndex;
+            attach(version.physicalIndex, buf->index, id);
+        }
+    };
+    auto bind = [&](StringID id, const ResourceRingVersion& version) {
+        if (ring.bImage) { bindTexture(id, version); }
+        else { bindBuffer(id, version); }
+    };
+
+    const bool bShift = ring.source == VersionSource::Fresh || ring.source == VersionSource::Emplaced;
+    if (bShift) {
+        for (uint32_t d = ring.depth; d >= 1; --d) { ring.versions[d] = ring.versions[d - 1]; }
+        ring.versions[0] = {};
+    }
+    for (uint32_t d = 1; d <= ring.depth; ++d) {
+        if (ring.versions[d].IsValid()) { bind(ring.versionNames[d], ring.versions[d]); }
+    }
+
+    switch (ring.source) {
+        case VersionSource::Fresh:
+            bind(ring.name, ring.versions[0]);
+            if (ring.bImage) { GetTexture(ring.name)->clear = ring.clear; }
+            break;
+        case VersionSource::Emplaced:
+            break;
+        case VersionSource::NoShiftReadOnly:
+            if (ring.versions[0].IsValid()) { bind(ring.name, ring.versions[0]); }
+            break;
+        case VersionSource::NoShiftReadWrite:
+            ENGINE_ASSERT(Renderer, ring.versions[0].IsValid(), "Versioned '{}' declared NoShiftReadWrite with nothing produced yet; declare it Fresh first (HasVersion(name, 0))", ring.name.ToString());
+            bind(ring.name, ring.versions[0]);
+            break;
+    }
+}
+
+void RenderGraph::      CaptureRingVersions()
+{
+    for (int32_t r = static_cast<int32_t>(rings.Size()) - 1; r >= 0; --r) {
+        ResourceRing& ring = rings[r];
+        if (bDropAllRings || !ring.bDeclaredThisFrame || (bDestroyViewportAssociated && ring.bViewportScaled)) {
+            rings.SwapRemove(r);
+            continue;
+        }
+
+        // Keep what this frame's passes left each version in
+        if (ring.bImage) {
+            for (uint32_t d = 0; d <= ring.depth; ++d) {
+                ResourceRingVersion& version = ring.versions[d];
+                if (!version.IsValid()) { continue; }
+                if (const TextureResource* tex = GetTexture(ring.versionNames[d])) {
+                    if (tex->physicalIndex == version.physicalIndex) {
+                        version.layout = tex->layout;
+                    }
+                }
+            }
+        }
+
+        // Slot 0 is pending after a shift
+        if (ring.source == VersionSource::Fresh || ring.source == VersionSource::Emplaced) {
+            const StringID sourceName = ring.emplaceSource.IsValid() ? ring.emplaceSource : ring.name;
+            ResourceRingVersion produced{};
+            if (ring.bImage) {
+                if (const TextureResource* tex = GetTexture(sourceName)) {
+                    if (tex->HasPhysical()) {
+                        produced = {tex->physicalIndex, tex->layout};
+                        ring.texInfo = tex->textureInfo;
+                    }
+                }
+            }
+            else if (const BufferResource* buf = GetBuffer(sourceName)) {
+                if (buf->HasPhysical()) {
+                    produced = {buf->physicalIndex};
+                    ring.bufferSize = buf->bufferInfo.size;
+                    ring.minAlignment = buf->minAlignment;
+                }
+            }
+            if (produced.IsValid()) { ring.versions[0] = produced; }
+            else { LOG_ERROR(Renderer, "[RDG] Versioned '{}' has no physical to keep this frame; history kept", ring.name.ToString()); }
+        }
+
+        ring.bDeclaredThisFrame = false;
+        ring.source = VersionSource::NoShiftReadOnly;
+        ring.emplaceSource = {};
+    }
+}
+
+void RenderGraph::CreateVersionedTexture(StringID name, const TextureInfo& texInfo, uint32_t depth, VersionSource source, bool bIsViewportScaled, VkImageUsageFlags extraUsage, bool bConcurrent, std::optional<VkClearValue> clearValue)
+{
+    ENGINE_ASSERT(Renderer, depth <= RDG_MAX_RING_DEPTH, "Versioned texture '{}' depth {} exceeds RDG_MAX_RING_DEPTH", name.ToString(), depth);
+    ENGINE_ASSERT(Renderer, texInfo.format != VK_FORMAT_UNDEFINED, "Texture info uses undefined format");
+    ENGINE_ASSERT(Renderer, textureNameToIndex.Find(name) == nullptr, "Versioned texture '{}' collides with a texture already declared this frame", name.ToString());
+
+    ResourceRing* ring = FindRing(name);
+    if (ring == nullptr) {
+        rings.PushBack(ResourceRing{});
+        ring = &rings.Back();
+        ring->name = name;
+        ring->bImage = true;
+    }
+    else {
+        ENGINE_ASSERT(Renderer, ring->bImage, "Versioned texture '{}' was declared as a buffer ring", name.ToString());
+        const bool bSame = ring->depth == depth && ring->bViewportScaled == bIsViewportScaled && ring->bConcurrent == bConcurrent && ring->texInfo.format == texInfo.format && ring->texInfo.width == texInfo.width
+                           && ring->texInfo.height == texInfo.height && ring->texInfo.mipLevels == texInfo.mipLevels;
+        if (!bSame) {
+            LOG_WARN(Renderer, "[RDG] Versioned texture '{}' redeclared with a new description; history dropped", name.ToString());
+            ResetRing(*ring);
+        }
+    }
+    ring->depth = depth;
+    ring->texInfo = texInfo;
+    ring->clear = clearValue;
+    ring->bViewportScaled = bIsViewportScaled;
+    ring->bConcurrent = bConcurrent;
+    ring->extraUsage = extraUsage;
+    for (uint32_t d = 0; d <= depth; ++d) { ring->versionNames[d] = RingVersionName(name, d); }
+    ring->bDeclaredThisFrame = true;
+    ring->source = source;
+    ring->emplaceSource = {};
+    BindRingLogicals(*ring);
+}
+
+void RenderGraph::CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32_t depth, VersionSource source, VkDeviceSize minAlignment, VkBufferUsageFlags extraUsage)
+{
+    ENGINE_ASSERT(Renderer, depth <= RDG_MAX_RING_DEPTH, "Versioned buffer '{}' depth {} exceeds RDG_MAX_RING_DEPTH", name.ToString(), depth);
+    ENGINE_ASSERT(Renderer, size > 0, "Versioned buffer '{}' requested with zero size", name.ToString());
+    ENGINE_ASSERT(Renderer, bufferNameToIndex.Find(name) == nullptr, "Versioned buffer '{}' collides with a buffer already declared this frame", name.ToString());
+
+    ResourceRing* ring = FindRing(name);
+    if (ring == nullptr) {
+        rings.PushBack(ResourceRing{});
+        ring = &rings.Back();
+        ring->name = name;
+    }
+    else {
+        ENGINE_ASSERT(Renderer, !ring->bImage && !ring->bTLAS, "Versioned buffer '{}' was declared as a texture or TLAS ring", name.ToString());
+        if (ring->depth != depth || ring->bufferSize != size || ring->minAlignment != minAlignment) {
+            LOG_WARN(Renderer, "[RDG] Versioned buffer '{}' redeclared with a new description; history dropped", name.ToString());
+            ResetRing(*ring);
+        }
+    }
+    ring->depth = depth;
+    ring->bufferSize = size;
+    ring->minAlignment = minAlignment;
+    ring->extraUsage = extraUsage;
+    for (uint32_t d = 0; d <= depth; ++d) { ring->versionNames[d] = RingVersionName(name, d); }
+    ring->bDeclaredThisFrame = true;
+    ring->source = source;
+    ring->emplaceSource = {};
+    BindRingLogicals(*ring);
+}
+
+void RenderGraph::CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category)
+{
+    ENGINE_ASSERT(Renderer, bufferNameToIndex.Find(name) == nullptr, "Versioned TLAS '{}' collides with a buffer already declared this frame", name.ToString());
+
+    ResourceRing* ring = FindRing(name);
+    if (ring == nullptr) {
+        rings.PushBack(ResourceRing{});
+        ring = &rings.Back();
+        ring->name = name;
+        ring->bTLAS = true;
+    }
+    else {
+        ENGINE_ASSERT(Renderer, ring->bTLAS, "Versioned TLAS '{}' was declared as a different ring kind", name.ToString());
+        if (ring->bufferSize != asSize) {
+            LOG_WARN(Renderer, "[RDG] Versioned TLAS '{}' resized; history dropped", name.ToString());
+            ResetRing(*ring);
+        }
+    }
+    ring->depth = 1;
+    ring->bufferSize = asSize;
+    ring->category = category;
+    for (uint32_t d = 0; d <= 1; ++d) { ring->versionNames[d] = RingVersionName(name, d); }
+    ring->bDeclaredThisFrame = true;
+    ring->source = VersionSource::Fresh;
+    ring->emplaceSource = {};
+    BindRingLogicals(*ring);
+}
+
+void RenderGraph::EmplaceVersion(StringID resourceDst, StringID resourceSrc)
+{
+    ResourceRing* ring = FindRing(resourceDst);
+    ENGINE_ASSERT(Renderer, ring != nullptr && ring->bDeclaredThisFrame, "EmplaceVersion: '{}' is not a versioned resource declared this frame", resourceDst.ToString());
+    ENGINE_ASSERT(Renderer, ring->source == VersionSource::Emplaced, "EmplaceVersion: '{}' was not declared VersionSource::Emplaced", resourceDst.ToString());
+    ENGINE_ASSERT(Renderer, !ring->emplaceSource.IsValid(), "EmplaceVersion: '{}' already emplaced this frame", resourceDst.ToString());
+    if (ring->bImage) {
+        TextureResource* src = GetTexture(resourceSrc);
+        ENGINE_ASSERT(Renderer, src != nullptr, "EmplaceVersion: source texture '{}' does not exist", resourceSrc.ToString());
+        src->bCanUseAliasedTexture = false;
+        src->bAsyncTouched |= ring->bConcurrent;
+        src->accumulatedUsage |= ring->extraUsage;
+    }
+    else {
+        BufferResource* src = GetBuffer(resourceSrc);
+        ENGINE_ASSERT(Renderer, src != nullptr, "EmplaceVersion: source buffer '{}' does not exist", resourceSrc.ToString());
+        src->bCanUseAliasedBuffer = false;
+        src->accumulatedUsage |= ring->extraUsage;
+    }
+    ring->emplaceSource = resourceSrc;
+}
+
+StringID RenderGraph::ResourceVersionID(StringID name, uint32_t age)
+{
+    ENGINE_ASSERT(Renderer, age <= RDG_MAX_RING_DEPTH, "Version: age {} exceeds RDG_MAX_RING_DEPTH", age);
+    return RingVersionName(name, age);
+}
+
+bool RenderGraph::ResourceHasVersion(StringID name, uint32_t age)
+{
+    const ResourceRing* ring = FindRing(name);
+    return ring != nullptr && age <= ring->depth && ring->versions[age].IsValid();
+}
+
+void RenderGraph::ValidateAsyncHazards(uint64_t currentFrame)
+{
+#ifdef WDEBUG
+    if (asyncPassCount == 0) { return; }
+
+    auto asyncWritten = Core::ArenaArray<bool>(arena, physicalResources.Size());
+    for (uint32_t i = 0; i < physicalResources.Size(); i++) { asyncWritten[i] = false; }
+
+    for (uint32_t pi = 0; pi < asyncPassCount; pi++) {
+        const RenderPass* pass = sortedPasses[pi];
+        auto markTex = [&](uint32_t i) { if (textures[i].HasPhysical()) { asyncWritten[textures[i].physicalIndex] = true; } };
+        auto markBuf = [&](uint32_t i) { if (buffers[i].HasPhysical()) { asyncWritten[buffers[i].physicalIndex] = true; } };
+        for (const uint32_t i : pass->storageImageWrites) { markTex(i); }
+        for (const uint32_t i : pass->imageReadWrite) { markTex(i); }
+        for (const uint32_t i : pass->bufferWrites) { markBuf(i); }
+        for (const uint32_t i : pass->bufferReadWrite) { markBuf(i); }
+        for (const uint32_t i : pass->bufferTransferWrites) { markBuf(i); }
+        for (const uint32_t i : pass->bufferTLASWrites) { markBuf(i); }
+        for (const uint32_t i : pass->bufferScratchWrites) { markBuf(i); }
+    }
+
+    for (uint32_t pi = 0; pi < asyncPassCount; pi++) {
+        const RenderPass* pass = sortedPasses[pi];
+        auto checkWrite = [&](uint32_t physIdx, StringID id) {
+            const PhysicalResource& phys = physicalResources[physIdx];
+            if (phys.bIsImported || phys.bAsyncEvent) { return; }
+            ENGINE_ASSERT(Renderer, !RdgFrameInFlight(currentFrame, phys.lastGraphicsFrame), "[RDG] Async pass '{}' writes '{}' while graphics from frame {} may still be using it", pass->renderPassId.ToString(), id.ToString(), phys.lastGraphicsFrame);
+        };
+        auto checkRead = [&](uint32_t physIdx, StringID id) {
+            const PhysicalResource& phys = physicalResources[physIdx];
+            if (phys.bIsImported || phys.bAsyncEvent || asyncWritten[physIdx]) { return; }
+            ENGINE_ASSERT(Renderer, !RdgFrameInFlight(currentFrame, phys.lastGraphicsWriteFrame), "[RDG] Async pass '{}' reads '{}' written by graphics in frame {}, which may still be in flight", pass->renderPassId.ToString(), id.ToString(), phys.lastGraphicsWriteFrame);
+        };
+        auto texWrite = [&](uint32_t i) { if (textures[i].HasPhysical()) { checkWrite(textures[i].physicalIndex, textures[i].textureId); } };
+        auto texRead = [&](uint32_t i) { if (textures[i].HasPhysical()) { checkRead(textures[i].physicalIndex, textures[i].textureId); } };
+        auto bufWrite = [&](uint32_t i) { if (buffers[i].HasPhysical()) { checkWrite(buffers[i].physicalIndex, buffers[i].bufferId); } };
+        auto bufRead = [&](uint32_t i) { if (buffers[i].HasPhysical()) { checkRead(buffers[i].physicalIndex, buffers[i].bufferId); } };
+        for (const uint32_t i : pass->storageImageWrites) { texWrite(i); }
+        for (const uint32_t i : pass->imageReadWrite) { texWrite(i); }
+        for (const uint32_t i : pass->storageImageReads) { texRead(i); }
+        for (const uint32_t i : pass->sampledImageReads) { texRead(i); }
+        for (const uint32_t i : pass->bufferWrites) { bufWrite(i); }
+        for (const uint32_t i : pass->bufferReadWrite) { bufWrite(i); }
+        for (const uint32_t i : pass->bufferTransferWrites) { bufWrite(i); }
+        for (const uint32_t i : pass->bufferTLASWrites) { bufWrite(i); }
+        for (const uint32_t i : pass->bufferScratchWrites) { bufWrite(i); }
+        for (const uint32_t i : pass->bufferReads) { bufRead(i); }
+        for (const uint32_t i : pass->bufferTransferReads) { bufRead(i); }
+        for (const uint32_t i : pass->bufferIndexRead) { bufRead(i); }
+        for (const uint32_t i : pass->bufferIndirectReads) { bufRead(i); }
+        for (const uint32_t i : pass->bufferIndirectCountReads) { bufRead(i); }
+        for (const uint32_t i : pass->bufferTLASReads) { bufRead(i); }
+        for (const uint32_t i : pass->bufferASInputReads) { bufRead(i); }
+    }
+#endif
 }
 
 void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue, bool bIsViewportScaled)
@@ -1784,7 +2086,7 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
         const bool bSameDescription = tex->textureInfo.format == texInfo.format && tex->textureInfo.width == texInfo.width && tex->textureInfo.height == texInfo.height && tex->textureInfo.mipLevels == texInfo.mipLevels;
         if (!bSameDescription) {
             ENGINE_ASSERT(Renderer, !tex->bDeclaredThisFrame, "Texture '{}' declared twice this frame with different descriptions", textureId.ToString());
-            DetachCarriedTexture(*tex);
+            DetachTexture(*tex);
         }
     }
 
@@ -1795,22 +2097,21 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
     tex->bDeclaredThisFrame = true;
 }
 
-void RenderGraph::DetachCarriedTexture(TextureResource& tex) const
+void RenderGraph::DetachTexture(TextureResource& tex) const
 {
     if (bDebugLogging) {
-        LOG_WARN(Renderer, "Texture '{}' re-declared with a new description; carried contents dropped", tex.textureId.ToString());
+        LOG_WARN(Renderer, "Texture '{}' re-declared with a new description; previous contents dropped", tex.textureId.ToString());
     }
     tex.physicalIndex = UINT32_MAX;
     tex.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
-void RenderGraph::DetachCarriedBuffer(BufferResource& buf) const
+void RenderGraph::DetachBuffer(BufferResource& buf) const
 {
     if (bDebugLogging) {
-        LOG_WARN(Renderer, "Buffer '{}' re-declared with a new description; carried contents dropped", buf.bufferId.ToString());
+        LOG_WARN(Renderer, "Buffer '{}' re-declared with a new description; previous contents dropped", buf.bufferId.ToString());
     }
     buf.physicalIndex = UINT32_MAX;
-    buf.carriedCount = 0;
 }
 
 void RenderGraph::ReconcileDetachedPhysicals()
@@ -1854,7 +2155,7 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
 
     if (buf->bufferInfo.size != 0 && buf->bufferInfo.size != size) {
         ENGINE_ASSERT(Renderer, !buf->bDeclaredThisFrame, "Buffer '{}' declared twice this frame at different sizes", bufferId.ToString());
-        DetachCarriedBuffer(*buf);
+        DetachBuffer(*buf);
     }
 
     buf->bufferInfo.size = size;
@@ -1863,29 +2164,13 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
     buf->bDeclaredThisFrame = true;
 }
 
-void RenderGraph::CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category)
-{
-    BufferResource* buf = GetOrCreateBuffer(name);
-
-    if (buf->bufferInfo.size != 0) {
-        ENGINE_ASSERT(Renderer, buf->bufferInfo.size == asSize, "TLAS size mismatch");
-    }
-
-    buf->bufferInfo.size = asSize;
-    buf->bIsAccelerationStructure = true;
-    // The AS backing memory must never be aliased
-    buf->bCanUseAliasedBuffer = false;
-    buf->bIsViewportScaled = false;
-    buf->category |= category;
-}
-
 void RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled, bool bCanAlias)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
     if (buf->bufferInfo.size != 0 && (buf->bufferInfo.size != size || buf->minAlignment != minAlignment)) {
         ENGINE_ASSERT(Renderer, !buf->bDeclaredThisFrame, "Buffer '{}' declared twice this frame with different descriptions", bufferId.ToString());
-        DetachCarriedBuffer(*buf);
+        DetachBuffer(*buf);
     }
 
     buf->bufferInfo.size = size;
@@ -2319,53 +2604,6 @@ PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
     return physicalResources[buf.physicalIndex].event;
 }
 
-void RenderGraph::CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage)
-{
-    TextureResource* tex = GetOrCreateTexture(textureId);
-    tex->bCanUseAliasedTexture = false;
-    tex->accumulatedUsage |= additionalUsage;
-
-    if (tex->physicalIndex != UINT32_MAX) {
-        auto& phys = physicalResources[tex->physicalIndex];
-        if (phys.IsAllocated()) {
-            ENGINE_ASSERT(Renderer, (phys.dimensions.imageUsage & additionalUsage) == additionalUsage, "Existing physical texture usage is not a superset of required usage");
-        }
-    }
-
-    for (const auto& c : textureCarryovers) {
-        ENGINE_ASSERT(Renderer, c.srcName != textureId, "Source texture already designated for carryover");
-        ENGINE_ASSERT(Renderer, c.dstName != newTextureId, "Destination texture name already used in another carryover");
-        if (const TextureResource* otherTex = GetTexture(c.srcName)) {
-            ENGINE_ASSERT(Renderer, otherTex->index != tex->index, "Cannot carry over texture already marked to be carried over");
-        }
-    }
-
-    textureCarryovers.PushBack(TextureFrameCarryover{textureId, newTextureId});
-}
-
-void RenderGraph::CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage)
-{
-    BufferResource* buf = GetOrCreateBuffer(bufferId);
-    buf->bCanUseAliasedBuffer = false;
-    buf->accumulatedUsage |= additionalUsage;
-
-    if (buf->physicalIndex != UINT32_MAX) {
-        auto& phys = physicalResources[buf->physicalIndex];
-        if (phys.IsAllocated()) {
-            ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & additionalUsage) == additionalUsage, "Existing physical buffer usage is not a superset of required usage");
-        }
-    }
-
-    for (const auto& c : bufferCarryovers) {
-        ENGINE_ASSERT(Renderer, c.srcName != bufferId, "Source buffer already designated for carryover");
-        ENGINE_ASSERT(Renderer, c.dstName != newBufferId, "Destination buffer name already used in another carryover");
-    }
-
-    BufferFrameCarryover carry{bufferId, newBufferId};
-    carry.srcCarriedCount = buf->carriedCount;
-    bufferCarryovers.PushBack(carry);
-}
-
 UploadAllocation RenderGraph::AllocateTransient(size_t size)
 {
     TransientUploadArena& arena = uploadArenas[currentFrameIndex];
@@ -2667,16 +2905,6 @@ uint32_t RenderGraph::GetAccelerationStructureDescriptorIndex(StringID name)
     ValidatePassDeclaresBuffer(buf->index);
     const PhysicalResource& phys = physicalResources[buf->physicalIndex];
     return phys.asDescriptorHandle.IsValid() ? phys.asDescriptorHandle.index : ~0u;
-}
-
-void RenderGraph::CarryTLASToNextFrame(StringID name, StringID historyName)
-{
-    // BLAS are only guaranteed to survive 4 frames after death command (3x fif and +1 for extra).
-    // So a TLAS history can only be carried over once: restoring it bumps carriedCount to 1, and re-carrying would outlive its BLAS.
-    if (const BufferResource* buf = GetBuffer(name)) {
-        ENGINE_ASSERT(Renderer, buf->carriedCount == 0, "CarryTLASToNextFrame: '{}' has already been carried {} time(s) and cannot be carried again (BLAS lifetime)", name.ToString(), buf->carriedCount);
-    }
-    CarryBufferToNextFrame(name, historyName, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 }
 
 void RenderGraph::ExportGraphviz()

@@ -19,15 +19,10 @@ namespace Render
 {
 static StringID DDGI_IRRADIANCE[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_VISIBILITY[DDGI_MAX_VOLUME_SLOTS];
-static StringID DDGI_IRRADIANCE_NEXT[DDGI_MAX_VOLUME_SLOTS];
-static StringID DDGI_VISIBILITY_NEXT[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_RAY_DATA[DDGI_MAX_VOLUME_SLOTS];
 static const StringID DDGI_PROBE_OFFSETS_BUFFER = SID("ddgi_probe_offsets");
 static const StringID DDGI_PROBE_RESTART_BUFFER = SID("ddgi_probe_restart");
 static const StringID DDGI_PROBE_ACTIVE_BUFFER = SID("ddgi_probe_active");
-static const StringID DDGI_PROBE_OFFSETS_PREV_BUFFER = SID("ddgi_probe_offsets_prev");
-static const StringID DDGI_PROBE_RESTART_PREV_BUFFER = SID("ddgi_probe_restart_prev");
-static const StringID DDGI_PROBE_ACTIVE_PREV_BUFFER = SID("ddgi_probe_active_prev");
 static StringID DDGI_TRACE_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_VOLUME_SLOTS];
@@ -45,8 +40,6 @@ static bool InitDDGISlotNames()
     for (uint32_t k = 0; k < DDGI_MAX_VOLUME_SLOTS; ++k) {
         DDGI_IRRADIANCE[k] = DDGISlotName("ddgi_irradiance_%u", k);
         DDGI_VISIBILITY[k] = DDGISlotName("ddgi_visibility_%u", k);
-        DDGI_IRRADIANCE_NEXT[k] = DDGISlotName("ddgi_irradiance_next_%u", k);
-        DDGI_VISIBILITY_NEXT[k] = DDGISlotName("ddgi_visibility_next_%u", k);
         DDGI_RAY_DATA[k] = DDGISlotName("ddgi_ray_data_%u", k);
         DDGI_TRACE_PASS[k] = DDGISlotName("DDGI Probe Trace %u", k);
         DDGI_BLEND_IRRADIANCE_PASS[k] = DDGISlotName("DDGI Blend Irradiance %u", k);
@@ -310,66 +303,73 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     const bool bClassify = params.bClassification && params.bRelocation;
 
     const bool bLayoutStable = prevTotal > 0 && previous.count == cascades.count && previous.volumes[0].probeCount == cascades.volumes[0].probeCount;
-    const bool bOffsetsCarried = graph.HasBuffer(DDGI_PROBE_OFFSETS_PREV_BUFFER) && bLayoutStable;
-    const bool bRestartCarried = graph.HasBuffer(DDGI_PROBE_RESTART_PREV_BUFFER) && bLayoutStable;
-    const bool bActiveCarried = graph.HasBuffer(DDGI_PROBE_ACTIVE_PREV_BUFFER) && bLayoutStable;
+
+    constexpr VkImageUsageFlags atlasUsage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    for (uint32_t k = 0; k < total; ++k) {
+        const glm::uvec3 probeCount = cascades.volumes[k].probeCount;
+        const TextureInfo irradianceInfo{VK_FORMAT_R16G16B16A16_SFLOAT, probeCount.x * probeCount.y * DDGI_IRRADIANCE_TILE, probeCount.z * DDGI_IRRADIANCE_TILE, 1};
+        const TextureInfo visibilityInfo{VK_FORMAT_R16G16_SFLOAT, probeCount.x * probeCount.y * DDGI_VISIBILITY_TILE, probeCount.z * DDGI_VISIBILITY_TILE, 1};
+        graph.CreateVersionedTexture(DDGI_IRRADIANCE[k], irradianceInfo, 1, cascades.bUpdated[k] ? VersionSource::Fresh : VersionSource::NoShiftReadOnly, false, atlasUsage, true);
+        graph.CreateVersionedTexture(DDGI_VISIBILITY[k], visibilityInfo, 1, cascades.bUpdated[k] ? VersionSource::Fresh : VersionSource::NoShiftReadOnly, false, atlasUsage, true);
+    }
+
+    bool bOffsetsCarried = false;
+    bool bRestartCarried = false;
+    bool bActiveCarried = false;
+    if (params.bRelocation) {
+        const uint32_t capacityElems = DDGIProbeDataElemOffset(cascades, cascades.count + DDGI_MAX_RESIDENT_LOCAL_VOLUMES);
+        const VkDeviceSize offsetsBytes = static_cast<VkDeviceSize>(capacityElems) * sizeof(glm::vec4);
+        const VkDeviceSize flagBytes = static_cast<VkDeviceSize>(capacityElems) * sizeof(uint32_t);
+        graph.CreateVersionedBuffer(DDGI_PROBE_OFFSETS_BUFFER, offsetsBytes, 1, VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        graph.CreateVersionedBuffer(DDGI_PROBE_RESTART_BUFFER, flagBytes, 1, VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        if (bClassify) {
+            graph.CreateVersionedBuffer(DDGI_PROBE_ACTIVE_BUFFER, flagBytes, 1, VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        }
+        bOffsetsCarried = graph.ResourceHasVersion(DDGI_PROBE_OFFSETS_BUFFER, 1) && bLayoutStable;
+        bRestartCarried = graph.ResourceHasVersion(DDGI_PROBE_RESTART_BUFFER, 1) && bLayoutStable;
+        bActiveCarried = bClassify && graph.ResourceHasVersion(DDGI_PROBE_ACTIVE_BUFFER, 1) && bLayoutStable;
+
+        if (bOffsetsCarried || bRestartCarried || bActiveCarried) {
+            RenderPass& carry = graph.AddPass(SID("DDGI Probe Data Carry"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::DDGI);
+            carry.AsyncCompute();
+            if (bOffsetsCarried) {
+                carry.ReadTransferBuffer(graph.ResourceVersionID(DDGI_PROBE_OFFSETS_BUFFER, 1));
+                carry.WriteTransferBuffer(DDGI_PROBE_OFFSETS_BUFFER);
+            }
+            if (bRestartCarried) {
+                carry.ReadTransferBuffer(graph.ResourceVersionID(DDGI_PROBE_RESTART_BUFFER, 1));
+                carry.WriteTransferBuffer(DDGI_PROBE_RESTART_BUFFER);
+            }
+            if (bActiveCarried) {
+                carry.ReadTransferBuffer(graph.ResourceVersionID(DDGI_PROBE_ACTIVE_BUFFER, 1));
+                carry.WriteTransferBuffer(DDGI_PROBE_ACTIVE_BUFFER);
+            }
+            carry.Execute([bOffsetsCarried, bRestartCarried, bActiveCarried, offsetsBytes, flagBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                auto copy = [&](StringID name, VkDeviceSize bytes) {
+                    const VkBufferCopy region{.size = bytes};
+                    vkCmdCopyBuffer(cmd, graph.GetBufferHandle(graph.ResourceVersionID(name, 1)), graph.GetBufferHandle(name), 1, &region);
+                };
+                if (bOffsetsCarried) { copy(DDGI_PROBE_OFFSETS_BUFFER, offsetsBytes); }
+                if (bRestartCarried) { copy(DDGI_PROBE_RESTART_BUFFER, flagBytes); }
+                if (bActiveCarried) { copy(DDGI_PROBE_ACTIVE_BUFFER, flagBytes); }
+            });
+        }
+    }
 
     bool bHistoryValid[DDGI_MAX_VOLUME_SLOTS]{};
     bool bOffsetsHistoryValid[DDGI_MAX_VOLUME_SLOTS]{};
     bool bRestartHistoryValid[DDGI_MAX_VOLUME_SLOTS]{};
     bool bActiveHistoryValid[DDGI_MAX_VOLUME_SLOTS]{};
+    uint32_t prevAge[DDGI_MAX_VOLUME_SLOTS]{};
     for (uint32_t k = 0; k < total; ++k) {
+        prevAge[k] = cascades.bUpdated[k] ? 1u : 0u;
         const bool bSameWindow = k < prevTotal && previous.localIds[k] == cascades.localIds[k] && previous.volumes[k].probeCount == cascades.volumes[k].probeCount
             && previous.volumes[k].probeSpacing == cascades.volumes[k].probeSpacing && previous.volumes[k].origin == cascades.volumes[k].origin && previous.volumes[k].irradianceGamma == cascades.volumes[k].irradianceGamma;
         const bool bWritten = k < cascades.count || previous.localWarmup[k] > 0;
-        bHistoryValid[k] = bSameWindow && bWritten && graph.HasTexture(DDGI_IRRADIANCE[k]) && graph.HasTexture(DDGI_VISIBILITY[k]);
+        bHistoryValid[k] = bSameWindow && bWritten && graph.ResourceHasVersion(DDGI_IRRADIANCE[k], prevAge[k]) && graph.ResourceHasVersion(DDGI_VISIBILITY[k], prevAge[k]);
         bOffsetsHistoryValid[k] = bSameWindow && bWritten && params.bRelocation && bOffsetsCarried;
         bRestartHistoryValid[k] = bSameWindow && bWritten && params.bRelocation && bRestartCarried;
         bActiveHistoryValid[k] = bSameWindow && bWritten && bClassify && bActiveCarried;
-    }
-
-    if (params.bRelocation) {
-        const uint32_t capacityElems = DDGIProbeDataElemOffset(cascades, cascades.count + DDGI_MAX_RESIDENT_LOCAL_VOLUMES);
-        const VkDeviceSize offsetsBytes = static_cast<VkDeviceSize>(capacityElems) * sizeof(glm::vec4);
-        const VkDeviceSize flagBytes = static_cast<VkDeviceSize>(capacityElems) * sizeof(uint32_t);
-        graph.CreateBuffer(DDGI_PROBE_OFFSETS_BUFFER, offsetsBytes, false);
-        graph.CreateBuffer(DDGI_PROBE_RESTART_BUFFER, flagBytes, false);
-        if (bClassify) {
-            graph.CreateBuffer(DDGI_PROBE_ACTIVE_BUFFER, flagBytes, false);
-        }
-
-        const bool bCopyActive = bClassify && bActiveCarried;
-        if (bOffsetsCarried || bRestartCarried || bCopyActive) {
-            RenderPass& carry = graph.AddPass(SID("DDGI Probe Data Carry"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::DDGI);
-            carry.AsyncCompute();
-            if (bOffsetsCarried) {
-                carry.ReadTransferBuffer(DDGI_PROBE_OFFSETS_PREV_BUFFER);
-                carry.WriteTransferBuffer(DDGI_PROBE_OFFSETS_BUFFER);
-            }
-            if (bRestartCarried) {
-                carry.ReadTransferBuffer(DDGI_PROBE_RESTART_PREV_BUFFER);
-                carry.WriteTransferBuffer(DDGI_PROBE_RESTART_BUFFER);
-            }
-            if (bCopyActive) {
-                carry.ReadTransferBuffer(DDGI_PROBE_ACTIVE_PREV_BUFFER);
-                carry.WriteTransferBuffer(DDGI_PROBE_ACTIVE_BUFFER);
-            }
-            carry.Execute([bOffsetsCarried, bRestartCarried, bCopyActive, offsetsBytes, flagBytes](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                auto copy = [&](StringID src, StringID dst, VkDeviceSize bytes) {
-                    const VkBufferCopy region{.size = bytes};
-                    vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &region);
-                };
-                if (bOffsetsCarried) { copy(DDGI_PROBE_OFFSETS_PREV_BUFFER, DDGI_PROBE_OFFSETS_BUFFER, offsetsBytes); }
-                if (bRestartCarried) { copy(DDGI_PROBE_RESTART_PREV_BUFFER, DDGI_PROBE_RESTART_BUFFER, flagBytes); }
-                if (bCopyActive) { copy(DDGI_PROBE_ACTIVE_PREV_BUFFER, DDGI_PROBE_ACTIVE_BUFFER, flagBytes); }
-            });
-        }
-
-        graph.CarryBufferToNextFrame(DDGI_PROBE_OFFSETS_BUFFER, DDGI_PROBE_OFFSETS_PREV_BUFFER, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-        graph.CarryBufferToNextFrame(DDGI_PROBE_RESTART_BUFFER, DDGI_PROBE_RESTART_PREV_BUFFER, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-        if (bClassify) {
-            graph.CarryBufferToNextFrame(DDGI_PROBE_ACTIVE_BUFFER, DDGI_PROBE_ACTIVE_PREV_BUFFER, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-        }
     }
 
     const bool bFeedback = params.bInfiniteBounce && !bBounceOnly;
@@ -386,8 +386,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             } else if (bHistoryValid[k]) {
                 prevSources->entries[k] = DDGICascadeDescSource{
                     .volume = previous.volumes[k],
-                    .irradiance = DDGI_IRRADIANCE[k],
-                    .visibility = DDGI_VISIBILITY[k],
+                    .irradiance = graph.ResourceVersionID(DDGI_IRRADIANCE[k], prevAge[k]),
+                    .visibility = graph.ResourceVersionID(DDGI_VISIBILITY[k], prevAge[k]),
                     .offsets = bOffsetsHistoryValid[k] ? DDGI_PROBE_OFFSETS_BUFFER : StringID{},
                     .offsetsByteOffset = DDGIProbeDataElemOffset(cascades, k) * static_cast<uint32_t>(sizeof(glm::vec4)),
                     .bValid = true,
@@ -397,24 +397,6 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             }
         }
         AddDDGICascadeDescriptorUpload(graph, SID("DDGI Prev Cascade Descriptors"), DDGI_CASCADES_PREV_BUFFER, prevSources, gridCamPos, params.bWorldVolumeGridCull);
-    }
-
-    constexpr VkImageUsageFlags atlasUsage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-    for (uint32_t k = 0; k < total; ++k) {
-        const glm::uvec3 probeCount = cascades.volumes[k].probeCount;
-        const TextureInfo irradianceInfo{VK_FORMAT_R16G16B16A16_SFLOAT, probeCount.x * probeCount.y * DDGI_IRRADIANCE_TILE, probeCount.z * DDGI_IRRADIANCE_TILE, 1};
-        const TextureInfo visibilityInfo{VK_FORMAT_R16G16_SFLOAT, probeCount.x * probeCount.y * DDGI_VISIBILITY_TILE, probeCount.z * DDGI_VISIBILITY_TILE, 1};
-        graph.CreateTexture(DDGI_IRRADIANCE[k], irradianceInfo, {std::nullopt}, false);
-        graph.CreateTexture(DDGI_VISIBILITY[k], visibilityInfo, {std::nullopt}, false);
-        if (cascades.bUpdated[k]) {
-            graph.CreateTexture(DDGI_IRRADIANCE_NEXT[k], irradianceInfo, {std::nullopt}, false);
-            graph.CreateTexture(DDGI_VISIBILITY_NEXT[k], visibilityInfo, {std::nullopt}, false);
-            graph.CarryTextureToNextFrame(DDGI_IRRADIANCE_NEXT[k], DDGI_IRRADIANCE[k], atlasUsage);
-            graph.CarryTextureToNextFrame(DDGI_VISIBILITY_NEXT[k], DDGI_VISIBILITY[k], atlasUsage);
-        } else {
-            graph.CarryTextureToNextFrame(DDGI_IRRADIANCE[k], DDGI_IRRADIANCE[k], atlasUsage);
-            graph.CarryTextureToNextFrame(DDGI_VISIBILITY[k], DDGI_VISIBILITY[k], atlasUsage);
-        }
     }
 
     for (uint32_t k = 0; k < total; ++k) {
@@ -476,8 +458,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             DeclareDDGIVolumeGridReads(graph, tracePass);
             for (uint32_t j = 0; j < total; ++j) {
                 if (bHistoryValid[j]) {
-                    tracePass.ReadSampledImage(DDGI_IRRADIANCE[j]);
-                    tracePass.ReadSampledImage(DDGI_VISIBILITY[j]);
+                    tracePass.ReadSampledImage(graph.ResourceVersionID(DDGI_IRRADIANCE[j], prevAge[j]));
+                    tracePass.ReadSampledImage(graph.ResourceVersionID(DDGI_VISIBILITY[j], prevAge[j]));
                 }
             }
         }
@@ -534,11 +516,11 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         RenderPass& blendPass = graph.AddPass(DDGI_BLEND_IRRADIANCE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         blendPass.AsyncCompute();
         blendPass.ReadBuffer(DDGI_RAY_DATA[k]);
-        if (bHistoryValid[k]) { blendPass.ReadStorageImage(irradianceId); }
-        blendPass.WriteStorageImage(DDGI_IRRADIANCE_NEXT[k]);
+        if (bHistoryValid[k]) { blendPass.ReadStorageImage(graph.ResourceVersionID(irradianceId, 1)); }
+        blendPass.WriteStorageImage(irradianceId);
         if (graph.HasBuffer(DDGI_PROBE_RESTART_BUFFER)) { blendPass.ReadBuffer(DDGI_PROBE_RESTART_BUFFER); }
         if (graph.HasBuffer(DDGI_PROBE_ACTIVE_BUFFER)) { blendPass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER); }
-        blendPass.Execute([pipelineManager, hysteresis = blendHysteresis, irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = irradianceId, nextId = DDGI_IRRADIANCE_NEXT[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        blendPass.Execute([pipelineManager, hysteresis = blendHysteresis, irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = graph.ResourceVersionID(irradianceId, 1), nextId = irradianceId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_irradiance"));
             if (!pipelineEntry) {
                 return;
@@ -569,11 +551,11 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         RenderPass& visibilityPass = graph.AddPass(DDGI_BLEND_VISIBILITY_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         visibilityPass.AsyncCompute();
         visibilityPass.ReadBuffer(DDGI_RAY_DATA[k]);
-        if (bHistoryValid[k]) { visibilityPass.ReadStorageImage(visibilityId); }
-        visibilityPass.WriteStorageImage(DDGI_VISIBILITY_NEXT[k]);
+        if (bHistoryValid[k]) { visibilityPass.ReadStorageImage(graph.ResourceVersionID(visibilityId, 1)); }
+        visibilityPass.WriteStorageImage(visibilityId);
         if (graph.HasBuffer(DDGI_PROBE_RESTART_BUFFER)) { visibilityPass.ReadBuffer(DDGI_PROBE_RESTART_BUFFER); }
         if (graph.HasBuffer(DDGI_PROBE_ACTIVE_BUFFER)) { visibilityPass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER); }
-        visibilityPass.Execute([pipelineManager, visibilityHysteresis = blendVisibilityHysteresis, distanceExponent = glm::max(params.distanceExponent, 1.0f), volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = visibilityId, nextId = DDGI_VISIBILITY_NEXT[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        visibilityPass.Execute([pipelineManager, visibilityHysteresis = blendVisibilityHysteresis, distanceExponent = glm::max(params.distanceExponent, 1.0f), volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = graph.ResourceVersionID(visibilityId, 1), nextId = visibilityId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_visibility"));
             if (!pipelineEntry) {
                 return;
@@ -655,8 +637,8 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         } else if (cascades.bUpdated[k] || bHistoryValid[k]) {
             sources->entries[k] = DDGICascadeDescSource{
                 .volume = cascades.volumes[k],
-                .irradiance = cascades.bUpdated[k] ? DDGI_IRRADIANCE_NEXT[k] : DDGI_IRRADIANCE[k],
-                .visibility = cascades.bUpdated[k] ? DDGI_VISIBILITY_NEXT[k] : DDGI_VISIBILITY[k],
+                .irradiance = DDGI_IRRADIANCE[k],
+                .visibility = DDGI_VISIBILITY[k],
                 .offsets = params.bRelocation && (cascades.bUpdated[k] || bOffsetsHistoryValid[k]) ? DDGI_PROBE_OFFSETS_BUFFER : StringID{},
                 .offsetsByteOffset = DDGIProbeDataElemOffset(cascades, k) * static_cast<uint32_t>(sizeof(glm::vec4)),
                 .bValid = true,
@@ -677,12 +659,9 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
     DeclareDDGIVolumeGridReads(graph, pass);
 
     for (uint32_t k = 0; k < DDGI_MAX_VOLUME_SLOTS; ++k) {
-        const bool bNext = graph.HasTexture(DDGI_IRRADIANCE_NEXT[k]);
-        const StringID irradianceId = bNext ? DDGI_IRRADIANCE_NEXT[k] : DDGI_IRRADIANCE[k];
-        const StringID visibilityId = bNext ? DDGI_VISIBILITY_NEXT[k] : DDGI_VISIBILITY[k];
-        if (!graph.HasTexture(irradianceId) || !graph.HasTexture(visibilityId)) { break; }
-        pass.ReadSampledImage(irradianceId);
-        pass.ReadSampledImage(visibilityId);
+        if (!graph.HasTexture(DDGI_IRRADIANCE[k]) || !graph.HasTexture(DDGI_VISIBILITY[k])) { continue; }
+        pass.ReadSampledImage(DDGI_IRRADIANCE[k]);
+        pass.ReadSampledImage(DDGI_VISIBILITY[k]);
     }
     if (graph.HasBuffer(DDGI_PROBE_OFFSETS_BUFFER)) {
         pass.ReadBuffer(DDGI_PROBE_OFFSETS_BUFFER);
@@ -743,12 +722,11 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
             continue;
         }
         const bool bLocal = k >= cascades.count;
-        const bool bNext = graph.HasTexture(DDGI_IRRADIANCE_NEXT[k]);
-        const StringID atlasId = bNext ? DDGI_IRRADIANCE_NEXT[k] : DDGI_IRRADIANCE[k];
+        const StringID atlasId = DDGI_IRRADIANCE[k];
         if (!graph.HasTexture(atlasId)) {
             continue;
         }
-        const StringID visibilityId = bNext ? DDGI_VISIBILITY_NEXT[k] : DDGI_VISIBILITY[k];
+        const StringID visibilityId = DDGI_VISIBILITY[k];
         const bool bVisibility = graph.HasTexture(visibilityId);
         // Flat buffers; a cold slot's region can be stale, acceptable for the debug draw.
         const bool bOffsets = graph.HasBuffer(DDGI_PROBE_OFFSETS_BUFFER);

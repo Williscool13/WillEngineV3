@@ -279,6 +279,14 @@ struct PipelineEvent
     VkAccessFlags2 access = VK_ACCESS_2_NONE;
 };
 
+inline constexpr uint64_t RDG_FRAME_NEVER = UINT64_MAX;
+
+/** True when frame is within FRAME_BUFFER_COUNT of currentFrame, so work from it may still be in flight. */
+inline bool RdgFrameInFlight(uint64_t currentFrame, uint64_t frame)
+{
+    return frame != RDG_FRAME_NEVER && currentFrame - frame < Core::FRAME_BUFFER_COUNT;
+}
+
 struct ResourceDimensions
 {
     enum class Type { Image, Buffer, AccelerationStructure } type = Type::Image;
@@ -335,7 +343,9 @@ struct PhysicalResource
     ResourceDimensions dimensions;
     PipelineEvent event;
     bool bAsyncEvent = false;
-    uint64_t lastGraphicsFrame = 0;
+    // Last frame a graphics wave touched / wrote this memory. The async reuse gate and hazard check compare against FRAME_BUFFER_COUNT.
+    uint64_t lastGraphicsFrame = RDG_FRAME_NEVER;
+    uint64_t lastGraphicsWriteFrame = RDG_FRAME_NEVER;
     bool bIsImported = false;
     bool bDisableBarriers = false;
 
@@ -409,6 +419,7 @@ struct TextureResource
     VkImageUsageFlags accumulatedUsage;
 
     bool bDeclaredThisFrame = false;
+    bool bWrittenThisFrame = false;
 
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
@@ -436,8 +447,6 @@ struct BufferResource
     bool bIsAccelerationStructure = false;
     bool bAsyncTouched = false;
 
-    uint32_t carriedCount = 0;
-
     RenderCategory category{RenderCategory::Untagged};
 
     BufferInfo bufferInfo = {};
@@ -445,6 +454,7 @@ struct BufferResource
     VkDeviceSize minAlignment = 0;
 
     bool bDeclaredThisFrame = false;
+    bool bWrittenThisFrame = false;
 
     uint32_t firstPass = UINT32_MAX;
     uint32_t lastPass = 0;
@@ -476,26 +486,55 @@ struct TransientReadback
     void* mappedData{nullptr};
 };
 
-struct TextureFrameCarryover
-{
-    StringID srcName;
-    StringID dstName;
+inline constexpr uint32_t RDG_MAX_RING_DEPTH = 4;
 
-    VkImage physicalImage{};
-    TextureInfo textInfo;
-    VkImageLayout layout{};
-    VkImageUsageFlags accumulatedUsage{};
+enum class VersionSource : uint8_t
+{
+    // Ages shift. Produces a new physical for a pass to write into.
+    Fresh,
+    // Ages shift. EmplaceVersion supplies the new version from another logical's physical
+    Emplaced,
+    // No shift. The bare name is the newest version, read-only
+    NoShiftReadOnly,
+    // No shift. The bare name is the newest version, written in place. Needs a produced version: declare Fresh on the first frame
+    NoShiftReadWrite,
 };
 
-struct BufferFrameCarryover
+struct ResourceRingVersion
 {
-    StringID srcName;
-    StringID dstName;
-    uint32_t srcCarriedCount{0};
+    uint32_t physicalIndex = UINT32_MAX;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VkBuffer buffer{};
-    BufferInfo bufferInfo{};
-    VkBufferUsageFlags accumulatedUsage{};
+    [[nodiscard]] bool IsValid() const { return physicalIndex != UINT32_MAX; }
+};
+
+/**
+ * Frame-to-frame state owned by the graph. versions[0] is the newest produced version (pending until frame end on a shifting source),
+ * versions[d] the one produced d versions earlier; ages count produced versions, not frames.
+ * Declared every frame like any resource; a ring not declared for a frame is dropped and its physicals age out.
+ */
+struct ResourceRing
+{
+    StringID name;
+    Core::Array<StringID, RDG_MAX_RING_DEPTH + 1> versionNames{};
+    Core::Array<ResourceRingVersion, RDG_MAX_RING_DEPTH + 1> versions{};
+    uint32_t depth = 0;
+    bool bImage = false;
+    bool bTLAS = false;
+    bool bViewportScaled = false;
+    bool bConcurrent = false;
+
+    TextureInfo texInfo{};
+    std::optional<VkClearValue> clear{std::nullopt};
+    VkDeviceSize bufferSize = 0;
+    VkDeviceSize minAlignment = 0;
+    RenderCategory category{RenderCategory::Untagged};
+    // VkImageUsageFlags or VkBufferUsageFlags the versions need beyond this frame's declarations
+    uint32_t extraUsage = 0;
+
+    bool bDeclaredThisFrame = false;
+    VersionSource source = VersionSource::NoShiftReadOnly;
+    StringID emplaceSource{};
 };
 
 struct HostBuffer

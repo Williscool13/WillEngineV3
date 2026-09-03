@@ -203,9 +203,8 @@ public:
         return false;
     }
 
-    // ---- Carryover ------------------------------------------------------------------------
-    [[nodiscard]] size_t TextureCarryoverCount() const { return rdg.textureCarryovers.Size(); }
-    [[nodiscard]] size_t BufferCarryoverCount() const { return rdg.bufferCarryovers.Size(); }
+    // ---- Versioned resources --------------------------------------------------------------
+    [[nodiscard]] size_t RingCount() const { return rdg.rings.Size(); }
 
     // ---- Barriers (the real product of PrecomputeBarriers) --------------------------------
     [[nodiscard]] size_t TotalImageBarriers() const { return rdg.compiledImageBarriers.Size(); }
@@ -983,14 +982,13 @@ TEST_CASE_METHOD(RdgFixture, "RDG: viewport-scaled flag propagates onto the phys
     CHECK(inspector.PhysicalIsViewportScaled(inspector.TexturePhysicalIndex(SID("vp"))));
 }
 
-TEST_CASE_METHOD(RdgFixture, "RDG: a carried-over texture cannot alias even with a free slot", "[rdg][aliasing]")
+TEST_CASE_METHOD(RdgFixture, "RDG: a versioned texture cannot alias even with a free slot", "[rdg][aliasing]")
 {
-    // texA is marked for carryover (bCanUseAliasedTexture=false); texC has a non-overlapping life and
+    // texA is versioned (bCanUseAliasedTexture=false); texC has a non-overlapping life and
     // identical dims but still must not reuse texA's physical.
-    rdg.CreateTexture(SID("texA"), TexInfo());
+    rdg.CreateVersionedTexture(SID("texA"), TexInfo(), 1, VersionSource::Fresh);
     rdg.CreateTexture(SID("texB"), TexInfo(640, 480));
     rdg.CreateTexture(SID("texC"), TexInfo());
-    rdg.CarryTextureToNextFrame(SID("texA"), SID("texA_next"), VK_IMAGE_USAGE_STORAGE_BIT);
     rdg.AddPass(SID("pA"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(SID("texA"));
     rdg.AddPass(SID("pB"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadStorageImage(SID("texA")).WriteStorageImage(SID("texB"));
     rdg.AddPass(SID("pC"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadStorageImage(SID("texB")).WriteStorageImage(SID("texC"));
@@ -1408,34 +1406,113 @@ TEST_CASE_METHOD(RdgFixture, "RDG: a physical unused beyond maxFramesUnused is e
     CHECK(inspector.PhysicalCount() == 0);
 }
 
-TEST_CASE_METHOD(RdgFixture, "RDG: texture carryover preserves the physical under the new name", "[rdg][reset][carryover]")
+TEST_CASE_METHOD(RdgFixture, "RDG: versioned texture rotates when the bare name is produced", "[rdg][reset][versioned]")
 {
-    rdg.CreateTexture(SID("history"), TexInfo());
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::Fresh);
+    CHECK_FALSE(rdg.ResourceHasVersion(SID("history"), 1));
     rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(SID("history"));
-    rdg.CarryTextureToNextFrame(SID("history"), SID("historyPrev"), VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    CHECK(inspector.TextureCarryoverCount() == 1);
     Compile(0);
-    VkImage carriedImage = inspector.TextureImage(SID("history"));
+    const VkImage frame0 = inspector.TextureImage(SID("history"));
 
     NextFrame(0, 1);
-    CHECK(rdg.HasTexture(SID("historyPrev")));
-    const uint32_t physIdx = inspector.TexturePhysicalIndex(SID("historyPrev"));
-    CHECK(inspector.PhysicalImage(physIdx) == carriedImage);
-    CHECK_FALSE(inspector.PhysicalCanAlias(physIdx));
-    CHECK(inspector.TextureCarryoverCount() == 0);
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::Fresh);
+    CHECK(rdg.ResourceHasVersion(SID("history"), 1));
+    const StringID prev = rdg.ResourceVersionID(SID("history"), 1);
+    CHECK(inspector.TextureImage(prev) == frame0);
+    CHECK_FALSE(inspector.PhysicalCanAlias(inspector.TexturePhysicalIndex(prev)));
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadStorageImage(prev).WriteStorageImage(SID("history"));
+    Compile(1);
+    CHECK(inspector.TextureImage(SID("history")) != frame0);
+    CHECK(inspector.TextureImage(prev) == frame0);
 }
 
-TEST_CASE_METHOD(RdgFixture, "RDG: buffer carryover preserves the physical under the new name", "[rdg][reset][carryover]")
+TEST_CASE_METHOD(RdgFixture, "RDG: NoShiftReadOnly binds the newest version to the bare name and does not shift", "[rdg][reset][versioned]")
 {
-    rdg.CreateBuffer(SID("accum"), 4096);
-    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteBuffer(SID("accum"));
-    rdg.CarryBufferToNextFrame(SID("accum"), SID("accumPrev"), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::Fresh);
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(SID("history"));
     Compile(0);
-    VkBuffer carriedBuffer = inspector.BufferHandle(SID("accum"));
+    const VkImage frame0 = inspector.TextureImage(SID("history"));
 
     NextFrame(0, 1);
-    CHECK(rdg.HasBuffer(SID("accumPrev")));
-    CHECK(inspector.BufferHandle(SID("accumPrev")) == carriedBuffer);
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::NoShiftReadOnly);
+    CHECK(rdg.ResourceHasVersion(SID("history"), 0));
+    CHECK_FALSE(rdg.ResourceHasVersion(SID("history"), 1));
+    CHECK(inspector.TextureImage(SID("history")) == frame0);
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadSampledImage(SID("history"));
+    Compile(1);
+
+    NextFrame(0, 2);
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::NoShiftReadOnly);
+    CHECK(inspector.TextureImage(SID("history")) == frame0);
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: versioned texture with no history has no bare name until produced", "[rdg][reset][versioned]")
+{
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::Emplaced, false, VK_IMAGE_USAGE_SAMPLED_BIT);
+    CHECK_FALSE(rdg.HasTexture(SID("history")));
+    CHECK_FALSE(rdg.ResourceHasVersion(SID("history"), 1));
+    rdg.CreateTexture(SID("current"), TexInfo());
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(SID("current"));
+    rdg.EmplaceVersion(SID("history"), SID("current"));
+    Compile(0);
+    const VkImage adopted = inspector.TextureImage(SID("current"));
+
+    NextFrame(0, 1);
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::Emplaced, false, VK_IMAGE_USAGE_SAMPLED_BIT);
+    CHECK_FALSE(rdg.HasTexture(SID("history")));
+    CHECK(rdg.ResourceHasVersion(SID("history"), 1));
+    CHECK(inspector.TextureImage(rdg.ResourceVersionID(SID("history"), 1)) == adopted);
+    CHECK(inspector.TextureAccumulatedUsage(rdg.ResourceVersionID(SID("history"), 1)) & VK_IMAGE_USAGE_SAMPLED_BIT);
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: NoShiftReadWrite depth 0 keeps one physical across frames", "[rdg][reset][versioned]")
+{
+    CHECK_FALSE(rdg.ResourceHasVersion(SID("accum"), 0));
+    rdg.CreateVersionedBuffer(SID("accum"), 4096, 0, VersionSource::Fresh);
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadWriteBuffer(SID("accum"));
+    Compile(0);
+    const VkBuffer frame0 = inspector.BufferHandle(SID("accum"));
+
+    NextFrame(0, 1);
+    rdg.CreateVersionedBuffer(SID("accum"), 4096, 0, VersionSource::NoShiftReadWrite);
+    CHECK(rdg.ResourceHasVersion(SID("accum"), 0));
+    CHECK(inspector.BufferHandle(SID("accum")) == frame0);
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadWriteBuffer(SID("accum"));
+    Compile(1);
+    CHECK(inspector.BufferHandle(SID("accum")) == frame0);
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: depth-3 versioned buffer keeps three frames of history", "[rdg][reset][versioned]")
+{
+    VkBuffer handles[4]{};
+    for (uint32_t frame = 0; frame < 4; ++frame) {
+        if (frame > 0) { NextFrame(0, frame); }
+        rdg.CreateVersionedBuffer(SID("touch"), 4096, 3, VersionSource::Fresh);
+        rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteBuffer(SID("touch"));
+        CHECK(rdg.ResourceHasVersion(SID("touch"), 3) == (frame >= 3));
+        Compile(frame);
+        handles[frame] = inspector.BufferHandle(SID("touch"));
+    }
+    CHECK(inspector.BufferHandle(rdg.ResourceVersionID(SID("touch"), 1)) == handles[2]);
+    CHECK(inspector.BufferHandle(rdg.ResourceVersionID(SID("touch"), 2)) == handles[1]);
+    CHECK(inspector.BufferHandle(rdg.ResourceVersionID(SID("touch"), 3)) == handles[0]);
+    CHECK(handles[3] != handles[0]);
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: a versioned resource not declared for a frame is dropped", "[rdg][reset][versioned]")
+{
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::Fresh);
+    rdg.AddPass(SID("p"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(SID("history"));
+    Compile(0);
+    CHECK(inspector.RingCount() == 1);
+
+    NextFrame(0, 1);
+    Compile(1);
+    CHECK(inspector.RingCount() == 0);
+
+    NextFrame(0, 2);
+    rdg.CreateVersionedTexture(SID("history"), TexInfo(), 1, VersionSource::NoShiftReadOnly);
+    CHECK_FALSE(rdg.ResourceHasVersion(SID("history"), 1));
 }
 
 TEST_CASE_METHOD(RdgFixture, "RDG: viewport-scaled physical is evicted on InvalidateAllViewportAssociated", "[rdg][reset][viewport]")

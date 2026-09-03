@@ -26,7 +26,6 @@ class PipelineManager;
 inline const StringID REFLECTION_HIT_DESCRIPTORS_BUFFER = SID("reflection_hit_descriptors");
 inline const StringID REFLECTION_SPEC_NOISY_TARGET = SID("reflection_spec_noisy");
 inline const StringID REFLECTION_HIT_DELTA_TARGET = SID("reflection_hit_delta");
-inline const StringID REFLECTION_HIT_DELTA_HISTORY = SID("reflection_hit_delta_history");
 
 inline float ComputeReflectionRoughnessMax(const Core::ReflectionConfiguration& config)
 {

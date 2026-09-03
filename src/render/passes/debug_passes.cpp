@@ -19,17 +19,15 @@ void SetupGPUDebugBegin(RenderGraph& graph, const bool bLocked)
 {
     ZoneScoped;
 #ifdef WDEBUG
+    graph.CreateVersionedBuffer(GPU_DEBUG_ARGS_BUFFER, sizeof(GPUDebugDrawArgs), 0, graph.ResourceHasVersion(GPU_DEBUG_ARGS_BUFFER, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    graph.CreateVersionedBuffer(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_MAX_SEGMENTS * sizeof(DebugLineSegment), 0, graph.ResourceHasVersion(GPU_DEBUG_SEGMENT_BUFFER, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    graph.CreateVersionedBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER, sizeof(GPUDebugSphereArgs), 0, graph.ResourceHasVersion(GPU_DEBUG_SPHERE_ARGS_BUFFER, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    graph.CreateVersionedBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_MAX_SPHERES * sizeof(DebugSphereInstance), 0, graph.ResourceHasVersion(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    graph.CreateVersionedBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER, sizeof(GPUDebugCubeArgs), 0, graph.ResourceHasVersion(GPU_DEBUG_CUBE_ARGS_BUFFER, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    graph.CreateVersionedBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_MAX_CUBES * sizeof(DebugCubeInstance), 0, graph.ResourceHasVersion(GPU_DEBUG_CUBE_INSTANCE_BUFFER, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+
     if (bLocked) {
         return;
-    }
-
-    if (!graph.HasBuffer(GPU_DEBUG_ARGS_BUFFER)) {
-        graph.CreateBuffer(GPU_DEBUG_ARGS_BUFFER, sizeof(GPUDebugDrawArgs), false);
-        graph.CreateBuffer(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_MAX_SEGMENTS * sizeof(DebugLineSegment), false);
-        graph.CreateBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER, sizeof(GPUDebugSphereArgs), false);
-        graph.CreateBuffer(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_MAX_SPHERES * sizeof(DebugSphereInstance), false);
-        graph.CreateBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER, sizeof(GPUDebugCubeArgs), false);
-        graph.CreateBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_MAX_CUBES * sizeof(DebugCubeInstance), false);
     }
 
     RenderPass& clearPass = graph.AddPass(SID("GPU Debug Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::Debug);
@@ -177,13 +175,6 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
 
         vkCmdEndRendering(cmd);
     });
-
-    graph.CarryBufferToNextFrame(GPU_DEBUG_ARGS_BUFFER, GPU_DEBUG_ARGS_BUFFER, 0);
-    graph.CarryBufferToNextFrame(GPU_DEBUG_SEGMENT_BUFFER, GPU_DEBUG_SEGMENT_BUFFER, 0);
-    graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_ARGS_BUFFER, GPU_DEBUG_SPHERE_ARGS_BUFFER, 0);
-    graph.CarryBufferToNextFrame(GPU_DEBUG_SPHERE_INSTANCE_BUFFER, GPU_DEBUG_SPHERE_INSTANCE_BUFFER, 0);
-    graph.CarryBufferToNextFrame(GPU_DEBUG_CUBE_ARGS_BUFFER, GPU_DEBUG_CUBE_ARGS_BUFFER, 0);
-    graph.CarryBufferToNextFrame(GPU_DEBUG_CUBE_INSTANCE_BUFFER, GPU_DEBUG_CUBE_INSTANCE_BUFFER, 0);
 #endif
 }
 

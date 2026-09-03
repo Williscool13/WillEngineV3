@@ -34,22 +34,27 @@ void SetupShadowsResolve(RenderGraph& graph,
     const float temporalMaxAccum = viewFamily.gtaoConfig.temporalMaxAccum;
     const float temporalClampScale = viewFamily.gtaoConfig.temporalClampScale;
     const bool bTemporal = bHasGTAO && temporalMaxAccum > 0.0f;
-    const bool bHistoryValid = bTemporal && graph.HasTexture(SID("gtao_temporal_prev")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
     if (bTemporal) {
-        graph.CreateTexture(SID("gtao_temporal"), TextureInfo{VK_FORMAT_R16G16_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateVersionedTexture(SID("gtao_temporal"), TextureInfo{VK_FORMAT_R16G16_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
+    const bool bHistoryValid = bTemporal && graph.ResourceHasVersion(SID("gtao_temporal"), 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
+    const StringID gtaoTemporalPrev = bHistoryValid ? graph.ResourceVersionID(SID("gtao_temporal"), 1) : StringID{};
+    const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
+    const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
+    if (bTemporal) {
         shadowsResolvePass.ReadSampledImage(targets.depthCopy);
         shadowsResolvePass.ReadSampledImage(targets.gbufferOne);
         shadowsResolvePass.WriteStorageImage(SID("gtao_temporal"));
     }
     if (bHistoryValid) {
-        shadowsResolvePass.ReadSampledImage(SID("gtao_temporal_prev"));
-        shadowsResolvePass.ReadSampledImage(SID("depth_history"));
-        shadowsResolvePass.ReadSampledImage(SID("gbuffer_one_history"));
+        shadowsResolvePass.ReadSampledImage(gtaoTemporalPrev);
+        shadowsResolvePass.ReadSampledImage(depthHistory);
+        shadowsResolvePass.ReadSampledImage(gbufferOneHistory);
     }
 
     shadowsResolvePass.ReadBuffer(SID("scene_data"));
     shadowsResolvePass.WriteStorageImage(SID("shadows_resolve_target"));
-    shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, temporalMaxAccum, temporalClampScale,
+    shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, gtaoTemporalPrev, depthHistory, gbufferOneHistory, temporalMaxAccum, temporalClampScale,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
             width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shadows_resolve"));
@@ -62,9 +67,9 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("shadows_resolve_target")),
                 .depthIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(depth) : ~0x0u,
                 .gbufferOneIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(gbufferOne) : ~0x0u,
-                .historyIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("gtao_temporal_prev")) : ~0x0u,
-                .depthHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0x0u,
-                .gbufferOneHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0x0u,
+                .historyIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(gtaoTemporalPrev) : ~0x0u,
+                .depthHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0x0u,
+                .gbufferOneHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0x0u,
                 .temporalOutputIndex = bTemporal ? graph.GetStorageImageViewDescriptorIndex(SID("gtao_temporal")) : ~0x0u,
                 .bHistoryValid = bHistoryValid ? 1u : 0u,
                 .temporalMaxAccum = temporalMaxAccum,
@@ -78,10 +83,6 @@ void SetupShadowsResolve(RenderGraph& graph,
             uint32_t yDispatch = (height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
-
-    if (bTemporal) {
-        graph.CarryTextureToNextFrame(SID("gtao_temporal"), SID("gtao_temporal_prev"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    }
 }
 
 static void AddSigmaBlurPass(RenderGraph& graph,
@@ -227,10 +228,12 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
     const StringID sigmaDepth = sigma.bHalfRes ? SID("rt_sun_depth") : targets.depthCopy;
     const StringID sigmaGbuffer = sigma.bHalfRes ? SID("rt_sun_gbuffer") : targets.gbufferOne;
 
-    graph.CreateTexture(SID("sigma_stabilized"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    graph.CreateTexture(SID("sigma_history_length"), TextureInfo{VK_FORMAT_R32_UINT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateVersionedTexture(SID("sigma_stabilized"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("sigma_history_length"), TextureInfo{VK_FORMAT_R32_UINT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    const bool bHasHistory = graph.HasTexture(SID("sigma_stabilized_prev")) && graph.HasTexture(SID("sigma_history_length_prev"));
+    const bool bHasHistory = graph.ResourceHasVersion(SID("sigma_stabilized"), 1) && graph.ResourceHasVersion(SID("sigma_history_length"), 1);
+    const StringID prevStabilized = bHasHistory ? graph.ResourceVersionID(SID("sigma_stabilized"), 1) : StringID{};
+    const StringID prevHistoryLength = bHasHistory ? graph.ResourceVersionID(SID("sigma_history_length"), 1) : StringID{};
 
     RenderPass& pass = graph.AddPass(SID("[SIGMA] Shadow Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::DirectionalLighting);
     pass.ReadBuffer(SID("scene_data"));
@@ -239,12 +242,12 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
     pass.ReadSampledImage(sigmaDepth);
     pass.ReadSampledImage(sigmaGbuffer);
     if (bHasHistory) {
-        pass.ReadSampledImage(SID("sigma_stabilized_prev"));
-        pass.ReadSampledImage(SID("sigma_history_length_prev"));
+        pass.ReadSampledImage(prevStabilized);
+        pass.ReadSampledImage(prevHistoryLength);
     }
     pass.WriteStorageImage(SID("sigma_stabilized"));
     pass.WriteStorageImage(SID("sigma_history_length"));
-    pass.Execute([pipelineManager, sigma, sceneIndex, renderExtent, bHasHistory, shadowTex,
+    pass.Execute([pipelineManager, sigma, sceneIndex, renderExtent, bHasHistory, shadowTex, prevStabilized, prevHistoryLength,
             depth = sigmaDepth, gbufferOne = sigmaGbuffer](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("sigma_shadow_temporal"));
             if (!pipeline) { return; }
@@ -254,8 +257,8 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .shadowIndex = graph.GetSampledImageViewDescriptorIndex(shadowTex),
-                .historyIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("sigma_stabilized_prev")) : ~0x0u,
-                .historyLengthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("sigma_history_length_prev")) : ~0x0u,
+                .historyIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(prevStabilized) : ~0x0u,
+                .historyLengthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(prevHistoryLength) : ~0x0u,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("sigma_stabilized")),
@@ -271,8 +274,5 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
             const uint32_t groupsY = (renderExtent[1] + 7) / 8;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
-
-    graph.CarryTextureToNextFrame(SID("sigma_stabilized"), SID("sigma_stabilized_prev"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CarryTextureToNextFrame(SID("sigma_history_length"), SID("sigma_history_length_prev"), VK_IMAGE_USAGE_SAMPLED_BIT);
 }
 } // Render

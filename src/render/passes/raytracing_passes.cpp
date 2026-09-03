@@ -58,7 +58,7 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize alignedTLASSize = (sizeInfo.accelerationStructureSize + 255ull) & ~255ull;
     const VkDeviceSize scratchSize = sizeInfo.buildScratchSize;
 
-    graph.CreateTLAS(RT_TLAS_BUFFER, alignedTLASSize, RenderCategory::RayTracing);
+    graph.CreateVersionedTLAS(RT_TLAS_BUFFER, alignedTLASSize, RenderCategory::RayTracing);
 
     const VkDeviceSize instanceBufferSize = static_cast<VkDeviceSize>(maxPrimitiveCount) * sizeof(VkAccelerationStructureInstanceKHR);
     graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false);
@@ -242,10 +242,8 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.HasBuffer(SID("rt_gt_di_accum"))) {
-        graph.CreateBuffer(SID("rt_gt_di_accum"), bufferSize, false);
-        bReset = true;
-    }
+    if (!graph.ResourceHasVersion(SID("rt_gt_di_accum"), 0)) { bReset = true; }
+    graph.CreateVersionedBuffer(SID("rt_gt_di_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("rt_gt_di_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass(SID("RT GT DI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
@@ -303,7 +301,6 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
-    graph.CarryBufferToNextFrame(SID("rt_gt_di_accum"), SID("rt_gt_di_accum"), 0);
     return true;
 }
 
@@ -324,10 +321,8 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.HasBuffer(SID("rt_gt_gi_accum"))) {
-        graph.CreateBuffer(SID("rt_gt_gi_accum"), bufferSize, false);
-        bReset = true;
-    }
+    if (!graph.ResourceHasVersion(SID("rt_gt_gi_accum"), 0)) { bReset = true; }
+    graph.CreateVersionedBuffer(SID("rt_gt_gi_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("rt_gt_gi_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass(SID("RT GT GI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
@@ -388,7 +383,6 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
-    graph.CarryBufferToNextFrame(SID("rt_gt_gi_accum"), SID("rt_gt_gi_accum"), 0);
     return true;
 }
 
@@ -410,10 +404,8 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.HasBuffer(SID("rt_gt_full_accum"))) {
-        graph.CreateBuffer(SID("rt_gt_full_accum"), bufferSize, false);
-        bReset = true;
-    }
+    if (!graph.ResourceHasVersion(SID("rt_gt_full_accum"), 0)) { bReset = true; }
+    graph.CreateVersionedBuffer(SID("rt_gt_full_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("rt_gt_full_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass(SID("RT GT Full Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
@@ -478,7 +470,6 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
-    graph.CarryBufferToNextFrame(SID("rt_gt_full_accum"), SID("rt_gt_full_accum"), 0);
     return true;
 }
 

@@ -1,6 +1,6 @@
 /*
  * RELAX: GenerateViewZ pass. Downsamples full-res raw depth to half-res linearized viewZ.
- * Run once per frame before temporal accumulation so that relax_viewz_history is always
+ * Run once per frame before temporal accumulation so that last frame's relax_viewz is always
  * a half-res texture that matches gResourceSizeInvPrev.
  */
 

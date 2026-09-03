@@ -96,9 +96,9 @@ public: // Frame setup
     void InvalidateAllViewportAssociated() { bDestroyViewportAssociated = true; }
 
     /**
-     * Drops every frame carryover record (textures and buffers, including the TLAS carry) regardless of viewport flag; physicals age out normally
+     * Drops every versioned resource (textures, buffers, the TLAS ring) regardless of viewport flag; physicals age out normally
      */
-    void InvalidateAllCarried() { bDropAllCarryovers = true; }
+    void InvalidateAllVersioned() { bDropAllRings = true; }
 
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
@@ -132,15 +132,38 @@ public: // Resource registration
 
     void ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
 
+public: // Rings
     /**
-     * Carries a texture across a frame boundary; the physical image is re-imported under newTextureId next frame
-     * @param textureId
-     * @param newTextureId
-     * @param additionalUsage
+     * Declares a texture the graph keeps across frames. The bare name is the newest version, Version(name, age) the one produced age versions earlier (1..depth).
+     * A ring not declared for a frame is dropped; a changed description resets it.
+     * @param name
+     * @param texInfo
+     * @param depth 0..RDG_MAX_RING_DEPTH; 0 is the in-place case (Fresh once, then NoShiftReadWrite: one physical for life)
+     * @param source see VersionSource
+     * @param bIsViewportScaled
+     * @param extraUsage usage the versions need beyond what this frame's passes declare on whatever produces them (a later consumer's sampled read, a copy source)
+     * @param bConcurrent an async pass touches some version of this ring; every physical is created CONCURRENT and pinned GENERAL. Asserted if an undeclared ring is touched by async.
+     * @param clearValue auto-clear for the bare name on frames it is produced
      */
-    void CarryTextureToNextFrame(StringID textureId, StringID newTextureId, VkImageUsageFlags additionalUsage);
+    void CreateVersionedTexture(StringID name, const TextureInfo& texInfo, uint32_t depth, VersionSource source, bool bIsViewportScaled = false, VkImageUsageFlags extraUsage = 0, bool bConcurrent = false, std::optional<VkClearValue> clearValue = std::nullopt);
 
-    void CarryBufferToNextFrame(StringID bufferId, StringID newBufferId, VkBufferUsageFlags additionalUsage);
+    void CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32_t depth, VersionSource source, VkDeviceSize minAlignment = 0, VkBufferUsageFlags extraUsage = 0);
+
+    void CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
+
+    /**
+     * Supplies this frame's version of a ring declared VersionSource::Emplaced from an existing logical's physical.
+     * The ring takes the source's description, so the next declaration must match it or the history resets.
+     * @param resourceDst
+     * @param resourceSrc
+     */
+    void EmplaceVersion(StringID resourceDst, StringID resourceSrc);
+
+    /** @returns the logical name of the version from age frames ago; age 0 is the bare name. Pure naming, no lookup: the version need not exist (see HasVersion) */
+    [[nodiscard]] StringID ResourceVersionID(StringID name, uint32_t age);
+
+    /** @returns true when that version holds a produced physical. Age 0 is pending on a shifting source until frame end, so it answers "was anything produced before" on the no-shift sources */
+    [[nodiscard]] bool ResourceHasVersion(StringID name, uint32_t age);
 
 public: // Pass setup
     RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, RenderCategory category);
@@ -224,6 +247,11 @@ public: // Compile and execute
     void AssignPhysicalResources(uint64_t currentFrame);
 
     /**
+     * Every async pass declaration must touch memory graphics cannot still be using: writes need FRAME_BUFFER_COUNT frames since any graphics touch, reads since a graphics write, unless an async pass wrote it this frame or last touched it.
+     */
+    void ValidateAsyncHazards(uint64_t currentFrame);
+
+    /**
      * Precomputes per-wave and per-pass barriers into flat arrays; call after Compile
      */
     void PrecomputeBarriers(uint64_t currentFrame);
@@ -262,14 +290,9 @@ public: // Persistent Per-FIF Buffers
      */
     HostBufferWrite OpenHostBufferMirrored(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
-public:
-    void CreateTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
-
     VkAccelerationStructureKHR GetAccelerationStructureHandle(StringID name);
 
     uint32_t GetAccelerationStructureDescriptorIndex(StringID name);
-
-    void CarryTLASToNextFrame(StringID name, StringID historyName);
 
 public: // Transient Uploader
     UploadAllocation AllocateTransient(size_t size);
@@ -369,8 +392,7 @@ private:
     Core::Vector<VkBufferMemoryBarrier2> compiledBufferBarriers;
     Core::Vector<WaveBarrierRange> compiledWaveRanges;
 
-    Core::Vector<TextureFrameCarryover> textureCarryovers;
-    Core::Vector<BufferFrameCarryover> bufferCarryovers;
+    Core::Vector<ResourceRing> rings;
 
     uint32_t currentFrameIndex{0};
     Core::Array<TransientUploadArena, Core::FRAME_BUFFER_COUNT> uploadArenas{};
@@ -382,7 +404,7 @@ private:
 
     bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};
-    bool bDropAllCarryovers{false};
+    bool bDropAllRings{false};
 
     bool bDebugLogging = false;
     uint32_t debugCaptureFramesLeft{0};
@@ -398,18 +420,33 @@ private:
     BufferResource* GetOrCreateBuffer(StringID textureId);
 
     /**
-     * Releases a carried-in resource from its physical so the compile pass allocates it fresh; last frame's contents are lost.
+     * Releases a logical from the physical it was bound to so the compile pass allocates it fresh; the previous contents are lost.
      * Only the logical side is touched here; ReconcileDetachedPhysicals does the physical bookkeeping at compile time.
      * @param tex
      */
-    void DetachCarriedTexture(TextureResource& tex) const;
+    void DetachTexture(TextureResource& tex) const;
 
-    void DetachCarriedBuffer(BufferResource& buf) const;
+    void DetachBuffer(BufferResource& buf) const;
 
     /**
      * Clears physical to logical back-references left dangling by a detach, re-opening any physical that is now unreferenced for aliasing this frame.
      */
     void ReconcileDetachedPhysicals();
+
+private: // Rings
+    ResourceRing* FindRing(StringID name);
+
+    void ResetRing(ResourceRing& ring);
+
+    /** Shifts the ages for Fresh/Emplaced, then creates the logicals for every existing version and binds them to their physicals; the bare name is fresh, absent, or slot 0 by source. */
+    void BindRingLogicals(ResourceRing& ring);
+
+    /** Frame end: drops undeclared rings, refreshes image layouts, and captures the physical of a pending slot 0. */
+    void CaptureRingVersions();
+
+    void OnPhysicalRemoved(uint32_t physicalIndex);
+
+private: // Physicals
 
     void DestroyPhysicalResource(PhysicalResource& resource);
 

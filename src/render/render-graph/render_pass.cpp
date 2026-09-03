@@ -42,6 +42,7 @@ RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const Textur
         ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
+    resource->bWrittenThisFrame = true;
     storageImageWrites.PushBack(resource->index);
     return *this;
 }
@@ -57,6 +58,7 @@ RenderPass& RenderPass::WriteClearImage(const StringID textureId, const TextureI
     else {
         ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
+    resource->bWrittenThisFrame = true;
     clearImageWrites.PushBack(resource->index);
     return *this;
 }
@@ -72,6 +74,7 @@ RenderPass& RenderPass::WriteBlitImage(const StringID textureId, const TextureIn
     else {
         ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
+    resource->bWrittenThisFrame = true;
     blitImageWrites.PushBack(resource->index);
     return *this;
 }
@@ -87,6 +90,7 @@ RenderPass& RenderPass::WriteCopyImage(const StringID textureId, const TextureIn
     else {
         ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
+    resource->bWrittenThisFrame = true;
     copyImageWrites.PushBack(resource->index);
     return *this;
 }
@@ -104,6 +108,7 @@ RenderPass& RenderPass::WriteColorAttachment(const StringID textureId, const Tex
         ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
+    resource->bWrittenThisFrame = true;
     colorAttachments.PushBack(resource->index);
     return *this;
 }
@@ -123,6 +128,7 @@ RenderPass& RenderPass::WriteDepthAttachment(const StringID textureId, const Tex
 
     ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
 
+    resource->bWrittenThisFrame = true;
     depthStencilAttachment = resource->index;
     depthAccessType |= DepthAccessType::Write;
     return *this;
@@ -146,6 +152,7 @@ RenderPass& RenderPass::ReadWriteImage(const StringID textureId, const TextureIn
         ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
     }
 
+    resource->bWrittenThisFrame = true;
     imageReadWrite.PushBack(resource->index);
     return *this;
 }
@@ -196,6 +203,7 @@ RenderPass& RenderPass::ReadCopyImage(const StringID textureId)
 RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->bWrittenThisFrame = true;
     bufferWrites.PushBack(resource->index);
     return *this;
 }
@@ -203,6 +211,7 @@ RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
 RenderPass& RenderPass::WriteTransferBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->bWrittenThisFrame = true;
     bufferTransferWrites.PushBack(resource->index);
     return *this;
 }
@@ -222,6 +231,7 @@ RenderPass& RenderPass::ReadWriteDepthAttachment(const StringID bufferId, const 
 
     ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
 
+    resource->bWrittenThisFrame = true;
     depthStencilAttachment = resource->index;
     depthAccessType = DepthAccessType::Read | DepthAccessType::Write;
     return *this;
@@ -230,6 +240,7 @@ RenderPass& RenderPass::ReadWriteDepthAttachment(const StringID bufferId, const 
 RenderPass& RenderPass::ReadWriteBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->bWrittenThisFrame = true;
     bufferReadWrite.PushBack(resource->index);
     return *this;
 }
@@ -276,6 +287,7 @@ RenderPass& RenderPass::ReadIndirectCountBuffer(const StringID bufferId)
 RenderPass& RenderPass::WriteTLASBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->bWrittenThisFrame = true;
     bufferTLASWrites.PushBack(resource->index);
     return *this;
 }
@@ -291,6 +303,7 @@ RenderPass& RenderPass::ReadTLASBuffer(const StringID bufferId)
 RenderPass& RenderPass::WriteScratchBuffer(const StringID bufferId)
 {
     BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
+    resource->bWrittenThisFrame = true;
     bufferScratchWrites.PushBack(resource->index);
     return *this;
 }

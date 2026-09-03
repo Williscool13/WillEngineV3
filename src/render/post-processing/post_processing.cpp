@@ -88,15 +88,15 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
     graph.CreateBuffer(SID("luminance_histogram"), POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
 
-    if (!graph.HasBuffer(SID("luminance_buffer"))) {
-        graph.CreateBuffer(SID("luminance_buffer"), sizeof(float), false);
+    // The persistent luminance buffer is declared by the frame setup (TAA reads it first); a first life still needs its seed.
+    const bool bInitLuminance = !graph.ResourceHasVersion(SID("luminance_buffer"), 0);
+    if (bInitLuminance) {
         auto& initPass = graph.AddPass(SID("[Exposure] Init Luminance"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
         initPass.WriteTransferBuffer(SID("luminance_buffer"));
         initPass.Execute([target = config.exposureTargetLuminance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("luminance_buffer")), 0, sizeof(float), &target);
         });
     }
-    graph.CarryBufferToNextFrame(SID("luminance_buffer"), SID("luminance_buffer"), VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
     auto& clearPass = graph.AddPass(SID("[Exposure] Clear Histogram"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
     clearPass.WriteTransferBuffer(SID("luminance_histogram"));

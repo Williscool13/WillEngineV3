@@ -33,9 +33,7 @@ inline const StringID GI_GATHER_VARIANCE_GUIDE = SID("gi_gather_variance_guide")
 inline const StringID GI_GATHER_RAW_SKY_VIS = SID("gi_gather_raw_sky_vis");
 inline const StringID GI_GATHER_TMP_SKY_VIS = SID("gi_gather_tmp_sky_vis");
 inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");
-inline const StringID GI_GATHER_HISTORY = SID("gi_gather_history");
 inline const StringID GI_GATHER_MOMENTS = SID("gi_gather_moments");
-inline const StringID GI_GATHER_MOMENTS_HISTORY = SID("gi_gather_moments_history");
 inline const StringID GI_MOTION_TILED_MAX = SID("gi_motion_tiled_max");
 inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = SID("gi_motion_tiled_neighbor_max");
 inline const StringID OBJECT_MOTION = SID("object_motion");
@@ -92,7 +90,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode);
 
 /**
- * Gather debug views written to gi_gather_debug_target for the debug visualizer instead of hijacking the lit composite, so lit_color_history and the screen tier stay authentic while inspecting.
+ * Gather debug views written to gi_gather_debug_target for the debug visualizer instead of hijacking the lit composite, so the lit-color snapshot and the screen tier stay authentic while inspecting.
  * @param graph
  * @param pipelineManager
  * @param renderExtent

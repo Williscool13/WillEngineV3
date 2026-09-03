@@ -18,9 +18,9 @@ namespace Render
 RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze)
 {
     ZoneScoped;
-    graph.CreateBuffer(RADIANCE_CACHE_ENTRIES, RADIANCE_CACHE_ENTRIES_BYTES, false);
-    graph.CreateBuffer(RADIANCE_CACHE_KEYS, RADIANCE_CACHE_KEYS_BYTES, false);
-    graph.CreateBuffer(RADIANCE_CACHE_CELLS, RADIANCE_CACHE_CELLS_BYTES, false);
+    graph.CreateVersionedBuffer(RADIANCE_CACHE_ENTRIES, RADIANCE_CACHE_ENTRIES_BYTES, 1, VersionSource::Fresh);
+    graph.CreateVersionedBuffer(RADIANCE_CACHE_KEYS, RADIANCE_CACHE_KEYS_BYTES, 1, VersionSource::Fresh);
+    graph.CreateVersionedBuffer(RADIANCE_CACHE_CELLS, RADIANCE_CACHE_CELLS_BYTES, 1, VersionSource::Fresh);
     graph.CreateBuffer(RADIANCE_CACHE_ACTIVE, RADIANCE_CACHE_ENTRIES_BYTES, false);
     graph.CreateBuffer(RADIANCE_CACHE_ACTIVE_LIST, RADIANCE_CACHE_ACTIVE_LIST_BYTES, false);
     graph.CreateBuffer(RADIANCE_CACHE_ACTIVE_COUNT, sizeof(uint32_t), false);
@@ -45,31 +45,27 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_STATS), 0, VK_WHOLE_SIZE, 0);
     });
 
-    const StringID touchEntries = RadianceCacheTouchEntries(frameNumber);
-    const StringID touchKeys = RadianceCacheTouchKeys(frameNumber);
-    const bool bTouchValid = graph.HasBuffer(touchEntries) && graph.HasBuffer(touchKeys);
-    if (!bTouchValid) {
-        graph.CreateBuffer(touchEntries, RADIANCE_CACHE_ENTRIES_BYTES, false);
-        graph.CreateBuffer(touchKeys, RADIANCE_CACHE_KEYS_BYTES, false);
-    }
-    for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; ++i) {
-        if (graph.HasBuffer(RADIANCE_CACHE_TOUCH_ENTRIES[i])) { graph.CarryBufferToNextFrame(RADIANCE_CACHE_TOUCH_ENTRIES[i], RADIANCE_CACHE_TOUCH_ENTRIES[i], 0); }
-        if (graph.HasBuffer(RADIANCE_CACHE_TOUCH_KEYS[i])) { graph.CarryBufferToNextFrame(RADIANCE_CACHE_TOUCH_KEYS[i], RADIANCE_CACHE_TOUCH_KEYS[i], 0); }
-    }
+    graph.CreateVersionedBuffer(RADIANCE_CACHE_TOUCH_ENTRIES, RADIANCE_CACHE_ENTRIES_BYTES, Core::FRAME_BUFFER_COUNT, VersionSource::Fresh);
+    graph.CreateBuffer(RADIANCE_CACHE_TOUCH_KEYS, RADIANCE_CACHE_KEYS_BYTES, false);
+    const bool bTouchValid = graph.ResourceHasVersion(RADIANCE_CACHE_TOUCH_ENTRIES, Core::FRAME_BUFFER_COUNT);
+    const StringID touchEntries = graph.ResourceVersionID(RADIANCE_CACHE_TOUCH_ENTRIES, Core::FRAME_BUFFER_COUNT);
 
-    const bool bHistoryValid = graph.HasBuffer(RADIANCE_CACHE_ENTRIES_HISTORY) && graph.HasBuffer(RADIANCE_CACHE_KEYS_HISTORY) && graph.HasBuffer(RADIANCE_CACHE_CELLS_HISTORY);
+    const bool bHistoryValid = graph.ResourceHasVersion(RADIANCE_CACHE_ENTRIES, 1) && graph.ResourceHasVersion(RADIANCE_CACHE_KEYS, 1) && graph.ResourceHasVersion(RADIANCE_CACHE_CELLS, 1);
     if (bHistoryValid) {
+        const StringID prevEntries = graph.ResourceVersionID(RADIANCE_CACHE_ENTRIES, 1);
+        const StringID prevKeys = graph.ResourceVersionID(RADIANCE_CACHE_KEYS, 1);
+        const StringID prevCells = graph.ResourceVersionID(RADIANCE_CACHE_CELLS, 1);
         RenderPass& carryPass = graph.AddPass(SID("Radiance Cache Carry Forward"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
         carryPass.AsyncCompute();
-        carryPass.ReadBuffer(RADIANCE_CACHE_ENTRIES_HISTORY);
-        carryPass.ReadBuffer(RADIANCE_CACHE_KEYS_HISTORY);
-        carryPass.ReadBuffer(RADIANCE_CACHE_CELLS_HISTORY);
+        carryPass.ReadBuffer(prevEntries);
+        carryPass.ReadBuffer(prevKeys);
+        carryPass.ReadBuffer(prevCells);
         if (bTouchValid) { carryPass.ReadBuffer(touchEntries); }
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_ENTRIES);
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_KEYS);
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_CELLS);
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_STATS);
-        carryPass.Execute([pipelineManager, frameNumber, cameraPos, bFreeze, bTouchValid, touchEntries](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        carryPass.Execute([pipelineManager, frameNumber, cameraPos, bFreeze, bTouchValid, touchEntries, prevEntries, prevKeys, prevCells](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("radiance_cache_carry_forward"));
             if (!pipelineEntry) {
                 return;
@@ -77,9 +73,9 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             RadianceCacheCarryForwardPushConstant pc{
-                .prevEntries = graph.GetBufferAddress(RADIANCE_CACHE_ENTRIES_HISTORY),
-                .prevKeys = graph.GetBufferAddress(RADIANCE_CACHE_KEYS_HISTORY),
-                .prevCells = graph.GetBufferAddress(RADIANCE_CACHE_CELLS_HISTORY),
+                .prevEntries = graph.GetBufferAddress(prevEntries),
+                .prevKeys = graph.GetBufferAddress(prevKeys),
+                .prevCells = graph.GetBufferAddress(prevCells),
                 .nextEntries = graph.GetBufferAddress(RADIANCE_CACHE_ENTRIES),
                 .nextKeys = graph.GetBufferAddress(RADIANCE_CACHE_KEYS),
                 .nextCells = graph.GetBufferAddress(RADIANCE_CACHE_CELLS),
@@ -98,9 +94,9 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
 
     RenderPass& touchClear = graph.AddPass(SID("Radiance Cache Touch Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
     touchClear.AsyncCompute();
-    touchClear.WriteTransferBuffer(touchEntries);
-    touchClear.Execute([touchEntries](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        vkCmdFillBuffer(cmd, graph.GetBufferHandle(touchEntries), 0, VK_WHOLE_SIZE, 0);
+    touchClear.WriteTransferBuffer(RADIANCE_CACHE_TOUCH_ENTRIES);
+    touchClear.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_TOUCH_ENTRIES), 0, VK_WHOLE_SIZE, 0);
     });
 
     graph.CreateBuffer(RADIANCE_CACHE_BUFFERS_CURRENT, sizeof(RadianceCacheBuffers), false);
@@ -227,17 +223,6 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(RADIANCE_CACHE_SHADE_ARGS), 0);
     });
-}
-
-void SetupRadianceCacheEnd(RenderGraph& graph, const RadianceCacheFrame& frame)
-{
-    ZoneScoped;
-    if (!frame.bValid) {
-        return;
-    }
-    graph.CarryBufferToNextFrame(RADIANCE_CACHE_ENTRIES, RADIANCE_CACHE_ENTRIES_HISTORY, 0);
-    graph.CarryBufferToNextFrame(RADIANCE_CACHE_KEYS, RADIANCE_CACHE_KEYS_HISTORY, 0);
-    graph.CarryBufferToNextFrame(RADIANCE_CACHE_CELLS, RADIANCE_CACHE_CELLS_HISTORY, 0);
 }
 
 void SetupRadianceCacheDebug(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, float debugExposure, int32_t normalBucket)

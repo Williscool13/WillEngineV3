@@ -73,9 +73,8 @@ void SetupGeometryPass(RenderGraph& graph,
             graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
             graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
             if (bOcclusion) {
-                // Fixed size so the cross-frame carry never resizes; garbage content on first use is safe (phase 2 corrects)
-                graph.CreateBuffer(visBits, MAX_INSTANCE_SLOTS / 8, false);
-                graph.CarryBufferToNextFrame(visBits, visBits, 0);
+                // Fixed size so the persistent ring never resizes; garbage content on first use is safe (phase 2 corrects)
+                graph.CreateVersionedBuffer(visBits, MAX_INSTANCE_SLOTS / 8, 0, graph.ResourceHasVersion(visBits, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
             }
         }
     }

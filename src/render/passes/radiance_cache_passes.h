@@ -12,12 +12,10 @@ namespace Render
 {
 class PipelineManager;
 
+// Entries/keys/cells are versioned depth 1: carry forward rebuilds this frame's table from Version(name, 1).
 inline const StringID RADIANCE_CACHE_ENTRIES = SID("radiance_cache_entries");
-inline const StringID RADIANCE_CACHE_ENTRIES_HISTORY = SID("radiance_cache_entries_history");
 inline const StringID RADIANCE_CACHE_KEYS = SID("radiance_cache_keys");
-inline const StringID RADIANCE_CACHE_KEYS_HISTORY = SID("radiance_cache_keys_history");
 inline const StringID RADIANCE_CACHE_CELLS = SID("radiance_cache_cells");
-inline const StringID RADIANCE_CACHE_CELLS_HISTORY = SID("radiance_cache_cells_history");
 inline const StringID RADIANCE_CACHE_ACTIVE = SID("radiance_cache_active");
 inline const StringID RADIANCE_CACHE_ACTIVE_LIST = SID("radiance_cache_active_list");
 inline const StringID RADIANCE_CACHE_ACTIVE_COUNT = SID("radiance_cache_active_count");
@@ -25,12 +23,8 @@ inline const StringID RADIANCE_CACHE_SHADE_ARGS = SID("radiance_cache_shade_args
 inline const StringID RADIANCE_CACHE_DESCRIPTORS = SID("radiance_cache_descriptors");
 inline const StringID RADIANCE_CACHE_BUFFERS_CURRENT = SID("radiance_cache_buffers_current");
 inline const StringID RADIANCE_CACHE_STATS = SID("radiance_cache_stats");
-static_assert(Core::FRAME_BUFFER_COUNT == 3);
-inline const StringID RADIANCE_CACHE_TOUCH_ENTRIES[3] = {SID("radiance_cache_touch_entries_0"), SID("radiance_cache_touch_entries_1"), SID("radiance_cache_touch_entries_2")};
-inline const StringID RADIANCE_CACHE_TOUCH_KEYS[3] = {SID("radiance_cache_touch_keys_0"), SID("radiance_cache_touch_keys_1"), SID("radiance_cache_touch_keys_2")};
-
-inline StringID RadianceCacheTouchEntries(uint64_t frameNumber) { return RADIANCE_CACHE_TOUCH_ENTRIES[frameNumber % Core::FRAME_BUFFER_COUNT]; }
-inline StringID RadianceCacheTouchKeys(uint64_t frameNumber) { return RADIANCE_CACHE_TOUCH_KEYS[frameNumber % Core::FRAME_BUFFER_COUNT]; }
+inline const StringID RADIANCE_CACHE_TOUCH_ENTRIES = SID("radiance_cache_touch_entries");
+inline const StringID RADIANCE_CACHE_TOUCH_KEYS = SID("radiance_cache_touch_keys");
 
 inline constexpr VkDeviceSize RADIANCE_CACHE_ENTRIES_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint32_t);
 inline constexpr VkDeviceSize RADIANCE_CACHE_KEYS_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint2);
@@ -73,13 +67,6 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
  * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the ambient's probe pick
  */
 void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
-
-/**
- * Carries this frame's cache buffers into history. Call last.
- * @param graph
- * @param frame
- */
-void SetupRadianceCacheEnd(RenderGraph& graph, const RadianceCacheFrame& frame);
 
 /**
  * One solid cube per occupied hash slot, colored by decoded radiance.

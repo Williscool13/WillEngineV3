@@ -441,7 +441,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         renderGraph->InvalidateAllViewportAssociated();
     }
     else if (frameBuffer.cacheReset == Core::RenderCacheReset::All) {
-        renderGraph->InvalidateAllCarried();
+        renderGraph->InvalidateAllVersioned();
         rtGroundTruthDIAccumCount = 0;
         rtGroundTruthGIAccumCount = 0;
         rtGroundTruthFullAccumCount = 0;
@@ -590,14 +590,30 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_VISIBILITY_EMPTY, true);
     renderGraph->CreateTexture(targets.barycentric, TextureInfo{VISIBILITY_BARYCENTRIC_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    const bool bGeometry = renderFamilyProperties.bCanRender && viewFamily.instanceCount > 0;
+    auto declareGeometryTarget = [&](StringID name, const TextureInfo& info) {
+        if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
+        else if (renderGraph->ResourceHasVersion(name, 0)) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::NoShiftReadOnly, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
+        else { renderGraph->CreateTexture(name, info, std::nullopt, true); }
+    };
+    declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1});
     renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
-    renderGraph->CreateTexture(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    declareGeometryTarget(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent[0], renderExtent[1], 1});
     renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+
+    const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
+    const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.debug.giGatherDebugMode != 0);
+    const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
+    const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
+    if (bSnapshotLitColor) {
+        renderGraph->CreateVersionedTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    }
+
+    renderGraph->CreateVersionedBuffer(SID("luminance_buffer"), sizeof(float), 0, renderGraph->ResourceHasVersion(SID("luminance_buffer"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
@@ -654,7 +670,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
                 SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
-                SetupRadianceCacheEnd(*renderGraph, radianceCache);
                 if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
                     RenderPass& wcStatsReadback = renderGraph->AddPass(SID("Radiance Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
                     wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_STATS);
@@ -871,13 +886,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupPortalComposite(*renderGraph, viewFamily, renderExtent, targets, portalTargets);
         }*/
 
-        // Snapshot the lit HDR composite BEFORE any overlay/debug/text/sprite pass so the gather's screen tier reads GI, not UI glyphs or debug lines carried into lit_color_history.
-        const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
-        const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.debug.giGatherDebugMode != 0);
-        const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
-        const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
         if (bSnapshotLitColor) {
-            renderGraph->CreateTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
             auto& snapshotPass = renderGraph->AddPass(SID("Lit Color Snapshot"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
             snapshotPass.ReadSampledImage(targets.colorOutput);
             snapshotPass.WriteStorageImage(SID("lit_color_preoverlay"));
@@ -914,9 +923,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.debug.bLockGPUDebug);
         }
 
-        if (bSnapshotLitColor) {
-            renderGraph->CarryTextureToNextFrame(SID("lit_color_preoverlay"), SID("lit_color_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-        }
 
         if (viewFamily.groundTruthMode == Core::GroundTruthMode::None) {
             targets.colorOutput = PPDepthOfField(*renderGraph, pipelineManager, viewFamily.postProcessConfig, targets, renderExtent, frameNumber, targets.colorOutput);
@@ -1041,13 +1047,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     break;
                 case DebugTransformationType::ReservoirHistoryLightIdx:
                 case DebugTransformationType::ReservoirHistoryW:
-                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_history"));
+                    bDebugReservoirReady = renderGraph->ResourceHasVersion(SID("restir_reservoir_history"), 1);
                     break;
                 default:
                     break;
             }
 
-            if (bDebugBuffersReady && bDebugReservoirReady && renderGraph->HasTexture(debugTargetName)) {
+            if (bDebugBuffersReady && bDebugReservoirReady && renderGraph->HasTexture(debugTargetName) && renderGraph->HasTexture(targets.depthCopy)) {
                 auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthCopy);
@@ -1065,7 +1071,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     SID("restir_reservoir_base"),
                     SID("restir_reservoir_temporal"),
                     SID("restir_reservoir_spatial"),
-                    SID("restir_reservoir_history"),
+                    renderGraph->ResourceVersionID(SID("restir_reservoir_history"), 1),
                     REFLECTION_PROBE_BUFFER,
                     SID("world_grid_probe_grid"),
                     LIGHT_DATA_BUFFER,
@@ -1140,7 +1146,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_base")),
                         .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
                         .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_spatial")),
-                        .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_history")),
+                        .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(renderGraph->ResourceVersionID(SID("restir_reservoir_history"), 1)),
                         .srcExtent = {renderExtent[0], renderExtent[1]},
                         .dstExtent = {postAaExtent[0], postAaExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
@@ -1346,8 +1352,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     });
 
     // For Hi-Z, ReSTIR-DI, SVGF
-    renderGraph->CarryTextureToNextFrame(targets.depthCopy, SID("depth_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
-    renderGraph->CarryTextureToNextFrame(targets.gbufferOne, SID("gbuffer_one_history"), VK_IMAGE_USAGE_SAMPLED_BIT); {
+    {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
 #ifdef ENABLE_VULKAN_VALIDATION

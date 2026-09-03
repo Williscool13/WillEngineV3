@@ -133,14 +133,16 @@ void SetupReflectionShadePass(RenderGraph& graph,
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
     const bool bSSRSource = reflectionConfig.bScreenSpaceTrace;
-    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.HasTexture(SID("lit_color_history")) && graph.HasTexture(SID("depth_history")) && graph.HasTexture(SID("gbuffer_one_history"));
+    const StringID litHistory = graph.ResourceVersionID(SID("lit_color_preoverlay"), 1);
+    const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
+    const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
+    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion(SID("lit_color_preoverlay"), 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
     const bool bHitDelta = reflectionConfig.bMergedDenoise && bHasTLAS;
     if (bHitDelta) {
-        graph.CreateTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
-        graph.CarryTextureToNextFrame(REFLECTION_HIT_DELTA_TARGET, REFLECTION_HIT_DELTA_HISTORY, VK_IMAGE_USAGE_SAMPLED_BIT);
+        graph.CreateVersionedTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}});
     }
 
     RenderPass& pass = graph.AddPass(SID("[Reflection] Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
@@ -166,9 +168,9 @@ void SetupReflectionShadePass(RenderGraph& graph,
         pass.ReadBuffer(SID("world_grid_index_list"));
     }
     if (bScreenSpace) {
-        pass.ReadSampledImage(SID("lit_color_history"));
-        pass.ReadSampledImage(SID("depth_history"));
-        pass.ReadSampledImage(SID("gbuffer_one_history"));
+        pass.ReadSampledImage(litHistory);
+        pass.ReadSampledImage(depthHistory);
+        pass.ReadSampledImage(gbufferOneHistory);
     }
     pass.WriteStorageImage(REFLECTION_SPEC_NOISY_TARGET);
     if (bHitDelta) {
@@ -181,7 +183,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
         ? static_cast<uint32_t>(Core::ReflectionConfiguration::SunMode::AlwaysLit)
         : static_cast<uint32_t>(reflectionConfig.sunMode);
     pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, bHitDelta, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, iblIntensity = viewFamily.iblIntensity, bCheckerboardPacked, sunMode,
-            field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy, reflectionProbeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy, reflectionProbeCount, litHistory, depthHistory, gbufferOneHistory](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
 
             ReflectionShadePushConstant pc{
@@ -212,9 +214,9 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .intensity = intensity,
                 .bDDGIApply = bDDGI ? 1u : 0u,
                 .bCheckerboardPacked = bCheckerboardPacked ? 1u : 0u,
-                .litHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("lit_color_history")) : ~0u,
-                .depthHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("depth_history")) : ~0u,
-                .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")) : ~0u,
+                .litHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(litHistory) : ~0u,
+                .depthHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0u,
+                .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,

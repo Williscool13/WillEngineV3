@@ -332,10 +332,8 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.HasBuffer(SID("gt_accum"))) {
-        graph.CreateBuffer(SID("gt_accum"), bufferSize, false);
-        bReset = true;
-    }
+    if (!graph.ResourceHasVersion(SID("gt_accum"), 0)) { bReset = true; }
+    graph.CreateVersionedBuffer(SID("gt_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("gt_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass(SID("GT Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::GroundTruth);
@@ -395,8 +393,6 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
             const uint32_t groupsY = (renderExtent[1] + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
-
-    graph.CarryBufferToNextFrame(SID("gt_accum"), SID("gt_accum"), 0);
 }
 
 void SetupDirectionalLightingPass(RenderGraph& graph,

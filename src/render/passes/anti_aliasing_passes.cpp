@@ -121,8 +121,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     ZoneScoped;
     graph.CreateTexture(SID("smaa_edges"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture(SID("smaa_t2x_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CarryTextureToNextFrame(SID("smaa_t2x_current"), SID("smaa_t2x_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("smaa_t2x_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
@@ -210,7 +209,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    if (!graph.HasTexture(SID("smaa_t2x_history"))) {
+    if (!graph.ResourceHasVersion(SID("smaa_t2x_current"), 1)) {
         return SID("smaa_t2x_current");
     }
 
@@ -220,15 +219,15 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     RenderPass& resolvePass = graph.AddPass(SID("SMAA T2X Temporal Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     resolvePass.ReadBuffer(SID("scene_data"));
     resolvePass.ReadSampledImage(SID("smaa_t2x_current"));
-    resolvePass.ReadSampledImage(SID("smaa_t2x_history"));
+    resolvePass.ReadSampledImage(graph.ResourceVersionID(SID("smaa_t2x_current"), 1));
     resolvePass.ReadSampledImage(targets.gbufferOne);
     resolvePass.WriteStorageImage(SID("smaa_t2x_output"));
     resolvePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
-            gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            gbufferOne = targets.gbufferOne, historyId = graph.ResourceVersionID(SID("smaa_t2x_current"), 1)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaTemporalResolvePushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .currentColorIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_t2x_current")),
-                .previousColorIndex = graph.GetSampledImageViewDescriptorIndex(SID("smaa_t2x_history")),
+                .previousColorIndex = graph.GetSampledImageViewDescriptorIndex(historyId),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("smaa_t2x_output")),
             };
@@ -253,10 +252,12 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    StringID pipelineSID)
 {
     ZoneScoped;
-    graph.CreateTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CarryTextureToNextFrame(SID("taa_current"), SID("taa_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
 
-    if (!graph.HasTexture(SID("taa_history")) || !graph.HasTexture(SID("gbuffer_one_history")) || !graph.HasTexture(SID("depth_history"))) {
+    const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
+    const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
+
+    if (!graph.ResourceHasVersion(SID("taa_current"), 1) || !graph.ResourceHasVersion(targets.gbufferOne, 1) || !graph.ResourceHasVersion(targets.depthCopy, 1)) {
         RenderPass& taaPass = graph.AddPass(SID("TAA Copy Deferred"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::AntiAliasing);
         taaPass.ReadCopyImage(targets.colorOutput);
         taaPass.WriteCopyImage(SID("taa_current"));
@@ -301,23 +302,25 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     }
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.depthCopy);
-    taaPass.ReadSampledImage(SID("depth_history"));
-    taaPass.ReadSampledImage(SID("taa_history"));
+    taaPass.ReadSampledImage(depthHistory);
+    taaPass.ReadSampledImage(graph.ResourceVersionID(SID("taa_current"), 1));
     taaPass.ReadSampledImage(targets.gbufferOne);
-    taaPass.ReadSampledImage(SID("gbuffer_one_history"));
+    taaPass.ReadSampledImage(gbufferOneHistory);
     taaPass.WriteStorageImage(SID("taa_current"));
     taaPass.WriteStorageImage(SID("taa_output"));
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig, bExposure, exposureTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig, bExposure, exposureTarget,
+            depthHistory, gbufferOneHistory,
+            historyId = graph.ResourceVersionID(SID("taa_current"), 1)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             TemporalAntialiasingPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
-                .depthHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("depth_history")),
-                .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("taa_history")),
+                .depthHistoryIndex = graph.GetSampledImageViewDescriptorIndex(depthHistory),
+                .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(historyId),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(SID("gbuffer_one_history")),
+                .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory),
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_current")),
                 .outputCopyIndex = graph.GetStorageImageViewDescriptorIndex(SID("taa_output")),
                 .baseBlendAlpha = taaConfig.baseBlendAlpha,
@@ -352,11 +355,10 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         const RenderTargets& targets)
 {
     ZoneScoped;
-    graph.CreateTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CarryTextureToNextFrame(SID("donut_taa_feedback"), SID("donut_taa_feedback_history"), VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CreateTexture(SID("donut_taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-    const bool bHasHistory = graph.HasTexture(SID("donut_taa_feedback_history"));
+    const bool bHasHistory = graph.ResourceHasVersion(SID("donut_taa_feedback"), 1);
     const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
 
     RenderPass& taaPass = graph.AddPass(SID("Donut TAA Main"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
@@ -364,7 +366,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.gbufferOne);
     if (bHasHistory) {
-        taaPass.ReadSampledImage(SID("donut_taa_feedback_history"));
+        taaPass.ReadSampledImage(graph.ResourceVersionID(SID("donut_taa_feedback"), 1));
     }
     taaPass.WriteStorageImage(SID("donut_taa_feedback"));
     taaPass.WriteStorageImage(SID("donut_taa_output"));
@@ -380,7 +382,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
             const uint32_t colorInputIdx = graph.GetSampledImageViewDescriptorIndex(outputColor);
 
             const float newFrameWeight = bHasHistory ? donutConfig.newFrameWeight : 1.0f;
-            const uint32_t feedbackInputIdx = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(SID("donut_taa_feedback_history")) : colorInputIdx;
+            const uint32_t feedbackInputIdx = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(graph.ResourceVersionID(SID("donut_taa_feedback"), 1)) : colorInputIdx;
 
             DonutTaaPushConstant pushData{
                 .sceneData = graph.GetBufferAddress(SID("scene_data")),
