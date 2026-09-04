@@ -49,6 +49,7 @@ add_library(core STATIC
         memory/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
+        string_id_table.cpp
         string_id_table.h
         hash/xxh3.h
         memory/arena.h

@@ -24,6 +24,7 @@
 #include "input_config.h"
 #include "core/time/time_manager.h"
 #include "core/time/frame_stamp.h"
+#include "core/string_id_table.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "audio/audio_manager.h"
 #include "core/containers/arena_fixed_vector.h"
@@ -225,6 +226,10 @@ WillEngine::~WillEngine() = default;
 void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& automation)
 {
     ZoneScoped;
+
+#ifdef WDEBUG
+    Core::VerifyStringLiteralTable();
+#endif
 
 #if WILL_EDITOR
     constexpr size_t ASSETS_SCRATCH_BUDGET = 4096ull * 1024 * 1024; // For baking
@@ -512,7 +517,6 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #if DEBUG
         engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
         engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
-        gResolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
 #endif
         engineContext->addImguiTextureFn = [](uint64_t sampler, uint64_t imageView) -> uint64_t {
             VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(

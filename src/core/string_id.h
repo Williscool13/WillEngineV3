@@ -16,11 +16,8 @@
 void DBG_InternString(uint64_t hash, const char* str);
 const char* DBG_ResolveStringId(uint64_t hash);
 
-// String interning uses function pointers instead of direct calls to cross the
-// engine/game DLL boundary. Set these during game DLL load before using _sid.
 extern void (*gInternStringFn)(uint64_t, const char*);
 extern const char* (*gResolveStringIdFn)(uint64_t);
-
 #endif // WDEBUG
 
 struct StringID
@@ -59,15 +56,9 @@ constexpr size_t StringIdLength(const char* str)
 }
 
 
-#ifdef WDEBUG
-inline StringID operator""_sid(const char* str, size_t len) {
-    return {str, len};
+consteval StringID operator""_sid(const char* str, size_t len) {
+    return StringID(Hash(str, len));
 }
-#else
-constexpr StringID operator""_sid(const char* str, size_t len) {
-    return StringID(str, len);
-}
-#endif
 
 namespace std
 {

@@ -16,12 +16,19 @@ its own. It routes through Hash rather than the _sid literal because _sid is not
 WDEBUG (it interns), which would make the table dynamically initialised in exactly the builds that
 need it. sizeof rather than a Python length so escaped literals stay correct.
 
+xxh3.py IS used, but only to order the rows so the table ships binary-searchable. The engine asserts
+that ordering at startup against its own hash, so a drift between the two implementations is caught
+immediately rather than silently mis-sorting the table.
+
 A literal this script fails to collect resolves to "unknown" at runtime. That is the same
 degradation the old fixed-size intern buffer had on overflow, so missing one is not a crash.
 """
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import xxh3
 
 SOURCE_ROOT = "src"
 SOURCE_EXTS = (".cpp", ".h", ".hpp")
@@ -52,7 +59,9 @@ def collect(root=None):
             literals.update(SID_LITERAL.findall(text))
             literals.update(COMPONENT_NAME.findall(text))
     literals.discard("")
-    return sorted(literals)
+    # Sorted by hash so the table is binary-searchable as emitted. The C++ side asserts this
+    # ordering at startup, so a drift between xxh3.py and the engine's XXH3 fails loudly.
+    return sorted(literals, key=lambda s: (xxh3.string_id(s), s))
 
 
 def emit(literals):
