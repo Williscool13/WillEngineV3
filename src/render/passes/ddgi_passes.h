@@ -23,10 +23,10 @@ class PipelineManager;
 class RenderPass;
 
 /** Per-frame GPU descriptor chain sampled by lighting/remodulate and the trace's infinite-bounce feedback. */
-inline const StringID DDGI_CASCADES_BUFFER = SID("ddgi_cascades");
-inline const StringID DDGI_CASCADES_PREV_BUFFER = SID("ddgi_cascades_prev");
-inline const StringID WORLD_GRID_DDGI_GRID_BUFFER = SID("world_grid_ddgi_grid");
-inline const StringID WORLD_GRID_DDGI_INDEX_BUFFER = SID("world_grid_ddgi_index_list");
+inline const StringID DDGI_CASCADES_BUFFER = "ddgi_cascades"_sid;
+inline const StringID DDGI_CASCADES_PREV_BUFFER = "ddgi_cascades_prev"_sid;
+inline const StringID WORLD_GRID_DDGI_GRID_BUFFER = "world_grid_ddgi_grid"_sid;
+inline const StringID WORLD_GRID_DDGI_INDEX_BUFFER = "world_grid_ddgi_index_list"_sid;
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
 
 /** CPU-side cascade chain, finest first; bUpdated marks which entries trace/blend/relocate this frame. Local volumes occupy entries [count, count + localCount), slot-sticky by localIds so a resident volume keeps its history. Every entry owns its own atlas pair. */

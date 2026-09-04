@@ -30,26 +30,26 @@ void SetupGeometryPass(RenderGraph& graph,
         return;
     }
 
-    const StringID instanceMeshletOffsets = SID("instance_meshlet_offsets");
-    const StringID level1Sums = SID("level1_sums");
-    const StringID level1BlockSums = SID("level1_block_sums");
-    const StringID level2Sums = SID("level2_sums");
-    const StringID level2BlockSums = SID("level2_block_sums");
-    const StringID scannedLevel2BlockSums = SID("scanned_level2_block_sums");
-    const StringID intermediateMeshlets = SID("intermediate_meshlets");
-    const StringID meshletLevel1Sums = SID("meshlet_level1_sums");
-    const StringID meshletLevel1BlockSums = SID("meshlet_level1_block_sums");
-    const StringID meshletLevel2Sums = SID("meshlet_level2_sums");
-    const StringID meshletLevel2BlockSums = SID("meshlet_level2_block_sums");
-    const StringID meshletScannedLevel2BlockSums = SID("meshlet_scanned_level2_block_sums");
-    const StringID visibleMeshlets = SID("visible_meshlets");
-    const StringID meshletCountDispatchArgs = SID("meshlet_count_dispatch_args");
-    const StringID compactedMeshletDispatchArgs = SID("compacted_meshlet_dispatch_args");
+    const StringID instanceMeshletOffsets = "instance_meshlet_offsets"_sid;
+    const StringID level1Sums = "level1_sums"_sid;
+    const StringID level1BlockSums = "level1_block_sums"_sid;
+    const StringID level2Sums = "level2_sums"_sid;
+    const StringID level2BlockSums = "level2_block_sums"_sid;
+    const StringID scannedLevel2BlockSums = "scanned_level2_block_sums"_sid;
+    const StringID intermediateMeshlets = "intermediate_meshlets"_sid;
+    const StringID meshletLevel1Sums = "meshlet_level1_sums"_sid;
+    const StringID meshletLevel1BlockSums = "meshlet_level1_block_sums"_sid;
+    const StringID meshletLevel2Sums = "meshlet_level2_sums"_sid;
+    const StringID meshletLevel2BlockSums = "meshlet_level2_block_sums"_sid;
+    const StringID meshletScannedLevel2BlockSums = "meshlet_scanned_level2_block_sums"_sid;
+    const StringID visibleMeshlets = "visible_meshlets"_sid;
+    const StringID meshletCountDispatchArgs = "meshlet_count_dispatch_args"_sid;
+    const StringID compactedMeshletDispatchArgs = "compacted_meshlet_dispatch_args"_sid;
     const uint32_t instanceCount = viewFamily.instanceCount;
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
     auto highestMeshletCount = renderFamilyProperties.visibleMeshletUpperBound;
 
-    const StringID visBits = SID("instance_vis_bits");
+    const StringID visBits = "instance_vis_bits"_sid;
     const bool bOcclusion = sceneIndex == 0 && renderFamilyProperties.bOcclusionCulling;
     const bool bOcclusionFreeze = bOcclusion && renderFamilyProperties.bOcclusionFreeze;
     const uint32_t cullFlags = renderFamilyProperties.cullFlags;
@@ -108,7 +108,7 @@ void SetupGeometryPass(RenderGraph& graph,
             instanceLODPass.ReadWriteBuffer(visBits);
             instanceLODPass.ReadWriteBuffer(instanceMeshletOffsets);
             if (GPU_STATS_ENABLED) {
-                instanceLODPass.ReadWriteBuffer(SID("readback_buffer"));
+                instanceLODPass.ReadWriteBuffer("readback_buffer"_sid);
             }
             instanceLODPass.Execute([instanceMeshletOffsets, visBits, instanceCount, lodBias, cullFlags, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const ResourceDimensions& dims = graph.GetImageDimensions(HIZ_PYRAMID);
@@ -119,7 +119,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .visBits = graph.GetBufferAddress(visBits),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
-                    .occludedCounter = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledInstanceOcclusion) : 0,
+                    .occludedCounter = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, culledInstanceOcclusion) : 0,
                     .hizExtent = {dims.width, dims.height},
                     .instanceCount = instanceCount,
                     .sceneDataIndex = sceneIndex,
@@ -129,7 +129,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     .cullFlags = cullFlags,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_instance_lod_occlusion"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_instance_lod_occlusion"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -148,7 +148,7 @@ void SetupGeometryPass(RenderGraph& graph,
             }
             instanceLODPass.WriteBuffer(instanceMeshletOffsets);
             if (GPU_STATS_ENABLED) {
-                instanceLODPass.ReadWriteBuffer(SID("readback_buffer"));
+                instanceLODPass.ReadWriteBuffer("readback_buffer"_sid);
             }
             instanceLODPass.Execute(
                 [instanceMeshletOffsets,
@@ -166,14 +166,14 @@ void SetupGeometryPass(RenderGraph& graph,
                         .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                         .visBits = bOcclusion ? graph.GetBufferAddress(visBits) : 0,
                         .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
-                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledInstanceFrustum) : 0,
+                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, culledInstanceFrustum) : 0,
                         .instanceCount = instanceCount,
                         .sceneDataIndex = sceneIndex,
                         .lodBias = lodBias,
                         .cullFlags = cullFlags,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_instance_lod"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_instance_lod"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -200,7 +200,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     .blockCount = level1BlockCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_1"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_1"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, level1BlockCount, 1, 1);
@@ -222,7 +222,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .blockCount = level2BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_up_2"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_up_2"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, level2BlockCount, 1, 1);
@@ -238,7 +238,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .blockCount = level2BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, 1, 1, 1);
@@ -254,7 +254,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .elementCount = level1BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_1"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_1"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, level2BlockCount, 1, 1);
@@ -271,7 +271,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .blockCount = level1BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_scan_blocks"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_scan_blocks"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, 1, 1, 1);
@@ -296,7 +296,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .elementCount = instanceCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_prefix_sum_down_2"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_prefix_sum_down_2"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, level1BlockCount, 1, 1);
@@ -313,7 +313,7 @@ void SetupGeometryPass(RenderGraph& graph,
                     .instanceCount = instanceCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_total_meshlet_count"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_total_meshlet_count"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -337,7 +337,7 @@ void SetupGeometryPass(RenderGraph& graph,
                 expandInstancesToMeshlets.ReadSampledImage(HIZ_PYRAMID);
             }
             if (GPU_STATS_ENABLED) {
-                expandInstancesToMeshlets.ReadWriteBuffer(SID("readback_buffer"));
+                expandInstancesToMeshlets.ReadWriteBuffer("readback_buffer"_sid);
             }
             expandInstancesToMeshlets.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets,
                     pipelineManager, instanceCount, highestMeshletCount, sceneIndex, bPhase2, cullFlags](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -360,7 +360,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
                         .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                         .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, culledMeshletFrustum) : 0,
+                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, culledMeshletFrustum) : 0,
                         .hizExtent = hizExtent,
                         .sceneDataIndex = sceneIndex,
                         .instanceCount = instanceCount,
@@ -371,7 +371,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .cullFlags = cullFlags,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_expand_instance_to_meshlet"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_expand_instance_to_meshlet"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshletCountDispatchArgs), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -401,7 +401,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .currentFrameBufferMeshletLimit = highestMeshletCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_meshlet_visibility_prefix_sum_up_1"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_up_1"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshletCountDispatchArgs), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -423,7 +423,7 @@ void SetupGeometryPass(RenderGraph& graph,
                             .blockCount = meshletLevel2BlockCount,
                         };
 
-                        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_region_prefix_sum_up_2"));
+                        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_region_prefix_sum_up_2"_sid);
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                         vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -442,7 +442,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .blockCount = meshletLevel2BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_region_scan_blocks"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_region_scan_blocks"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, 1, 1, 1);
@@ -459,7 +459,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .elementCount = meshletLevel1BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_region_prefix_sum_down_1"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_region_prefix_sum_down_1"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, meshletLevel2BlockCount, 1, 1);
@@ -479,7 +479,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .blockCount = meshletLevel1BlockCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_region_scan_blocks"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_region_scan_blocks"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, 1, 1, 1);
@@ -512,7 +512,7 @@ void SetupGeometryPass(RenderGraph& graph,
                         .currentFrameBufferMeshletLimit = highestMeshletCount,
                     };
 
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_meshlet_visibility_prefix_sum_down_2"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_meshlet_visibility_prefix_sum_down_2"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshletCountDispatchArgs), offsetof(InstancingMeshletDispatchIndirect, x));
@@ -522,16 +522,16 @@ void SetupGeometryPass(RenderGraph& graph,
                 chainID("Compacted Meshlet Dispatch Calculation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
             compactedDispatchCalc.ReadWriteBuffer(compactedMeshletDispatchArgs);
             if (GPU_STATS_ENABLED) {
-                compactedDispatchCalc.ReadWriteBuffer(SID("readback_buffer"));
+                compactedDispatchCalc.ReadWriteBuffer("readback_buffer"_sid);
             }
             compactedDispatchCalc.Execute([compactedMeshletDispatchArgs, pipelineManager, highestMeshletCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 CompactedMeshletDispatchPushConstant pc{
                     .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
-                    .regionVisibleStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, meshletRegionVisible) : 0,
+                    .regionVisibleStats = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, meshletRegionVisible) : 0,
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_compacted_meshlet_dispatch"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_compacted_meshlet_dispatch"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, 1, 1, 1);
@@ -540,14 +540,14 @@ void SetupGeometryPass(RenderGraph& graph,
 
         RenderPass& maxMeshletCount = graph.AddPass(chainID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
         maxMeshletCount.ReadBuffer(meshletCountDispatchArgs);
-        maxMeshletCount.ReadWriteBuffer(SID("readback_buffer"));
+        maxMeshletCount.ReadWriteBuffer("readback_buffer"_sid);
         maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshletCountDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             MaxMeshletCountPushConstant pc{
                 .indirectDispatchBuffer = graph.GetBufferAddress(bufferSrc),
-                .currentHighest = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, meshletCount),
+                .currentHighest = graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, meshletCount),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("instancing_max_meshlet_count"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_max_meshlet_count"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -607,10 +607,10 @@ void SetupGeometryPass(RenderGraph& graph,
                 };
 
                 const PipelineEntry* regionPipelines[MESHLET_REGION_COUNT] = {
-                    pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate")),
-                    pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate")),
-                    pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate_cutout")),
-                    pipelineManager->GetPipelineEntry(SID("visibility_buffer_accumulate_cutout")),
+                    pipelineManager->GetPipelineEntry("visibility_buffer_accumulate"_sid),
+                    pipelineManager->GetPipelineEntry("visibility_buffer_accumulate"_sid),
+                    pipelineManager->GetPipelineEntry("visibility_buffer_accumulate_cutout"_sid),
+                    pipelineManager->GetPipelineEntry("visibility_buffer_accumulate_cutout"_sid),
                 };
                 for (uint32_t region = 0; region < MESHLET_REGION_COUNT; region++) {
                     const PipelineEntry* entry = regionPipelines[region];
@@ -642,7 +642,7 @@ void SetupGeometryPass(RenderGraph& graph,
     // Phase 2: pyramid from phase-1 depth, then the whole chain again with the Hi-Z variants
     SetupHiZPyramid(graph, pipelineManager, renderExtent, targets);
 
-    RenderPass& occlusionClear = graph.AddPass(SID("[Geometry P2] Occlusion Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GeometryPhase2);
+    RenderPass& occlusionClear = graph.AddPass("[Geometry P2] Occlusion Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GeometryPhase2);
     occlusionClear.WriteTransferBuffer(visBits);
     occlusionClear.Execute([visBits](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         vkCmdFillBuffer(cmd, graph.GetBufferHandle(visBits), 0, VK_WHOLE_SIZE, 0);
@@ -659,7 +659,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                                               uint32_t sceneIndex)
 {
     ZoneScoped;
-    RenderPass& visBarDer = graph.AddPass(SID("Visibility Barycentric Derivative"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& visBarDer = graph.AddPass("Visibility Barycentric Derivative"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visBarDer.ReadSampledImage(targets.visibility);
     visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
     visBarDer.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
@@ -690,7 +690,7 @@ void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
                 .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_buffer_barycentric_derivative"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_buffer_barycentric_derivative"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (width + 15) / 16;
@@ -710,7 +710,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
-    RenderPass& boundsPass = graph.AddPass(SID("Shade Bucketing Bounds"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& boundsPass = graph.AddPass("Shade Bucketing Bounds"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     boundsPass.ReadSampledImage(targets.visibility);
     boundsPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     boundsPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
@@ -726,33 +726,33 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                 .extents = {width, height},
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
             };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_bucketing_bounds_calculation"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_bucketing_bounds_calculation"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
         });
 
-    RenderPass& resolvePass = graph.AddPass(SID("Shade Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& resolvePass = graph.AddPass("Shade Bucketing Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     resolvePass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     resolvePass.Execute([&, pipelineManager, materialCount = viewFamily.materialWatermark](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ShadeBucketingResolvePushConstant pc{
             .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
             .materialCount = materialCount,
         };
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_shading_bucketing_resolve"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_shading_bucketing_resolve"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (materialCount + 255) / 256, 1, 1);
     });
 
-    RenderPass& lightResolvePass = graph.AddPass(SID("Light Bucketing Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& lightResolvePass = graph.AddPass("Light Bucketing Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         LightingBucketingResolvePushConstant pc{
             .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
             .lightingCount = lightingCount,
         };
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_lighting_bucketing_resolve"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_lighting_bucketing_resolve"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (lightingCount + 255) / 256, 1, 1);
@@ -763,21 +763,21 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     }
 
     // Technically not "critical", used for stats. But since we write to readback_buffer, it becomes critical.
-    RenderPass& dispatchCountPass = graph.AddPass(SID("Bucket Dispatch Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& dispatchCountPass = graph.AddPass("Bucket Dispatch Count"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     dispatchCountPass.ReadBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    dispatchCountPass.ReadWriteBuffer(SID("readback_buffer"));
+    dispatchCountPass.ReadWriteBuffer("readback_buffer"_sid);
     dispatchCountPass.Execute([&, pipelineManager,
             materialCount = viewFamily.materialWatermark,
             lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
                 .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                .countBuffer = graph.GetBufferAddress(SID("readback_buffer")) + offsetof(ReadbackStruct, shadingDispatches),
+                .countBuffer = graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, shadingDispatches),
                 .materialCount = materialCount,
                 .lightingCount = lightingCount,
             };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("visibility_bucketing_dispatch_count"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_bucketing_dispatch_count"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -810,7 +810,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
         return a.fragmentShader < b.fragmentShader;
     });
 
-    RenderPass& visShading = graph.AddPass(SID("Visibility Shading"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& visShading = graph.AddPass("Visibility Shading"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visShading.ReadSampledImage(targets.visibility);
     visShading.ReadStorageImage(targets.barycentric);
     visShading.ReadStorageImage(targets.derivatives);
@@ -884,7 +884,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                                        Core::Arena& arena)
 {
     ZoneScoped;
-    RenderPass& bucketVisualizePass = graph.AddPass(SID("Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& bucketVisualizePass = graph.AddPass("Bucket Visualize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     bucketVisualizePass.ReadSampledImage(targets.visibility);
     bucketVisualizePass.ReadStorageImage(targets.barycentric);
     bucketVisualizePass.ReadStorageImage(targets.derivatives);
@@ -905,7 +905,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
             visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("shading_bucket_visualize"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shading_bucket_visualize"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
@@ -945,14 +945,14 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
                                      uint32_t sceneIndex)
 {
     ZoneScoped;
-    RenderPass& lightBucketVisualizePass = graph.AddPass(SID("Light Bucket Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
+    RenderPass& lightBucketVisualizePass = graph.AddPass("Light Bucket Visualize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
     lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("lighting_bucket_visualize"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("lighting_bucket_visualize"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);

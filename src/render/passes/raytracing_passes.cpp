@@ -63,14 +63,14 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize instanceBufferSize = static_cast<VkDeviceSize>(maxPrimitiveCount) * sizeof(VkAccelerationStructureInstanceKHR);
     graph.CreateBufferAligned(RT_TLAS_INSTANCE_BUFFER, instanceBufferSize, 16, false);
 
-    RenderPass& fillPass = graph.AddPass(SID("RT TLAS Instances"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RayTracing);
+    RenderPass& fillPass = graph.AddPass("RT TLAS Instances"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RayTracing);
     fillPass.AsyncCompute();
     fillPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     fillPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     fillPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     fillPass.WriteBuffer(RT_TLAS_INSTANCE_BUFFER);
     fillPass.Execute([pipelineManager, slotCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("tlas_instances"));
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("tlas_instances"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
         TLASInstancePushConstant pc{
@@ -87,7 +87,7 @@ void SetupTLASBuild(RenderGraph& graph,
     const VkDeviceSize scratchAlignment = VulkanContext::deviceInfo.accelerationStructureProps.minAccelerationStructureScratchOffsetAlignment;
     graph.CreateBufferAligned(RT_TLAS_SCRATCH_BUFFER, scratchSize, scratchAlignment, false);
 
-    RenderPass& buildPass = graph.AddPass(SID("RT Build TLAS"), VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, RenderCategory::RayTracing);
+    RenderPass& buildPass = graph.AddPass("RT Build TLAS"_sid, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, RenderCategory::RayTracing);
     buildPass.AsyncCompute();
     buildPass.ReadASInputBuffer(RT_TLAS_INSTANCE_BUFFER);
     buildPass.WriteTLASBuffer(RT_TLAS_BUFFER);
@@ -126,14 +126,14 @@ void SetupRTShadowTest(RenderGraph& graph,
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return; }
 
-    RenderPass& pass = graph.AddPass(SID("RT Shadow Test"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
+    RenderPass& pass = graph.AddPass("RT Shadow Test"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Untagged);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.WriteStorageImage(outputTarget);
     pass.Execute([pipelineManager, sceneIndex, renderExtent,
                   depth = targets.depthCopy, output = outputTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_shadow_test"));
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_shadow_test"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
         RTShadowTestPushConstant pc{
@@ -168,13 +168,13 @@ void SetupRTSunShadow(RenderGraph& graph,
     const bool bHalfRes = pixelScale > 1u;
 
     // R = binary visibility (1 lit, 0 occluded), G = closest-occluder distance (penumbra input for SIGMA)
-    graph.CreateTexture(SID("rt_sun_shadow"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture("rt_sun_shadow"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
     if (bHalfRes) {
-        graph.CreateTexture(SID("rt_sun_depth"), TextureInfo{VK_FORMAT_R32_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
-        graph.CreateTexture(SID("rt_sun_gbuffer"), TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture("rt_sun_depth"_sid, TextureInfo{VK_FORMAT_R32_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture("rt_sun_gbuffer"_sid, TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
     }
 
-    RenderPass& pass = graph.AddPass(SID("[SIGMA] RT Sun Shadow"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DirectionalLighting);
+    RenderPass& pass = graph.AddPass("[SIGMA] RT Sun Shadow"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DirectionalLighting);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
@@ -185,14 +185,14 @@ void SetupRTSunShadow(RenderGraph& graph,
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
-    pass.WriteStorageImage(SID("rt_sun_shadow"));
+    pass.WriteStorageImage("rt_sun_shadow"_sid);
     if (bHalfRes) {
-        pass.WriteStorageImage(SID("rt_sun_depth"));
-        pass.WriteStorageImage(SID("rt_sun_gbuffer"));
+        pass.WriteStorageImage("rt_sun_depth"_sid);
+        pass.WriteStorageImage("rt_sun_gbuffer"_sid);
     }
     pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, frameNumber, bAlphaTest = viewFamily.sigmaParams.bAlphaTest,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_sun_shadow"));
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_sun_shadow"_sid);
         if (!pipeline) { return; }
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
@@ -208,13 +208,13 @@ void SetupRTSunShadow(RenderGraph& graph,
             .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_shadow")),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("rt_sun_shadow"_sid),
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .fullExtent = {fullExtent[0], fullExtent[1]},
             .pixelScale = pixelScale,
-            .outputDepthIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_depth")) : ~0x0u,
-            .outputGbufferIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex(SID("rt_sun_gbuffer")) : ~0x0u,
+            .outputDepthIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex("rt_sun_depth"_sid) : ~0x0u,
+            .outputGbufferIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex("rt_sun_gbuffer"_sid) : ~0x0u,
             .bAlphaTest = bAlphaTest ? 1u : 0u,
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -237,32 +237,32 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return false; }
-    if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_di"))) { return false; }
+    if (!pipelineManager->GetPipelineEntry("rt_ground_truth_di"_sid)) { return false; }
 
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion(SID("rt_gt_di_accum"), 0)) { bReset = true; }
-    graph.CreateVersionedBuffer(SID("rt_gt_di_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("rt_gt_di_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    if (!graph.ResourceHasVersion("rt_gt_di_accum"_sid, 0)) { bReset = true; }
+    graph.CreateVersionedBuffer("rt_gt_di_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("rt_gt_di_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("RT GT DI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
-        clearPass.WriteTransferBuffer(SID("rt_gt_di_accum"));
+        RenderPass& clearPass = graph.AddPass("RT GT DI Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
+        clearPass.WriteTransferBuffer("rt_gt_di_accum"_sid);
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_di_accum")), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle("rt_gt_di_accum"_sid), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Ground Truth DI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
+    RenderPass& pass = graph.AddPass("RT Ground Truth DI"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer("light_data"_sid);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
     pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
-    pass.ReadWriteBuffer(SID("rt_gt_di_accum"));
+    pass.ReadWriteBuffer("rt_gt_di_accum"_sid);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
@@ -270,14 +270,14 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
     pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_di"));
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_ground_truth_di"_sid);
         if (!pipeline) { return; }
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
         RTGroundTruthDIPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_di_accum")),
+            .lightData = graph.GetBufferAddress("light_data"_sid),
+            .accumulationBuffer = graph.GetBufferAddress("rt_gt_di_accum"_sid),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
             .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
@@ -316,33 +316,33 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
-    if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_gi"))) { return false; }
+    if (!pipelineManager->GetPipelineEntry("rt_ground_truth_gi"_sid)) { return false; }
 
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion(SID("rt_gt_gi_accum"), 0)) { bReset = true; }
-    graph.CreateVersionedBuffer(SID("rt_gt_gi_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("rt_gt_gi_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    if (!graph.ResourceHasVersion("rt_gt_gi_accum"_sid, 0)) { bReset = true; }
+    graph.CreateVersionedBuffer("rt_gt_gi_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("rt_gt_gi_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("RT GT GI Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
-        clearPass.WriteTransferBuffer(SID("rt_gt_gi_accum"));
+        RenderPass& clearPass = graph.AddPass("RT GT GI Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
+        clearPass.WriteTransferBuffer("rt_gt_gi_accum"_sid);
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_gi_accum")), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle("rt_gt_gi_accum"_sid), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Ground Truth GI"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
+    RenderPass& pass = graph.AddPass("RT Ground Truth GI"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer("light_data"_sid);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
     pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
-    pass.ReadWriteBuffer(SID("rt_gt_gi_accum"));
+    pass.ReadWriteBuffer("rt_gt_gi_accum"_sid);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
@@ -350,14 +350,14 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
     pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_gi"));
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_ground_truth_gi"_sid);
         if (!pipeline) { return; }
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
         RTGroundTruthGIPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_gi_accum")),
+            .lightData = graph.GetBufferAddress("light_data"_sid),
+            .accumulationBuffer = graph.GetBufferAddress("rt_gt_gi_accum"_sid),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
@@ -399,33 +399,33 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
-    if (!pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"))) { return false; }
+    if (!pipelineManager->GetPipelineEntry("rt_ground_truth_full"_sid)) { return false; }
 
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion(SID("rt_gt_full_accum"), 0)) { bReset = true; }
-    graph.CreateVersionedBuffer(SID("rt_gt_full_accum"), bufferSize, 0, graph.ResourceHasVersion(SID("rt_gt_full_accum"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    if (!graph.ResourceHasVersion("rt_gt_full_accum"_sid, 0)) { bReset = true; }
+    graph.CreateVersionedBuffer("rt_gt_full_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("rt_gt_full_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
-        RenderPass& clearPass = graph.AddPass(SID("RT GT Full Accum Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
-        clearPass.WriteTransferBuffer(SID("rt_gt_full_accum"));
+        RenderPass& clearPass = graph.AddPass("RT GT Full Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
+        clearPass.WriteTransferBuffer("rt_gt_full_accum"_sid);
         clearPass.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("rt_gt_full_accum")), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle("rt_gt_full_accum"_sid), 0, VK_WHOLE_SIZE, 0);
         });
     }
 
-    RenderPass& pass = graph.AddPass(SID("RT Ground Truth Full"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
+    RenderPass& pass = graph.AddPass("RT Ground Truth Full"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GroundTruth);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(SID("light_data"));
+    pass.ReadBuffer("light_data"_sid);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
     pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
-    pass.ReadWriteBuffer(SID("rt_gt_full_accum"));
+    pass.ReadWriteBuffer("rt_gt_full_accum"_sid);
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
@@ -435,14 +435,14 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
     pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, samplesPerFrame, dofPacked, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("rt_ground_truth_full"));
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_ground_truth_full"_sid);
         if (!pipeline) { return; }
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
 
         RTGroundTruthGIPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .accumulationBuffer = graph.GetBufferAddress(SID("rt_gt_full_accum")),
+            .lightData = graph.GetBufferAddress("light_data"_sid),
+            .accumulationBuffer = graph.GetBufferAddress("rt_gt_full_accum"_sid),
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
             .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),

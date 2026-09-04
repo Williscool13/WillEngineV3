@@ -17,8 +17,8 @@ concept NamedComponent = requires {
 };
 
 template<NamedComponent T>
-StringID TypeSID() {
-    return StringID(T::COMPONENT_NAME, strlen(T::COMPONENT_NAME));
+constexpr StringID TypeSID() {
+    return StringID(Hash(T::COMPONENT_NAME, StringIdLength(T::COMPONENT_NAME)));
 }
 }
 

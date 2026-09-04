@@ -30,7 +30,7 @@ void SetupGPUDebugBegin(RenderGraph& graph, const bool bLocked)
         return;
     }
 
-    RenderPass& clearPass = graph.AddPass(SID("GPU Debug Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::Debug);
+    RenderPass& clearPass = graph.AddPass("GPU Debug Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::Debug);
     clearPass.WriteTransferBuffer(GPU_DEBUG_ARGS_BUFFER);
     clearPass.WriteTransferBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
     clearPass.WriteTransferBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
@@ -74,12 +74,12 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     }
 
     if (!bLocked) {
-        RenderPass& buildIndirectPass = graph.AddPass(SID("GPU Debug Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
+        RenderPass& buildIndirectPass = graph.AddPass("GPU Debug Build Indirect"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
         buildIndirectPass.ReadWriteBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
         buildIndirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_build_indirect"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gpu_debug_build_indirect"_sid);
             if (!pipelineEntry) {
                 return;
             }
@@ -95,7 +95,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
         });
     }
 
-    RenderPass& drawPass = graph.AddPass(SID("GPU Debug Draw"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, RenderCategory::Debug);
+    RenderPass& drawPass = graph.AddPass("GPU Debug Draw"_sid, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, RenderCategory::Debug);
     drawPass.WriteColorAttachment(targetImage);
     const bool bHasDepth = graph.HasTexture(depthTarget);
     if (bHasDepth) {
@@ -109,9 +109,9 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     drawPass.ReadBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER);
     drawPass.ReadIndirectBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
     drawPass.Execute([pipelineManager, width = renderExtent[0], height = renderExtent[1], bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* linePipeline = pipelineManager->GetPipelineEntry(SID("debug_render_gpu"));
-        const PipelineEntry* spherePipeline = pipelineManager->GetPipelineEntry(SID("debug_sphere"));
-        const PipelineEntry* cubePipeline = pipelineManager->GetPipelineEntry(SID("debug_cube"));
+        const PipelineEntry* linePipeline = pipelineManager->GetPipelineEntry("debug_render_gpu"_sid);
+        const PipelineEntry* spherePipeline = pipelineManager->GetPipelineEntry("debug_sphere"_sid);
+        const PipelineEntry* cubePipeline = pipelineManager->GetPipelineEntry("debug_cube"_sid);
         if (!linePipeline && !spherePipeline && !cubePipeline) {
             return;
         }
@@ -186,13 +186,13 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
         return;
     }
 
-    RenderPass& pass = graph.AddPass(SID("Probe Preview Spheres"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, RenderCategory::Debug);
+    RenderPass& pass = graph.AddPass("Probe Preview Spheres"_sid, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, RenderCategory::Debug);
     pass.WriteColorAttachment(targetImage);
     pass.ReadWriteDepthAttachment(depthTarget);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     // Arena-backed span; the frame's view family outlives graph execution
     pass.Execute([pipelineManager, settings, spheres = viewFamily.probePreviews.Data(), sphereCount = viewFamily.probePreviews.Size(), width = renderExtent[0], height = renderExtent[1], depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("probe_preview_sphere"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("probe_preview_sphere"_sid);
         if (!pipelineEntry) {
             return;
         }
@@ -235,12 +235,12 @@ void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager,
         return;
     }
 
-    RenderPass& pass = graph.AddPass(SID("Cluster Grid Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
+    RenderPass& pass = graph.AddPass("Cluster Grid Debug"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
     pass.ReadWriteBuffer(GPU_DEBUG_ARGS_BUFFER);
     pass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.Execute([pipelineManager, sceneIndex, clusterZNear, clusterZFar](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_cluster_grid"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gpu_debug_cluster_grid"_sid);
         if (!pipelineEntry) {
             return;
         }
@@ -263,8 +263,8 @@ void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager,
 
 #ifdef WDEBUG
 static const StringID WORLD_GRID_DEBUG_PASS[WORLD_GRID_CASCADES] = {
-    SID("World Grid Debug 0"), SID("World Grid Debug 1"), SID("World Grid Debug 2"), SID("World Grid Debug 3"),
-    SID("World Grid Debug 4"), SID("World Grid Debug 5"), SID("World Grid Debug 6"), SID("World Grid Debug 7"),
+    "World Grid Debug 0"_sid, "World Grid Debug 1"_sid, "World Grid Debug 2"_sid, "World Grid Debug 3"_sid,
+    "World Grid Debug 4"_sid, "World Grid Debug 5"_sid, "World Grid Debug 6"_sid, "World Grid Debug 7"_sid,
 };
 
 // Cascade identification tints for the all-cascades debug view (unorm RGBA, low byte = red).
@@ -293,7 +293,7 @@ void SetupWorldGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, u
         pass.WriteBuffer(GPU_DEBUG_SEGMENT_BUFFER);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.Execute([pipelineManager, sceneIndex, level, packedTint](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_world_grid"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gpu_debug_world_grid"_sid);
             if (!pipelineEntry) {
                 return;
             }

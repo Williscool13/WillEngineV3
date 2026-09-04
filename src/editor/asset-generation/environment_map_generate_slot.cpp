@@ -316,7 +316,7 @@ bool EnvironmentMapGenerateSlot::AssembleProbeCubemapAndGenerate(VkCommandBuffer
     );
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
-    const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot(SID("procedural_resize"));
+    const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot("procedural_resize"_sid);
     if (resizeEntry.pipeline == VK_NULL_HANDLE) {
         SPDLOG_ERROR("[EnvironmentMapGenerateSlot] procedural_resize pipeline not ready");
         return false;
@@ -601,7 +601,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
         VkDeviceSize bindingOffset{0};
         vkCmdBindDescriptorBuffersEXT(cmd, bindings.Size(), bindings.Data());
 
-        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("ibl_equirect_to_cubemap"));
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot("ibl_equirect_to_cubemap"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.pipeline);
         vkCmdPushConstants(cmd, pipelineEntry.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(eqPc), &eqPc);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
@@ -617,7 +617,7 @@ bool EnvironmentMapGenerateSlot::LoadEquirectangularAndGenerate(VkCommandBuffer 
     {
         ZoneScopedN("GenerateCubemapMipmaps");
 
-        const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot(SID("procedural_resize"));
+        const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot("procedural_resize"_sid);
         if (resizeEntry.pipeline == VK_NULL_HANDLE) {
             SPDLOG_ERROR("[EnvironmentMapGenerateSlot] procedural_resize pipeline not ready");
             return false;
@@ -728,7 +728,7 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
     // Generate specular prefilter for mips 0 to ENVIRONMENT_MAP_DIFFUSE_MIP-1
     {
         ZoneScopedN("PrefilterSpecular");
-        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("ibl_prefilter_specular"));
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot("ibl_prefilter_specular"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.pipeline);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
 
@@ -761,7 +761,7 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
     // Generate diffuse irradiance for the last mip
     {
         ZoneScopedN("ConvolveDiffuse");
-        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("ibl_convolve_diffuse"));
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot("ibl_convolve_diffuse"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.pipeline);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
 
@@ -792,7 +792,7 @@ bool EnvironmentMapGenerateSlot::BuildFilteredMipsAndCopy(VkCommandBuffer cmd, c
     {
         ZoneScopedN("EncodeCubemapToCPU");
 
-        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("bc6h_encode"));
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot("bc6h_encode"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.pipeline);
         vkCmdSetDescriptorBufferOffsetsEXT(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry.layout, 0, bindings.Size(), &bindingIndex, &bindingOffset);
 

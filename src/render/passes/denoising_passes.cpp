@@ -62,14 +62,14 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const TextureInfo viewZInfo{VK_FORMAT_R32_SFLOAT, width, height, 1};
 
     // History rings must be declared before anything queries them below.
-    graph.CreateVersionedTexture(SID("relax_viewz"), viewZInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_spec_hist"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_diff_hist"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_spec_fast_hist"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_diff_fast_hist"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_history_length"), histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_spec_hit_dist"), hitDistInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("relax_prev_nr"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_viewz"_sid, viewZInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_spec_hist"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_diff_hist"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_spec_fast_hist"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_diff_fast_hist"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_history_length"_sid, histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_spec_hit_dist"_sid, hitDistInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("relax_prev_nr"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     // Build RelaxDiffuseSpecularConstants
     const glm::mat4& view = viewFamily.mainView.currentViewData.view;
@@ -106,7 +106,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     glm::mat4 viewToWorld = glm::mat4(glm::mat3(invView));
     viewToWorld[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    const bool bFirstFrame = !graph.ResourceHasVersion(SID("relax_spec_hist"), 1);
+    const bool bFirstFrame = !graph.ResourceHasVersion("relax_spec_hist"_sid, 1);
 
     RelaxDiffuseSpecularConstants rc{};
 
@@ -188,27 +188,27 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gCheckerboardResolveAccumSpeed = bCheckerboard ? checkerboardResolveAccumSpeed : 0.0f;
 
     // Upload constants buffer
-    memcpy(graph.OpenHostBuffer(SID("relax_constants"), sizeof(RelaxDiffuseSpecularConstants)), &rc, sizeof(RelaxDiffuseSpecularConstants));
+    memcpy(graph.OpenHostBuffer("relax_constants"_sid, sizeof(RelaxDiffuseSpecularConstants)), &rc, sizeof(RelaxDiffuseSpecularConstants));
 
     // Pass 0: Generate half-res linearized viewZ (necessary cause of GatherRed) + the packed guide the filter chain taps
     {
-        graph.CreateTexture(SID("relax_guide"), TextureInfo{VK_FORMAT_R32G32_UINT, width, height, 1}, {std::nullopt}, true);
+        graph.CreateTexture("relax_guide"_sid, TextureInfo{VK_FORMAT_R32G32_UINT, width, height, 1}, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
+        auto& pass = graph.AddPass("[ReLAX] Generate ViewZ"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
-        pass.WriteStorageImage(SID("relax_viewz"));
-        pass.WriteStorageImage(SID("relax_guide"));
+        pass.WriteStorageImage("relax_viewz"_sid);
+        pass.WriteStorageImage("relax_guide"_sid);
         pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxGenerateViewZPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_viewz")),
-                .outGuideIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_guide")),
+                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex("relax_viewz"_sid),
+                .outGuideIndex = graph.GetStorageImageViewDescriptorIndex("relax_guide"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_generate_viewz"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_generate_viewz"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -217,19 +217,19 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     // Pass 1: Classify Tiles
     {
-        graph.CreateTexture(SID("relax_tiles"), tilesInfo, {std::nullopt}, true);
+        graph.CreateTexture("relax_tiles"_sid, tilesInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
-        pass.ReadSampledImage(SID("relax_viewz"));
-        pass.WriteStorageImage(SID("relax_tiles"));
+        auto& pass = graph.AddPass("[ReLAX] Classify Tiles"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
+        pass.ReadSampledImage("relax_viewz"_sid);
+        pass.WriteStorageImage("relax_tiles"_sid);
         pass.Execute([pipelineManager, tilesW, tilesH](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxClassifyTilesPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_viewz")),
-                .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_tiles")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex("relax_viewz"_sid),
+                .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex("relax_tiles"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_classify_tiles"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_classify_tiles"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, tilesW, tilesH, 1);
@@ -239,28 +239,28 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
     // Pass 2: Prepass (optional spatial prefilter)
     if (bPrepass) {
-        graph.CreateTexture(SID("relax_spec_prepass"), colorInfo, {std::nullopt}, true);
-        graph.CreateTexture(SID("relax_diff_prepass"), colorInfo, {std::nullopt}, true);
+        graph.CreateTexture("relax_spec_prepass"_sid, colorInfo, {std::nullopt}, true);
+        graph.CreateTexture("relax_diff_prepass"_sid, colorInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
-        pass.ReadSampledImage(SID("relax_tiles"));
-        pass.ReadSampledImage(SID("relax_guide"));
+        auto& pass = graph.AddPass("[ReLAX] Prepass"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
+        pass.ReadSampledImage("relax_tiles"_sid);
+        pass.ReadSampledImage("relax_guide"_sid);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(diffInput);
-        pass.WriteStorageImage(SID("relax_spec_prepass"));
-        pass.WriteStorageImage(SID("relax_diff_prepass"));
+        pass.WriteStorageImage("relax_spec_prepass"_sid);
+        pass.WriteStorageImage("relax_diff_prepass"_sid);
         pass.Execute([pipelineManager, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxPrepassPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
+                .guideIndex = graph.GetSampledImageViewDescriptorIndex("relax_guide"_sid),
                 .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
-                .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_prepass")),
-                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_prepass")),
+                .specOutIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_prepass"_sid),
+                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_prepass"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_prepass"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_prepass"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
@@ -268,69 +268,69 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     }
 
 
-    graph.CreateTexture(SID("relax_spec_illum"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_diff_illum"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_spec_fast"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_diff_fast"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_spec_reproj_confidence"), reprConfInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_spec_illum"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_diff_illum"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_spec_fast"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_diff_fast"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_spec_reproj_confidence"_sid, reprConfInfo, {std::nullopt}, true);
 
 
     // Pass 3: Temporal Accumulation
     {
-        const StringID specIn = bPrepass ? SID("relax_spec_prepass") : specInput;
-        const StringID diffIn = bPrepass ? SID("relax_diff_prepass") : diffInput;
+        const StringID specIn = bPrepass ? "relax_spec_prepass"_sid : specInput;
+        const StringID diffIn = bPrepass ? "relax_diff_prepass"_sid : diffInput;
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
-        pass.ReadSampledImage(SID("relax_tiles"));
+        auto& pass = graph.AddPass("[ReLAX] Temporal Accumulation"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
+        pass.ReadSampledImage("relax_tiles"_sid);
         pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(SID("relax_guide"));
+        pass.ReadSampledImage("relax_guide"_sid);
         pass.ReadSampledImage(specIn);
         pass.ReadSampledImage(diffIn);
-        if (graph.ResourceHasVersion(SID("relax_spec_hist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_spec_hist"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_diff_hist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_diff_hist"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_spec_fast_hist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_spec_fast_hist"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_diff_fast_hist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_diff_fast_hist"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_history_length"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_history_length"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_spec_hit_dist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_spec_hit_dist"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_prev_nr"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_prev_nr"), 1)); }
-        if (graph.ResourceHasVersion(SID("relax_viewz"), 1)) {
-            pass.ReadSampledImage(graph.ResourceVersionID(SID("relax_viewz"), 1));
+        if (graph.ResourceHasVersion("relax_spec_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_spec_hist"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_diff_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_diff_hist"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_spec_fast_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_spec_fast_hist"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_diff_fast_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_diff_fast_hist"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_history_length"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_history_length"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_spec_hit_dist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_spec_hit_dist"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_prev_nr"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("relax_prev_nr"_sid, 1)); }
+        if (graph.ResourceHasVersion("relax_viewz"_sid, 1)) {
+            pass.ReadSampledImage(graph.ResourceVersionID("relax_viewz"_sid, 1));
         }
         else {
-            pass.ReadSampledImage(SID("relax_viewz"));
+            pass.ReadSampledImage("relax_viewz"_sid);
         }
-        if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
+        if (graph.HasTexture("restir_confidence"_sid)) { pass.ReadSampledImage("restir_confidence"_sid); }
         if (graph.HasTexture(REFLECTION_HIT_DELTA_TARGET)) { pass.ReadSampledImage(REFLECTION_HIT_DELTA_TARGET); }
         if (graph.ResourceHasVersion(REFLECTION_HIT_DELTA_TARGET, 1)) { pass.ReadSampledImage(graph.ResourceVersionID(REFLECTION_HIT_DELTA_TARGET, 1)); }
-        pass.WriteStorageImage(SID("relax_spec_illum"));
-        pass.WriteStorageImage(SID("relax_diff_illum"));
-        pass.WriteStorageImage(SID("relax_spec_fast"));
-        pass.WriteStorageImage(SID("relax_diff_fast"));
-        pass.WriteStorageImage(SID("relax_history_length"));
-        pass.WriteStorageImage(SID("relax_spec_hit_dist"));
-        pass.WriteStorageImage(SID("relax_spec_reproj_confidence"));
-        pass.WriteStorageImage(SID("relax_prev_nr"));
+        pass.WriteStorageImage("relax_spec_illum"_sid);
+        pass.WriteStorageImage("relax_diff_illum"_sid);
+        pass.WriteStorageImage("relax_spec_fast"_sid);
+        pass.WriteStorageImage("relax_diff_fast"_sid);
+        pass.WriteStorageImage("relax_history_length"_sid);
+        pass.WriteStorageImage("relax_spec_hit_dist"_sid);
+        pass.WriteStorageImage("relax_spec_reproj_confidence"_sid);
+        pass.WriteStorageImage("relax_prev_nr"_sid);
 
-        const bool hasHistory = graph.ResourceHasVersion(SID("relax_spec_hist"), 1);
-        const StringID fallbackSpec = hasHistory ? graph.ResourceVersionID(SID("relax_spec_hist"), 1) : specIn;
-        const StringID fallbackDiff = hasHistory ? graph.ResourceVersionID(SID("relax_diff_hist"), 1) : diffIn;
-        const StringID fallbackSpecFast = graph.ResourceHasVersion(SID("relax_spec_fast_hist"), 1) ? graph.ResourceVersionID(SID("relax_spec_fast_hist"), 1) : specIn;
-        const StringID fallbackDiffFast = graph.ResourceHasVersion(SID("relax_diff_fast_hist"), 1) ? graph.ResourceVersionID(SID("relax_diff_fast_hist"), 1) : diffIn;
-        const StringID fallbackHistLen = graph.ResourceHasVersion(SID("relax_history_length"), 1) ? graph.ResourceVersionID(SID("relax_history_length"), 1) : SID("relax_history_length");
-        const StringID fallbackSpecHitD = graph.ResourceHasVersion(SID("relax_spec_hit_dist"), 1) ? graph.ResourceVersionID(SID("relax_spec_hit_dist"), 1) : SID("relax_spec_hit_dist");
-        const StringID fallbackPrevNR = graph.ResourceHasVersion(SID("relax_prev_nr"), 1) ? graph.ResourceVersionID(SID("relax_prev_nr"), 1) : SID("relax_prev_nr");
-        const StringID fallbackViewZ = graph.ResourceHasVersion(SID("relax_viewz"), 1) ? graph.ResourceVersionID(SID("relax_viewz"), 1) : SID("relax_viewz");
+        const bool hasHistory = graph.ResourceHasVersion("relax_spec_hist"_sid, 1);
+        const StringID fallbackSpec = hasHistory ? graph.ResourceVersionID("relax_spec_hist"_sid, 1) : specIn;
+        const StringID fallbackDiff = hasHistory ? graph.ResourceVersionID("relax_diff_hist"_sid, 1) : diffIn;
+        const StringID fallbackSpecFast = graph.ResourceHasVersion("relax_spec_fast_hist"_sid, 1) ? graph.ResourceVersionID("relax_spec_fast_hist"_sid, 1) : specIn;
+        const StringID fallbackDiffFast = graph.ResourceHasVersion("relax_diff_fast_hist"_sid, 1) ? graph.ResourceVersionID("relax_diff_fast_hist"_sid, 1) : diffIn;
+        const StringID fallbackHistLen = graph.ResourceHasVersion("relax_history_length"_sid, 1) ? graph.ResourceVersionID("relax_history_length"_sid, 1) : "relax_history_length"_sid;
+        const StringID fallbackSpecHitD = graph.ResourceHasVersion("relax_spec_hit_dist"_sid, 1) ? graph.ResourceVersionID("relax_spec_hit_dist"_sid, 1) : "relax_spec_hit_dist"_sid;
+        const StringID fallbackPrevNR = graph.ResourceHasVersion("relax_prev_nr"_sid, 1) ? graph.ResourceVersionID("relax_prev_nr"_sid, 1) : "relax_prev_nr"_sid;
+        const StringID fallbackViewZ = graph.ResourceHasVersion("relax_viewz"_sid, 1) ? graph.ResourceVersionID("relax_viewz"_sid, 1) : "relax_viewz"_sid;
         const bool hasHitDeltaHistory = graph.ResourceHasVersion(REFLECTION_HIT_DELTA_TARGET, 1);
         const StringID hitDeltaHistory = hasHitDeltaHistory ? graph.ResourceVersionID(REFLECTION_HIT_DELTA_TARGET, 1) : StringID{};
 
         pass.Execute([pipelineManager, specIn, diffIn, width, height, fallbackSpec, fallbackDiff, fallbackSpecFast, fallbackDiffFast, fallbackHistLen, fallbackSpecHitD, fallbackPrevNR, fallbackViewZ, hasHitDeltaHistory, hitDeltaHistory,
                 gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxTemporalAccumulationPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
+                .guideIndex = graph.GetSampledImageViewDescriptorIndex("relax_guide"_sid),
                 .prevNormalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(fallbackPrevNR),
                 .prevViewZIndex = graph.GetSampledImageViewDescriptorIndex(fallbackViewZ),
                 .prevHistoryLengthIndex = graph.GetSampledImageViewDescriptorIndex(fallbackHistLen),
@@ -341,19 +341,19 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .historySpecIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpec),
                 .historyDiffIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiff),
                 .prevSpecHitDistIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecHitD),
-                .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_history_length")),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_illum")),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_illum")),
-                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast")),
-                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast")),
-                .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hit_dist")),
-                .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_reproj_confidence")),
-                .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_prev_nr")),
-                .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
+                .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex("relax_history_length"_sid),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_illum"_sid),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_illum"_sid),
+                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_fast"_sid),
+                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_fast"_sid),
+                .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_hit_dist"_sid),
+                .outSpecReprojConfidenceIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_reproj_confidence"_sid),
+                .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex("relax_prev_nr"_sid),
+                .confidenceIndex = graph.HasTexture("restir_confidence"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_confidence"_sid) : ~0u,
                 .hitDeltaIndex = graph.HasTexture(REFLECTION_HIT_DELTA_TARGET) ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_HIT_DELTA_TARGET) : ~0u,
                 .hitDeltaHistoryIndex = hasHitDeltaHistory ? graph.GetSampledImageViewDescriptorIndex(hitDeltaHistory) : ~0u,
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_temporal_accumulation"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_temporal_accumulation"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 15) / 16, 1);
@@ -361,35 +361,35 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     }
 
 
-    graph.CreateTexture(SID("relax_atrous_spec_0"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_spec_1"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_diff_0"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("relax_atrous_diff_1"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_atrous_spec_0"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_atrous_spec_1"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_atrous_diff_0"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("relax_atrous_diff_1"_sid, colorInfo, {std::nullopt}, true);
 
     // Pass 4: History Fix. Filters the slow history but writes the responsive (fast) textures in place,
     // only at short-history pixels; clamping then promotes the fixed responsive value into the slow output.
     {
-        auto& pass = graph.AddPass(SID("[ReLAX] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
-        pass.ReadSampledImage(SID("relax_tiles"));
-        pass.ReadSampledImage(SID("relax_guide"));
-        pass.ReadSampledImage(SID("relax_history_length"));
-        pass.ReadSampledImage(SID("relax_spec_illum"));
-        pass.ReadSampledImage(SID("relax_diff_illum"));
-        pass.ReadWriteImage(SID("relax_spec_fast"));
-        pass.ReadWriteImage(SID("relax_diff_fast"));
+        auto& pass = graph.AddPass("[ReLAX] History Fix"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
+        pass.ReadSampledImage("relax_tiles"_sid);
+        pass.ReadSampledImage("relax_guide"_sid);
+        pass.ReadSampledImage("relax_history_length"_sid);
+        pass.ReadSampledImage("relax_spec_illum"_sid);
+        pass.ReadSampledImage("relax_diff_illum"_sid);
+        pass.ReadWriteImage("relax_spec_fast"_sid);
+        pass.ReadWriteImage("relax_diff_fast"_sid);
         pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryFixPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
-                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_illum")),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_illum")),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast")),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
+                .guideIndex = graph.GetSampledImageViewDescriptorIndex("relax_guide"_sid),
+                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex("relax_history_length"_sid),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex("relax_spec_illum"_sid),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex("relax_diff_illum"_sid),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_fast"_sid),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_fast"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_fix"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_history_fix"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -401,53 +401,53 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Pass 5: History Clamping
     // ----------------------------------------------------------------
     {
-        const StringID specNoisy = bPrepass ? SID("relax_spec_prepass") : specInput;
-        const StringID diffNoisy = bPrepass ? SID("relax_diff_prepass") : diffInput;
+        const StringID specNoisy = bPrepass ? "relax_spec_prepass"_sid : specInput;
+        const StringID diffNoisy = bPrepass ? "relax_diff_prepass"_sid : diffInput;
 
         // With anti-firefly enabled the clamped slow output goes into the atrous scratch and anti-firefly produces relax_*_hist.
         // Without it, the clamping output is the carried slow history directly.
-        const StringID clampSpecOut = params.enableAntiFirefly ? SID("relax_atrous_spec_0") : SID("relax_spec_hist");
-        const StringID clampDiffOut = params.enableAntiFirefly ? SID("relax_atrous_diff_0") : SID("relax_diff_hist");
+        const StringID clampSpecOut = params.enableAntiFirefly ? "relax_atrous_spec_0"_sid : "relax_spec_hist"_sid;
+        const StringID clampDiffOut = params.enableAntiFirefly ? "relax_atrous_diff_0"_sid : "relax_diff_hist"_sid;
 
-        auto& pass = graph.AddPass(SID("[ReLAX] History Clamping"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
-        pass.ReadSampledImage(SID("relax_tiles"));
-        pass.ReadSampledImage(SID("relax_viewz"));
-        pass.ReadWriteImage(SID("relax_history_length"));
-        pass.ReadSampledImage(SID("relax_spec_fast"));
-        pass.ReadSampledImage(SID("relax_diff_fast"));
-        pass.ReadSampledImage(SID("relax_spec_illum")); // raw TA slow history
-        pass.ReadSampledImage(SID("relax_diff_illum"));
+        auto& pass = graph.AddPass("[ReLAX] History Clamping"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
+        pass.ReadSampledImage("relax_tiles"_sid);
+        pass.ReadSampledImage("relax_viewz"_sid);
+        pass.ReadWriteImage("relax_history_length"_sid);
+        pass.ReadSampledImage("relax_spec_fast"_sid);
+        pass.ReadSampledImage("relax_diff_fast"_sid);
+        pass.ReadSampledImage("relax_spec_illum"_sid); // raw TA slow history
+        pass.ReadSampledImage("relax_diff_illum"_sid);
         if (params.enableAntiFirefly) {
-            pass.WriteStorageImage(SID("relax_atrous_spec_0"));
-            pass.WriteStorageImage(SID("relax_atrous_diff_0"));
+            pass.WriteStorageImage("relax_atrous_spec_0"_sid);
+            pass.WriteStorageImage("relax_atrous_diff_0"_sid);
         } else {
-            pass.WriteStorageImage(SID("relax_spec_hist"));
-            pass.WriteStorageImage(SID("relax_diff_hist"));
+            pass.WriteStorageImage("relax_spec_hist"_sid);
+            pass.WriteStorageImage("relax_diff_hist"_sid);
         }
         pass.ReadSampledImage(specNoisy); // noisy preblur reference
         pass.ReadSampledImage(diffNoisy);
-        pass.WriteStorageImage(SID("relax_spec_fast_hist"));
-        pass.WriteStorageImage(SID("relax_diff_fast_hist"));
+        pass.WriteStorageImage("relax_spec_fast_hist"_sid);
+        pass.WriteStorageImage("relax_diff_fast_hist"_sid);
         pass.Execute([pipelineManager, specNoisy, diffNoisy, clampSpecOut, clampDiffOut, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryClampingPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_viewz")),
-                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
-                .specFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_fast")),
-                .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_fast")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex("relax_viewz"_sid),
+                .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex("relax_history_length"_sid),
+                .specFastIndex = graph.GetSampledImageViewDescriptorIndex("relax_spec_fast"_sid),
+                .diffFastIndex = graph.GetSampledImageViewDescriptorIndex("relax_diff_fast"_sid),
                 .specNoisyIndex = graph.GetSampledImageViewDescriptorIndex(specNoisy),
                 .diffNoisyIndex = graph.GetSampledImageViewDescriptorIndex(diffNoisy),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_illum")),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_diff_illum")),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex("relax_spec_illum"_sid),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex("relax_diff_illum"_sid),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(clampSpecOut),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(clampDiffOut),
-                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_fast_hist")),
-                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_fast_hist")),
-                .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_history_length")),
+                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_fast_hist"_sid),
+                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_fast_hist"_sid),
+                .outHistoryLengthIndex = graph.GetStorageImageViewDescriptorIndex("relax_history_length"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_history_clamping"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_history_clamping"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -457,26 +457,26 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     // Pass 6: Anti-Firefly. RCRS filter from the clamped slow history (in the history-fix scratch) into relax_*_hist, so the firefly-suppressed result is what gets carried as next frame's history (matches NRD's Copy + Anti-Firefly writing into SPEC/DIFF_ILLUM_PREV).
     // Distinct input/output textures: the shared-memory preload reads a border from neighboring workgroups, so in-place filtering would race.
     if (params.enableAntiFirefly) {
-        auto& pass = graph.AddPass(SID("[ReLAX] Anti-Firefly"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-        pass.ReadBuffer(SID("relax_constants"));
-        pass.ReadSampledImage(SID("relax_tiles"));
-        pass.ReadSampledImage(SID("relax_viewz"));
-        pass.ReadSampledImage(SID("relax_atrous_spec_0"));
-        pass.ReadSampledImage(SID("relax_atrous_diff_0"));
-        pass.WriteStorageImage(SID("relax_spec_hist"));
-        pass.WriteStorageImage(SID("relax_diff_hist"));
+        auto& pass = graph.AddPass("[ReLAX] Anti-Firefly"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        pass.ReadBuffer("relax_constants"_sid);
+        pass.ReadSampledImage("relax_tiles"_sid);
+        pass.ReadSampledImage("relax_viewz"_sid);
+        pass.ReadSampledImage("relax_atrous_spec_0"_sid);
+        pass.ReadSampledImage("relax_atrous_diff_0"_sid);
+        pass.WriteStorageImage("relax_spec_hist"_sid);
+        pass.WriteStorageImage("relax_diff_hist"_sid);
 
         pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxAntiFireflyPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("relax_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_viewz")),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_spec_0")),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_atrous_diff_0")),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_spec_hist")),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("relax_diff_hist")),
+                .constants = graph.GetBufferAddress("relax_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex("relax_viewz"_sid),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex("relax_atrous_spec_0"_sid),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex("relax_atrous_diff_0"_sid),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_hist"_sid),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_hist"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_antifirefly"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_antifirefly"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -490,13 +490,13 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     {
         const int32_t iters = glm::max(1, params.atrousIterations);
         const int32_t chromaIters = params.bChromaAtrous ? glm::clamp(params.chromaAtrousIterations, 1, 4) : 0;
-        const StringID scratchSpec[2] = {SID("relax_atrous_spec_0"), SID("relax_atrous_spec_1")};
-        const StringID scratchDiff[2] = {SID("relax_atrous_diff_0"), SID("relax_atrous_diff_1")};
+        const StringID scratchSpec[2] = {"relax_atrous_spec_0"_sid, "relax_atrous_spec_1"_sid};
+        const StringID scratchDiff[2] = {"relax_atrous_diff_0"_sid, "relax_atrous_diff_1"_sid};
 
         for (int32_t i = 0; i < iters; i++) {
             const bool isLast = (i == iters - 1);
-            const StringID specIn = (i == 0) ? SID("relax_spec_hist") : scratchSpec[(i - 1) & 1];
-            const StringID diffIn = (i == 0) ? SID("relax_diff_hist") : scratchDiff[(i - 1) & 1];
+            const StringID specIn = (i == 0) ? "relax_spec_hist"_sid : scratchSpec[(i - 1) & 1];
+            const StringID diffIn = (i == 0) ? "relax_diff_hist"_sid : scratchDiff[(i - 1) & 1];
             const StringID specOut = isLast ? specInput : scratchSpec[i & 1];
 
             const StringID diffOut = (isLast && chromaIters == 0) ? diffInput : scratchDiff[i & 1];
@@ -505,11 +505,11 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReLAX] ATrous %d", i);
 
             auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-            pass.ReadBuffer(SID("relax_constants"));
-            pass.ReadSampledImage(SID("relax_tiles"));
-            pass.ReadSampledImage(SID("relax_guide"));
-            pass.ReadSampledImage(SID("relax_history_length"));
-            pass.ReadSampledImage(SID("relax_spec_reproj_confidence"));
+            pass.ReadBuffer("relax_constants"_sid);
+            pass.ReadSampledImage("relax_tiles"_sid);
+            pass.ReadSampledImage("relax_guide"_sid);
+            pass.ReadSampledImage("relax_history_length"_sid);
+            pass.ReadSampledImage("relax_spec_reproj_confidence"_sid);
             pass.ReadSampledImage(specIn);
             pass.ReadSampledImage(diffIn);
             pass.WriteStorageImage(specOut);
@@ -518,20 +518,20 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             pass.Execute([pipelineManager,
                     specIn, diffIn, specOut, diffOut, stepSize, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     RelaxAtrousPushConstant pc{
-                        .constants = graph.GetBufferAddress(SID("relax_constants")),
-                        .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                        .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
-                        .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
+                        .constants = graph.GetBufferAddress("relax_constants"_sid),
+                        .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
+                        .guideIndex = graph.GetSampledImageViewDescriptorIndex("relax_guide"_sid),
+                        .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex("relax_history_length"_sid),
                         .specVarIndex = graph.GetSampledImageViewDescriptorIndex(specIn),
                         .diffVarIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
-                        .specReprojConfidenceIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_spec_reproj_confidence")),
+                        .specReprojConfidenceIndex = graph.GetSampledImageViewDescriptorIndex("relax_spec_reproj_confidence"_sid),
                         .specIndex = graph.GetSampledImageViewDescriptorIndex(specIn),
                         .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
                         .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOut),
                         .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOut),
                         .stepSize = stepSize,
                     };
-                    const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous"));
+                    const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_atrous"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
                     vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
@@ -548,19 +548,19 @@ void SetupRELAXDenoiser(RenderGraph& graph,
             const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReLAX] ATrous Chroma %d", c);
 
             auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
-            pass.ReadBuffer(SID("relax_constants"));
-            pass.ReadSampledImage(SID("relax_tiles"));
-            pass.ReadSampledImage(SID("relax_guide"));
-            pass.ReadSampledImage(SID("relax_history_length"));
+            pass.ReadBuffer("relax_constants"_sid);
+            pass.ReadSampledImage("relax_tiles"_sid);
+            pass.ReadSampledImage("relax_guide"_sid);
+            pass.ReadSampledImage("relax_history_length"_sid);
             pass.ReadSampledImage(diffIn);
             pass.WriteStorageImage(diffOut);
 
             pass.Execute([pipelineManager, diffIn, diffOut, stepSize, width, height, chromaLumaPower = params.chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 RelaxAtrousPushConstant pc{
-                    .constants = graph.GetBufferAddress(SID("relax_constants")),
-                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_tiles")),
-                    .guideIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_guide")),
-                    .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex(SID("relax_history_length")),
+                    .constants = graph.GetBufferAddress("relax_constants"_sid),
+                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
+                    .guideIndex = graph.GetSampledImageViewDescriptorIndex("relax_guide"_sid),
+                    .historyLengthIndex = graph.GetSampledImageViewDescriptorIndex("relax_history_length"_sid),
                     .specVarIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
                     .diffVarIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
                     .specReprojConfidenceIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
@@ -571,7 +571,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                     .stepSize = stepSize,
                     .chromaLumaPower = chromaLumaPower,
                 };
-                const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("relax_atrous_chroma"));
+                const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_atrous_chroma"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
                 vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
@@ -592,11 +592,11 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
         const StringID shadows = targets.shadows;
 
-        auto& pass = graph.AddPass(SID("[ReLAX] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        auto& pass = graph.AddPass("[ReLAX] Remodulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadBuffer(LIGHT_DATA_BUFFER);
         pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-        if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
+        if (graph.HasBuffer("world_grid_probe_grid"_sid)) { pass.ReadBuffer("world_grid_probe_grid"_sid); }
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(gbufferOne);
@@ -647,10 +647,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -698,16 +698,16 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     const TextureInfo data2Info{VK_FORMAT_R32_UINT, width, height, 1};
 
     // History rings must be declared before anything queries them below.
-    graph.CreateVersionedTexture(SID("reblur_viewz"), viewZInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_spec_hist"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_diff_hist"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_spec_fast_fixed"), histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_diff_fast_fixed"), histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_internal_data"), data2Info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_spec_hit_dist"), hitDistInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_prev_nr"), colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_spec_luma_stab"), histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture(SID("reblur_diff_luma_stab"), histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_viewz"_sid, viewZInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_spec_hist"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_diff_hist"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_spec_fast_fixed"_sid, histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_diff_fast_fixed"_sid, histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_internal_data"_sid, data2Info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_spec_hit_dist"_sid, hitDistInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_prev_nr"_sid, colorInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_spec_luma_stab"_sid, histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("reblur_diff_luma_stab"_sid, histLenInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     // Build ReblurDiffuseSpecularConstants (geometry block matches RELAX so relax_utils helpers are reused).
     const glm::mat4& view = viewFamily.mainView.currentViewData.view;
@@ -740,7 +740,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     glm::mat4 viewToWorld = glm::mat4(glm::mat3(invView));
     viewToWorld[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    const bool bFirstFrame = !graph.ResourceHasVersion(SID("reblur_spec_hist"), 1);
+    const bool bFirstFrame = !graph.ResourceHasVersion("reblur_spec_hist"_sid, 1);
 
     ReblurDiffuseSpecularConstants rc{};
 
@@ -821,23 +821,23 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     rc.gCheckerboardResolveAccumSpeed = bCheckerboard ? checkerboardResolveAccumSpeed : 0.0f;
 
     // Upload constants buffer
-    memcpy(graph.OpenHostBuffer(SID("reblur_constants"), sizeof(ReblurDiffuseSpecularConstants)), &rc, sizeof(ReblurDiffuseSpecularConstants));
+    memcpy(graph.OpenHostBuffer("reblur_constants"_sid, sizeof(ReblurDiffuseSpecularConstants)), &rc, sizeof(ReblurDiffuseSpecularConstants));
 
     // Pass 0: Generate viewZ
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Generate ViewZ"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
+        auto& pass = graph.AddPass("[ReBLUR] Generate ViewZ"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
-        pass.WriteStorageImage(SID("reblur_viewz"));
+        pass.WriteStorageImage("reblur_viewz"_sid);
         pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurGenerateViewZPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_viewz")),
+                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex("reblur_viewz"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_generate_viewz"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_generate_viewz"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -846,19 +846,19 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     // Pass 1: Classify tiles
     {
-        graph.CreateTexture(SID("reblur_tiles"), tilesInfo, {std::nullopt}, true);
+        graph.CreateTexture("reblur_tiles"_sid, tilesInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Classify Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
+        auto& pass = graph.AddPass("[ReBLUR] Classify Tiles"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
         pass.ReadSampledImage(depth);
-        pass.WriteStorageImage(SID("reblur_tiles"));
+        pass.WriteStorageImage("reblur_tiles"_sid);
         pass.Execute([pipelineManager, depth, tilesW, tilesH](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurClassifyTilesPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_tiles")),
+                .tilesOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_tiles"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_classify_tiles"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_classify_tiles"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, tilesW, tilesH, 1);
@@ -866,28 +866,28 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     }
 
     // Pass 2: Front-end pack (raw RGB + hitDist -> YCoCg + hitDist)
-    graph.CreateTexture(SID("reblur_spec_packed"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_diff_packed"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_spec_packed"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_diff_packed"_sid, colorInfo, {std::nullopt}, true);
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Pack"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
+        auto& pass = graph.AddPass("[ReBLUR] Pack"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(diffInput);
-        pass.WriteStorageImage(SID("reblur_spec_packed"));
-        pass.WriteStorageImage(SID("reblur_diff_packed"));
+        pass.WriteStorageImage("reblur_spec_packed"_sid);
+        pass.WriteStorageImage("reblur_diff_packed"_sid);
         pass.Execute([pipelineManager, depth, gbufferOne, specInput, diffInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurPackPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
-                .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_packed")),
-                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_packed")),
+                .specOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_packed"_sid),
+                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_packed"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_pack"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_pack"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -896,97 +896,97 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     // Pass 3: Prepass (optional; forced on for checkerboard hole resolve)
     if (bPrepass) {
-        graph.CreateTexture(SID("reblur_spec_prepass"), colorInfo, {std::nullopt}, true);
-        graph.CreateTexture(SID("reblur_diff_prepass"), colorInfo, {std::nullopt}, true);
+        graph.CreateTexture("reblur_spec_prepass"_sid, colorInfo, {std::nullopt}, true);
+        graph.CreateTexture("reblur_diff_prepass"_sid, colorInfo, {std::nullopt}, true);
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Prepass"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
-        pass.ReadSampledImage(SID("reblur_tiles"));
+        auto& pass = graph.AddPass("[ReBLUR] Prepass"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
+        pass.ReadSampledImage("reblur_tiles"_sid);
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(SID("reblur_spec_packed"));
-        pass.ReadSampledImage(SID("reblur_diff_packed"));
-        pass.WriteStorageImage(SID("reblur_spec_prepass"));
-        pass.WriteStorageImage(SID("reblur_diff_prepass"));
+        pass.ReadSampledImage("reblur_spec_packed"_sid);
+        pass.ReadSampledImage("reblur_diff_packed"_sid);
+        pass.WriteStorageImage("reblur_spec_prepass"_sid);
+        pass.WriteStorageImage("reblur_diff_prepass"_sid);
         pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurPrepassPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .specInputIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_packed")),
-                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_packed")),
-                .specOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_prepass")),
-                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_prepass")),
+                .specInputIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_packed"_sid),
+                .diffInputIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_packed"_sid),
+                .specOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_prepass"_sid),
+                .diffOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_prepass"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_prepass"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_prepass"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
         });
     }
 
-    const StringID specIn = bPrepass ? SID("reblur_spec_prepass") : SID("reblur_spec_packed");
-    const StringID diffIn = bPrepass ? SID("reblur_diff_prepass") : SID("reblur_diff_packed");
+    const StringID specIn = bPrepass ? "reblur_spec_prepass"_sid : "reblur_spec_packed"_sid;
+    const StringID diffIn = bPrepass ? "reblur_diff_prepass"_sid : "reblur_diff_packed"_sid;
 
-    graph.CreateTexture(SID("reblur_spec_accum"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_diff_accum"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_spec_accum"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_diff_accum"_sid, colorInfo, {std::nullopt}, true);
     // Fast (responsive) history is NRD-faithful single-channel luma (R16F), not RGBA.
-    graph.CreateTexture(SID("reblur_spec_fast"), histLenInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_diff_fast"), histLenInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_spec_fast"_sid, histLenInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_diff_fast"_sid, histLenInfo, {std::nullopt}, true);
     // DATA1 = per-lobe accum frames (RG8), DATA2 = occlusion bits + curvature + vha (R32U);
     // internal data = carried per-lobe accum speeds written by stabilization with antilag feedback.
-    graph.CreateTexture(SID("reblur_data1"), data1Info, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_data2"), data2Info, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_spec_hfix"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_diff_hfix"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_spec_blur"), colorInfo, {std::nullopt}, true);
-    graph.CreateTexture(SID("reblur_diff_blur"), colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_data1"_sid, data1Info, {std::nullopt}, true);
+    graph.CreateTexture("reblur_data2"_sid, data2Info, {std::nullopt}, true);
+    graph.CreateTexture("reblur_spec_hfix"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_diff_hfix"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_spec_blur"_sid, colorInfo, {std::nullopt}, true);
+    graph.CreateTexture("reblur_diff_blur"_sid, colorInfo, {std::nullopt}, true);
 
     // Pass 4: Temporal accumulation
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Accumulation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
-        pass.ReadSampledImage(SID("reblur_tiles"));
+        auto& pass = graph.AddPass("[ReBLUR] Temporal Accumulation"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
+        pass.ReadSampledImage("reblur_tiles"_sid);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(specIn);
         pass.ReadSampledImage(diffIn);
-        if (graph.ResourceHasVersion(SID("reblur_spec_hist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_spec_hist"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_diff_hist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_diff_hist"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_spec_fast_fixed"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_spec_fast_fixed"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_diff_fast_fixed"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_diff_fast_fixed"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_internal_data"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_internal_data"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_spec_hit_dist"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_spec_hit_dist"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_prev_nr"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_prev_nr"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_viewz"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_viewz"), 1)); }
-        else { pass.ReadSampledImage(SID("reblur_viewz")); }
-        if (graph.HasTexture(SID("restir_confidence"))) { pass.ReadSampledImage(SID("restir_confidence")); }
-        pass.WriteStorageImage(SID("reblur_spec_accum"));
-        pass.WriteStorageImage(SID("reblur_diff_accum"));
-        pass.WriteStorageImage(SID("reblur_spec_fast"));
-        pass.WriteStorageImage(SID("reblur_diff_fast"));
-        pass.WriteStorageImage(SID("reblur_data1"));
-        pass.WriteStorageImage(SID("reblur_data2"));
-        pass.WriteStorageImage(SID("reblur_spec_hit_dist"));
-        pass.WriteStorageImage(SID("reblur_prev_nr"));
+        if (graph.ResourceHasVersion("reblur_spec_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_spec_hist"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_diff_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_diff_hist"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_spec_fast_fixed"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_spec_fast_fixed"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_diff_fast_fixed"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_diff_fast_fixed"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_internal_data"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_internal_data"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_spec_hit_dist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_spec_hit_dist"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_prev_nr"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_prev_nr"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_viewz"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_viewz"_sid, 1)); }
+        else { pass.ReadSampledImage("reblur_viewz"_sid); }
+        if (graph.HasTexture("restir_confidence"_sid)) { pass.ReadSampledImage("restir_confidence"_sid); }
+        pass.WriteStorageImage("reblur_spec_accum"_sid);
+        pass.WriteStorageImage("reblur_diff_accum"_sid);
+        pass.WriteStorageImage("reblur_spec_fast"_sid);
+        pass.WriteStorageImage("reblur_diff_fast"_sid);
+        pass.WriteStorageImage("reblur_data1"_sid);
+        pass.WriteStorageImage("reblur_data2"_sid);
+        pass.WriteStorageImage("reblur_spec_hit_dist"_sid);
+        pass.WriteStorageImage("reblur_prev_nr"_sid);
 
-        const bool hasHistory = graph.ResourceHasVersion(SID("reblur_spec_hist"), 1);
-        const StringID fallbackSpec = hasHistory ? graph.ResourceVersionID(SID("reblur_spec_hist"), 1) : specIn;
-        const StringID fallbackDiff = hasHistory ? graph.ResourceVersionID(SID("reblur_diff_hist"), 1) : diffIn;
+        const bool hasHistory = graph.ResourceHasVersion("reblur_spec_hist"_sid, 1);
+        const StringID fallbackSpec = hasHistory ? graph.ResourceVersionID("reblur_spec_hist"_sid, 1) : specIn;
+        const StringID fallbackDiff = hasHistory ? graph.ResourceVersionID("reblur_diff_hist"_sid, 1) : diffIn;
         // First-frame fallbacks must be format-compatible sources (values unused under gResetHistory).
-        const StringID fallbackSpecFast = graph.ResourceHasVersion(SID("reblur_spec_fast_fixed"), 1) ? graph.ResourceVersionID(SID("reblur_spec_fast_fixed"), 1) : SID("reblur_spec_hit_dist");
-        const StringID fallbackDiffFast = graph.ResourceHasVersion(SID("reblur_diff_fast_fixed"), 1) ? graph.ResourceVersionID(SID("reblur_diff_fast_fixed"), 1) : SID("reblur_spec_hit_dist");
-        const StringID fallbackInternalData = graph.ResourceHasVersion(SID("reblur_internal_data"), 1) ? graph.ResourceVersionID(SID("reblur_internal_data"), 1) : SID("reblur_data2");
-        const StringID fallbackSpecHitD = graph.ResourceHasVersion(SID("reblur_spec_hit_dist"), 1) ? graph.ResourceVersionID(SID("reblur_spec_hit_dist"), 1) : SID("reblur_spec_hit_dist");
-        const StringID fallbackPrevNR = graph.ResourceHasVersion(SID("reblur_prev_nr"), 1) ? graph.ResourceVersionID(SID("reblur_prev_nr"), 1) : SID("reblur_prev_nr");
-        const StringID fallbackViewZ = graph.ResourceHasVersion(SID("reblur_viewz"), 1) ? graph.ResourceVersionID(SID("reblur_viewz"), 1) : SID("reblur_viewz");
+        const StringID fallbackSpecFast = graph.ResourceHasVersion("reblur_spec_fast_fixed"_sid, 1) ? graph.ResourceVersionID("reblur_spec_fast_fixed"_sid, 1) : "reblur_spec_hit_dist"_sid;
+        const StringID fallbackDiffFast = graph.ResourceHasVersion("reblur_diff_fast_fixed"_sid, 1) ? graph.ResourceVersionID("reblur_diff_fast_fixed"_sid, 1) : "reblur_spec_hit_dist"_sid;
+        const StringID fallbackInternalData = graph.ResourceHasVersion("reblur_internal_data"_sid, 1) ? graph.ResourceVersionID("reblur_internal_data"_sid, 1) : "reblur_data2"_sid;
+        const StringID fallbackSpecHitD = graph.ResourceHasVersion("reblur_spec_hit_dist"_sid, 1) ? graph.ResourceVersionID("reblur_spec_hit_dist"_sid, 1) : "reblur_spec_hit_dist"_sid;
+        const StringID fallbackPrevNR = graph.ResourceHasVersion("reblur_prev_nr"_sid, 1) ? graph.ResourceVersionID("reblur_prev_nr"_sid, 1) : "reblur_prev_nr"_sid;
+        const StringID fallbackViewZ = graph.ResourceHasVersion("reblur_viewz"_sid, 1) ? graph.ResourceVersionID("reblur_viewz"_sid, 1) : "reblur_viewz"_sid;
 
         pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, fallbackSpec, fallbackDiff, fallbackSpecFast, fallbackDiffFast, fallbackInternalData, fallbackSpecHitD, fallbackPrevNR,
                 fallbackViewZ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurTemporalAccumulationPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .prevNormalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(fallbackPrevNR),
@@ -999,17 +999,17 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .historySpecIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpec),
                 .historyDiffIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiff),
                 .prevSpecHitDistIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecHitD),
-                .outData1Index = graph.GetStorageImageViewDescriptorIndex(SID("reblur_data1")),
-                .outData2Index = graph.GetStorageImageViewDescriptorIndex(SID("reblur_data2")),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_accum")),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_accum")),
-                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_fast")),
-                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_fast")),
-                .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_hit_dist")),
-                .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_prev_nr")),
-                .confidenceIndex = graph.HasTexture(SID("restir_confidence")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_confidence")) : ~0u,
+                .outData1Index = graph.GetStorageImageViewDescriptorIndex("reblur_data1"_sid),
+                .outData2Index = graph.GetStorageImageViewDescriptorIndex("reblur_data2"_sid),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_accum"_sid),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_accum"_sid),
+                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_fast"_sid),
+                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_fast"_sid),
+                .outSpecHitDistIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_hit_dist"_sid),
+                .outPrevNRIndex = graph.GetStorageImageViewDescriptorIndex("reblur_prev_nr"_sid),
+                .confidenceIndex = graph.HasTexture("restir_confidence"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_confidence"_sid) : ~0u,
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_temporal_accumulation"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_temporal_accumulation"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 15) / 16, 1);
@@ -1018,37 +1018,37 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     // Pass 5: History fix
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] History Fix"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
-        pass.ReadSampledImage(SID("reblur_tiles"));
+        auto& pass = graph.AddPass("[ReBLUR] History Fix"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
+        pass.ReadSampledImage("reblur_tiles"_sid);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(SID("reblur_data1"));
-        pass.ReadSampledImage(SID("reblur_spec_accum"));
-        pass.ReadSampledImage(SID("reblur_diff_accum"));
-        pass.ReadSampledImage(SID("reblur_spec_fast"));
-        pass.ReadSampledImage(SID("reblur_diff_fast"));
-        pass.WriteStorageImage(SID("reblur_spec_hfix"));
-        pass.WriteStorageImage(SID("reblur_diff_hfix"));
-        pass.WriteStorageImage(SID("reblur_spec_fast_fixed"));
-        pass.WriteStorageImage(SID("reblur_diff_fast_fixed"));
+        pass.ReadSampledImage("reblur_data1"_sid);
+        pass.ReadSampledImage("reblur_spec_accum"_sid);
+        pass.ReadSampledImage("reblur_diff_accum"_sid);
+        pass.ReadSampledImage("reblur_spec_fast"_sid);
+        pass.ReadSampledImage("reblur_diff_fast"_sid);
+        pass.WriteStorageImage("reblur_spec_hfix"_sid);
+        pass.WriteStorageImage("reblur_diff_hfix"_sid);
+        pass.WriteStorageImage("reblur_spec_fast_fixed"_sid);
+        pass.WriteStorageImage("reblur_diff_fast_fixed"_sid);
         pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurHistoryFixPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .data1Index = graph.GetSampledImageViewDescriptorIndex(SID("reblur_data1")),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_accum")),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_accum")),
-                .specFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_fast")),
-                .diffFastIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_fast")),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_hfix")),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_hfix")),
-                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_fast_fixed")),
-                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_fast_fixed")),
+                .data1Index = graph.GetSampledImageViewDescriptorIndex("reblur_data1"_sid),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_accum"_sid),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_accum"_sid),
+                .specFastIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_fast"_sid),
+                .diffFastIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_fast"_sid),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_hfix"_sid),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_hfix"_sid),
+                .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_fast_fixed"_sid),
+                .outDiffFastIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_fast_fixed"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_history_fix"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_history_fix"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -1058,83 +1058,83 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     // Passes 6 & 7: Blur and Post-Blur (one pipeline, isPostBlur toggles radius). Post-blur output is the carried slow history.
     auto addBlur = [&](StringID passName, StringID specSrc, StringID diffSrc, StringID specDst, StringID diffDst, uint32_t isPostBlur) {
         auto& pass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
-        pass.ReadSampledImage(SID("reblur_tiles"));
+        pass.ReadBuffer("reblur_constants"_sid);
+        pass.ReadSampledImage("reblur_tiles"_sid);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(SID("reblur_data1"));
+        pass.ReadSampledImage("reblur_data1"_sid);
         pass.ReadSampledImage(specSrc);
         pass.ReadSampledImage(diffSrc);
         pass.WriteStorageImage(specDst);
         pass.WriteStorageImage(diffDst);
         pass.Execute([pipelineManager, gbufferOne, depth, specSrc, diffSrc, specDst, diffDst, isPostBlur, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurBlurPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .data1Index = graph.GetSampledImageViewDescriptorIndex(SID("reblur_data1")),
+                .data1Index = graph.GetSampledImageViewDescriptorIndex("reblur_data1"_sid),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(specSrc),
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffSrc),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specDst),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffDst),
                 .isPostBlur = isPostBlur,
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_blur"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_blur"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
         });
     };
-    addBlur(SID("[ReBLUR] Blur"), SID("reblur_spec_hfix"), SID("reblur_diff_hfix"), SID("reblur_spec_blur"), SID("reblur_diff_blur"), 0u);
-    addBlur(SID("[ReBLUR] Post-Blur"), SID("reblur_spec_blur"), SID("reblur_diff_blur"), SID("reblur_spec_hist"), SID("reblur_diff_hist"), 1u);
+    addBlur("[ReBLUR] Blur"_sid, "reblur_spec_hfix"_sid, "reblur_diff_hfix"_sid, "reblur_spec_blur"_sid, "reblur_diff_blur"_sid, 0u);
+    addBlur("[ReBLUR] Post-Blur"_sid, "reblur_spec_blur"_sid, "reblur_diff_blur"_sid, "reblur_spec_hist"_sid, "reblur_diff_hist"_sid, 1u);
 
     const int32_t chromaIters = params.bChromaAtrous ? glm::clamp(params.chromaAtrousIterations, 1, 4) : 0;
-    const StringID stabilizationDiffOut = chromaIters > 0 ? SID("reblur_diff_blur") : diffInput;
+    const StringID stabilizationDiffOut = chromaIters > 0 ? "reblur_diff_blur"_sid : diffInput;
 
     // Pass 8: Temporal stabilization (luma-only stabilized ping-pong, surface + virtual motion via the DATA2
     // occlusion bits, antilag feedback written into the carried internal data, final RGB into intermediates)
     {
-        auto& pass = graph.AddPass(SID("[ReBLUR] Temporal Stabilization"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-        pass.ReadBuffer(SID("reblur_constants"));
-        pass.ReadSampledImage(SID("reblur_tiles"));
+        auto& pass = graph.AddPass("[ReBLUR] Temporal Stabilization"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        pass.ReadBuffer("reblur_constants"_sid);
+        pass.ReadSampledImage("reblur_tiles"_sid);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
-        pass.ReadSampledImage(SID("reblur_data1"));
-        pass.ReadSampledImage(SID("reblur_data2"));
-        pass.ReadSampledImage(SID("reblur_spec_hit_dist"));
-        pass.ReadSampledImage(SID("reblur_spec_hist"));
-        pass.ReadSampledImage(SID("reblur_diff_hist"));
-        if (graph.ResourceHasVersion(SID("reblur_spec_luma_stab"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_spec_luma_stab"), 1)); }
-        if (graph.ResourceHasVersion(SID("reblur_diff_luma_stab"), 1)) { pass.ReadSampledImage(graph.ResourceVersionID(SID("reblur_diff_luma_stab"), 1)); }
-        pass.WriteStorageImage(SID("reblur_spec_luma_stab"));
-        pass.WriteStorageImage(SID("reblur_diff_luma_stab"));
-        pass.WriteStorageImage(SID("reblur_internal_data"));
+        pass.ReadSampledImage("reblur_data1"_sid);
+        pass.ReadSampledImage("reblur_data2"_sid);
+        pass.ReadSampledImage("reblur_spec_hit_dist"_sid);
+        pass.ReadSampledImage("reblur_spec_hist"_sid);
+        pass.ReadSampledImage("reblur_diff_hist"_sid);
+        if (graph.ResourceHasVersion("reblur_spec_luma_stab"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_spec_luma_stab"_sid, 1)); }
+        if (graph.ResourceHasVersion("reblur_diff_luma_stab"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_diff_luma_stab"_sid, 1)); }
+        pass.WriteStorageImage("reblur_spec_luma_stab"_sid);
+        pass.WriteStorageImage("reblur_diff_luma_stab"_sid);
+        pass.WriteStorageImage("reblur_internal_data"_sid);
         pass.WriteStorageImage(specInput);
         pass.WriteStorageImage(stabilizationDiffOut);
-        const StringID fallbackSpecStab = graph.ResourceHasVersion(SID("reblur_spec_luma_stab"), 1) ? graph.ResourceVersionID(SID("reblur_spec_luma_stab"), 1) : SID("reblur_spec_hit_dist");
-        const StringID fallbackDiffStab = graph.ResourceHasVersion(SID("reblur_diff_luma_stab"), 1) ? graph.ResourceVersionID(SID("reblur_diff_luma_stab"), 1) : SID("reblur_spec_hit_dist");
+        const StringID fallbackSpecStab = graph.ResourceHasVersion("reblur_spec_luma_stab"_sid, 1) ? graph.ResourceVersionID("reblur_spec_luma_stab"_sid, 1) : "reblur_spec_hit_dist"_sid;
+        const StringID fallbackDiffStab = graph.ResourceHasVersion("reblur_diff_luma_stab"_sid, 1) ? graph.ResourceVersionID("reblur_diff_luma_stab"_sid, 1) : "reblur_spec_hit_dist"_sid;
 
         pass.Execute([pipelineManager, gbufferOne, depth, specInput, stabilizationDiffOut, width, height, fallbackSpecStab, fallbackDiffStab](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurStabilizationPushConstant pc{
-                .constants = graph.GetBufferAddress(SID("reblur_constants")),
-                .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                .constants = graph.GetBufferAddress("reblur_constants"_sid),
+                .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
                 .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .specIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_hist")),
-                .diffIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_diff_hist")),
-                .data1Index = graph.GetSampledImageViewDescriptorIndex(SID("reblur_data1")),
-                .data2Index = graph.GetSampledImageViewDescriptorIndex(SID("reblur_data2")),
-                .specHitDistIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_spec_hit_dist")),
+                .specIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_hist"_sid),
+                .diffIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_hist"_sid),
+                .data1Index = graph.GetSampledImageViewDescriptorIndex("reblur_data1"_sid),
+                .data2Index = graph.GetSampledImageViewDescriptorIndex("reblur_data2"_sid),
+                .specHitDistIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_hit_dist"_sid),
                 .prevSpecLumaStabIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecStab),
                 .prevDiffLumaStabIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiffStab),
-                .outSpecLumaStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_spec_luma_stab")),
-                .outDiffLumaStabIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_diff_luma_stab")),
+                .outSpecLumaStabIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_luma_stab"_sid),
+                .outDiffLumaStabIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_luma_stab"_sid),
                 .outSpecFinalIndex = graph.GetStorageImageViewDescriptorIndex(specInput),
                 .outDiffFinalIndex = graph.GetStorageImageViewDescriptorIndex(stabilizationDiffOut),
-                .outInternalDataIndex = graph.GetStorageImageViewDescriptorIndex(SID("reblur_internal_data")),
+                .outInternalDataIndex = graph.GetStorageImageViewDescriptorIndex("reblur_internal_data"_sid),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_stabilization"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_stabilization"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -1146,34 +1146,34 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         constexpr uint32_t chromaStrides[] = {32u, 64u, 128u, 256u};
         for (int32_t c = 0; c < chromaIters; c++) {
             const bool isLastChroma = (c == chromaIters - 1);
-            const StringID inTex = (c & 1) ? SID("reblur_diff_hfix") : SID("reblur_diff_blur");
-            const StringID outTex = isLastChroma ? diffInput : ((c & 1) ? SID("reblur_diff_blur") : SID("reblur_diff_hfix"));
+            const StringID inTex = (c & 1) ? "reblur_diff_hfix"_sid : "reblur_diff_blur"_sid;
+            const StringID outTex = isLastChroma ? diffInput : ((c & 1) ? "reblur_diff_blur"_sid : "reblur_diff_hfix"_sid);
             const uint32_t stepSize = chromaStrides[c];
 
             const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReBLUR] Chroma %d", c);
 
             auto& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
-            pass.ReadBuffer(SID("reblur_constants"));
-            pass.ReadSampledImage(SID("reblur_tiles"));
+            pass.ReadBuffer("reblur_constants"_sid);
+            pass.ReadSampledImage("reblur_tiles"_sid);
             pass.ReadSampledImage(gbufferOne);
             pass.ReadSampledImage(depth);
-            pass.ReadSampledImage(SID("reblur_data1"));
+            pass.ReadSampledImage("reblur_data1"_sid);
             pass.ReadSampledImage(inTex);
             pass.WriteStorageImage(outTex);
 
             pass.Execute([pipelineManager, gbufferOne, depth, inTex, outTex, stepSize, width, height, chromaLumaPower = params.chromaLumaPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 ReblurChromaPushConstant pc{
-                    .constants = graph.GetBufferAddress(SID("reblur_constants")),
-                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex(SID("reblur_tiles")),
+                    .constants = graph.GetBufferAddress("reblur_constants"_sid),
+                    .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
                     .normalRoughnessIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .viewZIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                    .data1Index = graph.GetSampledImageViewDescriptorIndex(SID("reblur_data1")),
+                    .data1Index = graph.GetSampledImageViewDescriptorIndex("reblur_data1"_sid),
                     .diffIndex = graph.GetSampledImageViewDescriptorIndex(inTex),
                     .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(outTex),
                     .stepSize = stepSize,
                     .chromaLumaPower = chromaLumaPower,
                 };
-                const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("reblur_chroma"));
+                const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_chroma"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
                 vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
@@ -1193,11 +1193,11 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
         const StringID shadows = targets.shadows;
 
-        auto& pass = graph.AddPass(SID("[ReBLUR] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        auto& pass = graph.AddPass("[ReBLUR] Remodulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadBuffer(LIGHT_DATA_BUFFER);
         pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-        if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
+        if (graph.HasBuffer("world_grid_probe_grid"_sid)) { pass.ReadBuffer("world_grid_probe_grid"_sid); }
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(gbufferOne);
@@ -1248,10 +1248,10 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);

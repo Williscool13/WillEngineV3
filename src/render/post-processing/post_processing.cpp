@@ -82,26 +82,26 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
     // Overlays (text/sprites/debug lines) composite pre-AA into the chain input; meter the clean snapshot when it exists
     StringID meteringSource = input;
-    if (graph.HasTexture(SID("lit_color_preoverlay")) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
-        meteringSource = SID("lit_color_preoverlay");
+    if (graph.HasTexture("lit_color_preoverlay"_sid) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
+        meteringSource = "lit_color_preoverlay"_sid;
     }
 
-    graph.CreateBuffer(SID("luminance_histogram"), POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
+    graph.CreateBuffer("luminance_histogram"_sid, POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
 
     // The persistent luminance buffer is declared by the frame setup (TAA reads it first); a first life still needs its seed.
-    const bool bInitLuminance = !graph.ResourceHasVersion(SID("luminance_buffer"), 0);
+    const bool bInitLuminance = !graph.ResourceHasVersion("luminance_buffer"_sid, 0);
     if (bInitLuminance) {
-        auto& initPass = graph.AddPass(SID("[Exposure] Init Luminance"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
-        initPass.WriteTransferBuffer(SID("luminance_buffer"));
+        auto& initPass = graph.AddPass("[Exposure] Init Luminance"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+        initPass.WriteTransferBuffer("luminance_buffer"_sid);
         initPass.Execute([target = config.exposureTargetLuminance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("luminance_buffer")), 0, sizeof(float), &target);
+            vkCmdUpdateBuffer(cmd, graph.GetBufferHandle("luminance_buffer"_sid), 0, sizeof(float), &target);
         });
     }
 
-    auto& clearPass = graph.AddPass(SID("[Exposure] Clear Histogram"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
-    clearPass.WriteTransferBuffer(SID("luminance_histogram"));
+    auto& clearPass = graph.AddPass("[Exposure] Clear Histogram"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    clearPass.WriteTransferBuffer("luminance_histogram"_sid);
     clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("luminance_histogram")), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle("luminance_histogram"_sid), 0, VK_WHOLE_SIZE, 0);
     });
 
     // Meters every other pixel per axis with a per-frame 2x2 phase; statistics are insensitive to the decimation
@@ -109,14 +109,14 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     const uint32_t gridHeight = (height + 1) / 2;
     const uint32_t phase = static_cast<uint32_t>(ctx.frameNumber) & 3u;
 
-    auto& histogramPass = graph.AddPass(SID("[Exposure] Build Histogram"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    auto& histogramPass = graph.AddPass("[Exposure] Build Histogram"_sid, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     histogramPass.ReadSampledImage(meteringSource);
-    histogramPass.ReadWriteBuffer(SID("luminance_histogram"));
+    histogramPass.ReadWriteBuffer("luminance_histogram"_sid);
     histogramPass.Execute([width, height, gridWidth, gridHeight, phase, meteringSource, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         constexpr float logLuminanceRange = EXPOSURE_MAX_LOG_LUMINANCE - EXPOSURE_MIN_LOG_LUMINANCE;
         HistogramBuildPushConstant pc{
             .hdrImageIndex = graph.GetSampledImageViewDescriptorIndex(meteringSource),
-            .histogramBufferAddress = graph.GetBufferAddress(SID("luminance_histogram")),
+            .histogramBufferAddress = graph.GetBufferAddress("luminance_histogram"_sid),
             .width = width,
             .height = height,
             .minLogLuminance = EXPOSURE_MIN_LOG_LUMINANCE,
@@ -124,7 +124,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
             .sampleOffset = {phase & 1u, phase >> 1u},
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("exposure_build_histogram"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("exposure_build_histogram"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (gridWidth + POST_PROCESS_LUMINANCE_DISPATCH_X - 1) / POST_PROCESS_LUMINANCE_DISPATCH_X;
@@ -139,13 +139,13 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     const float minAdaptedLuminance = config.exposureTargetLuminance * std::exp2(-config.exposureMaxGainEV);
     const float maxAdaptedLuminance = config.exposureTargetLuminance * std::exp2(-config.exposureMinGainEV);
 
-    auto& exposurePass = graph.AddPass(SID("[Exposure] Calculate Exposure"), VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    exposurePass.ReadBuffer(SID("luminance_histogram"));
-    exposurePass.ReadWriteBuffer(SID("luminance_buffer"));
+    auto& exposurePass = graph.AddPass("[Exposure] Calculate Exposure"_sid, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    exposurePass.ReadBuffer("luminance_histogram"_sid);
+    exposurePass.ReadWriteBuffer("luminance_buffer"_sid);
     exposurePass.Execute([gridWidth, gridHeight, pipelines, lowPercentile, highPercentile, alphaBrighten, alphaDarken, minAdaptedLuminance, maxAdaptedLuminance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ExposureCalculatePushConstant pc{
-            .histogramBufferAddress = graph.GetBufferAddress(SID("luminance_histogram")),
-            .luminanceBufferAddress = graph.GetBufferAddress(SID("luminance_buffer")),
+            .histogramBufferAddress = graph.GetBufferAddress("luminance_histogram"_sid),
+            .luminanceBufferAddress = graph.GetBufferAddress("luminance_buffer"_sid),
             .minLogLuminance = EXPOSURE_MIN_LOG_LUMINANCE,
             .logLuminanceRange = EXPOSURE_MAX_LOG_LUMINANCE - EXPOSURE_MIN_LOG_LUMINANCE,
             .alphaBrighten = alphaBrighten,
@@ -157,7 +157,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
             .totalPixels = gridWidth * gridHeight,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("exposure_calculate_average"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("exposure_calculate_average"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, 1, 1, 1);
@@ -183,25 +183,25 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
     const float nearTransitionInv = 1.0f / std::max(0.01f, config.dofNearTransition);
     const float farTransitionInv = 1.0f / std::max(0.01f, config.dofFarTransition);
 
-    graph.CreateTexture(SID("dof_color_coc"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("dof_coc_far_min"), TextureInfo{VK_FORMAT_R16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_color_coc"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_coc_far_min"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
 
-    RenderPass& cocPass = graph.AddPass(SID("[DoF] CoC Downsample"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    cocPass.ReadBuffer(SID("scene_data"));
+    RenderPass& cocPass = graph.AddPass("[DoF] CoC Downsample"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    cocPass.ReadBuffer("scene_data"_sid);
     cocPass.ReadSampledImage(input);
     cocPass.ReadSampledImage(depthStencil);
-    cocPass.WriteStorageImage(SID("dof_color_coc"));
-    cocPass.WriteStorageImage(SID("dof_coc_far_min"));
+    cocPass.WriteStorageImage("dof_color_coc"_sid);
+    cocPass.WriteStorageImage("dof_coc_far_min"_sid);
     cocPass.Execute([width, height, renderWidth, renderHeight, halfWidth, halfHeight, input, depthStencil, pipelines, nearRadiusPx, farRadiusPx, sharpHalfRange, nearTransitionInv, farTransitionInv, focusDistance = config.dofFocusDistance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DofCocPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .sceneData = graph.GetBufferAddress("scene_data"_sid),
             .outputExtent = {halfWidth, halfHeight},
             .inputExtent = {width, height},
             .renderExtent = {renderWidth, renderHeight},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_color_coc")),
-            .farMinIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_coc_far_min")),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("dof_color_coc"_sid),
+            .farMinIndex = graph.GetStorageImageViewDescriptorIndex("dof_coc_far_min"_sid),
             .focusDistance = focusDistance,
             .sharpHalfRange = sharpHalfRange,
             .nearTransitionInv = nearTransitionInv,
@@ -210,7 +210,7 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
             .farRadiusPx = farRadiusPx,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_coc"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_coc"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (halfWidth + POST_PROCESS_DOF_DISPATCH_X - 1) / POST_PROCESS_DOF_DISPATCH_X;
@@ -223,13 +223,13 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
     const uint32_t mip2Width = std::max(1u, (mip1Width + 1) / 2);
     const uint32_t mip2Height = std::max(1u, (mip1Height + 1) / 2);
 
-    graph.CreateTexture(SID("dof_color_coc_mip1"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, mip1Width, mip1Height, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("dof_color_coc_mip2"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, mip2Width, mip2Height, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_color_coc_mip1"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, mip1Width, mip1Height, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_color_coc_mip2"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, mip2Width, mip2Height, 1}, std::nullopt, true);
 
     struct MipStep { StringID passName; StringID input; StringID output; uint32_t inW, inH, outW, outH; };
     const MipStep mipSteps[2] = {
-        {SID("[DoF] Color Mip 1"), SID("dof_color_coc"), SID("dof_color_coc_mip1"), halfWidth, halfHeight, mip1Width, mip1Height},
-        {SID("[DoF] Color Mip 2"), SID("dof_color_coc_mip1"), SID("dof_color_coc_mip2"), mip1Width, mip1Height, mip2Width, mip2Height},
+        {"[DoF] Color Mip 1"_sid, "dof_color_coc"_sid, "dof_color_coc_mip1"_sid, halfWidth, halfHeight, mip1Width, mip1Height},
+        {"[DoF] Color Mip 2"_sid, "dof_color_coc_mip1"_sid, "dof_color_coc_mip2"_sid, mip1Width, mip1Height, mip2Width, mip2Height},
     };
     for (const MipStep& step : mipSteps) {
         RenderPass& mipPass = graph.AddPass(step.passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
@@ -243,7 +243,7 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(step.output),
             };
 
-            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_mip"));
+            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_mip"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (step.outW + POST_PROCESS_DOF_DISPATCH_X - 1) / POST_PROCESS_DOF_DISPATCH_X;
@@ -257,51 +257,51 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
     const float maxRadiusHalfResPx = std::max(nearRadiusPx, farRadiusPx) * 0.5f;
     const uint32_t dilationRadius = static_cast<uint32_t>(std::ceil(maxRadiusHalfResPx / static_cast<float>(POST_PROCESS_DOF_TILE_SIZE)));
 
-    graph.CreateTexture(SID("dof_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, tiledX, tiledY, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("dof_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, tiledX, tiledY, 1}, std::nullopt, true);
-    graph.CreateBuffer(SID("dof_dispatch_args"), 3 * sizeof(uint32_t), false);
-    graph.CreateBuffer(SID("dof_tile_list"), tiledX * tiledY * sizeof(uint32_t), false);
+    graph.CreateTexture("dof_tiled_max"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, tiledX, tiledY, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_tiled_neighbor_max"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, tiledX, tiledY, 1}, std::nullopt, true);
+    graph.CreateBuffer("dof_dispatch_args"_sid, 3 * sizeof(uint32_t), false);
+    graph.CreateBuffer("dof_tile_list"_sid, tiledX * tiledY * sizeof(uint32_t), false);
 
-    RenderPass& argsInitPass = graph.AddPass(SID("[DoF] Args Init"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
-    argsInitPass.WriteTransferBuffer(SID("dof_dispatch_args"));
+    RenderPass& argsInitPass = graph.AddPass("[DoF] Args Init"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    argsInitPass.WriteTransferBuffer("dof_dispatch_args"_sid);
     argsInitPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const uint32_t init[3] = {0u, 1u, 1u};
-        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("dof_dispatch_args")), 0, sizeof(init), init);
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle("dof_dispatch_args"_sid), 0, sizeof(init), init);
     });
 
-    RenderPass& tileMaxPass = graph.AddPass(SID("[DoF] Tile Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    tileMaxPass.ReadSampledImage(SID("dof_color_coc"));
-    tileMaxPass.WriteStorageImage(SID("dof_tiled_max"));
+    RenderPass& tileMaxPass = graph.AddPass("[DoF] Tile Max"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    tileMaxPass.ReadSampledImage("dof_color_coc"_sid);
+    tileMaxPass.WriteStorageImage("dof_tiled_max"_sid);
     tileMaxPass.Execute([halfWidth, halfHeight, tiledX, tiledY, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DofTileMaxPushConstant pc{
             .sourceExtent = {halfWidth, halfHeight},
             .tileExtent = {tiledX, tiledY},
-            .cocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc")),
-            .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_tiled_max")),
+            .cocIndex = graph.GetSampledImageViewDescriptorIndex("dof_color_coc"_sid),
+            .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("dof_tiled_max"_sid),
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_tile_max"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_tile_max"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, tiledX, tiledY, 1);
     });
 
-    RenderPass& neighborMaxPass = graph.AddPass(SID("[DoF] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    neighborMaxPass.ReadSampledImage(SID("dof_tiled_max"));
-    neighborMaxPass.WriteStorageImage(SID("dof_tiled_neighbor_max"));
-    neighborMaxPass.ReadWriteBuffer(SID("dof_dispatch_args"));
-    neighborMaxPass.ReadWriteBuffer(SID("dof_tile_list"));
+    RenderPass& neighborMaxPass = graph.AddPass("[DoF] Neighbor Max"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    neighborMaxPass.ReadSampledImage("dof_tiled_max"_sid);
+    neighborMaxPass.WriteStorageImage("dof_tiled_neighbor_max"_sid);
+    neighborMaxPass.ReadWriteBuffer("dof_dispatch_args"_sid);
+    neighborMaxPass.ReadWriteBuffer("dof_tile_list"_sid);
     neighborMaxPass.Execute([tiledX, tiledY, pipelines, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DofNeighborMaxPushConstant pc{
             .tileExtent = {tiledX, tiledY},
-            .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_tiled_max")),
-            .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_tiled_neighbor_max")),
+            .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex("dof_tiled_max"_sid),
+            .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex("dof_tiled_neighbor_max"_sid),
             .dilationRadius = dilationRadius,
-            .tileListBuffer = graph.GetBufferAddress(SID("dof_tile_list")),
-            .indirectArgsBuffer = graph.GetBufferAddress(SID("dof_dispatch_args")),
+            .tileListBuffer = graph.GetBufferAddress("dof_tile_list"_sid),
+            .indirectArgsBuffer = graph.GetBufferAddress("dof_dispatch_args"_sid),
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_neighbor_max"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_neighbor_max"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (tiledX + POST_PROCESS_DOF_NEIGHBOR_DISPATCH_X - 1) / POST_PROCESS_DOF_NEIGHBOR_DISPATCH_X;
@@ -309,71 +309,71 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    graph.CreateTexture(SID("dof_near"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("dof_far"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_near"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_far"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
 
     // Unlisted tiles are never gathered; alpha 0 is what tells the composite to keep the sharp pixel
-    RenderPass& layerClearPass = graph.AddPass(SID("[DoF] Layer Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
-    layerClearPass.WriteClearImage(SID("dof_near"));
-    layerClearPass.WriteClearImage(SID("dof_far"));
+    RenderPass& layerClearPass = graph.AddPass("[DoF] Layer Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    layerClearPass.WriteClearImage("dof_near"_sid);
+    layerClearPass.WriteClearImage("dof_far"_sid);
     layerClearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkClearColorValue clearValue{};
         VkImageSubresourceRange range{};
         range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         range.levelCount = 1;
         range.layerCount = 1;
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(SID("dof_near")), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
-        vkCmdClearColorImage(cmd, graph.GetImageHandle(SID("dof_far")), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle("dof_near"_sid), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
+        vkCmdClearColorImage(cmd, graph.GetImageHandle("dof_far"_sid), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &range);
     });
 
-    RenderPass& gatherPass = graph.AddPass(SID("[DoF] Gather"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    gatherPass.ReadSampledImage(SID("dof_color_coc"));
-    gatherPass.ReadSampledImage(SID("dof_color_coc_mip1"));
-    gatherPass.ReadSampledImage(SID("dof_color_coc_mip2"));
-    gatherPass.ReadSampledImage(SID("dof_tiled_neighbor_max"));
-    gatherPass.ReadIndirectBuffer(SID("dof_dispatch_args"));
-    gatherPass.ReadBuffer(SID("dof_tile_list"));
-    gatherPass.WriteStorageImage(SID("dof_near"));
-    gatherPass.WriteStorageImage(SID("dof_far"));
+    RenderPass& gatherPass = graph.AddPass("[DoF] Gather"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    gatherPass.ReadSampledImage("dof_color_coc"_sid);
+    gatherPass.ReadSampledImage("dof_color_coc_mip1"_sid);
+    gatherPass.ReadSampledImage("dof_color_coc_mip2"_sid);
+    gatherPass.ReadSampledImage("dof_tiled_neighbor_max"_sid);
+    gatherPass.ReadIndirectBuffer("dof_dispatch_args"_sid);
+    gatherPass.ReadBuffer("dof_tile_list"_sid);
+    gatherPass.WriteStorageImage("dof_near"_sid);
+    gatherPass.WriteStorageImage("dof_far"_sid);
     gatherPass.Execute([halfWidth, halfHeight, pipelines, frameIndex = static_cast<uint32_t>(frameNumber)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DofGatherPushConstant pc{
-            .tileListBuffer = graph.GetBufferAddress(SID("dof_tile_list")),
+            .tileListBuffer = graph.GetBufferAddress("dof_tile_list"_sid),
             .sourceExtent = {halfWidth, halfHeight},
-            .cocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc")),
-            .mip1Index = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc_mip1")),
-            .mip2Index = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc_mip2")),
-            .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_tiled_neighbor_max")),
-            .nearOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_near")),
-            .farOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_far")),
+            .cocIndex = graph.GetSampledImageViewDescriptorIndex("dof_color_coc"_sid),
+            .mip1Index = graph.GetSampledImageViewDescriptorIndex("dof_color_coc_mip1"_sid),
+            .mip2Index = graph.GetSampledImageViewDescriptorIndex("dof_color_coc_mip2"_sid),
+            .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("dof_tiled_neighbor_max"_sid),
+            .nearOutputIndex = graph.GetStorageImageViewDescriptorIndex("dof_near"_sid),
+            .farOutputIndex = graph.GetStorageImageViewDescriptorIndex("dof_far"_sid),
             .frameIndex = frameIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_gather"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_gather"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("dof_dispatch_args")), 0);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("dof_dispatch_args"_sid), 0);
     });
 
-    graph.CreateTexture(SID("dof_near_filtered"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("dof_far_filtered"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_near_filtered"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_far_filtered"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, halfWidth, halfHeight, 1}, std::nullopt, true);
 
-    RenderPass& layerBlurPass = graph.AddPass(SID("[DoF] Layer Blur"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    layerBlurPass.ReadSampledImage(SID("dof_color_coc"));
-    layerBlurPass.ReadSampledImage(SID("dof_near"));
-    layerBlurPass.ReadSampledImage(SID("dof_far"));
-    layerBlurPass.WriteStorageImage(SID("dof_near_filtered"));
-    layerBlurPass.WriteStorageImage(SID("dof_far_filtered"));
+    RenderPass& layerBlurPass = graph.AddPass("[DoF] Layer Blur"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    layerBlurPass.ReadSampledImage("dof_color_coc"_sid);
+    layerBlurPass.ReadSampledImage("dof_near"_sid);
+    layerBlurPass.ReadSampledImage("dof_far"_sid);
+    layerBlurPass.WriteStorageImage("dof_near_filtered"_sid);
+    layerBlurPass.WriteStorageImage("dof_far_filtered"_sid);
     layerBlurPass.Execute([halfWidth, halfHeight, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DofLayerBlurPushConstant pc{
             .extent = {halfWidth, halfHeight},
-            .cocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_color_coc")),
-            .nearIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_near")),
-            .farIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_far")),
-            .nearOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_near_filtered")),
-            .farOutputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_far_filtered")),
+            .cocIndex = graph.GetSampledImageViewDescriptorIndex("dof_color_coc"_sid),
+            .nearIndex = graph.GetSampledImageViewDescriptorIndex("dof_near"_sid),
+            .farIndex = graph.GetSampledImageViewDescriptorIndex("dof_far"_sid),
+            .nearOutputIndex = graph.GetStorageImageViewDescriptorIndex("dof_near_filtered"_sid),
+            .farOutputIndex = graph.GetStorageImageViewDescriptorIndex("dof_far_filtered"_sid),
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_layer_blur"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_layer_blur"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (halfWidth + POST_PROCESS_DOF_DISPATCH_X - 1) / POST_PROCESS_DOF_DISPATCH_X;
@@ -381,25 +381,25 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    graph.CreateTexture(SID("dof_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    graph.CreateTexture("dof_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
 
-    RenderPass& compositePass = graph.AddPass(SID("[DoF] Composite"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    RenderPass& compositePass = graph.AddPass("[DoF] Composite"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     compositePass.ReadSampledImage(input);
-    compositePass.ReadSampledImage(SID("dof_coc_far_min"));
-    compositePass.ReadSampledImage(SID("dof_near_filtered"));
-    compositePass.ReadSampledImage(SID("dof_far_filtered"));
-    compositePass.WriteStorageImage(SID("dof_output"));
+    compositePass.ReadSampledImage("dof_coc_far_min"_sid);
+    compositePass.ReadSampledImage("dof_near_filtered"_sid);
+    compositePass.ReadSampledImage("dof_far_filtered"_sid);
+    compositePass.WriteStorageImage("dof_output"_sid);
     compositePass.Execute([width, height, input, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DofCompositePushConstant pc{
             .extent = {width, height},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
-            .farMinCocIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_coc_far_min")),
-            .nearIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_near_filtered")),
-            .farIndex = graph.GetSampledImageViewDescriptorIndex(SID("dof_far_filtered")),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("dof_output")),
+            .farMinCocIndex = graph.GetSampledImageViewDescriptorIndex("dof_coc_far_min"_sid),
+            .nearIndex = graph.GetSampledImageViewDescriptorIndex("dof_near_filtered"_sid),
+            .farIndex = graph.GetSampledImageViewDescriptorIndex("dof_far_filtered"_sid),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("dof_output"_sid),
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("dof_composite"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("dof_composite"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (width + POST_PROCESS_DOF_DISPATCH_X - 1) / POST_PROCESS_DOF_DISPATCH_X;
@@ -407,7 +407,7 @@ StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Co
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    return SID("dof_output");
+    return "dof_output"_sid;
 }
 
 StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
@@ -437,88 +437,88 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         SetupObjectMotion(graph, pipelines, ctx.preAaExtent, ctx.targets, 0);
     }
 
-    graph.CreateTexture(SID("motion_blur_velocity"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1}, std::nullopt, true);
-    RenderPass& velocityExtractPass = graph.AddPass(SID("[Motion Blur] Velocity Extract"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    velocityExtractPass.ReadBuffer(SID("scene_data"));
+    graph.CreateTexture("motion_blur_velocity"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1}, std::nullopt, true);
+    RenderPass& velocityExtractPass = graph.AddPass("[Motion Blur] Velocity Extract"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    velocityExtractPass.ReadBuffer("scene_data"_sid);
     if (bObjectOnly) {
         velocityExtractPass.ReadSampledImage(OBJECT_MOTION);
     } else {
         velocityExtractPass.ReadSampledImage(velocity);
         velocityExtractPass.ReadSampledImage(depthStencil);
     }
-    velocityExtractPass.WriteStorageImage(SID("motion_blur_velocity"));
+    velocityExtractPass.WriteStorageImage("motion_blur_velocity"_sid);
     velocityExtractPass.Execute([width, height, renderWidth, renderHeight, pipelines, velocity, depthStencil, bObjectOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurVelocityExtractPushConstant pc{
-            .sceneData = graph.GetBufferAddress(SID("scene_data")),
+            .sceneData = graph.GetBufferAddress("scene_data"_sid),
             .extent = {width, height},
             .renderExtent = {renderWidth, renderHeight},
             .gbufferOneIndex = bObjectOnly ? ~0u : graph.GetSampledImageViewDescriptorIndex(velocity),
             .depthBufferIndex = bObjectOnly ? ~0u : graph.GetSampledImageViewDescriptorIndex(depthStencil),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_velocity")),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_velocity"_sid),
             .bObjectOnly = bObjectOnly ? 1u : 0u,
             .objectMotionIndex = bObjectOnly ? graph.GetSampledImageViewDescriptorIndex(OBJECT_MOTION) : ~0u,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_velocity_extract"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("motion_blur_velocity_extract"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (width + POST_PROCESS_MOTION_BLUR_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_X;
         uint32_t yDispatch = (height + POST_PROCESS_MOTION_BLUR_DISPATCH_Y - 1) / POST_PROCESS_MOTION_BLUR_DISPATCH_Y;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
-    velocity = SID("motion_blur_velocity");
+    velocity = "motion_blur_velocity"_sid;
 
     uint32_t blurTiledX = (width + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
     uint32_t blurTiledY = (height + POST_PROCESS_MOTION_BLUR_TILE_SIZE - 1) / POST_PROCESS_MOTION_BLUR_TILE_SIZE;
-    graph.CreateTexture(SID("motion_blur_tiled_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("motion_blur_tiled_neighbor_max"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
-    graph.CreateTexture(SID("motion_blur_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
-    graph.CreateBuffer(SID("motion_blur_dispatch_args"), 3 * sizeof(uint32_t), false);
-    graph.CreateBuffer(SID("motion_blur_tile_list"), blurTiledX * blurTiledY * sizeof(uint32_t), false);
+    graph.CreateTexture("motion_blur_tiled_max"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
+    graph.CreateTexture("motion_blur_tiled_neighbor_max"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, blurTiledX, blurTiledY, 1}, std::nullopt, true);
+    graph.CreateTexture("motion_blur_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    graph.CreateBuffer("motion_blur_dispatch_args"_sid, 3 * sizeof(uint32_t), false);
+    graph.CreateBuffer("motion_blur_tile_list"_sid, blurTiledX * blurTiledY * sizeof(uint32_t), false);
 
-    RenderPass& argsInitPass = graph.AddPass(SID("[Motion Blur] Args Init"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
-    argsInitPass.WriteTransferBuffer(SID("motion_blur_dispatch_args"));
+    RenderPass& argsInitPass = graph.AddPass("[Motion Blur] Args Init"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+    argsInitPass.WriteTransferBuffer("motion_blur_dispatch_args"_sid);
     argsInitPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const uint32_t init[3] = {0u, 1u, 1u};
-        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(SID("motion_blur_dispatch_args")), 0, sizeof(init), init);
+        vkCmdUpdateBuffer(cmd, graph.GetBufferHandle("motion_blur_dispatch_args"_sid), 0, sizeof(init), init);
     });
 
-    RenderPass& motionBlurTiledMaxPass = graph.AddPass(SID("[Motion Blur] Tiled Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    RenderPass& motionBlurTiledMaxPass = graph.AddPass("[Motion Blur] Tiled Max"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurTiledMaxPass.ReadSampledImage(velocity);
-    motionBlurTiledMaxPass.WriteStorageImage(SID("motion_blur_tiled_max"));
+    motionBlurTiledMaxPass.WriteStorageImage("motion_blur_tiled_max"_sid);
     motionBlurTiledMaxPass.Execute([width, height, blurTiledX, blurTiledY, pipelines, velocity, velocityScale, maxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurTileVelocityPushConstant pc{
             .velocityBufferSize = {width, height},
             .tileBufferSize = {blurTiledX, blurTiledY},
             .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
-            .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_tiled_max")),
+            .tileMaxIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_tiled_max"_sid),
             .velocityScale = velocityScale,
             .maxRadiusPx = maxRadiusPx,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_tile_max"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("motion_blur_tile_max"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, blurTiledX, blurTiledY, 1);
     });
 
-    RenderPass& motionBlurNeighborMax = graph.AddPass(SID("[Motion Blur] Neighbor Max"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-    motionBlurNeighborMax.ReadSampledImage(SID("motion_blur_tiled_max"));
-    motionBlurNeighborMax.WriteStorageImage(SID("motion_blur_tiled_neighbor_max"));
-    motionBlurNeighborMax.ReadWriteBuffer(SID("motion_blur_dispatch_args"));
-    motionBlurNeighborMax.ReadWriteBuffer(SID("motion_blur_tile_list"));
+    RenderPass& motionBlurNeighborMax = graph.AddPass("[Motion Blur] Neighbor Max"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    motionBlurNeighborMax.ReadSampledImage("motion_blur_tiled_max"_sid);
+    motionBlurNeighborMax.WriteStorageImage("motion_blur_tiled_neighbor_max"_sid);
+    motionBlurNeighborMax.ReadWriteBuffer("motion_blur_dispatch_args"_sid);
+    motionBlurNeighborMax.ReadWriteBuffer("motion_blur_tile_list"_sid);
     motionBlurNeighborMax.Execute([width, height, blurTiledX, blurTiledY, pipelines, dilationRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurNeighborMaxPushConstant pc{
             .tileBufferSize = {blurTiledX, blurTiledY},
-            .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_max")),
-            .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_tiled_neighbor_max")),
+            .tileMaxIndex = graph.GetSampledImageViewDescriptorIndex("motion_blur_tiled_max"_sid),
+            .neighborMaxIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_tiled_neighbor_max"_sid),
             .dilationRadius = dilationRadius,
-            .tileListBuffer = graph.GetBufferAddress(SID("motion_blur_tile_list")),
-            .indirectArgsBuffer = graph.GetBufferAddress(SID("motion_blur_dispatch_args")),
+            .tileListBuffer = graph.GetBufferAddress("motion_blur_tile_list"_sid),
+            .indirectArgsBuffer = graph.GetBufferAddress("motion_blur_dispatch_args"_sid),
             .velocityBufferSize = {width, height},
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_neighbor_max"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("motion_blur_neighbor_max"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (blurTiledX + POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X - 1) / POST_PROCESS_MOTION_BLUR_CONVOLUTION_DISPATCH_X;
@@ -527,9 +527,9 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     });
 
     // Static tiles keep this copy; the indirect reconstruction only touches listed tiles
-    RenderPass& prefillPass = graph.AddPass(SID("[Motion Blur] Output Prefill"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::PostProcessing);
+    RenderPass& prefillPass = graph.AddPass("[Motion Blur] Output Prefill"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::PostProcessing);
     prefillPass.ReadCopyImage(input);
-    prefillPass.WriteCopyImage(SID("motion_blur_output"));
+    prefillPass.WriteCopyImage("motion_blur_output"_sid);
     prefillPass.Execute([width, height, input](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkImageCopy2 copyRegion{};
         copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
@@ -543,40 +543,40 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
         copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
         copyInfo.srcImage = graph.GetImageHandle(input);
         copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        copyInfo.dstImage = graph.GetImageHandle(SID("motion_blur_output"));
+        copyInfo.dstImage = graph.GetImageHandle("motion_blur_output"_sid);
         copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &copyRegion;
         vkCmdCopyImage2(cmd, &copyInfo);
     });
 
-    RenderPass& motionBlurReconstructionPass = graph.AddPass(SID("[Motion Blur] Reconstruction"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    RenderPass& motionBlurReconstructionPass = graph.AddPass("[Motion Blur] Reconstruction"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     motionBlurReconstructionPass.ReadSampledImage(input);
     motionBlurReconstructionPass.ReadSampledImage(velocity);
-    motionBlurReconstructionPass.ReadSampledImage(SID("motion_blur_tiled_neighbor_max"));
-    motionBlurReconstructionPass.ReadIndirectBuffer(SID("motion_blur_dispatch_args"));
-    motionBlurReconstructionPass.ReadBuffer(SID("motion_blur_tile_list"));
-    motionBlurReconstructionPass.WriteStorageImage(SID("motion_blur_output"));
+    motionBlurReconstructionPass.ReadSampledImage("motion_blur_tiled_neighbor_max"_sid);
+    motionBlurReconstructionPass.ReadIndirectBuffer("motion_blur_dispatch_args"_sid);
+    motionBlurReconstructionPass.ReadBuffer("motion_blur_tile_list"_sid);
+    motionBlurReconstructionPass.WriteStorageImage("motion_blur_output"_sid);
     motionBlurReconstructionPass.Execute([width, height, input, pipelines, velocity, velocityScale, depthScale, maxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurReconstructionPushConstant pc{
-            .tileListBuffer = graph.GetBufferAddress(SID("motion_blur_tile_list")),
+            .tileListBuffer = graph.GetBufferAddress("motion_blur_tile_list"_sid),
             .srcBufferSize = {width, height},
             .sceneColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .velocityBufferIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
-            .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex(SID("motion_blur_tiled_neighbor_max")),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("motion_blur_output")),
+            .tileNeighborMaxIndex = graph.GetSampledImageViewDescriptorIndex("motion_blur_tiled_neighbor_max"_sid),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_output"_sid),
             .velocityScale = velocityScale,
             .depthScale = depthScale,
             .maxRadiusPx = maxRadiusPx,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("motion_blur_reconstruction"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("motion_blur_reconstruction"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("motion_blur_dispatch_args")), 0);
+        vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("motion_blur_dispatch_args"_sid), 0);
     });
 
-    return SID("motion_blur_output");
+    return "motion_blur_output"_sid;
 }
 
 StringID PPBloom(PostProcessContext& ctx, StringID input)
@@ -597,19 +597,19 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     const uint32_t halfWidth = std::max(1u, width / 2);
     const uint32_t halfHeight = std::max(1u, height / 2);
     const uint32_t numMips = BloomMipCount(width);
-    graph.CreateTexture(SID("bloom_chain"), TextureInfo{COLOR_ATTACHMENT_FORMAT, halfWidth, halfHeight, numMips}, std::nullopt, true);
+    graph.CreateTexture("bloom_chain"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, halfWidth, halfHeight, numMips}, std::nullopt, true);
 
-    RenderPass& thresholdPass = graph.AddPass(SID("[Bloom] Threshold"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    RenderPass& thresholdPass = graph.AddPass("[Bloom] Threshold"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     thresholdPass.ReadSampledImage(input);
-    if (bExposureEnabled) { thresholdPass.ReadBuffer(SID("luminance_buffer")); }
-    thresholdPass.ReadWriteImage(SID("bloom_chain"));
+    if (bExposureEnabled) { thresholdPass.ReadBuffer("luminance_buffer"_sid); }
+    thresholdPass.ReadWriteImage("bloom_chain"_sid);
     thresholdPass.Execute([width, height, halfWidth, halfHeight, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp, targetLuminance, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         BloomThresholdPushConstant pc{
             .outputExtent = {halfWidth, halfHeight},
             .inputExtent = {width, height},
             .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("bloom_chain"), 0),
-            .luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress(SID("luminance_buffer")) : 0,
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloom_chain"_sid, 0),
+            .luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress("luminance_buffer"_sid) : 0,
             .threshold = bloomThreshold,
             .softThreshold = bloomSoftThreshold,
             .clampValue = bloomClamp,
@@ -617,7 +617,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
             .bExposureEnabled = bExposureEnabled ? 1u : 0u,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("bloom_threshold"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("bloom_threshold"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (halfWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
@@ -633,17 +633,17 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
         Core::InlineString<32> passName = Core::InlineString<32>::Format("[Bloom] Downsample %u", i);
         RenderPass& downsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-        downsamplePass.ReadWriteImage(SID("bloom_chain"));
+        downsamplePass.ReadWriteImage("bloom_chain"_sid);
         downsamplePass.Execute([srcWidth, srcHeight, mipWidth, mipHeight, srcMip = i, dstMip = i + 1, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BloomDownsamplePushConstant pc{
                 .outputExtent = {mipWidth, mipHeight},
                 .inputExtent = {srcWidth, srcHeight},
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("bloom_chain"), dstMip),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("bloom_chain"_sid),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloom_chain"_sid, dstMip),
                 .srcMipLevel = srcMip,
             };
 
-            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("bloom_downsample"));
+            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("bloom_downsample"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (mipWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
@@ -660,19 +660,19 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
         Core::InlineString<32> passName = Core::InlineString<32>::Format("[Bloom] Upsample %d", i);
         RenderPass& upsamplePass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
-        upsamplePass.ReadWriteImage(SID("bloom_chain"));
+        upsamplePass.ReadWriteImage("bloom_chain"_sid);
         upsamplePass.Execute([mipWidth, mipHeight, lowerWidth, lowerHeight, dstMip = i, lowerMip = i + 1, pipelines, bloomRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BloomUpsamplePushConstant pc{
                 .outputExtent = {mipWidth, mipHeight},
                 .lowerExtent = {lowerWidth, lowerHeight},
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("bloom_chain"), dstMip),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex("bloom_chain"_sid),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloom_chain"_sid, dstMip),
                 .lowerMipLevel = static_cast<uint32_t>(lowerMip),
                 .higherMipLevel = static_cast<uint32_t>(dstMip),
                 .radius = bloomRadius,
             };
 
-            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("bloom_upsample"));
+            const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("bloom_upsample"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             uint32_t xDispatch = (mipWidth + POST_PROCESS_BLOOM_DISPATCH_X - 1) / POST_PROCESS_BLOOM_DISPATCH_X;
@@ -748,20 +748,20 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
                       (bBloomEnabled ? POST_PROCESS_FINALIZE_FLAG_BLOOM : 0u) |
                       (bGradingActive ? POST_PROCESS_FINALIZE_FLAG_GRADING : 0u);
 
-    graph.CreateTexture(SID("tonemap_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
-    RenderPass& finalizePass = graph.AddPass(SID("[Finalize] Tonemap + Grade + Lens"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    graph.CreateTexture("tonemap_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    RenderPass& finalizePass = graph.AddPass("[Finalize] Tonemap + Grade + Lens"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     finalizePass.ReadSampledImage(input);
-    if (bBloomEnabled) { finalizePass.ReadSampledImage(SID("bloom_chain")); }
-    if (bExposureEnabled) { finalizePass.ReadBuffer(SID("luminance_buffer")); }
-    finalizePass.WriteStorageImage(SID("tonemap_output"));
+    if (bBloomEnabled) { finalizePass.ReadSampledImage("bloom_chain"_sid); }
+    if (bExposureEnabled) { finalizePass.ReadBuffer("luminance_buffer"_sid); }
+    finalizePass.WriteStorageImage("tonemap_output"_sid);
     finalizePass.Execute([constants, input, pipelines, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         PostProcessFinalizePushConstant pc = constants;
         pc.srcImageIndex = graph.GetSampledImageViewDescriptorIndex(input);
-        pc.dstImageIndex = graph.GetStorageImageViewDescriptorIndex(SID("tonemap_output"));
-        pc.bloomImageIndex = bBloomEnabled ? graph.GetSampledImageViewDescriptorIndex(SID("bloom_chain")) : 0u;
-        pc.luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress(SID("luminance_buffer")) : 0;
+        pc.dstImageIndex = graph.GetStorageImageViewDescriptorIndex("tonemap_output"_sid);
+        pc.bloomImageIndex = bBloomEnabled ? graph.GetSampledImageViewDescriptorIndex("bloom_chain"_sid) : 0u;
+        pc.luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress("luminance_buffer"_sid) : 0;
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("post_process_finalize"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("post_process_finalize"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (pc.outputExtent.x + POST_PROCESS_FINALIZE_DISPATCH_X - 1) / POST_PROCESS_FINALIZE_DISPATCH_X;
@@ -769,7 +769,7 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    return SID("tonemap_output");
+    return "tonemap_output"_sid;
 }
 
 StringID PPCompose(PostProcessContext& ctx, StringID input)
@@ -789,15 +789,15 @@ StringID PPCompose(PostProcessContext& ctx, StringID input)
     const float grainResponse = std::clamp(config.grainResponse, 0.0f, 1.0f);
     const uint32_t frameIndex = static_cast<uint32_t>(ctx.frameNumber);
 
-    graph.CreateTexture(SID("post_process_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
-    RenderPass& composePass = graph.AddPass(SID("[Compose] Sharpen + Grain + Dither"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    graph.CreateTexture("post_process_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    RenderPass& composePass = graph.AddPass("[Compose] Sharpen + Grain + Dither"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     composePass.ReadSampledImage(input);
-    composePass.WriteStorageImage(SID("post_process_output"));
+    composePass.WriteStorageImage("post_process_output"_sid);
     composePass.Execute([width, height, input, pipelines, sharpenStrength, grainStrength, grainSize, grainResponse, ditherStrength, frameIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         PostProcessComposePushConstant pc{
             .outputExtent = {width, height},
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(input),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("post_process_output")),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex("post_process_output"_sid),
             .sharpenStrength = sharpenStrength,
             .grainStrength = grainStrength,
             .grainSize = grainSize,
@@ -806,7 +806,7 @@ StringID PPCompose(PostProcessContext& ctx, StringID input)
             .frameIndex = frameIndex,
         };
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("post_process_compose"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("post_process_compose"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (width + POST_PROCESS_COMPOSE_DISPATCH_X - 1) / POST_PROCESS_COMPOSE_DISPATCH_X;
@@ -814,7 +814,7 @@ StringID PPCompose(PostProcessContext& ctx, StringID input)
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    return SID("post_process_output");
+    return "post_process_output"_sid;
 }
 
 StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Array<uint32_t, 2> extent, StringID input)
@@ -834,16 +834,16 @@ StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core
     constants.aspect = static_cast<float>(width) / static_cast<float>(std::max(height, 1u));
     constants.mode = static_cast<uint32_t>(fade.mode);
 
-    graph.CreateTexture(SID("screen_fade_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
-    RenderPass& fadePass = graph.AddPass(SID("[Screen Fade] Overlay"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
+    graph.CreateTexture("screen_fade_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
+    RenderPass& fadePass = graph.AddPass("[Screen Fade] Overlay"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     fadePass.ReadSampledImage(input);
-    fadePass.WriteStorageImage(SID("screen_fade_output"));
+    fadePass.WriteStorageImage("screen_fade_output"_sid);
     fadePass.Execute([constants, input, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ScreenFadePushConstant pc = constants;
         pc.inputIndex = graph.GetSampledImageViewDescriptorIndex(input);
-        pc.outputIndex = graph.GetStorageImageViewDescriptorIndex(SID("screen_fade_output"));
+        pc.outputIndex = graph.GetStorageImageViewDescriptorIndex("screen_fade_output"_sid);
 
-        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry(SID("screen_fade"));
+        const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("screen_fade"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         uint32_t xDispatch = (pc.outputExtent.x + SCREEN_FADE_DISPATCH_X - 1) / SCREEN_FADE_DISPATCH_X;
@@ -851,6 +851,6 @@ StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
-    return SID("screen_fade_output");
+    return "screen_fade_output"_sid;
 }
 } // Render

@@ -206,7 +206,7 @@ void CreateBRDFLookupTable(
         VkDeviceSize bindingOffset{0};
         vkCmdBindDescriptorBuffersEXT(graphicsCmd, bindings.Size(), bindings.Data());
 
-        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot(SID("ibl_brdf_lut"));
+        const Render::PipelineEntry pipelineEntry = pipelineManager->GetPipelineEntrySnapshot("ibl_brdf_lut"_sid);
         if (pipelineEntry.pipeline == VK_NULL_HANDLE) {
             LOG_ERROR(Asset, "\"ibl_brdf_lut\" pipeline not ready");
             return;

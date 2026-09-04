@@ -17,29 +17,29 @@ namespace Render
 {
 class PipelineManager;
 
-inline const StringID GI_GATHER_SH_R = SID("gi_gather_sh_r");
-inline const StringID GI_GATHER_SH_G = SID("gi_gather_sh_g");
-inline const StringID GI_GATHER_SH_B = SID("gi_gather_sh_b");
-inline const StringID GI_GATHER_DATA = SID("gi_gather_data");
-inline const StringID GI_GATHER_GUIDE = SID("gi_gather_guide");
-inline const StringID GI_GATHER_RAW_SH_R = SID("gi_gather_raw_sh_r");
-inline const StringID GI_GATHER_RAW_SH_G = SID("gi_gather_raw_sh_g");
-inline const StringID GI_GATHER_RAW_SH_B = SID("gi_gather_raw_sh_b");
-inline const StringID GI_GATHER_TMP_SH_R = SID("gi_gather_tmp_sh_r");
-inline const StringID GI_GATHER_TMP_SH_G = SID("gi_gather_tmp_sh_g");
-inline const StringID GI_GATHER_TMP_SH_B = SID("gi_gather_tmp_sh_b");
-inline const StringID GI_GATHER_SKY_VIS = SID("gi_gather_sky_vis");
-inline const StringID GI_GATHER_VARIANCE_GUIDE = SID("gi_gather_variance_guide");
-inline const StringID GI_GATHER_RAW_SKY_VIS = SID("gi_gather_raw_sky_vis");
-inline const StringID GI_GATHER_TMP_SKY_VIS = SID("gi_gather_tmp_sky_vis");
-inline const StringID GI_GATHER_RESOLVED = SID("gi_gather_resolved");
-inline const StringID GI_GATHER_MOMENTS = SID("gi_gather_moments");
-inline const StringID GI_MOTION_TILED_MAX = SID("gi_motion_tiled_max");
-inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = SID("gi_motion_tiled_neighbor_max");
-inline const StringID OBJECT_MOTION = SID("object_motion");
-inline const StringID GI_DECONSTRUCT_TARGET = SID("gi_deconstruct_target");
-inline const StringID GI_GATHER_DEBUG_TARGET = SID("gi_gather_debug_target");
-inline const StringID GI_UPSCALE_PATH_DEBUG = SID("gi_upscale_path_debug");
+inline const StringID GI_GATHER_SH_R = "gi_gather_sh_r"_sid;
+inline const StringID GI_GATHER_SH_G = "gi_gather_sh_g"_sid;
+inline const StringID GI_GATHER_SH_B = "gi_gather_sh_b"_sid;
+inline const StringID GI_GATHER_DATA = "gi_gather_data"_sid;
+inline const StringID GI_GATHER_GUIDE = "gi_gather_guide"_sid;
+inline const StringID GI_GATHER_RAW_SH_R = "gi_gather_raw_sh_r"_sid;
+inline const StringID GI_GATHER_RAW_SH_G = "gi_gather_raw_sh_g"_sid;
+inline const StringID GI_GATHER_RAW_SH_B = "gi_gather_raw_sh_b"_sid;
+inline const StringID GI_GATHER_TMP_SH_R = "gi_gather_tmp_sh_r"_sid;
+inline const StringID GI_GATHER_TMP_SH_G = "gi_gather_tmp_sh_g"_sid;
+inline const StringID GI_GATHER_TMP_SH_B = "gi_gather_tmp_sh_b"_sid;
+inline const StringID GI_GATHER_SKY_VIS = "gi_gather_sky_vis"_sid;
+inline const StringID GI_GATHER_VARIANCE_GUIDE = "gi_gather_variance_guide"_sid;
+inline const StringID GI_GATHER_RAW_SKY_VIS = "gi_gather_raw_sky_vis"_sid;
+inline const StringID GI_GATHER_TMP_SKY_VIS = "gi_gather_tmp_sky_vis"_sid;
+inline const StringID GI_GATHER_RESOLVED = "gi_gather_resolved"_sid;
+inline const StringID GI_GATHER_MOMENTS = "gi_gather_moments"_sid;
+inline const StringID GI_MOTION_TILED_MAX = "gi_motion_tiled_max"_sid;
+inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = "gi_motion_tiled_neighbor_max"_sid;
+inline const StringID OBJECT_MOTION = "object_motion"_sid;
+inline const StringID GI_DECONSTRUCT_TARGET = "gi_deconstruct_target"_sid;
+inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;
+inline const StringID GI_UPSCALE_PATH_DEBUG = "gi_upscale_path_debug"_sid;
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;
 

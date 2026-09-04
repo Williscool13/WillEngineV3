@@ -1,4 +1,24 @@
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(STRING_LITERAL_TABLE ${CMAKE_BINARY_DIR}/generated/string_id_table.gen.cpp)
+
+file(GLOB_RECURSE STRING_LITERAL_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_SOURCE_DIR}/src/*.h
+)
+
+# The generator rewrites its output only when the literal set actually changes, so editing an
+# unrelated source reruns the scan but does not recompile the table.
+add_custom_command(
+        OUTPUT ${STRING_LITERAL_TABLE}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/gen_string_literals.py ${STRING_LITERAL_TABLE}
+        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_string_literals.py ${STRING_LITERAL_SOURCES}
+        COMMENT "Generating StringID literal table"
+        VERBATIM
+)
+
 add_library(core STATIC
+        ${STRING_LITERAL_TABLE}
         memory/free_list.cpp
         memory/free_list.h
         memory/handle_allocator.cpp
@@ -29,6 +49,7 @@ add_library(core STATIC
         memory/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
+        string_id_table.h
         hash/xxh3.h
         memory/arena.h
         memory/arena.cpp

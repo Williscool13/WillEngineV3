@@ -17,7 +17,7 @@ void DBG_InternString(uint64_t hash, const char* str);
 const char* DBG_ResolveStringId(uint64_t hash);
 
 // String interning uses function pointers instead of direct calls to cross the
-// engine/game DLL boundary. Set these during game DLL load before using SID().
+// engine/game DLL boundary. Set these during game DLL load before using _sid.
 extern void (*gInternStringFn)(uint64_t, const char*);
 extern const char* (*gResolveStringIdFn)(uint64_t);
 
@@ -51,12 +51,13 @@ struct StringID
 
 inline const StringID StringID::Invalid{};
 
+constexpr size_t StringIdLength(const char* str)
+{
+    size_t n = 0;
+    while (str[n] != '\0') { ++n; }
+    return n;
+}
 
-/**
- * Only works with string literals, use carefully
- * @param str
- */
-#define SID(str) StringID(str, sizeof(str) - 1)
 
 #ifdef WDEBUG
 inline StringID operator""_sid(const char* str, size_t len) {
@@ -79,23 +80,5 @@ struct hash<StringID>
     }
 };
 }
-
-inline StringID MakeConcatStringId(const char* a, size_t aLen,
-                                   const char* b, size_t bLen)
-{
-    char buf[256];
-    aLen = aLen < 255       ? aLen : 255;
-    bLen = bLen < 255 - aLen ? bLen : 255 - aLen;
-    memcpy(buf, a, aLen);
-    memcpy(buf + aLen, b, bLen);
-    buf[aLen + bLen] = '\0';
-    return {buf, aLen + bLen};
-}
-
-inline StringID MakeConcatStringId(const Core::InlineString<>& a, const char* b, size_t bLen)
-{
-    return MakeConcatStringId(a.c_str(), a.Size(), b, bLen);
-}
-#define SID_CONCAT(str, lit) MakeConcatStringId(str, lit, sizeof(lit) - 1)
 
 #endif // WILL_ENGINE_STRING_ID_H

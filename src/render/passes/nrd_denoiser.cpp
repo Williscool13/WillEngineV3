@@ -27,13 +27,13 @@ namespace Render
 {
 namespace
 {
-const StringID NRD_IN_MV_SID = SID("nrd_in_mv");
-const StringID NRD_IN_NORMAL_ROUGHNESS_SID = SID("nrd_in_normal_roughness");
-const StringID NRD_IN_VIEWZ_SID = SID("nrd_in_viewz");
-const StringID NRD_IN_DIFF_SID = SID("nrd_in_diff_radiance_hitdist");
-const StringID NRD_IN_SPEC_SID = SID("nrd_in_spec_radiance_hitdist");
-const StringID NRD_OUT_DIFF_SID = SID("nrd_out_diff_radiance_hitdist");
-const StringID NRD_OUT_SPEC_SID = SID("nrd_out_spec_radiance_hitdist");
+const StringID NRD_IN_MV_SID = "nrd_in_mv"_sid;
+const StringID NRD_IN_NORMAL_ROUGHNESS_SID = "nrd_in_normal_roughness"_sid;
+const StringID NRD_IN_VIEWZ_SID = "nrd_in_viewz"_sid;
+const StringID NRD_IN_DIFF_SID = "nrd_in_diff_radiance_hitdist"_sid;
+const StringID NRD_IN_SPEC_SID = "nrd_in_spec_radiance_hitdist"_sid;
+const StringID NRD_OUT_DIFF_SID = "nrd_out_diff_radiance_hitdist"_sid;
+const StringID NRD_OUT_SPEC_SID = "nrd_out_spec_radiance_hitdist"_sid;
 
 constexpr VkFormat NRD_IO_FORMATS[] = {
     VK_FORMAT_R16G16B16A16_SFLOAT, // IN_MV
@@ -629,7 +629,7 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
 void NrdDenoiser::AddDispatchPass(RenderGraph& graph, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex)
 {
     const bool bReblur = activeBackend == NrdBackend::Reblur;
-    auto& pass = graph.AddPass(bReblur ? SID("[NRD] ReBLUR Dispatch") : SID("[NRD] RELAX Dispatch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+    auto& pass = graph.AddPass(bReblur ? "[NRD] ReBLUR Dispatch"_sid : "[NRD] RELAX Dispatch"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
     if (bReblur) {
         // REBLUR's temporal stabilization writes modified motion back into IN_MV
         pass.WriteStorageImage(NRD_IN_MV_SID);
@@ -865,7 +865,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
     const StringID specInput = targets.intermediateTwo;
 
     {
-        auto& pass = graph.AddPass(SID("[NRD] Prep Guides"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+        auto& pass = graph.AddPass("[NRD] Prep Guides"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
@@ -883,7 +883,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
                 .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_VIEWZ_SID),
                 .rectSize = {width, height},
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("nrd_prep_guides"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_prep_guides"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -892,7 +892,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
 
     if (backend == NrdBackend::Reblur) {
         const glm::vec4 hitDistParams{reblurParams.hitDistA, reblurParams.hitDistB, reblurParams.hitDistC, 0.0f};
-        auto& pass = graph.AddPass(SID("[NRD] Prep Radiance"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+        auto& pass = graph.AddPass("[NRD] Prep Radiance"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(gbufferOne);
@@ -910,14 +910,14 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("nrd_reblur_radiance_pack"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_reblur_radiance_pack"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
         });
     }
     else {
-        auto& pass = graph.AddPass(SID("[NRD] Prep Radiance"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+        auto& pass = graph.AddPass("[NRD] Prep Radiance"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.WriteStorageImage(NRD_IN_DIFF_SID);
@@ -930,7 +930,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
             };
-            const PipelineEntry* p = pipelineManager->GetPipelineEntry(SID("nrd_radiance_copy"));
+            const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_radiance_copy"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
             vkCmdPushConstants(cmd, p->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);
@@ -948,9 +948,9 @@ void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Co
     const StringID srcDiff = NRD_OUT_DIFF_SID;
     const StringID srcSpec = NRD_OUT_SPEC_SID;
     // REBLUR outputs YCoCg + normalized hitT; remodulate only consumes .rgb, so the writeback just converts color
-    const StringID copyPipeline = backend == NrdBackend::Reblur ? SID("nrd_reblur_output_copy") : SID("nrd_radiance_copy");
+    const StringID copyPipeline = backend == NrdBackend::Reblur ? "nrd_reblur_output_copy"_sid : "nrd_radiance_copy"_sid;
 
-    auto& pass = graph.AddPass(SID("[NRD] Output Writeback"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
+    auto& pass = graph.AddPass("[NRD] Output Writeback"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
     pass.ReadSampledImage(srcDiff);
     pass.ReadSampledImage(srcSpec);
     pass.WriteStorageImage(diffOutput);

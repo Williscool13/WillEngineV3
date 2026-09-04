@@ -28,7 +28,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
     graph.CreateBuffer(RADIANCE_CACHE_DESCRIPTORS, RADIANCE_CACHE_DESCRIPTORS_BYTES, false);
     graph.CreateBuffer(RADIANCE_CACHE_STATS, sizeof(RadianceCacheStats), false);
 
-    RenderPass& clearPass = graph.AddPass(SID("Radiance Cache Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
+    RenderPass& clearPass = graph.AddPass("Radiance Cache Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
     clearPass.AsyncCompute();
     clearPass.WriteTransferBuffer(RADIANCE_CACHE_ENTRIES);
     clearPass.WriteTransferBuffer(RADIANCE_CACHE_ACTIVE);
@@ -55,7 +55,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
         const StringID prevEntries = graph.ResourceVersionID(RADIANCE_CACHE_ENTRIES, 1);
         const StringID prevKeys = graph.ResourceVersionID(RADIANCE_CACHE_KEYS, 1);
         const StringID prevCells = graph.ResourceVersionID(RADIANCE_CACHE_CELLS, 1);
-        RenderPass& carryPass = graph.AddPass(SID("Radiance Cache Carry Forward"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
+        RenderPass& carryPass = graph.AddPass("Radiance Cache Carry Forward"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
         carryPass.AsyncCompute();
         carryPass.ReadBuffer(prevEntries);
         carryPass.ReadBuffer(prevKeys);
@@ -66,7 +66,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_CELLS);
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_STATS);
         carryPass.Execute([pipelineManager, frameNumber, cameraPos, bFreeze, bTouchValid, touchEntries, prevEntries, prevKeys, prevCells](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("radiance_cache_carry_forward"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("radiance_cache_carry_forward"_sid);
             if (!pipelineEntry) {
                 return;
             }
@@ -92,7 +92,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
         });
     }
 
-    RenderPass& touchClear = graph.AddPass(SID("Radiance Cache Touch Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
+    RenderPass& touchClear = graph.AddPass("Radiance Cache Touch Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
     touchClear.AsyncCompute();
     touchClear.WriteTransferBuffer(RADIANCE_CACHE_TOUCH_ENTRIES);
     touchClear.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -100,7 +100,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
     });
 
     graph.CreateBuffer(RADIANCE_CACHE_BUFFERS_CURRENT, sizeof(RadianceCacheBuffers), false);
-    RenderPass& bundlePass = graph.AddPass(SID("Radiance Cache Buffers Upload"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
+    RenderPass& bundlePass = graph.AddPass("Radiance Cache Buffers Upload"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
     bundlePass.AsyncCompute();
     bundlePass.WriteTransferBuffer(RADIANCE_CACHE_BUFFERS_CURRENT);
     bundlePass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -135,14 +135,14 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
         return;
     }
     const bool bFeedback = bDDGIFeedbackValid && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
+    const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
 
-    RenderPass& indirectPass = graph.AddPass(SID("Radiance Cache Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
+    RenderPass& indirectPass = graph.AddPass("Radiance Cache Build Indirect"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
     indirectPass.AsyncCompute();
     indirectPass.ReadWriteBuffer(RADIANCE_CACHE_ACTIVE_COUNT);
     indirectPass.WriteBuffer(RADIANCE_CACHE_SHADE_ARGS);
     indirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("radiance_cache_build_indirect"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("radiance_cache_build_indirect"_sid);
         if (!pipelineEntry) {
             return;
         }
@@ -156,7 +156,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
         vkCmdDispatch(cmd, 1, 1, 1);
     });
 
-    RenderPass& pass = graph.AddPass(SID("Radiance Cache Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
+    RenderPass& pass = graph.AddPass("Radiance Cache Shade"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::RadianceCache);
     pass.AsyncCompute();
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(RADIANCE_CACHE_ACTIVE_LIST);
@@ -175,16 +175,16 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
     pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
+    if (graph.HasBuffer("world_grid_probe_grid"_sid)) { pass.ReadBuffer("world_grid_probe_grid"_sid); }
     if (bWorldGrid) {
-        pass.ReadBuffer(SID("world_grid_light_grid"));
-        pass.ReadBuffer(SID("world_grid_index_list"));
+        pass.ReadBuffer("world_grid_light_grid"_sid);
+        pass.ReadBuffer("world_grid_index_list"_sid);
     }
     if (bFeedback) {
         AddDDGISampleDependencies(graph, pass);
     }
     pass.Execute([pipelineManager, sceneIndex, bFeedback, bWorldGrid, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap, reflectionProbeCount, bReflectionProbeBruteForce](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("radiance_cache_shade"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("radiance_cache_shade"_sid);
         if (!pipelineEntry) {
             return;
         }
@@ -214,10 +214,10 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
             .bounceIntensity = bounceIntensity,
             .accumCap = accumCap,
             .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-            .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+            .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
             .stats = GPU_STATS_ENABLED ? graph.GetBufferAddress(RADIANCE_CACHE_STATS) : 0,
-            .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
-            .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
+            .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress("world_grid_light_grid"_sid) : 0,
+            .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
             .reflectionProbeCount = reflectionProbeCount,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -233,14 +233,14 @@ void SetupRadianceCacheDebug(RenderGraph& graph, PipelineManager* pipelineManage
         return;
     }
 
-    RenderPass& pass = graph.AddPass(SID("Radiance Cache Debug"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
+    RenderPass& pass = graph.AddPass("Radiance Cache Debug"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
     pass.ReadWriteBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
     pass.WriteBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER);
     pass.ReadBuffer(RADIANCE_CACHE_ENTRIES);
     pass.ReadBuffer(RADIANCE_CACHE_KEYS);
     pass.ReadBuffer(RADIANCE_CACHE_CELLS);
     pass.Execute([pipelineManager, debugExposure, normalBucket](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("gpu_debug_radiance_cache"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gpu_debug_radiance_cache"_sid);
         if (!pipelineEntry) {
             return;
         }

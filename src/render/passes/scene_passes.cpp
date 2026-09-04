@@ -22,11 +22,11 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           uint32_t sceneIndex)
 {
     ZoneScoped;
-    const PipelineEntry* skyboxEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
+    const PipelineEntry* skyboxEntry = pipelineManager->GetPipelineEntry("environment_skybox"_sid);
     if (!skyboxEntry || skyboxEntry->pipeline == VK_NULL_HANDLE) { return; }
 
     RenderPass& skyboxPass = graph.AddPass(
-        SID("Skybox"), VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, RenderCategory::Scene);
+        "Skybox"_sid, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, RenderCategory::Scene);
     skyboxPass.ReadBuffer(SCENE_DATA_BUFFER);
     skyboxPass.WriteColorAttachment(targets.colorOutput);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
@@ -45,14 +45,14 @@ void SetupSkyboxRendering(RenderGraph& graph,
             vkCmdBeginRendering(cmd, &renderInfo);
 
             EnvironmentSkyboxPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SID("scene_data")),
+                .sceneData = graph.GetBufferAddress("scene_data"_sid),
                 .sceneDataIndex = sceneIndex,
                 .cubemapIndex = skyboxIndex,
                 .skyboxLOD = skyboxLOD,
                 .intensity = skyIntensity,
             };
 
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("environment_skybox"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("environment_skybox"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
 
@@ -72,10 +72,10 @@ void SetupTextForwardPass(RenderGraph& graph,
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
     if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER) || !graph.HasBuffer(FONT_CURVE_BUFFER)) { return; }
 
-    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("text_default"));
+    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("text_default"_sid);
     if (!pipelineEntry) { return; }
 
-    RenderPass& textPass = graph.AddPass(SID("Text Forward"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::Scene);
+    RenderPass& textPass = graph.AddPass("Text Forward"_sid, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::Scene);
     textPass.ReadBuffer(SCENE_DATA_BUFFER);
     textPass.ReadBuffer(TEXT_GLYPH_QUAD_BUFFER);
     textPass.ReadBuffer(TEXT_INSTANCE_BUFFER);
@@ -143,7 +143,7 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
         return;
     }
 
-    auto& spritesPass = graph.AddPass(SID("Sprites"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::RenderCategory::Scene);
+    auto& spritesPass = graph.AddPass("Sprites"_sid, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::RenderCategory::Scene);
     spritesPass.ReadBuffer(SCENE_DATA_BUFFER);
     spritesPass.ReadBuffer(SPRITE_BUFFER);
     spritesPass.ReadWriteDepthAttachment(targets.depthStencil);
@@ -162,7 +162,7 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
         VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("sprites"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("sprites"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
 
         const VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(SCENE_DATA_BUFFER);

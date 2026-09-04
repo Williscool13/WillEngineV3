@@ -1294,10 +1294,10 @@ void WillEngine::EditorImgui()
 
         ImGui::SeparatorText("Procedural Textures:");
         if (ImGui::Button("Load Yellow Texture")) {
-            assetManager->LoadProceduralTexture(SID("yellow_texture"), 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
+            assetManager->LoadProceduralTexture("yellow_texture"_sid, 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
         }
         if (ImGui::Button("Load Domain Warp")) {
-            assetManager->LoadProceduralTexture(SID("domain_warp"), 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
+            assetManager->LoadProceduralTexture("domain_warp"_sid, 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
         }
 
         ImGui::Separator();

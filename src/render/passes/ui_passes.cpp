@@ -22,7 +22,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 
     const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER) && graph.HasBuffer(FONT_CURVE_BUFFER);
 
-    RenderPass& uiPass = graph.AddPass(SID("UI Render"), VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::UI);
+    RenderPass& uiPass = graph.AddPass("UI Render"_sid, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::UI);
     if (bHasText) {
         uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER);
         uiPass.ReadBuffer(FONT_CURVE_BUFFER);
@@ -44,10 +44,10 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         const VkDeviceAddress glyphQuadsAddr = bHasText ? graph.GetBufferAddress(UI_GLYPH_QUAD_BUFFER) : 0;
         const VkDeviceAddress fontCurveAddr = bHasText ? graph.GetBufferAddress(FONT_CURVE_BUFFER) : 0;
 
-        const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry(SID("ui_rect_default"));
-        const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry(SID("ui_image_default"));
-        const PipelineEntry* textPipeline = pipelineManager->GetPipelineEntry(SID("ui_text_default"));
-        const PipelineEntry* borderPipeline = pipelineManager->GetPipelineEntry(SID("ui_border_default"));
+        const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry("ui_rect_default"_sid);
+        const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry("ui_image_default"_sid);
+        const PipelineEntry* textPipeline = pipelineManager->GetPipelineEntry("ui_text_default"_sid);
+        const PipelineEntry* borderPipeline = pipelineManager->GetPipelineEntry("ui_border_default"_sid);
 
         Core::UICommandType boundPipeline = Core::UICommandType::ScissorPop; // sentinel: nothing bound
         glm::vec4 overlayColor{1.0f, 1.0f, 1.0f, 1.0f};
@@ -182,11 +182,11 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
 void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint64_t selectedStableId)
 {
     ZoneScoped;
-    RenderPass& outlinePass = graph.AddPass(SID("Selection Outline"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::UI);
+    RenderPass& outlinePass = graph.AddPass("Selection Outline"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::UI);
     outlinePass.ReadStorageImage(targets.stableId);
     outlinePass.WriteStorageImage(targets.colorOutput);
     outlinePass.Execute([&, pipelineManager, renderExtent, selectedStableId, stableId = targets.stableId, outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("selection_outline"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("selection_outline"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         SelectionOutlinePushConstant pc{

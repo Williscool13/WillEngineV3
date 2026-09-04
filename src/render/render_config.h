@@ -35,45 +35,45 @@ inline constexpr int32_t RDG_MAX_STORAGE_UINT2 = 64;
 inline constexpr int32_t RDG_MAX_STORAGE_UINT = 64;
 inline constexpr int32_t RDG_MAX_TLAS = 64;
 
-inline const StringID SCENE_DATA_BUFFER = SID("scene_data");
-inline const StringID LIGHT_DATA_BUFFER = SID("light_data");
-inline const StringID EMISSIVE_TRI_WORK_BUFFER = SID("emissive_tri_work");
-inline const StringID REFLECTION_PROBE_BUFFER = SID("reflection_probes");
-inline const StringID GEOMETRY_PRIMITIVE_BUFFER = SID("primitive_buffer");
-inline const StringID GEOMETRY_MODEL_BUFFER = SID("model_buffer");
-inline const StringID GEOMETRY_INSTANCE_BUFFER = SID("main_instance_buffer");
-inline const StringID GEOMETRY_VERTEX_POSITION_BUFFER = SID("vertex_position_buffer");
-inline const StringID GEOMETRY_VERTEX_ATTRIBUTE_BUFFER = SID("vertex_attribute_buffer");
-inline const StringID GEOMETRY_INDEX_BUFFER = SID("index_buffer");
-inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = SID("meshlet_vertex_buffer");
-inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = SID("meshlet_triangle_buffer");
-inline const StringID GEOMETRY_MESHLET_BUFFER = SID("meshlet_buffer");
-inline const StringID GEOMETRY_MATERIAL_BUFFER = SID("material_buffer");
+inline const StringID SCENE_DATA_BUFFER = "scene_data"_sid;
+inline const StringID LIGHT_DATA_BUFFER = "light_data"_sid;
+inline const StringID EMISSIVE_TRI_WORK_BUFFER = "emissive_tri_work"_sid;
+inline const StringID REFLECTION_PROBE_BUFFER = "reflection_probes"_sid;
+inline const StringID GEOMETRY_PRIMITIVE_BUFFER = "primitive_buffer"_sid;
+inline const StringID GEOMETRY_MODEL_BUFFER = "model_buffer"_sid;
+inline const StringID GEOMETRY_INSTANCE_BUFFER = "main_instance_buffer"_sid;
+inline const StringID GEOMETRY_VERTEX_POSITION_BUFFER = "vertex_position_buffer"_sid;
+inline const StringID GEOMETRY_VERTEX_ATTRIBUTE_BUFFER = "vertex_attribute_buffer"_sid;
+inline const StringID GEOMETRY_INDEX_BUFFER = "index_buffer"_sid;
+inline const StringID GEOMETRY_MESHLET_VERTEX_BUFFER = "meshlet_vertex_buffer"_sid;
+inline const StringID GEOMETRY_MESHLET_TRIANGLE_BUFFER = "meshlet_triangle_buffer"_sid;
+inline const StringID GEOMETRY_MESHLET_BUFFER = "meshlet_buffer"_sid;
+inline const StringID GEOMETRY_MATERIAL_BUFFER = "material_buffer"_sid;
 
-inline const StringID SPRITE_BUFFER = SID("sprite_buffer");
+inline const StringID SPRITE_BUFFER = "sprite_buffer"_sid;
 
-inline const StringID TEXT_GLYPH_QUAD_BUFFER = SID("text_glyph_quad_buffer");
-inline const StringID UI_GLYPH_QUAD_BUFFER = SID("ui_glyph_quad_buffer");
-inline const StringID TEXT_INSTANCE_BUFFER = SID("text_instance_buffer");
-inline const StringID TEXT_MATERIAL_BUFFER = SID("text_material_buffer");
-inline const StringID FONT_CURVE_BUFFER = SID("font_curve_buffer");
+inline const StringID TEXT_GLYPH_QUAD_BUFFER = "text_glyph_quad_buffer"_sid;
+inline const StringID UI_GLYPH_QUAD_BUFFER = "ui_glyph_quad_buffer"_sid;
+inline const StringID TEXT_INSTANCE_BUFFER = "text_instance_buffer"_sid;
+inline const StringID TEXT_MATERIAL_BUFFER = "text_material_buffer"_sid;
+inline const StringID FONT_CURVE_BUFFER = "font_curve_buffer"_sid;
 
-inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = SID("shading_bucketing_buffer");
-inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = SID("lighting_bucketing_buffer");
+inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = "shading_bucketing_buffer"_sid;
+inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = "lighting_bucketing_buffer"_sid;
 
-inline const StringID RT_TLAS_INSTANCE_BUFFER = SID("rt_tlas_instance_buffer");
-inline const StringID RT_TLAS_BUFFER = SID("rt_tlas_buffer");
-inline const StringID RT_TLAS_SCRATCH_BUFFER = SID("rt_tlas_scratch_buffer");
+inline const StringID RT_TLAS_INSTANCE_BUFFER = "rt_tlas_instance_buffer"_sid;
+inline const StringID RT_TLAS_BUFFER = "rt_tlas_buffer"_sid;
+inline const StringID RT_TLAS_SCRATCH_BUFFER = "rt_tlas_scratch_buffer"_sid;
 
-inline const StringID GPU_DEBUG_ARGS_BUFFER = SID("gpu_debug_args");
-inline const StringID GPU_DEBUG_SEGMENT_BUFFER = SID("gpu_debug_segments");
+inline const StringID GPU_DEBUG_ARGS_BUFFER = "gpu_debug_args"_sid;
+inline const StringID GPU_DEBUG_SEGMENT_BUFFER = "gpu_debug_segments"_sid;
 inline constexpr uint32_t GPU_DEBUG_MAX_SEGMENTS = 262144;
-inline const StringID GPU_DEBUG_SPHERE_ARGS_BUFFER = SID("gpu_debug_sphere_args");
-inline const StringID GPU_DEBUG_SPHERE_INSTANCE_BUFFER = SID("gpu_debug_sphere_instances");
+inline const StringID GPU_DEBUG_SPHERE_ARGS_BUFFER = "gpu_debug_sphere_args"_sid;
+inline const StringID GPU_DEBUG_SPHERE_INSTANCE_BUFFER = "gpu_debug_sphere_instances"_sid;
 inline constexpr uint32_t GPU_DEBUG_MAX_SPHERES = 65536;
 inline constexpr uint32_t GPU_DEBUG_SPHERE_VERTEX_COUNT = 16 * 32 * 6;
-inline const StringID GPU_DEBUG_CUBE_ARGS_BUFFER = SID("gpu_debug_cube_args");
-inline const StringID GPU_DEBUG_CUBE_INSTANCE_BUFFER = SID("gpu_debug_cube_instances");
+inline const StringID GPU_DEBUG_CUBE_ARGS_BUFFER = "gpu_debug_cube_args"_sid;
+inline const StringID GPU_DEBUG_CUBE_INSTANCE_BUFFER = "gpu_debug_cube_instances"_sid;
 inline constexpr uint32_t GPU_DEBUG_MAX_CUBES = 131072;
 inline constexpr uint32_t GPU_DEBUG_CUBE_VERTEX_COUNT = 6 * 6;
 

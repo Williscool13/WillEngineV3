@@ -255,7 +255,7 @@ bool TextureGenerateSlot::LoadImageAndGenerate(VkCommandBuffer cmd, const Core::
     if (mipmapped && mipLevels > 1) {
         ZoneScopedN("GenerateMipmaps");
 
-        const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot(SID("procedural_resize"));
+        const Render::PipelineEntry resizeEntry = pipelineManager->GetPipelineEntrySnapshot("procedural_resize"_sid);
         if (resizeEntry.pipeline == VK_NULL_HANDLE) {
             LOG_ERROR(Asset, "procedural_resize pipeline not ready");
             return false;

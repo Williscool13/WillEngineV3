@@ -103,7 +103,7 @@ void ProceduralTextureLoadSlot::GenerateTask::ExecuteRange(enki::TaskSetPartitio
     const VkFormat format = tex->format;
     assert(mipCount <= Render::ProceduralTextureGenerateResources::MAX_MIPS_PER_SLOT);
 
-    const Render::PipelineEntry downsampleEntry = loadSlot->pipelineManager->GetPipelineEntrySnapshot(SID("procedural_mip_downsample"));
+    const Render::PipelineEntry downsampleEntry = loadSlot->pipelineManager->GetPipelineEntrySnapshot("procedural_mip_downsample"_sid);
     if (mipCount > 1 && downsampleEntry.pipeline == VK_NULL_HANDLE) {
         SPDLOG_ERROR("ProceduralTextureLoadSlot: procedural_mip_downsample pipeline not ready");
         loadSlot->computeSubmit.Reset(loadSlot->context);

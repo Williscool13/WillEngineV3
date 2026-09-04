@@ -13,18 +13,18 @@ namespace Render
 class PipelineManager;
 
 // Entries/keys/cells are versioned depth 1: carry forward rebuilds this frame's table from Version(name, 1).
-inline const StringID RADIANCE_CACHE_ENTRIES = SID("radiance_cache_entries");
-inline const StringID RADIANCE_CACHE_KEYS = SID("radiance_cache_keys");
-inline const StringID RADIANCE_CACHE_CELLS = SID("radiance_cache_cells");
-inline const StringID RADIANCE_CACHE_ACTIVE = SID("radiance_cache_active");
-inline const StringID RADIANCE_CACHE_ACTIVE_LIST = SID("radiance_cache_active_list");
-inline const StringID RADIANCE_CACHE_ACTIVE_COUNT = SID("radiance_cache_active_count");
-inline const StringID RADIANCE_CACHE_SHADE_ARGS = SID("radiance_cache_shade_args");
-inline const StringID RADIANCE_CACHE_DESCRIPTORS = SID("radiance_cache_descriptors");
-inline const StringID RADIANCE_CACHE_BUFFERS_CURRENT = SID("radiance_cache_buffers_current");
-inline const StringID RADIANCE_CACHE_STATS = SID("radiance_cache_stats");
-inline const StringID RADIANCE_CACHE_TOUCH_ENTRIES = SID("radiance_cache_touch_entries");
-inline const StringID RADIANCE_CACHE_TOUCH_KEYS = SID("radiance_cache_touch_keys");
+inline const StringID RADIANCE_CACHE_ENTRIES = "radiance_cache_entries"_sid;
+inline const StringID RADIANCE_CACHE_KEYS = "radiance_cache_keys"_sid;
+inline const StringID RADIANCE_CACHE_CELLS = "radiance_cache_cells"_sid;
+inline const StringID RADIANCE_CACHE_ACTIVE = "radiance_cache_active"_sid;
+inline const StringID RADIANCE_CACHE_ACTIVE_LIST = "radiance_cache_active_list"_sid;
+inline const StringID RADIANCE_CACHE_ACTIVE_COUNT = "radiance_cache_active_count"_sid;
+inline const StringID RADIANCE_CACHE_SHADE_ARGS = "radiance_cache_shade_args"_sid;
+inline const StringID RADIANCE_CACHE_DESCRIPTORS = "radiance_cache_descriptors"_sid;
+inline const StringID RADIANCE_CACHE_BUFFERS_CURRENT = "radiance_cache_buffers_current"_sid;
+inline const StringID RADIANCE_CACHE_STATS = "radiance_cache_stats"_sid;
+inline const StringID RADIANCE_CACHE_TOUCH_ENTRIES = "radiance_cache_touch_entries"_sid;
+inline const StringID RADIANCE_CACHE_TOUCH_KEYS = "radiance_cache_touch_keys"_sid;
 
 inline constexpr VkDeviceSize RADIANCE_CACHE_ENTRIES_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint32_t);
 inline constexpr VkDeviceSize RADIANCE_CACHE_KEYS_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint2);

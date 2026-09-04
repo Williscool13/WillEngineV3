@@ -33,7 +33,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
 
     graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent[0] * renderExtent[1], true);
 
-    RenderPass& pass = graph.AddPass(SID("[Reflection] Trace"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
+    RenderPass& pass = graph.AddPass("[Reflection] Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
@@ -54,7 +54,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
                 .roughnessMax = reflectionRoughnessMax,
                 .mirrorRoughnessMax = mirrorRoughnessMax,
             };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_trace"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("reflection_trace"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
@@ -80,7 +80,7 @@ void SetupSSRTracePass(RenderGraph& graph,
 
     graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent[0] * renderExtent[1], true);
 
-    RenderPass& pass = graph.AddPass(SID("[Reflection] SSR Trace"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
+    RenderPass& pass = graph.AddPass("[Reflection] SSR Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
@@ -103,7 +103,7 @@ void SetupSSRTracePass(RenderGraph& graph,
                 .activeCheckerboardField = activeCheckerboardField,
                 .pad0 = 0u,
             };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ssr_trace"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ssr_trace"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
@@ -131,12 +131,12 @@ void SetupReflectionShadePass(RenderGraph& graph,
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
+    const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
     const bool bSSRSource = reflectionConfig.bScreenSpaceTrace;
-    const StringID litHistory = graph.ResourceVersionID(SID("lit_color_preoverlay"), 1);
+    const StringID litHistory = graph.ResourceVersionID("lit_color_preoverlay"_sid, 1);
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
     const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
-    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion(SID("lit_color_preoverlay"), 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
+    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion("lit_color_preoverlay"_sid, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
@@ -145,7 +145,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
         graph.CreateVersionedTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}});
     }
 
-    RenderPass& pass = graph.AddPass(SID("[Reflection] Shade"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
+    RenderPass& pass = graph.AddPass("[Reflection] Shade"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -157,15 +157,15 @@ void SetupReflectionShadePass(RenderGraph& graph,
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     pass.ReadBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
+    if (graph.HasBuffer("world_grid_probe_grid"_sid)) { pass.ReadBuffer("world_grid_probe_grid"_sid); }
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthCopy);
     if (bHasTLAS) { pass.ReadTLASBuffer(RT_TLAS_BUFFER); }
     if (bDDGI) { AddDDGISampleDependencies(graph, pass); }
     if (bWorldGrid) {
-        pass.ReadBuffer(SID("world_grid_light_grid"));
-        pass.ReadBuffer(SID("world_grid_index_list"));
+        pass.ReadBuffer("world_grid_light_grid"_sid);
+        pass.ReadBuffer("world_grid_index_list"_sid);
     }
     if (bScreenSpace) {
         pass.ReadSampledImage(litHistory);
@@ -198,8 +198,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
                 .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
-                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
-                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
+                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress("world_grid_light_grid"_sid) : 0,
+                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -219,7 +219,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-                .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+                .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .sunMode = sunMode,
                 .maxRayIntensity = reflectionConfig.maxRayIntensity,
                 .iblIntensity = iblIntensity,
@@ -229,7 +229,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .hitTextureLod = reflectionConfig.hitTextureLod,
                 .hitDeltaIndex = bHitDelta ? graph.GetStorageImageViewDescriptorIndex(REFLECTION_HIT_DELTA_TARGET) : ~0u,
             };
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("reflection_shade"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("reflection_shade"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);

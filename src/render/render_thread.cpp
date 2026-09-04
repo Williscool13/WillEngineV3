@@ -535,18 +535,18 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                            {resourceManager->megaVertexAttributeBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(GEOMETRY_INDEX_BUFFER, resourceManager->megaIndexBuffer.handle, resourceManager->megaIndexBuffer.address,
                                            {resourceManager->megaIndexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(SID("meshlet_vertex_buffer"), resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
+        renderGraph->ImportBufferNoBarrier("meshlet_vertex_buffer"_sid, resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
                                            {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(SID("meshlet_triangle_buffer"), resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
+        renderGraph->ImportBufferNoBarrier("meshlet_triangle_buffer"_sid, resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
                                            {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(SID("meshlet_buffer"), resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
+        renderGraph->ImportBufferNoBarrier("meshlet_buffer"_sid, resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
                                            {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(SID("primitive_buffer"), resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
+        renderGraph->ImportBufferNoBarrier("primitive_buffer"_sid, resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
                                            {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
         renderGraph->ImportBufferNoBarrier(FONT_CURVE_BUFFER, resourceManager->megaFontCurveBuffer.handle, resourceManager->megaFontCurveBuffer.address,
                                            {resourceManager->megaFontCurveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
 #if WILL_EDITOR
-        renderGraph->ImportBuffer(SID("debug_readback_buffer"),
+        renderGraph->ImportBuffer("debug_readback_buffer"_sid,
                                   resourceManager->debugReadback.GetHandle(),
                                   resourceManager->debugReadback.GetAddress(),
                                   {resourceManager->debugReadback.GetSize(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT},
@@ -554,7 +554,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 #endif
     }
 
-    renderGraph->ImportTexture(SID("dummy_black_rg32"),
+    renderGraph->ImportTexture("dummy_black_rg32"_sid,
                                resourceManager->blackDummyRG32Image.handle,
                                resourceManager->blackDummyRG32ImageView.handle,
                                TextureInfo{GBUFFER_STABLE_ID_FORMAT, 1, 1, 1},
@@ -564,11 +564,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                                VK_IMAGE_LAYOUT_GENERAL);
 
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read on frame N+3)
-    renderGraph->CreateBuffer(SID("readback_buffer"), sizeof(ReadbackStruct), false);
-    RenderPass& clearReadbackBuffer = renderGraph->AddPass(SID("Clear Readback Buffer"), VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Untagged);
-    clearReadbackBuffer.WriteTransferBuffer(SID("readback_buffer"));
+    renderGraph->CreateBuffer("readback_buffer"_sid, sizeof(ReadbackStruct), false);
+    RenderPass& clearReadbackBuffer = renderGraph->AddPass("Clear Readback Buffer"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Untagged);
+    clearReadbackBuffer.WriteTransferBuffer("readback_buffer"_sid);
     clearReadbackBuffer.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle(SID("readback_buffer")), 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle("readback_buffer"_sid), 0, VK_WHOLE_SIZE, 0);
     });
 
 
@@ -610,10 +610,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
     const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
     if (bSnapshotLitColor) {
-        renderGraph->CreateVersionedTexture(SID("lit_color_preoverlay"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     }
 
-    renderGraph->CreateVersionedBuffer(SID("luminance_buffer"), sizeof(float), 0, renderGraph->ResourceHasVersion(SID("luminance_buffer"), 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
@@ -670,13 +670,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
                 SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
-                if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer(SID("readback_buffer"))) {
-                    RenderPass& wcStatsReadback = renderGraph->AddPass(SID("Radiance Cache Stats Readback"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
+                if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer("readback_buffer"_sid)) {
+                    RenderPass& wcStatsReadback = renderGraph->AddPass("Radiance Cache Stats Readback"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
                     wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_STATS);
                     wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_ACTIVE_COUNT);
-                    wcStatsReadback.WriteTransferBuffer(SID("readback_buffer"));
+                    wcStatsReadback.WriteTransferBuffer("readback_buffer"_sid);
                     wcStatsReadback.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                        const VkBuffer dst = graph.GetBufferHandle(SID("readback_buffer"));
+                        const VkBuffer dst = graph.GetBufferHandle("readback_buffer"_sid);
                         const VkBufferCopy statsCopy{0, offsetof(ReadbackStruct, wcOccupied), sizeof(RadianceCacheStats)};
                         vkCmdCopyBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_STATS), dst, 1, &statsCopy);
                         const VkBufferCopy shadedCopy{0, offsetof(ReadbackStruct, wcShaded), sizeof(uint32_t)};
@@ -693,12 +693,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             // Copy depth to R32_SFLOAT for all downstream compute passes.
             {
-                auto& copyPass = renderGraph->AddPass(SID("Depth Copy"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
+                auto& copyPass = renderGraph->AddPass("Depth Copy"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
                 copyPass.ReadSampledImage(targets.depthStencil);
                 copyPass.WriteStorageImage(targets.depthCopy);
                 copyPass.Execute([depth = targets.depthStencil, depthCopy = targets.depthCopy,
                         w = renderExtent[0], h = renderExtent[1], &pipelineManager = pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("depth_copy"));
+                        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("depth_copy"_sid);
                         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
                         DepthCopyPushConstant pc{
                             .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
@@ -887,12 +887,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         }*/
 
         if (bSnapshotLitColor) {
-            auto& snapshotPass = renderGraph->AddPass(SID("Lit Color Snapshot"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
+            auto& snapshotPass = renderGraph->AddPass("Lit Color Snapshot"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
             snapshotPass.ReadSampledImage(targets.colorOutput);
-            snapshotPass.WriteStorageImage(SID("lit_color_preoverlay"));
-            snapshotPass.Execute([src = targets.colorOutput, dst = SID("lit_color_preoverlay"),
+            snapshotPass.WriteStorageImage("lit_color_preoverlay"_sid);
+            snapshotPass.Execute([src = targets.colorOutput, dst = "lit_color_preoverlay"_sid,
                     w = renderExtent[0], h = renderExtent[1], &pipelineManager = pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                    const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("color_copy"));
+                    const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("color_copy"_sid);
                     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
                     ColorCopyPushConstant pc{
                         .srcIndex = graph.GetSampledImageViewDescriptorIndex(src),
@@ -933,10 +933,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                 targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
                 break;
             case Core::AntiAliasingMode::TAA:
-                targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, SID("taa_main"));
+                targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, "taa_main"_sid);
                 break;
             case Core::AntiAliasingMode::NaiveTAA:
-                targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, SID("taa_naive"));
+                targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, "taa_naive"_sid);
                 break;
             case Core::AntiAliasingMode::DonutTAA:
                 targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets);
@@ -953,11 +953,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             uint32_t captureSquare = frameBuffer.probeCaptureCropSize > 0 ? std::min(frameBuffer.probeCaptureCropSize, minSquare) : minSquare;
             if (captureSquare >= 2) {
                 screenCapture->PrepareProbeCaptureResources(captureSquare);
-                renderGraph->CreateTexture(SID("probe_capture_intermediate"), TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, captureSquare, captureSquare, 1}, CLEAR_COLOR_EMPTY, true);
+                renderGraph->CreateTexture("probe_capture_intermediate"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, captureSquare, captureSquare, 1}, CLEAR_COLOR_EMPTY, true);
 
-                auto& probeCaptureBlitPass = renderGraph->AddPass(SID("Probe Capture Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
+                auto& probeCaptureBlitPass = renderGraph->AddPass("Probe Capture Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
                 probeCaptureBlitPass.ReadBlitImage(targets.colorOutput);
-                probeCaptureBlitPass.WriteBlitImage(SID("probe_capture_intermediate"));
+                probeCaptureBlitPass.WriteBlitImage("probe_capture_intermediate"_sid);
                 probeCaptureBlitPass.Execute([&, colorOutput = targets.colorOutput, s = captureSquare, w = postAaExtent[0], h = postAaExtent[1]](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
                     VkImageBlit2 blitRegion{};
                     blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
@@ -972,7 +972,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
                     blitInfo.srcImage = renderGraph->GetImageHandle(colorOutput);
                     blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-                    blitInfo.dstImage = renderGraph->GetImageHandle(SID("probe_capture_intermediate"));
+                    blitInfo.dstImage = renderGraph->GetImageHandle("probe_capture_intermediate"_sid);
                     blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
                     blitInfo.regionCount = 1;
                     blitInfo.pRegions = &blitRegion;
@@ -980,8 +980,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     vkCmdBlitImage2(_cmd, &blitInfo);
                 });
 
-                auto& probeCaptureCopyPass = renderGraph->AddPass(SID("Probe Capture Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-                probeCaptureCopyPass.ReadCopyImage(SID("probe_capture_intermediate"));
+                auto& probeCaptureCopyPass = renderGraph->AddPass("Probe Capture Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
+                probeCaptureCopyPass.ReadCopyImage("probe_capture_intermediate"_sid);
                 probeCaptureCopyPass.Execute([&, s = captureSquare](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
                     VkBufferImageCopy2 copyRegion{};
                     copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
@@ -990,7 +990,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
                     VkCopyImageToBufferInfo2 copyInfo{};
                     copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
-                    copyInfo.srcImage = renderGraph->GetImageHandle(SID("probe_capture_intermediate"));
+                    copyInfo.srcImage = renderGraph->GetImageHandle("probe_capture_intermediate"_sid);
                     copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                     copyInfo.dstBuffer = screenCapture->probeCaptureReadbackBuffer.handle;
                     copyInfo.regionCount = 1;
@@ -1024,7 +1024,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
         } else {
             debugCursorReadback.litTexture = StringID{};
         }
-        resourceManager->debugReadback.ScheduleCopies(*renderGraph, SID("debug_readback_buffer"));
+        resourceManager->debugReadback.ScheduleCopies(*renderGraph, "debug_readback_buffer"_sid);
 
         if (!viewFamily.debugResourceName.IsEmpty()) {
             StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
@@ -1035,26 +1035,26 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             switch (viewFamily.debugTransformationType) {
                 case DebugTransformationType::ReservoirLightIdx:
                 case DebugTransformationType::ReservoirGenerateW:
-                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_base"));
+                    bDebugReservoirReady = renderGraph->HasBuffer("restir_reservoir_base"_sid);
                     break;
                 case DebugTransformationType::ReservoirTemporalLightIdx:
                 case DebugTransformationType::ReservoirTemporalW:
-                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_temporal"));
+                    bDebugReservoirReady = renderGraph->HasBuffer("restir_reservoir_temporal"_sid);
                     break;
                 case DebugTransformationType::ReservoirSpatialLightIdx:
                 case DebugTransformationType::ReservoirSpatialW:
-                    bDebugReservoirReady = renderGraph->HasBuffer(SID("restir_reservoir_spatial"));
+                    bDebugReservoirReady = renderGraph->HasBuffer("restir_reservoir_spatial"_sid);
                     break;
                 case DebugTransformationType::ReservoirHistoryLightIdx:
                 case DebugTransformationType::ReservoirHistoryW:
-                    bDebugReservoirReady = renderGraph->ResourceHasVersion(SID("restir_reservoir_history"), 1);
+                    bDebugReservoirReady = renderGraph->ResourceHasVersion("restir_reservoir_history"_sid, 1);
                     break;
                 default:
                     break;
             }
 
             if (bDebugBuffersReady && bDebugReservoirReady && renderGraph->HasTexture(debugTargetName) && renderGraph->HasTexture(targets.depthCopy)) {
-                auto& debugVisPass = renderGraph->AddPass(SID("Debug Visualize"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
+                auto& debugVisPass = renderGraph->AddPass("Debug Visualize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
                 debugVisPass.ReadSampledImage(debugTargetName);
                 debugVisPass.ReadSampledImage(targets.depthCopy);
                 const StringID debugVisBuffers[] = {
@@ -1068,12 +1068,12 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                     GEOMETRY_INSTANCE_BUFFER,
                     GEOMETRY_MODEL_BUFFER,
                     GEOMETRY_MATERIAL_BUFFER,
-                    SID("restir_reservoir_base"),
-                    SID("restir_reservoir_temporal"),
-                    SID("restir_reservoir_spatial"),
-                    renderGraph->ResourceVersionID(SID("restir_reservoir_history"), 1),
+                    "restir_reservoir_base"_sid,
+                    "restir_reservoir_temporal"_sid,
+                    "restir_reservoir_spatial"_sid,
+                    renderGraph->ResourceVersionID("restir_reservoir_history"_sid, 1),
                     REFLECTION_PROBE_BUFFER,
-                    SID("world_grid_probe_grid"),
+                    "world_grid_probe_grid"_sid,
                     LIGHT_DATA_BUFFER,
                 };
                 for (const StringID bufferId : debugVisBuffers) {
@@ -1143,10 +1143,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .instanceBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                         .modelBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MODEL_BUFFER),
                         .materialBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                        .reservoirBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_base")),
-                        .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_temporal")),
-                        .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(SID("restir_reservoir_spatial")),
-                        .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(renderGraph->ResourceVersionID(SID("restir_reservoir_history"), 1)),
+                        .reservoirBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_base"_sid),
+                        .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_temporal"_sid),
+                        .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_spatial"_sid),
+                        .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(renderGraph->ResourceVersionID("restir_reservoir_history"_sid, 1)),
                         .srcExtent = {renderExtent[0], renderExtent[1]},
                         .dstExtent = {postAaExtent[0], postAaExtent[1]},
                         .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
@@ -1160,10 +1160,10 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
                         .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? renderGraph->TryGetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                         .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                         .dofPackedRadii = glm::packHalf2x16(glm::vec2(viewFamily.postProcessConfig.dofNearRadiusPx, viewFamily.postProcessConfig.dofFarRadiusPx)),
-                        .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress(SID("world_grid_probe_grid")),
+                        .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress("world_grid_probe_grid"_sid),
                         .lightData = renderGraph->TryGetBufferAddress(LIGHT_DATA_BUFFER),
                     };
-                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_visualize"));
+                    const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize"_sid);
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
                     vkCmdPushConstants(_cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     uint32_t xDispatch = (postAaExtent[0] + 15) / 16;
@@ -1175,13 +1175,13 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 #endif
     }
 
-    renderGraph->ImportTexture(SID("swapchain_image"), currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
+    renderGraph->ImportTexture("swapchain_image"_sid, currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
                                swapchain->usages,
                                VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
 
-    auto& blitPass = renderGraph->AddPass(SID("Blit To Swapchain"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
+    auto& blitPass = renderGraph->AddPass("Blit To Swapchain"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
     blitPass.ReadBlitImage(targets.colorOutput);
-    blitPass.WriteBlitImage(SID("swapchain_image"));
+    blitPass.WriteBlitImage("swapchain_image"_sid);
     blitPass.Execute([&, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkImage drawImage = renderGraph->GetImageHandle(colorOutput);
 
@@ -1213,15 +1213,15 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     });
 
     if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass(SID("Imgui Draw"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::UI);
-        imguiEditorPass.WriteColorAttachment(SID("swapchain_image"));
+        auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw"_sid, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::UI);
+        imguiEditorPass.WriteColorAttachment("swapchain_image"_sid);
         imguiEditorPass.Execute([&, frameIndex](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
             // Try to end before imgui draws so they're not included in statistics
             pipelineStatsQuery.End(_cmd, frameIndex);
 
-            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle(SID("swapchain_image")), nullptr,
+            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("swapchain_image"_sid), nullptr,
                                                                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions(SID("swapchain_image"));
+            const ResourceDimensions& dims = renderGraph->GetImageDimensions("swapchain_image"_sid);
             const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
             vkCmdBeginRendering(_cmd, &renderInfo);
             ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, _cmd);
@@ -1232,11 +1232,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
     if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
         screenCapture->PrepareScreenshotResources(postAaExtent[0], postAaExtent[1]);
-        renderGraph->CreateTexture(SID("screenshot_intermediate"), TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+        renderGraph->CreateTexture("screenshot_intermediate"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
-        auto& screenshotBlitPass = renderGraph->AddPass(SID("Screenshot Blit"), VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
+        auto& screenshotBlitPass = renderGraph->AddPass("Screenshot Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
         screenshotBlitPass.ReadBlitImage(targets.colorOutput);
-        screenshotBlitPass.WriteBlitImage(SID("screenshot_intermediate"));
+        screenshotBlitPass.WriteBlitImage("screenshot_intermediate"_sid);
         screenshotBlitPass.Execute([&, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
             VkImageBlit2 blitRegion{};
             blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
@@ -1251,7 +1251,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
             blitInfo.srcImage = renderGraph->GetImageHandle(colorOutput);
             blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            blitInfo.dstImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
+            blitInfo.dstImage = renderGraph->GetImageHandle("screenshot_intermediate"_sid);
             blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             blitInfo.regionCount = 1;
             blitInfo.pRegions = &blitRegion;
@@ -1259,8 +1259,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
             vkCmdBlitImage2(_cmd, &blitInfo);
         });
 
-        auto& screenshotCopyPass = renderGraph->AddPass(SID("Screenshot Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        screenshotCopyPass.ReadCopyImage(SID("screenshot_intermediate"));
+        auto& screenshotCopyPass = renderGraph->AddPass("Screenshot Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
+        screenshotCopyPass.ReadCopyImage("screenshot_intermediate"_sid);
         screenshotCopyPass.Execute([&](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferImageCopy2 copyRegion{};
             copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
@@ -1269,7 +1269,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             VkCopyImageToBufferInfo2 copyInfo{};
             copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
-            copyInfo.srcImage = renderGraph->GetImageHandle(SID("screenshot_intermediate"));
+            copyInfo.srcImage = renderGraph->GetImageHandle("screenshot_intermediate"_sid);
             copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             copyInfo.dstBuffer = screenCapture->screenshotReadbackBuffer.handle;
             copyInfo.regionCount = 1;
@@ -1307,9 +1307,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     const uint32_t scaledMouseY = std::min(renderExtent[1] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * renderExtent[1] / static_cast<float>(outputExtent[1]))));
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent[0] &&
         frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1]) {
-        RenderPass& copyStableId = renderGraph->AddPass(SID("Copy Stable ID"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        copyStableId.ReadCopyImage(SID("stable_id"));
-        copyStableId.WriteTransferBuffer(SID("readback_buffer"));
+        RenderPass& copyStableId = renderGraph->AddPass("Copy Stable ID"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
+        copyStableId.ReadCopyImage("stable_id"_sid);
+        copyStableId.WriteTransferBuffer("readback_buffer"_sid);
         copyStableId.Execute([&, mouseX = scaledMouseX, mouseY = scaledMouseY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferImageCopy region{};
             region.bufferOffset = offsetof(ReadbackStruct, selectedStableId);
@@ -1324,9 +1324,9 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
             vkCmdCopyImageToBuffer(
                 cmd,
-                renderGraph->GetImageHandle(SID("stable_id")),
+                renderGraph->GetImageHandle("stable_id"_sid),
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                renderGraph->GetBufferHandle(SID("readback_buffer")),
+                renderGraph->GetBufferHandle("readback_buffer"_sid),
                 1,
                 &region
             );
@@ -1334,8 +1334,8 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     }
 #endif
 
-    RenderPass& readbackMeshletCount = renderGraph->AddPass(SID("[Critical] Readback Copy"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-    readbackMeshletCount.ReadTransferBuffer(SID("readback_buffer"));
+    RenderPass& readbackMeshletCount = renderGraph->AddPass("[Critical] Readback Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
+    readbackMeshletCount.ReadTransferBuffer("readback_buffer"_sid);
     readbackMeshletCount.Execute([&](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkBufferCopy copy;
         copy.srcOffset = 0;
@@ -1344,7 +1344,7 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 
         vkCmdCopyBuffer(
             cmd,
-            renderGraph->GetBufferHandle(SID("readback_buffer")),
+            renderGraph->GetBufferHandle("readback_buffer"_sid),
             renderGraph->GetReadback(),
             1,
             &copy
@@ -1369,11 +1369,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     } {
         ZoneScopedN("RenderGraphExecute");
         renderGraph->Execute(asyncCmd, cmd);
-        renderGraph->PrepareSwapchain(cmd, SID("swapchain_image"));
+        renderGraph->PrepareSwapchain(cmd, "swapchain_image"_sid);
     }
 
 #if WILL_EDITOR
-    resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState(SID("debug_readback_buffer")));
+    resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState("debug_readback_buffer"_sid));
 #endif
     return {SUCCESS, swapchainImageIndex};
 }
@@ -1450,7 +1450,7 @@ void RenderThread::RegisterDebugReadbacks()
         [this](RenderGraph& graph, StringID dst, size_t dstOffset) {
             const StringID lit = debugCursorReadback.litTexture;
             if (lit == StringID{} || !graph.HasTexture(lit)) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Cursor Lit"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            RenderPass& pass = graph.AddPass("[Debug] Readback Cursor Lit"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
             pass.ReadCopyImage(lit);
             pass.WriteTransferBuffer(dst);
             pass.Execute([this, lit, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -1476,7 +1476,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Shade Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Shade Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            RenderPass& pass = graph.AddPass("[Debug] Readback Shade Dispatch"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
             pass.ReadTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -1521,7 +1521,7 @@ void RenderThread::RegisterDebugReadbacks()
         "Light Dispatch Parameters",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
             if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Light Dispatch"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            RenderPass& pass = graph.AddPass("[Debug] Readback Light Dispatch"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
             pass.ReadTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -1565,13 +1565,13 @@ void RenderThread::RegisterDebugReadbacks()
     resourceManager->debugReadback.Register<InstanceMeshletOffsets>(
         "Instance Meshlet Offsets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SID("instance_meshlet_offsets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Instance Meshlet Offsets"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(SID("instance_meshlet_offsets"));
+            if (!graph.HasBuffer("instance_meshlet_offsets"_sid)) { return; }
+            RenderPass& pass = graph.AddPass("[Debug] Readback Instance Meshlet Offsets"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            pass.ReadTransferBuffer("instance_meshlet_offsets"_sid);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(InstanceMeshletOffsets)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("instance_meshlet_offsets")), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("instance_meshlet_offsets"_sid), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const InstanceMeshletOffsets& d) {
@@ -1604,13 +1604,13 @@ void RenderThread::RegisterDebugReadbacks()
     resourceManager->debugReadback.Register<InstancingMeshletDispatchIndirect>(
         "Meshlet Dispatch Args",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SID("meshlet_count_dispatch_args"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Meshlet Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(SID("meshlet_count_dispatch_args"));
+            if (!graph.HasBuffer("meshlet_count_dispatch_args"_sid)) { return; }
+            RenderPass& pass = graph.AddPass("[Debug] Readback Meshlet Dispatch Args"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            pass.ReadTransferBuffer("meshlet_count_dispatch_args"_sid);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(InstancingMeshletDispatchIndirect)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("meshlet_count_dispatch_args")), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("meshlet_count_dispatch_args"_sid), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const InstancingMeshletDispatchIndirect& d) {
@@ -1622,13 +1622,13 @@ void RenderThread::RegisterDebugReadbacks()
     resourceManager->debugReadback.Register<IntermediateMeshlets>(
         "Intermediate Meshlets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SID("intermediate_meshlets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Intermediate Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(SID("intermediate_meshlets"));
+            if (!graph.HasBuffer("intermediate_meshlets"_sid)) { return; }
+            RenderPass& pass = graph.AddPass("[Debug] Readback Intermediate Meshlets"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            pass.ReadTransferBuffer("intermediate_meshlets"_sid);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(IntermediateMeshlets)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("intermediate_meshlets")), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("intermediate_meshlets"_sid), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const IntermediateMeshlets& d) {
@@ -1664,13 +1664,13 @@ void RenderThread::RegisterDebugReadbacks()
     resourceManager->debugReadback.Register<VisibleMeshlets>(
         "Visible Meshlets",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SID("visible_meshlets"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Visible Meshlets"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(SID("visible_meshlets"));
+            if (!graph.HasBuffer("visible_meshlets"_sid)) { return; }
+            RenderPass& pass = graph.AddPass("[Debug] Readback Visible Meshlets"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            pass.ReadTransferBuffer("visible_meshlets"_sid);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(VisibleMeshlets)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("visible_meshlets")), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("visible_meshlets"_sid), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const VisibleMeshlets& d) {
@@ -1701,13 +1701,13 @@ void RenderThread::RegisterDebugReadbacks()
     resourceManager->debugReadback.Register<InstancingCompactedMeshletDispatchIndirect>(
         "Compacted Dispatch Args",
         [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SID("compacted_meshlet_dispatch_args"))) { return; }
-            RenderPass& pass = graph.AddPass(SID("[Debug] Readback Compacted Dispatch Args"), VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(SID("compacted_meshlet_dispatch_args"));
+            if (!graph.HasBuffer("compacted_meshlet_dispatch_args"_sid)) { return; }
+            RenderPass& pass = graph.AddPass("[Debug] Readback Compacted Dispatch Args"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
+            pass.ReadTransferBuffer("compacted_meshlet_dispatch_args"_sid);
             pass.WriteTransferBuffer(dst);
             pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(InstancingCompactedMeshletDispatchIndirect)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SID("compacted_meshlet_dispatch_args")), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("compacted_meshlet_dispatch_args"_sid), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const InstancingCompactedMeshletDispatchIndirect& d) {
@@ -1917,7 +1917,7 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Re
 /*void RenderThread::SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets,
                                         const RenderTargets& portal) const
 {
-    RenderPass& portalCompositePass = graph.AddPass(SID("Portal Composite"), VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::Scene);
+    RenderPass& portalCompositePass = graph.AddPass("Portal Composite"_sid, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::Scene);
     portalCompositePass.ReadSampledImage(portalTargets.outputColor);
     portalCompositePass.ReadSampledImage(portalTargets.gbufferTwo);
     portalCompositePass.ReadSampledImage(portalTargets.depthStencil);
@@ -1945,7 +1945,7 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Re
             .portalDepthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(portalTargets.depthStencil),
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("portal_composite"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("portal_composite"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
         vkCmdSetStencilReference(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, 1);
@@ -2005,7 +2005,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     limits.highestDebugSegmentCount = std::max(limits.highestDebugSegmentCount, NextPowerOfTwo(totalSegments));
 
-    auto* segments = static_cast<DebugLineSegment*>(graph.OpenHostBuffer(SID("debug_segment_buffer"), limits.highestDebugSegmentCount * sizeof(DebugLineSegment)));
+    auto* segments = static_cast<DebugLineSegment*>(graph.OpenHostBuffer("debug_segment_buffer"_sid, limits.highestDebugSegmentCount * sizeof(DebugLineSegment)));
 
     uint32_t segmentOffset = 0;
 
@@ -2190,14 +2190,14 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     const uint32_t totalLineSegments = segmentOffset;
 
-    RenderPass& debugDrawPass = graph.AddPass(SID("Debug Draw"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::Debug);
+    RenderPass& debugDrawPass = graph.AddPass("Debug Draw"_sid, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::Debug);
     debugDrawPass.WriteColorAttachment(targetImage);
     bool bHasDepth = graph.HasTexture(depthTarget);
     if (bHasDepth) {
         debugDrawPass.ReadWriteDepthAttachment(depthTarget);
     }
     debugDrawPass.ReadBuffer(SCENE_DATA_BUFFER);
-    debugDrawPass.ReadBuffer(SID("debug_segment_buffer"));
+    debugDrawPass.ReadBuffer("debug_segment_buffer"_sid);
     debugDrawPass.Execute([&, width = renderExtent[0], height = renderExtent[1], totalLineSegments, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -2218,12 +2218,12 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
         DebugDrawPushConstant pushConstants{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .segmentBuffer = graph.GetBufferAddress(SID("debug_segment_buffer")),
+            .segmentBuffer = graph.GetBufferAddress("debug_segment_buffer"_sid),
             .sceneDataIndex = 0,
             .totalLineSegments = totalLineSegments,
         };
 
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("debug_render"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_render"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(DebugDrawPushConstant), &pushConstants);
 

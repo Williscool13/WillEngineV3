@@ -53,29 +53,29 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const bool bShadowVis = bAntilag;
 
     const bool bReGIRProposal = restirParams.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
-    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
+    const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
 
     // Temporal-gradient confidence runs at 1/GRAD_FACTOR of the half-res ReSTIR grid (must match GRAD_FACTOR in the confidence shaders).
     const uint32_t GRAD_FACTOR = 3u;
     const Core::Array<uint32_t, 2> gradientExtent = {(renderExtent[0] + GRAD_FACTOR - 1u) / GRAD_FACTOR, (renderExtent[1] + GRAD_FACTOR - 1u) / GRAD_FACTOR};
 
     // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
-    graph.CreateBuffer(SID("restir_lights_vs"), MAX_LIGHTS * sizeof(LightVSData), false);
+    graph.CreateBuffer("restir_lights_vs"_sid, MAX_LIGHTS * sizeof(LightVSData), false);
 
     const uint32_t liveLightCount = viewFamily.analyticLightCount + viewFamily.triLightCount;
 
-    RenderPass& transformPass = graph.AddPass(SID("[ReSTIR DI] Transform Lights"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+    RenderPass& transformPass = graph.AddPass("[ReSTIR DI] Transform Lights"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
-    transformPass.ReadBuffer(SID("light_data"));
-    transformPass.WriteBuffer(SID("restir_lights_vs"));
+    transformPass.ReadBuffer("light_data"_sid);
+    transformPass.WriteBuffer("restir_lights_vs"_sid);
     transformPass.Execute([&, pipelineManager, sceneIndex, liveLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_transform_lights"));
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_transform_lights"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         ReSTIRTransformLightsPushConstant pc{
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .lightData = graph.GetBufferAddress(SID("light_data")),
-            .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
+            .lightData = graph.GetBufferAddress("light_data"_sid),
+            .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
             .sceneDataIndex = sceneIndex,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -90,41 +90,41 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const uint32_t reservoirsSize = REGIR_HASH_CAPACITY * REGIR_RESERVOIRS_PER_CELL * static_cast<uint32_t>(sizeof(ReGIRReservoir));
         const uint32_t activeCellsSize = REGIR_HASH_CAPACITY * 4u * static_cast<uint32_t>(sizeof(int32_t));
 
-        graph.CreateVersionedBuffer(SID("regir_hash_entries"), entriesSize, 1, VersionSource::Fresh);
-        graph.CreateVersionedBuffer(SID("regir_hash_reservoirs"), reservoirsSize, 1, VersionSource::Fresh);
-        graph.CreateBuffer(SID("regir_cell_data"), REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), false);
-        graph.CreateBuffer(SID("regir_active_cells"), activeCellsSize, false);
-        graph.CreateBuffer(SID("regir_active_count"), sizeof(uint32_t), false);
-        graph.CreateBuffer(SID("regir_fill_indirect"), 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
-        graph.CreateBuffer(SID("regir_tiles"), REGIR_TILE_BUFFER_SIZE, false);
+        graph.CreateVersionedBuffer("regir_hash_entries"_sid, entriesSize, 1, VersionSource::Fresh);
+        graph.CreateVersionedBuffer("regir_hash_reservoirs"_sid, reservoirsSize, 1, VersionSource::Fresh);
+        graph.CreateBuffer("regir_cell_data"_sid, REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), false);
+        graph.CreateBuffer("regir_active_cells"_sid, activeCellsSize, false);
+        graph.CreateBuffer("regir_active_count"_sid, sizeof(uint32_t), false);
+        graph.CreateBuffer("regir_fill_indirect"_sid, 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
+        graph.CreateBuffer("regir_tiles"_sid, REGIR_TILE_BUFFER_SIZE, false);
 
-        const bool bHasPrev = !restirParams.bResetReGIR && graph.ResourceHasVersion(SID("regir_hash_entries"), 1) && graph.ResourceHasVersion(SID("regir_hash_reservoirs"), 1);
-        const StringID prevEntries = graph.ResourceVersionID(SID("regir_hash_entries"), 1);
-        const StringID prevReservoirs = graph.ResourceVersionID(SID("regir_hash_reservoirs"), 1);
+        const bool bHasPrev = !restirParams.bResetReGIR && graph.ResourceHasVersion("regir_hash_entries"_sid, 1) && graph.ResourceHasVersion("regir_hash_reservoirs"_sid, 1);
+        const StringID prevEntries = graph.ResourceVersionID("regir_hash_entries"_sid, 1);
+        const StringID prevReservoirs = graph.ResourceVersionID("regir_hash_reservoirs"_sid, 1);
 
-        RenderPass& clearPass = graph.AddPass(SID("[ReGIR] Clear"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReGIR);
-        clearPass.WriteTransferBuffer(SID("regir_hash_entries"));
-        clearPass.WriteTransferBuffer(SID("regir_active_count"));
+        RenderPass& clearPass = graph.AddPass("[ReGIR] Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReGIR);
+        clearPass.WriteTransferBuffer("regir_hash_entries"_sid);
+        clearPass.WriteTransferBuffer("regir_active_count"_sid);
         clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("regir_hash_entries")), 0, VK_WHOLE_SIZE, 0);
-            vkCmdFillBuffer(cmd, graph.GetBufferHandle(SID("regir_active_count")), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle("regir_hash_entries"_sid), 0, VK_WHOLE_SIZE, 0);
+            vkCmdFillBuffer(cmd, graph.GetBufferHandle("regir_active_count"_sid), 0, VK_WHOLE_SIZE, 0);
         });
 
-        RenderPass& touchPass = graph.AddPass(SID("[ReGIR] Touch"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+        RenderPass& touchPass = graph.AddPass("[ReGIR] Touch"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         touchPass.ReadBuffer(SCENE_DATA_BUFFER);
         touchPass.ReadSampledImage(targets.depthCopy);
-        touchPass.WriteBuffer(SID("regir_hash_entries"));
-        touchPass.WriteBuffer(SID("regir_active_cells"));
-        touchPass.WriteBuffer(SID("regir_active_count"));
+        touchPass.WriteBuffer("regir_hash_entries"_sid);
+        touchPass.WriteBuffer("regir_active_cells"_sid);
+        touchPass.WriteBuffer("regir_active_count"_sid);
         touchPass.Execute([&, pipelineManager, sceneIndex, fullW, fullH, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_touch"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_touch"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReGIRTouchPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .hashEntries = graph.GetBufferAddress(SID("regir_hash_entries")),
-                .activeCells = graph.GetBufferAddress(SID("regir_active_cells")),
-                .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
+                .hashEntries = graph.GetBufferAddress("regir_hash_entries"_sid),
+                .activeCells = graph.GetBufferAddress("regir_active_cells"_sid),
+                .activeCount = graph.GetBufferAddress("regir_active_count"_sid),
                 .renderExtent = {fullW, fullH},
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .sceneDataIndex = sceneIndex,
@@ -133,16 +133,16 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, (fullW + 7) / 8, (fullH + 7) / 8, 1);
         });
 
-        RenderPass& indirectPass = graph.AddPass(SID("[ReGIR] Build Indirect"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
-        indirectPass.ReadBuffer(SID("regir_active_count"));
-        indirectPass.WriteBuffer(SID("regir_fill_indirect"));
+        RenderPass& indirectPass = graph.AddPass("[ReGIR] Build Indirect"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+        indirectPass.ReadBuffer("regir_active_count"_sid);
+        indirectPass.WriteBuffer("regir_fill_indirect"_sid);
         indirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_build_indirect"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_build_indirect"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReGIRBuildIndirectPushConstant pc{
-                .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
-                .indirectArgs = graph.GetBufferAddress(SID("regir_fill_indirect")),
+                .activeCount = graph.GetBufferAddress("regir_active_count"_sid),
+                .indirectArgs = graph.GetBufferAddress("regir_fill_indirect"_sid),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
@@ -151,18 +151,18 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const uint32_t analyticLightCount = viewFamily.analyticLightCount;
         const uint32_t fillLightCount = liveLightCount;
 
-        graph.CreateBuffer(SID("light_power_cdf"), MAX_LIGHTS * sizeof(float), false);
+        graph.CreateBuffer("light_power_cdf"_sid, MAX_LIGHTS * sizeof(float), false);
 
-        RenderPass& cdfPass = graph.AddPass(SID("[ReGIR] Light Power CDF"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
-        cdfPass.ReadBuffer(SID("light_data"));
-        cdfPass.WriteBuffer(SID("light_power_cdf"));
+        RenderPass& cdfPass = graph.AddPass("[ReGIR] Light Power CDF"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+        cdfPass.ReadBuffer("light_data"_sid);
+        cdfPass.WriteBuffer("light_power_cdf"_sid);
         cdfPass.Execute([pipelineManager, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("light_power_cdf"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("light_power_cdf"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             LightPowerCDFPushConstant pc{
-                .lightData = graph.GetBufferAddress(SID("light_data")),
-                .cdf = graph.GetBufferAddress(SID("light_power_cdf")),
+                .lightData = graph.GetBufferAddress("light_data"_sid),
+                .cdf = graph.GetBufferAddress("light_power_cdf"_sid),
                 .liveCount = fillLightCount,
                 .analyticCount = static_cast<int32_t>(analyticLightCount),
             };
@@ -172,16 +172,16 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         // Presample tiles
         {
-            RenderPass& presamplePass = graph.AddPass(SID("[ReGIR] Presample Tiles"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
-            presamplePass.ReadBuffer(SID("light_power_cdf"));
-            presamplePass.WriteBuffer(SID("regir_tiles"));
+            RenderPass& presamplePass = graph.AddPass("[ReGIR] Presample Tiles"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+            presamplePass.ReadBuffer("light_power_cdf"_sid);
+            presamplePass.WriteBuffer("regir_tiles"_sid);
             presamplePass.Execute([pipelineManager, frameNumber, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_presample_tiles"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_presample_tiles"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 ReGIRPresampleTilesPushConstant pc{
-                    .cdf = graph.GetBufferAddress(SID("light_power_cdf")),
-                    .tiles = graph.GetBufferAddress(SID("regir_tiles")),
+                    .cdf = graph.GetBufferAddress("light_power_cdf"_sid),
+                    .tiles = graph.GetBufferAddress("regir_tiles"_sid),
                     .liveCount = fillLightCount,
                     .analyticCount = static_cast<int32_t>(analyticLightCount),
                     .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -193,76 +193,76 @@ void SetupReSTIRPasses(RenderGraph& graph,
             });
         }
 
-        RenderPass& regirFillPass = graph.AddPass(SID("[ReGIR] Fill"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+        RenderPass& regirFillPass = graph.AddPass("[ReGIR] Fill"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         regirFillPass.ReadBuffer(SCENE_DATA_BUFFER);
-        regirFillPass.ReadBuffer(SID("light_data"));
-        regirFillPass.ReadBuffer(SID("restir_lights_vs"));
-        regirFillPass.ReadBuffer(SID("regir_active_cells"));
-        regirFillPass.ReadBuffer(SID("regir_active_count"));
-        regirFillPass.ReadBuffer(SID("regir_tiles"));
+        regirFillPass.ReadBuffer("light_data"_sid);
+        regirFillPass.ReadBuffer("restir_lights_vs"_sid);
+        regirFillPass.ReadBuffer("regir_active_cells"_sid);
+        regirFillPass.ReadBuffer("regir_active_count"_sid);
+        regirFillPass.ReadBuffer("regir_tiles"_sid);
         if (bHasPrev) {
             regirFillPass.ReadBuffer(prevEntries);
             regirFillPass.ReadBuffer(prevReservoirs);
         }
-        regirFillPass.ReadIndirectBuffer(SID("regir_fill_indirect"));
-        regirFillPass.WriteBuffer(SID("regir_hash_reservoirs"));
-        regirFillPass.WriteBuffer(SID("regir_cell_data"));
+        regirFillPass.ReadIndirectBuffer("regir_fill_indirect"_sid);
+        regirFillPass.WriteBuffer("regir_hash_reservoirs"_sid);
+        regirFillPass.WriteBuffer("regir_cell_data"_sid);
         regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("regir_fill"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_fill"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReGIRFillPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress(SID("light_data")),
-                .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
-                .activeCells = graph.GetBufferAddress(SID("regir_active_cells")),
-                .activeCount = graph.GetBufferAddress(SID("regir_active_count")),
-                .reservoirs = graph.GetBufferAddress(SID("regir_hash_reservoirs")),
-                .cellData = graph.GetBufferAddress(SID("regir_cell_data")),
+                .lightData = graph.GetBufferAddress("light_data"_sid),
+                .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
+                .activeCells = graph.GetBufferAddress("regir_active_cells"_sid),
+                .activeCount = graph.GetBufferAddress("regir_active_count"_sid),
+                .reservoirs = graph.GetBufferAddress("regir_hash_reservoirs"_sid),
+                .cellData = graph.GetBufferAddress("regir_cell_data"_sid),
                 .hashEntriesPrev = bHasPrev ? graph.GetBufferAddress(prevEntries) : 0,
                 .reservoirsPrev = bHasPrev ? graph.GetBufferAddress(prevReservoirs) : 0,
-                .tiles = graph.GetBufferAddress(SID("regir_tiles")),
+                .tiles = graph.GetBufferAddress("regir_tiles"_sid),
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .bHasPrev = bHasPrev ? 1u : 0u,
                 .wClamp = restirParams.regirWClamp,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SID("regir_fill_indirect")), 0);
+            vkCmdDispatchIndirect(cmd, graph.GetBufferHandle("regir_fill_indirect"_sid), 0);
         });
 
     }
 
     {
         if (bTemporalReuse) {
-            graph.CreateBuffer(SID("restir_reservoir_temporal"), reservoirBufferSize, true);
-            graph.CreateVersionedBuffer(SID("restir_reservoir_history"), reservoirBufferSize, 1, VersionSource::Emplaced);
+            graph.CreateBuffer("restir_reservoir_temporal"_sid, reservoirBufferSize, true);
+            graph.CreateVersionedBuffer("restir_reservoir_history"_sid, reservoirBufferSize, 1, VersionSource::Emplaced);
         }
 
-        const bool bHasHistory = graph.ResourceHasVersion(SID("restir_reservoir_history"), 1) && !bResetHistory;
-        const StringID reservoirHistory = bHasHistory ? graph.ResourceVersionID(SID("restir_reservoir_history"), 1) : StringID{};
+        const bool bHasHistory = graph.ResourceHasVersion("restir_reservoir_history"_sid, 1) && !bResetHistory;
+        const StringID reservoirHistory = bHasHistory ? graph.ResourceVersionID("restir_reservoir_history"_sid, 1) : StringID{};
         const StringID gbufferOneHistory = bHasHistory ? graph.ResourceVersionID(targets.gbufferOne, 1) : StringID{};
         const StringID depthHistory = bHasHistory ? graph.ResourceVersionID(targets.depthCopy, 1) : StringID{};
         if (bShadowVis) {
-            graph.CreateVersionedTexture(SID("restir_shadow_vis"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            graph.CreateVersionedTexture("restir_shadow_vis"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         }
-        const bool bHasPrevVis = bShadowVis && graph.ResourceHasVersion(SID("restir_shadow_vis"), 1);
-        const StringID prevShadowVis = bHasPrevVis ? graph.ResourceVersionID(SID("restir_shadow_vis"), 1) : StringID{};
+        const bool bHasPrevVis = bShadowVis && graph.ResourceHasVersion("restir_shadow_vis"_sid, 1);
+        const StringID prevShadowVis = bHasPrevVis ? graph.ResourceVersionID("restir_shadow_vis"_sid, 1) : StringID{};
         if (bConfidence) {
-            graph.CreateVersionedTexture(SID("restir_confidence"), TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-            graph.CreateTexture(SID("restir_signal"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-            graph.CreateTexture(SID("restir_gradient"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, gradientExtent[0], gradientExtent[1], 1}, {std::nullopt}, true);
+            graph.CreateVersionedTexture("restir_confidence"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            graph.CreateTexture("restir_signal"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+            graph.CreateTexture("restir_gradient"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gradientExtent[0], gradientExtent[1], 1}, {std::nullopt}, true);
         }
 
         // Last frame's TLAS lets the temporal pass re-shade the winner against last frame's occluder positions; the TLAS ring is one frame deep by construction (BLAS lifetime).
         const bool bHasPrevTlas = bConfidence && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
         const StringID prevTlas = bHasPrevTlas ? graph.ResourceVersionID(RT_TLAS_BUFFER, 1) : StringID{};
 
-        graph.CreateBuffer(SID("restir_reservoir_base"), reservoirBufferSize, true);
+        graph.CreateBuffer("restir_reservoir_base"_sid, reservoirBufferSize, true);
         if (reflectionRoughnessMax >= 0.0f) {
             graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, reflectionBufferSize, true);
 
-            RenderPass& reflClearPass = graph.AddPass(SID("[Reflection] Clear Descriptors"), VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReflectionsDenoise);
+            RenderPass& reflClearPass = graph.AddPass("[Reflection] Clear Descriptors"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReflectionsDenoise);
             reflClearPass.WriteTransferBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
             reflClearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 vkCmdFillBuffer(cmd, graph.GetBufferHandle(REFLECTION_HIT_DESCRIPTORS_BUFFER), 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
@@ -270,30 +270,30 @@ void SetupReSTIRPasses(RenderGraph& graph,
         }
 
         // Base candidate generation
-        RenderPass& basePass = graph.AddPass(SID("[ReSTIR DI] Base"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+        RenderPass& basePass = graph.AddPass("[ReSTIR DI] Base"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         basePass.ReadBuffer(SCENE_DATA_BUFFER);
-        basePass.ReadBuffer(SID("light_data"));
-        basePass.ReadBuffer(SID("restir_lights_vs"));
+        basePass.ReadBuffer("light_data"_sid);
+        basePass.ReadBuffer("restir_lights_vs"_sid);
         if (bReGIRProposal) {
-            basePass.ReadBuffer(SID("regir_hash_entries"));
-            basePass.ReadBuffer(SID("regir_hash_reservoirs"));
-            basePass.ReadBuffer(SID("regir_cell_data"));
+            basePass.ReadBuffer("regir_hash_entries"_sid);
+            basePass.ReadBuffer("regir_hash_reservoirs"_sid);
+            basePass.ReadBuffer("regir_cell_data"_sid);
         } else if (bWorldGrid) {
-            basePass.ReadBuffer(SID("world_grid_light_grid"));
-            basePass.ReadBuffer(SID("world_grid_index_list"));
-            basePass.ReadBuffer(SID("world_grid_emissive_grid"));
-            basePass.ReadBuffer(SID("world_grid_emissive_index_list"));
-            basePass.ReadBuffer(SID("world_grid_cell_power"));
+            basePass.ReadBuffer("world_grid_light_grid"_sid);
+            basePass.ReadBuffer("world_grid_index_list"_sid);
+            basePass.ReadBuffer("world_grid_emissive_grid"_sid);
+            basePass.ReadBuffer("world_grid_emissive_index_list"_sid);
+            basePass.ReadBuffer("world_grid_cell_power"_sid);
         }
         basePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         basePass.ReadSampledImage(targets.gbufferOne);
         basePass.ReadSampledImage(targets.gbufferTwo);
         basePass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { basePass.ReadTLASBuffer(RT_TLAS_BUFFER); }
-        basePass.WriteBuffer(SID("restir_reservoir_base"));
+        basePass.WriteBuffer("restir_reservoir_base"_sid);
         if (reflectionRoughnessMax >= 0.0f) { basePass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER); }
         basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bReGIRProposal ? SID("restir_di_base_regir") : SID("restir_di_base_bin"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bReGIRProposal ? "restir_di_base_regir"_sid : "restir_di_base_bin"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
@@ -301,21 +301,21 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
             ReSTIRDICombinedTemporalPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress(SID("light_data")),
-                .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
+                .lightData = graph.GetBufferAddress("light_data"_sid),
+                .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .hashEntries = bReGIRProposal ? graph.GetBufferAddress(SID("regir_hash_entries")) : 0,
-                .reservoirs = bReGIRProposal ? graph.GetBufferAddress(SID("regir_hash_reservoirs")) : 0,
-                .cellData = bReGIRProposal ? graph.GetBufferAddress(SID("regir_cell_data")) : 0,
+                .hashEntries = bReGIRProposal ? graph.GetBufferAddress("regir_hash_entries"_sid) : 0,
+                .reservoirs = bReGIRProposal ? graph.GetBufferAddress("regir_hash_reservoirs"_sid) : 0,
+                .cellData = bReGIRProposal ? graph.GetBufferAddress("regir_cell_data"_sid) : 0,
                 .historyBuffer = 0,
                 .genBuffer = 0,
-                .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_base")),
+                .outputBuffer = graph.GetBufferAddress("restir_reservoir_base"_sid),
                 .reflectionDescriptors = reflectionRoughnessMax >= 0.0f ? graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER) : 0,
-                .worldGridBuffer = bBin ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
-                .worldGridIndexList = bBin ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
-                .worldGridEmissiveGrid = bBin ? graph.GetBufferAddress(SID("world_grid_emissive_grid")) : 0,
-                .worldGridEmissiveIndexList = bBin ? graph.GetBufferAddress(SID("world_grid_emissive_index_list")) : 0,
-                .worldGridCellPower = bBin ? graph.GetBufferAddress(SID("world_grid_cell_power")) : 0,
+                .worldGridBuffer = bBin ? graph.GetBufferAddress("world_grid_light_grid"_sid) : 0,
+                .worldGridIndexList = bBin ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
+                .worldGridEmissiveGrid = bBin ? graph.GetBufferAddress("world_grid_emissive_grid"_sid) : 0,
+                .worldGridEmissiveIndexList = bBin ? graph.GetBufferAddress("world_grid_emissive_index_list"_sid) : 0,
+                .worldGridCellPower = bBin ? graph.GetBufferAddress("world_grid_cell_power"_sid) : 0,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -349,11 +349,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         if (bTemporalReuse) {
             // Temporal reuse
-            RenderPass& temporalPass = graph.AddPass(SID("[ReSTIR DI] Temporal"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+            RenderPass& temporalPass = graph.AddPass("[ReSTIR DI] Temporal"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
             temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
-            temporalPass.ReadBuffer(SID("light_data"));
-            temporalPass.ReadBuffer(SID("restir_lights_vs"));
-            temporalPass.ReadBuffer(SID("restir_reservoir_base"));
+            temporalPass.ReadBuffer("light_data"_sid);
+            temporalPass.ReadBuffer("restir_lights_vs"_sid);
+            temporalPass.ReadBuffer("restir_reservoir_base"_sid);
             if (bHasHistory) { temporalPass.ReadBuffer(reservoirHistory); }
             temporalPass.ReadSampledImage(targets.gbufferOne);
             temporalPass.ReadSampledImage(targets.gbufferTwo);
@@ -363,11 +363,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
             if (bHasPrevVis) { temporalPass.ReadSampledImage(prevShadowVis); }
             if (bHasTLAS) { temporalPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
             if (bHasPrevTlas) { temporalPass.ReadTLASBuffer(prevTlas); }
-            temporalPass.WriteBuffer(SID("restir_reservoir_temporal"));
-            if (bShadowVis) { temporalPass.WriteStorageImage(SID("restir_shadow_vis")); }
-            if (bConfidence) { temporalPass.WriteStorageImage(SID("restir_signal")); }
+            temporalPass.WriteBuffer("restir_reservoir_temporal"_sid);
+            if (bShadowVis) { temporalPass.WriteStorageImage("restir_shadow_vis"_sid); }
+            if (bConfidence) { temporalPass.WriteStorageImage("restir_signal"_sid); }
             temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, prevShadowVis, reservoirHistory, gbufferOneHistory, depthHistory, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_temporal"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_temporal"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
@@ -375,15 +375,15 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
                 ReSTIRDICombinedTemporalPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .lightData = graph.GetBufferAddress(SID("light_data")),
-                    .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
+                    .lightData = graph.GetBufferAddress("light_data"_sid),
+                    .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
                     .instanceBuffer = 0,
                     .hashEntries = 0,
                     .reservoirs = 0,
                     .cellData = 0,
                     .historyBuffer = bHasHistory ? graph.GetBufferAddress(reservoirHistory) : 0,
-                    .genBuffer = graph.GetBufferAddress(SID("restir_reservoir_base")),
-                    .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_temporal")),
+                    .genBuffer = graph.GetBufferAddress("restir_reservoir_base"_sid),
+                    .outputBuffer = graph.GetBufferAddress("restir_reservoir_temporal"_sid),
                     .reflectionDescriptors = 0,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -397,8 +397,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .tlasIndex = tlasIndex,
                     .prevTlasIndex = prevTlasIndex,
                     .prevShadowVisIndex = bHasPrevVis ? graph.GetSampledImageViewDescriptorIndex(prevShadowVis) : ~0u,
-                    .shadowVisIndex = bShadowVis ? graph.GetStorageImageViewDescriptorIndex(SID("restir_shadow_vis")) : ~0u,
-                    .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex(SID("restir_signal")) : ~0u,
+                    .shadowVisIndex = bShadowVis ? graph.GetStorageImageViewDescriptorIndex("restir_shadow_vis"_sid) : ~0u,
+                    .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex("restir_signal"_sid) : ~0u,
                     .bPermutationSampling = restirParams.bPermutationSampling ? 1u : 0u,
                     .antilagStrength = restirParams.antilagStrength,
                     .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
@@ -421,21 +421,21 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const uint32_t sunCheckerboardField = (activeCheckerboardField != 0u && restirParams.bCheckerboardFullRateResolve) ? 0u : activeCheckerboardField;
         // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
         const uint32_t sunVisWidth = (sunCheckerboardField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
-        graph.CreateTexture(SID("restir_sun_vis"), TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture("restir_sun_vis"_sid, TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent[1], 1}, {std::nullopt}, true);
         const bool bHasPrevTlas = bConfidence && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
         const StringID prevTlas = bHasPrevTlas ? graph.ResourceVersionID(RT_TLAS_BUFFER, 1) : StringID{};
         if (bConfidence) {
-            graph.CreateVersionedTexture(SID("restir_sun_blocker"), TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            graph.CreateVersionedTexture("restir_sun_blocker"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         }
-        const bool bHasPrevBlocker = bConfidence && graph.ResourceHasVersion(SID("restir_sun_blocker"), 1);
-        const StringID prevSunBlocker = bHasPrevBlocker ? graph.ResourceVersionID(SID("restir_sun_blocker"), 1) : StringID{};
+        const bool bHasPrevBlocker = bConfidence && graph.ResourceHasVersion("restir_sun_blocker"_sid, 1);
+        const StringID prevSunBlocker = bHasPrevBlocker ? graph.ResourceVersionID("restir_sun_blocker"_sid, 1) : StringID{};
         const bool bSunReproject = bConfidence && !bResetHistory && graph.ResourceHasVersion(targets.gbufferOne, 1) && graph.ResourceHasVersion(targets.depthCopy, 1);
         const StringID gbufferOneHistory = bSunReproject ? graph.ResourceVersionID(targets.gbufferOne, 1) : StringID{};
         const StringID depthHistory = bSunReproject ? graph.ResourceVersionID(targets.depthCopy, 1) : StringID{};
 
-        RenderPass& sunPass = graph.AddPass(SID("[ReSTIR DI] Sun"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+        RenderPass& sunPass = graph.AddPass("[ReSTIR DI] Sun"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         sunPass.ReadBuffer(SCENE_DATA_BUFFER);
-        sunPass.ReadBuffer(SID("light_data"));
+        sunPass.ReadBuffer("light_data"_sid);
         sunPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         sunPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
         sunPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
@@ -448,17 +448,17 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bSunReproject) { sunPass.ReadSampledImage(depthHistory); }
         sunPass.ReadTLASBuffer(RT_TLAS_BUFFER);
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(prevTlas); }
-        sunPass.WriteStorageImage(SID("restir_sun_vis"));
-        if (bConfidence) { sunPass.WriteStorageImage(SID("restir_signal")); }
-        if (bConfidence) { sunPass.WriteStorageImage(SID("restir_sun_blocker")); }
+        sunPass.WriteStorageImage("restir_sun_vis"_sid);
+        if (bConfidence) { sunPass.WriteStorageImage("restir_signal"_sid); }
+        if (bConfidence) { sunPass.WriteStorageImage("restir_sun_blocker"_sid); }
         if (bHasPrevBlocker) { sunPass.ReadSampledImage(prevSunBlocker); }
         sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bSunReproject, bHasPrevTlas, bConfidence, bHasPrevBlocker, prevSunBlocker, gbufferOneHistory, depthHistory, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_sun"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_sun"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReSTIRDISunPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress(SID("light_data")),
+                .lightData = graph.GetBufferAddress("light_data"_sid),
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
                 .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
@@ -468,13 +468,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .visIndex = graph.GetStorageImageViewDescriptorIndex(SID("restir_sun_vis")),
+                .visIndex = graph.GetStorageImageViewDescriptorIndex("restir_sun_vis"_sid),
                 .prevGbufferOneIndex = bSunReproject ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
                 .prevDepthIndex = bSunReproject ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0u,
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
                 .prevTlasIndex = bHasPrevTlas ? graph.GetAccelerationStructureDescriptorIndex(prevTlas) : ~0u,
-                .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex(SID("restir_signal")) : ~0u,
-                .blockerIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex(SID("restir_sun_blocker")) : ~0u,
+                .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex("restir_signal"_sid) : ~0u,
+                .blockerIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex("restir_sun_blocker"_sid) : ~0u,
                 .prevBlockerIndex = bHasPrevBlocker ? graph.GetSampledImageViewDescriptorIndex(prevSunBlocker) : ~0u,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -492,44 +492,44 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     // Temporal-gradient antilag confidence: gradient (stratum mean of the re-shade signal) -> resolve (blur + convert + asymmetric temporal) -> restir_confidence, consumed by RELAX.
     if (bConfidence) {
-        const bool bHasPrevConfidence = graph.ResourceHasVersion(SID("restir_confidence"), 1);
-        const StringID prevConfidence = bHasPrevConfidence ? graph.ResourceVersionID(SID("restir_confidence"), 1) : StringID{};
+        const bool bHasPrevConfidence = graph.ResourceHasVersion("restir_confidence"_sid, 1);
+        const StringID prevConfidence = bHasPrevConfidence ? graph.ResourceVersionID("restir_confidence"_sid, 1) : StringID{};
 
-        RenderPass& gradientPass = graph.AddPass(SID("[ReSTIR DI] Confidence Gradient"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
-        gradientPass.ReadSampledImage(SID("restir_signal"));
-        gradientPass.WriteStorageImage(SID("restir_gradient"));
+        RenderPass& gradientPass = graph.AddPass("[ReSTIR DI] Confidence Gradient"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+        gradientPass.ReadSampledImage("restir_signal"_sid);
+        gradientPass.WriteStorageImage("restir_gradient"_sid);
         gradientPass.Execute([&, pipelineManager, renderExtent, gradientExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_confidence_gradient"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_confidence_gradient"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReSTIRConfidenceGradientPushConstant pc{
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .gradientExtent = {gradientExtent[0], gradientExtent[1]},
-                .signalIndex = graph.GetSampledImageViewDescriptorIndex(SID("restir_signal")),
-                .gradientIndex = graph.GetStorageImageViewDescriptorIndex(SID("restir_gradient")),
+                .signalIndex = graph.GetSampledImageViewDescriptorIndex("restir_signal"_sid),
+                .gradientIndex = graph.GetStorageImageViewDescriptorIndex("restir_gradient"_sid),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (gradientExtent[0] + 7) / 8, (gradientExtent[1] + 7) / 8, 1);
         });
 
-        RenderPass& resolvePass = graph.AddPass(SID("[ReSTIR DI] Confidence Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
-        resolvePass.ReadSampledImage(SID("restir_gradient"));
+        RenderPass& resolvePass = graph.AddPass("[ReSTIR DI] Confidence Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+        resolvePass.ReadSampledImage("restir_gradient"_sid);
         if (bHasPrevConfidence) { resolvePass.ReadSampledImage(prevConfidence); }
         resolvePass.ReadSampledImage(targets.gbufferOne);
-        resolvePass.WriteStorageImage(SID("restir_confidence"));
+        resolvePass.WriteStorageImage("restir_confidence"_sid);
         resolvePass.Execute([&, pipelineManager, renderExtent, gradientExtent, bHasPrevConfidence, prevConfidence, gbufferOne = targets.gbufferOne,
                 confStrength = restirParams.confidenceStrength, sensitivity = restirParams.confidenceSensitivity, darknessBias = restirParams.confidenceDarknessBias,
                 blendFactor = 1.0f / (restirParams.confidenceHistoryLength + 1.0f), blurRadius = restirParams.confidenceBlurRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_confidence_resolve"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_confidence_resolve"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 ReSTIRConfidenceResolvePushConstant pc{
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .gradientExtent = {gradientExtent[0], gradientExtent[1]},
-                    .gradientIndex = graph.GetSampledImageViewDescriptorIndex(SID("restir_gradient")),
+                    .gradientIndex = graph.GetSampledImageViewDescriptorIndex("restir_gradient"_sid),
                     .prevConfidenceIndex = bHasPrevConfidence ? graph.GetSampledImageViewDescriptorIndex(prevConfidence) : ~0u,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                    .confidenceIndex = graph.GetStorageImageViewDescriptorIndex(SID("restir_confidence")),
+                    .confidenceIndex = graph.GetStorageImageViewDescriptorIndex("restir_confidence"_sid),
                     .confidenceStrength = confStrength,
                     .sensitivity = sensitivity,
                     .darknessBias = darknessBias,
@@ -541,21 +541,21 @@ void SetupReSTIRPasses(RenderGraph& graph,
             });
     }
 
-    StringID reuseBuffer = bTemporalReuse ? SID("restir_reservoir_temporal") : SID("restir_reservoir_base");
+    StringID reuseBuffer = bTemporalReuse ? "restir_reservoir_temporal"_sid : "restir_reservoir_base"_sid;
 
     if (restirParams.boilingFilterStrength > 0.0f) {
-        graph.CreateBuffer(SID("restir_reservoir_boiled"), reservoirBufferSize, true);
+        graph.CreateBuffer("restir_reservoir_boiled"_sid, reservoirBufferSize, true);
 
-        RenderPass& boilingPass = graph.AddPass(SID("[ReSTIR DI] Boiling Filter"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+        RenderPass& boilingPass = graph.AddPass("[ReSTIR DI] Boiling Filter"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         boilingPass.ReadBuffer(reuseBuffer);
-        boilingPass.WriteBuffer(SID("restir_reservoir_boiled"));
+        boilingPass.WriteBuffer("restir_reservoir_boiled"_sid);
         boilingPass.Execute([&, pipelineManager, renderExtent, inBuffer = reuseBuffer, strength = restirParams.boilingFilterStrength, field = activeCheckerboardField](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_boiling_filter"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_boiling_filter"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             ReSTIRBoilingFilterPushConstant pc{
                 .inputBuffer = graph.GetBufferAddress(inBuffer),
-                .outputBuffer = graph.GetBufferAddress(SID("restir_reservoir_boiled")),
+                .outputBuffer = graph.GetBufferAddress("restir_reservoir_boiled"_sid),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .strength = strength,
                 .activeCheckerboardField = field,
@@ -568,18 +568,18 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 
-        reuseBuffer = SID("restir_reservoir_boiled");
+        reuseBuffer = "restir_reservoir_boiled"_sid;
     }
 
-    if (bTemporalReuse) { graph.EmplaceVersion(SID("restir_reservoir_history"), reuseBuffer); }
+    if (bTemporalReuse) { graph.EmplaceVersion("restir_reservoir_history"_sid, reuseBuffer); }
 
     // Spatial reuse chain: N passes ping-ponging two scratch buffers, each reading the previous output. Pass 0 reads the temporal reuseBuffer.
     const uint32_t spatialPasses = restirParams.spatialPasses;
     if (spatialPasses == 0u) {
-        graph.AliasBuffer(SID("restir_reservoir_final"), reuseBuffer);
+        graph.AliasBuffer("restir_reservoir_final"_sid, reuseBuffer);
         return;
     }
-    const StringID spatialScratch[2] = {SID("restir_reservoir_spatial"), SID("restir_reservoir_spatial2")};
+    const StringID spatialScratch[2] = {"restir_reservoir_spatial"_sid, "restir_reservoir_spatial2"_sid};
     graph.CreateBuffer(spatialScratch[0], reservoirBufferSize, true);
     if (spatialPasses > 1u) {
         graph.CreateBuffer(spatialScratch[1], reservoirBufferSize, true);
@@ -593,8 +593,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         RenderPass& spatialPass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         spatialPass.ReadBuffer(SCENE_DATA_BUFFER);
-        spatialPass.ReadBuffer(SID("light_data"));
-        spatialPass.ReadBuffer(SID("restir_lights_vs"));
+        spatialPass.ReadBuffer("light_data"_sid);
+        spatialPass.ReadBuffer("restir_lights_vs"_sid);
         spatialPass.ReadBuffer(inputName);
         spatialPass.ReadSampledImage(targets.gbufferOne);
         spatialPass.ReadSampledImage(targets.gbufferTwo);
@@ -602,15 +602,15 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         spatialPass.WriteBuffer(outputName);
         spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("restir_di_spatial"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_spatial"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
 
             ReSTIRDISpatialPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress(SID("light_data")),
-                .lightVS = graph.GetBufferAddress(SID("restir_lights_vs")),
+                .lightData = graph.GetBufferAddress("light_data"_sid),
+                .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
                 .inputBuffer = graph.GetBufferAddress(inputName),
                 .outputBuffer = graph.GetBufferAddress(outputName),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -641,7 +641,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         });
     }
 
-    graph.AliasBuffer(SID("restir_reservoir_final"), spatialScratch[spatialPasses - 1u & 1u]);
+    graph.AliasBuffer("restir_reservoir_final"_sid, spatialScratch[spatialPasses - 1u & 1u]);
 }
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
@@ -661,20 +661,20 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 
     const bool bMergedReflections = reflectionConfig.bMergedDenoise && ComputeReflectionRoughnessMax(reflectionConfig) >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
 
-    RenderPass& lightingResolve = graph.AddPass(SID("[ReSTIR DI] Lighting Resolve"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+    RenderPass& lightingResolve = graph.AddPass("[ReSTIR DI] Lighting Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     lightingResolve.ReadBuffer(SCENE_DATA_BUFFER);
-    lightingResolve.ReadBuffer(SID("light_data"));
+    lightingResolve.ReadBuffer("light_data"_sid);
     if (bMergedReflections) {
         lightingResolve.ReadSampledImage(REFLECTION_SPEC_NOISY_TARGET);
     }
-    if (graph.HasBuffer(SID("restir_reservoir_final"))) {
-        lightingResolve.ReadBuffer(SID("restir_reservoir_final"));
+    if (graph.HasBuffer("restir_reservoir_final"_sid)) {
+        lightingResolve.ReadBuffer("restir_reservoir_final"_sid);
     }
-    if (graph.HasTexture(SID("restir_sun_vis"))) {
-        lightingResolve.ReadSampledImage(SID("restir_sun_vis"));
+    if (graph.HasTexture("restir_sun_vis"_sid)) {
+        lightingResolve.ReadSampledImage("restir_sun_vis"_sid);
     }
-    if (graph.HasBuffer(SID("restir_lights_vs"))) {
-        lightingResolve.ReadBuffer(SID("restir_lights_vs"));
+    if (graph.HasBuffer("restir_lights_vs"_sid)) {
+        lightingResolve.ReadBuffer("restir_lights_vs"_sid);
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
@@ -706,12 +706,12 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 
                 VisibilityLightingPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .lightData = graph.GetBufferAddress(SID("light_data")),
-                    .lightVS = graph.TryGetBufferAddress(SID("restir_lights_vs")),
+                    .lightData = graph.GetBufferAddress("light_data"_sid),
+                    .lightVS = graph.TryGetBufferAddress("restir_lights_vs"_sid),
                     .lightDispatchBuffer = lightDispatchAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                    .reservoirBuffer = graph.TryGetBufferAddress(SID("restir_reservoir_final")),
+                    .reservoirBuffer = graph.TryGetBufferAddress("restir_reservoir_final"_sid),
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -729,7 +729,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .reflectionIndex = bMergedReflections ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
                     .bFullRateResolve = fullRate,
                     .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
-                    .sunVisIndex = graph.HasTexture(SID("restir_sun_vis")) ? graph.GetSampledImageViewDescriptorIndex(SID("restir_sun_vis")) : ~0x0u,
+                    .sunVisIndex = graph.HasTexture("restir_sun_vis"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_sun_vis"_sid) : ~0x0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
@@ -761,11 +761,11 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     const bool bReflectionMerged = reflectionConfig.bMergedDenoise && reflectionRoughnessMax >= 0.0f && graph.HasTexture(REFLECTION_SPEC_NOISY_TARGET);
     const bool bReflection = !bReflectionMerged && reflectionRoughnessMax >= 0.0f && graph.HasTexture(reflectionTarget);
 
-    RenderPass& pass = graph.AddPass(SID("[ReSTIR DI] Remodulate"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+    RenderPass& pass = graph.AddPass("[ReSTIR DI] Remodulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(LIGHT_DATA_BUFFER);
     pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-    if (graph.HasBuffer(SID("world_grid_probe_grid"))) { pass.ReadBuffer(SID("world_grid_probe_grid")); }
+    if (graph.HasBuffer("world_grid_probe_grid"_sid)) { pass.ReadBuffer("world_grid_probe_grid"_sid); }
     pass.ReadSampledImage(targets.intermediateOne);
     pass.ReadSampledImage(targets.intermediateTwo);
     pass.ReadSampledImage(targets.gbufferOne);
@@ -818,10 +818,10 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .giGatherMode = bGIGather ? giGatherMode : 0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
+                .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
             };
-            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry(SID("restir_remodulate"));
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (width + 7) / 8, (height + 7) / 8, 1);

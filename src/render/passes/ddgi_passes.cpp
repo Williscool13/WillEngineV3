@@ -20,9 +20,9 @@ namespace Render
 static StringID DDGI_IRRADIANCE[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_VISIBILITY[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_RAY_DATA[DDGI_MAX_VOLUME_SLOTS];
-static const StringID DDGI_PROBE_OFFSETS_BUFFER = SID("ddgi_probe_offsets");
-static const StringID DDGI_PROBE_RESTART_BUFFER = SID("ddgi_probe_restart");
-static const StringID DDGI_PROBE_ACTIVE_BUFFER = SID("ddgi_probe_active");
+static const StringID DDGI_PROBE_OFFSETS_BUFFER = "ddgi_probe_offsets"_sid;
+static const StringID DDGI_PROBE_RESTART_BUFFER = "ddgi_probe_restart"_sid;
+static const StringID DDGI_PROBE_ACTIVE_BUFFER = "ddgi_probe_active"_sid;
 static StringID DDGI_TRACE_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_BLEND_IRRADIANCE_PASS[DDGI_MAX_VOLUME_SLOTS];
 static StringID DDGI_BLEND_VISIBILITY_PASS[DDGI_MAX_VOLUME_SLOTS];
@@ -330,7 +330,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         bActiveCarried = bClassify && graph.ResourceHasVersion(DDGI_PROBE_ACTIVE_BUFFER, 1) && bLayoutStable;
 
         if (bOffsetsCarried || bRestartCarried || bActiveCarried) {
-            RenderPass& carry = graph.AddPass(SID("DDGI Probe Data Carry"), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::DDGI);
+            RenderPass& carry = graph.AddPass("DDGI Probe Data Carry"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::DDGI);
             carry.AsyncCompute();
             if (bOffsetsCarried) {
                 carry.ReadTransferBuffer(graph.ResourceVersionID(DDGI_PROBE_OFFSETS_BUFFER, 1));
@@ -373,7 +373,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
     }
 
     const bool bFeedback = params.bInfiniteBounce && !bBounceOnly;
-    const bool bWorldGrid = graph.HasBuffer(SID("world_grid_light_grid")) && graph.HasBuffer(SID("world_grid_index_list"));
+    const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
 
     if (bFeedback) {
         DDGICascadeDescSources* prevSources = arena.AllocArray<DDGICascadeDescSources>(1);
@@ -396,7 +396,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 prevSources->entries[k].volume = k < prevTotal ? previous.volumes[k] : cascades.volumes[k];
             }
         }
-        AddDDGICascadeDescriptorUpload(graph, SID("DDGI Prev Cascade Descriptors"), DDGI_CASCADES_PREV_BUFFER, prevSources, gridCamPos, params.bWorldVolumeGridCull);
+        AddDDGICascadeDescriptorUpload(graph, "DDGI Prev Cascade Descriptors"_sid, DDGI_CASCADES_PREV_BUFFER, prevSources, gridCamPos, params.bWorldVolumeGridCull);
     }
 
     for (uint32_t k = 0; k < total; ++k) {
@@ -437,10 +437,10 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         tracePass.WriteBuffer(DDGI_RAY_DATA[k]);
         tracePass.ReadBuffer(SCENE_DATA_BUFFER);
         tracePass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-        if (graph.HasBuffer(SID("world_grid_probe_grid"))) { tracePass.ReadBuffer(SID("world_grid_probe_grid")); }
+        if (graph.HasBuffer("world_grid_probe_grid"_sid)) { tracePass.ReadBuffer("world_grid_probe_grid"_sid); }
         if (bWorldGrid) {
-            tracePass.ReadBuffer(SID("world_grid_light_grid"));
-            tracePass.ReadBuffer(SID("world_grid_index_list"));
+            tracePass.ReadBuffer("world_grid_light_grid"_sid);
+            tracePass.ReadBuffer("world_grid_index_list"_sid);
         }
         if (radianceCache.bValid) {
             tracePass.ReadBuffer(RADIANCE_CACHE_BUFFERS_CURRENT);
@@ -466,7 +466,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (graph.HasBuffer(DDGI_PROBE_OFFSETS_BUFFER)) { tracePass.ReadBuffer(DDGI_PROBE_OFFSETS_BUFFER); }
         if (graph.HasBuffer(DDGI_PROBE_ACTIVE_BUFFER)) { tracePass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER); }
         tracePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, skyboxIndex, iblIntensity, raysPerProbe, probeCountTotal, bBounceOnly, bFeedback, bWorldGrid, maxRayRadiance, bounceIntensity, radianceCacheShadeInterval, reflectionProbeCount, bReflectionProbeBruteForce, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], offsetsByteOffset, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], frameNumber, bRadianceCache = radianceCache.bValid](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_trace"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ddgi_probe_trace"_sid);
             if (!pipelineEntry) {
                 return;
             }
@@ -499,9 +499,9 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .iblIntensity = iblIntensity,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-                .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer(SID("world_grid_probe_grid"))) ? graph.GetBufferAddress(SID("world_grid_probe_grid")) : 0,
-                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_light_grid")) : 0,
-                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(SID("world_grid_index_list")) : 0,
+                .worldGridProbeGrid = (!bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
+                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress("world_grid_light_grid"_sid) : 0,
+                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);
@@ -521,7 +521,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (graph.HasBuffer(DDGI_PROBE_RESTART_BUFFER)) { blendPass.ReadBuffer(DDGI_PROBE_RESTART_BUFFER); }
         if (graph.HasBuffer(DDGI_PROBE_ACTIVE_BUFFER)) { blendPass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER); }
         blendPass.Execute([pipelineManager, hysteresis = blendHysteresis, irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = graph.ResourceVersionID(irradianceId, 1), nextId = irradianceId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_irradiance"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ddgi_blend_irradiance"_sid);
             if (!pipelineEntry) {
                 return;
             }
@@ -556,7 +556,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         if (graph.HasBuffer(DDGI_PROBE_RESTART_BUFFER)) { visibilityPass.ReadBuffer(DDGI_PROBE_RESTART_BUFFER); }
         if (graph.HasBuffer(DDGI_PROBE_ACTIVE_BUFFER)) { visibilityPass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER); }
         visibilityPass.Execute([pipelineManager, visibilityHysteresis = blendVisibilityHysteresis, distanceExponent = glm::max(params.distanceExponent, 1.0f), volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = graph.ResourceVersionID(visibilityId, 1), nextId = visibilityId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_blend_visibility"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ddgi_blend_visibility"_sid);
             if (!pipelineEntry) {
                 return;
             }
@@ -595,7 +595,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 relocatePass.ReadWriteBuffer(DDGI_PROBE_ACTIVE_BUFFER);
             }
             relocatePass.Execute([pipelineManager, volume, rayRotation, previousBaseCell, bOffsetsHistory = bOffsetsHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], bClassify, raysPerProbe, probeCountTotal, minFrontfaceDistance, offsetsByteOffset, flagByteOffset, rayDataId = DDGI_RAY_DATA[k]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_relocate"));
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ddgi_probe_relocate"_sid);
                 if (!pipelineEntry) {
                     return;
                 }
@@ -647,7 +647,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             sources->entries[k].volume = cascades.volumes[k];
         }
     }
-    AddDDGICascadeDescriptorUpload(graph, SID("DDGI Cascade Descriptors"), DDGI_CASCADES_BUFFER, sources, gridCamPos, params.bWorldVolumeGridCull);
+    AddDDGICascadeDescriptorUpload(graph, "DDGI Cascade Descriptors"_sid, DDGI_CASCADES_BUFFER, sources, gridCamPos, params.bWorldVolumeGridCull);
 }
 
 bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
@@ -750,7 +750,7 @@ void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
         const uint32_t packedTint = debugCascade < 0 ? (bLocal ? DDGIVolumeTint(cascades.localIds[k]) : DDGISlotTint(k)) : 0xFFFFFFFFu;
         const uint32_t warmupAge = bLocal ? cascades.localWarmup[k] : DDGI_LOCAL_AGE_CAP;
         pass.Execute([pipelineManager, volume, bOffsets, bActive, bHideInactive, probeDebugExposure, packedTint, warmupAge, atlasId, visibilityId, bVisibility, probeDebugMode, probeDataElem](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(SID("ddgi_probe_debug"));
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ddgi_probe_debug"_sid);
             if (!pipelineEntry) {
                 return;
             }

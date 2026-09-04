@@ -22,7 +22,7 @@ struct Scene
     Scene& operator=(Scene&&) = default;
 };
 
-static inline StringID GLOBAL_SCENE_ID = SID("global_scene");
+static inline StringID GLOBAL_SCENE_ID = "global_scene"_sid;
 } // Engine
 
 #endif //WILL_ENGINE_SCENE_H
