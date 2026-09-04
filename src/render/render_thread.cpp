@@ -591,18 +591,18 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     renderGraph->CreateTexture(targets.barycentric, TextureInfo{VISIBILITY_BARYCENTRIC_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     const bool bGeometry = renderFamilyProperties.bCanRender && viewFamily.instanceCount > 0;
-    auto declareGeometryTarget = [&](StringID name, const TextureInfo& info) {
-        if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
+    auto declareGeometryTarget = [&](StringID name, const TextureInfo& info, std::optional<VkClearValue> clear) {
+        if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, clear); }
         else if (renderGraph->ResourceHasVersion(name, 0)) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::NoShiftReadOnly, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
-        else { renderGraph->CreateTexture(name, info, std::nullopt, true); }
+        else { renderGraph->CreateTexture(name, info, clear, true); }
     };
-    declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1});
+    declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY);
     renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
-    declareGeometryTarget(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent[0], renderExtent[1], 1});
+    declareGeometryTarget(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent[0], renderExtent[1], 1}, std::nullopt);
     renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;

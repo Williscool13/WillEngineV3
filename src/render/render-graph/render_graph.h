@@ -134,7 +134,7 @@ public: // Resource registration
 
 public: // Rings
     /**
-     * Declares a texture the graph keeps across frames. The bare name is the newest version, Version(name, age) the one produced age versions earlier (1..depth).
+     * Declares a texture the graph keeps across frames. The bare name is the newest version, ResourceVersionID(name, age) the one produced age versions earlier (1..depth).
      * A ring not declared for a frame is dropped; a changed description resets it.
      * @param name
      * @param texInfo

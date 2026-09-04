@@ -121,7 +121,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     ZoneScoped;
     graph.CreateTexture(SID("smaa_edges"), TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture(SID("smaa_blend"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateVersionedTexture(SID("smaa_t2x_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("smaa_t2x_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
 
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
@@ -252,7 +252,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    StringID pipelineSID)
 {
     ZoneScoped;
-    graph.CreateVersionedTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("taa_current"), TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
 
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
     const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
@@ -355,7 +355,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         const RenderTargets& targets)
 {
     ZoneScoped;
-    graph.CreateVersionedTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(SID("donut_taa_feedback"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
     graph.CreateTexture(SID("donut_taa_output"), TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
     const bool bHasHistory = graph.ResourceHasVersion(SID("donut_taa_feedback"), 1);
