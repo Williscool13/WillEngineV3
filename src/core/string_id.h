@@ -10,7 +10,7 @@
 #include <string>
 
 #include "containers/inline_string.h"
-#include "hash/fnv_1_a.h"
+#include "hash/xxh3.h"
 
 #ifdef WDEBUG
 void DBG_InternString(uint64_t hash, const char* str);
@@ -34,7 +34,7 @@ struct StringID
     StringID(const char* str, size_t len);
 #else
     constexpr StringID(const char* str, size_t len)
-        : id(fnv1a64(str, len)) {}
+        : id(Hash(str, len)) {}
 #endif
 
     constexpr explicit operator bool() const { return id != 0; }

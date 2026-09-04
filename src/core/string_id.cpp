@@ -61,7 +61,7 @@ const char* DBG_ResolveStringId(uint64_t hash)
 }
 
 StringID::StringID(const char* str, size_t len)
-    : id(fnv1a64(str, len))
+    : id(Hash(str, len))
 {
     if (gInternStringFn) {
         gInternStringFn(id, str);

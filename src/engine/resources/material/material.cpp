@@ -46,7 +46,7 @@ MaterialID HashMaterial(const Material& m)
     key.fragmentShaderID = m.fragmentShader.id;
     key.lightingShaderID = m.lightingShader.id;
 
-    return MaterialID(fnv1a64(reinterpret_cast<const uint8_t*>(&key), sizeof(StableKey)));
+    return MaterialID(Hash(&key, sizeof(StableKey)));
 }
 
 void SerializeMaterial(const Material& mat, TextWriter& w)

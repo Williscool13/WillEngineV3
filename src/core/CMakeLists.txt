@@ -29,7 +29,7 @@ add_library(core STATIC
         memory/lock_free_handle_allocator.h
         string_id.cpp
         string_id.h
-        hash/fnv_1_a.h
+        hash/xxh3.h
         memory/arena.h
         memory/arena.cpp
         memory/buddy_allocator.h

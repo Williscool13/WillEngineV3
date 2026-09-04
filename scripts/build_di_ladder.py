@@ -67,8 +67,8 @@ MAT_PILLAR = IDX.material("lab_white")
 
 # Pipeline-name hashes, NOT asset ids (verified: these reproduce the constants
 # hand-pasted into build_lighting_lab.py).
-FRAG_SHADER = wa._fnv1a64("default_lit")
-LIT_EMISSIVE = wa._fnv1a64("default_pbr")
+FRAG_SHADER = wa.string_id("default_lit")
+LIT_EMISSIVE = wa.string_id("default_pbr")
 
 _SAMPLER = {"addressModeU": 0, "addressModeV": 0, "addressModeW": 0, "anisotropyEnable": 0,
             "magFilter": 1, "maxAnisotropy": 1.0, "maxLod": 1000.0, "minFilter": 1,

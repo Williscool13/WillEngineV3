@@ -1,37 +1,13 @@
 //
-// StringID / FNV-1a test suite. Drafted by Claude.
+// StringID test suite. Drafted by Claude.
 //
-// StringID is serialized into assets; its hash must NEVER change. The canonical FNV-1a 64
-// known-answer vectors below are the tripwire for that: if any of these fail, saved asset
-// references break.
+// StringID is serialized into assets; its hash must NEVER change. The XXH3 known-answer vectors in hash_tests.cpp are the tripwire for that; this file covers the StringID API.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
 
-#include "core/hash/fnv_1_a.h"
+#include "core/hash/xxh3.h"
 #include "core/string_id.h"
-
-TEST_CASE("fnv1a64 matches canonical FNV-1a 64-bit test vectors", "[stringid][hash]")
-{
-    CHECK(fnv1a64("", 0) == 14695981039346656037ULL);
-    CHECK(fnv1a64("a", 1) == 0xaf63dc4c8601ec8cULL);
-    CHECK(fnv1a64("foobar", 6) == 0x85944171f73967e8ULL);
-}
-
-TEST_CASE("fnv1a64 char and byte overloads agree", "[stringid][hash]")
-{
-    const char* s = "will-engine";
-    CHECK(fnv1a64(s, 11) == fnv1a64(reinterpret_cast<const uint8_t*>(s), 11));
-}
-
-TEST_CASE("fnv1a64 seeded overload chains incremental hashing", "[stringid][hash]")
-{
-    const char* s = "abcdef";
-    const auto* b = reinterpret_cast<const uint8_t*>(s);
-    const uint64_t whole = fnv1a64(b, 6, FNV_OFFSET);
-    const uint64_t chained = fnv1a64(b + 3, 3, fnv1a64(b, 3, FNV_OFFSET));
-    CHECK(whole == chained);
-}
 
 TEST_CASE("SID, runtime StringID, and _sid literal produce the same id", "[stringid]")
 {
@@ -41,7 +17,7 @@ TEST_CASE("SID, runtime StringID, and _sid literal produce the same id", "[strin
     const StringID c = "gbuffer"_sid;
     CHECK(a == b);
     CHECK(b == c);
-    CHECK(a.id == fnv1a64("gbuffer", 7));
+    CHECK(a.id == Hash("gbuffer", 7));
 }
 
 TEST_CASE("StringID validity, equality, and ordering", "[stringid]")

@@ -13,7 +13,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "core/hash/fnv_1_a.h"
+#include "core/hash/xxh3.h"
 #include "core/memory/arena.h"
 #include "core/memory/handle.h"
 #include "core/memory/tlsf_allocator.h"
@@ -325,7 +325,7 @@ static Render::RenderGraphAllocFns MakeStubAllocFns()
     };
     fns.getBufferDeviceAddress = [](const Render::VulkanContext*, VkBuffer buffer) -> VkDeviceAddress {
         auto val = reinterpret_cast<uint64_t>(buffer);
-        return fnv1a64(reinterpret_cast<const uint8_t*>(&val), sizeof(val));
+        return Hash(&val, sizeof(val));
     };
     fns.writeDescriptors = [](Render::PhysicalResource& phys) {
         static uint32_t descCounter = 1;
@@ -1355,7 +1355,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: ImportBuffer with device-address usage retrie
     const uint32_t physIdx = inspector.BufferPhysicalIndex(SID("ext"));
     CHECK(inspector.PhysicalAddressRetrieved(physIdx));
     auto val = reinterpret_cast<uint64_t>(buf);
-    const VkDeviceAddress expected = fnv1a64(reinterpret_cast<const uint8_t*>(&val), sizeof(val));
+    const VkDeviceAddress expected = Hash(&val, sizeof(val));
     CHECK(rdg.GetBufferAddress(SID("ext")) == expected);
 }
 

@@ -300,16 +300,15 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 
 StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 {
-    const size_t idx = params.index();
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx));
-    // The fuck is this shit what the fuck
-    std::visit([&hash](const auto& v) {
+    HashBuilder h;
+    h.Add(params.index());
+    std::visit([&h](const auto& v) {
         if constexpr (!std::is_same_v<std::decay_t<decltype(v)>, std::monostate>) {
-            hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+            h.Add(&v, sizeof(v));
         }
     }, params);
 
-    ModelID proceduralModelId{hash};
+    ModelID proceduralModelId{h.Finish()};
 
     StaticModelHandle* existingPtr = modelIdToHandle.Find(proceduralModelId);
     if (existingPtr != nullptr) {
@@ -351,39 +350,44 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
     return handle;
 }
 
+static uint64_t HashSplineParams(const SplineParams& params)
+{
+    HashBuilder h;
+    h.Add(params.spline.points.Data(), params.spline.points.Size() * sizeof(Vec3));
+    h.Add(params.spline.mode);
+    h.Add(params.spline.bClosed);
+    h.Add(params.spline.rolls.Data(), params.spline.rolls.Size() * sizeof(float));
+    h.Add(params.radius);
+    h.Add(params.rollAngle);
+    h.Add(params.sides);
+    h.Add(params.segmentsPerSpan);
+    h.Add(params.bCaps);
+    h.Add(params.bCrossPlanks);
+    h.Add(params.crossPlankInterval);
+    h.Add(params.crossPlankHeight);
+    h.Add(params.crossPlankThickness);
+    h.Add(params.crossPlankLength);
+    h.Add(params.profile.type);
+    h.Add(params.profile.width);
+    h.Add(params.profile.height);
+    h.Add(params.profile.cornerRadius);
+    h.Add(params.profile.cornerSegments);
+    h.Add(params.profile.thickness);
+    h.Add(params.railing.bEnabled);
+    h.Add(params.railing.bPosts);
+    h.Add(params.railing.postInterval);
+    h.Add(params.railing.postBottom);
+    h.Add(params.railing.postTop);
+    h.Add(params.railing.postSize);
+    h.Add(params.railing.postLateral);
+    h.Add(params.railing.lateralOffset);
+    h.Add(params.railing.lanes.Data(), params.railing.lanes.Size() * sizeof(Vec2));
+    return h.Finish();
+}
+
 StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 {
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.points.Data()), params.spline.points.Size() * sizeof(Vec3));
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.mode), sizeof(params.spline.mode), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.bClosed), sizeof(params.spline.bClosed), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.rolls.Data()), params.spline.rolls.Size() * sizeof(float), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius), sizeof(params.radius), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle), sizeof(params.rollAngle), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides), sizeof(params.sides), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan), sizeof(params.segmentsPerSpan), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps), sizeof(params.bCaps), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks), sizeof(params.bCrossPlanks), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankHeight), sizeof(params.crossPlankHeight), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankThickness), sizeof(params.crossPlankThickness), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankLength), sizeof(params.crossPlankLength), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.type), sizeof(params.profile.type), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.width), sizeof(params.profile.width), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.height), sizeof(params.profile.height), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerRadius), sizeof(params.profile.cornerRadius), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerSegments), sizeof(params.profile.cornerSegments), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.thickness), sizeof(params.profile.thickness), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bEnabled), sizeof(params.railing.bEnabled), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bPosts), sizeof(params.railing.bPosts), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postInterval), sizeof(params.railing.postInterval), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postBottom), sizeof(params.railing.postBottom), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postTop), sizeof(params.railing.postTop), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postSize), sizeof(params.railing.postSize), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postLateral), sizeof(params.railing.postLateral), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.lateralOffset), sizeof(params.railing.lateralOffset), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.railing.lanes.Data()), params.railing.lanes.Size() * sizeof(Vec2), hash);
-
-    ModelID splineModelId{hash};
+    ModelID splineModelId{HashSplineParams(params)};
 
     StaticModelHandle* existingPtr = modelIdToHandle.Find(splineModelId);
     if (existingPtr != nullptr) {
@@ -436,23 +440,22 @@ StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 StaticModelHandle AssetManager::LoadModuleModel(const ModuleParams& params)
 {
     constexpr uint8_t kind = 77;
-    uint64_t hash = fnv1a64(&kind, sizeof(kind));
-    const size_t partCount = params.parts.Size();
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&partCount), sizeof(partCount), hash);
+    HashBuilder h;
+    h.Add(kind);
+    h.Add(params.parts.Size());
     for (const ModulePart& part : params.parts) {
-        const size_t idx = part.shape.index();
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx), hash);
-        std::visit([&hash]<typename T0>(const T0& v) {
+        h.Add(part.shape.index());
+        std::visit([&h]<typename T0>(const T0& v) {
             if constexpr (!std::is_same_v<std::decay_t<T0>, std::monostate>) {
-                hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+                h.Add(&v, sizeof(v));
             }
         }, part.shape);
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&part.offset), sizeof(part.offset), hash);
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&part.rotation), sizeof(part.rotation), hash);
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&part.materialSlot), sizeof(part.materialSlot), hash);
+        h.Add(&part.offset, sizeof(part.offset));
+        h.Add(&part.rotation, sizeof(part.rotation));
+        h.Add(part.materialSlot);
     }
 
-    ModelID moduleModelId{hash};
+    ModelID moduleModelId{h.Finish()};
 
     StaticModelHandle* existingPtr = modelIdToHandle.Find(moduleModelId);
     if (existingPtr != nullptr) {
@@ -506,27 +509,24 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
 {
     assert(!IsFontFrozen(fontId) && "LoadText3DModel called with a frozen font. You should freeze-gate (IsFontFrozen) before generating");
 
-    const uint64_t fontIdValue = fontId.id;
-
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&fontIdValue), sizeof(fontIdValue));
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(text.c_str()), text.Size(), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&depth), sizeof(depth), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&flatness), sizeof(flatness), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
-    const uint8_t alignByte = static_cast<uint8_t>(align);
-    hash = fnv1a64(&alignByte, sizeof(alignByte), hash);
-    const uint8_t anchorByte = static_cast<uint8_t>(anchor);
-    hash = fnv1a64(&anchorByte, sizeof(anchorByte), hash);
+    HashBuilder h;
+    h.Add(fontId.id);
+    h.Add(text.c_str(), text.Size());
+    h.Add(depth);
+    h.Add(flatness);
+    h.Add(tracking);
+    h.Add(scale);
+    h.Add(bSmoothNormals);
+    h.Add(static_cast<uint8_t>(align));
+    h.Add(static_cast<uint8_t>(anchor));
     if (wrapWidth > 0.0f) {
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&wrapWidth), sizeof(wrapWidth), hash);
+        h.Add(wrapWidth);
     }
     if (bendRadius != 0.0f) {
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bendRadius), sizeof(bendRadius), hash);
+        h.Add(bendRadius);
     }
 
-    ModelID textModelId{hash};
+    ModelID textModelId{h.Finish()};
 
     StaticModelHandle* existingPtr = modelIdToHandle.Find(textModelId);
     if (existingPtr != nullptr) {
@@ -565,7 +565,7 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     text3DParamsFreeList.PopBack();
     Text3DParams& params = text3DParamsPool[paramsSlot];
     params = {};
-    params.fontId = fontIdValue;
+    params.fontId = fontId.id;
     params.text = text;
     params.depth = depth;
     params.flatness = flatness;
@@ -643,47 +643,13 @@ bool AssetManager::IsModelFrozen(ModelID modelId) const
     return false;
 }
 
-static uint64_t HashSplineParams(const SplineParams& params)
-{
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.points.Data()), params.spline.points.Size() * sizeof(Vec3));
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.mode), sizeof(params.spline.mode), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.spline.bClosed), sizeof(params.spline.bClosed), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.spline.rolls.Data()), params.spline.rolls.Size() * sizeof(float), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.radius), sizeof(params.radius), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.rollAngle), sizeof(params.rollAngle), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.sides), sizeof(params.sides), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.segmentsPerSpan), sizeof(params.segmentsPerSpan), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCaps), sizeof(params.bCaps), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.bCrossPlanks), sizeof(params.bCrossPlanks), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankInterval), sizeof(params.crossPlankInterval), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankHeight), sizeof(params.crossPlankHeight), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankThickness), sizeof(params.crossPlankThickness), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.crossPlankLength), sizeof(params.crossPlankLength), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.type), sizeof(params.profile.type), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.width), sizeof(params.profile.width), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.height), sizeof(params.profile.height), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerRadius), sizeof(params.profile.cornerRadius), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.cornerSegments), sizeof(params.profile.cornerSegments), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.profile.thickness), sizeof(params.profile.thickness), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bEnabled), sizeof(params.railing.bEnabled), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.bPosts), sizeof(params.railing.bPosts), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postInterval), sizeof(params.railing.postInterval), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postBottom), sizeof(params.railing.postBottom), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postTop), sizeof(params.railing.postTop), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postSize), sizeof(params.railing.postSize), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.postLateral), sizeof(params.railing.postLateral), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&params.railing.lateralOffset), sizeof(params.railing.lateralOffset), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(params.railing.lanes.Data()), params.railing.lanes.Size() * sizeof(Vec2), hash);
-    return hash;
-}
-
 PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& params)
 {
-    uint64_t hash = HashSplineParams(params);
-    const uint8_t kind = static_cast<uint8_t>(PhysicsColliderKind::Compound);
-    hash = fnv1a64(&kind, sizeof(kind), hash);
+    HashBuilder h;
+    h.Add(HashSplineParams(params));
+    h.Add(static_cast<uint8_t>(PhysicsColliderKind::Compound));
 
-    PhysicsColliderID colliderId{hash};
+    PhysicsColliderID colliderId{h.Finish()};
 
     PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
     if (existingPtr != nullptr) {
@@ -730,17 +696,17 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
 
 PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParams& params)
 {
-    const size_t idx = params.index();
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&idx), sizeof(idx));
-    std::visit([&hash]<typename T0>(const T0& v) {
+    HashBuilder h;
+    h.Add(params.index());
+    std::visit([&h]<typename T0>(const T0& v) {
         if constexpr (!std::is_same_v<std::decay_t<T0>, std::monostate>) {
-            hash = fnv1a64(reinterpret_cast<const uint8_t*>(&v), sizeof(v), hash);
+            h.Add(&v, sizeof(v));
         }
     }, params);
     constexpr uint8_t domain = 1;
-    hash = fnv1a64(&domain, sizeof(domain), hash);
+    h.Add(domain);
 
-    PhysicsColliderID colliderId{hash};
+    PhysicsColliderID colliderId{h.Finish()};
 
     PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
     if (existingPtr != nullptr) {
@@ -786,13 +752,13 @@ PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceMode
         return PhysicsColliderHandle::INVALID;
     }
 
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&sourceModelId.id), sizeof(sourceModelId.id));
-    const uint8_t kindByte = static_cast<uint8_t>(kind);
-    hash = fnv1a64(&kindByte, sizeof(kindByte), hash);
+    HashBuilder h;
+    h.Add(sourceModelId.id);
+    h.Add(static_cast<uint8_t>(kind));
     constexpr uint8_t domain = 2;
-    hash = fnv1a64(&domain, sizeof(domain), hash);
+    h.Add(domain);
 
-    PhysicsColliderID colliderId{hash};
+    PhysicsColliderID colliderId{h.Finish()};
 
     PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
     if (existingPtr != nullptr) {
@@ -833,32 +799,29 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
 {
     assert(!IsFontFrozen(fontId) && "LoadText3DCollider called with a frozen font. Freeze-gate (IsFontFrozen) before generating");
 
-    const uint64_t fontIdValue = fontId.id;
-    uint64_t hash = fnv1a64(reinterpret_cast<const uint8_t*>(&fontIdValue), sizeof(fontIdValue));
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(text.c_str()), text.Size(), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&depth), sizeof(depth), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&flatness), sizeof(flatness), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&tracking), sizeof(tracking), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&scale), sizeof(scale), hash);
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bSmoothNormals), sizeof(bSmoothNormals), hash);
-    const uint8_t alignByte = static_cast<uint8_t>(align);
-    hash = fnv1a64(&alignByte, sizeof(alignByte), hash);
-    const uint8_t anchorByte = static_cast<uint8_t>(anchor);
-    hash = fnv1a64(&anchorByte, sizeof(anchorByte), hash);
+    HashBuilder h;
+    h.Add(fontId.id);
+    h.Add(text.c_str(), text.Size());
+    h.Add(depth);
+    h.Add(flatness);
+    h.Add(tracking);
+    h.Add(scale);
+    h.Add(bSmoothNormals);
+    h.Add(static_cast<uint8_t>(align));
+    h.Add(static_cast<uint8_t>(anchor));
     if (wrapWidth > 0.0f) {
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&wrapWidth), sizeof(wrapWidth), hash);
+        h.Add(wrapWidth);
     }
     if (bendRadius != 0.0f) {
-        hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bendRadius), sizeof(bendRadius), hash);
+        h.Add(bendRadius);
     }
-    hash = fnv1a64(reinterpret_cast<const uint8_t*>(&bPrecise), sizeof(bPrecise), hash);
+    h.Add(bPrecise);
     const PhysicsColliderKind kind = bPrecise ? PhysicsColliderKind::TriangleMesh : PhysicsColliderKind::Compound;
-    const uint8_t kindByte = static_cast<uint8_t>(kind);
-    hash = fnv1a64(&kindByte, sizeof(kindByte), hash);
+    h.Add(static_cast<uint8_t>(kind));
     constexpr uint8_t domain = 3;
-    hash = fnv1a64(&domain, sizeof(domain), hash);
+    h.Add(domain);
 
-    PhysicsColliderID colliderId{hash};
+    PhysicsColliderID colliderId{h.Finish()};
 
     PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
     if (existingPtr != nullptr) {
@@ -894,7 +857,7 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     text3DParamsFreeList.PopBack();
     Text3DParams& params = text3DParamsPool[paramsSlot];
     params = {};
-    params.fontId = fontIdValue;
+    params.fontId = fontId.id;
     params.text = text;
     params.depth = depth;
     params.flatness = flatness;
@@ -1906,7 +1869,7 @@ void AssetManager::UnloadTexture(TextureID id)
 
 Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 {
-    SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&samplerDesc), sizeof(samplerDesc))};
+    SamplerID id{Hash(&samplerDesc, sizeof(samplerDesc))};
 
     SamplerHandle* existingPtr = samplerIdToHandle.Find(id);
     if (existingPtr != nullptr) {
@@ -1948,7 +1911,7 @@ Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 
 void AssetManager::UnloadSampler(SamplerDesc& desc)
 {
-    SamplerID id{fnv1a64(reinterpret_cast<uint8_t*>(&desc), sizeof(desc))};
+    SamplerID id{Hash(&desc, sizeof(desc))};
 
     SamplerHandle* handlePtr = samplerIdToHandle.Find(id);
     if (handlePtr == nullptr) {

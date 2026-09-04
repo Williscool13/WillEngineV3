@@ -7,13 +7,12 @@ built from the same dict shapes wscene_authoring.py has always produced.
 
 import struct
 
+from xxh3 import string_id
 
-def fnv1a64(s):
-    h = 0xCBF29CE484222325
-    for c in s.encode():
-        h ^= c
-        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    return str(h)
+
+def type_key(s):
+    """Decimal block opener for a component: its COMPONENT_NAME hashed the way Game::TypeSID does."""
+    return str(string_id(s))
 
 
 def hx(v):
@@ -564,38 +563,38 @@ def c_physics_body(w, j):
 
 
 COMPONENTS = {
-    fnv1a64("TransformComponent"): c_transform,
-    fnv1a64("HierarchyComponent"): c_hierarchy,
-    fnv1a64("NameComponent"): c_name,
-    fnv1a64("PrefabInstanceComponent"): c_prefab_instance,
-    fnv1a64("StableIdComponent"): c_stable_id,
-    fnv1a64("EntityFolderComponent"): c_entity_folder,
-    fnv1a64("SceneFolderComponent"): c_scene_folder,
-    fnv1a64("FreeCameraComponent"): c_free_camera,
-    fnv1a64("MotionBlurMovementComponent"): c_motion_blur,
-    fnv1a64("RenderFlagsComponent"): c_render_flags,
-    fnv1a64("CheckpointComponent"): c_checkpoint,
-    fnv1a64("PlayerSpawnComponent"): c_player_spawn,
-    fnv1a64("RotateInPlaceComponent"): c_rotate_in_place,
-    fnv1a64("PathMoverComponent"): c_path_mover,
-    fnv1a64("DebugGizmoComponent"): c_debug_gizmo,
-    fnv1a64("StaticMeshComponent"): c_static_mesh,
-    fnv1a64("StaticMeshPrimitiveComponent"): c_static_mesh_primitive,
-    fnv1a64("ModuleMeshComponent"): c_module_mesh,
-    fnv1a64("ProceduralMeshComponent"): c_procedural_mesh,
-    fnv1a64("SplineMeshComponent"): c_spline_mesh,
-    fnv1a64("Text3DComponent"): c_text3d,
-    fnv1a64("TextComponent"): c_text,
-    fnv1a64("LocalDDGIVolumeComponent"): c_local_ddgi,
-    fnv1a64("ReflectionProbeComponent"): c_reflection_probe,
-    fnv1a64("AreaLightComponent"): c_area_light,
-    fnv1a64("SphereLightComponent"): c_sphere_light,
-    fnv1a64("DirectionalLightComponent"): c_directional_light,
-    fnv1a64("SkyboxComponent"): c_skybox,
-    fnv1a64("PhysicsBodyDesc"): c_physics_body,
+    type_key("TransformComponent"): c_transform,
+    type_key("HierarchyComponent"): c_hierarchy,
+    type_key("NameComponent"): c_name,
+    type_key("PrefabInstanceComponent"): c_prefab_instance,
+    type_key("StableIdComponent"): c_stable_id,
+    type_key("EntityFolderComponent"): c_entity_folder,
+    type_key("SceneFolderComponent"): c_scene_folder,
+    type_key("FreeCameraComponent"): c_free_camera,
+    type_key("MotionBlurMovementComponent"): c_motion_blur,
+    type_key("RenderFlagsComponent"): c_render_flags,
+    type_key("CheckpointComponent"): c_checkpoint,
+    type_key("PlayerSpawnComponent"): c_player_spawn,
+    type_key("RotateInPlaceComponent"): c_rotate_in_place,
+    type_key("PathMoverComponent"): c_path_mover,
+    type_key("DebugGizmoComponent"): c_debug_gizmo,
+    type_key("StaticMeshComponent"): c_static_mesh,
+    type_key("StaticMeshPrimitiveComponent"): c_static_mesh_primitive,
+    type_key("ModuleMeshComponent"): c_module_mesh,
+    type_key("ProceduralMeshComponent"): c_procedural_mesh,
+    type_key("SplineMeshComponent"): c_spline_mesh,
+    type_key("Text3DComponent"): c_text3d,
+    type_key("TextComponent"): c_text,
+    type_key("LocalDDGIVolumeComponent"): c_local_ddgi,
+    type_key("ReflectionProbeComponent"): c_reflection_probe,
+    type_key("AreaLightComponent"): c_area_light,
+    type_key("SphereLightComponent"): c_sphere_light,
+    type_key("DirectionalLightComponent"): c_directional_light,
+    type_key("SkyboxComponent"): c_skybox,
+    type_key("PhysicsBodyDesc"): c_physics_body,
 }
 
-TAGS = {fnv1a64(n) for n in ["DeathZoneComponent", "AntiGravityTag", "FloorTag", "DrawPhysicsDebugTag"]}
+TAGS = {type_key(n) for n in ["DeathZoneComponent", "AntiGravityTag", "FloorTag", "DrawPhysicsDebugTag"]}
 
 
 def emit_component_block(w, type_id, comp):

@@ -41,8 +41,8 @@ MAT_MIRROR = 12524225612196796220   # reflective_restir (metallic 1, roughness 0
 MAT_GLOSSY = 13687812491276665160   # somewhat_reflective (metallic 1, roughness 0.305)
 
 ROBOTO_FONT = IDX.font("Roboto")
-FRAG_SHADER = 11262630175972558216
-LIT_EMISSIVE = 12304496605836952073
+FRAG_SHADER = 16532098932897623660
+LIT_EMISSIVE = 14720002576866434405
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")

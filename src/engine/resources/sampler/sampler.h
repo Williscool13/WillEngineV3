@@ -62,7 +62,7 @@ struct Sampler
 
     SamplerDesc desc;
     /**
-     * fnv1a64 hash of the desc
+     * Hash of the desc bytes
      */
     SamplerID id{SamplerID::INVALID};
 

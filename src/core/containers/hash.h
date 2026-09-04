@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "core/hash/fnv_1_a.h"
+#include "core/hash/xxh3.h"
 #include "core/string_id.h"
 #include "inline_path.h"
 
@@ -26,14 +26,14 @@ template<> struct Hash<const char*>
 {
     uint64_t operator()(const char* k) const
     {
-        return k ? fnv1a64(k, strlen(k)) : 0;
+        return k ? ::Hash(k, strlen(k)) : 0;
     }
 };
 template<size_t N> struct Hash<InlinePath<N>>
 {
     uint64_t operator()(const InlinePath<N>& k) const
     {
-        return fnv1a64(k.c_str(), k.Size());
+        return ::Hash(k.c_str(), k.Size());
     }
 };
 } // namespace Core

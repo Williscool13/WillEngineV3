@@ -47,7 +47,7 @@ thinOccluderCompensation|0x00000000
 ;
 iblIntensity|0x3f800000
 lightingMode|2
-lightingShaderOverride|12304496605836952073
+lightingShaderOverride|14720002576866434405
 reflection
 bDenoiserEnabled|0
 bEnabled|0
@@ -215,4 +215,4 @@ sigmaNormal|0x42800000
 ;
 temporalMCap|200
 ;
-shadingShaderOverride|11262630175972558216
+shadingShaderOverride|16532098932897623660

@@ -60,11 +60,11 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCENE_DIR = os.path.join(REPO, "assets", "scenes")
 MAT_DIR = os.path.join(REPO, "assets", "materials")
 
-FRAG_SHADER = 11262630175972558216
+FRAG_SHADER = 16532098932897623660
 # SID("default_pbr_restir") and SID("default_pbr"). These were named LIT_RESTIR/LIT_EMISSIVE;
 # the second one is not an emissive shader, it is just the non-ReSTIR pipeline.
-LIT_PBR_RESTIR = 7554520945661456859
-LIT_PBR = 12304496605836952073
+LIT_PBR_RESTIR = 6423489698308471953
+LIT_PBR = 14720002576866434405
 
 # Engine caps this exercises. Kept here so the scene sizes and the numbers in the docstring
 # cannot drift apart silently.

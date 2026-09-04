@@ -4,7 +4,7 @@ Helper library for hand-authoring .wscene files without parsing an existing
 scene by hand each time. Helpers build the historical dict shapes; write_scene
 renders them to the v2 text body via wtext_serialize.py. Component-type keys
 are computed, not copied:
-they are fnv1a64 of the name each component is registered under in
+they are the StringID (xxh3.py) of the name each component is registered under in
 component_registry.cpp (see component_key() below). Any registered component is
 therefore writable from here. Field schemas per key are noted inline.
 
@@ -20,16 +20,12 @@ import os
 import re
 import struct
 
-def _fnv1a64(text):
-    h = 0xCBF29CE484222325
-    for b in text.encode("utf-8"):
-        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    return h
+from xxh3 import string_id
 
 def component_key(component_name):
-    """fnv1a64 of a component's COMPONENT_NAME (see Game::TypeSID). Full 64 bits, unlike name_id().
+    """StringID of a component's COMPONENT_NAME (see Game::TypeSID). Full 64 bits, unlike name_id().
     If one stops matching, that component's COMPONENT_NAME changed and every asset needs migrating."""
-    return str(_fnv1a64(component_name))
+    return str(string_id(component_name))
 
 # ---- component-type keys ----
 TRANSFORM = component_key("TransformComponent")             # translation/rotation(wxyz)/scale
@@ -202,14 +198,11 @@ def spiral_math(outer_radius, total_height, total_sweep_deg, sample_radius=None)
 # id / entity assembly
 # =============================================================================
 def name_id(name):
-    """FNV-1a 64 of `name`, masked to 63 bits. Order-independent, so unlike next_id() it survives
+    """StringID of `name`, masked to 63 bits. Order-independent, so unlike next_id() it survives
     entities/assets being added or removed ahead of it. Use it for every id an asset is keyed by
     (material ids, probeIds, scene ids): the id then follows the unique asset NAME and two
     generators can never mint the same one."""
-    h = 0xCBF29CE484222325
-    for b in name.encode("utf-8"):
-        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    return h & 0x7FFFFFFFFFFFFFFF
+    return string_id(name) & 0x7FFFFFFFFFFFFFFF
 
 _ctr = [0x1234567890ABCDEF]
 
@@ -422,7 +415,7 @@ def add_module(entity, parts, materials=()):
 
 def add_static_mesh(entity, model_id, lighting_shader=0, shading_shader=0, material_overrides=None, primitive_blacklist=None):
     """Whole imported model (.wsmesh) as ONE entity; model_id = asset_index.model(name).
-    lighting_shader/shading_shader = _fnv1a64 of a pipeline name (e.g. "default_pbr_restir"); 0 keeps
+    lighting_shader/shading_shader = string_id of a pipeline name (e.g. "default_pbr_restir"); 0 keeps
     each imported material's own shader (imports default to default_pbr, NOT the restir one).
     material_overrides = {slot: material_id} (cap 32); primitive_blacklist = [ordinal, ...] (cap 64).
     No physics; add a PhysicsBodyDesc separately if the model needs collision."""
@@ -798,9 +791,9 @@ def write_material(name, base_color=(1.0, 1.0, 1.0, 1.0), metallic=0.0, roughnes
         "colorUvTransform": list(uv),
         "emissiveFactor": list(emissive),
         "emissiveUvTransform": list(uv),
-        "fragmentShader": _fnv1a64(fragment_shader),
+        "fragmentShader": string_id(fragment_shader),
         "id": mid,
-        "lightingShader": _fnv1a64(lighting_shader),
+        "lightingShader": string_id(lighting_shader),
         "metalRoughFactors": [metallic, roughness, 0.0, 0.0],
         "metalRoughUvTransform": list(uv),
         "name": name,

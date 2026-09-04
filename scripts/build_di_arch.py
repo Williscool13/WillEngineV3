@@ -59,7 +59,7 @@ SIBENIK_MODEL = IDX.model("sibenik")
 BARREL_PREFAB = IDX.prefab("Barrel")
 BARREL_MATERIAL = 4805580789092568935  # from barrel.wprefab's own procedural payload
 
-LIT_RESTIR = wa._fnv1a64("default_pbr_restir")
+LIT_RESTIR = wa.string_id("default_pbr_restir")
 
 WALL_T = 0.25
 GROUND_TOP = -WALL_T - 0.02      # 2cm below every floor slab, ladder convention

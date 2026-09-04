@@ -40,9 +40,9 @@ SCENE_PATH = os.path.join(REPO, "assets", "scenes", "lighting_lab.wscene")
 # sequence would change the scene's identity every time an entity is added ahead of it.
 SCENE_ID = 908694288083905623
 
-FRAG_SHADER = 11262630175972558216
-LIT_RESTIR = 7554520945661456859       # pbr_restir / reflective_restir lighting shader
-LIT_EMISSIVE = 12304496605836952073    # emissive / somewhat_reflective lighting shader
+FRAG_SHADER = 16532098932897623660
+LIT_RESTIR = 6423489698308471953       # pbr_restir / reflective_restir lighting shader
+LIT_EMISSIVE = 14720002576866434405    # emissive / somewhat_reflective lighting shader
 
 # existing materials we reuse rather than re-author
 MAT_MIRROR = 12524225612196796220      # reflective_restir (metallic 1, roughness 0)

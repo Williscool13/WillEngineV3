@@ -11,7 +11,6 @@
 #include "core/containers/function.h"
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_function.h"
-#include "core/hash/fnv_1_a.h"
 #include "core/memory/memory_manager.h"
 #include "engine/compression/compression.h"
 #include "engine/logging/engine_log.h"
@@ -95,7 +94,7 @@ void CreateCriticalEngineResources(Core::MemoryManager* memoryManager)
         WriteSimpleRGBA8WTexture(
             memoryManager,
             whitePath.c_str(),
-            Engine::TextureID(fnv1a64("white", 5)), "engine_default_white", 1, 1, pixels
+            Engine::TextureID(14905071471194202630ULL), "engine_default_white", 1, 1, pixels
         );
     }
 
@@ -113,7 +112,7 @@ void CreateCriticalEngineResources(Core::MemoryManager* memoryManager)
         WriteSimpleRGBA8WTexture(
             memoryManager,
             errorPath.c_str(),
-            Engine::TextureID(fnv1a64("error", 5)), "engine_default_error", 4, 4, pixels
+            Engine::TextureID(11489899660447141169ULL), "engine_default_error", 4, 4, pixels
         );
     }
 }

@@ -207,5 +207,5 @@ temporalClampScale|0x3f800000
 ;
 iblIntensity|0x3f800000
 indirectIntensity|0x3f333333
-shadingShaderOverride|11262630175972558216
-lightingShaderOverride|7554520945661456859
+shadingShaderOverride|16532098932897623660
+lightingShaderOverride|6423489698308471953

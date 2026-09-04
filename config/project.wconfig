@@ -97,11 +97,11 @@ id|8657435429977274039
 name|Bistro Test
 ;
 s
-id|432933373719095695
+id|6251551709931360063
 name|instance_stress
 ;
 s
-id|8673693672080960228
+id|6134422189197649093
 name|ReSTIR Shader Lab
 ;
 s
@@ -117,14 +117,14 @@ id|0
 name|
 ;
 s
-id|935397838551095508
+id|3657157123610817139
 name|emissive_strand_split
 ;
 s
-id|2969348394993322204
+id|4722487947431716148
 name|emissive_strand_merged
 ;
 s
-id|8182859775055773030
+id|7636658603264895446
 name|emissive_strand_spheres
 ;
