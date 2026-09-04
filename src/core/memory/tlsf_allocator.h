@@ -61,6 +61,7 @@ enum class AllocTag : uint32_t
     Stbi,
     Bc7enc,
     HarfBuzz,
+    MCPServer,
 
     Count
 };

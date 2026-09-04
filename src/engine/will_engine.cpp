@@ -33,6 +33,7 @@
 #include "core/memory/concurrent_queue_traits.h"
 #include "logging/engine_assert.h"
 #include "logging/engine_logger.h"
+#include "mcp/mcp_server.h"
 #include "physics/physics_system.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
@@ -391,6 +392,14 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         ZoneScopedN("CreateAudioManager");
         audioManager = new(memoryManager.PersistentAllocRaw(sizeof(Audio::AudioManager), Core::AllocTag::AudioManager)) Audio::AudioManager(asyncAssetLoadManager);
     }
+
+#if WILL_EDITOR
+    //
+    {
+        ZoneScopedN("CreateMCPServer");
+        mcpServer = new(memoryManager.PersistentAllocRaw(sizeof(MCP::MCPServer), Core::AllocTag::MCPServer)) MCP::MCPServer(memoryManager);
+    }
+#endif
 
 
     //
@@ -1354,6 +1363,11 @@ void WillEngine::EditorImgui()
 void WillEngine::Run()
 {
     renderThread->Start();
+
+#if WILL_EDITOR
+    mcpServer->Start(engineState->automation.mcpPort > 0 ? engineState->automation.mcpPort : MCP::DEFAULT_PORT);
+#endif
+
     timeManager->Reset();
 
     const auto startupTime = std::chrono::steady_clock::now();
@@ -1728,6 +1742,16 @@ void WillEngine::PrepareImgui(ImDrawDataSnapshot* imguiSnapshot)
 
 void WillEngine::Cleanup()
 {
+#if WILL_EDITOR
+    if (mcpServer) {
+        mcpServer->RequestShutdown();
+        mcpServer->Join();
+        mcpServer->~MCPServer();
+        memoryManager.PersistentFree(mcpServer);
+        mcpServer = nullptr;
+    }
+#endif
+
 #if WILL_EDITOR
     assetGenerator->Join();
 #endif

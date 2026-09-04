@@ -16,11 +16,12 @@ enum class LogCategory
     Asset,
     Game,
     Temp,
+    MCP,
     Count
 };
 
 inline constexpr const char* kCategoryNames[] = {
-    "Engine", "Renderer", "Physics", "Audio", "Asset", "Game", "Temp"
+    "Engine", "Renderer", "Physics", "Audio", "Asset", "Game", "Temp", "MCP"
 };
 } // Engine
 

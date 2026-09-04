@@ -20,6 +20,7 @@ struct AutomationConfig
     int32_t settleFrames{-1};
     bool bExitWhenDone{false};
     bool bForceNoREBAR{false};
+    int32_t mcpPort{0};
 
     [[nodiscard]] bool IsCaptureRun() const { return !shotsPath.IsEmpty(); }
 };

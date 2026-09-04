@@ -50,6 +50,11 @@ namespace Engine
 struct EngineState;
 }
 
+namespace Engine::MCP
+{
+class MCPServer;
+}
+
 namespace AssetLoad
 {
 class AsyncAssetLoadManager;
@@ -126,6 +131,9 @@ private: // Main Systems
     Render::GPUDispatcher* gpuDispatcher{};
     Core::FrameSync* engineRenderSynchronization{};
     Audio::AudioManager* audioManager{};
+#if WILL_EDITOR
+    MCP::MCPServer* mcpServer{};
+#endif
 
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{};
     AssetManager* assetManager{};
