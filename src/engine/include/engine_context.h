@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <atomic>
+#include <mutex>
 #include <utility>
 #include <clay.h>
 
@@ -14,8 +15,14 @@
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_path.h"
 #include "core/memory/virtual_arena.h"
+#include "core/time/time_frame.h"
 #include "engine/resources/environment_map/probe_format.h"
 #include "render/pipelines/pipeline_manager.h"
+
+namespace Render
+{
+struct RendererStatisticsManager;
+}
 
 namespace enki
 {
@@ -117,6 +124,26 @@ struct RescanRequests
 
 inline constexpr size_t MAX_ASSET_RESOLVES_PER_TICK = 2048;
 
+/** Engine-thread copy of the current TimeFrame, readable from any thread. Mirrors RendererStatisticsManager. */
+struct PublishedTimeFrame
+{
+    void Publish(const Core::TimeFrame& frame)
+    {
+        std::lock_guard lock(mutex);
+        published = frame;
+    }
+
+    Core::TimeFrame Get()
+    {
+        std::lock_guard lock(mutex);
+        return published;
+    }
+
+private:
+    std::mutex mutex{};
+    Core::TimeFrame published{};
+};
+
 struct EngineContext
 {
     WindowContext windowContext{};
@@ -154,6 +181,8 @@ struct EngineContext
 
     uint64_t currentRenderFrame{0};
     EngineFrameStatus frameStatus{};
+    PublishedTimeFrame publishedTimeFrame{};
+    Render::RendererStatisticsManager* rendererStatistics{nullptr};
 
     RadianceCacheStatsSnapshot radianceCacheStats{};
 

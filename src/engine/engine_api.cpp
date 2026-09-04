@@ -114,6 +114,7 @@ EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryMana
     : allocator(allocator),
       stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
       componentRegistry(allocator),
+      mcpTools(allocator),
       physics(allocator),
       editor(allocator),
       input(allocator)

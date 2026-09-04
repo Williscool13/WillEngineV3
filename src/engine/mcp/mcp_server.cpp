@@ -9,10 +9,12 @@
 #include <nlohmann/json.hpp>
 
 #include "mcp_server.h"
+#include "mcp_call_internal.h"
 
 #include <tracy/Tracy.hpp>
 
 #include "core/memory/memory_manager.h"
+#include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "platform/thread_utils.h"
 
@@ -31,10 +33,13 @@ static constexpr int ERROR_PARSE = -32700;
 static constexpr int ERROR_INVALID_REQUEST = -32600;
 static constexpr int ERROR_METHOD_NOT_FOUND = -32601;
 static constexpr int ERROR_INVALID_PARAMS = -32602;
+static constexpr int ERROR_INTERNAL = -32603;
 
 struct ServerImpl
 {
     httplib::Server server;
+    EngineContext* ctx{};
+    EngineState* state{};
 };
 
 static nlohmann::json MakeError(const nlohmann::json& id, const int code, const char* message)
@@ -76,8 +81,77 @@ static nlohmann::json HandleInitialize(const nlohmann::json& request)
     };
 }
 
+static nlohmann::json HandleToolsList(ServerImpl& impl)
+{
+    nlohmann::json tools = nlohmann::json::array();
+
+    ToolRegistry& r = impl.state->mcpTools;
+    std::lock_guard lock(r.mutex);
+    for (size_t i = 0; i < r.tools.Size(); ++i) {
+        const ToolEntry& e = r.tools[i];
+        nlohmann::json schema = e.inputSchemaJson ? nlohmann::json::parse(e.inputSchemaJson, nullptr, false) : nlohmann::json();
+        if (!schema.is_object()) {
+            schema = {{"type", "object"}};
+        }
+        tools.push_back({
+            {"name", e.name},
+            {"description", e.description ? e.description : ""},
+            {"inputSchema", std::move(schema)},
+        });
+    }
+
+    return {{"tools", std::move(tools)}};
+}
+
+static nlohmann::json HandleToolsCall(ServerImpl& impl, const nlohmann::json& id, const nlohmann::json& request)
+{
+    const auto params = request.find("params");
+    if (params == request.end() || !params->is_object()) {
+        return MakeError(id, ERROR_INVALID_PARAMS, "Missing params");
+    }
+    const auto nameField = params->find("name");
+    if (nameField == params->end() || !nameField->is_string()) {
+        return MakeError(id, ERROR_INVALID_PARAMS, "Missing tool name");
+    }
+
+    const std::string& name = nameField->get_ref<const std::string&>();
+    const StringID toolId(Hash(name.c_str(), name.size()));
+
+    ToolEntry entry{};
+    {
+        ToolRegistry& r = impl.state->mcpTools;
+        std::lock_guard lock(r.mutex);
+        const size_t* index = r.mapping.Find(toolId);
+        if (!index) {
+            return MakeError(id, ERROR_INVALID_PARAMS, "Unknown tool");
+        }
+        entry = r.tools[*index];
+    }
+
+    if (entry.bNeedsDrain) {
+        return MakeError(id, ERROR_INTERNAL, "Tool requires the engine thread; drain dispatch not implemented yet");
+    }
+
+    const auto argsField = params->find("arguments");
+    const nlohmann::json args = argsField != params->end() && argsField->is_object() ? *argsField : nlohmann::json::object();
+
+    Call::Impl callImpl{};
+    callImpl.args = &args;
+    Call call(&callImpl);
+    const ToolResult outcome = entry.invoke(impl.ctx, impl.state, call);
+
+    nlohmann::json content = nlohmann::json::array();
+    if (outcome == ToolResult::Error || callImpl.bError) {
+        content.push_back({{"type", "text"}, {"text", callImpl.errorMessage.IsEmpty() ? "Tool failed" : callImpl.errorMessage.c_str()}});
+        return MakeResult(id, {{"content", std::move(content)}, {"isError", true}});
+    }
+
+    content.push_back({{"type", "text"}, {"text", callImpl.result.dump()}});
+    return MakeResult(id, {{"content", std::move(content)}, {"structuredContent", std::move(callImpl.result)}, {"isError", false}});
+}
+
 /** @return false for notifications, which carry no id and must not produce a response body. */
-static bool HandleRequest(const nlohmann::json& request, nlohmann::json& outResponse)
+static bool HandleRequest(ServerImpl& impl, const nlohmann::json& request, nlohmann::json& outResponse)
 {
     const auto methodField = request.find("method");
     if (methodField == request.end() || !methodField->is_string()) {
@@ -102,11 +176,11 @@ static bool HandleRequest(const nlohmann::json& request, nlohmann::json& outResp
         return true;
     }
     if (method == "tools/list") {
-        outResponse = MakeResult(id, {{"tools", nlohmann::json::array()}});
+        outResponse = MakeResult(id, HandleToolsList(impl));
         return true;
     }
     if (method == "tools/call") {
-        outResponse = MakeError(id, ERROR_INVALID_PARAMS, "Unknown tool");
+        outResponse = HandleToolsCall(impl, id, request);
         return true;
     }
 
@@ -123,7 +197,8 @@ MCPServer::MCPServer(Core::MemoryManager& memoryManager_)
     impl->server.set_read_timeout(SOCKET_TIMEOUT_SECONDS, 0);
     impl->server.set_write_timeout(SOCKET_TIMEOUT_SECONDS, 0);
 
-    impl->server.Post(ENDPOINT, [](const httplib::Request& req, httplib::Response& res) {
+    ServerImpl* serverImpl = impl;
+    impl->server.Post(ENDPOINT, [serverImpl](const httplib::Request& req, httplib::Response& res) {
         res.set_header("Cache-Control", "no-store");
 
         const nlohmann::json body = nlohmann::json::parse(req.body, nullptr, false);
@@ -139,7 +214,7 @@ MCPServer::MCPServer(Core::MemoryManager& memoryManager_)
         }
 
         nlohmann::json response;
-        if (!HandleRequest(body, response)) {
+        if (!HandleRequest(*serverImpl, body, response)) {
             res.status = 202;
             return;
         }
@@ -168,8 +243,10 @@ MCPServer::~MCPServer()
     }
 }
 
-void MCPServer::Start(const int32_t port)
+void MCPServer::Start(const int32_t port, EngineContext* ctx, EngineState* state)
 {
+    impl->ctx = ctx;
+    impl->state = state;
     bShouldExit.store(false, std::memory_order_release);
     boundPort = port;
     thisThread = std::jthread([this, port] { ThreadMain(port); });

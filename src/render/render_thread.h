@@ -120,6 +120,7 @@ public:
     ResourceManager* GetResourceManager() const { return resourceManager; }
     PipelineManager* GetPipelineManager() const { return pipelineManager; }
     RendererStatistics GetRendererStatistics() { return statisticsManager.GetPublished(); }
+    RendererStatisticsManager* GetStatisticsManager() { return &statisticsManager; }
     void RequestVRAMReport() { bVRAMReportShouldWrite.store(true, std::memory_order_relaxed); }
 
     /** @returns the latest VRAM snapshot if one is ready, otherwise an empty report. */

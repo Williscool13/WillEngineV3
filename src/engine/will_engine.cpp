@@ -34,6 +34,7 @@
 #include "logging/engine_assert.h"
 #include "logging/engine_logger.h"
 #include "mcp/mcp_server.h"
+#include "mcp/mcp_tools_engine.h"
 #include "physics/physics_system.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
@@ -496,6 +497,8 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         engineContext->assetManager = assetManager;
         engineContext->materialManager = materialManager;
         engineContext->pipelineManager = renderThread->GetPipelineManager();
+        engineContext->rendererStatistics = renderThread->GetStatisticsManager();
+        MCP::RegisterEngineTools(engineState);
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;
@@ -588,6 +591,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
             gameFunctions.gameHotReloadSave(engineContext, engineState);
             engineState->registry = entt::registry{};
+            MCP::ClearGameTools(engineState);
 
             auto reloadResponse = gameDll.Reload();
 
@@ -1365,7 +1369,7 @@ void WillEngine::Run()
     renderThread->Start();
 
 #if WILL_EDITOR
-    mcpServer->Start(engineState->automation.mcpPort > 0 ? engineState->automation.mcpPort : MCP::DEFAULT_PORT);
+    mcpServer->Start(engineState->automation.mcpPort > 0 ? engineState->automation.mcpPort : MCP::DEFAULT_PORT, engineContext, engineState);
 #endif
 
     timeManager->Reset();
@@ -1565,6 +1569,7 @@ void WillEngine::Run()
         engineContext->bImGuiWantsTextInput = ImGui::GetIO().WantTextInput;
         engineContext->frameStatus.bAssetsChangedThisFrame = loadCounts.modelLoadedCount > 0 || loadCounts.fontLoadedCount > 0 || assetsReclaimed;
         engineContext->frameStatus.bScreenshotInFlight = renderThread->IsScreenshotInFlight();
+        engineContext->publishedTimeFrame.Publish(timeManager->GetTime());
 #if WILL_EDITOR
         engineContext->frameStatus.bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;
         if (!bGenPipelineWakeSent && renderThread->GetPipelineManager()->IsCategoryReady(Render::PipelineCategory::AssetGeneration)) {

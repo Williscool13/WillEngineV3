@@ -16,6 +16,12 @@ namespace Core
 class MemoryManager;
 }
 
+namespace Engine
+{
+struct EngineContext;
+struct EngineState;
+}
+
 namespace Engine::MCP
 {
 inline constexpr int32_t DEFAULT_PORT = 8787;
@@ -37,7 +43,7 @@ public:
     MCPServer& operator=(const MCPServer&) = delete;
 
     /** Binds 127.0.0.1 only. Bind failure is logged, not fatal; check IsListening. */
-    void Start(int32_t port);
+    void Start(int32_t port, EngineContext* ctx, EngineState* state);
 
     void RequestShutdown();
 

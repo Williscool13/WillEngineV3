@@ -37,6 +37,7 @@
 #include "engine/builtin_assets.h"
 #include "engine/component_registry.h"
 #include "engine/editor_state.h"
+#include "engine/mcp/mcp_tool.h"
 #include "engine/editor_texture_residency.h"
 #include "engine/resources/model/instance_store.h"
 #include "engine/resources/model/model_store.h"
@@ -228,6 +229,7 @@ struct EngineState
     /** Set by hierarchy mutators (SetParent/ClearParent/SpawnModel/load); EnsureHierarchyOrder re-sorts the HierarchyComponent pool when set. */
     bool bHierarchyOrderDirty{true};
     ComponentRegistry componentRegistry{};
+    MCP::ToolRegistry mcpTools{};
     Clay_Arena clayArena{};
     // todo: remove
     FontHandle uiFont{FontHandle::INVALID};

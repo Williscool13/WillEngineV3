@@ -94,6 +94,12 @@ add_library(engine STATIC
         resources/font/text3d_layout.h
         mcp/mcp_server.cpp
         mcp/mcp_server.h
+        mcp/mcp_tool.h
+        mcp/mcp_call_internal.h
+        mcp/mcp_call.cpp
+        mcp/mcp_registry.cpp
+        mcp/mcp_tools_engine.cpp
+        mcp/mcp_tools_engine.h
 )
 
 target_include_directories(engine PRIVATE
