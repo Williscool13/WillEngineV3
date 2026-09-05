@@ -1522,7 +1522,7 @@ void WillEngine::Run()
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();
-        const bool assetsReclaimed = assetManager->ResolveUnloads();
+        const ResolveUnloadResult unloadCounts = assetManager->ResolveUnloads();
 
         {
             constexpr uint32_t SCRATCH_RELEASE_QUIET_FRAMES = 120;
@@ -1595,7 +1595,16 @@ void WillEngine::Run()
         engineContext->bImguiKeyboardCaptured = ImGui::GetIO().WantCaptureKeyboard;
         engineContext->bImguiMouseCaptured = ImGui::GetIO().WantCaptureMouse;
         engineContext->bImGuiWantsTextInput = ImGui::GetIO().WantTextInput;
-        engineContext->frameStatus.bAssetsChangedThisFrame = loadCounts.modelLoadedCount > 0 || loadCounts.fontLoadedCount > 0 || assetsReclaimed;
+        engineContext->frameEvents = {
+            .modelsLoaded = loadCounts.modelLoadedCount,
+            .texturesLoaded = loadCounts.textureLoadedCount,
+            .cubemapsLoaded = loadCounts.cubeLoadedCount,
+            .samplersLoaded = loadCounts.samplerLoadedCount,
+            .fontsLoaded = loadCounts.fontLoadedCount,
+            .collidersLoaded = loadCounts.colliderLoadedCount,
+            .modelsUnloaded = unloadCounts.modelUnloadedCount,
+            .fontsUnloaded = unloadCounts.fontUnloadedCount,
+        };
         engineContext->frameStatus.bScreenshotInFlight = renderThread->IsScreenshotInFlight();
         engineContext->publishedTimeFrame.Publish(timeManager->GetTime());
 #if WILL_EDITOR

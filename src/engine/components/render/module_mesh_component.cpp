@@ -25,10 +25,8 @@ void ModuleMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 {
     registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<ModuleMeshComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
 
     registry.emplace_or_replace<ModuleMeshLoadPendingTag>(entity);
-    state->assetLoad.bPendingModelResolve = true;
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
@@ -127,7 +125,6 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Emissive Light##modulemesh", &emissiveLight)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-            state->assetLoad.bPendingModelResolve = true;
             modified = true;
         }
 
@@ -152,7 +149,6 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                     if (component.slotMaterials[slot].IsValid()) {
                         component.slotMaterials[slot] = Engine::MaterialID{};
                         registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-                        state->assetLoad.bPendingModelResolve = true;
                         modified = true;
                     }
                 }
@@ -160,7 +156,6 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                 if (picked.IsValid() && picked != component.slotMaterials[slot]) {
                     component.slotMaterials[slot] = picked;
                     registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-                    state->assetLoad.bPendingModelResolve = true;
                     modified = true;
                 }
                 ImGui::EndCombo();

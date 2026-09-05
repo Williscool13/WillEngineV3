@@ -193,7 +193,6 @@ void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::
     state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
-    state->assetLoad.bPendingModelResolve = true;
 }
 
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
@@ -284,7 +283,6 @@ void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt
     state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
-    state->assetLoad.bPendingModelResolve = true;
 }
 
 void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)

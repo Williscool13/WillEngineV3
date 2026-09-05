@@ -240,55 +240,67 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
+void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto& materialManager = ctx->materialManager;
+    Engine::InstanceStore& store = state->instanceStore;
+    Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
+    emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
+    constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE;
+
+    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0
+                              || state->registry.view<Component::ProbeBakeProxyHiddenTag>().size() > 0;
+
+    auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw) {
+        if (!surfaceRuntime.range.IsValid()) { return; }
+
+        bool bDraw = draw;
+        if (bDraw && bAnyHideTags) {
+            bDraw = !state->registry.any_of<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>(lightEntity);
+        }
+
+        if (bDraw) {
+            emissiveMaterial.props.emissiveFactor = glm::vec4(color, intensity);
+            const Engine::MaterialID materialID = Engine::HashMaterial(emissiveMaterial);
+            if (materialID != surfaceRuntime.materialID) {
+                materialManager->CreateSynthesizedMaterial(emissiveMaterial);
+                materialManager->AcquireMaterial(materialID);
+                materialManager->ReleaseMaterial(surfaceRuntime.materialID);
+                store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
+                surfaceRuntime.materialID = materialID;
+            }
+        }
+
+        const Engine::InstanceSource& src = store[surfaceRuntime.range.offset];
+        if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != surfaceRuntime.stableId) {
+            store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, surfaceRuntime.stableId);
+        }
+    };
+
+    for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>().each()) {
+        emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+    }
+    for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::SphereLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::AreaLightComponent>).each()) {
+        emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+    }
+}
+
+void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>().each()) {
+        if (sky.handle.IsValid() || !sky.envMap.IsValid()) { continue; }
+        if (ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
+        sky.handle = ctx->assetManager->LoadCubemap(sky.envMap);
+    }
+}
+
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager;
-
-    //
-    {
-        ZoneScopedN("SyncLightSurfaces");
-        Engine::InstanceStore& store = state->instanceStore;
-        Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
-        emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
-        constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE;
-
-        const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0
-                                  || state->registry.view<Component::ProbeBakeProxyHiddenTag>().size() > 0;
-
-        auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw) {
-            if (!surfaceRuntime.range.IsValid()) { return; }
-
-            bool bDraw = draw;
-            if (bDraw && bAnyHideTags) {
-                bDraw = !state->registry.any_of<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>(lightEntity);
-            }
-
-            if (bDraw) {
-                emissiveMaterial.props.emissiveFactor = glm::vec4(color, intensity);
-                const Engine::MaterialID materialID = Engine::HashMaterial(emissiveMaterial);
-                if (materialID != surfaceRuntime.materialID) {
-                    materialManager->CreateSynthesizedMaterial(emissiveMaterial);
-                    materialManager->AcquireMaterial(materialID);
-                    materialManager->ReleaseMaterial(surfaceRuntime.materialID);
-                    store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
-                    surfaceRuntime.materialID = materialID;
-                }
-            }
-
-            const Engine::InstanceSource& src = store[surfaceRuntime.range.offset];
-            if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != surfaceRuntime.stableId) {
-                store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, surfaceRuntime.stableId);
-            }
-        };
-
-        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>().each()) {
-            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
-        }
-        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::SphereLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::AreaLightComponent>).each()) {
-            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
-        }
-    }
+    const entt::registry& registry = state->registry;
 
 #ifdef WDEBUG
     VerifyGeometryStores(state);
@@ -343,11 +355,8 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         int32_t bestPriority = INT32_MIN;
         Render::Cubemap* bestCubemap = nullptr;
         float bestIntensity = 1.0f;
-        for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>().each()) {
-            if (!sky.envMap.IsValid() || ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
-            if (!sky.handle.IsValid()) {
-                sky.handle = ctx->assetManager->LoadCubemap(sky.envMap);
-            }
+        for (const auto& [entity, sky] : registry.view<Component::SkyboxComponent>().each()) {
+            if (!sky.handle.IsValid()) { continue; }
             Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(sky.handle);
             if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
                 bestPriority = sky.priority;
@@ -366,7 +375,8 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextFontPendingTag>);
+    const entt::registry& registry = state->registry;
+    auto view = registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextFontPendingTag>);
 
     for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
         if (textComp.text.IsEmpty()) { continue; }
@@ -528,7 +538,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+        if (const auto* stable = registry.try_get<Component::StableIdComponent>(entity)) {
             stableId = stable->id.id;
         }
 
@@ -591,6 +601,7 @@ void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
+    const entt::registry& registry = state->registry;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
 
     state->analyticLightStore.Tick(ctx->currentRenderFrame);
@@ -657,9 +668,9 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         }
 
         if (bEmissiveCapture) {
-            for (const auto& [entity, runtime] : state->registry.view<Component::MeshRuntime>().each()) {
+            for (const auto& [entity, runtime] : registry.view<Component::MeshRuntime>().each()) {
                 if (!runtime.range.IsValid()) { continue; }
-                const bool bBakeHidden = state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+                const bool bBakeHidden = registry.all_of<Component::ProbeBakeHiddenTag>(entity);
                 for (uint32_t i = 0; i < runtime.range.count; ++i) {
                     const uint32_t slot = runtime.range.offset + i;
                     const Engine::InstanceSource& inst = store[slot];
@@ -690,7 +701,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         ZoneScopedN("DirectionalLight");
         int32_t bestPriority = INT32_MIN;
         bool found = false;
-        auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+        auto dirView = registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
         for (const auto& [entity, light, transform] : dirView.each()) {
             if (light.priority > bestPriority) {
                 bestPriority = light.priority;
@@ -718,7 +729,8 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     vf.bakedDiffuseClampK = config.bakedDiffuseClampK;
     vf.bReflectionProbeBruteForce = config.bBruteForcePick;
 
-    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
+    const entt::registry& registry = state->registry;
+    auto view = registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
     for (const auto& [entity, probe, worldTransform] : view.each()) {
         if (vf.reflectionProbes.IsFull()) { break; }
         const bool bPreview = state->debug.bProbePreview;
@@ -780,7 +792,8 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (!state->lighting.ddgi.bLocalVolumes) { return; }
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-    auto view = state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
+    const entt::registry& registry = state->registry;
+    auto view = registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
     for (const auto& [entity, volume, worldTransform] : view.each()) {
         if (vf.localDDGIVolumes.IsFull()) { break; }
         if (!volume.bEnabled) { continue; }

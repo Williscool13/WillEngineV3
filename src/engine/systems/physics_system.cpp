@@ -503,7 +503,6 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
             continue;
         }
         if (!allArmed) {
-            state->assetLoad.bPendingModelResolve = true; // a source is frozen; stay pending until it drains
             continue;
         }
         started.PushBack(entity);
@@ -515,7 +514,6 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
     for (const entt::entity entity : started) {
         state->registry.remove<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PhysicsMeshLoadingTag>(entity);
-        state->assetLoad.bPendingModelResolve = true;
     }
 }
 
@@ -555,7 +553,6 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
         }
 
         if (!allReady && !shouldAbandon) {
-            state->assetLoad.bPendingModelResolve = true;
             continue;
         }
 

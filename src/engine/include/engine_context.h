@@ -109,11 +109,20 @@ struct ProbeAssembleStaging
 /** Written by engine, consumed by game.  */
 struct EngineFrameStatus
 {
-    // Set when any model/font finished loading or a model/font was reclaimed this frame; gates the per-frame asset-resolve block.
-    bool bAssetsChangedThisFrame{false};
-
     bool bScreenshotInFlight{false};
     bool bAssetGenerationPending{false};
+};
+
+struct FrameEvents
+{
+    int32_t modelsLoaded{0};
+    int32_t texturesLoaded{0};
+    int32_t cubemapsLoaded{0};
+    int32_t samplersLoaded{0};
+    int32_t fontsLoaded{0};
+    int32_t collidersLoaded{0};
+    int32_t modelsUnloaded{0};
+    int32_t fontsUnloaded{0};
 };
 
 /** Deferred rescan requests, consumed by the owning manager. */
@@ -185,6 +194,7 @@ struct EngineContext
 
     uint64_t currentRenderFrame{0};
     EngineFrameStatus frameStatus{};
+    FrameEvents frameEvents{};
     PublishedTimeFrame publishedTimeFrame{};
     Render::RendererStatisticsManager* rendererStatistics{nullptr};
 

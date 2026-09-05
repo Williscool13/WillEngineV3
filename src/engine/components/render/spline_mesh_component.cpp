@@ -49,7 +49,6 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 {
     registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<SplineMeshComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
 
     if (component.spline.points.IsEmpty()) {
         component.spline.points.PushBack({0, 0, 0});
@@ -63,7 +62,6 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     }
 
     registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
-    state->assetLoad.bPendingModelResolve = true;
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
@@ -219,7 +217,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Emissive Light##splinemesh", &emissiveLight)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-            state->assetLoad.bPendingModelResolve = true;
             modified = true;
         }
 
@@ -550,7 +547,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     if (component.material.IsValid()) {
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                        state->assetLoad.bPendingModelResolve = true;
                         modified = true;
                     }
                 }
@@ -558,7 +554,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
                     registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                    state->assetLoad.bPendingModelResolve = true;
                     modified = true;
                 }
                 ImGui::EndCombo();
@@ -570,7 +565,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             registry.remove<MeshRuntime>(entity);
             registry.remove<SplineMeshLoadingTag>(entity);
             registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
-            state->assetLoad.bPendingModelResolve = true;
         }
     }
 

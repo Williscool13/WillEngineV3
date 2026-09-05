@@ -39,14 +39,11 @@ void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity e
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-
     registry.remove<MeshRuntime>(entity);
 
     registry.remove<ProceduralMeshLoadingTag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
         registry.emplace_or_replace<ProceduralMeshLoadPendingTag>(entity);
-        state->assetLoad.bPendingModelResolve |= true;
     }
     else {
         registry.remove<ProceduralMeshLoadPendingTag>(entity);
@@ -625,7 +622,6 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         if (ImGui::Checkbox("Emissive Light##proceduralmesh", &emissiveLight)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-            state->assetLoad.bPendingModelResolve = true;
             modified = true;
         }
         bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
@@ -1143,7 +1139,6 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (component.material.IsValid()) {
                         component.material = Engine::MaterialID{};
                         registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-                        state->assetLoad.bPendingModelResolve |= true;
                         modified = true;
                     }
                 }
@@ -1151,7 +1146,6 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
                     registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-                    state->assetLoad.bPendingModelResolve |= true;
                     modified = true;
                 }
                 ImGui::EndCombo();

@@ -33,12 +33,9 @@ void UnloadStaticMeshPrimitive(entt::registry& registry, entt::entity entity)
 
 void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-
     registry.remove<StaticMeshPrimitiveLoadingTag>(entity);
     if (component.modelId.IsValid() && component.primitiveOrdinal != ~0u) {
         registry.emplace_or_replace<StaticMeshPrimitiveLoadPendingTag>(entity);
-        state->assetLoad.bPendingModelResolve |= true;
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -116,7 +113,6 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         if (ImGui::Checkbox("Emissive Light##staticmeshprimitive", &emissiveLight)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-            state->assetLoad.bPendingModelResolve = true;
             modified = true;
         }
 
@@ -178,7 +174,6 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 if (pendingOrdinal != ~0u) {
                     component.primitiveOrdinal = pendingOrdinal;
                     registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-                    state->assetLoad.bPendingModelResolve |= true;
                     modified = true;
                 }
             }
@@ -208,7 +203,6 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         if (changed || clear) {
             component.materialOverride = clear ? Engine::MaterialID::INVALID : pendingMat;
             registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-            state->assetLoad.bPendingModelResolve |= true;
             modified = true;
         }
 
@@ -250,7 +244,6 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             }
             if (shaderChanged) {
                 registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-                state->assetLoad.bPendingModelResolve |= true;
                 modified = true;
             }
         }

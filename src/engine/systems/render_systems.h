@@ -70,6 +70,13 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
 void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+
+/** Serial pre-pass: rebinds emissive surface materials and writes instance render state so GatherRenderables can run with a const registry. */
+void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/** Serial pre-pass: kicks the lazy cubemap load for skybox components so the gathers never mutate. */
+void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

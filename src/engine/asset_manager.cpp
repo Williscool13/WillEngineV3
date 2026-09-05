@@ -968,6 +968,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         if (colliderComplete.bSuccess) {
             colliderComplete.collider->loadState = PhysicsColliderAsset::LoadState::Loaded;
             colliderComplete.collider->acquireFrame = ctx->currentRenderFrame;
+            loadCounts.colliderLoadedCount++;
             if (bVerboseLogging.load(std::memory_order_relaxed)) {
                 LOG_TRACE(Asset, "Physics collider generation succeeded: {}", colliderComplete.collider->name.c_str());
             }
@@ -1230,7 +1231,7 @@ void AssetManager::LogPendingLoads() const
     }
 }
 
-bool AssetManager::ResolveUnloads()
+ResolveUnloadResult AssetManager::ResolveUnloads()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;
 
@@ -1405,8 +1406,7 @@ bool AssetManager::ResolveUnloads()
         pendingFontUnloadLogCount = 0;
     }
 
-    // A reclaimed model/font may have just lifted a hot-reload freeze; signal so the load resolves re-run and re-acquire.
-    return modelsUnloadedThisTick > 0 || fontsUnloadedThisTick > 0;
+    return {.modelUnloadedCount = modelsUnloadedThisTick, .fontUnloadedCount = fontsUnloadedThisTick};
 }
 
 void AssetManager::Scan()

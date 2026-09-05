@@ -46,7 +46,7 @@ static const char* InputContextName(const Engine::InputContext context)
 
 static bool AnythingPending(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    return Engine::CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || state->assetLoad.bPendingModelResolve || ctx->frameStatus.bAssetGenerationPending;
+    return Engine::CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending;
 }
 
 void TickQuietFrames(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -72,7 +72,6 @@ static ToolResult GetEngineStatus(Engine::EngineContext* ctx, Engine::EngineStat
     call.SetInt("settledThresholdFrames", SETTLED_QUIET_FRAMES);
     call.SetInt("loadingEntities", static_cast<int64_t>(Engine::CountLoadingEntities(state)));
     call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
-    call.SetBool("pendingModelResolve", state->assetLoad.bPendingModelResolve);
     call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
     call.SetBool("rescanResources", ctx->rescan.bResources);
     call.SetBool("screenshotInFlight", ctx->frameStatus.bScreenshotInFlight);

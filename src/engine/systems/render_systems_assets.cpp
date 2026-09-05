@@ -173,7 +173,6 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
-        state->assetLoad.bPendingModelResolve = true;
     }
 
     state->assetLoad.pendingHotReloadModelIds.Clear();
@@ -235,7 +234,6 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
         state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
-        state->assetLoad.bPendingModelResolve = true;
     }
 
     state->assetLoad.pendingHotReloadFontIds.Clear();
@@ -365,7 +363,6 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
             probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
             state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
             state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
-            state->assetLoad.bPendingModelResolve |= true;
         }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -386,7 +383,6 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         }
         state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
         state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
-        state->assetLoad.bPendingModelResolve |= true;
     }
 }
 
@@ -1140,7 +1136,6 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
             runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius);
             if (runtime.modelHandle.IsValid()) {
                 state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
-                state->assetLoad.bPendingModelResolve = true;
             }
         }
         done.PushBack(entity);

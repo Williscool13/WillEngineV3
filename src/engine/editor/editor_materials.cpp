@@ -718,7 +718,6 @@ static void RetagMeshesUsingMaterial(Engine::EngineState* state, Engine::Materia
     RetagIfUsingMaterial<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>(state, id);
     RetagIfUsingMaterial<Component::Text3DComponent, Component::Text3DLoadingTag>(state, id);
     RetagIfUsingMaterial<Component::ModuleMeshComponent, Component::ModuleMeshLoadingTag>(state, id);
-    state->assetLoad.bPendingModelResolve = true;
 }
 
 static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineState* state)

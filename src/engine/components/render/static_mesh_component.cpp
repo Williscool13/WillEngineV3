@@ -40,12 +40,9 @@ void UnloadStaticMesh(entt::registry& registry, entt::entity entity)
 
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-
     registry.remove<StaticMeshLoadingTag>(entity);
     if (component.modelId.IsValid()) {
         registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);
-        state->assetLoad.bPendingModelResolve |= true;
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
@@ -215,7 +212,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         if (ImGui::Checkbox("Emissive Light", &emissiveLight)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
             registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-            state->assetLoad.bPendingModelResolve = true;
             modified = true;
         }
 
@@ -275,7 +271,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                 overrides->primitiveBlacklist.Clear();
                 PruneStaticMeshOverrides(registry, entity);
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-                state->assetLoad.bPendingModelResolve |= true;
                 return {.bRequestRemoval = remove, .bModified = true};
             }
         }
@@ -368,7 +363,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     registry.get_or_emplace<StaticMeshOverridesComponent>(entity).SetMaterialOverride(static_cast<uint32_t>(pendingChangeIdx), pendingChangeMat);
                     PruneStaticMeshOverrides(registry, entity);
                     registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-                    state->assetLoad.bPendingModelResolve |= true;
                     modified = true;
                 }
 
@@ -421,7 +415,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
             if (shaderChanged) {
                 registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
-                state->assetLoad.bPendingModelResolve |= true;
                 modified = true;
             }
         }

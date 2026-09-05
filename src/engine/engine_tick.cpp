@@ -4,6 +4,7 @@
 
 #include "engine_tick.h"
 
+#include <enkiTS/src/TaskScheduler.h>
 #include <tracy/Tracy.hpp>
 
 #include "engine/engine_api.h"
@@ -96,7 +97,6 @@ void PostUpdate(EngineContext* ctx, EngineState* state)
     Text3DGeneratePendingKickoff(ctx, state);
     PhysicsMeshPendingKickoff(ctx, state);
 
-    state->assetLoad.bPendingModelResolve = false;
     StaticMeshLoadResolve(ctx, state);
     LightSurfaceResolve(ctx, state);
     ReflectionProbeLoadResolve(ctx, state);
@@ -194,11 +194,26 @@ void PrepareFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* fra
 
     ResolveWorldTransforms(ctx, state);
     RenderPrepareTransforms(ctx, state, frameBuffer);
-    GatherLights(ctx, state, frameBuffer);
-    GatherReflectionProbes(ctx, state, frameBuffer);
-    GatherLocalDDGIVolumes(ctx, state, frameBuffer);
-    GatherRenderables(ctx, state, frameBuffer);
-    GatherTextRenderables(ctx, state, frameBuffer);
+    SyncLightSurfaces(ctx, state);
+    ResolveSkyboxCubemaps(ctx, state);
+    //
+    {
+        ZoneScopedN("ParallelGathers");
+        enki::TaskSet gatherTask(5, [&](enki::TaskSetPartition range, uint32_t) {
+            for (uint32_t i = range.start; i < range.end; ++i) {
+                switch (i) {
+                    case 0: GatherRenderables(ctx, state, frameBuffer); break;
+                    case 1: GatherLights(ctx, state, frameBuffer); break;
+                    case 2: GatherTextRenderables(ctx, state, frameBuffer); break;
+                    case 3: GatherReflectionProbes(ctx, state, frameBuffer); break;
+                    case 4: GatherLocalDDGIVolumes(ctx, state, frameBuffer); break;
+                    default: break;
+                }
+            }
+        });
+        ctx->scheduler->AddTaskSetToPipe(&gatherTask);
+        ctx->scheduler->WaitforTask(&gatherTask);
+    }
     GatherUIRenderables(ctx, state, frameBuffer);
     state->debug.bVerifyStoresOnce = false;
 

@@ -34,12 +34,9 @@ void UnloadText3DFont(entt::registry& registry, entt::entity entity)
 
 void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-
     registry.remove<Text3DLoadingTag>(entity);
     if (component.fontId.IsValid()) {
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-        state->assetLoad.bPendingModelResolve = true;
     }
     else {
         registry.remove<Text3DGeneratePendingTag>(entity);
@@ -154,7 +151,6 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     if (ImGui::Checkbox("Emissive Light##text3d", &emissiveLight)) {
         SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-        state->assetLoad.bPendingModelResolve = true;
     }
     bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
     if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
@@ -222,7 +218,6 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     if (dirty) {
         modified = true;
         registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-        state->assetLoad.bPendingModelResolve |= true;
     }
 
     ImGui::EndDisabled();
@@ -239,14 +234,12 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
             if (ImGui::Selectable("(none)", !comp.material.IsValid()) && comp.material.IsValid()) {
                 comp.material = Engine::MaterialID{};
                 registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                state->assetLoad.bPendingModelResolve |= true;
                 modified = true;
             }
             const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, comp.material);
             if (picked.IsValid() && picked != comp.material) {
                 comp.material = picked;
                 registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                state->assetLoad.bPendingModelResolve |= true;
                 modified = true;
             }
             ImGui::EndCombo();

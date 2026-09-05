@@ -186,7 +186,6 @@ struct FrameRequests
 /** Drained by the per-frame asset-resolve block. */
 struct AssetLoadState
 {
-    bool bPendingModelResolve{false};
     Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
     Core::InlineVector<FontID, 16> pendingHotReloadFontIds{};
     Core::InlineVector<TextureID, 16> pendingHotReloadTextureIds{};

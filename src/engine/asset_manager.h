@@ -53,6 +53,13 @@ struct ResolveLoadResult
     int32_t cubeLoadedCount{0};
     int32_t samplerLoadedCount{0};
     int32_t fontLoadedCount{0};
+    int32_t colliderLoadedCount{0};
+};
+
+struct ResolveUnloadResult
+{
+    int32_t modelUnloadedCount{0};
+    int32_t fontUnloadedCount{0};
 };
 
 class AssetManager
@@ -356,7 +363,7 @@ public: // Per-Tick calls
     void KickOffRetires();
 
     /** Reclaims drained assets. Returns true if a model/font was reclaimed (which may have lifted a hot-reload freeze). */
-    bool ResolveUnloads();
+    ResolveUnloadResult ResolveUnloads();
 
     [[nodiscard]] bool HasPendingLoads() const;
 

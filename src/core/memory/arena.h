@@ -5,8 +5,10 @@
 #ifndef WILL_ENGINE_ARENA_H
 #define WILL_ENGINE_ARENA_H
 
+#include <atomic>
 #include <cassert>
 #include <cstddef>
+#include <mutex>
 #include <new>
 #include <type_traits>
 
@@ -20,6 +22,7 @@ class VirtualMemoryManager;
  * Non-owning bump-pointer allocator over an externally-provided buffer.
  * Does NOT call destructors on Reset(); only use for trivially-destructible
  * types, or manage lifetimes manually.
+ * Alloc* is thread-safe (CAS bump); Reset/Trim/moves are not and must be externally quiesced.
  */
 class Arena
 {
@@ -35,9 +38,9 @@ public:
 
     Arena& operator=(const Arena&) = delete;
 
-    Arena(Arena&&) = default;
+    Arena(Arena&& other) noexcept;
 
-    Arena& operator=(Arena&&) = default;
+    Arena& operator=(Arena&& other) noexcept;
 
     /**
      * Allocates sizeof(T), aligned to alignof(T), and constructs T with the given args.
@@ -79,22 +82,28 @@ public:
         size_t committedBytes;
     };
 
-    [[nodiscard]] Stats GetStats() const { return {capacity, head, capacity - head, peakHead, committed}; }
+    [[nodiscard]] Stats GetStats() const
+    {
+        const size_t used = head.load(std::memory_order_relaxed);
+        return {capacity, used, capacity - used, peakHead.load(std::memory_order_relaxed), committed.load(std::memory_order_relaxed)};
+    }
+
     [[nodiscard]] void* Data() const { return memory; }
-    [[nodiscard]] size_t GetUsed() const { return head; }
+    [[nodiscard]] size_t GetUsed() const { return head.load(std::memory_order_relaxed); }
     [[nodiscard]] size_t GetCapacity() const { return capacity; }
-    [[nodiscard]] size_t GetRemaining() const { return capacity - head; }
-    [[nodiscard]] size_t GetPeak() const { return peakHead; }
+    [[nodiscard]] size_t GetRemaining() const { return capacity - head.load(std::memory_order_relaxed); }
+    [[nodiscard]] size_t GetPeak() const { return peakHead.load(std::memory_order_relaxed); }
     [[nodiscard]] const char* GetName() const { return name.buf; }
 
 private:
     void* memory{};
-    size_t head{};
+    std::atomic<size_t> head{};
     size_t capacity{};
-    size_t committed{};
+    std::atomic<size_t> committed{};
     VirtualMemoryManager* vm{};
     uint32_t vmHandle{};
-    size_t peakHead{};
+    std::atomic<size_t> peakHead{};
+    std::mutex commitMutex{};
     InlineString<32> name{};
 };
 

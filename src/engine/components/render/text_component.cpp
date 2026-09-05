@@ -42,7 +42,6 @@ void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::enti
     }
     if (comp.fontId.IsValid()) {
         registry.emplace_or_replace<TextFontPendingTag>(entity);
-        state->assetLoad.bPendingModelResolve = true;
     }
 }
 

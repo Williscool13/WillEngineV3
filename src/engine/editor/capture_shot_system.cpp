@@ -146,7 +146,7 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
         case Phase::WaitReady:
         {
             const size_t loadingEntities = CountLoadingEntities(state);
-            const bool bQuiet = !state->assetLoad.bPendingModelResolve && loadingEntities == 0 &&
+            const bool bQuiet = loadingEntities == 0 &&
                                 !ctx->rescan.bResources && !ctx->frameStatus.bAssetGenerationPending && !ctx->assetManager->HasPendingLoads();
             readyQuietCounter = bQuiet ? readyQuietCounter + 1 : 0;
             ++readyWaitedFrames;
@@ -154,8 +154,7 @@ void CaptureShotSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* st
                 phase = Phase::ShotSetup;
             }
             else if (readyWaitedFrames >= READY_TIMEOUT_FRAMES) {
-                LOG_WARN(Engine, "Capture run: asset readiness timed out after {} frames; capturing anyway. Gates: pendingModelResolve={} loadingEntities={} rescan={} generation={} pendingLoads={}",
-                         readyWaitedFrames, state->assetLoad.bPendingModelResolve, loadingEntities,
+                LOG_WARN(Engine, "Capture run: asset readiness timed out after {} frames; capturing anyway. Gates: loadingEntities={} rescan={} generation={} pendingLoads={}", readyWaitedFrames, loadingEntities,
                          ctx->rescan.bResources, ctx->frameStatus.bAssetGenerationPending, ctx->assetManager->HasPendingLoads());
                 ctx->assetManager->LogPendingLoads();
                 phase = Phase::ShotSetup;

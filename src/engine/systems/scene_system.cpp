@@ -522,7 +522,6 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
         parentOverrides.primitiveBlacklist.PushBack(primitiveOrdinal);
     }
     registry.emplace_or_replace<Component::StaticMeshLoadingTag>(parent);
-    state->assetLoad.bPendingModelResolve = true;
 
     state->bHierarchyOrderDirty = true;
     return child;

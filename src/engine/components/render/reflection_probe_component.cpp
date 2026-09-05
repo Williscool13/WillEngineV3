@@ -24,14 +24,12 @@ namespace Engine::Component
 static void RequestReflectionProbeLoad(entt::registry& registry, entt::entity entity)
 {
     auto& comp = registry.get<ReflectionProbeComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
 
     registry.remove<ReflectionProbeLoadingTag>(entity);
     const bool bHasBaked = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
     if (bHasBaked || comp.standInEnvMap.IsValid()) {
         registry.emplace_or_replace<ReflectionProbeLoadPendingTag>(entity);
-        state->assetLoad.bPendingModelResolve |= true;
     }
 }
 
