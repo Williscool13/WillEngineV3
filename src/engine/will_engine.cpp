@@ -17,6 +17,8 @@
 
 #include "asset_manager.h"
 #include "engine_api.h"
+#include "engine_lifecycle.h"
+#include "engine_tick.h"
 #include "engine/include/game_interface.h"
 #include "core/input/input_manager.h"
 #include "components/component_registration.h"
@@ -551,6 +553,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     {
         ZoneScopedN("PrepareGameFunctions");
 #ifdef GAME_STATIC
+        engineContext->bGameLoaded = true;
         gameFunctions.gameGetStateSize = &GameGetStateSize;
         gameFunctions.gameStartup = &GameStartup;
         gameFunctions.gameLoad = &GameLoad;
@@ -563,6 +566,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         gameFunctions.gameHotReloadLoad = &GameHotReloadLoad;
 #else
         if (gameDll.Load("game.dll", "game_temp.dll")) {
+            engineContext->bGameLoaded = true;
             gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
             gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
             gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
@@ -575,9 +579,8 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             gameFunctions.gameHotReloadLoad = gameDll.GetFunction<Core::GameHotReloadLoadFunc>("GameHotReloadLoad");
         }
         else {
-            LOG_CRITICAL(Engine, "game.dll failed to load; requesting shutdown");
+            LOG_WARN(Engine, "game.dll failed to load; running with the stub game");
             gameFunctions.Stub();
-            engineState->requests.bRequestedQuit = true;
         }
 #endif
 
@@ -586,8 +589,14 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             engineContext->gameState = memoryManager.PersistentAllocRaw(engineContext->gameStateSize, Core::AllocTag::GameState);
         }
 
+        engineState->registry.ctx().emplace<EngineState*>(engineState);
+        engineState->registry.ctx().emplace<EngineContext*>(engineContext);
         gameFunctions.gameStartup(engineContext, engineState);
+        CreateDefaultCameras(engineState);
+        ConnectEngineObservers(engineState->registry);
+        LoadUIFont(engineContext, engineState);
         gameFunctions.gameLoad(engineContext, engineState);
+        LoadStartupScene(engineContext, engineState);
         LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
     }
 
@@ -596,6 +605,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     auto gameDirectory = Platform::GetExecutablePath();
     if (gameDirectory.Exists()) {
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
+            HotReloadSave(engineContext, engineState);
             gameFunctions.gameHotReloadSave(engineContext, engineState);
             engineState->registry = entt::registry{};
             MCP::ClearGameTools(engineState);
@@ -607,6 +617,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
             engineState->registry.ctx().emplace<EngineContext*>(engineContext);
             engineState->registry.ctx().emplace<EngineState*>(engineState);
+            ConnectEngineObservers(engineState->registry);
 
             switch (reloadResponse) {
                 case Platform::DllLoadResponse::Loaded:
@@ -630,13 +641,15 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
                     break;
             }
 
-            if (reloadResponse != Platform::DllLoadResponse::FailedToLoad) {
+            engineContext->bGameLoaded = reloadResponse != Platform::DllLoadResponse::FailedToLoad;
+            if (engineContext->bGameLoaded) {
                 const size_t reloadedStateSize = gameFunctions.gameGetStateSize();
                 ENGINE_ASSERT(Engine, reloadedStateSize == engineContext->gameStateSize, "GameState size changed across hot reload ({} -> {} bytes) - layout changed, full restart required", engineContext->gameStateSize, reloadedStateSize);
             }
 
             // Reconnect observers and restore snapshot; skips default scene load.
             gameFunctions.gameHotReloadLoad(engineContext, engineState);
+            HotReloadRestore(engineContext, engineState);
             LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
         }, 2.0f, "game.dll");
     }
@@ -1601,7 +1614,9 @@ void WillEngine::Run()
                 engineState->input.bBindingsDirty = false;
             }
             engineState->timeFrame = &timeManager->GetTime();
+            PreUpdate(engineContext, engineState);
             gameFunctions.gameUpdate(engineContext, engineState);
+            PostUpdate(engineContext, engineState);
 
             inputManager->FrameReset();
 
@@ -1713,9 +1728,12 @@ void WillEngine::Run()
                 engineRenderSynchronization->GetCurrentFrameBuffer()->currentMousePosition = {(mousePos.x), (mousePos.y)};
                 //
                 {
-                    ZoneScopedN("GamePrepareFrame");
+                    ZoneScopedN("PrepareFrame");
                     engineState->timeFrame = &engineState->renderTimeFrame;
-                    gameFunctions.gamePrepareFrame(engineContext, engineState, engineRenderSynchronization->GetCurrentFrameBuffer());
+                    Core::FrameBuffer* frameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
+                    PrepareFrame(engineContext, engineState, frameBuffer);
+                    gameFunctions.gamePrepareFrame(engineContext, engineState, frameBuffer);
+                    ScrubFrame(engineContext, engineState, frameBuffer);
                     engineState->renderTimeFrame = {};
                 }
 
@@ -1742,6 +1760,7 @@ void WillEngine::Run()
         }
 
         gameFunctions.gameEndFrame(engineContext, engineState);
+        EndFrame(engineContext);
     }
 }
 

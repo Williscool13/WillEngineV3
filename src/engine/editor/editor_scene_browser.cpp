@@ -103,7 +103,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::EndDisabled();
 
         ImGui::SameLine();
-        ImGui::BeginDisabled(!bIsLoaded);
+        ImGui::BeginDisabled(!bIsLoaded || !ctx->bGameLoaded);
         if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
         if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
             SaveSceneToFile(state->scene.currentSceneId, state->scene.currentSceneName.View(), state, ctx->assetManager, ctx);
@@ -113,11 +113,17 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::EndDisabled();
 
         ImGui::SameLine();
+        ImGui::BeginDisabled(!ctx->bGameLoaded);
         if (ImGui::Checkbox("Auto", &state->editor.bAutoSave)) {
             state->editor.autoSaveTimer = 0.0f;
         }
+        ImGui::EndDisabled();
         if (state->editor.bAutoSave && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Auto-save in %.0fs", state->editor.autoSaveInterval - state->editor.autoSaveTimer);
+        }
+        if (!ctx->bGameLoaded) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "saving disabled: game.dll missing");
         }
 
         ImGui::SameLine();
@@ -245,7 +251,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::BeginDisabled(isExistingPrefab);
         ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
         ImGui::EndDisabled();
-        ImGui::BeginDisabled(isExistingPrefab && !isMasterPrefab);
+        ImGui::BeginDisabled((isExistingPrefab && !isMasterPrefab) || !ctx->bGameLoaded);
         if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
             SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->editor.selectedEntities[0], prefabName);
         }

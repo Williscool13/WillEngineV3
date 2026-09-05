@@ -232,7 +232,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->editor.bAutoSave && !state->editor.modifiedScenes.IsEmpty()) {
+    if (state->editor.bAutoSave && ctx->bGameLoaded && !state->editor.modifiedScenes.IsEmpty()) {
         state->editor.autoSaveTimer += state->timeFrame->deltaTime;
         if (state->editor.autoSaveTimer >= state->editor.autoSaveInterval) {
             state->editor.autoSaveTimer = 0.0f;
@@ -724,8 +724,14 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
         else {
+            ImGui::BeginDisabled(!ctx->bGameLoaded);
             if (ImGui::Button("Play")) {
                 PlayStart(ctx, state);
+            }
+            ImGui::EndDisabled();
+            if (!ctx->bGameLoaded) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "game.dll missing");
             }
         }
 

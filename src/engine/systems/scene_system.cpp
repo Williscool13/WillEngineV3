@@ -269,6 +269,11 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
 
 void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx)
 {
+    if (!ctx->bGameLoaded) {
+        LOG_WARN(Engine, "Scene save refused: game.dll is not loaded, game components would be lost");
+        return;
+    }
+
     const auto& sceneCache = assetManager->GetSceneCache();
     Core::Path path;
 
@@ -697,6 +702,11 @@ void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Tr
 
 void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
 {
+    if (!ctx->bGameLoaded) {
+        LOG_WARN(Engine, "Prefab save refused: game.dll is not loaded, game components would be lost");
+        return;
+    }
+
     // todo: Fix this to:
     //  Compare all existing prefabs and check their components. If their component fields are precisely the same as the src prefab, then replace it with new
     Core::Vector<std::byte> body(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
@@ -855,6 +865,11 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
 
 void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
+    if (!ctx->bGameLoaded) {
+        LOG_WARN(Engine, "Play refused: game.dll is not loaded");
+        return;
+    }
+
     ZoneScoped; {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();

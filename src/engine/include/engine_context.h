@@ -229,6 +229,7 @@ struct EngineContext
      */
     void* gameState{nullptr};
     size_t gameStateSize{0};
+    bool bGameLoaded{false};
 
     template<typename T>
     T* GetGameState() { return static_cast<T*>(gameState); }
