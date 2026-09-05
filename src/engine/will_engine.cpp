@@ -1576,6 +1576,7 @@ void WillEngine::Run()
             assetGenerator->Wake();
             bGenPipelineWakeSent = true;
         }
+        mcpServer->Drain(engineContext, engineState);
 #endif
 
         //

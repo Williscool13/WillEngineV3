@@ -11,9 +11,13 @@
 #include "mcp_server.h"
 #include "mcp_call_internal.h"
 
+#include <chrono>
+#include <semaphore>
 #include <tracy/Tracy.hpp>
 
+#include "core/memory/concurrent_queue_traits.h"
 #include "core/memory/memory_manager.h"
+#include "core/time/frame_stamp.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "platform/thread_utils.h"
@@ -28,6 +32,8 @@ static constexpr const char* ENDPOINT = "/mcp";
 static constexpr const char* JSON_MIME = "application/json";
 static constexpr time_t SOCKET_TIMEOUT_SECONDS = 5;
 static constexpr size_t MAX_CONNECTION_THREADS = 4;
+static constexpr std::chrono::milliseconds DRAIN_POLL_INTERVAL{50};
+static constexpr std::chrono::seconds DRAIN_WAIT_TIMEOUT{5};
 
 static constexpr int ERROR_PARSE = -32700;
 static constexpr int ERROR_INVALID_REQUEST = -32600;
@@ -35,12 +41,37 @@ static constexpr int ERROR_METHOD_NOT_FOUND = -32601;
 static constexpr int ERROR_INVALID_PARAMS = -32602;
 static constexpr int ERROR_INTERNAL = -32603;
 
+struct PendingCall
+{
+    StringID toolId{};
+    nlohmann::json args = nlohmann::json::object();
+    Call::Impl call{};
+    std::binary_semaphore done{0};
+    std::atomic<uint32_t> refs{2};
+    std::atomic<bool> bAbandoned{false};
+    uint64_t callId{0};
+    uint64_t frame{0};
+    ToolResult outcome{ToolResult::Error};
+};
+
 struct ServerImpl
 {
     httplib::Server server;
     EngineContext* ctx{};
     EngineState* state{};
+    Core::MemoryManager* memoryManager{};
+    Core::ConcurrentQueue<PendingCall*> queue;
+    std::atomic<uint64_t> nextCallId{1};
+    std::atomic<bool>* bShouldExit{};
 };
+
+static void ReleasePendingCall(ServerImpl& impl, PendingCall* pending)
+{
+    if (pending->refs.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        pending->~PendingCall();
+        impl.memoryManager->GeneralFree(pending);
+    }
+}
 
 static nlohmann::json MakeError(const nlohmann::json& id, const int code, const char* message)
 {
@@ -58,6 +89,18 @@ static nlohmann::json MakeResult(const nlohmann::json& id, nlohmann::json result
         {"id", id},
         {"result", std::move(result)},
     };
+}
+
+static nlohmann::json MakeToolResponse(const nlohmann::json& id, Call::Impl& call, const ToolResult outcome)
+{
+    nlohmann::json content = nlohmann::json::array();
+    if (outcome == ToolResult::Error || call.bError) {
+        content.push_back({{"type", "text"}, {"text", call.errorMessage.IsEmpty() ? "Tool failed" : call.errorMessage.c_str()}});
+        return MakeResult(id, {{"content", std::move(content)}, {"isError", true}});
+    }
+
+    content.push_back({{"type", "text"}, {"text", call.result.dump()}});
+    return MakeResult(id, {{"content", std::move(content)}, {"structuredContent", std::move(call.result)}, {"isError", false}});
 }
 
 static nlohmann::json HandleInitialize(const nlohmann::json& request)
@@ -103,6 +146,43 @@ static nlohmann::json HandleToolsList(ServerImpl& impl)
     return {{"tools", std::move(tools)}};
 }
 
+static nlohmann::json HandleDrainedCall(ServerImpl& impl, const nlohmann::json& id, const StringID toolId, const nlohmann::json& args)
+{
+    auto pending = new(impl.memoryManager->GeneralAllocRaw(sizeof(PendingCall), Core::AllocTag::MCPServer)) PendingCall();
+    pending->toolId = toolId;
+    pending->args = args;
+    pending->call.args = &pending->args;
+    pending->callId = impl.nextCallId.fetch_add(1, std::memory_order_relaxed);
+
+    impl.queue.enqueue(pending);
+
+    const auto deadline = std::chrono::steady_clock::now() + DRAIN_WAIT_TIMEOUT;
+    bool bFinished = false;
+    while (!bFinished) {
+        bFinished = pending->done.try_acquire_for(DRAIN_POLL_INTERVAL);
+        if (!bFinished && (impl.bShouldExit->load(std::memory_order_acquire) || std::chrono::steady_clock::now() >= deadline)) {
+            break;
+        }
+    }
+
+    if (!bFinished) {
+        pending->bAbandoned.store(true, std::memory_order_release);
+        bFinished = pending->done.try_acquire();
+    }
+    if (!bFinished) {
+        ReleasePendingCall(impl, pending);
+        return MakeError(id, ERROR_INTERNAL, "Engine thread did not service the call in time; the engine is paused, stalled or shutting down");
+    }
+
+    if (pending->call.result.is_object()) {
+        pending->call.result["callId"] = pending->callId;
+        pending->call.result["frame"] = pending->frame;
+    }
+    nlohmann::json response = MakeToolResponse(id, pending->call, pending->outcome);
+    ReleasePendingCall(impl, pending);
+    return response;
+}
+
 static nlohmann::json HandleToolsCall(ServerImpl& impl, const nlohmann::json& id, const nlohmann::json& request)
 {
     const auto params = request.find("params");
@@ -128,26 +208,19 @@ static nlohmann::json HandleToolsCall(ServerImpl& impl, const nlohmann::json& id
         entry = r.tools[*index];
     }
 
-    if (entry.bNeedsDrain) {
-        return MakeError(id, ERROR_INTERNAL, "Tool requires the engine thread; drain dispatch not implemented yet");
-    }
-
     const auto argsField = params->find("arguments");
     const nlohmann::json args = argsField != params->end() && argsField->is_object() ? *argsField : nlohmann::json::object();
+
+    if (entry.bNeedsDrain) {
+        return HandleDrainedCall(impl, id, toolId, args);
+    }
 
     Call::Impl callImpl{};
     callImpl.args = &args;
     Call call(&callImpl);
     const ToolResult outcome = entry.invoke(impl.ctx, impl.state, call);
-
-    nlohmann::json content = nlohmann::json::array();
-    if (outcome == ToolResult::Error || callImpl.bError) {
-        content.push_back({{"type", "text"}, {"text", callImpl.errorMessage.IsEmpty() ? "Tool failed" : callImpl.errorMessage.c_str()}});
-        return MakeResult(id, {{"content", std::move(content)}, {"isError", true}});
-    }
-
-    content.push_back({{"type", "text"}, {"text", callImpl.result.dump()}});
-    return MakeResult(id, {{"content", std::move(content)}, {"structuredContent", std::move(callImpl.result)}, {"isError", false}});
+    LOG_INFO(MCP, "mcp/{} tool={} result={}", impl.nextCallId.fetch_add(1, std::memory_order_relaxed), entry.name, outcome == ToolResult::Complete && !callImpl.bError ? "complete" : "error");
+    return MakeToolResponse(id, callImpl, outcome);
 }
 
 /** @return false for notifications, which carry no id and must not produce a response body. */
@@ -192,6 +265,8 @@ MCPServer::MCPServer(Core::MemoryManager& memoryManager_)
     : memoryManager(memoryManager_)
 {
     impl = new(memoryManager.PersistentAllocRaw(sizeof(ServerImpl), Core::AllocTag::MCPServer)) ServerImpl();
+    impl->memoryManager = &memoryManager;
+    impl->bShouldExit = &bShouldExit;
 
     impl->server.new_task_queue = [] { return new httplib::ThreadPool(MAX_CONNECTION_THREADS); };
     impl->server.set_read_timeout(SOCKET_TIMEOUT_SECONDS, 0);
@@ -237,6 +312,10 @@ MCPServer::~MCPServer()
     Join();
 
     if (impl) {
+        PendingCall* pending{};
+        while (impl->queue.try_dequeue(pending)) {
+            ReleasePendingCall(*impl, pending);
+        }
         impl->~ServerImpl();
         memoryManager.PersistentFree(impl);
         impl = nullptr;
@@ -250,6 +329,44 @@ void MCPServer::Start(const int32_t port, EngineContext* ctx, EngineState* state
     bShouldExit.store(false, std::memory_order_release);
     boundPort = port;
     thisThread = std::jthread([this, port] { ThreadMain(port); });
+}
+
+void MCPServer::Drain(EngineContext* ctx, EngineState* state)
+{
+    ZoneScoped;
+    PendingCall* pending{};
+    while (impl->queue.try_dequeue(pending)) {
+        if (pending->bAbandoned.load(std::memory_order_acquire)) {
+            ReleasePendingCall(*impl, pending);
+            continue;
+        }
+
+        ToolEntry entry{};
+        bool bFound = false;
+        {
+            ToolRegistry& r = state->mcpTools;
+            std::lock_guard lock(r.mutex);
+            if (const size_t* index = r.mapping.Find(pending->toolId)) {
+                entry = r.tools[*index];
+                bFound = true;
+            }
+        }
+
+        pending->frame = Core::gGameFrame.load(std::memory_order_relaxed);
+        Call call(&pending->call);
+        if (!bFound) {
+            call.SetError("Tool is no longer registered; the game DLL was reloaded between dispatch and drain");
+            pending->outcome = ToolResult::Error;
+        }
+        else {
+            LOG_INFO(MCP, "mcp/{} begin frame={} tool={}", pending->callId, pending->frame, entry.name);
+            pending->outcome = entry.invoke(ctx, state, call);
+            LOG_INFO(MCP, "mcp/{} end frame={} result={}", pending->callId, pending->frame, pending->outcome == ToolResult::Complete && !pending->call.bError ? "complete" : "error");
+        }
+
+        pending->done.release();
+        ReleasePendingCall(*impl, pending);
+    }
 }
 
 void MCPServer::RequestShutdown()

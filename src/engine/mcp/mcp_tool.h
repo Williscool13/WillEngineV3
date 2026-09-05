@@ -47,7 +47,6 @@ struct ToolEntry
     ToolOrigin origin{ToolOrigin::Engine};
     /** false serves the call on the socket thread; only allowed for Engine-owned tools. */
     bool bNeedsDrain{true};
-    bool bLogMarkers{false};
 };
 
 /**

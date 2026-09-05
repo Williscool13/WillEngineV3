@@ -56,6 +56,10 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->bTakeScreenshot = state->requests.bWantsScreenshot;
+    if (!state->requests.screenshotPath.IsEmpty()) {
+        frameBuffer->screenshotPath = state->requests.screenshotPath;
+        state->requests.screenshotPath.Clear();
+    }
     state->requests.bWantsScreenshot = false;
 }
 } // Game

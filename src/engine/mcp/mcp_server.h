@@ -31,6 +31,7 @@ struct ServerImpl;
 /**
  * Localhost-only JSON-RPC listener speaking the MCP wire protocol.
  * Owns a dedicated thread outside the enkiTS pool; never registered as an external task thread.
+ * Tools flagged bNeedsDrain are queued by the socket thread and run inside Drain() on the engine thread.
  */
 class MCPServer
 {
@@ -44,6 +45,9 @@ public:
 
     /** Binds 127.0.0.1 only. Bind failure is logged, not fatal; check IsListening. */
     void Start(int32_t port, EngineContext* ctx, EngineState* state);
+
+    /** Engine thread, once per frame. Runs every queued tool call to completion and wakes its waiting socket thread. */
+    void Drain(EngineContext* ctx, EngineState* state);
 
     void RequestShutdown();
 

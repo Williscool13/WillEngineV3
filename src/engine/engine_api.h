@@ -172,6 +172,8 @@ struct DDGIConvergeBoost
 struct FrameRequests
 {
     bool bWantsScreenshot{false};
+    /** Empty means the renderer picks a timestamped name under the user screenshots folder. */
+    Core::InlineString<512> screenshotPath{};
     bool bViewportClickPending{false};
     bool bRequestedQuit{false};
     Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
