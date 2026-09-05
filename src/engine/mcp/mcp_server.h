@@ -47,7 +47,7 @@ public:
     void Start(int32_t port, EngineContext* ctx, EngineState* state);
 
     /** Engine thread, once per frame. Runs every queued tool call to completion and wakes its waiting socket thread. */
-    void Drain(EngineContext* ctx, EngineState* state);
+    void Drain(EngineContext* ctx, EngineState* state) const;
 
     void RequestShutdown();
 

@@ -233,6 +233,22 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     RegisterDllEngineHooks(ctx);
 #endif
 
+    struct UIFontContext
+    {
+        Engine::AssetManager* assetManager;
+        Engine::FontHandle handle;
+    };
+    static UIFontContext uiFontCtx{};
+    uiFontCtx.assetManager = ctx->assetManager;
+    uiFontCtx.handle = state->uiFont;
+
+    Clay_SetMeasureTextFunction([](Clay_StringSlice text, Clay_TextElementConfig* config, void* userData) -> Clay_Dimensions {
+        auto* fc = static_cast<UIFontContext*>(userData);
+        const float width = Engine::MeasureText(fc->assetManager, fc->handle, text.chars, text.length, config->fontSize, config->letterSpacing);
+        const float height = config->lineHeight > 0 ? static_cast<float>(config->lineHeight) : static_cast<float>(config->fontSize);
+        return {width, height};
+    }, &uiFontCtx);
+
     Game::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);

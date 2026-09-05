@@ -35,6 +35,7 @@ namespace Game
 void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 {
     componentRegistry.registry.Clear();
+    componentRegistry.registryMapping.Clear();
 
     RegisterComponent<Component::NameComponent>(componentRegistry, true, false);
     RegisterComponent<Component::StableIdComponent>(componentRegistry, true, true);

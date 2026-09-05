@@ -7,6 +7,7 @@ add_library(platform STATIC
         thread_utils.h
         directory_watcher.h
         virtual_memory.h
+        tcp_socket.h
 )
 
 if(WIN32)
@@ -18,11 +19,13 @@ if(WIN32)
             thread_utils_win32.cpp
             directory_watcher_win32.cpp
             virtual_memory_win32.cpp
+            tcp_socket_win32.cpp
             paths.cpp
     )
     target_link_libraries(platform PUBLIC
             core
             dbghelp
+            ws2_32
             fmt::fmt
             spdlog::spdlog
             SDL3::SDL3

@@ -97,6 +97,8 @@ add_library(engine STATIC
         mcp/mcp_tool.h
         mcp/mcp_call_internal.h
         mcp/mcp_call.cpp
+        mcp/mcp_json.cpp
+        mcp/mcp_json.h
         mcp/mcp_registry.cpp
         mcp/mcp_tools_engine.cpp
         mcp/mcp_tools_engine.h
