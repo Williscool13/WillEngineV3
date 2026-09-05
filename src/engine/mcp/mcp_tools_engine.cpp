@@ -346,7 +346,7 @@ void RegisterEngineTools(EngineState* state)
         .description = "CPU and GPU frame timing for the running engine: frame counters, per-category GPU pass times in ms, culling counters, pipeline statistics, screenshotInFlight. Safe to poll.",
         .inputSchemaJson = nullptr,
         .invoke = &GetFrameTimings,
-        .origin = ToolOrigin::Engine,
+        .origin = Origin::Engine,
         .bNeedsDrain = false,
     });
 
@@ -356,7 +356,7 @@ void RegisterEngineTools(EngineState* state)
         .description = "Where the engine log file is and how to read it: path, flush policy, the frame-stamp format on every line, the MCP call-marker format, and the category names. The log is the return channel for side effects.",
         .inputSchemaJson = nullptr,
         .invoke = &GetLogInfo,
-        .origin = ToolOrigin::Engine,
+        .origin = Origin::Engine,
         .bNeedsDrain = false,
     });
 
@@ -370,7 +370,7 @@ void RegisterEngineTools(EngineState* state)
             "limit":{"type":"integer","default":50,"minimum":1,"maximum":500},
             "offset":{"type":"integer","default":0,"minimum":0}}})",
         .invoke = &QueryAssets,
-        .origin = ToolOrigin::Engine,
+        .origin = Origin::Engine,
         .bNeedsDrain = true,
     });
 
@@ -384,7 +384,7 @@ void RegisterEngineTools(EngineState* state)
             "limit":{"type":"integer","default":100,"minimum":1,"maximum":1000},
             "offset":{"type":"integer","default":0,"minimum":0}}})",
         .invoke = &QueryScene,
-        .origin = ToolOrigin::Engine,
+        .origin = Origin::Engine,
         .bNeedsDrain = true,
     });
 
@@ -395,7 +395,7 @@ void RegisterEngineTools(EngineState* state)
         .inputSchemaJson = R"({"type":"object","properties":{
             "path":{"type":"string","description":"Absolute output path; omit for <UserData>/screenshots/mcp_<frame>.png"}}})",
         .invoke = &CaptureScreenshot,
-        .origin = ToolOrigin::Engine,
+        .origin = Origin::Engine,
         .bNeedsDrain = true,
     });
 }

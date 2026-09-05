@@ -103,6 +103,15 @@ add_library(engine STATIC
         mcp/mcp_tools_engine.cpp
         mcp/mcp_tools_engine.h
         input/engine_actions.h
+        input/input_action_registry.cpp
+        input/input_action_registry.h
+        core/origin.h
+
+        console/console.cpp
+        console/console.h
+        ui/ui.cpp
+        ui/ui.h
+        ui/ui_zindex.h
 
         components/fwd_components.h
         components/component_types.cpp

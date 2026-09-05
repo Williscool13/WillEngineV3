@@ -4,6 +4,7 @@
 
 #include "component_registration.h"
 
+#include "engine/logging/engine_assert.h"
 #include "engine/components/camera_components.h"
 #include "engine/components/character_components.h"
 #include "engine/components/common_components.h"
@@ -26,40 +27,53 @@
 
 namespace Engine
 {
+void ClearGameComponents(ComponentRegistry& componentRegistry)
+{
+    for (size_t i = componentRegistry.registry.Size(); i-- > 0;) {
+        if (componentRegistry.registry[i].origin == Origin::Game) {
+            componentRegistry.registry.RemoveAt(i);
+        }
+    }
+
+    componentRegistry.registryMapping.Clear();
+    for (size_t i = 0; i < componentRegistry.registry.Size(); ++i) {
+        componentRegistry.registryMapping[componentRegistry.registry[i].typeId] = i;
+    }
+}
+
 void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
 {
-    componentRegistry.registry.Clear();
-    componentRegistry.registryMapping.Clear();
+    ENGINE_ASSERT(Engine, componentRegistry.registry.Size() == 0, "engine components are registered once");
 
-    RegisterComponent<Component::NameComponent>(componentRegistry, true, false);
-    RegisterComponent<Component::StableIdComponent>(componentRegistry, true, true);
-    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, true, true);
-    RegisterComponent<Component::SceneFolderComponent>(componentRegistry, true, false);
+    RegisterComponent<Component::NameComponent>(componentRegistry, Origin::Engine, true, false);
+    RegisterComponent<Component::StableIdComponent>(componentRegistry, Origin::Engine, true, true);
+    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::EntityFolderComponent>(componentRegistry, Origin::Engine, true, true);
+    RegisterComponent<Component::SceneFolderComponent>(componentRegistry, Origin::Engine, true, false);
 
-    RegisterComponent<Component::TransformComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::HierarchyComponent>(componentRegistry, true, true);
-    RegisterComponent<Component::RenderFlagsComponent>(componentRegistry, true, true);
-    RegisterComponent<Component::FreeCameraComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::StaticMeshComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::StaticMeshOverridesComponent>(componentRegistry, true, true);
-    RegisterComponent<Component::StaticMeshPrimitiveComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::TextComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::AreaLightComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::SphereLightComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::SkyboxComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::LocalDDGIVolumeComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::SplineMeshComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::ModuleMeshComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::Text3DComponent>(componentRegistry, false, false);
+    RegisterComponent<Component::TransformComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::HierarchyComponent>(componentRegistry, Origin::Engine, true, true);
+    RegisterComponent<Component::RenderFlagsComponent>(componentRegistry, Origin::Engine, true, true);
+    RegisterComponent<Component::FreeCameraComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::StaticMeshComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::StaticMeshOverridesComponent>(componentRegistry, Origin::Engine, true, true);
+    RegisterComponent<Component::StaticMeshPrimitiveComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::TextComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::AreaLightComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::SphereLightComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::SkyboxComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::LocalDDGIVolumeComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::SplineMeshComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::ModuleMeshComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::Text3DComponent>(componentRegistry, Origin::Engine, false, false);
 
-    RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, false, false);
-    RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, false, false);
-    RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, false, false);
+    RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, Origin::Engine, false, false);
 
-    RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, false, false);
+    RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, Origin::Engine, false, false);
 }
 } // Engine

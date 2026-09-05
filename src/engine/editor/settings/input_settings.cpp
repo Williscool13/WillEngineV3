@@ -11,21 +11,9 @@
 #include "engine/input/input_rebinding.h"
 #include "engine/input_config.h"
 #include "engine/profiles/profile_library.h"
-#include "engine/input/engine_actions.h"
 
 namespace Engine
 {
-struct DisplayedAction
-{
-    Engine::ActionHandle action;
-    const char* name{};
-};
-
-static const DisplayedAction DISPLAYED_ACTIONS[] = {
-    {Actions::ACTION_MOVE, "Move"},
-    {Actions::ACTION_JUMP, "Jump"},
-};
-
 static const char* BindingSourceLabel(const Engine::BindingSource& source)
 {
     switch (source.type) {
@@ -89,8 +77,8 @@ void DrawInputBindingsWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         DrawInputProfiles(state);
         ImGui::Separator();
 
-        for (const DisplayedAction& displayed : DISPLAYED_ACTIONS) {
-            ImGui::SeparatorText(displayed.name);
+        for (const DisplayedAction& displayed : state->input.displayedActions) {
+            ImGui::SeparatorText(displayed.name.c_str());
 
             const Core::InlineVector<size_t, 8> rows = Engine::EnumerateBindingRows(state->input, displayed.action);
             for (size_t idx = 0; idx < rows.Size(); ++idx) {

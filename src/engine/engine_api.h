@@ -39,6 +39,7 @@
 #include "engine/editor_state.h"
 #include "engine/editor/probe_bake_system.h"
 #include "engine/editor/capture_shot_system.h"
+#include "engine/console/console.h"
 #include "engine/mcp/mcp_tool.h"
 #include "engine/editor_texture_residency.h"
 #include "engine/resources/model/instance_store.h"
@@ -260,6 +261,7 @@ struct EngineState
     DDGIConvergeBoost ddgiConvergeBoost;
     ProbeBakeSystem probeBake{};
     CaptureShotSystem captureShot{};
+    Console::ConsoleState console{};
     ProjectConfig projectConfig{};
     AutomationConfig automation{};
 };

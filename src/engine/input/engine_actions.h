@@ -10,14 +10,6 @@
 
 namespace Engine::Actions
 {
-inline const Engine::ActionHandle ACTION_MOVE{"Move"_sid.id};
-inline const Engine::ActionHandle ACTION_JUMP{"Jump"_sid.id};
-inline const Engine::ActionHandle ACTION_LOOK{"Look"_sid.id};
-inline const Engine::ActionHandle ACTION_LOOK_GAMEPAD{"Look_Gamepad"_sid.id};
-
-inline const Engine::ActionHandle ACTION_DEBUG_PLAY_MUSIC{"Debug_PlayMusic"_sid.id};
-inline const Engine::ActionHandle ACTION_DEBUG_MUSIC_VOL_LOW{"Debug_MusicVolLow"_sid.id};
-inline const Engine::ActionHandle ACTION_DEBUG_MUSIC_VOL_FULL{"Debug_MusicVolFull"_sid.id};
 inline const Engine::ActionHandle ACTION_SCREENSHOT{"Screenshot"_sid.id};
 inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_RESTIR{"LoadLightingProfile_ReSTIR"_sid.id};
 inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_STANDARD{"LoadLightingProfile_Standard"_sid.id};

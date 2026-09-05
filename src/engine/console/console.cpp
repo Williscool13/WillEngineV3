@@ -8,42 +8,22 @@
 #include <cassert>
 #include <cstring>
 
-#include "core/containers/inline_map.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
 #include "engine/components/camera_components.h"
 #include "engine/components/core_components.h"
-#include "game/fwd_components.h"
-#include "game/game_state.h"
 #include "engine/input/engine_actions.h"
-#include "game/ui/game_ui.h"
-#include "game/ui/ui_zindex.h"
+#include "engine/ui/ui_zindex.h"
 
-namespace Game::Console
+namespace Engine::Console
 {
-constexpr size_t MAX_COMMANDS = 512;
 constexpr size_t HELP_LIST_LIMIT = 40;
-
-struct Command
-{
-    Core::ShortString name;
-    Core::InlineString<128> help;
-    CommandCallback callback;
-};
-
-static Core::InlineVector<Command, MAX_COMMANDS> gCOMMANDS;
-static Core::InlineMap<StringID, size_t, MAX_COMMANDS> gCOMMAND_MAPPING;
 
 static StringID CommandId(const char* name)
 {
     return StringID(Hash(name, strlen(name)));
-}
-
-static ConsoleState& GetConsole(Engine::EngineContext* ctx)
-{
-    return ctx->GetGameState<GameState>()->console;
 }
 
 static Clay_Color LevelColor(spdlog::level::level_enum level)
@@ -73,7 +53,7 @@ bool ExecuteCommand(Engine::EngineContext* ctx, Engine::EngineState* state, cons
 {
     Core::InlineString<256> echo("] ");
     echo.Append(line);
-    Print(ctx, echo.c_str());
+    Print(state, echo.c_str());
 
     Core::InlineString<256> work(line);
     Core::InlineVector<const char*, 32> args;
@@ -95,20 +75,21 @@ bool ExecuteCommand(Engine::EngineContext* ctx, Engine::EngineState* state, cons
         return false;
     }
 
-    if (const size_t* index = gCOMMAND_MAPPING.Find(CommandId(args[0]))) {
-        gCOMMANDS[*index].callback(ctx, state, Core::Span<const char*>(args.Data(), args.Size()));
+    ConsoleState& c = state->console;
+    if (const size_t* index = c.commandMapping.Find(CommandId(args[0]))) {
+        c.commands[*index].callback(ctx, state, Core::Span<const char*>(args.Data(), args.Size()));
         return true;
     }
 
     Core::InlineString<256> err("Unknown command: ");
     err.Append(args[0]);
-    Print(ctx, err.c_str());
+    Print(state, err.c_str());
     return false;
 }
 
-void Print(Engine::EngineContext* ctx, const char* text)
+void Print(Engine::EngineState* state, const char* text)
 {
-    ConsoleState& c = GetConsole(ctx);
+    ConsoleState& c = state->console;
     if (c.lines.IsFull()) {
         c.lines.RemoveAt(0);
     }
@@ -117,18 +98,20 @@ void Print(Engine::EngineContext* ctx, const char* text)
     c.bScrollToBottom = true;
 }
 
-void Register(const char* name, const char* help, CommandCallback callback)
+void Register(Engine::EngineState* state, Origin origin, const char* name, const char* help, CommandCallback callback)
 {
+    ConsoleState& c = state->console;
     const StringID id = CommandId(name);
-    if (const size_t* existing = gCOMMAND_MAPPING.Find(id)) {
-        Command& cmd = gCOMMANDS[*existing];
+    if (const size_t* existing = c.commandMapping.Find(id)) {
+        Command& cmd = c.commands[*existing];
         assert(cmd.name == name && "console command StringID collision between two differently named commands");
         cmd.help = Core::InlineString<128>(help);
         cmd.callback = std::move(callback);
+        cmd.origin = origin;
         return;
     }
-    if (gCOMMANDS.IsFull()) {
-        LOG_ERROR(Game, "Console command '{}' dropped, MAX_COMMANDS ({}) reached", name, MAX_COMMANDS);
+    if (c.commands.IsFull()) {
+        LOG_ERROR(Engine, "Console command '{}' dropped, MAX_COMMANDS ({}) reached", name, MAX_COMMANDS);
         assert(false && "console command overflow");
         return;
     }
@@ -136,45 +119,61 @@ void Register(const char* name, const char* help, CommandCallback callback)
     cmd.name = Core::ShortString(name);
     cmd.help = Core::InlineString<128>(help);
     cmd.callback = std::move(callback);
-    gCOMMAND_MAPPING.Insert(id, gCOMMANDS.Size());
-    gCOMMANDS.PushBack(std::move(cmd));
+    cmd.origin = origin;
+    c.commandMapping.Insert(id, c.commands.Size());
+    c.commands.PushBack(std::move(cmd));
 }
 
-size_t GetCommandCount()
+size_t GetCommandCount(const Engine::EngineState* state)
 {
-    return gCOMMANDS.Size();
+    return state->console.commands.Size();
 }
 
-CommandInfo GetCommandInfo(const size_t index)
+CommandInfo GetCommandInfo(const Engine::EngineState* state, const size_t index)
 {
-    const Command& cmd = gCOMMANDS[index];
+    const Command& cmd = state->console.commands[index];
     return {cmd.name.c_str(), cmd.help.c_str()};
 }
 
-void RegisterBuiltinCommands()
+void ClearGameCommands(Engine::EngineState* state)
 {
-    Register("help", "List commands; `help <prefix>` narrows the list", [](Engine::EngineContext* ctx, Engine::EngineState*, Core::Span<const char*> args) {
+    ConsoleState& c = state->console;
+    for (size_t i = c.commands.Size(); i-- > 0;) {
+        if (c.commands[i].origin == Origin::Game) {
+            c.commands.RemoveAt(i);
+        }
+    }
+    c.commandMapping.Clear();
+    for (size_t i = 0; i < c.commands.Size(); ++i) {
+        c.commandMapping.Insert(CommandId(c.commands[i].name.c_str()), i);
+    }
+}
+
+void RegisterBuiltinCommands(Engine::EngineState* state)
+{
+    Register(state, Origin::Engine, "help", "List commands; `help <prefix>` narrows the list", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        const ConsoleState& c = state->console;
         const char* prefix = args.Size() > 1 ? args[1] : "";
         const size_t prefixLen = strlen(prefix);
-        if (prefixLen == 0 && gCOMMANDS.Size() > HELP_LIST_LIMIT) {
-            Print(ctx, Core::InlineString<256>::Format("  %zu commands registered; use `help <prefix>` to list a subset", gCOMMANDS.Size()).c_str());
+        if (prefixLen == 0 && c.commands.Size() > HELP_LIST_LIMIT) {
+            Print(state, Core::InlineString<256>::Format("  %zu commands registered; use `help <prefix>` to list a subset", c.commands.Size()).c_str());
             return;
         }
-        for (auto& cmd : gCOMMANDS) {
+        for (auto& cmd : c.commands) {
             if (strncmp(cmd.name.c_str(), prefix, prefixLen) != 0) { continue; }
             Core::InlineString<256> l("  ");
             l.Append(cmd.name);
             l.Append(" - ");
             l.Append(cmd.help);
-            Print(ctx, l.c_str());
+            Print(state, l.c_str());
         }
     });
 
-    Register("clear", "Clear the console output", [](Engine::EngineContext* ctx, Engine::EngineState*, Core::Span<const char*>) {
-        GetConsole(ctx).lines.Clear();
+    Register(state, Origin::Engine, "clear", "Clear the console output", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+        state->console.lines.Clear();
     });
 
-    Register("echo", "Print the arguments back", [](Engine::EngineContext* ctx, Engine::EngineState*, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "echo", "Print the arguments back", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         Core::InlineString<256> l;
         for (size_t i = 1; i < args.Size(); ++i) {
             if (i > 1) {
@@ -182,10 +181,10 @@ void RegisterBuiltinCommands()
             }
             l.Append(args[i]);
         }
-        Print(ctx, l.c_str());
+        Print(state, l.c_str());
     });
 
-    Register("render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
         state->requests.pendingCacheReset = Core::RenderCacheReset::All;
     });
 }
@@ -290,7 +289,7 @@ static void UpdateLogFilters(Engine::EngineContext* ctx, Engine::EngineState* st
 
 static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    ConsoleState& c = GetConsole(ctx);
+    ConsoleState& c = state->console;
 
     const Clay_ElementId inputId = CLAY_ID("Console_Input");
     if (c.bReclaimFocus) {
@@ -392,7 +391,7 @@ static void SnapEditorCameraToGameCamera(Engine::EngineState* state)
 
 void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    ConsoleState& c = GetConsole(ctx);
+    ConsoleState& c = state->console;
 
     if (c.bOwnsContext && state->inputContext != Engine::InputContext::Console) {
         c.bOpen = false;
@@ -521,7 +520,7 @@ constexpr uint16_t BOTTOM_CONTROLS_CLEARANCE = RESIZE_HANDLE_OFFSET + WRAP_TOGGL
 
 static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    ConsoleState& c = GetConsole(ctx);
+    ConsoleState& c = state->console;
 
     UI::Panel window(CLAY_ID("Console_Window"), {
          .layout = { .sizing = { CLAY_SIZING_FIXED(c.windowSize.x), CLAY_SIZING_FIXED(c.windowSize.y) }, .padding = {0, 0, 0, BOTTOM_CONTROLS_CLEARANCE}, .layoutDirection = CLAY_TOP_TO_BOTTOM },
@@ -581,8 +580,8 @@ static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void Draw(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (GetConsole(ctx).bOpen) {
+    if (state->console.bOpen) {
         DrawWindow(ctx, state);
     }
 }
-}
+} // Engine::Console

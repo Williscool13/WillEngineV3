@@ -6,13 +6,16 @@
 #define WILL_ENGINE_CONSOLE_H
 
 #include "core/containers/inline_function.h"
+#include "core/containers/inline_map.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 #include "core/containers/span.h"
+#include "core/string_id.h"
 #include "core/types/math.h"
-#include "engine/engine_api.h"
+#include "engine/core/origin.h"
+#include "engine/input/input_binding.h"
 #include "engine/logging/log_category.h"
-#include "game/ui/game_ui.h"
+#include "engine/ui/ui.h"
 
 namespace Engine
 {
@@ -20,10 +23,20 @@ struct EngineContext;
 struct EngineState;
 }
 
-namespace Game::Console
+namespace Engine::Console
 {
 /** A command handler. args[0] is the command name, args[1..] are the whitespace-split arguments. */
 using CommandCallback = Core::InlineFunction<void(Engine::EngineContext*, Engine::EngineState*, Core::Span<const char*>), 64>;
+
+constexpr size_t MAX_COMMANDS = 512;
+
+struct Command
+{
+    Core::ShortString name;
+    Core::InlineString<128> help;
+    CommandCallback callback;
+    Origin origin{Origin::Engine};
+};
 
 struct ConsoleState
 {
@@ -66,6 +79,9 @@ struct ConsoleState
     Core::InlineVector<Core::InlineString<256>, MAX_LINES> lines{};
     Core::InlineVector<Core::InlineString<256>, MAX_HISTORY> history{};
     uint64_t totalPrinted{0};
+
+    Core::InlineVector<Command, MAX_COMMANDS> commands{};
+    Core::InlineMap<StringID, size_t, MAX_COMMANDS> commandMapping{};
 };
 
 struct CommandInfo
@@ -74,28 +90,22 @@ struct CommandInfo
     const char* help{};
 };
 
-void Register(const char* name, const char* help, CommandCallback callback);
+void Register(Engine::EngineState* state, Origin origin, const char* name, const char* help, CommandCallback callback);
 
-void Print(Engine::EngineContext* ctx, const char* text);
+void Print(Engine::EngineState* state, const char* text);
 
 /**
- *
- * @param ctx
- * @param state
- * @param line
  * @return false for an empty line or an unknown command.
  */
 bool ExecuteCommand(Engine::EngineContext* ctx, Engine::EngineState* state, const char* line);
 
-size_t GetCommandCount();
+size_t GetCommandCount(const Engine::EngineState* state);
 
-CommandInfo GetCommandInfo(size_t index);
+CommandInfo GetCommandInfo(const Engine::EngineState* state, size_t index);
 
+void RegisterBuiltinCommands(Engine::EngineState* state);
 
-/**
- * Help, Clear, and Echo.
- */
-void RegisterBuiltinCommands();
+void ClearGameCommands(Engine::EngineState* state);
 
 void Update(Engine::EngineContext* ctx, Engine::EngineState* state);
 

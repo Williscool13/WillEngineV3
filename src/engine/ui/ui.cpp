@@ -2,7 +2,7 @@
 // Created by William on 2026-07-14.
 //
 
-#include "game_ui.h"
+#include "ui.h"
 
 #include <algorithm>
 #include <cstring>
@@ -12,11 +12,11 @@
 #include "engine/asset_manager.h"
 #include "engine/resources/font/font_metrics.h"
 #include "engine/input/engine_actions.h"
-#include "game/console/console.h"
-#include "game/ui/ui_zindex.h"
+#include "engine/console/console.h"
+#include "engine/ui/ui_zindex.h"
 #include "core/memory/memory_manager.h"
 
-namespace Game::UI
+namespace Engine::UI
 {
 // ---- State ----
 
@@ -289,9 +289,9 @@ Panel::~Panel()
 {
     Clay__CloseElement();
 }
-} // Game::UI
+} // Engine::UI
 
-namespace Game
+namespace Engine
 {
 static const char* DenoiserModeName(Core::ReSTIRParams::DenoiserMode mode)
 {
@@ -332,7 +332,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     Clay_BeginLayout();
 
 #ifdef WDEBUG
-    Game::Console::Draw(ctx, state);
+    Console::Draw(ctx, state);
 #endif
 
 #if WILL_EDITOR
@@ -724,4 +724,4 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
     }
 }
-} // Game
+} // Engine

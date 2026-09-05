@@ -22,7 +22,7 @@ ToolRegistry::ToolRegistry(Core::TlsfAllocator* allocator)
 void RegisterTool(EngineState* state, const ToolEntry& entry)
 {
     assert(entry.invoke && entry.name && entry.id.IsValid());
-    assert((entry.bNeedsDrain || entry.origin == ToolOrigin::Engine) && "socket-thread MCP tools must be engine-owned, a game function pointer can dangle across a reload");
+    assert((entry.bNeedsDrain || entry.origin == Origin::Engine) && "socket-thread MCP tools must be engine-owned, a game function pointer can dangle across a reload");
 
     ToolRegistry& r = state->mcpTools;
     std::lock_guard lock(r.mutex);
@@ -43,7 +43,7 @@ void ClearGameTools(EngineState* state)
     std::lock_guard lock(r.mutex);
 
     for (size_t i = r.tools.Size(); i-- > 0;) {
-        if (r.tools[i].origin == ToolOrigin::Game) {
+        if (r.tools[i].origin == Origin::Game) {
             r.tools.RemoveAt(i);
         }
     }

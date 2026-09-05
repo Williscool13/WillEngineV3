@@ -18,7 +18,7 @@
 #include "engine/components/scene_components.h"
 #include "engine/components/common/stable_id_component.h"
 #include "game/fwd_components.h"
-#include "game/console/console.h"
+#include "engine/console/console.h"
 #include "engine/editor/capture_shot_system.h"
 #include "engine/systems/scene_system.h"
 
@@ -92,9 +92,9 @@ static ToolResult ExecConsoleCommand(Engine::EngineContext* ctx, Engine::EngineS
         return ToolResult::Error;
     }
 
-    Console::ConsoleState& console = ctx->GetGameState<GameState>()->console;
+    Engine::Console::ConsoleState& console = state->console;
     const uint64_t printedBefore = console.totalPrinted;
-    const bool bOk = Console::ExecuteCommand(ctx, state, command);
+    const bool bOk = Engine::Console::ExecuteCommand(ctx, state, command);
 
     const size_t printed = static_cast<size_t>(std::min<uint64_t>(console.totalPrinted - printedBefore, console.lines.Size()));
     const size_t first = console.lines.Size() - printed;
@@ -112,13 +112,13 @@ static ToolResult ExecConsoleCommand(Engine::EngineContext* ctx, Engine::EngineS
     return ToolResult::Complete;
 }
 
-static ToolResult ListConsoleCommands(Engine::EngineContext*, Engine::EngineState*, Call& call)
+static ToolResult ListConsoleCommands(Engine::EngineContext*, Engine::EngineState* state, Call& call)
 {
     const char* prefix = call.GetString("prefix", "");
     const size_t prefixLen = strlen(prefix);
     call.BeginArray("commands");
-    for (size_t i = 0; i < Console::GetCommandCount(); ++i) {
-        const Console::CommandInfo info = Console::GetCommandInfo(i);
+    for (size_t i = 0; i < Engine::Console::GetCommandCount(state); ++i) {
+        const Engine::Console::CommandInfo info = Engine::Console::GetCommandInfo(state, i);
         if (strncmp(info.name, prefix, prefixLen) != 0) { continue; }
         call.PushObject();
         call.SetString("name", info.name);
@@ -126,7 +126,7 @@ static ToolResult ListConsoleCommands(Engine::EngineContext*, Engine::EngineStat
         call.End();
     }
     call.End();
-    call.SetInt("total", static_cast<int64_t>(Console::GetCommandCount()));
+    call.SetInt("total", static_cast<int64_t>(Engine::Console::GetCommandCount(state)));
     return ToolResult::Complete;
 }
 
@@ -316,7 +316,6 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
 void RegisterMCPTools(Engine::EngineState* state)
 {
     using Engine::MCP::RegisterTool;
-    using Engine::MCP::ToolOrigin;
 
     RegisterTool(state, {
         .id = "get_engine_status"_sid,
@@ -324,7 +323,7 @@ void RegisterMCPTools(Engine::EngineState* state)
         .description = "Readiness of the running scene: settled (no loads in flight for 30 frames), loading entity count, pending asset work, current scene, input context. Poll this after any mutation before trusting a screenshot or query.",
         .inputSchemaJson = nullptr,
         .invoke = &GetEngineStatus,
-        .origin = ToolOrigin::Game,
+        .origin = Engine::Origin::Game,
         .bNeedsDrain = true,
     });
 
@@ -334,7 +333,7 @@ void RegisterMCPTools(Engine::EngineState* state)
         .description = "Runs one line in the in-game developer console exactly as if typed, and returns the lines it printed. Use list_console_commands to discover commands.",
         .inputSchemaJson = R"({"type":"object","required":["command"],"properties":{"command":{"type":"string","description":"Full command line, e.g. `echo hi`"}}})",
         .invoke = &ExecConsoleCommand,
-        .origin = ToolOrigin::Game,
+        .origin = Engine::Origin::Game,
         .bNeedsDrain = true,
     });
 
@@ -344,7 +343,7 @@ void RegisterMCPTools(Engine::EngineState* state)
         .description = "Names and help text of every registered console command, optionally narrowed by name prefix.",
         .inputSchemaJson = R"({"type":"object","properties":{"prefix":{"type":"string"}}})",
         .invoke = &ListConsoleCommands,
-        .origin = ToolOrigin::Game,
+        .origin = Engine::Origin::Game,
         .bNeedsDrain = true,
     });
 
@@ -354,7 +353,7 @@ void RegisterMCPTools(Engine::EngineState* state)
         .description = "Full detail for one entity by stable id: name, scene, local and world transform, parent, component names.",
         .inputSchemaJson = R"({"type":"object","required":["stableId"],"properties":{"stableId":{"type":"string","description":"16 hex digits from query_scene"}}})",
         .invoke = &GetEntity,
-        .origin = ToolOrigin::Game,
+        .origin = Engine::Origin::Game,
         .bNeedsDrain = true,
     });
 
@@ -364,7 +363,7 @@ void RegisterMCPTools(Engine::EngineState* state)
         .description = "Entities whose name contains a substring (case-insensitive), with the same detail as get_entity.",
         .inputSchemaJson = R"({"type":"object","properties":{"nameContains":{"type":"string"},"limit":{"type":"integer","default":20,"minimum":1,"maximum":200}}})",
         .invoke = &FindEntities,
-        .origin = ToolOrigin::Game,
+        .origin = Engine::Origin::Game,
         .bNeedsDrain = true,
     });
 
@@ -379,7 +378,7 @@ void RegisterMCPTools(Engine::EngineState* state)
             "x":{"type":"number","default":0},"y":{"type":"number","default":0},"z":{"type":"number","default":0},
             "parentStableId":{"type":"string","description":"Parent under this entity, keeping world pose"}}})",
         .invoke = &SpawnEntity,
-        .origin = ToolOrigin::Game,
+        .origin = Engine::Origin::Game,
         .bNeedsDrain = true,
     });
 }

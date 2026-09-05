@@ -5,7 +5,6 @@
 #ifndef WILL_ENGINE_GAME_STATE_H
 #define WILL_ENGINE_GAME_STATE_H
 
-#include "console/console.h"
 #include "gameplay/player/physics_player_controller.h"
 
 namespace Game
@@ -15,8 +14,6 @@ namespace Game
  */
 struct GameState
 {
-    Console::ConsoleState console;
-
     /** Live only between PlayStart and PlayStop; GetCharacter() is null when no PIE player exists. */
     PhysicsPlayerController playerController;
 

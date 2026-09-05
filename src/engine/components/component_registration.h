@@ -21,7 +21,7 @@ template<typename T>
 concept DataComponent = !std::is_empty_v<T>;
 
 template<DataComponent T> requires NamedComponent<T>
-void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden, bool hideInInspector)
+void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin origin, bool hidden, bool hideInInspector)
 {
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
@@ -69,6 +69,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);
         },
+        origin,
         hidden,
         hideInInspector
     });
@@ -77,7 +78,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden
 }
 
 template<TagComponent T> requires NamedComponent<T>
-void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden, bool hideInInspector)
+void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin origin, bool hidden, bool hideInInspector)
 {
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
@@ -117,6 +118,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, bool hidden
         [](const entt::registry& reg, entt::entity e) -> bool {
             return reg.all_of<T>(e);
         },
+        origin,
         hidden,
         hideInInspector
     });

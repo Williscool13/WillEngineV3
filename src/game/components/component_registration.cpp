@@ -16,14 +16,14 @@ namespace Game
 {
 void RegisterGameComponents(Engine::ComponentRegistry& componentRegistry)
 {
-    Engine::RegisterComponent<Component::MotionBlurMovementComponent>(componentRegistry, false, false);
-    Engine::RegisterComponent<Component::AntiGravityTag>(componentRegistry, false, false);
-    Engine::RegisterComponent<Component::FloorTag>(componentRegistry, false, false);
+    Engine::RegisterComponent<Component::MotionBlurMovementComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::AntiGravityTag>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::FloorTag>(componentRegistry, Engine::Origin::Game, false, false);
 
-    Engine::RegisterComponent<Component::CheckpointComponent>(componentRegistry, false, false);
-    Engine::RegisterComponent<Component::DeathZoneComponent>(componentRegistry, false, false);
-    Engine::RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, false, false);
-    Engine::RegisterComponent<Component::PathMoverComponent>(componentRegistry, false, false);
-    Engine::RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, false, false);
+    Engine::RegisterComponent<Component::CheckpointComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::DeathZoneComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::PathMoverComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, Engine::Origin::Game, false, false);
 }
 } // Game

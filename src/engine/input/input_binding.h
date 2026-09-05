@@ -8,12 +8,14 @@
 #include <cstdint>
 
 #include "core/containers/inline_string.h"
+#include "core/containers/inline_vector.h"
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
 #include "core/input/action_state.h"
 #include "core/input/input_frame.h"
 #include "core/types/math.h"
 #include "engine/core/action_handle.h"
+#include "engine/core/origin.h"
 
 namespace Engine
 {
@@ -135,6 +137,7 @@ struct ActionBinding
     ActionHandle action;
     InputContext context{InputContext::Gameplay};
     BindingShape shape{BindingShape::Discrete};
+    Origin origin{Origin::Engine};
     union
     {
         BindingSource source;
@@ -193,6 +196,15 @@ struct TextInputState
     bool down{false};
 };
 
+struct DisplayedAction
+{
+    ActionHandle action;
+    Core::ShortString name{};
+    Origin origin{Origin::Engine};
+};
+
+inline constexpr size_t MAX_DISPLAYED_ACTIONS = 32;
+
 struct InputState
 {
     InputState() = default;
@@ -203,6 +215,7 @@ struct InputState
     Core::Vector<ActionBinding> defaultBindings{};
     Core::Map<ActionHandle, size_t> actionIndex{};
     Core::Vector<Core::ActionState> actionStates{};
+    Core::InlineVector<DisplayedAction, MAX_DISPLAYED_ACTIONS> displayedActions{};
 
     bool bCaptureActive{false};
     size_t captureTargetBindingRow{~size_t{0}};

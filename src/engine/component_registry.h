@@ -10,6 +10,7 @@
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
 #include "core/string_id.h"
+#include "engine/core/origin.h"
 
 namespace Core
 {
@@ -51,6 +52,8 @@ struct ComponentEntry
     DrawEditorFn drawEditor{};
     HasComponentFn has{};
 
+    Origin origin{Origin::Engine};
+
     /** Engine-managed components hidden from user-facing component lists (Add Component, filters). */
     bool hidden{false};
 
@@ -69,6 +72,8 @@ struct ComponentRegistry
     Core::Vector<ComponentEntry> registry{};
     Core::Map<StringID, size_t> registryMapping{};
 };
+
+void ClearGameComponents(ComponentRegistry& componentRegistry);
 } // Engine
 
 #endif //WILL_ENGINE_ENGINE_COMPONENT_REGISTRY_H

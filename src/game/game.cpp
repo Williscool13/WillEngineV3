@@ -18,11 +18,9 @@
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
-#include "engine/components/component_registration.h"
 #include "components/component_registration.h"
 #include "components/player_spawn_component.h"
 #include "input/input_action_registry.h"
-#include "engine/input_config.h"
 #include "engine/components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
@@ -33,7 +31,7 @@
 #include "engine/editor/probe_bake_system.h"
 #include "engine/editor/ddgi_converge_boost.h"
 #include "engine/editor/editor_systems.h"
-#include "console/console.h"
+#include "engine/console/console.h"
 #include "game_state.h"
 #include "mcp/game_mcp_tools.h"
 #include "logging/game_log_category.h"
@@ -44,7 +42,7 @@
 #include "systems/gameplay_systems.h"
 #include "engine/asset_manager.h"
 #include "engine/systems/scene_system.h"
-#include "ui/game_ui.h"
+#include "engine/ui/ui.h"
 #include "clay/clay.h"
 #include "engine/resources/font/font_metrics.h"
 
@@ -180,13 +178,10 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     }, &uiFontCtx);
 
     Audio::AudioManager::RegisterAudio();
-    Engine::RegisterEngineComponents(state->componentRegistry);
     Game::RegisterGameComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
-    Game::Console::RegisterBuiltinCommands();
     Game::RegisterMCPTools(state);
-    Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Engine::ConnectPhysicsObservers(state->registry);
     Engine::ConnectCommonObservers(state->registry);
     Game::ConnectGameplayObservers(state->registry);
@@ -285,13 +280,10 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
         return {width, height};
     }, &uiFontCtx);
 
-    Engine::RegisterEngineComponents(state->componentRegistry);
     Game::RegisterGameComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
-    Game::Console::RegisterBuiltinCommands();
     Game::RegisterMCPTools(state);
-    Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Engine::ConnectPhysicsObservers(state->registry);
     Engine::ConnectCommonObservers(state->registry);
     Game::ConnectGameplayObservers(state->registry);
@@ -332,7 +324,7 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Engine::UpdateUIPointerState(ctx, state);
 
 #ifdef WDEBUG
-    Game::Console::Update(ctx, state);
+    Engine::Console::Update(ctx, state);
 #endif
 
     // Gameplay simulation runs only while playing AND game-focused
@@ -492,7 +484,7 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     Engine::GatherLocalDDGIVolumes(ctx, state, frameBuffer);
     Engine::GatherRenderables(ctx, state, frameBuffer);
     Engine::GatherTextRenderables(ctx, state, frameBuffer);
-    Game::GatherUIRenderables(ctx, state, frameBuffer);
+    Engine::GatherUIRenderables(ctx, state, frameBuffer);
     state->debug.bVerifyStoresOnce = false;
 
 #if WILL_EDITOR

@@ -19,6 +19,9 @@
 #include "engine_api.h"
 #include "engine/include/game_interface.h"
 #include "core/input/input_manager.h"
+#include "components/component_registration.h"
+#include "console/console.h"
+#include "input/input_action_registry.h"
 #include "input/input_resolve.h"
 #include "input/input_rebinding.h"
 #include "input_config.h"
@@ -499,6 +502,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         engineContext->pipelineManager = renderThread->GetPipelineManager();
         engineContext->rendererStatistics = renderThread->GetStatisticsManager();
         MCP::RegisterEngineTools(engineState);
+        RegisterEngineComponents(engineState->componentRegistry);
+        RegisterEngineInputActions(engineState->input);
+        Console::RegisterBuiltinCommands(engineState);
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;
@@ -582,6 +588,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
         gameFunctions.gameStartup(engineContext, engineState);
         gameFunctions.gameLoad(engineContext, engineState);
+        LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
     }
 
 #if WILL_EDITOR
@@ -592,6 +599,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             gameFunctions.gameHotReloadSave(engineContext, engineState);
             engineState->registry = entt::registry{};
             MCP::ClearGameTools(engineState);
+            ClearGameComponents(engineState->componentRegistry);
+            ClearGameInputActions(engineState->input);
+            Console::ClearGameCommands(engineState);
 
             auto reloadResponse = gameDll.Reload();
 
@@ -627,6 +637,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
             // Reconnect observers and restore snapshot; skips default scene load.
             gameFunctions.gameHotReloadLoad(engineContext, engineState);
+            LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
         }, 2.0f, "game.dll");
     }
     else {

@@ -9,13 +9,6 @@ set(GAME_SOURCES
         systems/gameplay_systems.cpp
         systems/gameplay_systems.h
 
-        ui/game_ui.cpp
-        ui/game_ui.h
-        ui/ui_zindex.h
-
-        console/console.cpp
-        console/console.h
-
         mcp/game_mcp_tools.cpp
         mcp/game_mcp_tools.h
 
@@ -49,6 +42,7 @@ set(GAME_SOURCES
         gameplay/player/player_controller.cpp
         gameplay/player/player_controller.h
 
+        input/game_actions.h
         input/input_action_registry.cpp
         input/input_action_registry.h
 )

@@ -14,6 +14,7 @@
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
 #include "core/string_id.h"
+#include "engine/core/origin.h"
 
 namespace Engine
 {
@@ -29,12 +30,6 @@ enum class ToolResult : uint8_t
     Error,
 };
 
-enum class ToolOrigin : uint8_t
-{
-    Engine,
-    Game,
-};
-
 class Call;
 
 using ToolFn = ToolResult(*)(EngineContext* ctx, EngineState* state, Call& call);
@@ -47,7 +42,7 @@ struct ToolEntry
     /** JSON Schema object for the tool's arguments; nullptr means "no arguments". */
     const char* inputSchemaJson{};
     ToolFn invoke{};
-    ToolOrigin origin{ToolOrigin::Engine};
+    Origin origin{Origin::Engine};
     /** false serves the call on the socket thread; only allowed for Engine-owned tools. */
     bool bNeedsDrain{true};
 };

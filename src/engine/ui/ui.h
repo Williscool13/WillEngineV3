@@ -2,8 +2,8 @@
 // Created by William on 2026-07-14.
 //
 
-#ifndef WILL_ENGINE_GAME_UI_H
-#define WILL_ENGINE_GAME_UI_H
+#ifndef WILL_ENGINE_UI_H
+#define WILL_ENGINE_UI_H
 
 #include <cstdint>
 
@@ -21,12 +21,12 @@ namespace Core
 struct FrameBuffer;
 }
 
-namespace Game
+namespace Engine
 {
 void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
-} // Game
+} // Engine
 
-namespace Game::UI
+namespace Engine::UI
 {
 // ---- State ----
 
@@ -158,6 +158,6 @@ public:
     Panel(const Panel&) = delete;
     Panel& operator=(const Panel&) = delete;
 };
-} // Game::UI
+} // Engine::UI
 
-#endif //WILL_ENGINE_GAME_UI_H
+#endif //WILL_ENGINE_UI_H
