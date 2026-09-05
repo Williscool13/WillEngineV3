@@ -1807,6 +1807,8 @@ void WillEngine::Cleanup()
         memoryManager.PersistentFree(engineContext->gameState);
         engineContext->gameState = nullptr;
     }
+    engineState->registry.clear();
+    PlaybackCommands(engineContext, engineState);
     engineState->~EngineState();
     scheduler->ShutdownNow();
     engineContext->scheduler = nullptr;

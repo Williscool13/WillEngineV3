@@ -122,6 +122,7 @@ void HotReloadSave(EngineContext* ctx, EngineState* state)
     LOG_INFO(Engine, "Hot reload: snapshot saved ({} scene(s))", state->editor.hotReloadSnapshot.Size());
 
     state->registry.clear();
+    PlaybackCommands(ctx, state);
 }
 
 void HotReloadRestore(EngineContext* ctx, EngineState* state)

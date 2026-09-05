@@ -312,6 +312,11 @@ void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entit
     if (comp.probeId == 0) {
         comp.probeId = state->rng();
     }
+    state->commandQueue.Push({.type = CommandType::ProbeConstruct, .entity = entity});
+}
+
+void ReflectionProbeComponent::DeferredConstruct(entt::registry& registry, entt::entity entity)
+{
     RequestReflectionProbeLoad(registry, entity);
 }
 
@@ -319,8 +324,8 @@ void ReflectionProbeComponent::OnDestroy(entt::registry& registry, entt::entity 
 {
     auto& comp = registry.get<ReflectionProbeComponent>(entity);
     if (comp.contentHandle.IsValid()) {
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-        ctx->assetManager->UnloadCubemap(comp.contentHandle);
+        auto* state = registry.ctx().get<Engine::EngineState*>();
+        state->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = comp.contentHandle}});
         comp.contentHandle = Engine::CubemapHandle::INVALID;
     }
     registry.remove<ReflectionProbeLoadPendingTag>(entity);

@@ -23,10 +23,10 @@ namespace Engine::Component
 {
 void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
     if (runtime.fontHandle.IsValid()) {
-        ctx->assetManager->UnloadFont(runtime.fontHandle);
+        state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
         runtime.fontHandle = {};
     }
     registry.remove<TextFontPendingTag>(entity);
@@ -49,13 +49,15 @@ void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::enti
 void TextRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    state->modelStore.Free(registry.get<TextRuntime>(entity).modelRange);
+    auto& runtime = registry.get<TextRuntime>(entity);
+    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {0, 0, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
+    runtime.modelRange = {};
 }
 
 void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<TextComponent>(entity);
-    LoadTextComponent(comp, registry, entity);
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->commandQueue.Push({.type = CommandType::TextConstruct, .entity = entity});
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);

@@ -60,6 +60,12 @@ static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
 
 void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 {
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
+}
+
+void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity entity)
+{
     auto& component = registry.get<PhysicsBodyDesc>(entity);
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
@@ -122,28 +128,27 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
     for (auto& shape : component.shapes) {
         if (shape.colliderHandle.IsValid()) {
-            ctx->assetManager->UnloadCollider(shape.colliderHandle);
+            state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = shape.colliderHandle}});
             shape.colliderHandle = {};
         }
     }
-    OnConstruct(registry, entity);
+    state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
 void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<PhysicsBodyDesc>(entity);
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* state = registry.ctx().get<EngineState*>();
     for (auto& shape : component.shapes) {
         if (shape.colliderHandle.IsValid()) {
-            ctx->assetManager->UnloadCollider(shape.colliderHandle);
+            state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = shape.colliderHandle}});
             shape.colliderHandle = {};
         }
     }
-    registry.remove<PhysicsBodyComponent>(entity);
-    registry.remove<DynamicPhysicsBodyComponent>(entity);
+    state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
 }
 }
 

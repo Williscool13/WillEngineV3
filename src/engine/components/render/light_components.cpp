@@ -190,7 +190,7 @@ LightInfo Component::ComputeAreaLightInfo(const TransformComponent& transform, c
 void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    registry.get<AreaLightComponent>(entity).lightSlot = state->analyticLightStore.Allocate();
+    state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     state->assetLoad.bPendingModelResolve = true;
@@ -199,7 +199,11 @@ void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    state->analyticLightStore.Free(registry.get<AreaLightComponent>(entity).lightSlot);
+    auto& light = registry.get<AreaLightComponent>(entity);
+    if (light.lightSlot != AnalyticLightStore::INVALID_SLOT) {
+        state->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = light.lightSlot}});
+        light.lightSlot = AnalyticLightStore::INVALID_SLOT;
+    }
     registry.remove<LightSurfacePendingTag>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
@@ -277,7 +281,7 @@ LightInfo Component::ComputeSphereLightInfo(const TransformComponent& transform,
 void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    registry.get<SphereLightComponent>(entity).lightSlot = state->analyticLightStore.Allocate();
+    state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     state->assetLoad.bPendingModelResolve = true;
@@ -286,7 +290,11 @@ void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt
 void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    state->analyticLightStore.Free(registry.get<SphereLightComponent>(entity).lightSlot);
+    auto& light = registry.get<SphereLightComponent>(entity);
+    if (light.lightSlot != AnalyticLightStore::INVALID_SLOT) {
+        state->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = light.lightSlot}});
+        light.lightSlot = AnalyticLightStore::INVALID_SLOT;
+    }
     registry.remove<LightSurfacePendingTag>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
@@ -303,10 +311,10 @@ void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::e
     auto& runtime = registry.get<LightSurfaceRuntime>(entity);
     if (!runtime.range.IsValid() && !runtime.modelRange.IsValid()) { return; }
 
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime.range);
-    state->modelStore.Free(runtime.modelRange);
+    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
+    runtime.range = {};
+    runtime.modelRange = {};
 }
 
 Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
@@ -374,8 +382,8 @@ void Component::SkyboxComponent::OnDestroy(entt::registry& registry, entt::entit
 {
     auto& comp = registry.get<SkyboxComponent>(entity);
     if (comp.handle.IsValid()) {
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-        ctx->assetManager->UnloadCubemap(comp.handle);
+        auto* state = registry.ctx().get<Engine::EngineState*>();
+        state->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = comp.handle}});
         comp.handle = Engine::CubemapHandle::INVALID;
     }
 }

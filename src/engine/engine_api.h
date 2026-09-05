@@ -36,6 +36,7 @@
 #include "engine/asset_manager.h"
 #include "engine/builtin_assets.h"
 #include "engine/component_registry.h"
+#include "engine/systems/command_queue.h"
 #include "engine/editor_state.h"
 #include "engine/editor/probe_bake_system.h"
 #include "engine/editor/capture_shot_system.h"
@@ -229,6 +230,7 @@ struct EngineState
     Core::TimeFrame renderTimeFrame{};
     std::mt19937_64 rng{std::random_device{}()};
 
+    CommandQueue commandQueue{};
     entt::registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
     /** Set by hierarchy mutators (SetParent/ClearParent/SpawnModel/load); EnsureHierarchyOrder re-sorts the HierarchyComponent pool when set. */

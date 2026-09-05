@@ -120,6 +120,7 @@ struct PhysicsBodyDesc
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void DeferredConstruct(entt::registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
 };
 }

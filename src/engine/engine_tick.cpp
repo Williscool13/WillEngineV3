@@ -83,6 +83,8 @@ void PostUpdate(EngineContext* ctx, EngineState* state)
     CubemapHotReload(ctx, state);
 #endif
 
+    PlaybackCommands(ctx, state);
+
     StaticMeshPendingKickoff(ctx, state);
     ReflectionProbeBakeUpgrade(ctx, state);
     ReflectionProbePendingKickoff(ctx, state);

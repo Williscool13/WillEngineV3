@@ -21,13 +21,10 @@ void PhysicsBodyComponent::OnConstruct(entt::registry& registry, entt::entity en
 void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto& physics = registry.get<PhysicsBodyComponent>(entity);
 
     if (!physics.bodyID.IsInvalid()) {
-        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-        bodyInterface.RemoveBody(physics.bodyID);
-        bodyInterface.DestroyBody(physics.bodyID);
+        state->commandQueue.Push({.type = CommandType::BodyDestroy, .payload = {.bodyId = physics.bodyID.GetIndexAndSequenceNumber()}});
     }
 
     state->physics.bodyToEntity.Remove(physics.bodyID);

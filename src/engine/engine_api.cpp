@@ -112,12 +112,13 @@ InputState::InputState(Core::TlsfAllocator* allocator)
 
 EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryManager* virtualMemory)
     : allocator(allocator),
+      commandQueue(allocator),
       stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
       componentRegistry(allocator),
       mcpTools(allocator),
+      input(allocator),
       physics(allocator),
-      editor(allocator),
-      input(allocator)
+      editor(allocator)
 {
     instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);
     modelStore.Init(MAX_MODEL_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);

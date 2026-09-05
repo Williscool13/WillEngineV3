@@ -184,6 +184,8 @@ add_library(engine STATIC
 
         systems/camera_system.cpp
         systems/camera_system.h
+        systems/command_queue.cpp
+        systems/command_queue.h
         systems/common_systems.cpp
         systems/common_systems.h
         systems/physics_system.cpp

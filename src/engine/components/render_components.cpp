@@ -59,14 +59,12 @@ void MeshRuntime::OnConstruct(entt::registry& registry, entt::entity entity)
 
 void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get<MeshRuntime>(entity);
 
-    state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime.range);
-    state->modelStore.Free(runtime.modelRange);
-    if (runtime.modelHandle.IsValid()) {
-        ctx->assetManager->UnloadModel(runtime.modelHandle);
-    }
+    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, runtime.modelHandle}}});
+    runtime.range = {};
+    runtime.modelRange = {};
+    runtime.modelHandle = StaticModelHandle::INVALID;
 }
 }

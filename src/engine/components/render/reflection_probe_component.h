@@ -75,6 +75,8 @@ struct ReflectionProbeComponent
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
+
+    static void DeferredConstruct(entt::registry& registry, entt::entity entity);
 };
 
 /** Stand-in cubemap load requested; ReflectionProbePendingKickoff kicks the cubemap load. */
