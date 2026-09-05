@@ -63,10 +63,11 @@ struct CaptureShotSystem
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 };
 
-/** Advances the capture run one render frame; call in GamePrepareFrame after ProbeBakeTick and before FunctionKeyRenderUpdate. */
+size_t CountLoadingEntities(Engine::EngineState* state);
+
 void CaptureShotTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
-/** During an active run, empties debug draws, sprites, probe previews, selection outline, and GPU debug so none of it bakes into the PNGs. */
+/** Empties debug draws, sprites, probe previews, selection outline, and GPU debug so none of it bakes into the PNGs. */
 void CaptureShotScrubFrame(Engine::EngineContext* ctx, Core::FrameBuffer* frameBuffer);
 } // Game
 

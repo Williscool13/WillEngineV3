@@ -5,10 +5,13 @@
 #include "console.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
+#include "core/containers/inline_map.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
+#include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
 #include "game/components/camera_components.h"
 #include "game/components/core_components.h"
@@ -19,7 +22,8 @@
 
 namespace Game::Console
 {
-constexpr int MAX_COMMANDS = 128;
+constexpr size_t MAX_COMMANDS = 512;
+constexpr size_t HELP_LIST_LIMIT = 40;
 
 struct Command
 {
@@ -29,6 +33,12 @@ struct Command
 };
 
 static Core::InlineVector<Command, MAX_COMMANDS> gCOMMANDS;
+static Core::InlineMap<StringID, size_t, MAX_COMMANDS> gCOMMAND_MAPPING;
+
+static StringID CommandId(const char* name)
+{
+    return StringID(Hash(name, strlen(name)));
+}
 
 static ConsoleState& GetConsole(Engine::EngineContext* ctx)
 {
@@ -58,7 +68,7 @@ static void PushHistory(ConsoleState& c, const char* line)
     c.history.PushBack(Core::InlineString<256>(line));
 }
 
-static void Execute(Engine::EngineContext* ctx, Engine::EngineState* state, const char* line)
+bool ExecuteCommand(Engine::EngineContext* ctx, Engine::EngineState* state, const char* line)
 {
     Core::InlineString<256> echo("] ");
     echo.Append(line);
@@ -81,19 +91,18 @@ static void Execute(Engine::EngineContext* ctx, Engine::EngineState* state, cons
     }
 
     if (args.IsEmpty()) {
-        return;
+        return false;
     }
 
-    for (auto& cmd : gCOMMANDS) {
-        if (cmd.name == args[0]) {
-            cmd.callback(ctx, state, Core::Span<const char*>(args.Data(), args.Size()));
-            return;
-        }
+    if (const size_t* index = gCOMMAND_MAPPING.Find(CommandId(args[0]))) {
+        gCOMMANDS[*index].callback(ctx, state, Core::Span<const char*>(args.Data(), args.Size()));
+        return true;
     }
 
     Core::InlineString<256> err("Unknown command: ");
     err.Append(args[0]);
     Print(ctx, err.c_str());
+    return false;
 }
 
 void Print(Engine::EngineContext* ctx, const char* text)
@@ -103,32 +112,55 @@ void Print(Engine::EngineContext* ctx, const char* text)
         c.lines.RemoveAt(0);
     }
     c.lines.PushBack(Core::InlineString<256>(text));
+    c.totalPrinted++;
     c.bScrollToBottom = true;
 }
 
 void Register(const char* name, const char* help, CommandCallback callback)
 {
-    for (auto& cmd : gCOMMANDS) {
-        if (cmd.name == name) {
-            cmd.help = Core::InlineString<128>(help);
-            cmd.callback = std::move(callback);
-            return;
-        }
+    const StringID id = CommandId(name);
+    if (const size_t* existing = gCOMMAND_MAPPING.Find(id)) {
+        Command& cmd = gCOMMANDS[*existing];
+        assert(cmd.name == name && "console command StringID collision between two differently named commands");
+        cmd.help = Core::InlineString<128>(help);
+        cmd.callback = std::move(callback);
+        return;
     }
     if (gCOMMANDS.IsFull()) {
+        LOG_ERROR(Game, "Console command '{}' dropped, MAX_COMMANDS ({}) reached", name, MAX_COMMANDS);
+        assert(false && "console command overflow");
         return;
     }
     Command cmd;
     cmd.name = Core::ShortString(name);
     cmd.help = Core::InlineString<128>(help);
     cmd.callback = std::move(callback);
+    gCOMMAND_MAPPING.Insert(id, gCOMMANDS.Size());
     gCOMMANDS.PushBack(std::move(cmd));
+}
+
+size_t GetCommandCount()
+{
+    return gCOMMANDS.Size();
+}
+
+CommandInfo GetCommandInfo(const size_t index)
+{
+    const Command& cmd = gCOMMANDS[index];
+    return {cmd.name.c_str(), cmd.help.c_str()};
 }
 
 void RegisterBuiltinCommands()
 {
-    Register("help", "List all commands", [](Engine::EngineContext* ctx, Engine::EngineState*, Core::Span<const char*>) {
+    Register("help", "List commands; `help <prefix>` narrows the list", [](Engine::EngineContext* ctx, Engine::EngineState*, Core::Span<const char*> args) {
+        const char* prefix = args.Size() > 1 ? args[1] : "";
+        const size_t prefixLen = strlen(prefix);
+        if (prefixLen == 0 && gCOMMANDS.Size() > HELP_LIST_LIMIT) {
+            Print(ctx, Core::InlineString<256>::Format("  %zu commands registered; use `help <prefix>` to list a subset", gCOMMANDS.Size()).c_str());
+            return;
+        }
         for (auto& cmd : gCOMMANDS) {
+            if (strncmp(cmd.name.c_str(), prefix, prefixLen) != 0) { continue; }
             Core::InlineString<256> l("  ");
             l.Append(cmd.name);
             l.Append(" - ");
@@ -329,7 +361,7 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (res.submitted) {
         if (c.input[0] != '\0') {
             PushHistory(c, c.input);
-            Execute(ctx, state, c.input);
+            ExecuteCommand(ctx, state, c.input);
         }
         c.input[0] = '\0';
         c.historyPos = -1;

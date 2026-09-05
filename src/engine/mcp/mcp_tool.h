@@ -6,8 +6,11 @@
 #define WILL_ENGINE_MCP_TOOL_H
 
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 
+#include "core/containers/inline_string.h"
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
 #include "core/string_id.h"
@@ -70,6 +73,19 @@ void RegisterTool(EngineState* state, const ToolEntry& entry);
 
 /** Engine thread only. Call before the game DLL unloads. */
 void ClearGameTools(EngineState* state);
+
+inline Core::InlineString<24> HexId(const uint64_t id)
+{
+    return Core::InlineString<24>::Format("%016llx", static_cast<unsigned long long>(id));
+}
+
+inline bool ParseHexId(const char* text, uint64_t& outId)
+{
+    if (!text || strlen(text) != 16) { return false; }
+    char* end = nullptr;
+    outId = strtoull(text, &end, 16);
+    return end == text + 16;
+}
 
 /**
  * Argument reader and result writer handed to a tool handler. Handlers never see the JSON library.

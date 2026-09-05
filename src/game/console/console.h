@@ -65,11 +65,31 @@ struct ConsoleState
 
     Core::InlineVector<Core::InlineString<256>, MAX_LINES> lines{};
     Core::InlineVector<Core::InlineString<256>, MAX_HISTORY> history{};
+    uint64_t totalPrinted{0};
+};
+
+struct CommandInfo
+{
+    const char* name{};
+    const char* help{};
 };
 
 void Register(const char* name, const char* help, CommandCallback callback);
 
 void Print(Engine::EngineContext* ctx, const char* text);
+
+/**
+ *
+ * @param ctx
+ * @param state
+ * @param line
+ * @return false for an empty line or an unknown command.
+ */
+bool ExecuteCommand(Engine::EngineContext* ctx, Engine::EngineState* state, const char* line);
+
+size_t GetCommandCount();
+
+CommandInfo GetCommandInfo(size_t index);
 
 
 /**

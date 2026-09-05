@@ -359,7 +359,12 @@ void MCPServer::Drain(EngineContext* ctx, EngineState* state)
             pending->outcome = ToolResult::Error;
         }
         else {
-            LOG_INFO(MCP, "mcp/{} begin frame={} tool={}", pending->callId, pending->frame, entry.name);
+            if (pending->args.empty()) {
+                LOG_INFO(MCP, "mcp/{} begin frame={} tool={}", pending->callId, pending->frame, entry.name);
+            }
+            else {
+                LOG_INFO(MCP, "mcp/{} begin frame={} tool={} args={}", pending->callId, pending->frame, entry.name, pending->args.dump());
+            }
             pending->outcome = entry.invoke(ctx, state, call);
             LOG_INFO(MCP, "mcp/{} end frame={} result={}", pending->callId, pending->frame, pending->outcome == ToolResult::Complete && !pending->call.bError ? "complete" : "error");
         }

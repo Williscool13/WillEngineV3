@@ -33,6 +33,7 @@
 #include "editor/editor_systems.h"
 #include "console/console.h"
 #include "game_state.h"
+#include "mcp/game_mcp_tools.h"
 #include "logging/game_log_category.h"
 #include "systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
@@ -156,6 +157,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::Console::RegisterBuiltinCommands();
+    Game::RegisterMCPTools(state);
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
@@ -235,6 +237,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::Console::RegisterBuiltinCommands();
+    Game::RegisterMCPTools(state);
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
     Game::ConnectPhysicsObservers(state->registry);
     Game::ConnectCommonObservers(state->registry);
@@ -259,6 +262,8 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
+
+    Game::TickQuietFrames(ctx, state);
 
 #if WILL_EDITOR
     Game::EditorUpdate(ctx, state);

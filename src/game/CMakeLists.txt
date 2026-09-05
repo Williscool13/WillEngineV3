@@ -32,6 +32,9 @@ set(GAME_SOURCES
         console/console.cpp
         console/console.h
 
+        mcp/game_mcp_tools.cpp
+        mcp/game_mcp_tools.h
+
         logging/game_log_category.h
         logging/game_log.h
 

@@ -35,7 +35,7 @@ static constexpr int32_t READY_QUIET_FRAMES = 30;
 static constexpr int32_t READY_TIMEOUT_FRAMES = 3000;
 static constexpr int32_t SAVE_TIMEOUT_FRAMES = 300;
 
-static size_t CountLoadingEntities(Engine::EngineState* state)
+size_t CountLoadingEntities(Engine::EngineState* state)
 {
     return state->registry.view<Component::StaticMeshLoadingTag>().size() +
            state->registry.view<Component::StaticMeshPrimitiveLoadingTag>().size() +

@@ -55,11 +55,6 @@ static void WritePage(Call& call, const Page& page)
     call.SetInt("limit", page.limit);
 }
 
-static Core::InlineString<24> HexId(const uint64_t id)
-{
-    return Core::InlineString<24>::Format("%016llx", static_cast<unsigned long long>(id));
-}
-
 static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
 {
     call.SetInt("gameFrame", static_cast<int64_t>(Core::gGameFrame.load(std::memory_order_relaxed)));
