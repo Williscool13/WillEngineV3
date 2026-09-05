@@ -34,7 +34,7 @@ void VerifyStringLiteralTable()
     for (size_t i = 1; i < gSTRING_LITERAL_COUNT; ++i) {
         const uint64_t prev = gSTRING_LITERALS[i - 1].id.id;
         const uint64_t cur = gSTRING_LITERALS[i].id.id;
-        assert(prev <= cur && "string literal table not sorted by hash, scripts/xxh3.py has drifted from the engine's XXH3");
+        assert(prev <= cur && "string literal table not sorted by hash, core/tools/xxh3.py has drifted from the engine's XXH3");
         if (prev == cur) {
             assert(strcmp(gSTRING_LITERALS[i - 1].str, gSTRING_LITERALS[i].str) == 0 && "StringID hash collision between two distinct literals");
         }

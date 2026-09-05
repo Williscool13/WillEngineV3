@@ -254,7 +254,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
     }
     uint64_t modelId = modelIdRng();
     uint64_t contentVersion = 1;
-    if (outputPath.Exists()) {
+    if (Platform::FileExists(outputPath)) {
         if (auto header = Engine::ReadWStaticModelHeaderAnyVersion(outputPath)) {
             modelId = header->modelId;
             contentVersion = header->contentVersion + 1;
@@ -267,7 +267,7 @@ void AssetGenerator::RequestModelGenerate(const Core::Path& gltfPath, const Core
 AssetGenerator::RecoveredTextureIdentity AssetGenerator::RecoverTextureIdentity(const Core::Path& outputPath, uint64_t ownerModelId, uint32_t ownerImageIndex)
 {
     RecoveredTextureIdentity out{Engine::TextureID{textureIdRng()}};
-    if (outputPath.Exists()) {
+    if (Platform::FileExists(outputPath)) {
         if (auto header = Engine::ReadWTextureHeaderAnyVersion(outputPath)) {
             out.id = Engine::TextureID{header->textureId};
             out.contentVersion = header->contentVersion + 1;
@@ -354,7 +354,7 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
     }
     Engine::EnvironmentMapID id{environmentMapIdRng()};
     uint64_t contentVersion = 1;
-    if (outputPath.Exists()) {
+    if (Platform::FileExists(outputPath)) {
         if (auto header = Engine::ReadWEnvMapHeaderAnyVersion(outputPath)) {
             id = Engine::EnvironmentMapID{header->environmentMapId};
             contentVersion = header->contentVersion + 1;
@@ -373,7 +373,7 @@ void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint
     }
     Engine::EnvironmentMapID id{environmentMapIdRng()};
     uint64_t contentVersion = 1;
-    if (outputPath.Exists()) {
+    if (Platform::FileExists(outputPath)) {
         if (auto header = Engine::ReadWProbeHeaderAnyVersion(outputPath)) {
             id = Engine::EnvironmentMapID{header->environmentMapId};
             contentVersion = header->contentVersion + 1;
@@ -520,7 +520,7 @@ Engine::FontID AssetGenerator::RequestFontGenerate(const Core::Path& ttfPath, co
     }
     Engine::FontID id{fontIdRng()};
     uint64_t contentVersion = 1;
-    if (outputPath.Exists()) {
+    if (Platform::FileExists(outputPath)) {
         if (auto header = Engine::ReadWFontHeaderAnyVersion(outputPath)) {
             id = Engine::FontID{header->fontId};
             contentVersion = header->contentVersion + 1;

@@ -1,18 +1,36 @@
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+# CORE_ALLOC_TAGS_DIR: dir holding alloc_tags.h
+if(NOT DEFINED CORE_ALLOC_TAGS_DIR OR CORE_ALLOC_TAGS_DIR STREQUAL "")
+    set(CORE_ALLOC_TAGS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/memory/default_tags)
+    set(CORE_USE_DEFAULT_ALLOC_TAGS ON)
+else()
+    set(CORE_USE_DEFAULT_ALLOC_TAGS OFF)
+endif()
+
+# CORE_STRING_LITERAL_ROOTS: where to look for string IDs for code gen.
+if(NOT DEFINED CORE_STRING_LITERAL_ROOTS OR CORE_STRING_LITERAL_ROOTS STREQUAL "")
+    set(CORE_STRING_LITERAL_ROOTS ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+
+
 set(STRING_LITERAL_TABLE ${CMAKE_BINARY_DIR}/generated/string_id_table.gen.cpp)
+set(STRING_LITERAL_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_string_literals.py)
 
-file(GLOB_RECURSE STRING_LITERAL_SOURCES CONFIGURE_DEPENDS
-        ${CMAKE_SOURCE_DIR}/src/*.cpp
-        ${CMAKE_SOURCE_DIR}/src/*.h
-)
+set(STRING_LITERAL_GLOBS)
+set(STRING_LITERAL_ROOT_ARGS)
+foreach(root ${CORE_STRING_LITERAL_ROOTS})
+    list(APPEND STRING_LITERAL_GLOBS ${root}/*.cpp ${root}/*.h ${root}/*.hpp)
+    list(APPEND STRING_LITERAL_ROOT_ARGS --root ${root})
+endforeach()
+file(GLOB_RECURSE STRING_LITERAL_SOURCES CONFIGURE_DEPENDS ${STRING_LITERAL_GLOBS})
+list(FILTER STRING_LITERAL_SOURCES EXCLUDE REGEX "/extern/")
 
-# The generator rewrites its output only when the literal set actually changes, so editing an
-# unrelated source reruns the scan but does not recompile the table.
+# The generator rewrites its output only when the literal set actually changes, so editing an unrelated source reruns the scan but does not recompile the table.
 add_custom_command(
         OUTPUT ${STRING_LITERAL_TABLE}
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/gen_string_literals.py ${STRING_LITERAL_TABLE}
-        DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_string_literals.py ${STRING_LITERAL_SOURCES}
+        COMMAND ${Python3_EXECUTABLE} ${STRING_LITERAL_GENERATOR} ${STRING_LITERAL_TABLE} ${STRING_LITERAL_ROOT_ARGS}
+        DEPENDS ${STRING_LITERAL_GENERATOR} ${CMAKE_CURRENT_SOURCE_DIR}/tools/xxh3.py ${STRING_LITERAL_SOURCES}
         COMMENT "Generating StringID literal table"
         VERBATIM
 )
@@ -26,14 +44,6 @@ add_library(core STATIC
         containers/ring_buffer.h
         memory/handle.cpp
         memory/handle.h
-        input/input_frame.h
-        input/action_state.h
-        input/input_utils.cpp
-        input/input_utils.h
-        input/input_manager.cpp
-        input/input_manager.h
-        input/input_names.cpp
-        input/input_names.h
         time/time_manager.cpp
         time/time_manager.h
         time/time_frame.cpp
@@ -106,16 +116,23 @@ add_library(core STATIC
         memory/virtual_arena.h
 )
 
+target_sources(core PRIVATE extern/tlsf/tlsf.c extern/tlsf/tlsf.h)
+
+if(CORE_USE_DEFAULT_ALLOC_TAGS)
+    target_sources(core PRIVATE memory/default_tags/alloc_tags.h memory/default_tags/alloc_tags.cpp)
+endif()
+
+target_include_directories(core PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_SOURCE_DIR}/extern
+        ${CORE_ALLOC_TAGS_DIR}
+)
 
 target_include_directories(core PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/extern
+        ${CMAKE_CURRENT_SOURCE_DIR}/extern/tlsf
 )
 
-target_link_libraries(core PUBLIC
-        spdlog::spdlog
-        SDL3::SDL3
-        tlsf
+target_compile_definitions(core PUBLIC
+        GLM_FORCE_DEPTH_ZERO_TO_ONE
+        GLM_ENABLE_EXPERIMENTAL
 )
-
-target_link_libraries(core PRIVATE platform)

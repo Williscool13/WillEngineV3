@@ -25,7 +25,7 @@
 #include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "engine/include/engine_context.h"
-#include "core/input/input_frame.h"
+#include "engine/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
 #include "engine/material_manager.h"

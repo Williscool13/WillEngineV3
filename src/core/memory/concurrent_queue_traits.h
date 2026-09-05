@@ -11,9 +11,6 @@
 
 namespace Core
 {
-/**
- * moodycamel concurrent queue allocated TlsfAllocator (AllocTag::Queue).
- */
 struct TlsfQueueTraits : moodycamel::ConcurrentQueueDefaultTraits
 {
     static constexpr size_t BLOCK_SIZE = 8;
@@ -22,7 +19,7 @@ struct TlsfQueueTraits : moodycamel::ConcurrentQueueDefaultTraits
     static void free(void* ptr);
 };
 
-void SetConcurrentQueueAllocator(TlsfAllocator* alloc);
+void SetConcurrentQueueAllocator(TlsfAllocator* alloc, AllocTag tag);
 
 template<typename T>
 using ConcurrentQueue = moodycamel::ConcurrentQueue<T, TlsfQueueTraits>;

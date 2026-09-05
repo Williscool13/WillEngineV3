@@ -398,7 +398,7 @@ bool MaterialManager::MoveMutableMaterial(MaterialID id, std::string_view subDir
     if (newDir == mat->sourcePath.Parent()) { return false; }
 
     const Core::Path newPath = newDir / mat->sourcePath.Filename();
-    if (newPath.Exists()) { return false; }
+    if (Platform::FileExists(newPath)) { return false; }
 
     Platform::CreateDirectories(newDir.c_str());
     if (!Platform::RenameFile(mat->sourcePath, newPath)) { return false; }

@@ -2,7 +2,7 @@
 src/core/hash/xxh3.h. Every id the engine derives from a string (component-type keys,
 shader-name StringIDs, name_id() asset ids) goes through here so scripts and C++ agree.
 
-    python scripts/xxh3.py            # self-test against pinned vectors
+    python src/core/tools/xxh3.py     # self-test against pinned vectors
 """
 
 import struct

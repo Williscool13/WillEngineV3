@@ -19,7 +19,7 @@
 #include "engine/engine_api.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
-#include "core/input/input_frame.h"
+#include "engine/input/input_frame.h"
 #include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "engine/components/fwd_components.h"

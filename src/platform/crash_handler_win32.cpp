@@ -261,7 +261,7 @@ Core::Path CrashHandler::CreateCrashFolder()
 
 void CrashHandler::CopyLogsToCrashes(const Core::Path& currentCrashFolder)
 {
-    if (logPath.IsEmpty() || !logPath.Exists()) {
+    if (logPath.IsEmpty() || !FileExists(logPath)) {
         fmt::println("No log file to copy");
         return;
     }

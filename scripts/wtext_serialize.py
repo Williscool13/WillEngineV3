@@ -5,8 +5,11 @@ Mirrors the C++ TextWriter output byte-for-byte (field order, omit-default,
 built from the same dict shapes wscene_authoring.py has always produced.
 """
 
+import os
 import struct
+import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "core", "tools"))
 from xxh3 import string_id
 
 

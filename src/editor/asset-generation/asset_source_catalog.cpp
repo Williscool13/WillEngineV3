@@ -271,7 +271,7 @@ void AssetSourceCatalog::Scan(Core::MemoryManager& memoryManager)
 
     for (uint8_t i = 0; i < EXTERNAL_MODEL_SOURCE_COUNT; ++i) {
         const Core::Path source{EXTERNAL_MODEL_SOURCES[i].sourcePath};
-        if (source.Exists()) {
+        if (Platform::FileExists(source)) {
             push(AssetSourceKind::Model, source, i);
         }
     }

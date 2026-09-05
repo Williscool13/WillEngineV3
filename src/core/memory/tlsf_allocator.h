@@ -11,60 +11,11 @@
 
 #include "core/containers/inline_string.h"
 
+#include "alloc_tags.h"
+
 namespace Core
 {
-enum class AllocTag : uint32_t
-{
-    Unknown = 0,
-    // Assets
-    AssetModel,
-    AssetTexture,
-    AssetGenerator,
-    // Physics
-    Physics,
-    // Render
-    RenderMesh,
-    RenderMaterial,
-    Render,
-    // ECS
-    ECS,
-    // Scheduler
-    TaskScheduler,
-    // SDL
-    SDL,
-    // ImGui
-    ImGui,
-    Editor,
-    // Engine systems
-    EngineLogger,
-    EngineContext,
-    EngineState,
-    GameState,
-    InputManager,
-    TimeManager,
-    FrameSync,
-    FrameSync0,
-    FrameSync1,
-    FrameSync2,
-    FrameSync3,
-    RenderThread,
-    AudioManager,
-    AsyncAssetLoadManager,
-    AssetManager,
-    MaterialManager,
-    Clay,
-    Meshopt,
-    Vulkan,
-    ParShapes,
-    Earcut,
-    Queue,
-    Stbi,
-    Bc7enc,
-    HarfBuzz,
-    MCPServer,
-
-    Count
-};
+static_assert(static_cast<uint32_t>(AllocTag::Unknown) == 0, "AllocTag::Unknown must be 0");
 
 const char* AllocTagName(AllocTag tag);
 

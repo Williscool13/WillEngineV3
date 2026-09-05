@@ -8,12 +8,6 @@
 #include <cstring>
 #include <string_view>
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 namespace Core
 {
 /**
@@ -99,15 +93,6 @@ public:
             if (buf_[i] == '.' && (i == 0 || buf_[i - 1] == '/')) { return true; }
         }
         return false;
-    }
-
-    [[nodiscard]] bool Exists() const
-    {
-#ifdef _WIN32
-        return _access(buf_, 0) == 0;
-#else
-        return access(buf_, F_OK) == 0;
-#endif
     }
 
     [[nodiscard]] const char* c_str() const { return buf_; }

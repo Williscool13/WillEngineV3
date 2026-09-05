@@ -7,6 +7,8 @@
 
 #include <cstddef>
 
+#include "core/memory/virtual_memory_manager.h"
+
 namespace Platform
 {
 /** bytes must be a multiple of VirtualReserveGranularity. Returns nullptr on failure. */
@@ -23,6 +25,8 @@ void VirtualRelease(void* base);
 size_t VirtualPageSize();
 
 size_t VirtualReserveGranularity();
+
+Core::VirtualMemoryOps GetVirtualMemoryOps();
 } // Platform
 
 #endif //WILL_ENGINE_VIRTUAL_MEMORY_H

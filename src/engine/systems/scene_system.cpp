@@ -304,7 +304,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
     }
 
     uint64_t contentVersion = 1;
-    if (path.Exists()) {
+    if (Platform::FileExists(path)) {
         if (auto existing = Engine::ReadWSceneHeader(path)) {
             contentVersion = existing->contentVersion + 1;
         }
@@ -746,7 +746,7 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     }
 
     uint64_t contentVersion = 1;
-    if (path.Exists()) {
+    if (Platform::FileExists(path)) {
         if (auto existing = Engine::ReadWPrefabHeader(path)) {
             contentVersion = existing->contentVersion + 1;
         }

@@ -64,7 +64,7 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
 {
     ZoneScopedN("ReadModelColliderGeometry");
 
-    if (!source.Exists()) { return false; }
+    if (!Platform::FileExists(source)) { return false; }
 
     Engine::WStaticModelHeader header{};
     Core::HeapArray<Engine::Vertex> vertices{};

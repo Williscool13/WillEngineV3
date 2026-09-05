@@ -39,6 +39,10 @@ void MemoryManager::Init(const Layout& layout)
     tlsfPhysics.InitGrowable(physicsSz, layout.physicsPoolBudget, true, "Physics", chunkOr(layout.physicsGrowChunk, physicsSz));
     tlsfRender.InitGrowable(renderSz, layout.renderPoolBudget, false, "Render", chunkOr(layout.renderGrowChunk, renderSz));
     tlsfVulkan.InitGrowable(vulkanSz, layout.vulkanPoolBudget, true, "Vulkan", chunkOr(layout.vulkanGrowChunk, vulkanSz));
+
+    physicsTag = layout.physicsTag;
+    renderTag = layout.renderTag;
+    virtualMemory.Init(layout.virtualMemory);
 }
 
 MemoryManager::~MemoryManager()
@@ -93,14 +97,14 @@ void MemoryManager::GeneralFree(void* ptr)
 
 void* MemoryManager::PhysicsAllocRaw(size_t size, size_t alignment)
 {
-    void* ptr = tlsfPhysics.AlignedAlloc(size, alignment, AllocTag::Physics);
+    void* ptr = tlsfPhysics.AlignedAlloc(size, alignment, physicsTag);
     assert(ptr != nullptr && "OOM: physics pool exhausted");
     return ptr;
 }
 
 void* MemoryManager::PhysicsRealloc(void* ptr, size_t newSize, size_t alignment)
 {
-    void* p = tlsfPhysics.AlignedRealloc(ptr, newSize, alignment, AllocTag::Physics);
+    void* p = tlsfPhysics.AlignedRealloc(ptr, newSize, alignment, physicsTag);
     assert(p != nullptr && "OOM: physics pool exhausted");
     return p;
 }
@@ -112,14 +116,14 @@ void MemoryManager::PhysicsFree(void* ptr)
 
 void* MemoryManager::RenderAllocRaw(size_t size)
 {
-    void* ptr = tlsfRender.Alloc(size, AllocTag::Render);
+    void* ptr = tlsfRender.Alloc(size, renderTag);
     assert(ptr != nullptr && "OOM: render pool exhausted");
     return ptr;
 }
 
 void* MemoryManager::RenderRealloc(void* ptr, size_t newSize)
 {
-    void* p = tlsfRender.Realloc(ptr, newSize, AllocTag::Render);
+    void* p = tlsfRender.Realloc(ptr, newSize, renderTag);
     assert(p != nullptr && "OOM: render pool exhausted");
     return p;
 }

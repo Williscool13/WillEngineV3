@@ -16,10 +16,20 @@
 
 namespace Core
 {
+struct VirtualMemoryOps
+{
+    void* (*reserve)(size_t bytes){nullptr};
+    bool (*commit)(void* base, size_t bytes){nullptr};
+    bool (*decommit)(void* base, size_t bytes){nullptr};
+    void (*release)(void* base){nullptr};
+    size_t reserveGranularity{0};
+};
+
 /**
  * Address-space reservations with on-demand page commit. Thread-safe.
  *
  * Usage:
+ *   vm.Init(ops);
  *   Handle h = vm.Reserve(256 * 1024 * 1024, AllocTag::FrameSync0, "frame0");
  *   vm.EnsureCommitted(h, bytesNeeded);
  *   auto* p = static_cast<uint8_t*>(vm.Base(h));
@@ -57,6 +67,8 @@ public:
 
     VirtualMemoryManager& operator=(const VirtualMemoryManager&) = delete;
 
+    void Init(const VirtualMemoryOps& ops);
+
     Handle Reserve(size_t bytes, AllocTag tag, const char* name);
 
     /** Rounds up to COMMIT_STEP. Asserts past reserved. */
@@ -87,6 +99,7 @@ private:
         InlineString<32> name{};
     };
 
+    VirtualMemoryOps ops_{};
     Array<Entry, MAX_RESERVATIONS> entries_{};
     mutable std::mutex mutex_;
 };

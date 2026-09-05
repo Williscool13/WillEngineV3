@@ -69,6 +69,9 @@ if (WILL_ENGINE_GAME_STATIC)
 else()
     add_library(game SHARED ${GAME_SOURCES})
     target_compile_definitions(game PRIVATE GAME_EXPORTS)
+    if (MSVC)
+        target_link_options(game PRIVATE $<$<CONFIG:Debug>:/DEBUG:FASTLINK> $<$<CONFIG:Debug>:/time>)
+    endif ()
 
     add_custom_command(TARGET game POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different

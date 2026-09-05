@@ -141,7 +141,7 @@ bool TextureLoadSlot::LoadTextureFromDisk()
 
     const Core::Path& texturePath = outputTexture->source; {
         ZoneScopedN("FileExistsCheck");
-        if (!texturePath.Exists()) {
+        if (!Platform::FileExists(texturePath)) {
             LOG_ERROR(Asset, "Failed to find texture: {}", texturePath.c_str());
             return false;
         }

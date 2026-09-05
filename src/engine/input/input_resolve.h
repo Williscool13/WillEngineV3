@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_INPUT_RESOLVE_H
 #define WILL_ENGINE_INPUT_RESOLVE_H
 
-#include "core/input/input_frame.h"
+#include "engine/input/input_frame.h"
 
 namespace Engine
 {

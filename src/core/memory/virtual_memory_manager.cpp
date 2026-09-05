@@ -8,8 +8,6 @@
 #include <cassert>
 #include <cstdio>
 
-#include "platform/virtual_memory.h"
-
 namespace Core
 {
 static size_t RoundUp(size_t v, size_t step)
@@ -21,15 +19,22 @@ VirtualMemoryManager::~VirtualMemoryManager()
 {
     for (Entry& e : entries_) {
         if (e.base) {
-            Platform::VirtualRelease(e.base);
+            ops_.release(e.base);
             e.base = nullptr;
         }
     }
 }
 
+void VirtualMemoryManager::Init(const VirtualMemoryOps& ops)
+{
+    assert(ops.reserve && ops.commit && ops.decommit && ops.release && ops.reserveGranularity != 0);
+    ops_ = ops;
+}
+
 VirtualMemoryManager::Handle VirtualMemoryManager::Reserve(size_t bytes, AllocTag tag, const char* name)
 {
     std::lock_guard lock(mutex_);
+    assert(ops_.reserve && "VirtualMemoryManager::Init not called");
 
     Handle h = INVALID_HANDLE;
     for (size_t i = 0; i < MAX_RESERVATIONS; ++i) {
@@ -44,8 +49,8 @@ VirtualMemoryManager::Handle VirtualMemoryManager::Reserve(size_t bytes, AllocTa
         return INVALID_HANDLE;
     }
 
-    const size_t reserved = RoundUp(bytes, Platform::VirtualReserveGranularity());
-    void* base = Platform::VirtualReserve(reserved);
+    const size_t reserved = RoundUp(bytes, ops_.reserveGranularity);
+    void* base = ops_.reserve(reserved);
     if (!base) {
         fprintf(stderr, "VirtualMemoryManager: reserve of %zu bytes failed ('%s')\n", reserved, name);
         assert(false && "VirtualMemoryManager: reserve failed");
@@ -80,7 +85,7 @@ bool VirtualMemoryManager::EnsureCommitted(Handle h, size_t bytes)
     }
 
     const size_t target = std::min(RoundUp(bytes, COMMIT_STEP), e.reserved);
-    if (!Platform::VirtualCommit(static_cast<uint8_t*>(e.base) + committed, target - committed)) {
+    if (!ops_.commit(static_cast<uint8_t*>(e.base) + committed, target - committed)) {
         fprintf(stderr, "VirtualMemoryManager: '%s' commit of %zu bytes failed (committed %zu / %zu)\n", e.name.buf, target - committed, committed, e.reserved);
         assert(false && "VirtualMemoryManager: commit failed");
         return false;
@@ -98,7 +103,7 @@ void VirtualMemoryManager::Decommit(Handle h, size_t keepBytes)
     if (keep >= committed) {
         return;
     }
-    Platform::VirtualDecommit(static_cast<uint8_t*>(e.base) + keep, committed - keep);
+    ops_.decommit(static_cast<uint8_t*>(e.base) + keep, committed - keep);
     e.committed.store(keep, std::memory_order_release);
 }
 
@@ -107,7 +112,7 @@ void VirtualMemoryManager::Release(Handle h)
     std::lock_guard lock(mutex_);
     Entry& e = entries_[h];
     if (e.base) {
-        Platform::VirtualRelease(e.base);
+        ops_.release(e.base);
     }
     e.base = nullptr;
     e.reserved = 0;

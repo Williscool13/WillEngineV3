@@ -77,7 +77,7 @@ bool WriteSimpleRGBA8WTexture(Core::MemoryManager* memoryManager, const char* ou
 
 static bool BuiltinUpToDate(const Core::Path& path)
 {
-    if (!path.Exists()) {
+    if (!Platform::FileExists(path)) {
         return false;
     }
     std::optional<Engine::WTextureHeader> header = Engine::ReadWTextureHeader(path);

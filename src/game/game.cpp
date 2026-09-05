@@ -8,7 +8,7 @@
 
 #include "engine/include/game_interface.h"
 #include "../render/interface/render_interface.h"
-#include "core/input/input_frame.h"
+#include "engine/input/input_frame.h"
 #include "engine/engine_api.h"
 #include "physics/physics_system.h"
 
@@ -66,7 +66,7 @@ static void RegisterDllEngineHooks(Engine::EngineContext* ctx)
     meshopt_setAllocator(DllMeshoptAlloc, DllMeshoptFree);
     par_shapes_set_allocator(&ctx->memoryManager->AssetsScratch());
     AssetLoad::SetEarcutAllocator(&ctx->memoryManager->AssetsScratch());
-    Core::SetConcurrentQueueAllocator(&ctx->memoryManager->General());
+    Core::SetConcurrentQueueAllocator(&ctx->memoryManager->General(), Core::AllocTag::Queue);
 }
 #endif
 

@@ -6,7 +6,7 @@
 
 #include "imgui.h"
 
-#include "core/input/input_names.h"
+#include "engine/input/input_names.h"
 #include "engine/engine_api.h"
 #include "engine/input/input_rebinding.h"
 #include "engine/input_config.h"

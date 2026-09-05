@@ -70,6 +70,11 @@ uint64_t GetFileSize(const char* path);
 
 uint64_t GetFileSize(const Core::Path& path);
 
+/** True for files and directories. */
+bool FileExists(const char* path);
+
+bool FileExists(const Core::Path& path);
+
 /**
  * Read-only memory-mapped view of an entire file. data is null on failure (including empty files). Release with UnmapFile.
  */

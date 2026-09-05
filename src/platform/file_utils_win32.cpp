@@ -121,6 +121,13 @@ uint64_t GetFileSize(const char* path)
 
 uint64_t GetFileSize(const Core::Path& path) { return GetFileSize(path.c_str()); }
 
+bool FileExists(const char* path)
+{
+    return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+bool FileExists(const Core::Path& path) { return FileExists(path.c_str()); }
+
 FileMapping MapFileReadOnly(const Core::Path& path, bool bSequential)
 {
     FileMapping mapping{};

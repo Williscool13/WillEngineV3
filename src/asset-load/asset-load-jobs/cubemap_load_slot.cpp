@@ -140,7 +140,7 @@ bool CubemapLoadSlot::LoadCubemapFromDisk()
 
     {
         ZoneScopedN("FileExistsCheck");
-        if (!cubemapPath.Exists()) {
+        if (!Platform::FileExists(cubemapPath)) {
             SPDLOG_ERROR("Failed to find cubemap: {}", cubemapPath.c_str());
             return false;
         }

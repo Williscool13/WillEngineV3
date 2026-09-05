@@ -56,7 +56,7 @@ Logger::~Logger() = default;
 
 void Logger::ArchiveLogs()
 {
-    if (!logPath.Exists()) {
+    if (!Platform::FileExists(logPath)) {
         return;
     }
 

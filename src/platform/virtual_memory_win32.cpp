@@ -47,4 +47,15 @@ size_t VirtualReserveGranularity()
 {
     return SysInfo().dwAllocationGranularity;
 }
+
+Core::VirtualMemoryOps GetVirtualMemoryOps()
+{
+    return {
+        .reserve = VirtualReserve,
+        .commit = VirtualCommit,
+        .decommit = VirtualDecommit,
+        .release = VirtualRelease,
+        .reserveGranularity = VirtualReserveGranularity(),
+    };
+}
 } // Platform

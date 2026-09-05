@@ -64,6 +64,11 @@ public:
         size_t vulkanPoolSize;
         size_t vulkanPoolBudget;
         size_t vulkanGrowChunk;
+
+        AllocTag physicsTag{AllocTag::Unknown};
+        AllocTag renderTag{AllocTag::Unknown};
+
+        VirtualMemoryOps virtualMemory{};
     };
 
     struct Stats
@@ -147,6 +152,9 @@ private:
     TlsfAllocator tlsfRender;
     TlsfAllocator tlsfVulkan;
     VirtualMemoryManager virtualMemory;
+
+    AllocTag physicsTag{AllocTag::Unknown};
+    AllocTag renderTag{AllocTag::Unknown};
 
     std::atomic<uint32_t> deviceAllocCount{0};
     std::atomic<uint64_t> deviceAllocBytes{0};

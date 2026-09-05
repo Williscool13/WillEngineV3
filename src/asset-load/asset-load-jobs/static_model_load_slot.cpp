@@ -177,7 +177,7 @@ bool StaticModelLoadSlot::LoadModelFromDisk()
 {
     ZoneScopedN("LoadModelFromDisk");
 
-    if (!outputModel->source.Exists()) {
+    if (!Platform::FileExists(outputModel->source)) {
         SPDLOG_ERROR("Failed to find path to static model - {}", outputModel->name.c_str());
         return false;
     }

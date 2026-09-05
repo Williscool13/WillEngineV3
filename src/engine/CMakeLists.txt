@@ -30,10 +30,20 @@ add_library(engine STATIC
         core/probe_id.h
         core/physics_collider_id.h
         core/action_handle.h
+        memory/alloc_tags.h
+        memory/alloc_tags.cpp
         input/input_resolve.cpp
         input/input_resolve.h
         input/input_rebinding.cpp
         input/input_rebinding.h
+        input/input_frame.h
+        input/action_state.h
+        input/input_utils.cpp
+        input/input_utils.h
+        input/input_manager.cpp
+        input/input_manager.h
+        input/input_names.cpp
+        input/input_names.h
         input_config.cpp
         input_config.h
         include/frame_sync.h

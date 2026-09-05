@@ -20,7 +20,7 @@
 #include "engine_lifecycle.h"
 #include "engine_tick.h"
 #include "engine/include/game_interface.h"
-#include "core/input/input_manager.h"
+#include "engine/input/input_manager.h"
 #include "components/component_registration.h"
 #include "console/console.h"
 #include "input/input_action_registry.h"
@@ -44,6 +44,7 @@
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
+#include "platform/virtual_memory.h"
 #include "profiles/profile_library.h"
 #include "render/render_thread.h"
 #include "render/gpu_dispatcher.h"
@@ -264,6 +265,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         .vulkanPoolSize = 48ull * 1024 * 1024,
         .vulkanPoolBudget = 512ull * 1024 * 1024,
         .vulkanGrowChunk = 16ull * 1024 * 1024,
+        .physicsTag = Core::AllocTag::Physics,
+        .renderTag = Core::AllocTag::Render,
+        .virtualMemory = Platform::GetVirtualMemoryOps(),
     });
 
 #if LOGGING_ENABLED
@@ -314,7 +318,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         gMemory = &memoryManager;
         SDL_SetMemoryFunctions(SdlMalloc, SdlCalloc, SdlRealloc, SdlFree);
         meshopt_setAllocator(MeshoptAlloc, MeshoptFree);
-        Core::SetConcurrentQueueAllocator(&memoryManager.General());
+        Core::SetConcurrentQueueAllocator(&memoryManager.General(), Core::AllocTag::Queue);
         bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
         if (!sdlInitSuccess) {
             SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());
@@ -443,7 +447,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
                 continue;
             }
             const Core::Path sourcePath(Core::InlineString<512>::Format("%s/%s", desc.source.Parent().c_str(), header->genSource).c_str());
-            if (!sourcePath.Exists()) {
+            if (!Platform::FileExists(sourcePath)) {
                 LOG_WARN(Asset, "Ungenerated texture '{}' source missing: {}", desc.name.c_str(), sourcePath.c_str());
                 continue;
             }
@@ -603,7 +607,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #if WILL_EDITOR
 #if !GAME_STATIC
     auto gameDirectory = Platform::GetExecutablePath();
-    if (gameDirectory.Exists()) {
+    if (Platform::FileExists(gameDirectory)) {
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
             HotReloadSave(engineContext, engineState);
             gameFunctions.gameHotReloadSave(engineContext, engineState);
@@ -658,7 +662,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     }
 #endif
     auto shaderDirectory = Platform::GetShaderPath();
-    if (shaderDirectory.Exists()) {
+    if (Platform::FileExists(shaderDirectory)) {
         shaderWatcher.Start(shaderDirectory.c_str(), [&]() {
             if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
                 pipelineManager->RequestReload();

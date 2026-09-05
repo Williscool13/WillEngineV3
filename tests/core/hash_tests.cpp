@@ -54,7 +54,7 @@ TEST_CASE("Hash folds at compile time on every length path", "[hash]")
     CHECK(longPath == XXH3_64bits(LONG, sizeof(LONG) - 1));
 }
 
-// Same pins as scripts/xxh3.py VECTORS: the Python authoring scripts must mint the same ids the engine recomputes.
+// Same pins as src/core/tools/xxh3.py VECTORS: the Python authoring scripts must mint the same ids the engine recomputes.
 TEST_CASE("Hash matches the pinned cross-language vectors", "[hash]")
 {
     CHECK(Hash("", 0) == 3244421341483603138ULL);

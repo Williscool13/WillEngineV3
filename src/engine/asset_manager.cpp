@@ -1418,7 +1418,7 @@ void AssetManager::Scan()
 
     if (ctx->rescan.bResources) {
         const Core::Path& assetPath = Platform::GetAssetPath();
-        if (assetPath.Exists()) {
+        if (Platform::FileExists(assetPath)) {
             Core::Vector<Core::Path> paths;
             paths = Core::Vector<Core::Path>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
             Platform::RecursiveDirectoryIterator(assetPath, paths);

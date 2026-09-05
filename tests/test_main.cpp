@@ -10,8 +10,8 @@
 #include "meshoptimizer/src/meshoptimizer.h"
 #include "par/par_shapes_ext.h"
 #include "asset-load/asset-load-jobs/text3d_geometry.h"
+#include "platform/virtual_memory.h"
 
-// The engine wires these hooks in WillEngine/AsyncAssetLoadManager init; the test runner must install its own or any test touching meshopt/par_shapes/earcut null-derefs (or silently mallocs)
 static Core::MemoryManager gTestMemory;
 
 static void* TestMeshoptAlloc(size_t size)
@@ -40,6 +40,7 @@ int main(int argc, char* argv[])
         .renderPoolBudget = 16ull * 1024 * 1024,
         .vulkanPoolSize = 4ull * 1024 * 1024,
         .vulkanPoolBudget = 16ull * 1024 * 1024,
+        .virtualMemory = Platform::GetVirtualMemoryOps(),
     });
 
     meshopt_setAllocator(TestMeshoptAlloc, TestMeshoptFree);

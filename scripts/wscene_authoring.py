@@ -19,7 +19,9 @@ import math
 import os
 import re
 import struct
+import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "core", "tools"))
 from xxh3 import string_id
 
 def component_key(component_name):

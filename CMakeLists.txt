@@ -86,6 +86,9 @@ target_include_directories(will-engine PRIVATE
 )
 
 target_link_libraries(will-engine PUBLIC engine)
+if (MSVC)
+    target_link_options(will-engine PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL:NO>)
+endif ()
 
 add_dependencies(will-engine game)
 
@@ -107,8 +110,6 @@ add_subdirectory(extern/SDL_mixer EXCLUDE_FROM_ALL)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Shared Libraries" FORCE)
 
 add_compile_definitions(NOMINMAX)
-add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
-add_compile_definitions(GLM_ENABLE_EXPERIMENTAL)
 # EnTT Debug-build perf on Windows: https://github.com/skypjack/entt/wiki/Frequently-Asked-Questions#why-is-my-debug-build-on-windows-so-slow
 add_compile_definitions(ENTT_DISABLE_ASSERT)
 # __FUNCTION__ in a lambda is bare operator() on Clang/GCC
@@ -148,6 +149,9 @@ set(NRD_ROUGHNESS_ENCODING "1" CACHE STRING "" FORCE)
 set(FETCHCONTENT_SOURCE_DIR_SHADERMAKE "${CMAKE_SOURCE_DIR}/extern/NRD/External/ShaderMake" CACHE PATH "" FORCE)
 set(FETCHCONTENT_SOURCE_DIR_MATHLIB "${CMAKE_SOURCE_DIR}/extern/NRD/External/MathLib" CACHE PATH "" FORCE)
 add_subdirectory(extern/NRD)
+
+set(CORE_ALLOC_TAGS_DIR ${CMAKE_SOURCE_DIR}/src/engine/memory)
+set(CORE_STRING_LITERAL_ROOTS ${CMAKE_SOURCE_DIR}/src)
 
 add_subdirectory(src/engine)
 add_subdirectory(src/core)
@@ -342,13 +346,6 @@ add_library(clay STATIC
         extern/clay/clay.h
 )
 target_include_directories(clay PUBLIC extern/clay)
-
-# tlsf =======================================
-add_library(tlsf STATIC
-        extern/tlsf/tlsf.c
-        extern/tlsf/tlsf.h
-)
-target_include_directories(tlsf PUBLIC extern/tlsf)
 
 # Tracy =======================================
 if (WILL_ENGINE_ENABLE_PROFILER)

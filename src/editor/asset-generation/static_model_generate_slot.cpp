@@ -269,7 +269,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                     const bool bForceFallback = (ext == ".dds" || ext == ".DDS");
 
                     Core::Path candidate = parentPath / uriPath;
-                    if (!bForceFallback && candidate.Exists()) {
+                    if (!bForceFallback && Platform::FileExists(candidate)) {
                         rawModel.images[i].sourcePath = Core::InlinePath<256>{uriPath};
                     }
                     else {
@@ -277,7 +277,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                         for (const std::string_view altExt : altExts) {
                             Core::InlineString<512> altUri{stem};
                             altUri.Append(altExt);
-                            if ((parentPath / altUri.c_str()).Exists()) {
+                            if (Platform::FileExists(parentPath / altUri.c_str())) {
                                 rawModel.images[i].sourcePath = Core::InlinePath<256>{altUri.View()};
                                 break;
                             }
