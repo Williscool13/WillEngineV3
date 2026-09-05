@@ -12,12 +12,13 @@
 
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
-#include "game/components/common_components.h"
-#include "game/components/core_components.h"
-#include "game/components/physics/physics_components.h"
-#include "game/components/physics/physics_body_component.h"
+#include "engine/components/common_components.h"
+#include "engine/components/core_components.h"
+#include "engine/components/physics/physics_components.h"
+#include "engine/components/physics/physics_body_component.h"
+#include "game/fwd_components.h"
 #include "game/logging/game_log.h"
-#include "game/systems/scene_system.h"
+#include "engine/systems/scene_system.h"
 #include "physics/physics_system.h"
 
 namespace Game
@@ -28,7 +29,7 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
     physicsSystem = ctx->physicsSystem;
 
     constexpr StringID WOODEN_BALL_PREFAB_ID{4933586796549546436};
-    entity = SpawnPrefab(engineState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
+    entity = Engine::SpawnPrefab(engineState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
     engineState->registry.emplace<Component::DoNotSerializeTag>(entity);

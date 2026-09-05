@@ -14,34 +14,37 @@
 
 #include "imgui.h"
 #include "audio/audio_manager.h"
-#include "systems/render_systems.h"
+#include "engine/systems/render_systems.h"
 #include "core/math/constants.h"
 
 #include "fwd_components.h"
-#include "component-registry/component_registry.h"
+#include "engine/components/component_registration.h"
+#include "components/component_registration.h"
+#include "components/player_spawn_component.h"
 #include "input/input_action_registry.h"
 #include "engine/input_config.h"
-#include "components/common_components.h"
+#include "engine/components/common_components.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
 #include "render/vulkan/vk_context.h"
 #include "systems/debug_system.h"
-#include "systems/camera_system.h"
-#include "systems/capture_shot_system.h"
-#include "systems/probe_bake_system.h"
-#include "systems/ddgi_converge_boost.h"
-#include "editor/editor_systems.h"
+#include "engine/systems/camera_system.h"
+#include "engine/editor/capture_shot_system.h"
+#include "engine/editor/probe_bake_system.h"
+#include "engine/editor/ddgi_converge_boost.h"
+#include "engine/editor/editor_systems.h"
 #include "console/console.h"
 #include "game_state.h"
 #include "mcp/game_mcp_tools.h"
 #include "logging/game_log_category.h"
-#include "systems/physics_system.h"
+#include "engine/systems/physics_system.h"
 #include "gameplay/player/physics_player_controller.h"
-#include "systems/common_systems.h"
-#include "systems/core_systems.h"
+#include "engine/systems/common_systems.h"
+#include "engine/editor/core_systems.h"
 #include "systems/gameplay_systems.h"
 #include "engine/asset_manager.h"
-#include "systems/scene_system.h"
+#include "engine/systems/scene_system.h"
+#include "ui/game_ui.h"
 #include "clay/clay.h"
 #include "engine/resources/font/font_metrics.h"
 
@@ -84,6 +87,30 @@ static void RegisterDllEngineHooks(Engine::EngineContext* ctx)
     Core::SetConcurrentQueueAllocator(&ctx->memoryManager->General());
 }
 #endif
+
+static void GamePlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f};
+    int32_t bestPriority = INT32_MIN;
+    auto spawnView = state->registry.view<Game::Component::PlayerSpawnComponent, Game::Component::TransformComponent>();
+    for (auto entity : spawnView) {
+        auto& spawn = spawnView.get<Game::Component::PlayerSpawnComponent>(entity);
+        if (spawn.priority > bestPriority) {
+            bestPriority = spawn.priority;
+            spawnPosition = spawnView.get<Game::Component::TransformComponent>(entity).translation + spawn.offset;
+        }
+    }
+
+    ctx->GetGameState<Game::GameState>()->playerController.Initialize(state, ctx, spawnPosition);
+}
+
+static void GamePlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
+    if (playerController.GetCharacter()) {
+        playerController.Shutdown(ctx->physicsSystem);
+    }
+}
 
 extern "C"
 {
@@ -153,15 +180,20 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     }, &uiFontCtx);
 
     Audio::AudioManager::RegisterAudio();
-    Game::RegisterComponents(state->componentRegistry);
+    Engine::RegisterEngineComponents(state->componentRegistry);
+    Game::RegisterGameComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::Console::RegisterBuiltinCommands();
     Game::RegisterMCPTools(state);
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
-    Game::ConnectPhysicsObservers(state->registry);
-    Game::ConnectCommonObservers(state->registry);
-    Game::ConnectRenderObservers(state->registry);
+    Engine::ConnectPhysicsObservers(state->registry);
+    Engine::ConnectCommonObservers(state->registry);
+    Game::ConnectGameplayObservers(state->registry);
+    Engine::ConnectRenderObservers(state->registry);
+
+    ctx->playStartFn = GamePlayStart;
+    ctx->playStopFn = GamePlayStop;
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;
@@ -174,7 +206,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
         for (const auto& pair : sceneCache) {
             if (pair.value.sceneName == startupScene) {
-                auto res = Game::LoadSceneFromFile(state, ctx->assetManager, pair.key);
+                auto res = Engine::LoadSceneFromFile(state, ctx->assetManager, pair.key);
                 if (res.bSuccess) {
                     state->scene.currentSceneId = res.sceneId;
                     state->scene.currentSceneName = res.sceneName;
@@ -191,8 +223,8 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (Game::IsPlaying(state)) {
-        Game::PlayStop(ctx, state);
+    if (Engine::IsPlaying(state)) {
+        Engine::PlayStop(ctx, state);
     }
     //
     {
@@ -205,19 +237,23 @@ GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState*
         }
     }
 
-    state->editor.hotReloadSnapshot = Game::SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
+    state->editor.hotReloadSnapshot = Engine::SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
     Core::InlineVector<StringID, 8> scenesToUnload;
     for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);
     }
-    Game::UnloadScenes(state, scenesToUnload);
+    Engine::UnloadScenes(state, scenesToUnload);
     LOG_INFO(Game, "Hot reload: snapshot saved ({} scene(s))", state->editor.hotReloadSnapshot.Size());
 
     state->registry.clear();
 
-    Game::DisconnectPhysicsObservers(state->registry);
-    Game::DisconnectCommonObservers(state->registry);
-    Game::DisconnectRenderObservers(state->registry);
+    Engine::DisconnectPhysicsObservers(state->registry);
+    Engine::DisconnectCommonObservers(state->registry);
+    Game::DisconnectGameplayObservers(state->registry);
+    Engine::DisconnectRenderObservers(state->registry);
+
+    ctx->playStartFn = {};
+    ctx->playStopFn = {};
 
 #ifndef GAME_STATIC
     if (ctx->scheduler) {
@@ -249,15 +285,20 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
         return {width, height};
     }, &uiFontCtx);
 
-    Game::RegisterComponents(state->componentRegistry);
+    Engine::RegisterEngineComponents(state->componentRegistry);
+    Game::RegisterGameComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::Console::RegisterBuiltinCommands();
     Game::RegisterMCPTools(state);
     Engine::LoadAndApplyInputConfig(state->input, state->projectConfig);
-    Game::ConnectPhysicsObservers(state->registry);
-    Game::ConnectCommonObservers(state->registry);
-    Game::ConnectRenderObservers(state->registry);
+    Engine::ConnectPhysicsObservers(state->registry);
+    Engine::ConnectCommonObservers(state->registry);
+    Game::ConnectGameplayObservers(state->registry);
+    Engine::ConnectRenderObservers(state->registry);
+
+    ctx->playStartFn = GamePlayStart;
+    ctx->playStopFn = GamePlayStop;
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;
@@ -267,7 +308,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     CreateCameras(state, state->editor.pieCameraTranslation, state->editor.pieCameraRotation);
 
     if (!state->editor.hotReloadSnapshot.IsEmpty()) {
-        Game::DeserializeAll(state, state->editor.hotReloadSnapshot);
+        Engine::DeserializeAll(state, state->editor.hotReloadSnapshot);
         state->editor.hotReloadSnapshot.Clear();
         LOG_INFO(Game, "Hot reload: snapshot restored");
     }
@@ -282,13 +323,13 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::TickQuietFrames(ctx, state);
 
 #if WILL_EDITOR
-    Game::EditorUpdate(ctx, state);
-    Game::EditorTickInput(ctx, state);
+    Engine::EditorUpdate(ctx, state);
+    Engine::EditorTickInput(ctx, state);
 #endif
 
-    Game::FunctionKeyUpdate(ctx, state);
+    Engine::FunctionKeyUpdate(ctx, state);
 
-    Game::UpdateUIPointerState(ctx, state);
+    Engine::UpdateUIPointerState(ctx, state);
 
 #ifdef WDEBUG
     Game::Console::Update(ctx, state);
@@ -297,9 +338,9 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     // Gameplay simulation runs only while playing AND game-focused
     if (state->inputContext == Engine::InputContext::Gameplay) {
         if (state->physics.bEnabled) {
-            Game::PhysicsUpdate(ctx, state);
+            Engine::PhysicsUpdate(ctx, state);
         }
-        Game::ResolveCollisionEvents(ctx, state);
+        Engine::ResolveCollisionEvents(ctx, state);
 
         Game::DebugProcessPhysicsCollisions(ctx, state);
         Game::DebugApplyGroundForces(ctx, state);
@@ -316,14 +357,14 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 #if WILL_EDITOR
     if (state->inputContext == Engine::InputContext::Editor) {
-        Game::UpdatePhysicsEditor(ctx, state);
+        Engine::UpdatePhysicsEditor(ctx, state);
     }
     if (state->inputContext != Engine::InputContext::Gameplay) {
-        Game::UpdateEditorCamera(ctx, state);
+        Engine::UpdateEditorCamera(ctx, state);
     }
 #else
     if (state->inputContext == Engine::InputContext::Editor) {
-        Game::PlayStart(ctx, state);
+        Engine::PlayStart(ctx, state);
     }
 #endif
 
@@ -331,40 +372,40 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     // Resolve Creations
 #if WILL_EDITOR
-    Game::ModelHotReload(ctx, state);
-    Game::FontHotReload(ctx, state);
-    Game::TextureHotReload(ctx, state);
-    Game::CubemapHotReload(ctx, state);
+    Engine::ModelHotReload(ctx, state);
+    Engine::FontHotReload(ctx, state);
+    Engine::TextureHotReload(ctx, state);
+    Engine::CubemapHotReload(ctx, state);
 #endif
 
-    Game::StaticMeshPendingKickoff(ctx, state);
-    Game::ReflectionProbeBakeUpgrade(ctx, state);
-    Game::ReflectionProbePendingKickoff(ctx, state);
-    Game::StaticMeshPrimitivePendingKickoff(ctx, state);
-    Game::ProceduralMeshPendingKickoff(ctx, state);
-    Game::SplineMeshPendingKickoff(ctx, state);
-    Game::ModuleMeshPendingKickoff(ctx, state);
-    Game::TextFontPendingKickoff(ctx, state);
-    Game::Text3DGeneratePendingKickoff(ctx, state);
-    Game::PhysicsMeshPendingKickoff(ctx, state);
+    Engine::StaticMeshPendingKickoff(ctx, state);
+    Engine::ReflectionProbeBakeUpgrade(ctx, state);
+    Engine::ReflectionProbePendingKickoff(ctx, state);
+    Engine::StaticMeshPrimitivePendingKickoff(ctx, state);
+    Engine::ProceduralMeshPendingKickoff(ctx, state);
+    Engine::SplineMeshPendingKickoff(ctx, state);
+    Engine::ModuleMeshPendingKickoff(ctx, state);
+    Engine::TextFontPendingKickoff(ctx, state);
+    Engine::Text3DGeneratePendingKickoff(ctx, state);
+    Engine::PhysicsMeshPendingKickoff(ctx, state);
 
     state->assetLoad.bPendingModelResolve = false;
-    Game::StaticMeshLoadResolve(ctx, state);
-    Game::LightSurfaceResolve(ctx, state);
-    Game::ReflectionProbeLoadResolve(ctx, state);
-    Game::StaticMeshPrimitiveLoadResolve(ctx, state);
-    Game::ProceduralMeshLoadResolve(ctx, state);
-    Game::SplineMeshLoadResolve(ctx, state);
-    Game::ModuleMeshLoadResolve(ctx, state);
-    Game::Text3DLoadResolve(ctx, state);
-    Game::PhysicsMeshLoadResolve(ctx, state);
-    Game::PhysicsShapeCreationResolve(ctx, state);
-    Game::PhysicsBodyCreationResolve(ctx, state);
+    Engine::StaticMeshLoadResolve(ctx, state);
+    Engine::LightSurfaceResolve(ctx, state);
+    Engine::ReflectionProbeLoadResolve(ctx, state);
+    Engine::StaticMeshPrimitiveLoadResolve(ctx, state);
+    Engine::ProceduralMeshLoadResolve(ctx, state);
+    Engine::SplineMeshLoadResolve(ctx, state);
+    Engine::ModuleMeshLoadResolve(ctx, state);
+    Engine::Text3DLoadResolve(ctx, state);
+    Engine::PhysicsMeshLoadResolve(ctx, state);
+    Engine::PhysicsShapeCreationResolve(ctx, state);
+    Engine::PhysicsBodyCreationResolve(ctx, state);
 
     // Dirty carry-over to next frame
-    Game::MarkRenderTransformsDirty(ctx, state);
+    Engine::MarkRenderTransformsDirty(ctx, state);
     if (state->inputContext != Engine::InputContext::Editor) {
-        Game::MarkPhysicsTransformsDirty(state);
+        Engine::MarkPhysicsTransformsDirty(state);
     }
 
     // Frame Cleanup
@@ -376,13 +417,13 @@ GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-    Game::ProbeBakeTick(ctx, state, frameBuffer);
-    Game::DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
-    Game::CaptureShotTick(ctx, state, frameBuffer);
+    Engine::ProbeBakeTick(ctx, state, frameBuffer);
+    Engine::DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
+    Engine::CaptureShotTick(ctx, state, frameBuffer);
 
-    Game::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
+    Engine::FunctionKeyRenderUpdate(ctx, state, frameBuffer);
 
-    Game::BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
+    Engine::BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
 
 #if WILL_EDITOR
     {
@@ -441,32 +482,32 @@ GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* 
     frameBuffer->mainViewFamily.indirectIntensity = state->lighting.indirectIntensity;
     frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;
     if (state->debug.bEnablePortal) {
-        Game::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
+        Engine::BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
 
-    Game::ResolveWorldTransforms(ctx, state);
-    Game::RenderPrepareTransforms(ctx, state, frameBuffer);
-    Game::GatherLights(ctx, state, frameBuffer);
-    Game::GatherReflectionProbes(ctx, state, frameBuffer);
-    Game::GatherLocalDDGIVolumes(ctx, state, frameBuffer);
-    Game::GatherRenderables(ctx, state, frameBuffer);
-    Game::GatherTextRenderables(ctx, state, frameBuffer);
+    Engine::ResolveWorldTransforms(ctx, state);
+    Engine::RenderPrepareTransforms(ctx, state, frameBuffer);
+    Engine::GatherLights(ctx, state, frameBuffer);
+    Engine::GatherReflectionProbes(ctx, state, frameBuffer);
+    Engine::GatherLocalDDGIVolumes(ctx, state, frameBuffer);
+    Engine::GatherRenderables(ctx, state, frameBuffer);
+    Engine::GatherTextRenderables(ctx, state, frameBuffer);
     Game::GatherUIRenderables(ctx, state, frameBuffer);
     state->debug.bVerifyStoresOnce = false;
 
 #if WILL_EDITOR
-    Game::DrawEditorInterface(ctx, state, frameBuffer);
-    Game::GatherEditorSprites(ctx, state, frameBuffer);
-    Game::GatherLightDebugDraws(ctx, state, frameBuffer);
+    Engine::DrawEditorInterface(ctx, state, frameBuffer);
+    Engine::GatherEditorSprites(ctx, state, frameBuffer);
+    Engine::GatherLightDebugDraws(ctx, state, frameBuffer);
 #endif
 
 #ifdef WDEBUG
     Game::DebugRender(ctx, state, frameBuffer);
-    Game::DebugRenderPhysics(ctx, state, frameBuffer);
+    Engine::DebugRenderPhysics(ctx, state, frameBuffer);
 #endif
 
-    Game::ProbeBakeScrubFrame(ctx, state, frameBuffer);
-    Game::CaptureShotScrubFrame(ctx, frameBuffer);
+    Engine::ProbeBakeScrubFrame(ctx, state, frameBuffer);
+    Engine::CaptureShotScrubFrame(ctx, state, frameBuffer);
 }
 
 GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -479,6 +520,9 @@ GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
+    ctx->playStartFn = {};
+    ctx->playStopFn = {};
+
 #ifndef GAME_STATIC
     if (ctx->scheduler) {
         ctx->scheduler->DeRegisterExternalTaskThread();

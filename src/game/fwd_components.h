@@ -2,16 +2,15 @@
 // Created by William on 2025-12-21.
 //
 
-#ifndef WILL_ENGINE_FWD_COMPONENTS_H
-#define WILL_ENGINE_FWD_COMPONENTS_H
+#ifndef WILL_ENGINE_GAME_FWD_COMPONENTS_H
+#define WILL_ENGINE_GAME_FWD_COMPONENTS_H
 
-#include "components/core_components.h"
-#include "components/common/stable_id_component.h"
-#include "components/render_components.h"
-#include "components/render/static_mesh_component.h"
-#include "components/camera_components.h"
-#include "components/physics/physics_components.h"
-#include "components/portal_components.h"
-#include "components/debug_components.h"
+#include "engine/components/fwd_components.h"
+#include "game/components/debug_components.h"
 
-#endif //WILL_ENGINE_FWD_COMPONENTS_H
+namespace Game::Component
+{
+using namespace Engine::Component;
+}
+
+#endif //WILL_ENGINE_GAME_FWD_COMPONENTS_H

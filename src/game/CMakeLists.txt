@@ -2,28 +2,12 @@ set(GAME_SOURCES
         game.cpp
         game_state.h
 
+        fwd_components.h
 
-        systems/camera_system.cpp
-        systems/camera_system.h
-        systems/capture_shot_system.cpp
-        systems/capture_shot_system.h
         systems/debug_system.cpp
         systems/debug_system.h
-        systems/physics_system.cpp
-        systems/physics_system.h
-        systems/render_systems.h
-        systems/render_systems.cpp
-        systems/render_systems_assets.cpp
-        systems/render_systems_helpers.h
-        systems/render_systems_helpers.cpp
-        editor/editor_systems.cpp
-        editor/editor_systems.h
-        editor/editor_scene_browser.cpp
-        editor/editor_scene_browser.h
-        editor/editor_materials.cpp
-        editor/editor_materials.h
-        editor/editor_multi_edit.cpp
-        editor/editor_multi_edit.h
+        systems/gameplay_systems.cpp
+        systems/gameplay_systems.h
 
         ui/game_ui.cpp
         ui/game_ui.h
@@ -38,70 +22,21 @@ set(GAME_SOURCES
         logging/game_log_category.h
         logging/game_log.h
 
-        fwd_components.h
-
-        components/camera_components.cpp
-        components/camera_components.h
-        components/debug_gizmo_component.cpp
-        components/debug_gizmo_component.h
-
-        components/common/stable_id_component.cpp
-        components/common/stable_id_component.h
-
-        components/physics/physics_components.cpp
-        components/physics/physics_components.h
-        components/physics/physics_body_component.cpp
-        components/physics/physics_body_component.h
-        components/physics/physics_body_desc.cpp
-        components/physics/physics_body_desc.h
-        components/physics/physics_shape_helpers.cpp
-        components/physics/physics_shape_helpers.h
-
-        components/render/static_mesh_component.cpp
-        components/render/static_mesh_component.h
-        components/render/static_mesh_primitive_component.cpp
-        components/render/static_mesh_primitive_component.h
-        components/render/text_component.cpp
-        components/render/text_component.h
-        components/render/procedural_mesh_component.cpp
-        components/render/procedural_mesh_component.h
-        components/render/procedural_mesh_component.cpp
-        components/render/spline_mesh_component.cpp
-        components/render/spline_mesh_component.h
-        components/render/module_mesh_component.cpp
-        components/render/module_mesh_component.h
-
-        components/gameplay/checkpoint_component.cpp
-        components/gameplay/checkpoint_component.h
-        components/gameplay/death_zone_component.cpp
-        components/gameplay/death_zone_component.h
-        components/gameplay/player_spawn_component.cpp
-        components/gameplay/player_spawn_component.h
-        components/gameplay/path_mover_component.cpp
-        components/gameplay/path_mover_component.h
-        components/gameplay/rotate_in_place_component.cpp
-        components/gameplay/rotate_in_place_component.h
-
+        components/component_registration.cpp
+        components/component_registration.h
         components/debug_components.cpp
         components/debug_components.h
-        components/render_components.cpp
-        components/render_components.h
-        components/portal_components.cpp
-        components/portal_components.h
-        components/core_components.cpp
-        components/core_components.h
-        components/scene_components.cpp
-        components/scene_components.h
-        components/common_components.cpp
-        components/common_components.h
-        component-registry/component_registry.cpp
-        component-registry/component_registry.h
-        components/component_types.cpp
-        components/component_types.h
-        components/editor_components.cpp
-        components/editor_components.h
-        components/character_components.h
-        component-registry/component_editor.h
+
+        components/checkpoint_component.cpp
+        components/checkpoint_component.h
+        components/death_zone_component.cpp
+        components/death_zone_component.h
+        components/player_spawn_component.cpp
+        components/player_spawn_component.h
+        components/path_mover_component.cpp
+        components/path_mover_component.h
+        components/rotate_in_place_component.cpp
+        components/rotate_in_place_component.h
 
         gameplay/player/character.cpp
         gameplay/player/character.h
@@ -113,37 +48,7 @@ set(GAME_SOURCES
         gameplay/player/physics_player_controller.h
         gameplay/player/player_controller.cpp
         gameplay/player/player_controller.h
-        components/physics/physics_body_desc.cpp
 
-
-
-        systems/core_systems.cpp
-        systems/core_systems.h
-        systems/scene_system.cpp
-        systems/scene_system.h
-        systems/common_systems.cpp
-        systems/common_systems.h
-        systems/gameplay_systems.cpp
-        systems/gameplay_systems.h
-        systems/probe_bake_system.cpp
-        systems/probe_bake_system.h
-        components/render/light_components.cpp
-        components/render/light_components.h
-        components/render/local_ddgi_volume_component.cpp
-        components/render/local_ddgi_volume_component.h
-        components/render/reflection_probe_component.cpp
-        components/render/reflection_probe_component.h
-        component-registry/editor_gizmo_helpers.cpp
-        editor/settings/graphics_settings.cpp
-        editor/settings/graphics_settings.h
-        editor/settings/input_settings.cpp
-        editor/settings/input_settings.h
-        editor/editor_widgets.cpp
-        editor/editor_widgets.h
-        components/render/text3d_component.cpp
-        components/render/text3d_component.h
-
-        input/game_actions.h
         input/input_action_registry.cpp
         input/input_action_registry.h
 )

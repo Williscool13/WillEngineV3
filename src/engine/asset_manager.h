@@ -31,7 +31,7 @@
 #include "engine/resources/texture/texture.h"
 #include "engine/resources/model/static_model.h"
 #include "engine/resources/physics/physics_collider_asset.h"
-#include "game/components/render_components.h"
+#include "engine/components/render_components.h"
 #include "logging/engine_log.h"
 
 namespace AssetLoad

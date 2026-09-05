@@ -10,12 +10,13 @@
 #include "audio/audio_manager.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
-#include "game/components/common_components.h"
-#include "game/components/core_components.h"
+#include "engine/components/common_components.h"
+#include "engine/components/core_components.h"
+#include "engine/components/debug_gizmo_component.h"
+#include "engine/components/physics/physics_body_component.h"
 #include "game/components/debug_components.h"
-#include "game/components/debug_gizmo_component.h"
-#include "game/components/physics/physics_body_component.h"
-#include "game/input/game_actions.h"
+#include "game/fwd_components.h"
+#include "engine/input/engine_actions.h"
 #include "physics/physics_system.h"
 #include "platform/paths.h"
 
@@ -23,16 +24,16 @@ namespace Game
 {
 void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->input.GetActionState(Actions::ACTION_DEBUG_PLAY_MUSIC).pressed) {
+    if (state->input.GetActionState(Engine::Actions::ACTION_DEBUG_PLAY_MUSIC).pressed) {
         auto musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
         auto _musicPath = Core::Path(musicPath);
         Core::Handle<Audio::WillAudio> testMusic = ctx->audioManager->LoadAudio("test_music", _musicPath);
         ctx->audioManager->PlayMusic(testMusic);
     }
-    if (state->input.GetActionState(Actions::ACTION_DEBUG_MUSIC_VOL_LOW).pressed) {
+    if (state->input.GetActionState(Engine::Actions::ACTION_DEBUG_MUSIC_VOL_LOW).pressed) {
         ctx->audioManager->SetMusicVolume(0.25f);
     }
-    if (state->input.GetActionState(Actions::ACTION_DEBUG_MUSIC_VOL_FULL).pressed) {
+    if (state->input.GetActionState(Engine::Actions::ACTION_DEBUG_MUSIC_VOL_FULL).pressed) {
         ctx->audioManager->SetMusicVolume(1.0f);
     }
 }

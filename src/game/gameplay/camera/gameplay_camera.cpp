@@ -14,6 +14,7 @@
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 
 #include "core/math/constants.h"
+#include "engine/systems/camera_system.h"
 #include "physics/physics_system.h"
 #include "physics/layers/layer_interface.h"
 
@@ -27,35 +28,9 @@ public:
         return inLayer != Physics::Layers::PLAYER && inLayer != Physics::Layers::SENSOR;
     }
 };
-Core::ViewData BuildPerspectiveView(glm::vec3 pos, glm::vec3 forward, glm::vec3 up, float aspectRatio, float fovRadians, float nearPlane)
-{
-    const glm::vec3 f = glm::normalize(forward);
-
-    Core::ViewData vd{};
-    vd.cameraPos = pos;
-    vd.cameraForward = f;
-    vd.cameraUp = up;
-    vd.cameraLookAt = pos + f;
-    vd.aspectRatio = aspectRatio;
-    vd.fovRadians = fovRadians;
-    vd.nearPlane = nearPlane;
-    vd.view = glm::lookAt(pos, vd.cameraLookAt, up);
-
-    const float tanHalfFov = glm::tan(fovRadians * 0.5f);
-    // Reverse-Z, infinite far: ndc.z = near/dist (1 at near, ->0 at infinity).
-    // Hand-rolled rather than glm::infinitePerspective(fovRadians, aspectRatio, nearPlane), which isn't reverse-Z.
-    glm::mat4 proj(0.0f);
-    proj[0][0] = 1.0f / (aspectRatio * tanHalfFov);
-    proj[1][1] = 1.0f / tanHalfFov;
-    proj[2][3] = -1.0f;
-    proj[3][2] = nearPlane;
-    vd.proj = proj;
-    return vd;
-}
-
 static Core::ViewData BuildViewData(glm::vec3 cameraPos, glm::vec3 focusPoint, float aspectRatio, float fovRadians, float nearPlane)
 {
-    Core::ViewData vd = BuildPerspectiveView(cameraPos, focusPoint - cameraPos, WORLD_UP, aspectRatio, fovRadians, nearPlane);
+    Core::ViewData vd = Engine::BuildPerspectiveView(cameraPos, focusPoint - cameraPos, WORLD_UP, aspectRatio, fovRadians, nearPlane);
     vd.cameraLookAt = focusPoint;
     return vd;
 }

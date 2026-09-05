@@ -1,0 +1,47 @@
+//
+// Created by William on 2025-12-25.
+//
+
+#ifndef WILL_ENGINE_PHYSICS_SYSTEM_H
+#define WILL_ENGINE_PHYSICS_SYSTEM_H
+
+#include <Jolt/Jolt.h>
+
+#include <Jolt/Physics/Collision/Shape/Shape.h>
+
+#include "engine/components/physics/physics_body_desc.h"
+#include "Jolt/Physics/Body/BodyInterface.h"
+
+
+namespace Core
+{
+struct FrameBuffer;
+struct ViewFamily;
+}
+
+namespace Engine
+{
+struct EngineContext;
+struct EngineState;
+class AssetManager;
+}
+
+namespace Engine
+{
+void ConnectPhysicsObservers(entt::registry& registry);
+void DisconnectPhysicsObservers(entt::registry& registry);
+void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);
+void MarkPhysicsTransformsDirty(Engine::EngineState* state);
+void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
+void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);
+} // Engine
+
+#endif //WILL_ENGINE_PHYSICS_SYSTEM_H

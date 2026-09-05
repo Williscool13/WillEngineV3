@@ -61,6 +61,8 @@ class MemoryManager;
 
 namespace Engine
 {
+struct EngineState;
+
 struct WindowContext
 {
     uint32_t windowWidth;
@@ -165,6 +167,8 @@ struct EngineContext
     const char* (*resolveStringIdFn)(uint64_t);
     Core::InlineFunction<void(bool)> setCursorHiddenFn;
     Core::InlineFunction<void(bool)> setTextInputActiveFn;
+    Core::InlineFunction<void(EngineContext*, EngineState*)> playStartFn;
+    Core::InlineFunction<void(EngineContext*, EngineState*)> playStopFn;
 
     // Imgui
     ImGuiContext* imguiContext;

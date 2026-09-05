@@ -37,6 +37,8 @@
 #include "engine/builtin_assets.h"
 #include "engine/component_registry.h"
 #include "engine/editor_state.h"
+#include "engine/editor/probe_bake_system.h"
+#include "engine/editor/capture_shot_system.h"
 #include "engine/mcp/mcp_tool.h"
 #include "engine/editor_texture_residency.h"
 #include "engine/resources/model/instance_store.h"
@@ -256,6 +258,8 @@ struct EngineState
     EditorState editor;
     DebugState debug;
     DDGIConvergeBoost ddgiConvergeBoost;
+    ProbeBakeSystem probeBake{};
+    CaptureShotSystem captureShot{};
     ProjectConfig projectConfig{};
     AutomationConfig automation{};
 };

@@ -4,7 +4,7 @@
 
 #include "input_action_registry.h"
 
-#include "game_actions.h"
+#include "engine/input/engine_actions.h"
 #include "engine/input/input_binding.h"
 #include "engine/input/input_rebinding.h"
 
@@ -72,118 +72,118 @@ void RegisterInputActions(Engine::InputState& input)
     input.actionIndex.Clear();
 
     // Globals
-    AddDefaultAllContexts(input, Actions::ACTION_SCREENSHOT, Engine::BindingSource::FromKey(Key::F10));
-    AddDefaultAllContexts(input, Actions::ACTION_ESCAPE, Engine::BindingSource::FromKey(Key::ESCAPE));
-    AddDefaultAllContexts(input, Actions::ACTION_DEBUG_PLAY_MUSIC, Engine::BindingSource::FromKey(Key::M));
-    AddDefaultAllContexts(input, Actions::ACTION_DEBUG_MUSIC_VOL_LOW, Engine::BindingSource::FromKey(Key::N));
-    AddDefaultAllContexts(input, Actions::ACTION_DEBUG_MUSIC_VOL_FULL, Engine::BindingSource::FromKey(Key::B));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCREENSHOT, Engine::BindingSource::FromKey(Key::F10));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_ESCAPE, Engine::BindingSource::FromKey(Key::ESCAPE));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_DEBUG_PLAY_MUSIC, Engine::BindingSource::FromKey(Key::M));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_DEBUG_MUSIC_VOL_LOW, Engine::BindingSource::FromKey(Key::N));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_DEBUG_MUSIC_VOL_FULL, Engine::BindingSource::FromKey(Key::B));
 
-    AddDefaultAllContexts(input, Actions::ACTION_MODIFIER_CTRL, Engine::BindingSource::FromKey(Key::LCTRL));
-    AddDefaultAllContexts(input, Actions::ACTION_MODIFIER_CTRL, Engine::BindingSource::FromKey(Key::RCTRL));
-    AddDefaultAllContexts(input, Actions::ACTION_MODIFIER_SHIFT, Engine::BindingSource::FromKey(Key::LSHIFT));
-    AddDefaultAllContexts(input, Actions::ACTION_MODIFIER_SHIFT, Engine::BindingSource::FromKey(Key::RSHIFT));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_MODIFIER_CTRL, Engine::BindingSource::FromKey(Key::LCTRL));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_MODIFIER_CTRL, Engine::BindingSource::FromKey(Key::RCTRL));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_MODIFIER_SHIFT, Engine::BindingSource::FromKey(Key::LSHIFT));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_MODIFIER_SHIFT, Engine::BindingSource::FromKey(Key::RSHIFT));
 
-    AddDefaultAllContexts(input, Actions::ACTION_UI_POINTER_DOWN, Engine::BindingSource::FromMouse(MouseButton::LMB));
-    AddDefaultStickAllContexts(input, Actions::ACTION_UI_SCROLL, {
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_UI_POINTER_DOWN, Engine::BindingSource::FromMouse(MouseButton::LMB));
+    AddDefaultStickAllContexts(input, Engine::Actions::ACTION_UI_SCROLL, {
         Engine::BindingSource::FromMouseWheelX(),
         Engine::BindingSource::FromMouseWheelY()
     });
-    AddDefaultAllContexts(input, Actions::ACTION_UI_PAGE_UP, Engine::BindingSource::FromKey(Key::PAGEUP));
-    AddDefaultAllContexts(input, Actions::ACTION_UI_PAGE_DOWN, Engine::BindingSource::FromKey(Key::PAGEDOWN));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_UI_PAGE_UP, Engine::BindingSource::FromKey(Key::PAGEUP));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_UI_PAGE_DOWN, Engine::BindingSource::FromKey(Key::PAGEDOWN));
 
     // Gameplay
-    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F1));
-    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Menu, Engine::BindingSource::FromKey(Key::F1));
-    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F2));
-    AddDefault(input, Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, Engine::InputContext::Menu, Engine::BindingSource::FromKey(Key::F2));
+    AddDefault(input, Engine::Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F1));
+    AddDefault(input, Engine::Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, Engine::InputContext::Menu, Engine::BindingSource::FromKey(Key::F1));
+    AddDefault(input, Engine::Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::F2));
+    AddDefault(input, Engine::Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, Engine::InputContext::Menu, Engine::BindingSource::FromKey(Key::F2));
 
-    AddDefaultComposite2D(input, Actions::ACTION_MOVE, Engine::InputContext::Gameplay, {
+    AddDefaultComposite2D(input, Engine::Actions::ACTION_MOVE, Engine::InputContext::Gameplay, {
         Engine::BindingSource::FromKey(Key::W),
         Engine::BindingSource::FromKey(Key::S),
         Engine::BindingSource::FromKey(Key::A),
         Engine::BindingSource::FromKey(Key::D)
     });
-    AddDefaultStick(input, Actions::ACTION_MOVE, Engine::InputContext::Gameplay, {
+    AddDefaultStick(input, Engine::Actions::ACTION_MOVE, Engine::InputContext::Gameplay, {
         Engine::BindingSource::FromGamepadAxis(GamepadAxis::LEFT_X),
         Engine::BindingSource::FromGamepadAxis(GamepadAxis::LEFT_Y)
     });
-    AddDefault(input, Actions::ACTION_JUMP, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::SPACE));
-    AddDefault(input, Actions::ACTION_JUMP, Engine::InputContext::Gameplay, Engine::BindingSource::FromGamepadButton(GamepadButton::SOUTH));
-    AddDefaultStick(input, Actions::ACTION_LOOK, Engine::InputContext::Gameplay, {
+    AddDefault(input, Engine::Actions::ACTION_JUMP, Engine::InputContext::Gameplay, Engine::BindingSource::FromKey(Key::SPACE));
+    AddDefault(input, Engine::Actions::ACTION_JUMP, Engine::InputContext::Gameplay, Engine::BindingSource::FromGamepadButton(GamepadButton::SOUTH));
+    AddDefaultStick(input, Engine::Actions::ACTION_LOOK, Engine::InputContext::Gameplay, {
         Engine::BindingSource::FromMouseDeltaX(),
         Engine::BindingSource::FromMouseDeltaY()
     });
-    AddDefaultStick(input, Actions::ACTION_LOOK_GAMEPAD, Engine::InputContext::Gameplay, {
+    AddDefaultStick(input, Engine::Actions::ACTION_LOOK_GAMEPAD, Engine::InputContext::Gameplay, {
         Engine::BindingSource::FromGamepadAxis(GamepadAxis::RIGHT_X),
         Engine::BindingSource::FromGamepadAxis(GamepadAxis::RIGHT_Y)
     });
 
 
     // Editor + "Eject out of Gameplay"
-    AddDefaultEditorAndMenu(input, Actions::ACTION_VIEWPORT_SELECT, Engine::BindingSource::FromMouse(MouseButton::LMB));
-    AddDefaultEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_LOOK_MODIFIER, Engine::BindingSource::FromMouse(MouseButton::RMB));
-    AddDefaultEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_PAN_MODIFIER, Engine::BindingSource::FromMouse(MouseButton::MMB));
-    AddDefaultCompositeEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_MOVE, {
+    AddDefaultEditorAndMenu(input, Engine::Actions::ACTION_VIEWPORT_SELECT, Engine::BindingSource::FromMouse(MouseButton::LMB));
+    AddDefaultEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_LOOK_MODIFIER, Engine::BindingSource::FromMouse(MouseButton::RMB));
+    AddDefaultEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_PAN_MODIFIER, Engine::BindingSource::FromMouse(MouseButton::MMB));
+    AddDefaultCompositeEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_MOVE, {
         Engine::BindingSource::FromKey(Key::W),
         Engine::BindingSource::FromKey(Key::S),
         Engine::BindingSource::FromKey(Key::A),
         Engine::BindingSource::FromKey(Key::D)
     });
-    AddDefaultEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_UP, Engine::BindingSource::FromKey(Key::SPACE));
-    AddDefaultEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_DOWN, Engine::BindingSource::FromKey(Key::LCTRL));
-    AddDefaultStickEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_MOUSE_DELTA, {
+    AddDefaultEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_UP, Engine::BindingSource::FromKey(Key::SPACE));
+    AddDefaultEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_DOWN, Engine::BindingSource::FromKey(Key::LCTRL));
+    AddDefaultStickEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_MOUSE_DELTA, {
         Engine::BindingSource::FromMouseDeltaX(),
         Engine::BindingSource::FromMouseDeltaY()
     });
-    AddDefaultStickEditorAndMenu(input, Actions::ACTION_EDITOR_CAM_ZOOM_SPEED, {
+    AddDefaultStickEditorAndMenu(input, Engine::Actions::ACTION_EDITOR_CAM_ZOOM_SPEED, {
         Engine::BindingSource{},
         Engine::BindingSource::FromMouseWheelY()
     });
 
     // Editor-Only
-    AddDefault(input, Actions::ACTION_GIZMO_TRANSLATE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::W));
-    AddDefault(input, Actions::ACTION_GIZMO_ROTATE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::E));
-    AddDefault(input, Actions::ACTION_GIZMO_SCALE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::R));
-    AddDefault(input, Actions::ACTION_DUPLICATE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::W));
-    AddDefault(input, Actions::ACTION_DELETE_SELECTED, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::DEL));
-    AddDefault(input, Actions::ACTION_BEGIN_RENAME, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::F2));
-    AddDefault(input, Actions::ACTION_FOCUS_SELECTION, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::F));
-    AddDefaultAllContexts(input, Actions::ACTION_TOGGLE_CONSOLE, Engine::BindingSource::FromKey(Key::BACKTICK));
-    AddDefault(input, Actions::ACTION_TOGGLE_CONSOLE, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::BACKTICK));
-    AddDefault(input, Actions::ACTION_ESCAPE, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::ESCAPE));
-    AddDefault(input, Actions::ACTION_UI_POINTER_DOWN, Engine::InputContext::Console, Engine::BindingSource::FromMouse(MouseButton::LMB));
-    AddDefaultStick(input, Actions::ACTION_UI_SCROLL, Engine::InputContext::Console, {
+    AddDefault(input, Engine::Actions::ACTION_GIZMO_TRANSLATE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::W));
+    AddDefault(input, Engine::Actions::ACTION_GIZMO_ROTATE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::E));
+    AddDefault(input, Engine::Actions::ACTION_GIZMO_SCALE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::R));
+    AddDefault(input, Engine::Actions::ACTION_DUPLICATE, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::W));
+    AddDefault(input, Engine::Actions::ACTION_DELETE_SELECTED, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::DEL));
+    AddDefault(input, Engine::Actions::ACTION_BEGIN_RENAME, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::F2));
+    AddDefault(input, Engine::Actions::ACTION_FOCUS_SELECTION, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::F));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_TOGGLE_CONSOLE, Engine::BindingSource::FromKey(Key::BACKTICK));
+    AddDefault(input, Engine::Actions::ACTION_TOGGLE_CONSOLE, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::BACKTICK));
+    AddDefault(input, Engine::Actions::ACTION_ESCAPE, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::ESCAPE));
+    AddDefault(input, Engine::Actions::ACTION_UI_POINTER_DOWN, Engine::InputContext::Console, Engine::BindingSource::FromMouse(MouseButton::LMB));
+    AddDefaultStick(input, Engine::Actions::ACTION_UI_SCROLL, Engine::InputContext::Console, {
         Engine::BindingSource::FromMouseWheelX(),
         Engine::BindingSource::FromMouseWheelY()
     });
-    AddDefault(input, Actions::ACTION_UI_PAGE_UP, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::PAGEUP));
-    AddDefault(input, Actions::ACTION_UI_PAGE_DOWN, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::PAGEDOWN));
-    AddDefault(input, Actions::ACTION_MODIFIER_CTRL, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::LCTRL));
-    AddDefault(input, Actions::ACTION_MODIFIER_CTRL, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::RCTRL));
-    AddDefault(input, Actions::ACTION_MODIFIER_SHIFT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::LSHIFT));
-    AddDefault(input, Actions::ACTION_MODIFIER_SHIFT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::RSHIFT));
-    AddDefault(input, Actions::ACTION_SCREENSHOT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::F10));
+    AddDefault(input, Engine::Actions::ACTION_UI_PAGE_UP, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::PAGEUP));
+    AddDefault(input, Engine::Actions::ACTION_UI_PAGE_DOWN, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::PAGEDOWN));
+    AddDefault(input, Engine::Actions::ACTION_MODIFIER_CTRL, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::LCTRL));
+    AddDefault(input, Engine::Actions::ACTION_MODIFIER_CTRL, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::RCTRL));
+    AddDefault(input, Engine::Actions::ACTION_MODIFIER_SHIFT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::LSHIFT));
+    AddDefault(input, Engine::Actions::ACTION_MODIFIER_SHIFT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::RSHIFT));
+    AddDefault(input, Engine::Actions::ACTION_SCREENSHOT, Engine::InputContext::Console, Engine::BindingSource::FromKey(Key::F10));
 
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_1, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_1));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_2, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_2));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_3, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_3));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_4, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_4));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_5, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_5));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_6, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_6));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_7, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_7));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_8, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_8));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_9, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_9));
-    AddDefault(input, Actions::ACTION_DEBUG_VIEW_0, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_0));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_1, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_1));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_2, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_2));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_3, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_3));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_4, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_4));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_5, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_5));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_6, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_6));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_7, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_7));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_8, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_8));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_9, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_9));
+    AddDefault(input, Engine::Actions::ACTION_DEBUG_VIEW_0, Engine::InputContext::Editor, Engine::BindingSource::FromKey(Key::NUM_0));
 
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_1, Engine::BindingSource::FromKey(Key::KP_1));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_2, Engine::BindingSource::FromKey(Key::KP_2));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_3, Engine::BindingSource::FromKey(Key::KP_3));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_4, Engine::BindingSource::FromKey(Key::KP_4));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_5, Engine::BindingSource::FromKey(Key::KP_5));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_6, Engine::BindingSource::FromKey(Key::KP_6));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_7, Engine::BindingSource::FromKey(Key::KP_7));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_8, Engine::BindingSource::FromKey(Key::KP_8));
-    AddDefaultAllContexts(input, Actions::ACTION_SCENE_SLOT_9, Engine::BindingSource::FromKey(Key::KP_9));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_1, Engine::BindingSource::FromKey(Key::KP_1));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_2, Engine::BindingSource::FromKey(Key::KP_2));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_3, Engine::BindingSource::FromKey(Key::KP_3));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_4, Engine::BindingSource::FromKey(Key::KP_4));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_5, Engine::BindingSource::FromKey(Key::KP_5));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_6, Engine::BindingSource::FromKey(Key::KP_6));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_7, Engine::BindingSource::FromKey(Key::KP_7));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_8, Engine::BindingSource::FromKey(Key::KP_8));
+    AddDefaultAllContexts(input, Engine::Actions::ACTION_SCENE_SLOT_9, Engine::BindingSource::FromKey(Key::KP_9));
 
     Engine::ApplyDefaultBindings(input);
     input.actionStates.Resize(input.actionIndex.Size());

@@ -13,10 +13,11 @@
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
-#include "game/components/camera_components.h"
-#include "game/components/core_components.h"
+#include "engine/components/camera_components.h"
+#include "engine/components/core_components.h"
+#include "game/fwd_components.h"
 #include "game/game_state.h"
-#include "game/input/game_actions.h"
+#include "engine/input/engine_actions.h"
 #include "game/ui/game_ui.h"
 #include "game/ui/ui_zindex.h"
 
@@ -342,10 +343,10 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
     const Clay_ElementId activeContentId = c.activeTab == 0 ? CLAY_ID("Console_Output") : CLAY_ID("Console_Log");
-    if (state->input.GetActionState(Actions::ACTION_UI_PAGE_UP).pressed) {
+    if (state->input.GetActionState(Engine::Actions::ACTION_UI_PAGE_UP).pressed) {
         PageScroll(activeContentId, 1.0f);
     }
-    if (state->input.GetActionState(Actions::ACTION_UI_PAGE_DOWN).pressed) {
+    if (state->input.GetActionState(Engine::Actions::ACTION_UI_PAGE_DOWN).pressed) {
         PageScroll(activeContentId, -1.0f);
     }
 
@@ -399,7 +400,7 @@ void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
         ctx->setTextInputActiveFn(false);
     }
 
-    if (state->input.GetActionState(Actions::ACTION_TOGGLE_CONSOLE).pressed) {
+    if (state->input.GetActionState(Engine::Actions::ACTION_TOGGLE_CONSOLE).pressed) {
         c.bOpen = !c.bOpen;
         if (c.bOpen) {
             c.bReclaimFocus = true;
@@ -407,7 +408,7 @@ void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
             state->input.textInput.chars.Clear();
         }
     }
-    if (c.bOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
+    if (c.bOpen && state->input.GetActionState(Engine::Actions::ACTION_ESCAPE).pressed) {
         c.bOpen = false;
     }
 

@@ -13,13 +13,14 @@
 #include "engine/include/engine_context.h"
 #include "engine/mcp/mcp_tool.h"
 #include "game/game_state.h"
-#include "game/components/common_components.h"
-#include "game/components/core_components.h"
-#include "game/components/scene_components.h"
-#include "game/components/common/stable_id_component.h"
+#include "engine/components/common_components.h"
+#include "engine/components/core_components.h"
+#include "engine/components/scene_components.h"
+#include "engine/components/common/stable_id_component.h"
+#include "game/fwd_components.h"
 #include "game/console/console.h"
-#include "game/systems/capture_shot_system.h"
-#include "game/systems/scene_system.h"
+#include "engine/editor/capture_shot_system.h"
+#include "engine/systems/scene_system.h"
 
 namespace Game
 {
@@ -45,7 +46,7 @@ static const char* InputContextName(const Engine::InputContext context)
 
 static bool AnythingPending(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    return CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || state->assetLoad.bPendingModelResolve || ctx->frameStatus.bAssetGenerationPending;
+    return Engine::CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || state->assetLoad.bPendingModelResolve || ctx->frameStatus.bAssetGenerationPending;
 }
 
 void TickQuietFrames(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -69,7 +70,7 @@ static ToolResult GetEngineStatus(Engine::EngineContext* ctx, Engine::EngineStat
     call.SetBool("settled", quiet >= SETTLED_QUIET_FRAMES);
     call.SetInt("quietFrames", quiet);
     call.SetInt("settledThresholdFrames", SETTLED_QUIET_FRAMES);
-    call.SetInt("loadingEntities", static_cast<int64_t>(CountLoadingEntities(state)));
+    call.SetInt("loadingEntities", static_cast<int64_t>(Engine::CountLoadingEntities(state)));
     call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
     call.SetBool("pendingModelResolve", state->assetLoad.bPendingModelResolve);
     call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
@@ -279,7 +280,7 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
             call.SetError("Unknown prefab; pass a name or the hex id from query_assets type=prefab");
             return ToolResult::Error;
         }
-        entity = SpawnPrefab(state, ctx->assetManager, prefabId, position);
+        entity = Engine::SpawnPrefab(state, ctx->assetManager, prefabId, position);
     }
     else if (*model) {
         Engine::ModelID modelId{};
@@ -287,11 +288,11 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
             call.SetError("Unknown model; pass a name or the hex id from query_assets type=model");
             return ToolResult::Error;
         }
-        const auto spawned = SpawnModel(ctx, state, modelId, position);
+        const auto spawned = Engine::SpawnModel(ctx, state, modelId, position);
         entity = spawned.IsEmpty() ? entt::null : spawned[0];
     }
     else {
-        entity = CreateSceneEntity(state);
+        entity = Engine::CreateSceneEntity(state);
         state->registry.get<Component::TransformComponent>(entity).translation = position;
     }
 
@@ -305,7 +306,7 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
         state->registry.get_or_emplace<Component::NameComponent>(entity).name = Core::InlineString<128>(std::string_view(name));
     }
     if (parent != entt::null) {
-        SetParent(state, entity, parent);
+        Engine::SetParent(state, entity, parent);
     }
 
     WriteEntityDetail(state, call, entity);

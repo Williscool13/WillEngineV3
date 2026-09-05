@@ -8,9 +8,10 @@
 #include "core/input/input_frame.h"
 #include "core/math/constants.h"
 #include "engine/engine_api.h"
-#include "game/components/camera_components.h"
-#include "game/components/core_components.h"
-#include "game/input/game_actions.h"
+#include "engine/components/camera_components.h"
+#include "engine/components/core_components.h"
+#include "game/fwd_components.h"
+#include "engine/input/engine_actions.h"
 #include "physics/physics_system.h"
 
 namespace Game
@@ -31,11 +32,11 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     bool jumpRequested = false;
 
     if (state->inputContext == Engine::InputContext::Gameplay) {
-        const Core::ActionState& lookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK);
+        const Core::ActionState& lookAction = state->input.GetActionState(Engine::Actions::ACTION_LOOK);
         lookYaw += glm::radians(-lookAction.axis.x * lookSpeed) * deltaTime;
         lookPitch += glm::radians(-lookAction.axis.y * lookSpeed) * deltaTime;
 
-        const Core::ActionState& gamepadLookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK_GAMEPAD);
+        const Core::ActionState& gamepadLookAction = state->input.GetActionState(Engine::Actions::ACTION_LOOK_GAMEPAD);
         lookYaw += glm::radians(-gamepadLookAction.axis.x * gamepadLookSpeed) * deltaTime;
         lookPitch += glm::radians(gamepadLookAction.axis.y * gamepadLookSpeed) * deltaTime;
 
@@ -45,7 +46,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         const glm::vec3 forward = horizontalRotation * WORLD_FORWARD;
         const glm::vec3 right = horizontalRotation * WORLD_RIGHT;
 
-        const Core::ActionState& moveAction = state->input.GetActionState(Game::Actions::ACTION_MOVE);
+        const Core::ActionState& moveAction = state->input.GetActionState(Engine::Actions::ACTION_MOVE);
         moveInput += forward * moveAction.axis.y;
         moveInput += right * moveAction.axis.x;
 
@@ -53,7 +54,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
             moveInput = glm::normalize(moveInput);
         }
 
-        jumpRequested = state->input.GetActionState(Game::Actions::ACTION_JUMP).pressed;
+        jumpRequested = state->input.GetActionState(Engine::Actions::ACTION_JUMP).pressed;
     }
 
     character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsSystem);

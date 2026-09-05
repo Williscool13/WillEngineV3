@@ -1,0 +1,1015 @@
+//
+// Created by William on 2025-12-26.
+//
+
+#include "render_systems.h"
+
+#include <tracy/Tracy.hpp>
+
+#include "scene_system.h"
+#include "render_systems_helpers.h"
+#include "core/containers/arena_fixed_vector.h"
+#include "core/containers/arena_vector.h"
+#include "core/containers/inline_vector.h"
+#include "core/math/color_helpers.h"
+#include "engine/include/engine_context.h"
+#include "engine/asset_manager.h"
+#include "engine/material_manager.h"
+#include "engine/engine_api.h"
+#include "engine/logging/engine_assert.h"
+#include "engine/logging/engine_log.h"
+#include "engine/components/fwd_components.h"
+#include "engine/components/common_components.h"
+#include "engine/input/engine_actions.h"
+#include "engine/components/render/procedural_mesh_component.h"
+#include "engine/components/render/spline_mesh_component.h"
+#include "engine/components/render/module_mesh_component.h"
+#include "engine/components/render/text3d_component.h"
+#include "engine/components/render/light_components.h"
+#include "engine/components/render/local_ddgi_volume_component.h"
+#include "engine/components/render/reflection_probe_component.h"
+#include "render/shaders/lights_interop.h"
+#include "render/shaders/reflection_probe_interop.h"
+#include "render/shaders/text_interop.h"
+#include "engine/components/render/static_mesh_component.h"
+#include "engine/components/render/static_mesh_primitive_component.h"
+#include "engine/components/render/text_component.h"
+#include "engine/components/common/stable_id_component.h"
+#include "engine/components/core_components.h"
+#include "engine/components/physics/physics_body_desc.h"
+#include "render/types/render_types.h"
+#include "core/memory/memory_manager.h"
+
+
+namespace Engine
+{
+void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto transformDirtyView = state->registry.view<Component::TransformComponent, Component::DirtyTransformTag>();
+    for (auto entity : transformDirtyView) {
+        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+    }
+}
+
+// Tick-to-tick physics deltas are tiny, so normalized lerp is visually identical to slerp without the trig
+static glm::quat NlerpPose(const glm::quat& a, glm::quat b, float t)
+{
+    if (glm::dot(a, b) < 0.0f) { b = -b; }
+    return glm::normalize(glm::lerp(a, b, t));
+}
+
+void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    const float alpha = state->physics.interpolationAlpha;
+
+    // Roots (no parent), non-physics
+    for (auto [entity, local, world, dirty] : registry.view<Component::TransformComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>(
+             entt::exclude<Component::HierarchyComponent, Component::DynamicPhysicsBodyComponent>).each()) {
+        world.translation = local.translation;
+        world.rotation = local.rotation;
+        world.scale = local.scale;
+    }
+
+    // Roots, physics (interpolated Jolt pose)
+    for (auto [entity, physics, local, world] : registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::WorldTransformComponent>(
+             entt::exclude<Component::HierarchyComponent>).each()) {
+        world.translation = glm::mix(physics.previousPosition, physics.currentPosition, alpha);
+        world.rotation = NlerpPose(physics.previousRotation, physics.currentRotation, alpha);
+        world.scale = local.scale;
+        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+    }
+
+    // Children in depth order. EnsureHierarchyOrder re-sorts only if a topology change flagged it dirty (cheap bool check otherwise).
+    EnsureHierarchyOrder(state);
+    auto orphans = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 8);
+    auto hierarchy = registry.view<Component::HierarchyComponent>();
+    for (auto entity : hierarchy) {
+        const auto& node = hierarchy.get<Component::HierarchyComponent>(entity);
+
+        auto& local = registry.get<Component::TransformComponent>(entity);
+        auto& world = registry.get<Component::WorldTransformComponent>(entity);
+
+        if (node.parent == entt::null || !registry.valid(node.parent) || !registry.all_of<Component::WorldTransformComponent>(node.parent)) {
+            local.translation = world.translation;
+            local.rotation = world.rotation;
+            local.scale = world.scale;
+            registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+            orphans.PushBack(entity);
+            continue;
+        }
+
+        auto* physics = registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
+        const bool selfDirty = physics || registry.all_of<Component::MultiframeDirtyComponent>(entity);
+        const bool parentDirty = registry.all_of<Component::MultiframeDirtyComponent>(node.parent);
+        if (!selfDirty && !parentDirty) { continue; }
+        if (!registry.all_of<Component::MultiframeDirtyComponent>(entity)) {
+            registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        }
+
+        // Physics (interpolated Jolt pose)
+        if (physics) {
+            world.translation = glm::mix(physics->previousPosition, physics->currentPosition, alpha);
+            world.rotation = NlerpPose(physics->previousRotation, physics->currentRotation, alpha);
+            world.scale = local.scale;
+        }
+        else {
+            const auto& parentWorld = registry.get<Component::WorldTransformComponent>(node.parent);
+            world = Component::ComposeWorldTransform(parentWorld, local);
+        }
+    }
+
+    for (entt::entity entity : orphans) {
+        registry.remove<Component::HierarchyComponent>(entity);
+    }
+}
+
+void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    const Vec2 mousePos = state->input.mousePositionAbsolute;
+    const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
+    const float viewportOffsetY = static_cast<float>(ctx->windowContext.viewportOffsetY);
+    const bool bIsMouseDown = state->input.GetActionState(Actions::ACTION_UI_POINTER_DOWN).down;
+    Clay_SetPointerState(Clay_Vector2{mousePos.x - viewportOffsetX, mousePos.y - viewportOffsetY}, bIsMouseDown);
+
+    state->input.uiScrollAccum += state->input.GetActionState(Actions::ACTION_UI_SCROLL).axis;
+}
+
+void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+
+    auto dirtyView = state->registry.view<Component::WorldTransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>();
+    constexpr size_t TASK_THRESHOLD = 1000;
+    size_t dirtyViewCount = dirtyView.size_hint();
+    if (dirtyViewCount < TASK_THRESHOLD) {
+        ZoneScopedN("Serial");
+        for (auto [entity, world, renderTransform, dirtyRender] : dirtyView.each()) {
+            renderTransform.previousMatrix = renderTransform.modelMatrix;
+            renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
+        }
+    }
+    else {
+        ZoneScopedN("Parallel");
+        constexpr size_t TASK_BATCH = 8192;
+        auto entities = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::min(dirtyViewCount, TASK_BATCH));
+
+        auto dispatch = [&]() {
+            if (entities.IsEmpty()) { return; }
+            enki::TaskSet task(entities.Size(), [&](enki::TaskSetPartition range, uint32_t) {
+                for (uint32_t i = range.start; i < range.end; ++i) {
+                    auto entity = entities[i];
+                    auto& world = dirtyView.get<Component::WorldTransformComponent>(entity);
+                    auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
+
+                    renderTransform.previousMatrix = renderTransform.modelMatrix;
+                    renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
+                }
+            });
+            ctx->scheduler->AddTaskSetToPipe(&task);
+            ctx->scheduler->WaitforTask(&task);
+            entities.Clear();
+        };
+
+        for (entt::entity e : dirtyView) {
+            entities.PushBack(e);
+            if (entities.Size() == entities.GetCapacity()) { dispatch(); }
+        }
+        dispatch();
+    }
+
+    // Dirty entities write their node matrices into their stable model slots
+    {
+        Engine::InstanceStore& store = state->instanceStore;
+        Engine::ModelStore& modelStore = state->modelStore;
+        for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
+            if (!runtime.range.IsValid()) { continue; }
+            uint32_t lastSlot = ~0u;
+            for (uint32_t i = 0; i < runtime.range.count; ++i) {
+                const Engine::InstanceSource& inst = store[runtime.range.offset + i];
+                if (inst.modelSlot == lastSlot) { continue; }
+                lastSlot = inst.modelSlot;
+                modelStore.SetModel(inst.modelSlot, {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform});
+            }
+        }
+    }
+
+    // Area light emissive quads
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>().each()) {
+        if (!surfaceRuntime.modelRange.IsValid()) { continue; }
+        const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
+        state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
+    }
+
+    // Sphere light emissive meshes
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
+        if (!surfaceRuntime.modelRange.IsValid()) { continue; }
+        const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
+        state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
+    }
+
+    // Text quads
+    for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
+        if (!runtime.modelRange.IsValid()) { continue; }
+        state->modelStore.SetModel(runtime.modelRange.offset, {renderTransform.modelMatrix, renderTransform.previousMatrix});
+    }
+
+    // Analytic light payload. A bake-hidden light writes dead, so the store stays the only authority on what the GPU sees.
+    {
+        Engine::AnalyticLightStore& lightStore = state->analyticLightStore;
+        const bool bAnyHidden = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
+        auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && state->registry.all_of<Component::ProbeBakeHiddenTag>(entity); };
+
+        for (auto [entity, light, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
+            if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+            lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeAreaLightInfo(transform, light));
+        }
+
+        for (auto [entity, light, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
+            if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+            lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeSphereLightInfo(transform, light));
+        }
+    }
+
+    for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyComponent>().each()) {
+        dirty.counter--;
+        if (dirty.counter <= 0) {
+            state->registry.remove<Component::MultiframeDirtyComponent>(entity);
+        }
+    }
+}
+
+void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    auto& materialManager = ctx->materialManager;
+
+    //
+    {
+        ZoneScopedN("SyncLightSurfaces");
+        Engine::InstanceStore& store = state->instanceStore;
+        Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
+        emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
+        constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE;
+
+        const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0
+                                  || state->registry.view<Component::ProbeBakeProxyHiddenTag>().size() > 0;
+
+        auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw) {
+            if (!surfaceRuntime.range.IsValid()) { return; }
+
+            bool bDraw = draw;
+            if (bDraw && bAnyHideTags) {
+                bDraw = !state->registry.any_of<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>(lightEntity);
+            }
+
+            if (bDraw) {
+                emissiveMaterial.props.emissiveFactor = glm::vec4(color, intensity);
+                const Engine::MaterialID materialID = Engine::HashMaterial(emissiveMaterial);
+                if (materialID != surfaceRuntime.materialID) {
+                    materialManager->CreateSynthesizedMaterial(emissiveMaterial);
+                    materialManager->AcquireMaterial(materialID);
+                    materialManager->ReleaseMaterial(surfaceRuntime.materialID);
+                    store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
+                    surfaceRuntime.materialID = materialID;
+                }
+            }
+
+            const Engine::InstanceSource& src = store[surfaceRuntime.range.offset];
+            if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != surfaceRuntime.stableId) {
+                store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, surfaceRuntime.stableId);
+            }
+        };
+
+        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>().each()) {
+            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+        }
+        for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::SphereLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::AreaLightComponent>).each()) {
+            emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+        }
+    }
+
+#ifdef WDEBUG
+    VerifyGeometryStores(state);
+#endif
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    //
+    {
+        ZoneScopedN("Instances");
+        const Instance* storeInstances = state->instanceStore.Instances();
+        vf.instanceCount = state->instanceStore.GetWatermark();
+        vf.instancePayload.Clear();
+        vf.instanceRuns.Clear();
+        state->instanceStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+            const size_t base = vf.instancePayload.Size();
+            vf.instancePayload.ResizeUninitialized(base + count);
+            memcpy(vf.instancePayload.Data() + base, storeInstances + offset, count * sizeof(Instance));
+            vf.instanceRuns.PushBack(Core::DirtyRun{offset, count});
+        });
+    }
+    //
+    {
+        ZoneScopedN("ModelMatrices");
+        const Model* storeModels = state->modelStore.Models();
+        vf.modelCount = state->modelStore.GetWatermark();
+        vf.modelPayload.Clear();
+        vf.modelRuns.Clear();
+        state->modelStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+            const size_t base = vf.modelPayload.Size();
+            vf.modelPayload.ResizeUninitialized(base + count);
+            memcpy(vf.modelPayload.Data() + base, storeModels + offset, count * sizeof(Model));
+            vf.modelRuns.PushBack(Core::DirtyRun{offset, count});
+        });
+    }
+
+    //
+    {
+        ZoneScopedN("Material Recording");
+        uint32_t watermark = 0;
+        const auto& entries = materialManager->GetActiveMaterials();
+        for (uint32_t i = 0; i < static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT); ++i) {
+            const Engine::MaterialEntry& entry = entries[i];
+            if (!entry.handle.IsValid() || entry.refCounter <= 0) { continue; }
+            watermark = i + 1u;
+            frameBuffer->mainViewFamily.activeMaterials.PushBack({i, materialManager->GetRenderMaterial(entry.id)});
+        }
+        frameBuffer->mainViewFamily.materialWatermark = watermark;
+    }
+
+    //
+    {
+        ZoneScopedN("Skybox Selection");
+        int32_t bestPriority = INT32_MIN;
+        Render::Cubemap* bestCubemap = nullptr;
+        float bestIntensity = 1.0f;
+        for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>().each()) {
+            if (!sky.envMap.IsValid() || ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
+            if (!sky.handle.IsValid()) {
+                sky.handle = ctx->assetManager->LoadCubemap(sky.envMap);
+            }
+            Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(sky.handle);
+            if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
+                bestPriority = sky.priority;
+                bestCubemap = cubemap;
+                bestIntensity = sky.intensity;
+            }
+        }
+        if (bestCubemap) {
+            frameBuffer->mainViewFamily.skyboxIndex = static_cast<int32_t>(bestCubemap->bindlessHandle.index);
+            frameBuffer->mainViewFamily.skyboxLOD = state->lighting.skyboxLOD;
+            frameBuffer->mainViewFamily.iblIntensity *= bestIntensity;
+        }
+    }
+}
+
+void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextFontPendingTag>);
+
+    for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
+        if (textComp.text.IsEmpty()) { continue; }
+        if (!runtime.modelRange.IsValid()) { continue; }
+
+        Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
+        if (!font) { continue; }
+
+        const float scale = textComp.scale / font->header.emSize;
+        float lineHeight = font->header.lineHeight * scale;
+        if (lineHeight <= 0.0f) { lineHeight = (font->header.ascender - font->header.descender) * scale; }
+        if (lineHeight <= 0.0f) { lineHeight = textComp.scale; }
+
+        const auto rmat = ctx->materialManager->GetRenderTextMaterial(textComp.textMaterialId);
+
+        const Engine::WFontHeader& fh = font->header;
+        const bool bSdf = fh.sdfUncompressedSize > 0;
+        const float sdfSpreadFU = fh.sdfSpread * fh.emSize;
+        const float sdfCellU = bSdf ? 1.0f / static_cast<float>(fh.sdfCols) : 0.0f;
+        const float sdfCellV = bSdf ? 1.0f / static_cast<float>(fh.sdfRows) : 0.0f;
+
+        glm::vec2 padMinEm{0.0f};
+        glm::vec2 padMaxEm{0.0f};
+        if (rmat.outlineColor.w > 0.0f && rmat.outlineWidth > 0.0f) {
+            padMinEm = glm::vec2(rmat.outlineWidth);
+            padMaxEm = glm::vec2(rmat.outlineWidth);
+        }
+        if (rmat.shadowColor.w > 0.0f && (rmat.shadowOffset.x != 0.0f || rmat.shadowOffset.y != 0.0f)) {
+            const glm::vec2 off{rmat.shadowOffset.x, rmat.shadowOffset.y};
+            const glm::vec2 soft{rmat.shadowSoftness};
+            padMinEm = glm::max(padMinEm, soft - off);
+            padMaxEm = glm::max(padMaxEm, soft + off);
+        }
+        if (bSdf) {
+            padMinEm = glm::min(padMinEm, glm::vec2(fh.sdfSpread));
+            padMaxEm = glm::min(padMaxEm, glm::vec2(fh.sdfSpread));
+        }
+        const glm::vec2 padMinFU = padMinEm * font->header.emSize;
+        const glm::vec2 padMaxFU = padMaxEm * font->header.emSize;
+
+        const char* str = textComp.text.c_str();
+        const size_t len = textComp.text.Size();
+        auto advanceOf = [&](char c) -> float {
+            const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
+            return g ? g->advance * scale : textComp.scale * 0.25f;
+        };
+
+        struct TextLine
+        {
+            size_t start;
+            size_t end;
+            float width;
+        };
+        Core::InlineVector<TextLine, 257> lines;
+        size_t lineStart = 0;
+        while (lineStart <= len && !lines.IsFull()) {
+            size_t hardEnd = lineStart;
+            while (hardEnd < len && str[hardEnd] != '\n') { ++hardEnd; }
+
+            size_t segStart = lineStart;
+            if (textComp.wrapWidth > 0.0f) {
+                float width = 0.0f;
+                size_t lastSpace = SIZE_MAX;
+                for (size_t i = segStart; i < hardEnd && !lines.IsFull(); ++i) {
+                    if (str[i] == ' ') { lastSpace = i; }
+                    const float adv = advanceOf(str[i]);
+                    if (width + adv > textComp.wrapWidth && lastSpace != SIZE_MAX && lastSpace > segStart) {
+                        lines.PushBack({segStart, lastSpace, 0.0f});
+                        segStart = lastSpace + 1;
+                        i = segStart - 1;
+                        width = 0.0f;
+                        lastSpace = SIZE_MAX;
+                        continue;
+                    }
+                    width += adv;
+                }
+            }
+            if (!lines.IsFull()) { lines.PushBack({segStart, hardEnd, 0.0f}); }
+            lineStart = hardEnd + 1;
+        }
+
+        for (TextLine& line : lines) {
+            float w = 0.0f;
+            for (size_t i = line.start; i < line.end; ++i) { w += advanceOf(str[i]); }
+            line.width = w;
+        }
+
+        float alignFactor = 0.0f;
+        switch (textComp.align) {
+            case Engine::Text3DAlign::Center: alignFactor = 0.5f;
+                break;
+            case Engine::Text3DAlign::Right: alignFactor = 1.0f;
+                break;
+            case Engine::Text3DAlign::Left: break;
+        }
+
+        const float blockTop = font->header.ascender * scale;
+        const float blockBottom = font->header.descender * scale - static_cast<float>(lines.Size() - 1) * lineHeight;
+        float baseY = 0.0f;
+        switch (textComp.anchor) {
+            case Engine::Text3DAnchor::Top: baseY = -blockTop;
+                break;
+            case Engine::Text3DAnchor::Center: baseY = -(blockTop + blockBottom) * 0.5f;
+                break;
+            case Engine::Text3DAnchor::Bottom: baseY = -blockBottom;
+                break;
+            case Engine::Text3DAnchor::Baseline: break;
+        }
+
+        const uint32_t modelIndex = runtime.modelRange.offset;
+
+        const auto drawCallIndex = static_cast<uint32_t>(frameBuffer->mainViewFamily.textInstances.Size());
+        uint32_t quadCount = 0;
+
+        for (uint32_t li = 0; li < lines.Size(); ++li) {
+            float cursorX = -lines[li].width * alignFactor;
+            const float penY = baseY - static_cast<float>(li) * lineHeight;
+            for (size_t i = lines[li].start; i < lines[li].end; ++i) {
+                const uint32_t codepoint = static_cast<unsigned char>(str[i]);
+                const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, codepoint);
+                if (!g) {
+                    cursorX += textComp.scale * 0.25f;
+                    continue;
+                }
+
+                if (g->slugTexelCount != 0) {
+                    WorldGlyphQuad quad{};
+                    quad.emMin = {g->planeLeft - padMinFU.x, g->planeBottom - padMinFU.y};
+                    quad.emMax = {g->planeRight + padMaxFU.x, g->planeTop + padMaxFU.y};
+                    quad.posMin = {cursorX + quad.emMin.x * scale, penY + quad.emMin.y * scale};
+                    quad.posMax = {cursorX + quad.emMax.x * scale, penY + quad.emMax.y * scale};
+                    if (bSdf) {
+                        // Cell = planeBounds + spread, v runs top-down
+                        const uint32_t glyphIdx = static_cast<uint32_t>(g - font->glyphs.Data());
+                        const float cellU0 = static_cast<float>(glyphIdx % fh.sdfCols) * sdfCellU;
+                        const float cellV0 = static_cast<float>(glyphIdx / fh.sdfCols) * sdfCellV;
+                        const float ku = sdfCellU / (g->planeRight - g->planeLeft + 2.0f * sdfSpreadFU);
+                        const float kv = sdfCellV / (g->planeTop - g->planeBottom + 2.0f * sdfSpreadFU);
+                        quad.sdfUvScale = {ku, -kv};
+                        quad.sdfUvBias = {cellU0 - (g->planeLeft - sdfSpreadFU) * ku, cellV0 + (g->planeTop + sdfSpreadFU) * kv};
+                    }
+                    quad.glyphTexelOffset = g->slugTexelOffset;
+                    quad.color = textComp.color;
+                    quad.drawCallIndex = drawCallIndex;
+                    frameBuffer->mainViewFamily.worldGlyphQuads.PushBack(quad);
+                    ++quadCount;
+                }
+
+                cursorX += g->advance * scale;
+            }
+        }
+
+        if (quadCount == 0) { continue; }
+
+        auto [matIndexRef, inserted] = frameBuffer->mainViewFamily.activeTextMaterials.TryEmplace(textComp.textMaterialId);
+        if (inserted) {
+            matIndexRef = static_cast<uint32_t>(frameBuffer->mainViewFamily.textMaterials.Size());
+            frameBuffer->mainViewFamily.textMaterials.PushBack(rmat);
+        }
+
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+
+        frameBuffer->mainViewFamily.textInstances.PushBack({
+            .modelIndex = modelIndex,
+            .fontCurveByteOffset = font->curveByteOffset,
+            .textMaterialIndex = matIndexRef,
+            .fontAtlasIndex = bSdf ? static_cast<uint32_t>(font->atlasBindlessHandle.index) : 0u,
+            .sdfGridDims = bSdf ? (fh.sdfCols | (fh.sdfRows << 16)) : 0u,
+            .stableId = stableId,
+        });
+    }
+}
+
+static void MarkAnalyticLightsDirty(entt::registry& registry)
+{
+    for (auto entity : registry.view<Component::AreaLightComponent>()) {
+        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+    }
+    for (auto entity : registry.view<Component::SphereLightComponent>()) {
+        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+    }
+}
+
+void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    entt::registry& registry = state->registry;
+
+    for (const auto& [entity, renderFlags] : registry.view<Component::RenderFlagsComponent>().each()) {
+        if (!renderFlags.Has(Component::RenderFlagsComponent::PROBE_BAKE_INCLUDE)) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+
+    for (const auto& [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
+        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
+    }
+    for (const auto& [entity, light] : registry.view<Component::SphereLightComponent>().each()) {
+        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
+    }
+
+    for (auto entity : registry.view<Component::DynamicPhysicsBodyComponent>()) {
+        registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity);
+    }
+    for (const auto& [entity, body] : registry.view<Component::PhysicsBodyDesc>().each()) {
+        if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    }
+
+    EvaluateAllInstanceRenderStates(state);
+    MarkAnalyticLightsDirty(registry);
+}
+
+void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
+    EvaluateAllInstanceRenderStates(state);
+    MarkAnalyticLightsDirty(state->registry);
+}
+
+void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+
+    state->analyticLightStore.Tick(ctx->currentRenderFrame);
+    state->triLightStore.Tick(ctx->currentRenderFrame);
+
+#ifdef WDEBUG
+    VerifyAnalyticLightStore(state);
+#endif
+
+    const uint32_t analyticWatermark = state->analyticLightStore.GetWatermark();
+    const LightInfo* storeLights = state->analyticLightStore.Lights();
+    vf.analyticLightCount = analyticWatermark;
+    vf.lightRuns.Clear();
+    vf.lightPayload.Clear();
+
+    state->analyticLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+        const size_t base = vf.lightPayload.Size();
+        vf.lightPayload.ResizeUninitialized(base + count);
+        memcpy(vf.lightPayload.Data() + base, storeLights + offset, count * sizeof(LightInfo));
+        vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
+    });
+
+    Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;
+    emissiveDebug.entries.Clear();
+    emissiveDebug.bEntriesTruncated = false;
+    emissiveDebug.dispatchedTriangles = 0;
+    emissiveDebug.reservedInstances = state->triLightStore.GetReservationCount();
+    emissiveDebug.triLightWatermark = state->triLightStore.GetWatermark();
+    emissiveDebug.analyticLightCount = vf.analyticLightCount;
+    const bool bEmissiveCapture = emissiveDebug.bCapture;
+
+    auto recordEmissive = [&](entt::entity entity, uint32_t slot, const Engine::InstanceSource& inst, Engine::EmissiveDispatchState dispatchState) {
+        if (emissiveDebug.entries.Size() >= Engine::EmissiveDebugState::MAX_ENTRIES) {
+            emissiveDebug.bEntriesTruncated = true;
+            return;
+        }
+        const Engine::Material* material = ctx->materialManager->GetMaterial(inst.materialID);
+        emissiveDebug.entries.PushBack(Engine::EmissiveDebugEntry{
+            .entity = entity,
+            .instanceSlot = slot,
+            .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
+            .triangleCount = inst.triLightRange.count,
+            .materialIndex = inst.materialIndex,
+            .modelSlot = inst.modelSlot,
+            .emissiveFactor = material ? material->props.emissiveFactor : glm::vec4(0.0f),
+            .materialID = inst.materialID,
+            .dispatchState = dispatchState,
+        });
+    };
+
+    vf.triLightCount = state->triLightStore.GetWatermark();
+    if (state->debug.restir.bEmissiveTriangleLights) {
+        ZoneScopedN("EmissiveTriangleLights");
+        Engine::InstanceStore& store = state->instanceStore;
+
+        for (const Engine::TriLightStore::Reservation& reservation : state->triLightStore.Reservations()) {
+            if (!store[reservation.instanceSlot].bVisible) { continue; }
+            vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
+                .instanceSlot = reservation.instanceSlot,
+                .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + reservation.range.offset,
+                .triangleCount = reservation.range.count,
+            });
+            emissiveDebug.dispatchedTriangles += reservation.range.count;
+        }
+
+        if (bEmissiveCapture) {
+            for (const auto& [entity, runtime] : state->registry.view<Component::MeshRuntime>().each()) {
+                if (!runtime.range.IsValid()) { continue; }
+                const bool bBakeHidden = state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+                for (uint32_t i = 0; i < runtime.range.count; ++i) {
+                    const uint32_t slot = runtime.range.offset + i;
+                    const Engine::InstanceSource& inst = store[slot];
+                    if (!inst.triLightRange.IsValid()) { continue; }
+                    Engine::EmissiveDispatchState dispatchState;
+                    if (bBakeHidden) { dispatchState = Engine::EmissiveDispatchState::ProbeBakeHidden; }
+                    else if (!inst.bVisible) { dispatchState = Engine::EmissiveDispatchState::EntityHidden; }
+                    else {
+                        bool bDispatched = false;
+                        for (size_t w = 0; w < vf.emissiveTriWork.Size() && !bDispatched; ++w) {
+                            bDispatched = vf.emissiveTriWork[w].instanceSlot == slot;
+                        }
+                        dispatchState = bDispatched ? Engine::EmissiveDispatchState::Dispatched : Engine::EmissiveDispatchState::WorkListFull;
+                    }
+                    recordEmissive(entity, slot, inst, dispatchState);
+                }
+            }
+        }
+    }
+    else {
+        vf.triLightCount = 0;
+    }
+    emissiveDebug.dispatchedGroups = static_cast<uint32_t>(vf.emissiveTriWork.Size());
+    emissiveDebug.triLightCountFed = vf.triLightCount;
+
+    //
+    {
+        ZoneScopedN("DirectionalLight");
+        int32_t bestPriority = INT32_MIN;
+        bool found = false;
+        auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+        for (const auto& [entity, light, transform] : dirView.each()) {
+            if (light.priority > bestPriority) {
+                bestPriority = light.priority;
+                vf.directionalLight.direction = transform.rotation * glm::vec3(0.0f, 0.0f, 1.0f);
+                vf.directionalLight.color = light.color;
+                vf.directionalLight.intensity = light.intensity;
+                vf.directionalLight.angularRadiusDegrees = light.angularRadiusDegrees;
+                vf.directionalLight.bEnabled = true;
+                found = true;
+            }
+        }
+        if (!found) {
+            vf.directionalLight = Core::DirectionalLight{};
+        }
+    }
+}
+
+void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    const auto& config = state->lighting.reflectionProbe;
+    if (!config.bEnabled) { return; }
+
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    vf.bakedDiffuseClampK = config.bakedDiffuseClampK;
+    vf.bReflectionProbeBruteForce = config.bBruteForcePick;
+
+    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
+    for (const auto& [entity, probe, worldTransform] : view.each()) {
+        if (vf.reflectionProbes.IsFull()) { break; }
+        const bool bPreview = state->debug.bProbePreview;
+        if (!probe.bEnabled && !bPreview) { continue; }
+        if (!probe.contentHandle.IsValid()) { continue; }
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+        if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
+
+        glm::vec3 srcTranslation = worldTransform.translation;
+        glm::quat srcRotation = worldTransform.rotation;
+        glm::vec3 srcScale = worldTransform.scale;
+        glm::vec3 srcCaptureOffset = probe.captureOffset;
+        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
+            if (const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+                const Engine::ProbeBakeSnapshot& snap = info->snapshot;
+                srcTranslation = glm::vec3(snap.translation[0], snap.translation[1], snap.translation[2]);
+                srcRotation = glm::quat(snap.rotation[0], snap.rotation[1], snap.rotation[2], snap.rotation[3]);
+                srcScale = glm::vec3(snap.scale[0], snap.scale[1], snap.scale[2]);
+                srcCaptureOffset = glm::vec3(snap.captureOffset[0], snap.captureOffset[1], snap.captureOffset[2]);
+            }
+        }
+
+        const bool bSphere = probe.shape == Component::ReflectionProbeComponent::Shape::Sphere;
+        const glm::vec3 halfExtents = bSphere
+                                          ? glm::vec3(glm::max(glm::max(srcScale.x, srcScale.y), srcScale.z))
+                                          : srcScale;
+        const glm::mat4 world = glm::translate(glm::mat4(1.0f), srcTranslation) * glm::mat4_cast(srcRotation) * glm::scale(glm::mat4(1.0f), halfExtents);
+        const glm::vec3 capturePos = srcTranslation + srcRotation * srcCaptureOffset;
+
+        if (bPreview && !vf.probePreviews.IsFull()) {
+            vf.probePreviewSettings.bActive = true;
+            vf.probePreviewSettings.bIrradiance = state->debug.bProbePreviewIrradiance;
+            vf.probePreviewSettings.roughness = state->debug.probePreviewRoughness;
+            vf.probePreviews.PushBack(Core::ProbePreviewSphere{
+                .cubemapIndex = cubemap->bindlessHandle.index,
+                .position = capturePos,
+            });
+        }
+        if (!probe.bEnabled) { continue; }
+
+        uint32_t flags = 0u;
+        if (bSphere) { flags |= REFLECTION_PROBE_FLAG_SPHERE; }
+        if (probe.bParallax) { flags |= REFLECTION_PROBE_FLAG_PARALLAX; }
+
+        vf.reflectionProbes.PushBack(ReflectionProbeGPU{
+            .worldToLocal = glm::inverse(world),
+            .capturePosition = {capturePos, 0.0f},
+            .cubemapIndex = cubemap->bindlessHandle.index,
+            .fadeMargin = probe.fadeMargin,
+            .flags = flags,
+            .intensity = config.intensity,
+        });
+    }
+}
+
+void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    if (!state->lighting.ddgi.bLocalVolumes) { return; }
+
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    auto view = state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
+    for (const auto& [entity, volume, worldTransform] : view.each()) {
+        if (vf.localDDGIVolumes.IsFull()) { break; }
+        if (!volume.bEnabled) { continue; }
+        vf.localDDGIVolumes.PushBack(Core::LocalDDGIVolume{
+            .corner = Component::LocalDDGIVolumeComponent::WindowCorner(worldTransform.translation, volume.probeSpacing),
+            .probeSpacing = glm::max(volume.probeSpacing, 0.25f),
+            .volumeId = volume.volumeId,
+        });
+    }
+}
+
+void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    if (!state->editor.bShowLightSprites) { return; }
+    Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
+
+    auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : areaView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_AREA_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : sphereView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_POINT_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+    for (auto [entity, light, transform] : dirView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_DIRECTIONAL_LIGHT_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto probeView = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
+    for (auto [entity, probe, transform] : probeView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation + transform.rotation * probe.captureOffset,
+            .pixelSize = 0.5f,
+            .color = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f),
+            .stableId = stableId,
+            .textureIndex = SPRITE_REFLECTION_PROBE_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+
+    auto volumeView = state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
+    for (auto [entity, volume, transform] : volumeView.each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f),
+            .stableId = stableId,
+            .textureIndex = SPRITE_DDGI_VOLUME_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
+}
+
+void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    const Engine::LightDebugDrawMode mode = state->editor.lightDebugDrawMode;
+    const bool bProbeDebugDraw = state->lighting.reflectionProbe.bDebugDraw;
+    const bool bVolumeDebugDraw = state->lighting.ddgi.bDebugDrawVolumes;
+    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw && !bVolumeDebugDraw) { return; }
+
+    Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
+
+    auto shouldDraw = [&](entt::entity entity) {
+        if (mode == Engine::LightDebugDrawMode::None) { return false; }
+        return mode == Engine::LightDebugDrawMode::All || state->editor.selectedEntities.Contains(entity);
+    };
+
+    auto addHemisphereVolume = [&](const Vec3& center, const Vec3& forward, const Vec3& right, const Vec3& up, float radius, const Vec4& color) {
+        if (radius <= 0.0f) { return; }
+
+        constexpr int kRimSegments = 24;
+        constexpr int kArcSegments = 8;
+        constexpr float kWidth = 0.02f;
+        constexpr float kPi = 3.14159265358979323846f;
+        constexpr float twoPi = 2.0f * kPi;
+        constexpr float halfPi = 0.5f * kPi;
+
+        for (int i = 0; i < kRimSegments; ++i) {
+            const float a0 = (static_cast<float>(i) / kRimSegments) * twoPi;
+            const float a1 = (static_cast<float>(i + 1) / kRimSegments) * twoPi;
+            const Vec3 p0 = center + radius * (glm::cos(a0) * right + glm::sin(a0) * up);
+            const Vec3 p1 = center + radius * (glm::cos(a1) * right + glm::sin(a1) * up);
+            DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, color, kWidth});
+        }
+
+        const Vec3 meridians[4] = {right, up, -right, -up};
+        for (const Vec3& dir : meridians) {
+            for (int i = 0; i < kArcSegments; ++i) {
+                const float a0 = (static_cast<float>(i) / kArcSegments) * halfPi;
+                const float a1 = (static_cast<float>(i + 1) / kArcSegments) * halfPi;
+                const Vec3 p0 = center + radius * (glm::cos(a0) * dir + glm::sin(a0) * forward);
+                const Vec3 p1 = center + radius * (glm::cos(a1) * dir + glm::sin(a1) * forward);
+                DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, color, kWidth});
+            }
+        }
+    };
+
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
+        const Vec3 center = transform.translation;
+        const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
+        const Vec3 up = transform.rotation * Vec3(0.0f, 1.0f, 0.0f);
+        const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
+        constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+        constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
+        DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
+        DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
+        addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
+    }
+
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
+        constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
+        constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
+        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, light.radius * transform.scale.x, editColor, 0.02f});
+        if (light.range > 0.0f) {
+            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, light.range, rangeColor, 0.02f});
+        }
+    }
+
+    for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {
+        if (!shouldDraw(entity)) { continue; }
+        const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
+        constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
+        DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
+    }
+
+    for (auto [entity, volume, transform] : state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>().each()) {
+        if (!bVolumeDebugDraw && !shouldDraw(entity)) { continue; }
+        constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
+        const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
+        Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
+    }
+
+    for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
+        if (!bProbeDebugDraw && !shouldDraw(entity)) { continue; }
+
+        const Vec4 volumeColor = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f);
+        constexpr Vec4 captureColor{1.0f, 0.8f, 0.3f, 1.0f};
+        const float lineWidth = state->projectConfig.reflectionProbeLineWidth;
+        if (probe.shape == Component::ReflectionProbeComponent::Shape::Sphere) {
+            const float radius = glm::max(glm::max(transform.scale.x, transform.scale.y), transform.scale.z);
+            DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, radius, volumeColor, lineWidth});
+        }
+        else {
+            DEBUG_ADD_BOX(viewFamily.debugBoxes, {transform.translation, transform.scale, transform.rotation, volumeColor, lineWidth});
+            const Vec3 axes[3] = {transform.rotation * Vec3(1.0f, 0.0f, 0.0f), transform.rotation * Vec3(0.0f, 1.0f, 0.0f), transform.rotation * Vec3(0.0f, 0.0f, 1.0f)};
+            for (int i = 0; i < 3 && state->editor.selectedEntities.Contains(entity); ++i) {
+                const Vec3 u = axes[(i + 1) % 3] * transform.scale[(i + 1) % 3];
+                const Vec3 v = axes[(i + 2) % 3] * transform.scale[(i + 2) % 3];
+                for (int s = 0; s < 2; ++s) {
+                    const Vec3 faceCenter = transform.translation + axes[i] * (s == 0 ? transform.scale[i] : -transform.scale[i]);
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u - v, faceCenter + u + v, volumeColor, lineWidth});
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u + v, faceCenter + u - v, volumeColor, lineWidth});
+                }
+            }
+        }
+        const Vec3 capturePos = transform.translation + transform.rotation * probe.captureOffset;
+        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {capturePos, 0.1f, captureColor, lineWidth});
+
+        // Stale baked probes
+        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
+            const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId});
+            if (info && Component::ReflectionProbeComponent::IsBakeStale(transform, probe, info->snapshot, info->resolution)) {
+                constexpr Vec4 staleColor{1.0f, 0.0f, 0.0f, 1.0f};
+                const Engine::ProbeBakeSnapshot& snap = info->snapshot;
+                const Vec3 snapTranslation{snap.translation[0], snap.translation[1], snap.translation[2]};
+                const Quat snapRotation{snap.rotation[0], snap.rotation[1], snap.rotation[2], snap.rotation[3]};
+                const Vec3 snapScale{snap.scale[0], snap.scale[1], snap.scale[2]};
+                if (probe.shape == Component::ReflectionProbeComponent::Shape::Sphere) {
+                    const float snapRadius = glm::max(glm::max(snapScale.x, snapScale.y), snapScale.z);
+                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {snapTranslation, snapRadius, staleColor, lineWidth});
+                }
+                else {
+                    DEBUG_ADD_BOX(viewFamily.debugBoxes, {snapTranslation, snapScale, snapRotation, staleColor, lineWidth});
+                }
+            }
+        }
+    }
+}
+}

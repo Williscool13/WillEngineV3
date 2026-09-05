@@ -16,6 +16,16 @@ struct EngineContext;
 struct EngineState;
 }
 
+namespace Core
+{
+struct FrameBuffer;
+}
+
+namespace Game
+{
+void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+} // Game
+
 namespace Game::UI
 {
 // ---- State ----

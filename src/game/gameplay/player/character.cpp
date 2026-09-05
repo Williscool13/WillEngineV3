@@ -9,12 +9,13 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 
-#include "game/components/character_components.h"
-#include "game/components/common_components.h"
-#include "game/components/core_components.h"
-#include "game/components/render_components.h"
-#include "game/components/render/procedural_mesh_component.h"
-#include "game/systems/scene_system.h"
+#include "engine/components/character_components.h"
+#include "engine/components/common_components.h"
+#include "engine/components/core_components.h"
+#include "engine/components/render_components.h"
+#include "engine/components/render/procedural_mesh_component.h"
+#include "engine/systems/scene_system.h"
+#include "game/fwd_components.h"
 #include "physics/physics_system.h"
 
 namespace Game
@@ -23,8 +24,8 @@ void Character::Initialize(Engine::EngineState* gameState, Physics::PhysicsSyste
 {
     engineGameState = gameState;
 
-    entity = CreateSceneEntity(engineGameState);
-    auto transformCreated =  CreateComponent<Component::TransformComponent>(engineGameState, entity);
+    entity = Engine::CreateSceneEntity(engineGameState);
+    auto transformCreated =  Engine::CreateComponent<Component::TransformComponent>(engineGameState, entity);
     assert(transformCreated && "Failed to make transform for Character::Initialize.");
 
     auto& transform = engineGameState->registry.get<Component::TransformComponent>(entity);
@@ -50,14 +51,14 @@ void Character::Initialize(Engine::EngineState* gameState, Physics::PhysicsSyste
     JPH::RVec3 joltPos(spawnPosition.x, spawnPosition.y, spawnPosition.z);
     auto* characterPhysics = new JPH::CharacterVirtual(&settings, joltPos, JPH::Quat::sIdentity(), 0, &physicsSystem->GetPhysicsSystem());
 
-    bool createdPhysicsComp = CreateComponent<Component::CharacterPhysicsComponent>(engineGameState, entity);
+    bool createdPhysicsComp = Engine::CreateComponent<Component::CharacterPhysicsComponent>(engineGameState, entity);
     assert(createdPhysicsComp && "Failed to create character physics comp.");
     auto& characterPhysicsComp = engineGameState->registry.get<Component::CharacterPhysicsComponent>(entity);
     characterPhysicsComp.character = characterPhysics;
     characterPhysicsComp.capsuleShape = capsuleShape;
     characterPhysicsComp.standingShape = standingShape;
 
-    bool createdProceduralMesh = CreateComponent<Component::ProceduralMeshComponent>(engineGameState, entity);
+    bool createdProceduralMesh = Engine::CreateComponent<Component::ProceduralMeshComponent>(engineGameState, entity);
     assert(createdProceduralMesh && "Failed to create procedural mesh for Player Character.");
 
     auto& playerMesh = engineGameState->registry.get<Component::ProceduralMeshComponent>(entity);

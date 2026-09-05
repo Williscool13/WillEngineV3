@@ -16,7 +16,7 @@
 #include "asset-load/asset_load_utils.h"
 #include "core/types/math.h"
 #include "core/types/transform.h"
-#include "game/components/core_components.h"
+#include "engine/components/core_components.h"
 #include "render/render_utils.h"
 #include "render/types/render_types.h"
 
@@ -137,13 +137,13 @@ TEST_CASE("ComposeWorldTransform matches matrix composition", "[math][transform]
         const float uniformScale = 0.25f + std::fabs(rng.NextFloat(2.0f));
         const Transform parent{rng.NextVec3(10.0f), rng.NextRotation(), {uniformScale, uniformScale, uniformScale}};
         const Transform local{rng.NextVec3(10.0f), rng.NextRotation(), {1.5f, 1.5f, 1.5f}};
-        const Transform composed = Game::Component::ComposeWorldTransform(parent, local);
+        const Transform composed = Engine::Component::ComposeWorldTransform(parent, local);
         CHECK(NearlyEqual(composed.GetMatrix(), parent.GetMatrix() * local.GetMatrix(), 1e-3f));
     }
 
     const Transform parent{{1.0f, 2.0f, 3.0f}, glm::quat{1.0f, 0.0f, 0.0f, 0.0f}, {2.0f, 3.0f, 4.0f}};
     const Transform local{{-1.0f, 0.5f, 2.0f}, glm::quat{1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 2.0f, 0.5f}};
-    const Transform composed = Game::Component::ComposeWorldTransform(parent, local);
+    const Transform composed = Engine::Component::ComposeWorldTransform(parent, local);
     CHECK(NearlyEqual(composed.GetMatrix(), parent.GetMatrix() * local.GetMatrix()));
 }
 
@@ -154,8 +154,8 @@ TEST_CASE("ComposeLocalFromWorld inverts ComposeWorldTransform", "[math][transfo
         const float uniformScale = 0.25f + std::fabs(rng.NextFloat(2.0f));
         const Transform parent{rng.NextVec3(10.0f), rng.NextRotation(), {uniformScale, uniformScale, uniformScale}};
         const Transform local{rng.NextVec3(10.0f), rng.NextRotation(), {0.5f, 2.0f, 1.25f}};
-        const Transform world = Game::Component::ComposeWorldTransform(parent, local);
-        const Transform recovered = Game::Component::ComposeLocalFromWorld(parent, world);
+        const Transform world = Engine::Component::ComposeWorldTransform(parent, local);
+        const Transform recovered = Engine::Component::ComposeLocalFromWorld(parent, world);
         CHECK(NearlyEqual(recovered.translation, local.translation, 1e-3f));
         CHECK(SameRotation(recovered.rotation, local.rotation, 1e-4f));
         CHECK(NearlyEqual(recovered.scale, local.scale, 1e-3f));

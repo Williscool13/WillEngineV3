@@ -9,17 +9,27 @@
 
 #include "core/time/time_frame.h"
 #include "engine/engine_api.h"
-#include "game/components/core_components.h"
-#include "game/components/gameplay/checkpoint_component.h"
-#include "game/components/gameplay/death_zone_component.h"
-#include "game/components/gameplay/path_mover_component.h"
-#include "game/components/gameplay/rotate_in_place_component.h"
-#include "game/components/physics/physics_components.h"
+#include "game/fwd_components.h"
+#include "game/components/checkpoint_component.h"
+#include "game/components/death_zone_component.h"
+#include "game/components/path_mover_component.h"
+#include "game/components/rotate_in_place_component.h"
+#include "engine/components/physics/physics_components.h"
 #include "game/gameplay/player/physics_player_controller.h"
 #include "game/game_state.h"
 
 namespace Game
 {
+void ConnectGameplayObservers(entt::registry& registry)
+{
+    registry.on_construct<Component::CheckpointComponent>().connect<&Component::CheckpointComponent::OnConstruct>();
+}
+
+void DisconnectGameplayObservers(entt::registry& registry)
+{
+    registry.on_construct<Component::CheckpointComponent>().disconnect<&Component::CheckpointComponent::OnConstruct>();
+}
+
 void UpdatePathMovers(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;

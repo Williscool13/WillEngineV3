@@ -33,9 +33,6 @@ struct OrbitCameraState
     bool initialized{false};
 };
 
-/** Shared reverse-Z, infinite-far perspective view-data builder. */
-Core::ViewData BuildPerspectiveView(glm::vec3 pos, glm::vec3 forward, glm::vec3 up, float aspectRatio, float fovRadians, float nearPlane);
-
 Core::ViewData ComputeOrbitCamera(
     glm::vec3 focusPosition,
     float yaw,
