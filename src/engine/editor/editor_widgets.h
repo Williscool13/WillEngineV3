@@ -29,6 +29,12 @@ bool SliderInt(const char* name, int* v, int vMin, int vMax, const SliderOpts& o
  * The caller still triggers its own save whenever a value changes while autoSave is set.
  */
 bool SaveBar(const char* id, bool* autoSave);
+
+/**
+ * Shared two-level tree renderer for the VRAM report and the GPU pass-timing report: a row per RenderCategoryGroup with its total, expandable to the RenderCategory leaves rolled into it.
+ * leafValues is indexed by RenderCategory bit, groupValues by RenderCategoryGroup.
+ */
+void DrawCategoryGroupTree(const char* tableId, const double* leafValues, const double* groupValues, double total, const char* fmt);
 }
 
 #endif //WILL_ENGINE_EDITOR_WIDGETS_H

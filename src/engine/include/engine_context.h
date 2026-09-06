@@ -172,10 +172,12 @@ struct EngineContext
     Physics::PhysicsSystem* physicsSystem{nullptr};
 
     // Global Fn
-    void (*internStringFn)(uint64_t, const char*);
-    const char* (*resolveStringIdFn)(uint64_t);
+    //   Defined by engine called by game
+    void (*internStringFn)(uint64_t, const char*); // debug only
+    const char* (*resolveStringIdFn)(uint64_t);    // debug only
     Core::InlineFunction<void(bool)> setCursorHiddenFn;
     Core::InlineFunction<void(bool)> setTextInputActiveFn;
+    //   Defined by game called by engine
     Core::InlineFunction<void(EngineContext*, EngineState*)> playStartFn;
     Core::InlineFunction<void(EngineContext*, EngineState*)> playStopFn;
 
@@ -188,6 +190,9 @@ struct EngineContext
     bool bImguiMouseCaptured = false;
     bool bImGuiWantsTextInput = false;
     uint64_t lastKnownStableIdUnderCursor{0};
+    // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded) handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
+    Core::InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
+    Core::InlineFunction<void(uint64_t)> removeImguiTextureFn;
 
     // Clay
     Clay_Context* clayContext{nullptr};
@@ -224,21 +229,13 @@ struct EngineContext
     /** @returns true when a bake has been submitted for assembly and not yet forwarded. */
     bool IsProbeAssemblePending() const { return probeAssemble.bPending.load(std::memory_order_acquire); }
 
-
-    // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded)
-    // handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
-    Core::InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
-    Core::InlineFunction<void(uint64_t)> removeImguiTextureFn;
-
     RescanRequests rescan{};
 
-    /**
-     * Opaque, engine-allocated (persistent, sized via GameGetStateSize) storage for game-defined persistent state -
-     * the engine never interprets it, only owns the memory so it survives game DLL hot-reload. Game code placement-
-     * constructs its own type into it once (GameStartup) and destructs it once (GameShutdown); see GetGameState().
-     */
     void* gameState{nullptr};
     size_t gameStateSize{0};
+    /**
+     * Whether game DLL is loaded
+     */
     bool bGameLoaded{false};
 
     template<typename T>

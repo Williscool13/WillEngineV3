@@ -207,18 +207,9 @@ void AssetGenerator::ThreadMain()
             }
         }
 
-        if (workCounter.load(std::memory_order_acquire) > 0) {
-            workCounter.fetch_sub(1);
-        }
-        else {
+        if (!workSemaphore.TryAcquire()) {
             ZoneScopedN("Idle - Waiting for Work");
-            std::unique_lock lock(wakeMutex);
-            wakeCV.wait(lock, [&] {
-                return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
-            });
-            if (workCounter.load(std::memory_order_acquire) > 0) {
-                workCounter.fetch_sub(1);
-            }
+            workSemaphore.Acquire();
         }
     }
 }

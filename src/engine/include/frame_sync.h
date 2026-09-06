@@ -5,12 +5,11 @@
 #ifndef WILL_ENGINE_FRAME_SYNC_H
 #define WILL_ENGINE_FRAME_SYNC_H
 
-#include <mutex>
-
 #include <imgui/imgui_threaded_rendering.h>
 
 #include "core/containers/array.h"
 #include "core/containers/inline_queue.h"
+#include "core/threading/semaphore.h"
 #include "render/interface/render_interface.h"
 
 namespace Core
@@ -53,19 +52,10 @@ public: // Render Thread
     Array<uint32_t, FRAME_BUFFER_COUNT> renderFrameBuffer{};
 
 
-    void SignalRenderFrame()
-    {
-        {
-            std::lock_guard lock(renderMutex);
-            renderFrames.fetch_add(1);
-        }
-        renderCV.notify_one();
-    }
-
-    std::atomic<uint32_t> gameFrames{3};
-    std::mutex renderMutex;
-    std::condition_variable renderCV;
-    std::atomic<uint32_t> renderFrames{0};
+    /** Tokens for the game thread: render releases one per rendered frame, game acquires one per published snapshot. Seeded to pipeline depth. */
+    Semaphore gameFrames{FRAME_BUFFER_COUNT};
+    /** Tokens for the render thread: game releases one per published snapshot. */
+    Semaphore renderFrames{};
 };
 } // Core
 

@@ -111,18 +111,9 @@ void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadN
             }
         }
 
-        if (channel.workCounter.load(std::memory_order_acquire) > 0) {
-            channel.workCounter.fetch_sub(1);
-        }
-        else {
+        if (!channel.workSemaphore.TryAcquire()) {
             ZoneScopedN("Idle - Waiting for Work");
-            std::unique_lock lock(channel.wakeMutex);
-            channel.wakeCV.wait(lock, [&] {
-                return channel.workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
-            });
-            if (channel.workCounter.load(std::memory_order_acquire) > 0) {
-                channel.workCounter.fetch_sub(1);
-            }
+            channel.workSemaphore.Acquire();
         }
     }
 }

@@ -54,6 +54,7 @@
 #if WILL_EDITOR
 #include "editor/asset-generation/asset_generator.h"
 #include "editor/asset-generation/asset_source_catalog.h"
+#include "editor/editor_widgets.h"
 #endif
 
 #if PROFILER_ENABLED
@@ -377,8 +378,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         Render::VulkanContext::bForceNoREBAR = automation.bForceNoREBAR;
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
         engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync(memoryManager);
-        renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(
-            memoryManager, engineRenderSynchronization, scheduler, window, w, h);
+        renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
     }
 
     //
@@ -473,8 +473,6 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             SDL_SetWindowRelativeMouseMode(window, false);
         }
 
-        // todo game state
-
         engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General(), &memoryManager.Virtual());
         engineState->projectConfig = ReadProjectConfig();
         engineState->automation = automation;
@@ -553,6 +551,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(descriptorSet));
         };
     }
+
     //
     {
         ZoneScopedN("PrepareGameFunctions");
@@ -596,13 +595,14 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         engineState->registry.ctx().emplace<EngineState*>(engineState);
         engineState->registry.ctx().emplace<EngineContext*>(engineContext);
         gameFunctions.gameStartup(engineContext, engineState);
-        CreateDefaultCameras(engineState);
-        ConnectEngineObservers(engineState->registry);
-        LoadUIFont(engineContext, engineState);
-        gameFunctions.gameLoad(engineContext, engineState);
-        LoadStartupScene(engineContext, engineState);
-        LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
     }
+
+    CreateDefaultCameras(engineState);
+    ConnectEngineObservers(engineState->registry);
+    LoadUIFont(engineContext, engineState);
+    gameFunctions.gameLoad(engineContext, engineState);
+    LoadStartupScene(engineContext, engineState);
+    LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
 
 #if WILL_EDITOR
 #if !GAME_STATIC
@@ -674,71 +674,6 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     }
 #endif
 }
-
-#if WILL_EDITOR
-/** Shared two-level tree renderer for both the VRAM report and the GPU pass-timing report: a row per RenderCategoryGroup with its total, expandable to the RenderCategory leaves rolled into it. */
-static void DrawCategoryGroupTree(const char* tableId, const double* leafValues, const double* groupValues, double total, const char* fmt)
-{
-    constexpr ImGuiTableFlags flags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
-    if (!ImGui::BeginTable(tableId, 3, flags)) { return; }
-    ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 80.f);
-    ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
-    ImGui::TableHeadersRow();
-
-    auto Row = [&](bool bTree, const char* name, double value, bool* pOpen) -> bool {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        bool bOpen = false;
-        if (bTree) {
-            bOpen = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
-        }
-        else {
-            ImGui::Indent();
-            ImGui::TextUnformatted(name);
-            ImGui::Unindent();
-        }
-        ImGui::TableSetColumnIndex(1);
-        ImGui::Text(fmt, value);
-        ImGui::TableSetColumnIndex(2);
-        if (total > 0.0) { ImGui::Text("%.1f%%", 100.0 * value / total); }
-        else { ImGui::TextUnformatted("-"); }
-        if (pOpen) { *pOpen = bOpen; }
-        return bOpen;
-    };
-
-    for (uint32_t group = 0; group < Render::RENDER_CATEGORY_GROUP_COUNT; ++group) {
-        if (groupValues[group] <= 0.0) { continue; }
-
-        // Groups with exactly one contributing leaf render as a flat row (no expand arrow needed).
-        uint32_t leafCount = 0;
-        for (uint32_t bit = 0; bit < Render::RENDER_CATEGORY_BIT_COUNT; ++bit) {
-            if (static_cast<uint32_t>(Render::RENDER_CATEGORY_GROUP_OF[bit]) == group && leafValues[bit] > 0.0) {
-                ++leafCount;
-            }
-        }
-
-        if (leafCount <= 1) {
-            Row(false, Render::RENDER_CATEGORY_GROUP_NAMES[group], groupValues[group], nullptr);
-            continue;
-        }
-
-        bool bOpen = false;
-        Row(true, Render::RENDER_CATEGORY_GROUP_NAMES[group], groupValues[group], &bOpen);
-        if (bOpen) {
-            for (uint32_t bit = 0; bit < Render::RENDER_CATEGORY_BIT_COUNT; ++bit) {
-                if (static_cast<uint32_t>(Render::RENDER_CATEGORY_GROUP_OF[bit]) == group && leafValues[bit] > 0.0) {
-                    ImGui::Indent();
-                    Row(false, Render::RENDER_CATEGORY_NAMES[bit], leafValues[bit], nullptr);
-                    ImGui::Unindent();
-                }
-            }
-            ImGui::TreePop();
-        }
-    }
-    ImGui::EndTable();
-}
-#endif
 
 #if WILL_EDITOR
 static uint32_t PendingGenerationCount(const Editor::AssetGenerator* gen, bool bActiveOnly)
@@ -1020,9 +955,11 @@ void WillEngine::EditorImgui()
                             ImGui::TableSetColumnIndex(1);
                             ImGui::TextUnformatted(Core::AllocTagName(r.tag));
                             ImGui::TableSetColumnIndex(2);
-                            if (arena) { ImGui::Text("%.2f", static_cast<float>(arena->GetUsed()) * kToMB); } else { ImGui::TextUnformatted("-"); }
+                            if (arena) { ImGui::Text("%.2f", static_cast<float>(arena->GetUsed()) * kToMB); }
+                            else { ImGui::TextUnformatted("-"); }
                             ImGui::TableSetColumnIndex(3);
-                            if (arena) { ImGui::Text("%.2f", static_cast<float>(arena->GetPeak()) * kToMB); } else { ImGui::TextUnformatted("-"); }
+                            if (arena) { ImGui::Text("%.2f", static_cast<float>(arena->GetPeak()) * kToMB); }
+                            else { ImGui::TextUnformatted("-"); }
                             ImGui::TableSetColumnIndex(4);
                             ImGui::Text("%.0f", static_cast<float>(r.committed) * kToMB);
                             ImGui::TableSetColumnIndex(5);
@@ -1059,7 +996,8 @@ void WillEngine::EditorImgui()
                         ImGui::TableSetColumnIndex(5);
                         ImGui::Text("%u", s.largestFreeRun);
                         ImGui::TableSetColumnIndex(6);
-                        if (pendingFree >= 0) { ImGui::Text("%lld", static_cast<long long>(pendingFree)); } else { ImGui::TextUnformatted("-"); }
+                        if (pendingFree >= 0) { ImGui::Text("%lld", static_cast<long long>(pendingFree)); }
+                        else { ImGui::TextUnformatted("-"); }
                     };
                     if (engineState->instanceStore.IsInitialized()) { storeRow("Instance", engineState->instanceStore.GetStats(), -1); }
                     if (engineState->modelStore.IsInitialized()) { storeRow("Model", engineState->modelStore.GetStats(), -1); }
@@ -1105,11 +1043,11 @@ void WillEngine::EditorImgui()
 
                     ImGui::Spacing();
                     ImGui::Text("Logical (pre-alias, declared demand) -- Total: %.2f MB", fmtMB(vram.logicalTotal));
-                    DrawCategoryGroupTree("##vram_logical_tree", logicalLeafMB, logicalGroupMB, fmtMB(vram.logicalTotal), "%.2f");
+                    Widgets::DrawCategoryGroupTree("##vram_logical_tree", logicalLeafMB, logicalGroupMB, fmtMB(vram.logicalTotal), "%.2f");
 
                     ImGui::Spacing();
                     ImGui::Text("Physical (post-alias, committed) -- Total: %.2f MB", fmtMB(vram.physicalTotal));
-                    DrawCategoryGroupTree("##vram_physical_tree", physicalLeafMB, physicalGroupMB, fmtMB(vram.physicalTotal), "%.2f");
+                    Widgets::DrawCategoryGroupTree("##vram_physical_tree", physicalLeafMB, physicalGroupMB, fmtMB(vram.physicalTotal), "%.2f");
                     if (vram.physicalSharedPoolBytes > 0) {
                         char sharedLabel[272] = "Shared [";
                         int written = static_cast<int>(strlen(sharedLabel));
@@ -1141,7 +1079,7 @@ void WillEngine::EditorImgui()
 
                     ImGui::Spacing();
                     ImGui::Text("GPU Frame Time -- Span: %.3f ms, Pass Sum: %.3f ms", profile.spanMs, profile.totalMs);
-                    DrawCategoryGroupTree("##gpu_profile_tree", leafMs, groupMs, profile.totalMs, "%.3f");
+                    Widgets::DrawCategoryGroupTree("##gpu_profile_tree", leafMs, groupMs, profile.totalMs, "%.3f");
                 }
             }
         } // bMemoryOpen + outer block
@@ -1433,21 +1371,32 @@ void WillEngine::Run()
             }
         }
         //
+        bool bHaveRenderSlot = false;
         {
             ZoneScopedN("FramePacing");
-            constexpr auto FRAME_INTERVAL_FLOOR = std::chrono::microseconds(3000);
-            auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(FRAME_INTERVAL_FLOOR);
             if (engineState->projectConfig.bLimitFps && engineState->projectConfig.frameLimitTarget > 0) {
-                const auto capInterval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
-                if (capInterval > interval) { interval = capInterval; }
-            }
-            nextFrameTime += interval;
-            const auto now = std::chrono::steady_clock::now();
-            if (now < nextFrameTime) {
-                std::this_thread::sleep_until(nextFrameTime);
+                const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
+                nextFrameTime += interval;
+                const auto now = std::chrono::steady_clock::now();
+                if (now < nextFrameTime) {
+                    std::this_thread::sleep_until(nextFrameTime);
+                }
+                else {
+                    nextFrameTime = now;
+                }
             }
             else {
-                nextFrameTime = now;
+                nextFrameTime = std::chrono::steady_clock::now();
+            }
+
+            // Tick when render can take a snapshot or the next fixed physics step is due; the timestep-length fallback keeps housekeeping alive while render stalls.
+            float waitSeconds = Physics::PHYSICS_TIMESTEP;
+            if (engineState->inputContext == InputContext::Gameplay && engineState->physics.bEnabled) {
+                const float untilStep = Physics::PHYSICS_TIMESTEP - engineState->physics.deltaTimeAccumulator;
+                waitSeconds = untilStep > 0.0f ? std::min(untilStep, waitSeconds) : 0.0f;
+            }
+            if (waitSeconds > 0.0f) {
+                bHaveRenderSlot = engineRenderSynchronization->gameFrames.AcquireFor(std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(waitSeconds)));
             }
         }
         while (SDL_PollEvent(&e) != 0) {
@@ -1522,9 +1471,7 @@ void WillEngine::Run()
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();
-        const ResolveUnloadResult unloadCounts = assetManager->ResolveUnloads();
-
-        {
+        const ResolveUnloadResult unloadCounts = assetManager->ResolveUnloads(); {
             constexpr uint32_t SCRATCH_RELEASE_QUIET_FRAMES = 120;
             const uint32_t activeScratchLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()
                                                 + asyncAssetLoadManager->GetActiveTextureLoadCount() + asyncAssetLoadManager->GetActiveCubemapLoadCount()
@@ -1648,9 +1595,9 @@ void WillEngine::Run()
         //
         {
             ZoneScopedN("PrepareRenderFrameData");
-            const bool bRenderReadyToReceive = engineRenderSynchronization->gameFrames.load(std::memory_order_acquire) > 0;
-            if (bRenderReadyToReceive) {
-                engineRenderSynchronization->gameFrames.fetch_sub(1, std::memory_order_release);
+            // Catches a render frame that finished while this game frame was already running after a physics-deadline wake.
+            if (!bHaveRenderSlot) { bHaveRenderSlot = engineRenderSynchronization->gameFrames.TryAcquire(); }
+            if (bHaveRenderSlot) {
 
                 //
                 {
@@ -1753,7 +1700,6 @@ void WillEngine::Run()
                 //
                 {
                     ZoneScopedN("SwapAndPrepare");
-                    // std::swap(currentFrameBuffer, engineRenderSynchronization->stagingFrameBuffer);
                     Core::TimeFrame& handoffTimeFrame = engineRenderSynchronization->GetCurrentFrameBuffer()->timeFrame;
                     handoffTimeFrame = timeManager->GetTime();
                     const Render::RendererStatistics renderStats = renderThread->GetRendererStatistics();
@@ -1768,7 +1714,7 @@ void WillEngine::Run()
                 // Clear the frame buffer to be accumulated until the next render frame
                 engineRenderSynchronization->GetCurrentFrameBuffer()->Reinitialize();
 
-                engineRenderSynchronization->SignalRenderFrame();
+                engineRenderSynchronization->renderFrames.Release();
             }
         }
 

@@ -6,8 +6,6 @@
 #define WILL_ENGINE_GPU_DISPATCHER_H
 
 #include <atomic>
-#include <condition_variable>
-#include <mutex>
 #include <semaphore>
 #include <thread>
 
@@ -15,6 +13,7 @@
 
 #include "core/containers/inline_vector.h"
 #include "core/memory/concurrent_queue_traits.h"
+#include "core/threading/semaphore.h"
 
 namespace enki
 {
@@ -81,18 +80,12 @@ private:
     {
         void Wake()
         {
-            {
-                std::lock_guard lock(wakeMutex);
-                workCounter.fetch_add(1);
-            }
-            wakeCV.notify_one();
+            workSemaphore.Release();
         }
 
         Core::ConcurrentQueue<GPUDispatchRequest> requests;
         std::jthread thread;
-        std::atomic<uint32_t> workCounter{0};
-        std::mutex wakeMutex;
-        std::condition_variable wakeCV;
+        Core::Semaphore workSemaphore;
         VkQueue queue{};
     };
 

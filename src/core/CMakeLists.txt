@@ -114,6 +114,7 @@ add_library(core STATIC
         memory/virtual_memory_manager.cpp
         memory/virtual_memory_manager.h
         memory/virtual_arena.h
+        threading/semaphore.h
 )
 
 target_sources(core PRIVATE extern/tlsf/tlsf.c extern/tlsf/tlsf.h)

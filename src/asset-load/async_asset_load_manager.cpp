@@ -404,24 +404,13 @@ void AsyncAssetLoadManager::ThreadMain()
         }
 
         bool bTrimStaging = false;
-        if (workCounter.load(std::memory_order_acquire) > 0) {
-            workCounter.fetch_sub(1);
-        }
-        else {
+        if (!workSemaphore.TryAcquire()) {
             ZoneScopedN("Idle - Waiting for Work");
-            const bool bDecayArmed = stagingDepot.CanTrim(UPLOAD_STAGING_IDLE_FLOOR);
-            std::unique_lock lock(wakeMutex);
-            auto bHasWork = [this] {
-                return workCounter.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
-            };
-            if (bDecayArmed) {
-                bTrimStaging = !wakeCV.wait_for(lock, std::chrono::seconds(UPLOAD_STAGING_IDLE_TRIM_SECONDS), bHasWork);
+            if (stagingDepot.CanTrim(UPLOAD_STAGING_IDLE_FLOOR)) {
+                bTrimStaging = !workSemaphore.AcquireFor(std::chrono::seconds(UPLOAD_STAGING_IDLE_TRIM_SECONDS));
             }
             else {
-                wakeCV.wait(lock, bHasWork);
-            }
-            if (workCounter.load(std::memory_order_acquire) > 0) {
-                workCounter.fetch_sub(1);
+                workSemaphore.Acquire();
             }
         }
 
@@ -433,11 +422,7 @@ void AsyncAssetLoadManager::ThreadMain()
 
 void AsyncAssetLoadManager::Wake()
 {
-    {
-        std::lock_guard lock(wakeMutex);
-        workCounter.fetch_add(1);
-    }
-    wakeCV.notify_one();
+    workSemaphore.Release();
 }
 
 void AsyncAssetLoadManager::BeginShutdown()

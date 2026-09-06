@@ -137,7 +137,7 @@ void RenderThread::Start()
 void RenderThread::RequestShutdown()
 {
     bShouldExit.store(true, std::memory_order_release);
-    engineRenderSynchronization->SignalRenderFrame();
+    engineRenderSynchronization->renderFrames.Release();
 }
 
 void RenderThread::Join()
@@ -157,13 +157,7 @@ void RenderThread::ThreadMain()
         // Wait for frame
         bool bHasFrame; {
             ZoneScopedN("Idle - WaitForFrame");
-            std::unique_lock lock(engineRenderSynchronization->renderMutex);
-            bHasFrame = engineRenderSynchronization->renderCV.wait_for(lock, std::chrono::milliseconds(1), [&] {
-                return engineRenderSynchronization->renderFrames.load(std::memory_order_acquire) > 0 || bShouldExit.load(std::memory_order_acquire);
-            });
-            if (bHasFrame) {
-                engineRenderSynchronization->renderFrames.fetch_sub(1);
-            }
+            bHasFrame = engineRenderSynchronization->renderFrames.AcquireFor(std::chrono::milliseconds(1));
         }
 
         if (bShouldExit.load()) {
@@ -221,7 +215,7 @@ void RenderThread::ThreadMain()
             }
 
             FrameMark;
-            engineRenderSynchronization->gameFrames.fetch_add(1, std::memory_order_release);
+            engineRenderSynchronization->gameFrames.Release();
         }
 
         gpuDispatcher->DrainGraphics();

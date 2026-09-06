@@ -49,6 +49,15 @@ void DisconnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
+void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->inputContext != InputContext::Gameplay) { return; }
+    if (state->physics.bEnabled) {
+        PhysicsUpdate(ctx, state);
+    }
+    ResolveCollisionEvents(ctx, state);
+}
+
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;

@@ -30,6 +30,7 @@ namespace Engine
 {
 void ConnectPhysicsObservers(entt::registry& registry);
 void DisconnectPhysicsObservers(entt::registry& registry);
+void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);
 void MarkPhysicsTransformsDirty(Engine::EngineState* state);

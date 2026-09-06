@@ -8,6 +8,8 @@
 
 #include "imgui.h"
 
+#include "render/render-graph/render_graph_resources.h"
+
 namespace Engine::Widgets
 {
 constexpr float kInputWidth = 70.0f;
@@ -145,5 +147,67 @@ bool SaveBar(const char* id, bool* autoSave)
     if (ImGui::Checkbox("Auto-save", autoSave)) { save = true; }
     ImGui::PopID();
     return save;
+}
+
+void DrawCategoryGroupTree(const char* tableId, const double* leafValues, const double* groupValues, double total, const char* fmt)
+{
+    constexpr ImGuiTableFlags flags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+    if (!ImGui::BeginTable(tableId, 3, flags)) { return; }
+    ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 80.f);
+    ImGui::TableSetupColumn("% of Total", ImGuiTableColumnFlags_WidthFixed, 80.f);
+    ImGui::TableHeadersRow();
+
+    auto Row = [&](bool bTree, const char* name, double value, bool* pOpen) -> bool {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        bool bOpen = false;
+        if (bTree) {
+            bOpen = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanFullWidth);
+        }
+        else {
+            ImGui::Indent();
+            ImGui::TextUnformatted(name);
+            ImGui::Unindent();
+        }
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(fmt, value);
+        ImGui::TableSetColumnIndex(2);
+        if (total > 0.0) { ImGui::Text("%.1f%%", 100.0 * value / total); }
+        else { ImGui::TextUnformatted("-"); }
+        if (pOpen) { *pOpen = bOpen; }
+        return bOpen;
+    };
+
+    for (uint32_t group = 0; group < Render::RENDER_CATEGORY_GROUP_COUNT; ++group) {
+        if (groupValues[group] <= 0.0) { continue; }
+
+        // Groups with exactly one contributing leaf render as a flat row (no expand arrow needed).
+        uint32_t leafCount = 0;
+        for (uint32_t bit = 0; bit < Render::RENDER_CATEGORY_BIT_COUNT; ++bit) {
+            if (static_cast<uint32_t>(Render::RENDER_CATEGORY_GROUP_OF[bit]) == group && leafValues[bit] > 0.0) {
+                ++leafCount;
+            }
+        }
+
+        if (leafCount <= 1) {
+            Row(false, Render::RENDER_CATEGORY_GROUP_NAMES[group], groupValues[group], nullptr);
+            continue;
+        }
+
+        bool bOpen = false;
+        Row(true, Render::RENDER_CATEGORY_GROUP_NAMES[group], groupValues[group], &bOpen);
+        if (bOpen) {
+            for (uint32_t bit = 0; bit < Render::RENDER_CATEGORY_BIT_COUNT; ++bit) {
+                if (static_cast<uint32_t>(Render::RENDER_CATEGORY_GROUP_OF[bit]) == group && leafValues[bit] > 0.0) {
+                    ImGui::Indent();
+                    Row(false, Render::RENDER_CATEGORY_NAMES[bit], leafValues[bit], nullptr);
+                    ImGui::Unindent();
+                }
+            }
+            ImGui::TreePop();
+        }
+    }
+    ImGui::EndTable();
 }
 }

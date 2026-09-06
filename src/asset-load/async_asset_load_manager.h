@@ -23,6 +23,7 @@
 #include "core/containers/array.h"
 #include "core/memory/concurrent_queue_traits.h"
 #include "core/memory/lock_free_handle_allocator.h"
+#include "core/threading/semaphore.h"
 #include "engine/resources/sampler/sampler.h"
 
 namespace Render
@@ -172,9 +173,7 @@ private:
     std::atomic<bool> bShouldExit{false};
 
     std::jthread thisThread;
-    std::atomic<uint32_t> workCounter{0};
-    std::mutex wakeMutex;
-    std::condition_variable wakeCV;
+    Core::Semaphore workSemaphore;
 
     // Audio loading
     Core::LockFreeHandleAllocator<AudioLoadSlot, AUDIO_JOB_COUNT> audioLoadAllocator;

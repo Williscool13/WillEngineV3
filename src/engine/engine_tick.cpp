@@ -52,12 +52,7 @@ void PreUpdate(EngineContext* ctx, EngineState* state)
     Console::Update(ctx, state);
 #endif
 
-    if (state->inputContext == InputContext::Gameplay) {
-        if (state->physics.bEnabled) {
-            PhysicsUpdate(ctx, state);
-        }
-        ResolveCollisionEvents(ctx, state);
-    }
+    PhysicsPreUpdate(ctx, state);
 }
 
 void PostUpdate(EngineContext* ctx, EngineState* state)

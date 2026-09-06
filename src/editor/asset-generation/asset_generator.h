@@ -2,14 +2,13 @@
 #define WILL_ENGINE_ASSET_GENERATOR_H
 
 #include <atomic>
-#include <mutex>
-#include <condition_variable>
 #include <random>
 #include <semaphore>
 #include <thread>
 
 #include "core/containers/inline_path.h"
 #include "core/memory/concurrent_queue_traits.h"
+#include "core/threading/semaphore.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/core/model_id.h"
 #include "engine/core/texture_id.h"
@@ -239,11 +238,7 @@ public:
 
     void Wake()
     {
-        {
-            std::lock_guard lock(wakeMutex);
-            workCounter.fetch_add(1);
-        }
-        wakeCV.notify_one();
+        workSemaphore.Release();
     }
 
     bool GetFastMode() const { return bFastMode.load(std::memory_order_relaxed); }
@@ -318,9 +313,7 @@ private:
 
     std::atomic<bool> bFastMode{true};
     std::atomic<bool> bShouldExit{false};
-    std::atomic<uint32_t> workCounter{0};
-    std::mutex wakeMutex;
-    std::condition_variable wakeCV;
+    Core::Semaphore workSemaphore;
     std::jthread thisThread;
 
 
