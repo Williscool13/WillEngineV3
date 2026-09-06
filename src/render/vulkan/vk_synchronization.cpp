@@ -33,6 +33,7 @@ RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noex
     asyncComputeCommandPool = other.asyncComputeCommandPool;
     commandBuffer = other.commandBuffer;
     asyncComputeCommandBuffer = other.asyncComputeCommandBuffer;
+    presentCommandBuffer = other.presentCommandBuffer;
     renderFence = other.renderFence;
     swapchainSemaphore = other.swapchainSemaphore;
     renderSemaphore = other.renderSemaphore;
@@ -42,6 +43,7 @@ RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noex
     other.asyncComputeCommandPool = VK_NULL_HANDLE;
     other.commandBuffer = VK_NULL_HANDLE;
     other.asyncComputeCommandBuffer = VK_NULL_HANDLE;
+    other.presentCommandBuffer = VK_NULL_HANDLE;
     other.renderFence = VK_NULL_HANDLE;
     other.swapchainSemaphore = VK_NULL_HANDLE;
     other.renderSemaphore = VK_NULL_HANDLE;
@@ -63,6 +65,7 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
         asyncComputeCommandPool = other.asyncComputeCommandPool;
         commandBuffer = other.commandBuffer;
         asyncComputeCommandBuffer = other.asyncComputeCommandBuffer;
+        presentCommandBuffer = other.presentCommandBuffer;
         renderFence = other.renderFence;
         swapchainSemaphore = other.swapchainSemaphore;
         renderSemaphore = other.renderSemaphore;
@@ -72,6 +75,7 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
         other.asyncComputeCommandPool = VK_NULL_HANDLE;
         other.commandBuffer = VK_NULL_HANDLE;
         other.asyncComputeCommandBuffer = VK_NULL_HANDLE;
+        other.presentCommandBuffer = VK_NULL_HANDLE;
         other.renderFence = VK_NULL_HANDLE;
         other.swapchainSemaphore = VK_NULL_HANDLE;
         other.renderSemaphore = VK_NULL_HANDLE;
@@ -88,17 +92,21 @@ void RenderSynchronization::Initialize()
         VkCommandPoolCreateInfo asyncPoolCreateInfo = VkHelpers::CommandPoolCreateInfo(context->computeQueueFamily);
         VK_CHECK(vkCreateCommandPool(context->device, &asyncPoolCreateInfo, context->HostAllocCallbacks(), &asyncComputeCommandPool));
 
-        VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(1, commandPool);
-        VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, &commandBuffer));
-        VkCommandBufferAllocateInfo asyncAllocateInfo = VkHelpers::CommandBufferAllocateInfo(1, asyncComputeCommandPool);
-        VK_CHECK(vkAllocateCommandBuffers(context->device, &asyncAllocateInfo, &asyncComputeCommandBuffer));
-    }
-    else {
         VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(2, commandPool);
         VkCommandBuffer commandBuffers[2]{};
         VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, commandBuffers));
         commandBuffer = commandBuffers[0];
+        presentCommandBuffer = commandBuffers[1];
+        VkCommandBufferAllocateInfo asyncAllocateInfo = VkHelpers::CommandBufferAllocateInfo(1, asyncComputeCommandPool);
+        VK_CHECK(vkAllocateCommandBuffers(context->device, &asyncAllocateInfo, &asyncComputeCommandBuffer));
+    }
+    else {
+        VkCommandBufferAllocateInfo commandBufferAllocateInfo = VkHelpers::CommandBufferAllocateInfo(3, commandPool);
+        VkCommandBuffer commandBuffers[3]{};
+        VK_CHECK(vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, commandBuffers));
+        commandBuffer = commandBuffers[0];
         asyncComputeCommandBuffer = commandBuffers[1];
+        presentCommandBuffer = commandBuffers[2];
     }
 
     const VkFenceCreateInfo fenceCreateInfo = VkHelpers::FenceCreateInfo();

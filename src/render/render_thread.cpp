@@ -305,12 +305,12 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     vkCmdBeginDebugUtilsLabelEXT(renderSync.commandBuffer, &frameLabel);
 #endif
 
-    RenderResponse res;
+    RenderResponseCode res;
     //
     {
         TracyVkZone(context->tracyContext, renderSync.commandBuffer, "Frame");
         ProcessAcquisitions(renderSync.commandBuffer, frameBuffer.imageAcquireOperations);
-        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.asyncComputeCommandBuffer, renderSync.swapchainSemaphore, frameBuffer, imguiSnapshot);
+        res = RecordFrame(currentFrameIndex, renderSync.commandBuffer, renderSync.asyncComputeCommandBuffer, frameBuffer, imguiSnapshot);
     }
     // ends if not already ended
     pipelineStatsQuery.End(renderSync.commandBuffer, currentFrameIndex);
@@ -337,7 +337,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     const VkPipelineStageFlags2 crossCutMask = renderGraph->GetCrossCutWaitStageMask();
     const VkPipelineStageFlags2 timelineWaitStageMask = crossCutMask != 0 ? crossCutMask : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 
-    switch (res.code) {
+    switch (res) {
         case RENDER_REQUESTED_RECREATE:
         {
             VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
@@ -346,30 +346,12 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
             VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
         }
         break;
-        case SWAPCHAIN_OUTDATED:
-        {
-            VkCommandBufferSubmitInfo cmdInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-            VkSemaphoreSubmitInfo waitInfos[2] = {
-                VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT),
-                VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, timelineWaitStageMask),
-            };
-            VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdInfo, nullptr, nullptr);
-            submitInfo.waitSemaphoreInfoCount = 2;
-            submitInfo.pWaitSemaphoreInfos = waitInfos;
-            VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
-            bRenderRequestsRecreate = true;
-        }
-        break;
         case SUCCESS:
         {
 #ifdef WDEBUG
             if (renderGraph->IsFrameCorrupted()) {
                 LOG_CRITICAL(Renderer, "[RDG] Frame recorded with undeclared resource accesses (see errors above); dropping submission and requesting engine shutdown");
-                VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
                 VkSubmitInfo2 submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
-                submitInfo.waitSemaphoreInfoCount = 1;
-                submitInfo.pWaitSemaphoreInfos = &swapchainSemaphoreWaitInfo;
-                VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
                 VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
                 bRenderRequestsShutdown.store(true, std::memory_order_relaxed);
                 break;
@@ -377,23 +359,51 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
 #endif
             //
             {
-                ZoneScopedN("QueueSubmit");
+                ZoneScopedN("MainSubmit");
                 VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.commandBuffer);
-                VkSemaphoreSubmitInfo waitInfos[2] = {
-                    VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT),
-                    VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, timelineWaitStageMask),
-                };
+                VkSemaphoreSubmitInfo timelineWaitInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, timelineWaitStageMask);
+                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &timelineWaitInfo, nullptr);
+                VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
+            }
+
+            uint32_t swapchainImageIndex;
+            //
+            {
+                ZoneScopedN("AcquireSwapchainImage");
+                const VkResult e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, renderSync.swapchainSemaphore, nullptr, &swapchainImageIndex);
+                if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
+                    SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
+                    VkSemaphoreSubmitInfo swapchainSemaphoreWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+                    VkSubmitInfo2 submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+                    submitInfo.waitSemaphoreInfoCount = 1;
+                    submitInfo.pWaitSemaphoreInfos = &swapchainSemaphoreWaitInfo;
+                    VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
+                    bRenderRequestsRecreate = true;
+                    break;
+                }
+            }
+
+            //
+            {
+                ZoneScopedN("PresentRecord");
+                VK_CHECK(vkResetCommandBuffer(renderSync.presentCommandBuffer, 0));
+                VK_CHECK(vkBeginCommandBuffer(renderSync.presentCommandBuffer, &beginInfo));
+                RecordPresent(renderSync.presentCommandBuffer, swapchainImageIndex, frameBuffer, imguiSnapshot);
+                VK_CHECK(vkEndCommandBuffer(renderSync.presentCommandBuffer));
+            }
+            //
+            {
+                ZoneScopedN("QueueSubmit");
+                VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.presentCommandBuffer);
+                VkSemaphoreSubmitInfo swapchainWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
                 VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
-                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, nullptr, &renderSemaphoreSignalInfo);
-                submitInfo.waitSemaphoreInfoCount = 2;
-                submitInfo.pWaitSemaphoreInfos = waitInfos;
-                VK_CHECK(vkResetFences(context->device, 1, &renderSync.renderFence));
+                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainWaitInfo, &renderSemaphoreSignalInfo);
                 VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
             }
             //
             {
                 ZoneScopedN("QueuePresent");
-                VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &res.swapchainIndex);
+                VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
                 presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
                 const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 
@@ -407,24 +417,12 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     }
 }
 
-RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
+RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
 {
     ZoneScoped;
 
     if (bRenderRequestsRecreate) {
-        return {RENDER_REQUESTED_RECREATE, ~0u};
-    }
-
-    uint32_t swapchainImageIndex;
-    //
-    {
-        VkResult e;
-        ZoneScopedN("AcquireSwapchainImage");
-        e = vkAcquireNextImageKHR(context->device, swapchain->handle, UINT64_MAX, swapchainSemaphore, nullptr, &swapchainImageIndex);
-        if (e == VK_ERROR_OUT_OF_DATE_KHR || e == VK_SUBOPTIMAL_KHR) {
-            SPDLOG_TRACE("[RenderThread::Render] Swapchain acquire failed ({})", string_VkResult(e));
-            return {SWAPCHAIN_OUTDATED, ~0u};
-        }
+        return RENDER_REQUESTED_RECREATE;
     }
 
     if (frameBuffer.cacheReset != Core::RenderCacheReset::None) {
@@ -455,9 +453,6 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     Core::Array<uint32_t, 2> postAaExtent = renderExtent;
 
     uint32_t debugReservoirCheckerboardField = 0u;
-
-    VkImage currentSwapchainImage = swapchain->swapchainImages[swapchainImageIndex];
-    VkImageView currentSwapchainImageView = swapchain->swapchainImageViews[swapchainImageIndex];
     ReadbackStruct* readbackData = renderGraph->GetReadbackData();
     frameBuffer.stableIdUnderCursor = readbackData->selectedStableId;
     statisticsManager.scratch.visibleMeshletCount = readbackData->meshletCount;
@@ -1169,60 +1164,11 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
 #endif
     }
 
-    renderGraph->ImportTexture("swapchain_image"_sid, currentSwapchainImage, currentSwapchainImageView, TextureInfo{swapchain->format, swapchain->extent.width, swapchain->extent.height, 1},
-                               swapchain->usages,
-                               VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_IMAGE_LAYOUT_UNDEFINED, true);
-
-    auto& blitPass = renderGraph->AddPass("Blit To Swapchain"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
-    blitPass.ReadBlitImage(targets.colorOutput);
-    blitPass.WriteBlitImage("swapchain_image"_sid);
-    blitPass.Execute([&, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
-        VkImage drawImage = renderGraph->GetImageHandle(colorOutput);
-
-        Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
-        Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
-
-        VkImageBlit2 blitRegion{};
-        blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.srcSubresource.layerCount = 1;
-        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blitRegion.dstSubresource.layerCount = 1;
-        blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = {static_cast<int32_t>(postAaExtent[0]), static_cast<int32_t>(postAaExtent[1]), 1};
-        blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
-        blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
-
-        VkBlitImageInfo2 blitInfo{};
-        blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-        blitInfo.srcImage = drawImage;
-        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = currentSwapchainImage;
-        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        blitInfo.regionCount = 1;
-        blitInfo.pRegions = &blitRegion;
-        blitInfo.filter = VK_FILTER_LINEAR;
-
-        vkCmdBlitImage2(_cmd, &blitInfo);
-    });
-
-    if (frameBuffer.bDrawImgui) {
-        auto& imguiEditorPass = renderGraph->AddPass("Imgui Draw"_sid, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::UI);
-        imguiEditorPass.WriteColorAttachment("swapchain_image"_sid);
-        imguiEditorPass.Execute([&, frameIndex](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
-            // Try to end before imgui draws so they're not included in statistics
-            pipelineStatsQuery.End(_cmd, frameIndex);
-
-            const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(renderGraph->GetImageViewHandle("swapchain_image"_sid), nullptr,
-                                                                                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-            const ResourceDimensions& dims = renderGraph->GetImageDimensions("swapchain_image"_sid);
-            const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({dims.width, dims.height}, &imguiAttachment, nullptr);
-            vkCmdBeginRendering(_cmd, &renderInfo);
-            ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, _cmd);
-
-            vkCmdEndRendering(_cmd);
-        });
-    }
+    // Leaves the color output in TRANSFER_SRC for RecordPresent, which blits it after the swapchain acquire.
+    presentSourceTexture = targets.colorOutput;
+    auto& exportPass = renderGraph->AddPass("Export Color Output"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
+    exportPass.ReadBlitImage(targets.colorOutput);
+    exportPass.Execute([](VkCommandBuffer, VulkanContext*, RenderGraph&) {});
 
     if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
         screenCapture->PrepareScreenshotResources(postAaExtent[0], postAaExtent[1]);
@@ -1363,13 +1309,92 @@ RenderThread::RenderResponse RenderThread::RecordFrame(uint32_t frameIndex, VkCo
     } {
         ZoneScopedN("RenderGraphExecute");
         renderGraph->Execute(asyncCmd, cmd);
-        renderGraph->PrepareSwapchain(cmd, "swapchain_image"_sid);
     }
 
 #if WILL_EDITOR
     resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState("debug_readback_buffer"_sid));
 #endif
-    return {SUCCESS, swapchainImageIndex};
+    return SUCCESS;
+}
+
+void RenderThread::RecordPresent(VkCommandBuffer cmd, uint32_t swapchainImageIndex, const Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
+{
+    ZoneScoped;
+#ifdef WDEBUG
+    Core::InlineString<32> presentLabelName = Core::InlineString<32>::Format("Present F%llu", static_cast<unsigned long long>(frameNumber));
+    VkDebugUtilsLabelEXT presentLabel = {.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, .pLabelName = presentLabelName.c_str()};
+    vkCmdBeginDebugUtilsLabelEXT(cmd, &presentLabel);
+#endif
+
+    const VkImage swapchainImage = swapchain->swapchainImages[swapchainImageIndex];
+    const VkImageSubresourceRange colorRange = VkHelpers::SubresourceRange(VK_IMAGE_ASPECT_COLOR_BIT);
+    VkDependencyInfo depInfo{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+    depInfo.imageMemoryBarrierCount = 1;
+
+    VkImageMemoryBarrier2 toTransferDst = VkHelpers::ImageMemoryBarrier(swapchainImage, colorRange,
+                                                                        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+                                                                        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    depInfo.pImageMemoryBarriers = &toTransferDst;
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+    const ResourceDimensions& srcDims = renderGraph->GetImageDimensions(presentSourceTexture);
+    const Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
+    const Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
+
+    VkImageBlit2 blitRegion{};
+    blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
+    blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blitRegion.srcSubresource.layerCount = 1;
+    blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    blitRegion.dstSubresource.layerCount = 1;
+    blitRegion.srcOffsets[0] = {0, 0, 0};
+    blitRegion.srcOffsets[1] = {static_cast<int32_t>(srcDims.width), static_cast<int32_t>(srcDims.height), 1};
+    blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
+    blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
+
+    VkBlitImageInfo2 blitInfo{};
+    blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
+    blitInfo.srcImage = renderGraph->GetImageHandle(presentSourceTexture);
+    blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    blitInfo.dstImage = swapchainImage;
+    blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    blitInfo.regionCount = 1;
+    blitInfo.pRegions = &blitRegion;
+    blitInfo.filter = VK_FILTER_LINEAR;
+    vkCmdBlitImage2(cmd, &blitInfo);
+
+    VkPipelineStageFlags2 lastStage = VK_PIPELINE_STAGE_2_BLIT_BIT;
+    VkAccessFlags2 lastAccess = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    VkImageLayout lastLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+    if (frameBuffer.bDrawImgui) {
+        VkImageMemoryBarrier2 toColorAttachment = VkHelpers::ImageMemoryBarrier(swapchainImage, colorRange,
+                                                                                lastStage, lastAccess, lastLayout,
+                                                                                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        depInfo.pImageMemoryBarriers = &toColorAttachment;
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+
+        const VkRenderingAttachmentInfo imguiAttachment = VkHelpers::RenderingAttachmentInfo(swapchain->swapchainImageViews[swapchainImageIndex], nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo(swapchain->extent, &imguiAttachment, nullptr);
+        vkCmdBeginRendering(cmd, &renderInfo);
+        ImGui_ImplVulkan_RenderDrawData(&imguiSnapshot.DrawData, cmd);
+        vkCmdEndRendering(cmd);
+
+        lastStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        lastAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        lastLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    VkImageMemoryBarrier2 toPresent = VkHelpers::ImageMemoryBarrier(swapchainImage, colorRange,
+                                                                    lastStage, lastAccess, lastLayout,
+                                                                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    depInfo.pImageMemoryBarriers = &toPresent;
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+
+#ifdef WDEBUG
+    vkCmdEndDebugUtilsLabelEXT(cmd);
+#endif
 }
 
 void RenderThread::ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations)

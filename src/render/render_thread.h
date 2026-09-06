@@ -80,13 +80,6 @@ class RenderThread
     {
         SUCCESS,
         RENDER_REQUESTED_RECREATE,
-        SWAPCHAIN_OUTDATED
-    };
-
-    struct RenderResponse
-    {
-        RenderResponseCode code;
-        uint32_t swapchainIndex; // meaningless if code is not success
     };
 
 public:
@@ -111,7 +104,9 @@ public:
 
     void RenderFrame(uint32_t currentFrameIndex, RenderSynchronization& renderSync, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
-    RenderResponse RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, VkSemaphore swapchainSemaphore, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
+    RenderResponseCode RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
+
+    void RecordPresent(VkCommandBuffer cmd, uint32_t swapchainImageIndex, const Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot);
 
     void ProcessAcquisitions(VkCommandBuffer cmd, Core::Span<Core::ImageAcquireOperation> imageAcquireOperations);
 
@@ -212,6 +207,7 @@ private:
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
+    StringID presentSourceTexture{};
 
 #if WILL_EDITOR
     struct DebugCursorReadback

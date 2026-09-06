@@ -21,6 +21,8 @@ inline constexpr VkColorSpaceKHR SWAPCHAIN_SDR_COLORSPACE = VK_COLOR_SPACE_SRGB_
 
 // Swapchain - Present
 inline constexpr VkPresentModeKHR SWAPCHAIN_PRESENT_MODE = VK_PRESENT_MODE_FIFO_KHR;
+inline constexpr uint32_t SWAPCHAIN_EXTRA_IMAGES = 1;
+inline constexpr uint32_t SWAPCHAIN_MAX_IMAGES = 8;
 
 // Render targets
 inline constexpr VkFormat COLOR_ATTACHMENT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;

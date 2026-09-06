@@ -37,8 +37,8 @@ struct Swapchain
     VkExtent2D extent{};
     VkImageUsageFlags usages{};
     uint32_t imageCount{};
-    Core::InlineVector<VkImage, Core::FRAME_BUFFER_COUNT> swapchainImages{};
-    Core::InlineVector<VkImageView, Core::FRAME_BUFFER_COUNT> swapchainImageViews{};
+    Core::InlineVector<VkImage, SWAPCHAIN_MAX_IMAGES> swapchainImages{};
+    Core::InlineVector<VkImageView, SWAPCHAIN_MAX_IMAGES> swapchainImageViews{};
 
 private:
     const VulkanContext* context;

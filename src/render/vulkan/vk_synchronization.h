@@ -20,6 +20,7 @@ struct RenderSynchronization
     VkCommandPool asyncComputeCommandPool{};
     VkCommandBuffer commandBuffer{};
     VkCommandBuffer asyncComputeCommandBuffer{};
+    VkCommandBuffer presentCommandBuffer{};
     VkFence renderFence{};
     VkSemaphore swapchainSemaphore{};
     VkSemaphore renderSemaphore{};

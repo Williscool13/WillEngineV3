@@ -82,8 +82,7 @@ void Swapchain::Create(uint32_t width, uint32_t height)
         selectedExtent.height = std::clamp(height, caps.minImageExtent.height, caps.maxImageExtent.height);
     }
 
-    // Triple buffer, respecting surface limits
-    uint32_t selectedImageCount = std::max(caps.minImageCount, Core::FRAME_BUFFER_COUNT);
+    uint32_t selectedImageCount = std::max(caps.minImageCount, Core::FRAME_BUFFER_COUNT + SWAPCHAIN_EXTRA_IMAGES);
     if (caps.maxImageCount > 0) {
         selectedImageCount = std::min(selectedImageCount, caps.maxImageCount);
     }
@@ -115,17 +114,17 @@ void Swapchain::Create(uint32_t width, uint32_t height)
 
     uint32_t actualImageCount = 0;
     vkGetSwapchainImagesKHR(context->device, handle, &actualImageCount, nullptr);
-    assert(actualImageCount >= Core::FRAME_BUFFER_COUNT);
-    Core::Array<VkImage, Core::FRAME_BUFFER_COUNT + 2> images;
+    assert(actualImageCount >= Core::FRAME_BUFFER_COUNT && actualImageCount <= SWAPCHAIN_MAX_IMAGES);
+    Core::Array<VkImage, SWAPCHAIN_MAX_IMAGES> images;
     vkGetSwapchainImagesKHR(context->device, handle, &actualImageCount, images.Data());
 
     format = selectedFormat.format;
     colorSpace = selectedFormat.colorSpace;
     extent = selectedExtent;
     usages = createInfo.imageUsage;
-    imageCount = Core::FRAME_BUFFER_COUNT;
+    imageCount = actualImageCount;
 
-    for (uint32_t i = 0; i < Core::FRAME_BUFFER_COUNT; i++) {
+    for (uint32_t i = 0; i < actualImageCount; i++) {
         swapchainImages.PushBack(images[i]);
 
         VkImageViewCreateInfo viewInfo{};
