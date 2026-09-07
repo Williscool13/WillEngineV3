@@ -23,7 +23,6 @@ struct RenderSynchronization
     VkCommandBuffer presentCommandBuffer{};
     VkFence renderFence{};
     VkSemaphore swapchainSemaphore{};
-    VkSemaphore renderSemaphore{};
 
     RenderSynchronization() = default;
     explicit RenderSynchronization(VulkanContext* context);

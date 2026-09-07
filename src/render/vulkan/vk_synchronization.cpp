@@ -22,7 +22,6 @@ RenderSynchronization::~RenderSynchronization()
         vkDestroyCommandPool(context->device, asyncComputeCommandPool, context->HostAllocCallbacks());
         vkDestroyFence(context->device, renderFence, context->HostAllocCallbacks());
         vkDestroySemaphore(context->device, swapchainSemaphore, context->HostAllocCallbacks());
-        vkDestroySemaphore(context->device, renderSemaphore, context->HostAllocCallbacks());
     }
 }
 
@@ -36,7 +35,6 @@ RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noex
     presentCommandBuffer = other.presentCommandBuffer;
     renderFence = other.renderFence;
     swapchainSemaphore = other.swapchainSemaphore;
-    renderSemaphore = other.renderSemaphore;
 
     other.context = nullptr;
     other.commandPool = VK_NULL_HANDLE;
@@ -46,7 +44,6 @@ RenderSynchronization::RenderSynchronization(RenderSynchronization&& other) noex
     other.presentCommandBuffer = VK_NULL_HANDLE;
     other.renderFence = VK_NULL_HANDLE;
     other.swapchainSemaphore = VK_NULL_HANDLE;
-    other.renderSemaphore = VK_NULL_HANDLE;
 }
 
 RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& other) noexcept
@@ -57,7 +54,6 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
             vkDestroyCommandPool(context->device, asyncComputeCommandPool, context->HostAllocCallbacks());
             vkDestroyFence(context->device, renderFence, context->HostAllocCallbacks());
             vkDestroySemaphore(context->device, swapchainSemaphore, context->HostAllocCallbacks());
-            vkDestroySemaphore(context->device, renderSemaphore, context->HostAllocCallbacks());
         }
 
         context = other.context;
@@ -68,7 +64,6 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
         presentCommandBuffer = other.presentCommandBuffer;
         renderFence = other.renderFence;
         swapchainSemaphore = other.swapchainSemaphore;
-        renderSemaphore = other.renderSemaphore;
 
         other.context = nullptr;
         other.commandPool = VK_NULL_HANDLE;
@@ -78,7 +73,6 @@ RenderSynchronization& RenderSynchronization::operator=(RenderSynchronization&& 
         other.presentCommandBuffer = VK_NULL_HANDLE;
         other.renderFence = VK_NULL_HANDLE;
         other.swapchainSemaphore = VK_NULL_HANDLE;
-        other.renderSemaphore = VK_NULL_HANDLE;
     }
     return *this;
 }
@@ -113,19 +107,16 @@ void RenderSynchronization::Initialize()
     const VkSemaphoreCreateInfo semaphoreCreateInfo = VkHelpers::SemaphoreCreateInfo();
     VK_CHECK(vkCreateFence(context->device, &fenceCreateInfo, context->HostAllocCallbacks(), &renderFence));
     VK_CHECK(vkCreateSemaphore(context->device, &semaphoreCreateInfo, context->HostAllocCallbacks(), &swapchainSemaphore));
-    VK_CHECK(vkCreateSemaphore(context->device, &semaphoreCreateInfo, context->HostAllocCallbacks(), &renderSemaphore));
 }
 
 void RenderSynchronization::RecreateSynchronization()
 {
     vkDestroyFence(context->device, renderFence, context->HostAllocCallbacks());
     vkDestroySemaphore(context->device, swapchainSemaphore, context->HostAllocCallbacks());
-    vkDestroySemaphore(context->device, renderSemaphore, context->HostAllocCallbacks());
 
     const VkFenceCreateInfo fenceCreateInfo = VkHelpers::FenceCreateInfo();
     const VkSemaphoreCreateInfo semaphoreCreateInfo = VkHelpers::SemaphoreCreateInfo();
     VK_CHECK(vkCreateFence(context->device, &fenceCreateInfo, context->HostAllocCallbacks(), &renderFence));
     VK_CHECK(vkCreateSemaphore(context->device, &semaphoreCreateInfo, context->HostAllocCallbacks(), &swapchainSemaphore));
-    VK_CHECK(vkCreateSemaphore(context->device, &semaphoreCreateInfo, context->HostAllocCallbacks(), &renderSemaphore));
 }
 } // Renderer

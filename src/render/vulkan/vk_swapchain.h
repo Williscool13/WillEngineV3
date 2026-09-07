@@ -39,6 +39,7 @@ struct Swapchain
     uint32_t imageCount{};
     Core::InlineVector<VkImage, SWAPCHAIN_MAX_IMAGES> swapchainImages{};
     Core::InlineVector<VkImageView, SWAPCHAIN_MAX_IMAGES> swapchainImageViews{};
+    Core::InlineVector<VkSemaphore, SWAPCHAIN_MAX_IMAGES> presentSemaphores{};
 
 private:
     const VulkanContext* context;

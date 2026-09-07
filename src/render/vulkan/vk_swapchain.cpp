@@ -27,6 +27,9 @@ Swapchain::~Swapchain()
     for (VkImageView swapchainImageView : swapchainImageViews) {
         vkDestroyImageView(context->device, swapchainImageView, context->HostAllocCallbacks());
     }
+    for (VkSemaphore semaphore : presentSemaphores) {
+        vkDestroySemaphore(context->device, semaphore, context->HostAllocCallbacks());
+    }
 }
 
 void Swapchain::Create(uint32_t width, uint32_t height)
@@ -145,6 +148,11 @@ void Swapchain::Create(uint32_t width, uint32_t height)
         VkImageView view = VK_NULL_HANDLE;
         vkCreateImageView(context->device, &viewInfo, context->HostAllocCallbacks(), &view);
         swapchainImageViews.PushBack(view);
+
+        const VkSemaphoreCreateInfo semaphoreInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        VkSemaphore semaphore = VK_NULL_HANDLE;
+        vkCreateSemaphore(context->device, &semaphoreInfo, context->HostAllocCallbacks(), &semaphore);
+        presentSemaphores.PushBack(semaphore);
     }
 }
 
@@ -155,9 +163,13 @@ void Swapchain::Recreate(uint32_t width, uint32_t height)
     for (const auto swapchainImage : swapchainImageViews) {
         vkDestroyImageView(context->device, swapchainImage, context->HostAllocCallbacks());
     }
+    for (VkSemaphore semaphore : presentSemaphores) {
+        vkDestroySemaphore(context->device, semaphore, context->HostAllocCallbacks());
+    }
 
     swapchainImages.Clear();
     swapchainImageViews.Clear();
+    presentSemaphores.Clear();
     Create(width, height);
     Dump();
 }

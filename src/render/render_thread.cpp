@@ -396,15 +396,15 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
                 ZoneScopedN("QueueSubmit");
                 VkCommandBufferSubmitInfo commandBufferSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.presentCommandBuffer);
                 VkSemaphoreSubmitInfo swapchainWaitInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.swapchainSemaphore, VK_PIPELINE_STAGE_2_BLIT_BIT);
-                VkSemaphoreSubmitInfo renderSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(renderSync.renderSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
-                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainWaitInfo, &renderSemaphoreSignalInfo);
+                VkSemaphoreSubmitInfo presentSemaphoreSignalInfo = VkHelpers::SemaphoreSubmitInfo(swapchain->presentSemaphores[swapchainImageIndex], VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+                VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&commandBufferSubmitInfo, &swapchainWaitInfo, &presentSemaphoreSignalInfo);
                 VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, renderSync.renderFence));
             }
             //
             {
                 ZoneScopedN("QueuePresent");
                 VkPresentInfoKHR presentInfo = VkHelpers::PresentInfo(&swapchain->handle, nullptr, &swapchainImageIndex);
-                presentInfo.pWaitSemaphores = &renderSync.renderSemaphore;
+                presentInfo.pWaitSemaphores = &swapchain->presentSemaphores[swapchainImageIndex];
                 const VkResult presentResult = vkQueuePresentKHR(context->graphicsQueue, &presentInfo);
 
                 if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
