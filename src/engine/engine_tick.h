@@ -16,14 +16,15 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemGraph;
 
 void ConnectEngineObservers(entt::registry& registry);
 
-void PreUpdate(EngineContext* ctx, EngineState* state);
+void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph);
 
-void PostUpdate(EngineContext* ctx, EngineState* state);
+void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph);
 
-void PrepareFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer);
+void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph);
 
 void ScrubFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer);
 

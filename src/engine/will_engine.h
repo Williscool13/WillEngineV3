@@ -12,6 +12,7 @@
 #include "engine/include/automation_config.h"
 #include "engine/include/frame_sync.h"
 #include "engine/include/game_interface.h"
+#include "engine/systems/system_graph.h"
 #include "render/interface/render_interface.h"
 #include "core/containers/array.h"
 #include "core/memory/memory_manager.h"
@@ -158,6 +159,7 @@ private: // Game DLL
 #endif
     Platform::DirectoryWatcher shaderWatcher{};
     Core::GameAPI gameFunctions{};
+    SystemGraph systemGraph{};
     EngineContext* engineContext{};
     EngineState* engineState{};
 

@@ -560,7 +560,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         gameFunctions.gameGetStateSize = &GameGetStateSize;
         gameFunctions.gameStartup = &GameStartup;
         gameFunctions.gameLoad = &GameLoad;
-        gameFunctions.gameUpdate = &GameUpdate;
+        gameFunctions.gameCollect = &GameCollect;
         gameFunctions.gamePrepareFrame = &GamePrepareFrame;
         gameFunctions.gameEndFrame = &GameEndFrame;
         gameFunctions.gameUnload = &GameUnload;
@@ -573,7 +573,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
             gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
             gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
-            gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+            gameFunctions.gameCollect = gameDll.GetFunction<Core::GameCollectFunc>("GameCollect");
             gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
             gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
             gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
@@ -631,7 +631,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
                     gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
                     gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
                     gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
-                    gameFunctions.gameUpdate = gameDll.GetFunction<Core::GameUpdateFunc>("GameUpdate");
+                    gameFunctions.gameCollect = gameDll.GetFunction<Core::GameCollectFunc>("GameCollect");
                     gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
                     gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
                     gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
@@ -1574,9 +1574,25 @@ void WillEngine::Run()
                 engineState->input.bBindingsDirty = false;
             }
             engineState->timeFrame = &timeManager->GetTime();
-            PreUpdate(engineContext, engineState);
-            gameFunctions.gameUpdate(engineContext, engineState);
-            PostUpdate(engineContext, engineState);
+            systemGraph.BeginFrame();
+            {
+                ZoneScopedN("PreUpdate");
+                systemGraph.BeginPhase(SystemPhase::PreUpdate);
+                CollectPreUpdate(engineContext, engineState, systemGraph);
+                systemGraph.ExecutePhase(engineContext, engineState, nullptr);
+            }
+            {
+                ZoneScopedN("GameUpdate");
+                systemGraph.BeginPhase(SystemPhase::GameUpdate);
+                gameFunctions.gameCollect(engineContext, engineState, systemGraph);
+                systemGraph.ExecutePhase(engineContext, engineState, nullptr);
+            }
+            {
+                ZoneScopedN("PostUpdate");
+                systemGraph.BeginPhase(SystemPhase::PostUpdate);
+                CollectPostUpdate(engineContext, engineState, systemGraph);
+                systemGraph.ExecutePhase(engineContext, engineState, nullptr);
+            }
 
             inputManager->FrameReset();
 
@@ -1691,7 +1707,9 @@ void WillEngine::Run()
                     ZoneScopedN("PrepareFrame");
                     engineState->timeFrame = &engineState->renderTimeFrame;
                     Core::FrameBuffer* frameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
-                    PrepareFrame(engineContext, engineState, frameBuffer);
+                    systemGraph.BeginPhase(SystemPhase::PrepareFrame);
+                    CollectPrepareFrame(engineContext, engineState, systemGraph);
+                    systemGraph.ExecutePhase(engineContext, engineState, frameBuffer);
                     gameFunctions.gamePrepareFrame(engineContext, engineState, frameBuffer);
                     ScrubFrame(engineContext, engineState, frameBuffer);
                     engineState->renderTimeFrame = {};

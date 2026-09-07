@@ -7,6 +7,7 @@
 #include "spdlog/spdlog.h"
 
 #include "engine/include/game_interface.h"
+#include "engine/systems/system_graph.h"
 #include "../render/interface/render_interface.h"
 #include "engine/input/input_frame.h"
 #include "engine/engine_api.h"
@@ -168,28 +169,28 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 }
 
 
-GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph)
 {
-    ZoneScoped;
-
-    Game::TickQuietFrames(ctx, state);
+    graph.Add("TickQuietFrames", &Game::TickQuietFrames);
 
     if (state->inputContext == Engine::InputContext::Gameplay) {
-        Game::DebugProcessPhysicsCollisions(ctx, state);
-        Game::DebugApplyGroundForces(ctx, state);
+        graph.Add("DebugProcessPhysicsCollisions", &Game::DebugProcessPhysicsCollisions);
+        graph.Add("DebugApplyGroundForces", &Game::DebugApplyGroundForces);
 
-        Game::UpdatePathMovers(ctx, state);
-        Game::UpdateRotateInPlace(ctx, state);
-        Game::CheckpointUpdate(ctx, state);
-        Game::DeathZoneUpdate(ctx, state);
+        graph.Add("UpdatePathMovers", &Game::UpdatePathMovers);
+        graph.Add("UpdateRotateInPlace", &Game::UpdateRotateInPlace);
+        graph.Add("CheckpointUpdate", &Game::CheckpointUpdate);
+        graph.Add("DeathZoneUpdate", &Game::DeathZoneUpdate);
 
-        Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
-        if (playerController.GetCharacter()) {
-            playerController.Update(ctx, state);
-        }
+        graph.Add("PlayerControllerUpdate", [](Engine::EngineContext* ctx, Engine::EngineState* state) {
+            Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
+            if (playerController.GetCharacter()) {
+                playerController.Update(ctx, state);
+            }
+        });
     }
 
-    Game::DebugUpdate(ctx, state);
+    graph.Add("DebugUpdate", &Game::DebugUpdate);
 }
 
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)

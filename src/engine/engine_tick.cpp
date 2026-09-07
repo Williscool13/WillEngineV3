@@ -22,6 +22,7 @@
 #include "engine/systems/physics_system.h"
 #include "engine/systems/render_systems.h"
 #include "engine/systems/scene_system.h"
+#include "engine/systems/system_graph.h"
 #include "engine/ui/ui.h"
 #include "physics/physics_system.h"
 #include "render/interface/render_interface.h"
@@ -35,98 +36,88 @@ void ConnectEngineObservers(entt::registry& registry)
     ConnectRenderObservers(registry);
 }
 
-void PreUpdate(EngineContext* ctx, EngineState* state)
+void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph)
 {
-    ZoneScoped;
-
 #if WILL_EDITOR
-    EditorUpdate(ctx, state);
-    EditorTickInput(ctx, state);
+    graph.Add("EditorUpdate", &EditorUpdate);
+    graph.Add("EditorTickInput", &EditorTickInput);
 #endif
 
-    FunctionKeyUpdate(ctx, state);
-
-    UpdateUIPointerState(ctx, state);
+    graph.Add("FunctionKeyUpdate", &FunctionKeyUpdate);
+    graph.Add("UpdateUIPointerState", &UpdateUIPointerState);
 
 #ifdef WDEBUG
-    Console::Update(ctx, state);
+    graph.Add("ConsoleUpdate", &Console::Update);
 #endif
 
-    PhysicsPreUpdate(ctx, state);
+    graph.Add("PhysicsPreUpdate", &PhysicsPreUpdate);
 }
 
-void PostUpdate(EngineContext* ctx, EngineState* state)
+static void PostUpdateCleanup(EngineContext* ctx, EngineState* state)
 {
-    ZoneScoped;
-
-#if WILL_EDITOR
-    if (state->inputContext == InputContext::Editor) {
-        UpdatePhysicsEditor(ctx, state);
-    }
-    if (state->inputContext != InputContext::Gameplay) {
-        UpdateEditorCamera(ctx, state);
-    }
-#else
-    if (state->inputContext == InputContext::Editor && ctx->bGameLoaded) {
-        PlayStart(ctx, state);
-    }
-#endif
-
-#if WILL_EDITOR
-    ModelHotReload(ctx, state);
-    FontHotReload(ctx, state);
-    TextureHotReload(ctx, state);
-    CubemapHotReload(ctx, state);
-#endif
-
-    PlaybackCommands(ctx, state);
-
-    StaticMeshPendingKickoff(ctx, state);
-    ReflectionProbeBakeUpgrade(ctx, state);
-    ReflectionProbePendingKickoff(ctx, state);
-    StaticMeshPrimitivePendingKickoff(ctx, state);
-    ProceduralMeshPendingKickoff(ctx, state);
-    SplineMeshPendingKickoff(ctx, state);
-    ModuleMeshPendingKickoff(ctx, state);
-    TextFontPendingKickoff(ctx, state);
-    Text3DGeneratePendingKickoff(ctx, state);
-    PhysicsMeshPendingKickoff(ctx, state);
-
-    StaticMeshLoadResolve(ctx, state);
-    LightSurfaceResolve(ctx, state);
-    ReflectionProbeLoadResolve(ctx, state);
-    StaticMeshPrimitiveLoadResolve(ctx, state);
-    ProceduralMeshLoadResolve(ctx, state);
-    SplineMeshLoadResolve(ctx, state);
-    ModuleMeshLoadResolve(ctx, state);
-    Text3DLoadResolve(ctx, state);
-    PhysicsMeshLoadResolve(ctx, state);
-    PhysicsShapeCreationResolve(ctx, state);
-    PhysicsBodyCreationResolve(ctx, state);
-
-    MarkRenderTransformsDirty(ctx, state);
-    if (state->inputContext != InputContext::Editor) {
-        MarkPhysicsTransformsDirty(state);
-    }
-
     state->registry.clear<Component::DirtyTransformTag>();
     ctx->physicsSystem->ClearCollisionEvents();
     ctx->physicsSystem->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();
 }
 
-void PrepareFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph)
 {
-    ZoneScoped;
+#if WILL_EDITOR
+    graph.Add("UpdatePhysicsEditor", [](EngineContext* ctx, EngineState* state) {
+        if (state->inputContext == InputContext::Editor) { UpdatePhysicsEditor(ctx, state); }
+    });
+    graph.Add("UpdateEditorCamera", [](EngineContext* ctx, EngineState* state) {
+        if (state->inputContext != InputContext::Gameplay) { UpdateEditorCamera(ctx, state); }
+    });
+#else
+    graph.Add("PlayStart", [](EngineContext* ctx, EngineState* state) {
+        if (state->inputContext == InputContext::Editor && ctx->bGameLoaded) { PlayStart(ctx, state); }
+    });
+#endif
 
-    ProbeBakeTick(ctx, state, frameBuffer);
-    DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
-    CaptureShotTick(ctx, state, frameBuffer);
+#if WILL_EDITOR
+    graph.Add("ModelHotReload", &ModelHotReload);
+    graph.Add("FontHotReload", &FontHotReload);
+    graph.Add("TextureHotReload", &TextureHotReload);
+    graph.Add("CubemapHotReload", &CubemapHotReload);
+#endif
 
-    FunctionKeyRenderUpdate(ctx, state, frameBuffer);
+    graph.Add("PlaybackCommands", &PlaybackCommands);
 
-    BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
+    graph.Add("StaticMeshPendingKickoff", &StaticMeshPendingKickoff);
+    graph.Add("ReflectionProbeBakeUpgrade", &ReflectionProbeBakeUpgrade);
+    graph.Add("ReflectionProbePendingKickoff", &ReflectionProbePendingKickoff);
+    graph.Add("StaticMeshPrimitivePendingKickoff", &StaticMeshPrimitivePendingKickoff);
+    graph.Add("ProceduralMeshPendingKickoff", &ProceduralMeshPendingKickoff);
+    graph.Add("SplineMeshPendingKickoff", &SplineMeshPendingKickoff);
+    graph.Add("ModuleMeshPendingKickoff", &ModuleMeshPendingKickoff);
+    graph.Add("TextFontPendingKickoff", &TextFontPendingKickoff);
+    graph.Add("Text3DGeneratePendingKickoff", &Text3DGeneratePendingKickoff);
+    graph.Add("PhysicsMeshPendingKickoff", &PhysicsMeshPendingKickoff);
 
+    graph.Add("StaticMeshLoadResolve", &StaticMeshLoadResolve);
+    graph.Add("LightSurfaceResolve", &LightSurfaceResolve);
+    graph.Add("ReflectionProbeLoadResolve", &ReflectionProbeLoadResolve);
+    graph.Add("StaticMeshPrimitiveLoadResolve", &StaticMeshPrimitiveLoadResolve);
+    graph.Add("ProceduralMeshLoadResolve", &ProceduralMeshLoadResolve);
+    graph.Add("SplineMeshLoadResolve", &SplineMeshLoadResolve);
+    graph.Add("ModuleMeshLoadResolve", &ModuleMeshLoadResolve);
+    graph.Add("Text3DLoadResolve", &Text3DLoadResolve);
+    graph.Add("PhysicsMeshLoadResolve", &PhysicsMeshLoadResolve);
+    graph.Add("PhysicsShapeCreationResolve", &PhysicsShapeCreationResolve);
+    graph.Add("PhysicsBodyCreationResolve", &PhysicsBodyCreationResolve);
+
+    graph.Add("MarkRenderTransformsDirty", &MarkRenderTransformsDirty);
+    graph.Add("MarkPhysicsTransformsDirty", [](EngineContext* ctx, EngineState* state) {
+        if (state->inputContext != InputContext::Editor) { MarkPhysicsTransformsDirty(state); }
+    });
+
+    graph.Add("PostUpdateCleanup", &PostUpdateCleanup);
+}
+
+static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+{
 #if WILL_EDITOR
     {
         frameBuffer->selectedStableId = 0;
@@ -186,40 +177,58 @@ void PrepareFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* fra
     if (state->debug.bEnablePortal) {
         BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }
+}
 
-    ResolveWorldTransforms(ctx, state);
-    RenderPrepareTransforms(ctx, state, frameBuffer);
-    SyncLightSurfaces(ctx, state);
-    ResolveSkyboxCubemaps(ctx, state);
-    //
-    {
-        ZoneScopedN("ParallelGathers");
-        enki::TaskSet gatherTask(5, [&](enki::TaskSetPartition range, uint32_t) {
-            for (uint32_t i = range.start; i < range.end; ++i) {
-                switch (i) {
-                    case 0: GatherRenderables(ctx, state, frameBuffer); break;
-                    case 1: GatherLights(ctx, state, frameBuffer); break;
-                    case 2: GatherTextRenderables(ctx, state, frameBuffer); break;
-                    case 3: GatherReflectionProbes(ctx, state, frameBuffer); break;
-                    case 4: GatherLocalDDGIVolumes(ctx, state, frameBuffer); break;
-                    default: break;
-                }
+static void ParallelGathersNode(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScopedN("ParallelGathers");
+    enki::TaskSet gatherTask(5, [&](enki::TaskSetPartition range, uint32_t) {
+        for (uint32_t i = range.start; i < range.end; ++i) {
+            switch (i) {
+                case 0: GatherRenderables(ctx, state, frameBuffer); break;
+                case 1: GatherLights(ctx, state, frameBuffer); break;
+                case 2: GatherTextRenderables(ctx, state, frameBuffer); break;
+                case 3: GatherReflectionProbes(ctx, state, frameBuffer); break;
+                case 4: GatherLocalDDGIVolumes(ctx, state, frameBuffer); break;
+                default: break;
             }
-        });
-        ctx->scheduler->AddTaskSetToPipe(&gatherTask);
-        ctx->scheduler->WaitforTask(&gatherTask);
-    }
-    GatherUIRenderables(ctx, state, frameBuffer);
+        }
+    });
+    ctx->scheduler->AddTaskSetToPipe(&gatherTask);
+    ctx->scheduler->WaitforTask(&gatherTask);
     state->debug.bVerifyStoresOnce = false;
+}
+
+void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph)
+{
+    graph.Add("ProbeBakeTick", &ProbeBakeTick);
+    graph.Add("DDGIConvergeBoost", [](EngineContext* ctx, EngineState* state) {
+        DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
+    });
+    graph.Add("CaptureShotTick", &CaptureShotTick);
+
+    graph.Add("FunctionKeyRenderUpdate", &FunctionKeyRenderUpdate);
+
+    graph.Add("BuildViewFamily", [](EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer) {
+        BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
+    });
+    graph.Add("PublishFrameSettings", &PublishFrameSettings);
+
+    graph.Add("ResolveWorldTransforms", &ResolveWorldTransforms);
+    graph.Add("RenderPrepareTransforms", &RenderPrepareTransforms);
+    graph.Add("SyncLightSurfaces", &SyncLightSurfaces);
+    graph.Add("ResolveSkyboxCubemaps", &ResolveSkyboxCubemaps);
+    graph.Add("ParallelGathers", &ParallelGathersNode);
+    graph.Add("GatherUIRenderables", &GatherUIRenderables);
 
 #if WILL_EDITOR
-    DrawEditorInterface(ctx, state, frameBuffer);
-    GatherEditorSprites(ctx, state, frameBuffer);
-    GatherLightDebugDraws(ctx, state, frameBuffer);
+    graph.Add("DrawEditorInterface", &DrawEditorInterface);
+    graph.Add("GatherEditorSprites", &GatherEditorSprites);
+    graph.Add("GatherLightDebugDraws", &GatherLightDebugDraws);
 #endif
 
 #ifdef WDEBUG
-    DebugRenderPhysics(ctx, state, frameBuffer);
+    graph.Add("DebugRenderPhysics", &DebugRenderPhysics);
 #endif
 }
 

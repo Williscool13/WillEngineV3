@@ -197,6 +197,7 @@ add_library(engine STATIC
         systems/render_systems_helpers.h
         systems/scene_system.cpp
         systems/scene_system.h
+        systems/system_graph.h
 
         editor/editor_systems.cpp
         editor/editor_systems.h

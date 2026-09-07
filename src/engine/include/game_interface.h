@@ -10,6 +10,7 @@
 namespace Engine
 {
 struct EngineState;
+class SystemGraph;
 }
 
 namespace Core
@@ -19,7 +20,7 @@ struct FrameBuffer;
 using GameGetStateSizeFunc = size_t(*)();
 using GameStartUpFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
-using GameUpdateFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
+using GameCollectFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, Engine::SystemGraph&);
 using GamePrepareFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, FrameBuffer*);
 using GameEndFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameUnloadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
@@ -33,7 +34,7 @@ void StubStartup(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StubLoad(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void StubUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+void StubCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph);
 
 void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, FrameBuffer* frameBuffer);
 
@@ -48,7 +49,7 @@ struct GameAPI
     GameGetStateSizeFunc gameGetStateSize;
     GameStartUpFunc gameStartup;
     GameLoadFunc gameLoad;
-    GameUpdateFunc gameUpdate;
+    GameCollectFunc gameCollect;
     GamePrepareFrameFunc gamePrepareFrame;
     GameEndFrameFunc gameEndFrame;
     GameUnloadFunc gameUnload;
@@ -61,7 +62,7 @@ struct GameAPI
         gameGetStateSize = StubGetStateSize;
         gameStartup = StubStartup;
         gameLoad = StubLoad;
-        gameUpdate = StubUpdate;
+        gameCollect = StubCollect;
         gamePrepareFrame = StubPrepareFrame;
         gameEndFrame = StubEndFrame;
         gameUnload = StubUnload;
@@ -107,11 +108,12 @@ GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state
 GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
- * Called every tick. This is executed by the main engine loop.
+ * Called every tick to add the game's systems to the frame's SystemGraph. The engine executes the phase after this returns.
  * @param ctx
  * @param state
+ * @param graph
  */
-GAME_API void GameUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph);
 
 /**
  * Called before frame buffer is sent directly to the render thread to be drawn.

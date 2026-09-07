@@ -24,7 +24,7 @@ void StubLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     SPDLOG_WARN("Game DLL not loaded - stub GameInit");
 }
 
-void StubUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+void StubCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph)
 {
 
 }
