@@ -307,6 +307,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         SPDLOG_INFO("Scheduler operating with {} threads.", config.numTaskThreadsToCreate + 1);
         scheduler = new(memoryManager.PersistentAllocRaw(sizeof(enki::TaskScheduler), Core::AllocTag::TaskScheduler)) enki::TaskScheduler();
         scheduler->Initialize(config);
+        systemGraph.SetScheduler(scheduler);
     }
 
 
