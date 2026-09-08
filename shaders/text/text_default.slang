@@ -145,7 +145,9 @@ void MeshTextDefault(
 struct FragmentOutput
 {
     float4 color   : SV_Target0;
+#if WILL_EDITOR
     uint2 stableId : SV_Target1;
+#endif
 };
 
 [shader("fragment")]
@@ -198,6 +200,8 @@ FragmentOutput FragmentTextDefault(VertexOutput input, uniform TextRenderPushCon
 
     FragmentOutput output;
     output.color = result;
+#if WILL_EDITOR
     output.stableId = input.stableId;
+#endif
     return output;
 }

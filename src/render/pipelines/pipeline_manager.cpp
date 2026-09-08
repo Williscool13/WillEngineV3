@@ -752,10 +752,16 @@ void PipelineManager::RegisterPipelines()
 
     GraphicsPipelineBuilder builder;
 
+#if WILL_EDITOR
     constexpr Core::Array<VkFormat, 2> graphicsColorFormats{
         VISIBILITY_BUFFER_FORMAT,
         GBUFFER_STABLE_ID_FORMAT,
     };
+#else
+    constexpr Core::Array<VkFormat, 1> graphicsColorFormats{
+        VISIBILITY_BUFFER_FORMAT,
+    };
+#endif
 
     // Visibility Buffer
     {
@@ -883,6 +889,7 @@ void PipelineManager::RegisterPipelines()
             .blendEnable = VK_FALSE,
             .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
         };
+#if WILL_EDITOR
         VkPipelineColorBlendAttachmentState stableIdBlend{
             .blendEnable = VK_FALSE,
             .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
@@ -892,6 +899,12 @@ void PipelineManager::RegisterPipelines()
 
         VkFormat colorFormats[2] = {COLOR_ATTACHMENT_FORMAT, GBUFFER_STABLE_ID_FORMAT};
         builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT);
+#else
+        builder.SetupBlending(&colorBlend, 1);
+
+        VkFormat colorFormats[1] = {COLOR_ATTACHMENT_FORMAT};
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+#endif
 
         RegisterGraphicsPipeline(
             "sprites"_sid,
@@ -922,6 +935,7 @@ void PipelineManager::RegisterPipelines()
                               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
         };
 
+#if WILL_EDITOR
         VkPipelineColorBlendAttachmentState stableIdBlendState{
             .blendEnable = VK_FALSE,
             .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
@@ -935,6 +949,12 @@ void PipelineManager::RegisterPipelines()
             GBUFFER_STABLE_ID_FORMAT,
         };
         builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT);
+#else
+        builder.SetupBlending(&blendState, 1);
+
+        VkFormat colorFormats[1] = {COLOR_ATTACHMENT_FORMAT};
+        builder.SetupRenderer(colorFormats, 1, DEPTH_ATTACHMENT_FORMAT);
+#endif
 
         RegisterGraphicsPipeline(
             "text_default"_sid,

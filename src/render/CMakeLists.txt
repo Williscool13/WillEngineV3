@@ -168,6 +168,11 @@ function(compile_shader TARGET SHADER_SOURCE)
         list(APPEND SLANG_INCLUDE_FLAGS -I ${dir})
     endforeach()
 
+    set(SLANG_DEFINE_FLAGS "")
+    if(WILL_ENGINE_BUILD_EDITOR)
+        list(APPEND SLANG_DEFINE_FLAGS -DWILL_EDITOR=1)
+    endif()
+
     add_custom_command(
             OUTPUT ${SHADER_OUTPUT}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
@@ -176,6 +181,7 @@ function(compile_shader TARGET SHADER_SOURCE)
             -fvk-use-entrypoint-name
             -I ${SHADER_INCLUDE_DIR}
             ${SLANG_INCLUDE_FLAGS}
+            ${SLANG_DEFINE_FLAGS}
             -o ${SHADER_OUTPUT}
             DEPENDS ${SHADER_SOURCE_ABS} ${INCLUDE_FILES}
             COMMENT "Compiling shader: ${SHADER_NAME}.spv"

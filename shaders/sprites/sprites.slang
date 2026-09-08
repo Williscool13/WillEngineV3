@@ -15,7 +15,9 @@ struct VertexOutput
 struct FragmentOutput
 {
     float4 color   : SV_Target0;
+#if WILL_EDITOR
     uint2 stableId : SV_Target1;
+#endif
 };
 
 [shader("mesh")]
@@ -84,7 +86,9 @@ FragmentOutput FragmentSprites(VertexOutput input, uniform SpritePushConstant pc
     if (color.a < 0.5) { discard; }
     FragmentOutput output;
     output.color    = color;
+#if WILL_EDITOR
     output.stableId = input.stableId;
+#endif
     return output;
 }
 

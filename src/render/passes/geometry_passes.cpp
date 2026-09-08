@@ -558,7 +558,9 @@ void SetupGeometryPass(RenderGraph& graph,
                                                                                    VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, chainCategory);
         instancedMeshShading.WriteColorAttachment(targets.visibility);
         instancedMeshShading.WriteColorAttachment(targets.gbufferOne);
+#if WILL_EDITOR
         instancedMeshShading.WriteColorAttachment(targets.stableId);
+#endif
         instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
         instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
         instancedMeshShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
@@ -582,12 +584,16 @@ void SetupGeometryPass(RenderGraph& graph,
                 vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
 
                 auto visibilityAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(visibility), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-                auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 auto depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
                 auto stencilAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthStencil), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
+#if WILL_EDITOR
+                auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
                 const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
+#else
+                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &visibilityAttachment, 1, &depthAttachment, &stencilAttachment);
+#endif
 
                 vkCmdBeginRendering(cmd, &renderInfo);
 

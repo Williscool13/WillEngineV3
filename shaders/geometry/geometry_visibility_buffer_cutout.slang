@@ -104,7 +104,9 @@ void MeshGeometryVisibilityBufferCutout(
 // ==================== Fragment Shader ====================
 struct FragmentOutput {
     uint2 visibilityBuffer : SV_Target0;
+#if WILL_EDITOR
     uint2 stableId         : SV_Target1;
+#endif
 };
 
 [shader("fragment")]
@@ -120,6 +122,8 @@ FragmentOutput FragmentGeometryVisibilityBufferCutout(VertexOutputCutout vertexI
 
     FragmentOutput output;
     output.visibilityBuffer = uint2((vertexInput.visibility.x << 8) | primitiveInput.primitiveID & 0xFF, vertexInput.visibility.y);
+#if WILL_EDITOR
     output.stableId = uint2(uint(vertexInput.stableId & 0xFFFFFFFF), uint(vertexInput.stableId >> 32));
+#endif
     return output;
 }

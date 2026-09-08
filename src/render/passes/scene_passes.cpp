@@ -85,7 +85,9 @@ void SetupTextForwardPass(RenderGraph& graph,
     //textPass.ReadDepthAttachment(targets.depthStencil);
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
     textPass.WriteColorAttachment(targets.colorOutput);
+#if WILL_EDITOR
     textPass.WriteColorAttachment(targets.stableId);
+#endif
     textPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineEntry, colorOutput = targets.colorOutput, depthOutput = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -94,13 +96,16 @@ void SetupTextForwardPass(RenderGraph& graph,
 
         VkImageView colorView = graph.GetImageViewHandle(colorOutput);
         VkImageView depthView = graph.GetImageViewHandle(depthOutput);
-        VkImageView stableIdView = graph.GetImageViewHandle(stableId);
         VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(colorView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(stableIdView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         // VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(depthView, nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+#if WILL_EDITOR
+        VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo colorAttachments[] = {colorAttachment, stableIdAttachment};
         VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, nullptr);
+#else
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+#endif
         vkCmdBeginRendering(cmd, &renderInfo);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
@@ -148,7 +153,9 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
     spritesPass.ReadBuffer(SPRITE_BUFFER);
     spritesPass.ReadWriteDepthAttachment(targets.depthStencil);
     spritesPass.WriteColorAttachment(targets.colorOutput);
+#if WILL_EDITOR
     spritesPass.WriteColorAttachment(targets.stableId);
+#endif
     spritesPass.Execute([&, width = renderExtent[0], height = renderExtent[1], pipelineManager, outputColor = targets.colorOutput, depthTarget = targets.depthStencil, stableId = targets.stableId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkViewport viewport = VkHelpers::GenerateViewport(width, height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -156,10 +163,14 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(outputColor), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+#if WILL_EDITOR
+        VkRenderingAttachmentInfo stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo colorAttachments[] = {colorAttachment, stableIdAttachment};
         VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, nullptr);
+#else
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+#endif
         vkCmdBeginRendering(cmd, &renderInfo);
 
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("sprites"_sid);
