@@ -12,6 +12,7 @@ import visibility_lighting_common;
 import restir_common;
 
 import bindless_declarations;
+import bucket_dispatch_common;
 
 // =============== Shader Summary ============
 // lighting_pbr_restir with the diffuse posterized. The demodulated outputs and hitT must stay identical or the denoiser breaks.
@@ -47,10 +48,9 @@ float MergeSpecHitT(float acc, float hitT) {
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
-    uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
-    if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
+void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID) {
+    uint2 pixel = BucketPixel(pc.tileListBuffer, pc.tileCapacity, pc.lightingIndex, gid.x, gtid.xy);
+    if (any(pixel >= pc.renderExtent)) {
         return;
     }
 

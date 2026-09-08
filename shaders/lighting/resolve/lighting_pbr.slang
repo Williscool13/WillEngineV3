@@ -18,15 +18,15 @@ import reflection_probe_interop;
 import reflection_probe_common;
 
 import bindless_declarations;
+import bucket_dispatch_common;
 
 #define GI_SKY_SPECULAR_OCCLUSION 1
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
-    uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
-    if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
+void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID) {
+    uint2 pixel = BucketPixel(pc.tileListBuffer, pc.tileCapacity, pc.lightingIndex, gid.x, gtid.xy);
+    if (any(pixel >= pc.renderExtent)) {
         return;
     }
 

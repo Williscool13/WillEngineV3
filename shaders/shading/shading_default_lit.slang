@@ -8,15 +8,14 @@ import limits_declarations;
 import bindless_declarations;
 import shader_functions;
 import visibility_shading_common;
+import bucket_dispatch_common;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPushConstant pc)
+void ComputeShadingDefaultLit(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uniform VisibilityShadingPushConstant pc)
 {
-    ShadeDispatchParameters shadeParams = pc.shadeDispatchBuffer[pc.materialIndex];
-    uint2 pixel = dtid.xy + uint2(shadeParams.minX, shadeParams.minY);
-    uint2 boundsMax = uint2(shadeParams.maxX, shadeParams.maxY);
-    if (any(pixel >= boundsMax)) {
+    uint2 pixel = BucketPixel(pc.tileListBuffer, pc.tileCapacity, pc.materialIndex, gid.x, gtid.xy);
+    if (any(pixel >= pc.extents)) {
         return;
     }
 

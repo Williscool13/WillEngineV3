@@ -260,6 +260,7 @@ uint32_t PipelineManager::GetLightingShaderIndex(StringID pipelineId) const
 
 void PipelineManager::RegisterLightingPipeline(StringID pipelineId, LightingShaderType type)
 {
+    assert(lightingPipelines.Size() < MAX_LIGHTING_BUCKETS && "Bucketing bounds dedup bitset is sized by MAX_LIGHTING_BUCKETS");
     lightingPipelines.PushBack({pipelineId, type, static_cast<uint32_t>(lightingPipelines.Size())});
 }
 
@@ -443,10 +444,6 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline("visibility_bucketing_bounds_calculation"_sid, src / "visibility_bucketing_bounds.spv", "ComputeShadeDispatchBucketing",
                             sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("visibility_shading_bucketing_resolve"_sid, src / "visibility_bucketing_shade_resolve.spv", "ComputeShadeDispatchBucketingResolve",
-                            sizeof(ShadeBucketingResolvePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("visibility_lighting_bucketing_resolve"_sid, src / "visibility_bucketing_light_resolve.spv", "ComputeLightDispatchBucketingResolve",
-                            sizeof(LightingBucketingResolvePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("visibility_bucketing_dispatch_count"_sid, src / "visibility_bucketing_dispatch_count.spv", "ComputeBucketDispatchCount",
                             sizeof(BucketDispatchCountPushConstant), PipelineCategory::Critical);
 

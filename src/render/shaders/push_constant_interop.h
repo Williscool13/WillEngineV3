@@ -350,29 +350,20 @@ SHADER_PUBLIC struct ShadeBucketingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // out
-    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // out
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) shadeDispatchBuffer; // out
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer; // out
+    SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileListBuffer; // out, tileCapacity entries per bucket
+    SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileListBuffer; // out
     SHADER_PUBLIC uint2 extents;
     // In
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
-};
-
-SHADER_PUBLIC struct ShadeBucketingResolvePushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in/out
-    SHADER_PUBLIC uint32_t materialCount;
-};
-
-SHADER_PUBLIC struct LightingBucketingResolvePushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in/out
-    SHADER_PUBLIC uint32_t lightingCount;
+    SHADER_PUBLIC uint32_t tileCapacity;
 };
 
 SHADER_PUBLIC struct BucketDispatchCountPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in
-    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) shadeDispatchBuffer; // in
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer; // in
     SHADER_PUBLIC SHADER_PTR(uint32_t) countBuffer; // out: [shadingActive, lightingActive]
     SHADER_PUBLIC uint32_t materialCount;
     SHADER_PUBLIC uint32_t lightingCount;
@@ -380,11 +371,13 @@ SHADER_PUBLIC struct BucketDispatchCountPushConstant
 
 SHADER_PUBLIC struct LightingBucketVisualizePushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer; // in
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer; // in
     SHADER_PUBLIC uint32_t lightingIndex;
     // Out
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t tileCapacity;
+    SHADER_PUBLIC uint2 extents;
 };
 
 SHADER_PUBLIC struct VisibilityShadingPushConstant
@@ -399,9 +392,9 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-    SHADER_PUBLIC SHADER_PTR(ShadeDispatchParameters) shadeDispatchBuffer; // in
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer; // in
+    SHADER_PUBLIC uint32_t tileCapacity;
     uint32_t pad0;
-    uint32_t pad1;
     SHADER_PUBLIC uint2 extents;
     // In
     SHADER_PUBLIC uint32_t materialIndex;
@@ -624,7 +617,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
-    SHADER_PUBLIC SHADER_PTR(LightingDispatchParameters) lightDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) reservoirBuffer;
@@ -661,7 +654,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t pad2;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunVisIndex;
-    SHADER_PUBLIC uint32_t pad3;
+    SHADER_PUBLIC uint32_t tileCapacity;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.

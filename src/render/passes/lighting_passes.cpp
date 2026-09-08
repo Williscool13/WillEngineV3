@@ -243,6 +243,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadBuffer("restir_reservoir_final"_sid);
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    if (graph.HasBuffer(LIGHTING_TILE_LIST_BUFFER)) { lightingResolve.ReadBuffer(LIGHTING_TILE_LIST_BUFFER); }
     lightingResolve.ReadSampledImage(targets.visibility);
     lightingResolve.ReadSampledImage(targets.gbufferOne);
     lightingResolve.ReadSampledImage(targets.gbufferTwo);
@@ -267,7 +268,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
             bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax
             ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+            VkDeviceAddress tileListAddress = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER);
 
             for (const LightingPipelineInfo& entry : pipelineManager->GetLightingPipelines()) {
                 if (!entry.id) { continue; }
@@ -280,7 +281,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                 VisibilityLightingPushConstant pc{
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress("light_data"_sid),
-                    .lightDispatchBuffer = lightDispatchAddress,
+                    .tileListBuffer = tileListAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .reservoirBuffer = graph.TryGetBufferAddress("restir_reservoir_final"_sid),
@@ -310,10 +311,10 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
+                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                                      entry.index * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), entry.index * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
             }
         });
 }
@@ -369,7 +370,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
             VisibilityLightingPushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress("light_data"_sid),
-                .lightDispatchBuffer = 0,
+                .tileListBuffer = 0,
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                 .reservoirBuffer = 0,

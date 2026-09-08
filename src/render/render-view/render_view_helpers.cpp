@@ -245,8 +245,8 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
 
     renderFamilyProperties.modelBufferSize = _limits.highestModelCount * sizeof(Model);
     renderFamilyProperties.materialBufferSize = Render::BINDLESS_MATERIAL_BUFFER_SIZE;
-    renderFamilyProperties.shadeDispatchBufferSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(ShadeDispatchParameters);
-    renderFamilyProperties.lightingDispatchBufferSize = _limits.highestLightingCount * sizeof(LightingDispatchParameters);
+    renderFamilyProperties.shadeDispatchBufferSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(BucketDispatchParameters);
+    renderFamilyProperties.lightingDispatchBufferSize = _limits.highestLightingCount * sizeof(BucketDispatchParameters);
     renderFamilyProperties.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
 
 

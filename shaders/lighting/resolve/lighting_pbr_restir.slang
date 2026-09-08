@@ -12,6 +12,7 @@ import visibility_lighting_common;
 import restir_common;
 
 import bindless_declarations;
+import bucket_dispatch_common;
 
 // Directional-light hit distance for the denoiser's specular hitT channel; matches the sun trace TMax.
 static const float SUN_SPEC_HIT_T = 10000.0;
@@ -34,10 +35,9 @@ float MergeSpecHitT(float acc, float hitT) {
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
-    LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
-    uint2 pixel = threadID.xy + uint2(lightParams.minX, lightParams.minY);
-    if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
+void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID) {
+    uint2 pixel = BucketPixel(pc.tileListBuffer, pc.tileCapacity, pc.lightingIndex, gid.x, gtid.xy);
+    if (any(pixel >= pc.renderExtent)) {
         return;
     }
 

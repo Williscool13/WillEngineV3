@@ -60,6 +60,13 @@ inline const StringID FONT_CURVE_BUFFER = "font_curve_buffer"_sid;
 
 inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = "shading_bucketing_buffer"_sid;
 inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = "lighting_bucketing_buffer"_sid;
+inline const StringID SHADING_TILE_LIST_BUFFER = "shading_tile_list_buffer"_sid;
+inline const StringID LIGHTING_TILE_LIST_BUFFER = "lighting_tile_list_buffer"_sid;
+
+inline constexpr uint32_t BucketTileCapacity(uint32_t width, uint32_t height)
+{
+    return ((width + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE) * ((height + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE);
+}
 
 inline const StringID RT_TLAS_INSTANCE_BUFFER = "rt_tlas_instance_buffer"_sid;
 inline const StringID RT_TLAS_BUFFER = "rt_tlas_buffer"_sid;
@@ -85,7 +92,7 @@ inline constexpr int32_t BINDLESS_MODEL_BUFFER_COUNT = 16384;
 inline constexpr int32_t BINDLESS_MODEL_BUFFER_SIZE = sizeof(Model) * BINDLESS_MODEL_BUFFER_COUNT;
 inline constexpr int32_t BINDLESS_INSTANCE_BUFFER_COUNT = 131072;
 inline constexpr int32_t BINDLESS_INSTANCE_BUFFER_SIZE = sizeof(Instance) * BINDLESS_INSTANCE_BUFFER_COUNT;
-inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_COUNT = 2048;
+inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_COUNT = MAX_SHADE_BUCKETS;
 inline constexpr int32_t BINDLESS_MATERIAL_BUFFER_SIZE = sizeof(MaterialProperties) * BINDLESS_MATERIAL_BUFFER_COUNT;
 
 inline constexpr int32_t MEGA_VERTEX_POSITION_BUFFER_SIZE = sizeof(VertexPosition) * 4194302; // 4M verts

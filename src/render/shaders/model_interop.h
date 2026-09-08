@@ -10,9 +10,11 @@
 import constants_interop;
 #define SHADER_PUBLIC public
 #define SHADER_CONST const static
+#define SHADER_PTR(T) T*
 #else
-#include <glm/glm.hpp>
 #include <cstdint>
+#include <glm/glm.hpp>
+#include <volk.h>
 #include "constants_interop.h"
 
 using uint = uint32_t;
@@ -37,6 +39,7 @@ using float4x4 = glm::mat4;
 
 #define SHADER_PUBLIC
 #define SHADER_CONST constexpr inline
+#define SHADER_PTR(T) VkDeviceAddress
 #endif // __SLANG__
 
 SHADER_PUBLIC struct DebugVertex
@@ -214,32 +217,13 @@ SHADER_PUBLIC struct Model
     SHADER_PUBLIC float4x4 prevModelMatrix;
 };
 
-SHADER_PUBLIC struct ShadeDispatchParameters
+// xDispatch is the tile count (bounds pass appends), y = z = 1
+SHADER_PUBLIC struct BucketDispatchParameters
 {
     SHADER_PUBLIC uint32_t xDispatch;
     SHADER_PUBLIC uint32_t yDispatch;
     SHADER_PUBLIC uint32_t zDispatch;
-
-    SHADER_PUBLIC uint32_t minX;
-    SHADER_PUBLIC uint32_t maxX;
-    SHADER_PUBLIC uint32_t minY;
-    SHADER_PUBLIC uint32_t maxY;
-
-    SHADER_PUBLIC uint32_t shadingIndex;
-};
-
-SHADER_PUBLIC struct LightingDispatchParameters
-{
-    SHADER_PUBLIC uint32_t xDispatch;
-    SHADER_PUBLIC uint32_t yDispatch;
-    SHADER_PUBLIC uint32_t zDispatch;
-
-    SHADER_PUBLIC uint32_t minX;
-    SHADER_PUBLIC uint32_t maxX;
-    SHADER_PUBLIC uint32_t minY;
-    SHADER_PUBLIC uint32_t maxY;
-
-    SHADER_PUBLIC uint32_t lightingIndex;
+    SHADER_PUBLIC uint32_t bucketIndex;
 };
 
 #endif // WILLENGINEV3_MODEL_INTEROP_H

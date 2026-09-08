@@ -1447,11 +1447,11 @@ void RenderThread::RegisterDebugReadbacks()
     };
     struct ShadeDispatchReadback
     {
-        ShadeDispatchParameters data[16];
+        BucketDispatchParameters data[16];
     };
     struct LightDispatchReadback
     {
-        LightingDispatchParameters data[16];
+        BucketDispatchParameters data[16];
     };
     struct CursorLitPixel
     {
@@ -1498,32 +1498,20 @@ void RenderThread::RegisterDebugReadbacks()
             });
         },
         [](const ShadeDispatchReadback& d) {
-            if (ImGui::BeginTable("ShadeDispatchTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            if (ImGui::BeginTable("ShadeDispatchTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Index");
                 ImGui::TableSetupColumn("Material");
-                ImGui::TableSetupColumn("Dispatch");
-                ImGui::TableSetupColumn("MinX");
-                ImGui::TableSetupColumn("MinY");
-                ImGui::TableSetupColumn("MaxX");
-                ImGui::TableSetupColumn("MaxY");
+                ImGui::TableSetupColumn("Tiles");
                 ImGui::TableHeadersRow();
                 for (int i = 0; i < 16; ++i) {
-                    const ShadeDispatchParameters& p = d.data[i];
+                    const BucketDispatchParameters& p = d.data[i];
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("%d", i);
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.shadingIndex);
+                    ImGui::Text("%u", p.bucketIndex);
                     ImGui::TableNextColumn();
-                    ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.minX);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.minY);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.maxX);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.maxY);
+                    ImGui::Text("%u", p.xDispatch);
                 }
                 ImGui::EndTable();
             }
@@ -1543,32 +1531,20 @@ void RenderThread::RegisterDebugReadbacks()
             });
         },
         [](const LightDispatchReadback& d) {
-            if (ImGui::BeginTable("LightDispatchTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            if (ImGui::BeginTable("LightDispatchTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableSetupColumn("Index");
                 ImGui::TableSetupColumn("Lighting");
-                ImGui::TableSetupColumn("Dispatch");
-                ImGui::TableSetupColumn("MinX");
-                ImGui::TableSetupColumn("MinY");
-                ImGui::TableSetupColumn("MaxX");
-                ImGui::TableSetupColumn("MaxY");
+                ImGui::TableSetupColumn("Tiles");
                 ImGui::TableHeadersRow();
                 for (int i = 0; i < 16; ++i) {
-                    const LightingDispatchParameters& p = d.data[i];
+                    const BucketDispatchParameters& p = d.data[i];
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Text("%d", i);
                     ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.lightingIndex);
+                    ImGui::Text("%u", p.bucketIndex);
                     ImGui::TableNextColumn();
-                    ImGui::Text("(%u,%u,%u)", p.xDispatch, p.yDispatch, p.zDispatch);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.minX);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.minY);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.maxX);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", p.maxY);
+                    ImGui::Text("%u", p.xDispatch);
                 }
                 ImGui::EndTable();
             }
@@ -1835,32 +1811,14 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         }
 
         ZoneScopedN("Dispatch Resets");
-        auto* shadeDispatchBuffer = static_cast<ShadeDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+        auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
         for (uint32_t i = 0; i < viewFamily.materialWatermark; ++i) {
-            shadeDispatchBuffer[i] = {
-                .xDispatch = 0,
-                .yDispatch = 0,
-                .zDispatch = 0,
-                .minX = UINT32_MAX,
-                .maxX = 0,
-                .minY = UINT32_MAX,
-                .maxY = 0,
-                .shadingIndex = i,
-            };
+            shadeDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = i};
         }
 
-        auto* lightDispatchBuffer = static_cast<LightingDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+        auto* lightDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
         for (size_t i = 0; i < pipelineManager->GetLightingPipelines().Size(); ++i) {
-            lightDispatchBuffer[i] = {
-                .xDispatch = 0,
-                .yDispatch = 0,
-                .zDispatch = 0,
-                .minX = UINT32_MAX,
-                .maxX = 0,
-                .minY = UINT32_MAX,
-                .maxY = 0,
-                .lightingIndex = static_cast<uint32_t>(i),
-            };
+            lightDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = static_cast<uint32_t>(i)};
         }
     }
 }

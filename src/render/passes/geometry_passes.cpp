@@ -662,55 +662,41 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
+    const uint32_t tilesX = (renderExtent[0] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
+    const uint32_t tilesY = (renderExtent[1] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
+    const uint32_t tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]);
+    const uint32_t lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size());
+    graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialWatermark) * tileCapacity * sizeof(uint32_t));
+    graph.CreateBuffer(LIGHTING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(lightingCount) * tileCapacity * sizeof(uint32_t));
+
     RenderPass& boundsPass = graph.AddPass("Shade Bucketing Bounds"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     boundsPass.ReadSampledImage(targets.visibility);
     boundsPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     boundsPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     boundsPass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
     boundsPass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    boundsPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    boundsPass.WriteBuffer(SHADING_TILE_LIST_BUFFER);
+    boundsPass.WriteBuffer(LIGHTING_TILE_LIST_BUFFER);
+    boundsPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], tilesX, tilesY, tileCapacity,
             visibility = targets.visibility](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ShadeBucketingPushConstant pc{
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                 .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
                 .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
+                .shadeTileListBuffer = graph.GetBufferAddress(SHADING_TILE_LIST_BUFFER),
+                .lightTileListBuffer = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER),
                 .extents = {width, height},
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
+                .tileCapacity = tileCapacity,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_bucketing_bounds_calculation"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (width + 15) / 16, (height + 15) / 16, 1);
+            vkCmdDispatch(cmd, tilesX, tilesY, 1);
         });
 
-    RenderPass& resolvePass = graph.AddPass("Shade Bucketing Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
-    resolvePass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    resolvePass.Execute([&, pipelineManager, materialCount = viewFamily.materialWatermark](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        ShadeBucketingResolvePushConstant pc{
-            .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
-            .materialCount = materialCount,
-        };
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_shading_bucketing_resolve"_sid);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (materialCount + 255) / 256, 1, 1);
-    });
-
-    RenderPass& lightResolvePass = graph.AddPass("Light Bucketing Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
-    lightResolvePass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    lightResolvePass.Execute([&, pipelineManager, lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        LightingBucketingResolvePushConstant pc{
-            .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-            .lightingCount = lightingCount,
-        };
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_lighting_bucketing_resolve"_sid);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (lightingCount + 255) / 256, 1, 1);
-    });
-
-    if (!GPU_STATS_ENABLED) {
+    if constexpr (!GPU_STATS_ENABLED) {
         return;
     }
 
@@ -775,13 +761,14 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     visShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     visShading.ReadIndirectBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
+    if (graph.HasBuffer(SHADING_TILE_LIST_BUFFER)) { visShading.ReadBuffer(SHADING_TILE_LIST_BUFFER); }
     visShading.WriteStorageImage(targets.gbufferOne);
     visShading.WriteStorageImage(targets.gbufferTwo);
     visShading.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
+            VkDeviceAddress tileListAddress = graph.GetBufferAddress(SHADING_TILE_LIST_BUFFER);
 
             StringID boundShader{};
             const PipelineEntry* pipelineEntry = nullptr;
@@ -809,7 +796,8 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                    .shadeDispatchBuffer = shadeDispatchAddress,
+                    .tileListBuffer = tileListAddress,
+                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                     .extents = {renderExtent[0], renderExtent[1]},
                     .materialIndex = entry.materialIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
@@ -817,8 +805,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER),
-                                      entry.materialIndex * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER), entry.materialIndex * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
             }
         });
 }
@@ -845,16 +832,17 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
     bucketVisualizePass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
     bucketVisualizePass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     bucketVisualizePass.ReadIndirectBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
+    if (graph.HasBuffer(SHADING_TILE_LIST_BUFFER)) { bucketVisualizePass.ReadBuffer(SHADING_TILE_LIST_BUFFER); }
     bucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     bucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
-    bucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
+    bucketVisualizePass.Execute([&, pipelineManager, sceneIndex, renderExtent,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shading_bucket_visualize"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-            VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
+            VkDeviceAddress tileListAddress = graph.GetBufferAddress(SHADING_TILE_LIST_BUFFER);
             for (uint32_t i = 0; i < materialCount; ++i) {
                 const uint32_t stableIndex = viewFamily.activeMaterials[i].stableIndex;
                 VisibilityShadingPushConstant pc{
@@ -868,15 +856,16 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                    .shadeDispatchBuffer = shadeDispatchAddress,
+                    .tileListBuffer = tileListAddress,
+                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
+                    .extents = {renderExtent[0], renderExtent[1]},
                     .materialIndex = stableIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER),
-                                      stableIndex * sizeof(ShadeDispatchParameters) + offsetof(ShadeDispatchParameters, xDispatch));
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER), stableIndex * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
             }
         });
 }
@@ -891,25 +880,27 @@ void SetupLightingBucketingDebugPass(RenderGraph& graph,
     ZoneScoped;
     RenderPass& lightBucketVisualizePass = graph.AddPass("Light Bucket Visualize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     lightBucketVisualizePass.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    if (graph.HasBuffer(LIGHTING_TILE_LIST_BUFFER)) { lightBucketVisualizePass.ReadBuffer(LIGHTING_TILE_LIST_BUFFER); }
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     lightBucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
-    lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
+    lightBucketVisualizePass.Execute([&, pipelineManager, sceneIndex, renderExtent,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("lighting_bucket_visualize"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-            VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+            VkDeviceAddress tileListAddress = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER);
             for (uint32_t i = 0; i < lightingCount; ++i) {
                 LightingBucketVisualizePushConstant pc{
-                    .lightDispatchBuffer = lightDispatchAddress,
+                    .tileListBuffer = tileListAddress,
                     .lightingIndex = i,
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
+                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
+                    .extents = {renderExtent[0], renderExtent[1]},
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                                      i * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), i * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
             }
         });
 }

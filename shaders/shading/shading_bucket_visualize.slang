@@ -8,23 +8,17 @@ import bindless_declarations;
 import shader_functions;
 
 import visibility_shading_common;
+import bucket_dispatch_common;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeShadingBucketVisualize(uint3 dtid : SV_DispatchThreadID, uniform VisibilityShadingPushConstant pc)
+void ComputeShadingBucketVisualize(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uniform VisibilityShadingPushConstant pc)
 {
-    ShadeDispatchParameters shadeParams = pc.shadeDispatchBuffer[pc.materialIndex];
-    uint2 pixel = dtid.xy + uint2(shadeParams.minX, shadeParams.minY);
-    if (any(pixel >= uint2(shadeParams.maxX, shadeParams.maxY))) {
+    uint2 pixel = BucketPixel(pc.tileListBuffer, pc.tileCapacity, pc.materialIndex, gid.x, gtid.xy);
+    if (any(pixel >= pc.extents)) {
         return;
     }
-
-    bool onEdge = pixel.x == shadeParams.minX
-               || pixel.x == shadeParams.maxX - 1
-               || pixel.y == shadeParams.minY
-               || pixel.y == shadeParams.maxY - 1;
-
-    if (!onEdge) {
+    if (!BucketTileEdge(gtid.xy)) {
         return;
     }
 

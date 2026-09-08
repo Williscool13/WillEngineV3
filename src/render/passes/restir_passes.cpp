@@ -677,6 +677,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadBuffer("restir_lights_vs"_sid);
     }
     lightingResolve.ReadIndirectBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+    if (graph.HasBuffer(LIGHTING_TILE_LIST_BUFFER)) { lightingResolve.ReadBuffer(LIGHTING_TILE_LIST_BUFFER); }
     lightingResolve.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     lightingResolve.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     lightingResolve.ReadSampledImage(targets.visibility);
@@ -694,7 +695,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
             field = activeCheckerboardField, packed = bCheckerboardPacked, fullRate = bFullRateResolve,
             bMergedReflections](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkDeviceAddress lightDispatchAddress = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+            VkDeviceAddress tileListAddress = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER);
 
             for (const LightingPipelineInfo& entry : pipelineManager->GetLightingPipelines()) {
                 if (!entry.id) { continue; }
@@ -708,7 +709,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                     .lightData = graph.GetBufferAddress("light_data"_sid),
                     .lightVS = graph.TryGetBufferAddress("restir_lights_vs"_sid),
-                    .lightDispatchBuffer = lightDispatchAddress,
+                    .tileListBuffer = tileListAddress,
                     .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .reservoirBuffer = graph.TryGetBufferAddress("restir_reservoir_final"_sid),
@@ -730,10 +731,10 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .bFullRateResolve = fullRate,
                     .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
                     .sunVisIndex = graph.HasTexture("restir_sun_vis"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_sun_vis"_sid) : ~0x0u,
+                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                                      entry.index * sizeof(LightingDispatchParameters) + offsetof(LightingDispatchParameters, xDispatch));
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), entry.index * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
             }
         });
 }

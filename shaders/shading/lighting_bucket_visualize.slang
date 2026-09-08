@@ -4,23 +4,17 @@ import model_interop;
 import push_constant_interop;
 import bindless_declarations;
 import shader_functions;
+import bucket_dispatch_common;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
-void ComputeLightingBucketVisualize(uint3 dtid : SV_DispatchThreadID, uniform LightingBucketVisualizePushConstant pc)
+void ComputeLightingBucketVisualize(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uniform LightingBucketVisualizePushConstant pc)
 {
-    LightingDispatchParameters lightParams = pc.lightDispatchBuffer[pc.lightingIndex];
-    uint2 pixel = dtid.xy + uint2(lightParams.minX, lightParams.minY);
-    if (any(pixel >= uint2(lightParams.maxX, lightParams.maxY))) {
+    uint2 pixel = BucketPixel(pc.tileListBuffer, pc.tileCapacity, pc.lightingIndex, gid.x, gtid.xy);
+    if (any(pixel >= pc.extents)) {
         return;
     }
-
-    bool onEdge = pixel.x == lightParams.minX
-               || pixel.x == lightParams.maxX - 1
-               || pixel.y == lightParams.minY
-               || pixel.y == lightParams.maxY - 1;
-
-    if (!onEdge) {
+    if (!BucketTileEdge(gtid.xy)) {
         return;
     }
 
