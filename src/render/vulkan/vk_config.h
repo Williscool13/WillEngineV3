@@ -31,11 +31,6 @@ inline constexpr VkFormat DEPTH_ATTACHMENT_FORMAT = VK_FORMAT_D32_SFLOAT_S8_UINT
 inline constexpr VkFormat VISIBILITY_BUFFER_FORMAT = VK_FORMAT_R32G32_UINT;
 inline constexpr VkFormat GBUFFER_STABLE_ID_FORMAT = VK_FORMAT_R32G32_UINT;
 
-// Half is imprecise. Anything larger than a few units will show.
-inline constexpr VkFormat VISIBILITY_BARYCENTRIC_FORMAT = VK_FORMAT_R32G32_SFLOAT;
-// Keep an eye for mip selection artifacts
-inline constexpr VkFormat VISIBILITY_DERIVATIVES_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
-
 // R: Normal oct16 RG16 packed into R32
 // G: Motion vectors XY R16G16 | 16-bit spare
 // B: Roughness 15-bit | Metalness 1-bit

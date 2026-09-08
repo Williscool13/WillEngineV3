@@ -563,8 +563,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
     RenderTargets targets{
         .visibility = "visibility_target"_sid,
-        .barycentric = "visibility_barycentric"_sid,
-        .derivatives = "visibility_derivatives"_sid,
         .gbufferOne = "gbuffer_one"_sid,
         .gbufferTwo = "gbuffer_two"_sid,
         .shadows = "shadows_resolve_target"_sid,
@@ -577,8 +575,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     };
 
     renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_VISIBILITY_EMPTY, true);
-    renderGraph->CreateTexture(targets.barycentric, TextureInfo{VISIBILITY_BARYCENTRIC_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.derivatives, TextureInfo{VISIBILITY_DERIVATIVES_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     const bool bGeometry = renderFamilyProperties.bCanRender && viewFamily.instanceCount > 0;
     auto declareGeometryTarget = [&](StringID name, const TextureInfo& info, std::optional<VkClearValue> clear) {
         if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, clear); }
@@ -616,8 +612,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         // Geometry
         if (viewFamily.instanceCount > 0) {
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
-
-            SetupVisibilityBarycentricDerivativePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
             SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 

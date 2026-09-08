@@ -21,8 +21,8 @@ void ComputeShadingDefaultLit(uint3 dtid : SV_DispatchThreadID, uniform Visibili
     }
 
     ReconstructedShadingData data = ReconstructShadingInputs(
-        pixel,
-        pc.visibilityBufferIndex, pc.barycentricBufferIndex, pc.derivativeBufferIndex,
+        pixel, pc.extents,
+        pc.visibilityBufferIndex,
         pc.materialIndex,
         pc.instanceBuffer, pc.primitiveBuffer, pc.modelBuffer,
         pc.meshletBuffer, pc.meshletVerticesBuffer, pc.meshletTrianglesBuffer,

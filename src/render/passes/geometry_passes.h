@@ -21,13 +21,6 @@ void SetupGeometryPass(RenderGraph& graph,
                        const RenderTargets& targets,
                        uint32_t sceneIndex);
 
-void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
-                                              PipelineManager* pipelineManager,
-                                              const Core::ViewFamily& viewFamily,
-                                              Core::Array<uint32_t, 2> renderExtent,
-                                              const RenderTargets& targets,
-                                              uint32_t sceneIndex);
-
 void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,

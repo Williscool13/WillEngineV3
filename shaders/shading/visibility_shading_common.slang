@@ -29,11 +29,60 @@ public struct ReconstructedShadingData
     public Model model;
 }
 
+struct BarycentricDeriv
+{
+    float3 m_lambda;
+    float3 m_ddx;
+    float3 m_ddy;
+};
+
+// Perspective-correct barycentrics + analytic screen-space derivatives.
+// From: http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
+static BarycentricDeriv CalcFullBary(float4 pt0, float4 pt1, float4 pt2, float2 pixelNdc, float2 winSize)
+{
+    BarycentricDeriv ret = (BarycentricDeriv)0;
+
+    float3 invW = rcp(float3(pt0.w, pt1.w, pt2.w));
+
+    float2 ndc0 = pt0.xy * invW.x;
+    float2 ndc1 = pt1.xy * invW.y;
+    float2 ndc2 = pt2.xy * invW.z;
+
+    float invDet = rcp(determinant(float2x2(ndc2 - ndc1, ndc0 - ndc1)));
+    ret.m_ddx = float3(ndc1.y - ndc2.y, ndc2.y - ndc0.y, ndc0.y - ndc1.y) * invDet * invW;
+    ret.m_ddy = float3(ndc2.x - ndc1.x, ndc0.x - ndc2.x, ndc1.x - ndc0.x) * invDet * invW;
+    float ddxSum = dot(ret.m_ddx, float3(1, 1, 1));
+    float ddySum = dot(ret.m_ddy, float3(1, 1, 1));
+
+    float2 deltaVec = pixelNdc - ndc0;
+    float interpInvW = invW.x + deltaVec.x * ddxSum + deltaVec.y * ddySum;
+    float interpW = rcp(interpInvW);
+
+    ret.m_lambda.x = interpW * (invW[0] + deltaVec.x * ret.m_ddx.x + deltaVec.y * ret.m_ddy.x);
+    ret.m_lambda.y = interpW * (0.0f + deltaVec.x * ret.m_ddx.y + deltaVec.y * ret.m_ddy.y);
+    ret.m_lambda.z = interpW * (0.0f + deltaVec.x * ret.m_ddx.z + deltaVec.y * ret.m_ddy.z);
+
+    ret.m_ddx *= (2.0f / winSize.x);
+    ret.m_ddy *= (2.0f / winSize.y);
+    ddxSum *= (2.0f / winSize.x);
+    ddySum *= (2.0f / winSize.y);
+
+    ret.m_ddy *= -1.0f;
+    ddySum *= -1.0f;
+
+    float interpW_ddx = 1.0f / (interpInvW + ddxSum);
+    float interpW_ddy = 1.0f / (interpInvW + ddySum);
+
+    ret.m_ddx = interpW_ddx * (ret.m_lambda * interpInvW + ret.m_ddx) - ret.m_lambda;
+    ret.m_ddy = interpW_ddy * (ret.m_lambda * interpInvW + ret.m_ddy) - ret.m_lambda;
+
+    return ret;
+}
+
 public ReconstructedShadingData ReconstructShadingInputs(
     uint2 pixel,
+    uint2 extents,
     uint32_t visibilityBufferIndex,
-    uint32_t barycentricBufferIndex,
-    uint32_t derivativeBufferIndex,
     uint32_t materialIndex,
     Instance* instanceBuffer,
     Primitive* primitiveBuffer,
@@ -83,19 +132,29 @@ public ReconstructedShadingData ReconstructShadingInputs(
     VertexAttribute vertexAttribute1 = vertexAttributeBuffer[meshlet.vertexOffset + v1i];
     VertexAttribute vertexAttribute2 = vertexAttributeBuffer[meshlet.vertexOffset + v2i];
 
-    float2 bary2 = rdgStorageFloat2[barycentricBufferIndex].Load(pixel);
-    float3 bary = float3(bary2.x, bary2.y, 1.0 - bary2.x - bary2.y);
-    float4 derivs = rdgStorageFloat4[derivativeBufferIndex].Load(pixel);
+    float3 extent = result.primitive.boundingBoxMax - result.primitive.boundingBoxMin;
+    float3 objPos0 = DecodePosition(vertexPosition0, result.primitive.boundingBoxMin, extent);
+    float3 objPos1 = DecodePosition(vertexPosition1, result.primitive.boundingBoxMin, extent);
+    float3 objPos2 = DecodePosition(vertexPosition2, result.primitive.boundingBoxMin, extent);
+
+    float4x4 mvp = mul(sceneData->viewProj, result.model.modelMatrix);
+    float4 clip0 = mul(mvp, float4(objPos0, 1.0));
+    float4 clip1 = mul(mvp, float4(objPos1, 1.0));
+    float4 clip2 = mul(mvp, float4(objPos2, 1.0));
+    float2 pixelNdc = (float2(pixel) + 0.5) / float2(extents) * 2.0 - 1.0;
+    BarycentricDeriv baryDeriv = CalcFullBary(clip0, clip1, clip2, pixelNdc, float2(extents));
+    float3 bary = baryDeriv.m_lambda;
+
+    float2 uv0 = DecodeUV(vertexAttribute0);
+    float2 uv1 = DecodeUV(vertexAttribute1);
+    float2 uv2 = DecodeUV(vertexAttribute2);
 
     result.shadingInputs.mv = mul(sceneData->view, result.model.modelMatrix);
-    float3 extent = result.primitive.boundingBoxMax - result.primitive.boundingBoxMin;
-    result.shadingInputs.objPos = bary.x * DecodePosition(vertexPosition0, result.primitive.boundingBoxMin, extent)
-                                + bary.y * DecodePosition(vertexPosition1, result.primitive.boundingBoxMin, extent)
-                                + bary.z * DecodePosition(vertexPosition2, result.primitive.boundingBoxMin, extent);
+    result.shadingInputs.objPos = bary.x * objPos0 + bary.y * objPos1 + bary.z * objPos2;
     result.shadingInputs.posVS = mul(result.shadingInputs.mv, float4(result.shadingInputs.objPos, 1.0)).xyz;
     result.shadingInputs.interp = InterpolateVertex(bary, vertexAttribute0, vertexAttribute1, vertexAttribute2, result.shadingInputs.mv);
-    result.shadingInputs.uvDdx = derivs.xy;
-    result.shadingInputs.uvDdy = derivs.zw;
+    result.shadingInputs.uvDdx = baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2;
+    result.shadingInputs.uvDdy = baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2;
 
     float4 currClip = mul(sceneData->viewProj, mul(result.model.modelMatrix, float4(result.shadingInputs.objPos, 1.0)));
     float4 prevClip = mul(sceneData->prevViewProj, mul(result.model.prevModelMatrix, float4(result.shadingInputs.objPos, 1.0)));

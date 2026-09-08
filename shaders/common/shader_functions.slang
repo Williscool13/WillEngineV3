@@ -152,7 +152,7 @@ float3 OctDecode(float2 f)
 
 // Interpolated surface attributes in view space, reconstructed from barycentrics + vertices.
 // mv: model-view matrix (mul(view, modelMatrix))
-// bary: float3(bary.x, bary.y, 1 - bary.x - bary.y) from the barycentric buffer
+// bary: perspective-correct barycentrics, sum to 1
 struct InterpolatedVertex
 {
     float3 normalVS;

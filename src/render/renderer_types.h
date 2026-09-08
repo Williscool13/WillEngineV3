@@ -28,8 +28,6 @@ struct RendererStatistics
 struct RenderTargets
 {
     StringID visibility;
-    StringID barycentric;
-    StringID derivatives;
 
     // GBuffer
     StringID gbufferOne;

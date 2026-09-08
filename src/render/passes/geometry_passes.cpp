@@ -651,54 +651,6 @@ void SetupGeometryPass(RenderGraph& graph,
     addCullChain(true);
 }
 
-void SetupVisibilityBarycentricDerivativePass(RenderGraph& graph,
-                                              PipelineManager* pipelineManager,
-                                              const Core::ViewFamily& viewFamily,
-                                              Core::Array<uint32_t, 2> renderExtent,
-                                              const RenderTargets& targets,
-                                              uint32_t sceneIndex)
-{
-    ZoneScoped;
-    RenderPass& visBarDer = graph.AddPass("Visibility Barycentric Derivative"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
-    visBarDer.ReadSampledImage(targets.visibility);
-    visBarDer.ReadBuffer(SCENE_DATA_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    visBarDer.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-    visBarDer.WriteStorageImage(targets.barycentric);
-    visBarDer.WriteStorageImage(targets.derivatives);
-    visBarDer.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], sceneIndex,
-            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VisibilityBufferResolvePushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                .extents = {width, height},
-                .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-                .barycentricTargetIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
-                .derivativeTargetIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
-            };
-
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("visibility_buffer_barycentric_derivative"_sid);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
-            vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
-        });
-}
-
 void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
@@ -812,8 +764,6 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 
     RenderPass& visShading = graph.AddPass("Visibility Shading"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visShading.ReadSampledImage(targets.visibility);
-    visShading.ReadStorageImage(targets.barycentric);
-    visShading.ReadStorageImage(targets.derivatives);
     visShading.ReadBuffer(SCENE_DATA_BUFFER);
     visShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     visShading.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
@@ -828,7 +778,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     visShading.WriteStorageImage(targets.gbufferOne);
     visShading.WriteStorageImage(targets.gbufferTwo);
     visShading.Execute([&, pipelineManager, sceneIndex,
-            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
+            visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress shadeDispatchAddress = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER);
@@ -863,8 +813,6 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .extents = {renderExtent[0], renderExtent[1]},
                     .materialIndex = entry.materialIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-                    .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
-                    .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
                 };
@@ -886,8 +834,6 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
     ZoneScoped;
     RenderPass& bucketVisualizePass = graph.AddPass("Bucket Visualize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     bucketVisualizePass.ReadSampledImage(targets.visibility);
-    bucketVisualizePass.ReadStorageImage(targets.barycentric);
-    bucketVisualizePass.ReadStorageImage(targets.derivatives);
     bucketVisualizePass.ReadBuffer(SCENE_DATA_BUFFER);
     bucketVisualizePass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     bucketVisualizePass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
@@ -902,7 +848,7 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
     bucketVisualizePass.WriteStorageImage(targets.gbufferOne);
     bucketVisualizePass.WriteStorageImage(targets.gbufferTwo);
     bucketVisualizePass.Execute([&, pipelineManager, sceneIndex,
-            visibility = targets.visibility, barycentric = targets.barycentric, derivatives = targets.derivatives,
+            visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shading_bucket_visualize"_sid);
@@ -925,8 +871,6 @@ void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
                     .shadeDispatchBuffer = shadeDispatchAddress,
                     .materialIndex = stableIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-                    .barycentricBufferIndex = graph.GetStorageImageViewDescriptorIndex(barycentric),
-                    .derivativeBufferIndex = graph.GetStorageImageViewDescriptorIndex(derivatives),
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
                 };

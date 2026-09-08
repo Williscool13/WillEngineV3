@@ -441,8 +441,6 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("instancing_instance_lod_occlusion"_sid, src / "instancing_lod.spv", "ComputeInstanceLODOcclusion",
                             sizeof(InstanceLODOcclusionPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("visibility_buffer_barycentric_derivative"_sid, src / "visibility_barycentric_derivative.spv", "ComputeVisibilityBarycentricDerivative",
-                            sizeof(VisibilityBufferResolvePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("visibility_bucketing_bounds_calculation"_sid, src / "visibility_bucketing_bounds.spv", "ComputeShadeDispatchBucketing",
                             sizeof(ShadeBucketingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("visibility_shading_bucketing_resolve"_sid, src / "visibility_bucketing_shade_resolve.spv", "ComputeShadeDispatchBucketingResolve",
