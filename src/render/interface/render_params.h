@@ -494,12 +494,20 @@ struct ReflectionProbeConfiguration
     bool bBruteForcePick{false};
 };
 
+enum class BucketDebugMode : int32_t
+{
+    Off = 0,
+    ShadeBuckets = 1,
+    ShadeHeat = 2,
+    LightBuckets = 3,
+    LightHeat = 4,
+};
+
 /** The bFreeze* members are per-stage selections; the game gates them by its master freeze during the frame copy. */
 struct DebugRenderParams
 {
     bool bWireframe{false};
-    bool bEnableShadeDispatchBucketingVisualization{false};
-    bool bEnableLightingBucketingVisualization{false};
+    BucketDebugMode bucketDebugMode{BucketDebugMode::Off};
     bool bEnableGPUDebug{false};
     bool bLockGPUDebug{false};
     bool bDDGIProbeDebug{false};

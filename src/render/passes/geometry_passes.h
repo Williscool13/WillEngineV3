@@ -26,7 +26,8 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   const Core::ViewFamily& viewFamily,
                                   Core::Array<uint32_t, 2> renderExtent,
                                   const RenderTargets& targets,
-                                  uint32_t sceneIndex);
+                                  uint32_t sceneIndex,
+                                  Core::BucketDebugMode bucketDebugMode);
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
@@ -36,20 +37,16 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena);
 
-void SetupVisibilityBucketingDebugPass(RenderGraph& graph,
-                                       PipelineManager* pipelineManager,
-                                       const Core::ViewFamily& viewFamily,
-                                       Core::Array<uint32_t, 2> renderExtent,
-                                       const RenderTargets& targets,
-                                       uint32_t sceneIndex,
-                                       Core::Arena& arena);
-
-void SetupLightingBucketingDebugPass(RenderGraph& graph,
-                                     PipelineManager* pipelineManager,
-                                     const Core::ViewFamily& viewFamily,
-                                     Core::Array<uint32_t, 2> renderExtent,
-                                     const RenderTargets& targets,
-                                     uint32_t sceneIndex);
+/**
+ * Bucket debug views written to bucket_debug_target for the debug visualizer, one group per tile off the bounds pass's per-tile bucket bitset.
+ * Buckets modes: fill = the pixel's own bucket, concentric ring n = the n-th bucket dispatched to the tile; Heat modes: tile color by bucket count.
+ */
+void SetupBucketDebugPass(RenderGraph& graph,
+                          PipelineManager* pipelineManager,
+                          const Core::ViewFamily& viewFamily,
+                          Core::Array<uint32_t, 2> renderExtent,
+                          const RenderTargets& targets,
+                          Core::BucketDebugMode bucketDebugMode);
 } // Render
 
 #endif //WILL_ENGINE_GEOMETRY_PASSES_H

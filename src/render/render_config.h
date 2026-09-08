@@ -62,6 +62,8 @@ inline const StringID SHADING_DISPATCH_BUCKETING_BUFFER = "shading_bucketing_buf
 inline const StringID LIGHTING_DISPATCH_BUCKETING_BUFFER = "lighting_bucketing_buffer"_sid;
 inline const StringID SHADING_TILE_LIST_BUFFER = "shading_tile_list_buffer"_sid;
 inline const StringID LIGHTING_TILE_LIST_BUFFER = "lighting_tile_list_buffer"_sid;
+inline const StringID BUCKET_TILE_BITS_BUFFER = "bucket_tile_bits_buffer"_sid;
+inline const StringID BUCKET_DEBUG_TARGET = "bucket_debug_target"_sid;
 
 inline constexpr uint32_t BucketTileCapacity(uint32_t width, uint32_t height)
 {

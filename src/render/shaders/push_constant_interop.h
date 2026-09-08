@@ -354,6 +354,8 @@ SHADER_PUBLIC struct ShadeBucketingPushConstant
     SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer; // out
     SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileListBuffer; // out, tileCapacity entries per bucket
     SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileListBuffer; // out
+    SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileBitsBuffer; // out, per-tile bucket bitset (MAX_SHADE_BUCKETS/32 words), null unless a shade debug view is on
+    SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileBitsBuffer; // out, per-tile bucket bitset (MAX_LIGHTING_BUCKETS/32 words), null unless a light debug view is on
     SHADER_PUBLIC uint2 extents;
     // In
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
@@ -369,15 +371,17 @@ SHADER_PUBLIC struct BucketDispatchCountPushConstant
     SHADER_PUBLIC uint32_t lightingCount;
 };
 
-SHADER_PUBLIC struct LightingBucketVisualizePushConstant
+SHADER_PUBLIC struct BucketDebugPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer; // in
-    SHADER_PUBLIC uint32_t lightingIndex;
-    // Out
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t gbufferTwoIndex;
-    SHADER_PUBLIC uint32_t tileCapacity;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileBitsBuffer;
     SHADER_PUBLIC uint2 extents;
+    SHADER_PUBLIC uint32_t tilesX;
+    SHADER_PUBLIC uint32_t bLighting;
+    SHADER_PUBLIC uint32_t bHeat;
+    SHADER_PUBLIC uint32_t visibilityBufferIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
 };
 
 SHADER_PUBLIC struct VisibilityShadingPushConstant

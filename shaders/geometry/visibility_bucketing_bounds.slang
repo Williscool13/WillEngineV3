@@ -36,6 +36,7 @@ void ComputeShadeDispatchBucketing(uint3 dtid : SV_DispatchThreadID, uint3 gid :
     GroupMemoryBarrierWithGroupSync();
 
     uint tileIndex = (gid.y << 16) | gid.x;
+    uint tileLinear = gid.y * ((pc.extents.x + BUCKET_TILE_SIZE - 1u) / BUCKET_TILE_SIZE) + gid.x;
 
     bool valid = dtid.x < pc.extents.x && dtid.y < pc.extents.y;
     uint shadeBucket = ~0u;
@@ -80,5 +81,14 @@ void ComputeShadeDispatchBucketing(uint3 dtid : SV_DispatchThreadID, uint3 gid :
             }
             done = true;
         }
+    }
+
+    // Debug views read the dedup bitsets back per tile
+    GroupMemoryBarrierWithGroupSync();
+    if (pc.shadeTileBitsBuffer != nullptr && gindex < MAX_SHADE_BUCKETS / 32) {
+        pc.shadeTileBitsBuffer[tileLinear * (MAX_SHADE_BUCKETS / 32) + gindex] = gsShadeBits[gindex];
+    }
+    if (pc.lightTileBitsBuffer != nullptr && gindex < MAX_LIGHTING_BUCKETS / 32) {
+        pc.lightTileBitsBuffer[tileLinear * (MAX_LIGHTING_BUCKETS / 32) + gindex] = gsLightBits[gindex];
     }
 }

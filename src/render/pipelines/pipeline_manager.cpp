@@ -447,16 +447,13 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("visibility_bucketing_dispatch_count"_sid, src / "visibility_bucketing_dispatch_count.spv", "ComputeBucketDispatchCount",
                             sizeof(BucketDispatchCountPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("shading_bucket_visualize"_sid, src / "shading_bucket_visualize.spv", "ComputeShadingBucketVisualize",
-                            sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("lighting_bucket_visualize"_sid, src / "lighting_bucket_visualize.spv", "ComputeLightingBucketVisualize",
-                            sizeof(LightingBucketVisualizePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("bucket_debug"_sid, src / "bucket_visualize.spv", "ComputeBucketDebug",
+                            sizeof(BucketDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("default_lit"_sid, src / "shading_default_lit.spv", "ComputeShadingDefaultLit",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("error_unlit"_sid, src / "shading_error_unlit.spv", "ComputeShadingErrorUnlit",
                             sizeof(VisibilityShadingPushConstant), PipelineCategory::Critical);
 
-    shadingPipelines.PushBack("shading_bucket_visualize"_sid);
     shadingPipelines.PushBack("default_lit"_sid);
     shadingPipelines.PushBack("error_unlit"_sid);
 

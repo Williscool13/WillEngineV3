@@ -613,17 +613,11 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         if (viewFamily.instanceCount > 0) {
             SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, renderFamilyProperties, renderExtent, targets, 0);
 
-            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+            SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameBuffer.debug.bucketDebugMode);
 
             SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
 
-            if (frameBuffer.debug.bEnableShadeDispatchBucketingVisualization) {
-                SetupVisibilityBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
-            }
-
-            if (frameBuffer.debug.bEnableLightingBucketingVisualization) {
-                SetupLightingBucketingDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
-            }
+            SetupBucketDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameBuffer.debug.bucketDebugMode);
 
 
             SetupTLASBuild(*renderGraph, context, pipelineManager, viewFamily, renderExtent, frameResourceLimits);

@@ -594,9 +594,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (ImGui::Button("Disable Debug View")) {
             state->debug.resourceName.Clear();
         }
-        ImGui::Checkbox("V-Buffer Shade Dispatch Bucketing##DebugView", &state->debug.render.bEnableShadeDispatchBucketingVisualization);
-        ImGui::SameLine();
-        ImGui::Checkbox("V-Buffer Lighting Bucketing##DebugView", &state->debug.render.bEnableLightingBucketingVisualization);
 
         if (ImGui::CollapsingHeader("Hotkeys")) {
             const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
@@ -631,8 +628,30 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("Visibility Buffer (Instance)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffInstance, Core::DebugViewAspect::None);
             if (ImGui::Button("Visibility Buffer (Meshlet)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffMeshlet, Core::DebugViewAspect::None);
             if (ImGui::Button("Visibility Buffer (Triangle)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffTriangle, Core::DebugViewAspect::None);
-            if (ImGui::Button("Visibility Bucketing (Shading)")) setDebugTarget("visibility_target", DebugTransformationType::VisBucketShading, Core::DebugViewAspect::None);
-            if (ImGui::Button("Visibility Bucketing (Lighting)")) setDebugTarget("visibility_target", DebugTransformationType::VisBucketLighting, Core::DebugViewAspect::None);
+            auto setBucketDebug = [&](const char* label, Core::BucketDebugMode mode) {
+                if (!ImGui::Button(label)) {
+                    return;
+                }
+                if (state->debug.render.bucketDebugMode == mode) {
+                    state->debug.render.bucketDebugMode = Core::BucketDebugMode::Off;
+                    state->debug.resourceName.Clear();
+                }
+                else {
+                    state->debug.render.bucketDebugMode = mode;
+                    state->debug.resourceName = Core::InlineString("bucket_debug_target");
+                    state->debug.transformationType = DebugTransformationType::None;
+                    state->debug.viewAspect = Core::DebugViewAspect::None;
+                }
+            };
+            setBucketDebug("Bucket Tiles (Shading)", Core::BucketDebugMode::ShadeBuckets);
+            ImGui::SameLine();
+            setBucketDebug("Bucket Heat (Shading)", Core::BucketDebugMode::ShadeHeat);
+            setBucketDebug("Bucket Tiles (Lighting)", Core::BucketDebugMode::LightBuckets);
+            ImGui::SameLine();
+            setBucketDebug("Bucket Heat (Lighting)", Core::BucketDebugMode::LightHeat);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Tiles: fill = the pixel's own bucket (dim), one bright ring per bucket dispatched to the tile, outermost = lowest index; a ring hue with no matching fill is over-dispatch. Heat: tile color by bucket count, black 0, blue 1, cyan 2, green 3, yellow 4, orange 5, red 6, magenta 7+.");
+            }
         }
         if (ImGui::CollapsingHeader("ReSTIR DI Visualize")) {
             if (ImGui::Button("Generate Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirLightIdx, Core::DebugViewAspect::Depth);
