@@ -1765,8 +1765,10 @@ void WillEngine::PrepareImgui(ImDrawDataSnapshot* imguiSnapshot)
 
 void WillEngine::Cleanup()
 {
+    ZoneScopedN("Cleanup");
 #if WILL_EDITOR
     if (mcpServer) {
+        ZoneScopedN("MCPServerShutdown");
         mcpServer->RequestShutdown();
         mcpServer->Join();
         mcpServer->~MCPServer();
@@ -1776,59 +1778,128 @@ void WillEngine::Cleanup()
 #endif
 
 #if WILL_EDITOR
-    assetGenerator->Join();
-#endif
-    asyncAssetLoadManager->Join();
-    scheduler->WaitforAll();
-    gpuDispatcher->Shutdown();
-    renderThread->RequestShutdown();
-    renderThread->Join();
-
-    gameFunctions.gameUnload(engineContext, engineState);
-    gameFunctions.gameShutdown(engineContext, engineState);
-    if (engineContext->gameState) {
-        memoryManager.PersistentFree(engineContext->gameState);
-        engineContext->gameState = nullptr;
+    {
+        ZoneScopedN("AssetGeneratorJoin");
+        assetGenerator->Join();
     }
-    engineState->registry.clear();
-    PlaybackCommands(engineContext, engineState);
-    engineState->~EngineState();
-    scheduler->ShutdownNow();
-    engineContext->scheduler = nullptr;
-    engineContext->~EngineContext();
+#endif
+    {
+        ZoneScopedN("AsyncAssetLoadJoin");
+        asyncAssetLoadManager->Join();
+    }
+    {
+        ZoneScopedN("SchedulerWaitAll");
+        scheduler->WaitforAll();
+    }
+    {
+        ZoneScopedN("GPUDispatcherShutdown");
+        gpuDispatcher->Shutdown();
+    }
+    {
+        ZoneScopedN("RenderThreadShutdown");
+        renderThread->RequestShutdown();
+        renderThread->Join();
+    }
 
-    inputManager->~InputManager();
+    {
+        ZoneScopedN("GameShutdown");
+        gameFunctions.gameUnload(engineContext, engineState);
+        gameFunctions.gameShutdown(engineContext, engineState);
+        if (engineContext->gameState) {
+            memoryManager.PersistentFree(engineContext->gameState);
+            engineContext->gameState = nullptr;
+        }
+    }
+    {
+        ZoneScopedN("RegistryTeardown");
+        engineState->registry.clear();
+        PlaybackCommands(engineContext, engineState);
+        engineState->~EngineState();
+    }
+    {
+        ZoneScopedN("SchedulerShutdown");
+        scheduler->ShutdownNow();
+    }
+    engineContext->scheduler = nullptr;
+    {
+        ZoneScopedN("EngineContextDestroy");
+        engineContext->~EngineContext();
+    }
+
+    {
+        ZoneScopedN("InputManagerDestroy");
+        inputManager->~InputManager();
+    }
 
 #if WILL_EDITOR
-    assetGenerator->~AssetGenerator();
+    {
+        ZoneScopedN("AssetGeneratorDestroy");
+        assetGenerator->~AssetGenerator();
+    }
 #endif
 
-    physicsSystem->~PhysicsSystem();
-    materialManager->~MaterialManager();
-    assetManager->~AssetManager();
+    {
+        ZoneScopedN("PhysicsSystemDestroy");
+        physicsSystem->~PhysicsSystem();
+    }
+    {
+        ZoneScopedN("MaterialManagerDestroy");
+        materialManager->~MaterialManager();
+    }
+    {
+        ZoneScopedN("AssetManagerDestroy");
+        assetManager->~AssetManager();
+    }
 
-    asyncAssetLoadManager->~AsyncAssetLoadManager();
-    gpuDispatcher->~GPUDispatcher();
+    {
+        ZoneScopedN("AsyncAssetLoadDestroy");
+        asyncAssetLoadManager->~AsyncAssetLoadManager();
+    }
+    {
+        ZoneScopedN("GPUDispatcherDestroy");
+        gpuDispatcher->~GPUDispatcher();
+    }
 
-    audioManager->~AudioManager();
+    {
+        ZoneScopedN("AudioManagerDestroy");
+        audioManager->~AudioManager();
+    }
 
-    engineRenderSynchronization->~FrameSync();
+    {
+        ZoneScopedN("FrameSyncDestroy");
+        engineRenderSynchronization->~FrameSync();
+    }
 
-    renderThread->~RenderThread();
+    {
+        ZoneScopedN("RenderThreadDestroy");
+        renderThread->~RenderThread();
+    }
 
-    scheduler->~TaskScheduler();
+    {
+        ZoneScopedN("TaskSchedulerDestroy");
+        scheduler->~TaskScheduler();
+    }
 
-    SDL_DestroyWindow(window);
+    {
+        ZoneScopedN("WindowDestroy");
+        SDL_DestroyWindow(window);
+    }
     window = nullptr;
     gMemory = nullptr;
 
 #ifndef GAME_STATIC
-    gameDll.Unload();
+    {
+        ZoneScopedN("GameDllUnload");
+        gameDll.Unload();
+    }
 #endif
 
 #if LOGGING_ENABLED
-    engineLogger->Shutdown();
-    engineLogger->~EngineLogger();
+    {
+        ZoneScopedN("LoggerShutdown");
+        engineLogger->Shutdown();
+        engineLogger->~EngineLogger();
+    }
 #endif
 }
 }

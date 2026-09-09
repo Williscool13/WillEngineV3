@@ -133,8 +133,10 @@ public:
             }
             assert(waveCount > 0 && "SystemGraph wave deadlock");
             if (bDumpActive) { DumpWave(state, wave, waveCount, waveIndex); }
-            ++waveIndex;
 
+            ZoneScopedN("Wave");
+            ZoneValue(waveIndex);
+            ZoneValue(waveCount);
             if (waveCount == 1 || scheduler == nullptr) {
                 for (uint32_t t = 0; t < waveCount; ++t) {
                     RunNode(nodes[wave[t]], ctx, state, frameBuffer);
@@ -154,6 +156,7 @@ public:
             }
 
             for (uint32_t t = 0; t < waveCount; ++t) { finished |= 1ull << (wave[t] - begin); }
+            ++waveIndex;
         }
     }
 
