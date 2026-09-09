@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builds the GI sun-bounce scene: assets/scenes/gi_sunbounce.wscene.
+Builds the GI sun-bounce scene: scenes/gi_sunbounce.wscene.
 Run from repo root:  python scripts/build_gi_sunbounce.py
 
 The fail case under test: the dominant light source reaches the interior only through GI
@@ -49,7 +49,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "gi_sunbounce.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "gi_sunbounce.wscene")
 SCENE_ID = name_id("gi_sunbounce")
 
 IDX = asset_index.scan()

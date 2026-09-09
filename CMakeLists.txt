@@ -58,10 +58,12 @@ endif ()
 if (WILL_ENGINE_PACKAGED_BUILD)
     # todo remove when actually making packaged builds
     add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
+    add_compile_definitions(SCENES_PATH="${CMAKE_SOURCE_DIR}/scenes")
     add_compile_definitions(CONFIG_PATH="${CMAKE_SOURCE_DIR}/config")
     add_compile_definitions(PACKAGED_BUILD)
 else ()
     add_compile_definitions(ASSETS_PATH="${CMAKE_SOURCE_DIR}/assets")
+    add_compile_definitions(SCENES_PATH="${CMAKE_SOURCE_DIR}/scenes")
     add_compile_definitions(CONFIG_PATH="${CMAKE_SOURCE_DIR}/config")
 endif ()
 

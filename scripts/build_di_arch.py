@@ -46,7 +46,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "di_arch.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "di_arch.wscene")
 SCENE_ID = name_id("di_arch")
 
 IDX = asset_index.scan()

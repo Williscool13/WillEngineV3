@@ -57,7 +57,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_DIR = os.path.join(REPO, "assets", "scenes")
+SCENE_DIR = os.path.join(REPO, "scenes")
 MAT_DIR = os.path.join(REPO, "assets", "materials")
 
 FRAG_SHADER = 16532098932897623660

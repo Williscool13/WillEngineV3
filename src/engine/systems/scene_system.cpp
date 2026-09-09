@@ -286,7 +286,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
         std::ranges::transform(stem.buf, stem.buf + stem.len, stem.buf, tolower);
         std::ranges::replace(stem.buf, stem.buf + stem.len, ' ', '_');
         stem.Append(".wscene");
-        path = Platform::GetAssetPath() / "scenes" / stem.c_str();
+        path = Platform::GetScenePath() / stem.c_str();
         assert(path.Extension() == ".wscene");
     }
 

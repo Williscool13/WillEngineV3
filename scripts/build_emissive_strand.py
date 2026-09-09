@@ -26,7 +26,7 @@ from build_emissive_stress import write_material, mesh_only, emissive_mesh, comm
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_DIR = os.path.join(REPO, "assets", "scenes")
+SCENE_DIR = os.path.join(REPO, "scenes")
 
 BULB_COUNT = 32           # add_module part cap
 BULB_RADIUS = 0.02

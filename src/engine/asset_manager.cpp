@@ -1418,10 +1418,12 @@ void AssetManager::Scan()
 
     if (ctx->rescan.bResources) {
         const Core::Path& assetPath = Platform::GetAssetPath();
-        if (Platform::FileExists(assetPath)) {
+        const Core::Path& scenePath = Platform::GetScenePath();
+        if (Platform::FileExists(assetPath) || Platform::FileExists(scenePath)) {
             Core::Vector<Core::Path> paths;
             paths = Core::Vector<Core::Path>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
-            Platform::RecursiveDirectoryIterator(assetPath, paths);
+            if (Platform::FileExists(assetPath)) { Platform::RecursiveDirectoryIterator(assetPath, paths); }
+            if (Platform::FileExists(scenePath)) { Platform::RecursiveDirectoryIterator(scenePath, paths); }
 
             for (const auto& path : paths) {
                 const auto ext = path.Extension();

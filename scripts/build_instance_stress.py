@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builds the instance stress scene: assets/scenes/instance_stress.wscene
+Builds the instance stress scene: scenes/instance_stress.wscene
 Run from repo root:  python scripts/build_instance_stress.py
 
 A 47x47x47 lattice of BoxTextured4k instances with the central 13x13x13 block carved out,
@@ -37,7 +37,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "instance_stress.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "instance_stress.wscene")
 SCENE_ID = name_id("instance_stress")
 
 # 47 and 13 are both odd so the void centres exactly on the lattice centre cell (index 23).

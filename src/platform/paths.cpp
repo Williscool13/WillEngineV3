@@ -63,6 +63,17 @@ const Core::Path& GetAssetPath()
 #endif
 }
 
+const Core::Path& GetScenePath()
+{
+#ifdef SCENES_PATH
+    static const Core::Path path = Core::Path(SCENES_PATH);
+    return path;
+#else
+    static const Core::Path path = GetExecutablePath() / "scenes";
+    return path;
+#endif
+}
+
 const Core::Path& GetLogPath()
 {
 #ifndef PACKAGED_BUILD

@@ -30,7 +30,7 @@ import asset_index
 IDX = asset_index.scan()
 ENV_MAP = IDX.envmap("modern_evening_street_4k")
 
-SCENE_PATH = os.path.join(wa._REPO_ROOT, "assets", "scenes", "restir_shader_lab.wscene")
+SCENE_PATH = os.path.join(wa._REPO_ROOT, "scenes", "restir_shader_lab.wscene")
 SCENE_ID = wa.name_id("restir_shader_lab")
 
 

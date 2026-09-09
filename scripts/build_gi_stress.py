@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builds the GI stress scene: assets/scenes/gi_stress.wscene + its materials.
+Builds the GI stress scene: scenes/gi_stress.wscene + its materials.
 Run from repo root:  python scripts/build_gi_stress.py
 
 Two rows of open-front rooms (front faces -Z, camera aisle between the rows), skybox at 0 so the
@@ -40,7 +40,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "gi_stress.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "gi_stress.wscene")
 SCENE_ID = name_id("gi_stress")
 
 IDX = asset_index.scan()

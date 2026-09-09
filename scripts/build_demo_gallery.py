@@ -44,7 +44,7 @@ IDX = asset_index.scan()
 ROBOTO_FONT = IDX.font("Roboto")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "demo_gallery.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "demo_gallery.wscene")
 SCENE_ID = name_id("demo_gallery")
 
 H = 6.0      # interior height everywhere (court walls same, no roof)

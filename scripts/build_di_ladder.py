@@ -55,7 +55,7 @@ import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "di_ladder.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "di_ladder.wscene")
 SCENE_ID = name_id("di_ladder")
 
 IDX = asset_index.scan()

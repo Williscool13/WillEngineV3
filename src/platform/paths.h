@@ -25,6 +25,8 @@ const Core::Path& GetShaderPath();
 
 const Core::Path& GetAssetPath();
 
+const Core::Path& GetScenePath();
+
 const Core::Path& GetCachePath();
 
 const Core::Path& GetConfigPath();

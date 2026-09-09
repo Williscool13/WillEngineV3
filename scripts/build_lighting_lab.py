@@ -35,7 +35,7 @@ ROBOTO_FONT = IDX.font("Roboto")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "lighting_lab.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting_lab.wscene")
 # Pinned: next_id() is a deterministic sequence, so leaving the scene id to the tail of that
 # sequence would change the scene's identity every time an entity is added ahead of it.
 SCENE_ID = 908694288083905623

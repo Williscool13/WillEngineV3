@@ -19,7 +19,7 @@ Color key:            Expected label reading orientation:
 
 Emissive walls make the test lighting-independent; no sun, no sky exposure.
 
-WARNING: the live assets/scenes/probe_orientation_room.wscene has been edited in the
+WARNING: the live scenes/probe_orientation_room.wscene has been edited in the
 editor since this script last wrote it -- it carries a hand-placed Probe entity (whose
 probeId names a baked .wprobe) and three hand-made view spheres. RE-RUNNING THIS SCRIPT
 DISCARDS THOSE. Only re-run if you mean to go back to the generated state.
@@ -46,7 +46,7 @@ LIT_EMISSIVE = 14720002576866434405
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "probe_orientation_room.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "probe_orientation_room.wscene")
 # Pinned: leaving this to the tail of the next_id() sequence changed the scene's identity
 # every time an entity was added ahead of it.
 SCENE_ID = 92882415086882491

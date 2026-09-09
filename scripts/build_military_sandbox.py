@@ -102,7 +102,7 @@ from wscene_authoring import (
 )
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "assets", "scenes", "military_sandbox.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "military_sandbox.wscene")
 SCENE_NAME = "military_sandbox"
 SCENE_ID = name_id(SCENE_NAME)
 
@@ -1301,7 +1301,7 @@ CAMERA = {"rotation": list(camera_look_quat(-24.0, -13.0, 64.0)), "translation":
 wa.write_scene(SCENE_PATH, all_entities, SCENE_ID, SCENE_NAME, editor_camera=CAMERA)
 
 # Capture-run shots, one or two per zone; names order the PNG listing into a walkthrough.
-SHOTS_PATH = os.path.join(REPO, "assets", "scenes", "military_sandbox.wshots")
+SHOTS_PATH = os.path.join(REPO, "scenes", "military_sandbox.wshots")
 write_shots(SHOTS_PATH, [
     shot("01_overview", CAM_POS, (0.0, 2.0, 0.0)),
     shot("02_gate", (0.0, 1.8, -58.0), (0.0, 3.0, -40.0)),
