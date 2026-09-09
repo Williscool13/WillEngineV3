@@ -183,6 +183,12 @@ static void ImGuiFree(void* ptr, void* userData)
     static_cast<Core::MemoryManager*>(userData)->GeneralFree(ptr);
 }
 
+static void SystemGraphDumpSink(EngineState* state, const char* line)
+{
+    Console::Print(state, line);
+    LOG_INFO(Engine, "{}", line);
+}
+
 static void DumpMemoryBreakdown(Core::MemoryManager& memoryManager)
 {
     struct PoolRef
@@ -513,6 +519,8 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;
+        engineContext->systemGraph = &systemGraph;
+        systemGraph.SetDumpSink(&SystemGraphDumpSink);
         engineContext->memoryManager = &memoryManager;
         engineContext->gameplayArena = Core::VirtualArena(memoryManager.Virtual(), 8ull * 1024 * 1024, Core::AllocTag::ECS, "gameplay");
         engineContext->editorArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Editor, "editor");
@@ -1644,7 +1652,8 @@ void WillEngine::Run()
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();
                 currentFrameBuffer->currentFrameBuffer = engineRenderSynchronization->currentRenderFrame;
-                currentFrameBuffer->bLogRDG = bLogRDG;
+                currentFrameBuffer->bLogRDG = bLogRDG || engineState->requests.bLogRDG;
+                engineState->requests.bLogRDG = false;
                 currentFrameBuffer->bDrawImgui = bDrawImgui;
 
                 engineRenderSynchronization->renderFrameBuffer[engineRenderSynchronization->currentRenderFrame] = engineRenderSynchronization->currentFrameBufferIndex;

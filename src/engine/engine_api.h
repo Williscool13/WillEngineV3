@@ -180,6 +180,7 @@ struct FrameRequests
     Core::InlineString<512> screenshotPath{};
     bool bViewportClickPending{false};
     bool bRequestedQuit{false};
+    bool bLogRDG{false};
     Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
 };
 

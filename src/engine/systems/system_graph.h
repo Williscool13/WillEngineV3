@@ -12,6 +12,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "core/string_id.h"
+#include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 
 namespace Core
@@ -65,10 +66,16 @@ class SystemGraph
 public:
     void SetScheduler(enki::TaskScheduler* scheduler_) { scheduler = scheduler_; }
 
+    void SetDumpSink(void (*sink)(EngineState*, const char*)) { dumpSink = sink; }
+
+    void RequestDump() { bDumpPending = true; }
+
     void BeginFrame()
     {
         nodes.Clear();
         cursor = 0;
+        bDumpActive = bDumpPending && dumpSink != nullptr;
+        bDumpPending = false;
     }
 
     void BeginPhase(SystemPhase phase) { currentPhase = phase; }
@@ -115,6 +122,7 @@ public:
         const uint64_t allMask = count == 64 ? ~0ull : (1ull << count) - 1;
         uint64_t finished = 0;
         uint32_t wave[MAX_NODES_PER_PHASE];
+        uint32_t waveIndex = 0;
         while (finished != allMask) {
             uint32_t waveCount = 0;
             for (uint32_t i = 0; i < count; ++i) {
@@ -124,6 +132,8 @@ public:
                 }
             }
             assert(waveCount > 0 && "SystemGraph wave deadlock");
+            if (bDumpActive) { DumpWave(state, wave, waveCount, waveIndex); }
+            ++waveIndex;
 
             if (waveCount == 1 || scheduler == nullptr) {
                 for (uint32_t t = 0; t < waveCount; ++t) {
@@ -181,7 +191,46 @@ private:
         else { node.fn(ctx, state); }
     }
 
+    static const char* PhaseName(SystemPhase phase)
+    {
+        switch (phase) {
+            case SystemPhase::PreUpdate: return "PreUpdate";
+            case SystemPhase::GameUpdate: return "GameUpdate";
+            case SystemPhase::PostUpdate: return "PostUpdate";
+            case SystemPhase::PrepareFrame: return "PrepareFrame";
+            default: return "?";
+        }
+    }
+
+    void DumpWave(EngineState* state, const uint32_t* wave, uint32_t waveCount, uint32_t waveIndex)
+    {
+        for (uint32_t t = 0; t < waveCount; ++t) {
+            const SystemNode& node = nodes[wave[t]];
+            Core::InlineString<256> line = Core::InlineString<256>::Format("[%s] wave %u: %s", PhaseName(node.phase), waveIndex, node.name);
+            if (node.access.bExclusive) {
+                line.Append(" (exclusive)");
+            }
+            else {
+                line.Append(" [r:");
+                for (const StringID id : node.access.reads) {
+                    line.Append(" ");
+                    line.Append(id.ToString());
+                }
+                line.Append(" | w:");
+                for (const StringID id : node.access.writes) {
+                    line.Append(" ");
+                    line.Append(id.ToString());
+                }
+                line.Append("]");
+            }
+            dumpSink(state, line.c_str());
+        }
+    }
+
     enki::TaskScheduler* scheduler{};
+    void (*dumpSink)(EngineState*, const char*){};
+    bool bDumpPending{};
+    bool bDumpActive{};
     Core::InlineVector<SystemNode, MAX_SYSTEM_NODES> nodes{};
     SystemPhase currentPhase{SystemPhase::PreUpdate};
     size_t cursor{};

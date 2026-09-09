@@ -15,6 +15,7 @@
 #include "engine/components/camera_components.h"
 #include "engine/components/core_components.h"
 #include "engine/input/engine_actions.h"
+#include "engine/systems/system_graph.h"
 #include "engine/ui/ui_zindex.h"
 
 namespace Engine::Console
@@ -186,6 +187,16 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
 
     Register(state, Origin::Engine, "render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
         state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+    });
+
+    Register(state, Origin::Engine, "system_graph_dump", "Print the next frame's SystemGraph waves and access sets", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+        ctx->systemGraph->RequestDump();
+        Print(state, "  dumping next frame");
+    });
+
+    Register(state, Origin::Engine, "log_rdg", "Log the next frame's render graph", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+        state->requests.bLogRDG = true;
+        Print(state, "  logging next render frame");
     });
 }
 

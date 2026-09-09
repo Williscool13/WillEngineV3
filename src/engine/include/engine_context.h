@@ -50,6 +50,7 @@ namespace Engine
 class MaterialManager;
 class EngineLogger;
 class AssetManager;
+class SystemGraph;
 }
 
 struct ImGuiContext;
@@ -160,6 +161,7 @@ struct EngineContext
     WindowContext windowContext{};
 
     enki::TaskScheduler* scheduler{nullptr};
+    SystemGraph* systemGraph{nullptr};
     Core::MemoryManager* memoryManager{nullptr};
     Core::VirtualArena gameplayArena{};
     Core::VirtualArena editorArena{};
