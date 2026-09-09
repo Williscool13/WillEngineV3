@@ -2548,6 +2548,8 @@ VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
     ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
 
     auto& phys = physicalResources[buf.physicalIndex];
+    ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0, "[RDG] Pass '{}' fetched the address of buffer '{}' but its physical '{}' was created without device-address usage ({:#x})",
+                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
 
     if (!phys.addressRetrieved) {
         phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
@@ -2566,6 +2568,8 @@ VkDeviceAddress RenderGraph::PeekBufferAddress(StringID bufferId)
     ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
 
     auto& phys = physicalResources[buf.physicalIndex];
+    ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0, "[RDG] Pass '{}' peeked the address of buffer '{}' but its physical '{}' was created without device-address usage ({:#x})",
+                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
 
     if (!phys.addressRetrieved) {
         phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);

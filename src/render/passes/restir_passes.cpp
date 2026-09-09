@@ -207,7 +207,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         regirFillPass.ReadIndirectBuffer("regir_fill_indirect"_sid);
         regirFillPass.WriteBuffer("regir_hash_reservoirs"_sid);
         regirFillPass.WriteBuffer("regir_cell_data"_sid);
-        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        regirFillPass.Execute([&, pipelineManager, sceneIndex, frameNumber, bHasPrev, prevEntries, prevReservoirs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_fill"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
