@@ -10,7 +10,12 @@
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/material_manager.h"
+#include "engine/components/component_types.h"
 #include "engine/components/fwd_components.h"
+#include "engine/components/render/light_components.h"
+#include "engine/components/render/local_ddgi_volume_component.h"
+#include "engine/components/render/reflection_probe_component.h"
+#include "engine/components/render/text_component.h"
 #include "engine/console/console.h"
 #include "engine/editor/capture_shot_system.h"
 #include "engine/editor/core_systems.h"
@@ -179,26 +184,6 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     }
 }
 
-static void ParallelGathersNode(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
-{
-    ZoneScopedN("ParallelGathers");
-    enki::TaskSet gatherTask(5, [&](enki::TaskSetPartition range, uint32_t) {
-        for (uint32_t i = range.start; i < range.end; ++i) {
-            switch (i) {
-                case 0: GatherRenderables(ctx, state, frameBuffer); break;
-                case 1: GatherLights(ctx, state, frameBuffer); break;
-                case 2: GatherTextRenderables(ctx, state, frameBuffer); break;
-                case 3: GatherReflectionProbes(ctx, state, frameBuffer); break;
-                case 4: GatherLocalDDGIVolumes(ctx, state, frameBuffer); break;
-                default: break;
-            }
-        }
-    });
-    ctx->scheduler->AddTaskSetToPipe(&gatherTask);
-    ctx->scheduler->WaitforTask(&gatherTask);
-    state->debug.bVerifyStoresOnce = false;
-}
-
 void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph)
 {
     graph.Add("ProbeBakeTick", &ProbeBakeTick);
@@ -218,7 +203,34 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("RenderPrepareTransforms", &RenderPrepareTransforms);
     graph.Add("SyncLightSurfaces", &SyncLightSurfaces);
     graph.Add("ResolveSkyboxCubemaps", &ResolveSkyboxCubemaps);
-    graph.Add("ParallelGathers", &ParallelGathersNode);
+    graph.Add("GatherRenderables", &GatherRenderables, {
+        .bExclusive = false,
+        .reads = {TypeSID<Component::SkyboxComponent>(), "assetManager"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, "viewFamily.renderables"_sid},
+    });
+    graph.Add("GatherLights", &GatherLights, {
+        .bExclusive = false,
+        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenTag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::TransformComponent>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid},
+    });
+    graph.Add("GatherTextRenderables", &GatherTextRenderables, {
+        .bExclusive = false,
+        .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformComponent>(), TypeSID<Component::TextFontPendingTag>(), TypeSID<Component::StableIdComponent>(), "assetManager"_sid, "materialManager"_sid},
+        .writes = {"viewFamily.text"_sid},
+    });
+    graph.Add("GatherReflectionProbes", &GatherReflectionProbes, {
+        .bExclusive = false,
+        .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::WorldTransformComponent>(), "assetManager"_sid, "engineConfig"_sid},
+        .writes = {"viewFamily.probes"_sid},
+    });
+    graph.Add("GatherLocalDDGIVolumes", &GatherLocalDDGIVolumes, {
+        .bExclusive = false,
+        .reads = {TypeSID<Component::LocalDDGIVolumeComponent>(), TypeSID<Component::WorldTransformComponent>(), "engineConfig"_sid},
+        .writes = {"viewFamily.ddgiVolumes"_sid},
+    });
+    graph.Add("ClearVerifyStores", [](EngineContext* ctx, EngineState* state) {
+        state->debug.bVerifyStoresOnce = false;
+    });
     graph.Add("GatherUIRenderables", &GatherUIRenderables);
 
 #if WILL_EDITOR

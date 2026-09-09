@@ -89,7 +89,9 @@ struct ReflectionProbeLoadingTag
 
 /** Transient bake-time hide: tagged entities drop out of raster, TLAS, and light gather for the capture. */
 struct ProbeBakeHiddenTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ProbeBakeHiddenTag";
+};
 
 /** Transient bake-time hide of the emissive proxy surface only. Light still contributes to GI, but not to DI in probe bake.*/
 struct ProbeBakeProxyHiddenTag

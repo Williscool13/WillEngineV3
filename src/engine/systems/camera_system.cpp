@@ -117,6 +117,7 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
 {
     ZoneScoped;
     entt::entity mainCamera;
+#if WILL_EDITOR
     if (state->inputContext == Engine::InputContext::Gameplay) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
@@ -124,6 +125,10 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
         auto cameraView = state->registry.view<Component::CameraComponent, Component::EditorCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     }
+#else
+    auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
+    mainCamera = cameraView.front();
+#endif
 
     const auto& [cam, transform] = state->registry.get<Component::CameraComponent, Component::TransformComponent>(mainCamera);
 
@@ -138,6 +143,7 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
 {
     ZoneScoped;
     entt::entity mainCamera;
+#if WILL_EDITOR
     if (state->inputContext == Engine::InputContext::Gameplay) {
         auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
@@ -145,6 +151,10 @@ void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainVie
         auto cameraView = state->registry.view<Component::CameraComponent, Component::EditorCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     }
+#else
+    auto cameraView = state->registry.view<Component::CameraComponent, Component::GameCameraTag, Component::TransformComponent>();
+    mainCamera = cameraView.front();
+#endif
 
     const auto& [cam, cameraTransform] = state->registry.get<Component::CameraComponent, Component::TransformComponent>(mainCamera);
 

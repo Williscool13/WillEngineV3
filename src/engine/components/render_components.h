@@ -56,6 +56,8 @@ void SetRenderFlag(Engine::EngineState* state, entt::entity entity, RenderFlagsC
 
 struct RenderTransformComponent
 {
+    static constexpr const char* COMPONENT_NAME = "RenderTransformComponent";
+
     glm::mat4 modelMatrix;
     glm::mat4 previousMatrix;
     glm::vec3 renderOffset{0.0f};
@@ -64,6 +66,8 @@ struct RenderTransformComponent
 
 struct MeshRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "MeshRuntime";
+
     /**
      * Entity's contiguous run in EngineState::instanceStore
      */

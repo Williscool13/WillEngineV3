@@ -40,6 +40,8 @@ struct TextComponent
 
 struct TextRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "TextRuntime";
+
     Engine::FontHandle fontHandle{Engine::FontHandle::INVALID};
     /**
      * Entity's model matrix slot in EngineState::modelStore
@@ -50,7 +52,9 @@ struct TextRuntime
 };
 
 struct TextFontPendingTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "TextFontPendingTag";
+};
 
 void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);
 void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);
