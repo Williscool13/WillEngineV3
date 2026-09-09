@@ -17,7 +17,7 @@
 #include "engine/components/render/reflection_probe_component.h"
 #include "engine/components/render/text_component.h"
 #include "engine/console/console.h"
-#include "engine/editor/capture_shot_system.h"
+#include "engine/editor/playtest_system.h"
 #include "engine/editor/core_systems.h"
 #include "engine/editor/ddgi_converge_boost.h"
 #include "engine/editor/editor_systems.h"
@@ -190,7 +190,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("DDGIConvergeBoost", [](EngineContext* ctx, EngineState* state) {
         DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
     });
-    graph.Add("CaptureShotTick", &CaptureShotTick);
+    graph.Add("PlaytestTick", &PlaytestTick);
 
     graph.Add("FunctionKeyRenderUpdate", &FunctionKeyRenderUpdate);
 
@@ -247,7 +247,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
 void ScrubFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ProbeBakeScrubFrame(ctx, state, frameBuffer);
-    CaptureShotScrubFrame(ctx, state, frameBuffer);
+    PlaytestScrubFrame(ctx, state, frameBuffer);
 }
 
 void EndFrame(EngineContext* ctx)

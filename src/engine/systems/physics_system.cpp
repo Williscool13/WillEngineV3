@@ -141,6 +141,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         state->physics.deltaTimeAccumulator -= Physics::PHYSICS_TIMESTEP;
+        ++state->physics.stepCount;
     }
 
     state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;

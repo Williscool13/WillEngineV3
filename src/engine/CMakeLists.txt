@@ -69,6 +69,8 @@ add_library(engine STATIC
         resources/wimage_format.h
         resources/scene/scene_format.cpp
         resources/scene/scene_format.h
+        resources/scene/play_format.cpp
+        resources/scene/play_format.h
         resources/sampler/sampler.h
         resources/scene/scene.h
         resources/prefab/prefab_format.cpp
@@ -211,8 +213,8 @@ add_library(engine STATIC
         editor/editor_widgets.h
         editor/editor_gizmo_helpers.cpp
         editor/editor_gizmo_helpers.h
-        editor/capture_shot_system.cpp
-        editor/capture_shot_system.h
+        editor/playtest_system.cpp
+        editor/playtest_system.h
         editor/probe_bake_system.cpp
         editor/probe_bake_system.h
         editor/core_systems.cpp

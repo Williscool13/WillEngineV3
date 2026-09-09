@@ -19,7 +19,7 @@
 #include "engine/components/common/stable_id_component.h"
 #include "game/fwd_components.h"
 #include "engine/console/console.h"
-#include "engine/editor/capture_shot_system.h"
+#include "engine/editor/playtest_system.h"
 #include "engine/systems/scene_system.h"
 
 namespace Game

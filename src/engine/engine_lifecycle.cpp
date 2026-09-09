@@ -15,6 +15,7 @@
 #include "engine/components/common_components.h"
 #include "engine/components/core_components.h"
 #include "engine/resources/font/font_metrics.h"
+#include "engine/resources/scene/play_format.h"
 #include "engine/systems/scene_system.h"
 
 namespace Engine
@@ -74,7 +75,13 @@ void LoadUIFont(EngineContext* ctx, EngineState* state)
 
 void LoadStartupScene(EngineContext* ctx, EngineState* state)
 {
-    const char* startupScene = !state->automation.sceneOverride.IsEmpty() ? state->automation.sceneOverride.c_str() : state->projectConfig.defaultScene.c_str();
+    Core::InlineString<128> playScene{};
+    if (state->automation.sceneOverride.IsEmpty() && state->automation.IsPlayRun()) {
+        if (const auto header = ReadWPlayHeader(Core::Path(state->automation.playPath.c_str()))) {
+            playScene = Core::InlineString<128>(header->scene);
+        }
+    }
+    const char* startupScene = !state->automation.sceneOverride.IsEmpty() ? state->automation.sceneOverride.c_str() : !playScene.IsEmpty() ? playScene.c_str() : state->projectConfig.defaultScene.c_str();
     if (startupScene[0] == '\0') {
         return;
     }
@@ -92,8 +99,8 @@ void LoadStartupScene(EngineContext* ctx, EngineState* state)
             break;
         }
     }
-    if (!bFound && !state->automation.sceneOverride.IsEmpty()) {
-        LOG_ERROR(Engine, "--scene '{}' not found in the scene cache", startupScene);
+    if (!bFound && (!state->automation.sceneOverride.IsEmpty() || !playScene.IsEmpty())) {
+        LOG_ERROR(Engine, "Startup scene '{}' not found in the scene cache", startupScene);
     }
 }
 

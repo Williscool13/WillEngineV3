@@ -10,6 +10,7 @@
 #include "engine/engine_api.h"
 #include "engine/components/camera_components.h"
 #include "engine/components/core_components.h"
+#include "engine/systems/camera_system.h"
 #include "game/fwd_components.h"
 #include "game/input/game_actions.h"
 #include "physics/physics_system.h"
@@ -62,12 +63,26 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     // Camera always updates (even when cursor released, so the view doesn't freeze)
     glm::vec3 characterPos = character->GetInterpolatedPosition();
     const float aspectRatio = state->projectConfig.ResolvedGameAspect(static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight));
-    Core::ViewData viewData = Camera::ComputeOrbitCameraSwept(
-        characterPos, lookYaw, lookPitch,
-        cameraParams, aspectRatio,
-        glm::radians(state->projectConfig.gameCameraFovDegrees), state->projectConfig.gameCameraNearPlane,
-        deltaTime, cameraState, ctx->physicsSystem
-    );
+    const float fov = glm::radians(state->projectConfig.gameCameraFovDegrees);
+    const float nearPlane = state->projectConfig.gameCameraNearPlane;
+    Core::ViewData viewData{};
+    const Engine::CameraOverride& camOverride = state->cameraOverride;
+    if (camOverride.mode == Engine::CameraOverride::Mode::Held) {
+        viewData = Engine::BuildPerspectiveView(camOverride.translation, camOverride.rotation * WORLD_FORWARD, WORLD_UP, aspectRatio, fov, nearPlane);
+    }
+    else if (camOverride.mode == Engine::CameraOverride::Mode::Track) {
+        const glm::vec3 toPlayer = characterPos - camOverride.translation;
+        const glm::vec3 forward = glm::length(toPlayer) > 1e-4f ? glm::normalize(toPlayer) : camOverride.rotation * WORLD_FORWARD;
+        viewData = Engine::BuildPerspectiveView(camOverride.translation, forward, WORLD_UP, aspectRatio, fov, nearPlane);
+    }
+    else {
+        viewData = Camera::ComputeOrbitCameraSwept(
+            characterPos, lookYaw, lookPitch,
+            cameraParams, aspectRatio,
+            fov, nearPlane,
+            deltaTime, cameraState, ctx->physicsSystem
+        );
+    }
 
     auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraComponent, Component::TransformComponent>();
     for (auto camEntity : cameraView) {

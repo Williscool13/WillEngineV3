@@ -830,7 +830,7 @@ def camera_look_quat(dx, dy, dz):
 
 
 def shot(name, pos, target, settle_frames=None):
-    """One capture-run shot: camera at `pos` looking at `target`. Names become <name>.png."""
+    """One shot: camera at `pos` looking at `target`, captured as <name>.png. Expand with shots_to_events()."""
     d = (target[0] - pos[0], target[1] - pos[1], target[2] - pos[2])
     entry = {"name": name, "translation": list(pos), "rotation": list(camera_look_quat(*d))}
     if settle_frames is not None:
@@ -838,22 +838,75 @@ def shot(name, pos, target, settle_frames=None):
     return entry
 
 
-def write_shots(path, shots):
-    """Shot-list text body for `will-engine.exe --shots <path>` (capture_shot_system.cpp).
-    Rotation is [w,x,y,z] like everything else in this file; build entries with shot()."""
+# .wplay events (playtest_system.cpp). One op per event; keys other than the op are its arguments.
+def ev_cam_held(pos, target):
+    d = (target[0] - pos[0], target[1] - pos[1], target[2] - pos[2])
+    return {"cam": "held", "translation": list(pos), "rotation": list(camera_look_quat(*d))}
+
+
+def ev_cam_track(pos):
+    return {"cam": "track", "translation": list(pos)}
+
+
+def ev_cam_follow():
+    return {"cam": "follow"}
+
+
+def ev_play(on=True):
+    return {"play": 1 if on else 0}
+
+
+def ev_axis(action, x, y):
+    return {"action": action, "axis": [x, y]}
+
+
+def ev_button(action, down=True):
+    return {"action": action, "down": 1 if down else 0}
+
+
+def ev_wait(ticks):
+    """Physics ticks while playing, render frames otherwise."""
+    return {"wait": int(ticks)}
+
+
+def ev_reset():
+    return {"reset": 1}
+
+
+def ev_capture(name):
+    return {"capture": name}
+
+
+def shots_to_events(shots, settle=240):
+    """Expands shot() entries into held-camera capture events: cam, reset, wait, capture per shot."""
+    events = []
+    for s in shots:
+        events.append({"cam": "held", "translation": list(s["translation"]), "rotation": list(s["rotation"])})
+        events.append(ev_reset())
+        events.append(ev_wait(s.get("settleFrames", settle)))
+        events.append(ev_capture(s["name"]))
+    return events
+
+
+def write_play(path, name, scene, events, content_version=1):
+    """Run script for `will-engine.exe --play <path>` or the scene browser's Run button. `scene` is the .wscene header name.
+    Vector args are hex floats; rotation is [w,x,y,z] like everything else in this file."""
     import wtext_serialize
-    shots = list(shots)
-    lines = ["shots|%d" % len(shots)]
-    for e in shots:
-        lines.append("s")
-        lines.append("name|" + str(e["name"]).replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n"))
-        lines.append("translation|" + "|".join(wtext_serialize.hx(v) for v in e["translation"]))
-        lines.append("rotation|" + "|".join(wtext_serialize.hx(v) for v in e["rotation"]))
-        if "settleFrames" in e:
-            lines.append("settleFrames|%d" % e["settleFrames"])
+    events = list(events)
+    header = f"wplay\nversion 1 0\nname {name}\nscene {scene}\ncontent_version {content_version}\nevent_count {len(events)}\nend_header\n"
+    lines = ["events|%d" % len(events)]
+    for e in events:
+        lines.append("e")
+        for k, v in e.items():
+            if k in ("translation", "rotation", "axis"):
+                lines.append(k + "|" + "|".join(wtext_serialize.hx(x) for x in v))
+            elif isinstance(v, str):
+                lines.append(k + "|" + v.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n"))
+            else:
+                lines.append("%s|%d" % (k, v))
         lines.append(";")
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write(header + "\n".join(lines) + "\n")
     return path
 
 

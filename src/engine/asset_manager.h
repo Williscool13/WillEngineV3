@@ -499,6 +499,18 @@ public: // Prefabs
 
     bool DeletePrefab(StringID prefabId);
 
+public: // Runs (.wplay)
+    struct CachedPlayMetadata
+    {
+        Core::Path source;
+        Core::InlineString<128> name{};
+        Core::InlineString<128> sceneName{};
+        uint32_t eventCount{};
+        uint64_t contentVersion{0};
+    };
+
+    const Core::FixedMap<StringID, CachedPlayMetadata>& GetPlayCache() { return playCache; }
+
 private: // Asset Registry
     Core::FixedMap<StringID, ModelID> modelNameToId;
     Core::FixedMap<ModelID, CachedModelMetadata> modelCache;
@@ -520,6 +532,7 @@ private: // Asset Registry
 
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
+    Core::FixedMap<StringID, CachedPlayMetadata> playCache;
 
     Core::InlineVector<ModelID, 16> changedModelIds{};
     Core::InlineVector<TextureID, 16> changedTextureIds{};

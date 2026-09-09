@@ -78,5 +78,16 @@ void ResolveInputActions(const Core::InputFrame& frame, InputContext context, In
             state.axis.y += AxisValue(binding.stick.y);
         }
     }
+
+    for (ScriptedAction& scripted : input.scripted) {
+        const size_t* idx = input.actionIndex.Find(scripted.action);
+        if (!idx) { continue; }
+        Core::ActionState& state = input.actionStates[*idx];
+        state.axis = scripted.axis;
+        state.down = scripted.bDown;
+        state.pressed = scripted.bDown && !scripted.bWasDown;
+        state.released = !scripted.bDown && scripted.bWasDown;
+        scripted.bWasDown = scripted.bDown;
+    }
 }
 } // Engine

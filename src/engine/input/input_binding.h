@@ -204,6 +204,16 @@ struct DisplayedAction
 };
 
 inline constexpr size_t MAX_DISPLAYED_ACTIONS = 32;
+inline constexpr size_t MAX_SCRIPTED_ACTIONS = 8;
+
+/** Applied after device resolve; wins over any binding for its action. */
+struct ScriptedAction
+{
+    ActionHandle action{};
+    Vec2 axis{};
+    bool bDown{false};
+    bool bWasDown{false};
+};
 
 struct InputState
 {
@@ -216,6 +226,7 @@ struct InputState
     Core::Map<ActionHandle, size_t> actionIndex{};
     Core::Vector<Core::ActionState> actionStates{};
     Core::InlineVector<DisplayedAction, MAX_DISPLAYED_ACTIONS> displayedActions{};
+    Core::InlineVector<ScriptedAction, MAX_SCRIPTED_ACTIONS> scripted{};
 
     bool bCaptureActive{false};
     size_t captureTargetBindingRow{~size_t{0}};

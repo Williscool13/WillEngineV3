@@ -336,8 +336,8 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
         SDL_DisplayID targetDisplay = SDL_GetPrimaryDisplay();
         SDL_WindowFlags extraFlags = SDL_WINDOW_MAXIMIZED;
-        if (automation.IsCaptureRun()) {
-            // 1. Capture runs render unattended
+        if (automation.IsPlayRun()) {
+            // 1. Scripted runs render unattended
             // 2. Don't yank focus from the user
             // 3. Prefer a secondary monitor
             SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
@@ -363,7 +363,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             rect.w, rect.h,
             SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | extraFlags);
 
-        if (automation.IsCaptureRun()) {
+        if (automation.IsPlayRun()) {
             SDL_SetWindowPosition(window, rect.x, rect.y);
         }
         SDL_ShowWindow(window);

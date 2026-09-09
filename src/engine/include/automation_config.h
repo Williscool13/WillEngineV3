@@ -11,18 +11,17 @@
 
 namespace Engine
 {
-/** Command-line automation options, carried on EngineState so game.dll can drive the capture run. */
+/** Command-line automation options, carried on EngineState so game.dll can drive a scripted run. */
 struct AutomationConfig
 {
     Core::InlineString<256> sceneOverride{};
-    Core::InlineString<512> shotsPath{};
+    Core::InlineString<512> playPath{};
     Core::InlineString<512> outputDir{};
-    int32_t settleFrames{-1};
     bool bExitWhenDone{false};
     bool bForceNoREBAR{false};
     int32_t mcpPort{0};
 
-    [[nodiscard]] bool IsCaptureRun() const { return !shotsPath.IsEmpty(); }
+    [[nodiscard]] bool IsPlayRun() const { return !playPath.IsEmpty(); }
 };
 } // Engine
 

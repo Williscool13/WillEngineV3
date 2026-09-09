@@ -13,6 +13,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "engine/editor/editor_systems.h"
+#include "engine/editor/probe_bake_system.h"
 #include "engine/systems/scene_system.h"
 #include "engine/input/engine_actions.h"
 #include "engine/include/engine_context.h"
@@ -148,6 +149,30 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && hasScene) {
             ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->scene.currentSceneName.c_str());
+        }
+
+        ImGui::SeparatorText("Runs");
+        {
+            const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty() || ProbeBakeActive(state);
+            uint32_t runCount = 0;
+            for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
+                if (!(meta.sceneName == state->scene.currentSceneName)) { continue; }
+                ++runCount;
+                ImGui::PushID(static_cast<int>(id.id));
+                ImGui::BeginDisabled(bRunBusy || !bIsLoaded);
+                if (ImGui::Button("Run")) {
+                    state->playtest.Arm(meta.source.c_str());
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                ImGui::Text("%s", meta.name.c_str());
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%u events)", meta.eventCount);
+                ImGui::PopID();
+            }
+            if (runCount == 0) {
+                ImGui::TextDisabled("No .wplay for this scene");
+            }
         }
 
         ImGui::SeparatorText("New Scene");

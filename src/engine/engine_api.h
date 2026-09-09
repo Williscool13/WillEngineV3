@@ -39,7 +39,7 @@
 #include "engine/systems/command_queue.h"
 #include "engine/editor_state.h"
 #include "engine/editor/probe_bake_system.h"
-#include "engine/editor/capture_shot_system.h"
+#include "engine/editor/playtest_system.h"
 #include "engine/console/console.h"
 #include "engine/mcp/mcp_tool.h"
 #include "engine/editor_texture_residency.h"
@@ -68,6 +68,7 @@ struct PhysicsState
     float deltaTimeAccumulator = 0.0f;
     float interpolationAlpha = 0.0f;
     bool bEnabled = true;
+    uint64_t stepCount = 0;
     Core::Map<JPH::BodyID, entt::entity> bodyToEntity;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
@@ -172,6 +173,20 @@ struct DDGIConvergeBoost
     uint32_t stashedRadianceCacheAccumCap{0};
 };
 
+struct CameraOverride
+{
+    enum class Mode : uint8_t
+    {
+        None,
+        Held,
+        Track,
+    };
+
+    Mode mode{Mode::None};
+    glm::vec3 translation{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+};
+
 /** One-shot requests raised during the game tick and drained by the next render prepare. */
 struct FrameRequests
 {
@@ -262,7 +277,8 @@ struct EngineState
     DebugState debug;
     DDGIConvergeBoost ddgiConvergeBoost;
     ProbeBakeSystem probeBake{};
-    CaptureShotSystem captureShot{};
+    PlaytestSystem playtest{};
+    CameraOverride cameraOverride{};
     Console::ConsoleState console{};
     ProjectConfig projectConfig{};
     AutomationConfig automation{};

@@ -12,6 +12,7 @@
 #include "resources/font/font_format.h"
 #include "resources/prefab/prefab_format.h"
 #include "resources/scene/scene_format.h"
+#include "resources/scene/play_format.h"
 #include "editor/asset-generation/miscellaneous_asset_generate.h"
 #include "logging/engine_log.h"
 #include "platform/file_utils.h"
@@ -34,6 +35,7 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       probeRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
       sceneCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
       prefabCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
+      playCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PLAYS),
       fontNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
       fontCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
       deferredTextureBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURES),
@@ -1624,6 +1626,24 @@ void AssetManager::Scan()
                     cached.contentVersion = header->contentVersion;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Prefab '{}' (id {:x}) content changed on disk: v{} -> v{}", cached.prefabName.c_str(), id.id, prevVersion, header->contentVersion);
+                    }
+                }
+                else if (ext == ".wplay") {
+                    auto header = ReadWPlayHeader(path);
+                    if (!header) { continue; }
+                    const Core::InlineString<128> stem{path.Stem()};
+                    const StringID id{stem.c_str(), stem.Size()};
+                    const CachedPlayMetadata* prev = playCache.Find(id);
+                    const bool bExisted = prev != nullptr;
+                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
+                    CachedPlayMetadata& cached = playCache[id];
+                    cached.source = Core::Path(path);
+                    cached.name = Core::InlineString<128>(header->name);
+                    cached.sceneName = Core::InlineString<128>(header->scene);
+                    cached.eventCount = header->eventCount;
+                    cached.contentVersion = header->contentVersion;
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        LOG_TRACE(Asset, "Run '{}' content changed on disk: v{} -> v{}", cached.name.c_str(), prevVersion, header->contentVersion);
                     }
                 }
             }

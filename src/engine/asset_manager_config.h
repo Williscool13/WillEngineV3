@@ -28,6 +28,7 @@ inline constexpr uint32_t MAX_CACHED_PROBES = 512;
 inline constexpr uint32_t MAX_CACHED_AUDIO = 256;
 inline constexpr uint32_t MAX_CACHED_SCENES = 512;
 inline constexpr uint32_t MAX_CACHED_PREFABS = 512;
+inline constexpr uint32_t MAX_CACHED_PLAYS = 128;
 inline constexpr uint32_t MAX_CACHED_FONTS = 256;
 inline constexpr uint32_t MAX_STATIC_PROCEDURAL_TEXTURES = 64;
 

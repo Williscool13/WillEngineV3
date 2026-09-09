@@ -17,11 +17,10 @@
 #endif
 
 /**
- * --scene <name>   load this scene (by .wscene header name) instead of projectConfig.defaultScene
- * --shots <file>   shot-list JSON; activates the capture run
- * --out <dir>      capture PNG output directory
- * --settle <n>     per-shot convergence frames (default probeBake.settleFrames)
- * --exit           quit after the last shot is saved
+ * --scene <name>   load this scene (by .wscene header name) instead of the .wplay header's scene or projectConfig.defaultScene
+ * --play <file>    .wplay run script; arms it at startup
+ * --out <dir>      capture PNG output directory (default <UserData>/screenshots/<run>/<timestamp>)
+ * --exit           quit when the run finishes
  * --no-rebar       report no resizable BAR, forcing per frame data through the staged upload path
  * --mcp-port <n>   MCP listen port; editor builds only, defaults to 8787
  */
@@ -34,16 +33,12 @@ static Engine::AutomationConfig ParseLaunchArgs(int argc, char* argv[])
             automation.sceneOverride = Core::InlineString<256>(value);
             i++;
         }
-        else if (strcmp(argv[i], "--shots") == 0) {
-            automation.shotsPath = Core::InlineString<512>(value);
+        else if (strcmp(argv[i], "--play") == 0) {
+            automation.playPath = Core::InlineString<512>(value);
             i++;
         }
         else if (strcmp(argv[i], "--out") == 0) {
             automation.outputDir = Core::InlineString<512>(value);
-            i++;
-        }
-        else if (strcmp(argv[i], "--settle") == 0) {
-            automation.settleFrames = atoi(value);
             i++;
         }
         else if (strcmp(argv[i], "--exit") == 0) {

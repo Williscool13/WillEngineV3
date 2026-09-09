@@ -97,7 +97,7 @@ from wscene_authoring import (
     bowl_params, add_area_light, add_sphere_light, add_directional_light, add_skybox,
     add_reflection_probe, add_local_ddgi_volume, add_checkpoint, mat_to_quat, PROBE_RES_128, PROBE_RES_256,
     PROCEDURAL, NAME, FOLDER, SCENE_FOLDER, SPAWN, RENDER_DEFAULTS,
-    write_material, write_texture_stub, camera_look_quat, shot, write_shots,
+    write_material, write_texture_stub, camera_look_quat, shot, shots_to_events, write_play,
     DXGI_BC5_UNORM, DXGI_BC7_UNORM, DXGI_BC7_UNORM_SRGB,
 )
 
@@ -1300,9 +1300,9 @@ CAM_POS = (24.0, 15.0, -64.0)
 CAMERA = {"rotation": list(camera_look_quat(-24.0, -13.0, 64.0)), "translation": list(CAM_POS)}
 wa.write_scene(SCENE_PATH, all_entities, SCENE_ID, SCENE_NAME, editor_camera=CAMERA)
 
-# Capture-run shots, one or two per zone; names order the PNG listing into a walkthrough.
-SHOTS_PATH = os.path.join(REPO, "scenes", "military_sandbox.wshots")
-write_shots(SHOTS_PATH, [
+# Walkthrough run, one or two shots per zone; names order the PNG listing.
+SHOTS_PATH = os.path.join(REPO, "scenes", "military_sandbox.wplay")
+write_play(SHOTS_PATH, "Military sandbox walkthrough", SCENE_NAME, shots_to_events([
     shot("01_overview", CAM_POS, (0.0, 2.0, 0.0)),
     shot("02_gate", (0.0, 1.8, -58.0), (0.0, 3.0, -40.0)),
     shot("03_motorpool_shadows", (-2.0, 8.0, -18.0), (-22.0, 1.0, -32.0)),
@@ -1322,7 +1322,7 @@ write_shots(SHOTS_PATH, [
     shot("15_fuel_farm", (52.0, 5.0, -22.0), (FF_X0 + 6.0, 1.5, FF_Z0 + 8.0)),
     shot("16_barracks", (-44.0, 6.0, 22.0), (-53.0, 1.5, 38.0)),
     shot("17_heli", (-28.0, 3.4, 3.5), (HELI_X, 2.2, HELI_Z - 0.5)),
-])
+]))
 
 print(f"wrote {SCENE_PATH}")
 print(f"  {len(entities)} entities + {len(folders)} folders, scene id {SCENE_ID}")
