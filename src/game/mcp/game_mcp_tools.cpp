@@ -80,6 +80,8 @@ static ToolResult GetEngineStatus(Engine::EngineContext* ctx, Engine::EngineStat
     call.SetInt("stableEntityCount", static_cast<int64_t>(state->stableIdToEntityMap.Size()));
     call.SetString("inputContext", InputContextName(state->inputContext));
     call.SetBool("physicsEnabled", state->physics.bEnabled);
+    call.SetBool("playtestActive", state->playtest.bActive || !state->playtest.pendingPath.IsEmpty());
+    call.SetString("playtestOutputDir", state->playtest.outputDir.c_str());
     return ToolResult::Complete;
 }
 

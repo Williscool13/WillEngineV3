@@ -1018,15 +1018,15 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC uint32_t colorInputIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t feedbackInputIndex;
-    SHADER_PUBLIC uint32_t historyClampRelaxIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t colorOutputIndex;
     SHADER_PUBLIC uint32_t feedbackOutputIndex;
     SHADER_PUBLIC float clampingFactor;
     SHADER_PUBLIC float newFrameWeight;
     SHADER_PUBLIC float pqC;
     SHADER_PUBLIC float invPqC;
-    SHADER_PUBLIC uint32_t useHistoryClampRelax;
     SHADER_PUBLIC uint32_t useCatmullRom;
+    SHADER_PUBLIC uint32_t _pad0; // keeps the float2 block 8-byte aligned on both sides
     SHADER_PUBLIC float2 inputViewOrigin;
     SHADER_PUBLIC float2 inputViewSize;
     SHADER_PUBLIC float2 outputViewOrigin;

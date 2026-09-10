@@ -116,8 +116,12 @@ void Preload(int2 sharedID, int2 globalID, int2 inputMax)
 
     float3 color = PQEncode(rdgTexturesFloat4[pc.colorInputIndex].Load(int3(loadCoord, 0)).rgb);
 
-    uint4 gbufferOne = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0));
-    float2 velocityNDC = UnpackMotionVectors(gbufferOne.g);
+    float2 velocityNDC;
+    if (rdgTexturesFloat[pc.depthIndex].Load(int3(loadCoord, 0)).r > 0.0) {
+        velocityNDC = UnpackMotionVectors(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(loadCoord, 0)).g);
+    } else {
+        velocityNDC = SkyMotionVectorNDC(pc.sceneData.clipToPrevClip, pc.sceneData.jitter, pc.sceneData.prevJitter, (float2(loadCoord) + 0.5) / pc.inputViewSize);
+    }
     float2 motion = velocityNDC * 0.5 * pc.inputViewSize; // NDC delta -> input-pixel delta
     float motionLength = dot(motion, motion);
 
@@ -209,22 +213,6 @@ void ComputeDonutTaa(
 
     float clampingFactor = pc.clampingFactor;
     float newFrameWeight = pc.newFrameWeight;
-    if (pc.useHistoryClampRelax != 0)
-    {
-        float2 centerUV = (float2(outputPixelPos) + 0.5) * pc.outputTextureSizeInv;
-        float2 offset = pc.outputTextureSizeInv * 0.4;
-        Texture2D<float> mask = rdgTexturesFloat[pc.historyClampRelaxIndex];
-        SamplerState samp = rdgSamplers[RDG_LINEAR_SAMPLER_INDEX];
-
-        float historyClampRelax = saturate(
-              (mask.SampleLevel(samp, centerUV + offset * float2(-1, -1), 0)
-             + mask.SampleLevel(samp, centerUV + offset * float2( 1, -1), 0)
-             + mask.SampleLevel(samp, centerUV + offset * float2(-1,  1), 0)
-             + mask.SampleLevel(samp, centerUV + offset * float2( 1,  1), 0)) * 0.4);
-
-        clampingFactor *= (1.0 + historyClampRelax * 1.5);
-        newFrameWeight /= (1.0 + historyClampRelax * 0.5);
-    }
 
     float2 longestMV = s_MotionVectors[longestMVPos.y][longestMVPos.x];
 

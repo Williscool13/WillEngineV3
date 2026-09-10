@@ -153,7 +153,6 @@ struct DonutTAAConfiguration
     float newFrameWeight{0.1f}; // steady-state new-sample blend
     float maxRadiance{1000.0f}; // pqC (cd/m^2); clamped to [1e-4, 1e8] CPU-side
     bool bUseCatmullRom{true};
-    bool bUseHistoryClampRelax{false}; // no mask resource wired by default
 };
 
 struct AntiAliasingConfiguration

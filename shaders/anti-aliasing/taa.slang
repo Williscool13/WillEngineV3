@@ -195,7 +195,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
     float3 minc = max(mean - gamma * stddev, minColor);
     float3 maxc = min(mean + gamma * stddev, maxColor);
 
-    float2 velocityNDC = UnpackMotionVectors(closestPackedVelocity);
+    float2 velocityNDC = closestDepth > 0.0 ? UnpackMotionVectors(closestPackedVelocity) : SkyMotionVectorNDC(pc.sceneData.clipToPrevClip, pc.sceneData.jitter, pc.sceneData.prevJitter, uv);
     float2 velocity = velocityNDC * 0.5;
     float2 historyUv = uv + velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));

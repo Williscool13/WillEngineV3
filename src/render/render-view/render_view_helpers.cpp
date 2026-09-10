@@ -52,10 +52,10 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
         const glm::vec2& curr = kSubsampleOffsets[frameNumber % 2];
         const glm::vec2& prev = kSubsampleOffsets[(frameNumber + 1) % 2];
 
-        float jitterX = curr.x / static_cast<float>(renderExtent[0]);
-        float jitterY = curr.y / static_cast<float>(renderExtent[1]);
-        float prevJitterX = prev.x / static_cast<float>(renderExtent[0]);
-        float prevJitterY = prev.y / static_cast<float>(renderExtent[1]);
+        float jitterX = curr.x * 2.0f / static_cast<float>(renderExtent[0]);
+        float jitterY = curr.y * 2.0f / static_cast<float>(renderExtent[1]);
+        float prevJitterX = prev.x * 2.0f / static_cast<float>(renderExtent[0]);
+        float prevJitterY = prev.y * 2.0f / static_cast<float>(renderExtent[1]);
 
         glm::mat4 jitteredProj = projMatrix;
         jitteredProj[2][0] += jitterX;

@@ -507,7 +507,6 @@ void Serialize(const Core::DonutTAAConfiguration& p, TextWriter& w)
     w.Key("newFrameWeight", p.newFrameWeight);
     w.Key("maxRadiance", p.maxRadiance);
     w.Key("bUseCatmullRom", p.bUseCatmullRom);
-    w.Key("bUseHistoryClampRelax", p.bUseHistoryClampRelax);
 }
 
 void Deserialize(const TextReader& r, Core::DonutTAAConfiguration& p)
@@ -516,7 +515,6 @@ void Deserialize(const TextReader& r, Core::DonutTAAConfiguration& p)
     p.newFrameWeight = r.Float("newFrameWeight", p.newFrameWeight);
     p.maxRadiance = r.Float("maxRadiance", p.maxRadiance);
     p.bUseCatmullRom = r.Bool("bUseCatmullRom", p.bUseCatmullRom);
-    p.bUseHistoryClampRelax = r.Bool("bUseHistoryClampRelax", p.bUseHistoryClampRelax);
 }
 
 void Serialize(const Core::AntiAliasingConfiguration& p, TextWriter& w)

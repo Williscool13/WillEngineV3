@@ -329,6 +329,16 @@ float2 UnpackMotionVectors(uint p)
     return float2(f16tof32(p & 0xFFFF), f16tof32(p >> 16));
 }
 
+float2 SkyMotionVectorNDC(float4x4 clipToPrevClip, float2 jitter, float2 prevJitter, float2 uv)
+{
+    float2 ndc = uv * 2.0 - 1.0;
+    float4 prevClip = mul(clipToPrevClip, float4(ndc, 0.0, 1.0));
+    if (prevClip.w <= 1e-6) {
+        return float2(0.0);
+    }
+    return (prevClip.xy / prevClip.w - ndc) - jitter + prevJitter;
+}
+
 // View-depth delta (viewZprev - viewZ) packed as float16 into bits 16-31 of gbuffer_one.w
 uint PackViewZDelta(float delta)
 {

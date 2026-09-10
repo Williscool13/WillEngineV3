@@ -27,7 +27,7 @@ void ComputeObjectMotionExtract(uniform ObjectMotionExtractPushConstant pc, uint
     if (depth > 0.0 && (gt1.w & GBUFFER1_LIT_BIT) != 0u) {
         float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
         viewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-        float3 xv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewZ);
+        float3 xv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewZ);
         float4 prevClip = mul(scene.prevViewProj, float4(mul(scene.invView, float4(xv, 1.0)).xyz, 1.0));
         if (prevClip.w > 0.0) {
             float2 staticDeltaUv = ((prevClip.xy / prevClip.w) * 0.5 + 0.5) - uv - scene.jitter * 0.5 + scene.prevJitter * 0.5;

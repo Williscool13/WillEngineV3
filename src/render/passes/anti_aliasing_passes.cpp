@@ -365,6 +365,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     taaPass.ReadBuffer("scene_data"_sid);
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.gbufferOne);
+    taaPass.ReadSampledImage(targets.depthCopy);
     if (bHasHistory) {
         taaPass.ReadSampledImage(graph.ResourceVersionID("donut_taa_feedback"_sid, 1));
     }
@@ -374,7 +375,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
             inWidth = static_cast<float>(inputExtent[0]), inHeight = static_cast<float>(inputExtent[1]),
             outWidth = static_cast<float>(outputExtent[0]), outHeight = static_cast<float>(outputExtent[1]),
             dispatchW = outputExtent[0], dispatchH = outputExtent[1],
-            outputColor = targets.colorOutput, gbufferOne = targets.gbufferOne, donutConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            outputColor = targets.colorOutput, gbufferOne = targets.gbufferOne, depthStencil = targets.depthCopy, donutConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             float pqC = donutConfig.maxRadiance;
             if (pqC < 1e-4f) { pqC = 1e-4f; }
             if (pqC > 1e8f) { pqC = 1e8f; }
@@ -389,14 +390,13 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                 .colorInputIndex = colorInputIdx,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .feedbackInputIndex = feedbackInputIdx,
-                .historyClampRelaxIndex = colorInputIdx,
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
                 .colorOutputIndex = graph.GetStorageImageViewDescriptorIndex("donut_taa_output"_sid),
                 .feedbackOutputIndex = graph.GetStorageImageViewDescriptorIndex("donut_taa_feedback"_sid),
                 .clampingFactor = donutConfig.clampingFactor,
                 .newFrameWeight = newFrameWeight,
                 .pqC = pqC,
                 .invPqC = 1.0f / pqC,
-                .useHistoryClampRelax = donutConfig.bUseHistoryClampRelax ? 1u : 0u,
                 .useCatmullRom = donutConfig.bUseCatmullRom ? 1u : 0u,
                 .inputViewOrigin = {0.0f, 0.0f},
                 .inputViewSize = {inWidth, inHeight},

@@ -299,7 +299,6 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             if (Widgets::SliderFloat("New Frame Weight##donuttaa", &donutTaa.newFrameWeight, 0.01f, 1.0f, {.format = "%.3f"})) { changed = true; }
             if (Widgets::SliderFloat("Max Radiance (pqC)##donuttaa", &donutTaa.maxRadiance, 1.0f, 10000.0f, {.format = "%.1f"})) { changed = true; }
             if (ImGui::Checkbox("Catmull-Rom History##donuttaa", &donutTaa.bUseCatmullRom)) { changed = true; }
-            if (ImGui::Checkbox("History Clamp Relax##donuttaa", &donutTaa.bUseHistoryClampRelax)) { changed = true; }
             if (ImGui::Button("Reset Donut TAA")) {
                 donutTaa = defaultDonutTaa;
                 changed = true;
