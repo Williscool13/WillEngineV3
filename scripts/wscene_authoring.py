@@ -873,8 +873,21 @@ def ev_reset():
     return {"reset": 1}
 
 
-def ev_capture(name):
-    return {"capture": name}
+def ev_capture(name, frames=1, fps=0):
+    e = {"capture": name}
+    if frames > 1:
+        e["frames"] = int(frames)
+    if fps > 0:
+        e["fps"] = int(fps)
+    return e
+
+
+def ev_fps(fps):
+    return {"fps": int(fps)}
+
+
+def ev_console(line):
+    return {"console": line}
 
 
 def shots_to_events(shots, settle=240):

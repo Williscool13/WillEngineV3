@@ -116,6 +116,15 @@ static bool LoadPlayFile(const char* path, Core::InlineVector<PlaytestSystem::Ev
         }
         else if (e.Str("capture", ev.name)) {
             ev.op = PlaytestSystem::Op::Capture;
+            ev.count = glm::max(1, e.Int("frames", 1));
+            ev.fps = e.Int("fps", 0);
+        }
+        else if (e.Has("fps")) {
+            ev.op = PlaytestSystem::Op::Fps;
+            ev.fps = e.Int("fps");
+        }
+        else if (e.Str("console", ev.name)) {
+            ev.op = PlaytestSystem::Op::Console;
         }
         else {
             LOG_ERROR(Engine, "Run: '{}' has an event with no recognised op, skipped", path);
@@ -213,7 +222,11 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                 stashedCameraRotation = transform.rotation;
             }
         }
-        if (state->projectConfig.probeBake.bAutoConverge) {
+        bool bHasPlay = false;
+        for (const Event& e : events) {
+            bHasPlay = bHasPlay || e.op == Op::Play;
+        }
+        if (state->projectConfig.probeBake.bAutoConverge && !bHasPlay) {
             DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, state->lighting.ddgi);
         }
 
@@ -232,7 +245,8 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
             PlayStop(ctx, state);
         }
         state->input.scripted.Clear();
-        state->cameraOverride = {};
+        cameraOverride = {};
+        frameLimit = 0;
         state->inputContext = stashedInputContext;
         TeleportEditorCamera(ctx, state, stashedCameraTranslation, stashedCameraRotation);
         LOG_INFO(Engine, "Run '{}' {}: {} capture(s) -> {}", runName.c_str(), outcome, captureCount, outputDir.c_str());
@@ -242,6 +256,16 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
             state->requests.bRequestedQuit = true;
         }
         bCliRun = false;
+    };
+
+    auto requestCaptureFrame = [&]() {
+        const Event& e = events[cursor - 1];
+        const Core::InlineString<128> file = e.count > 1 ? Core::InlineString<128>::Format("%s_%03d.png", e.name.c_str(), burstIndex) : Core::InlineString<128>::Format("%s.png", e.name.c_str());
+        const Core::Path savePath = Core::Path(outputDir.c_str()) / file.c_str();
+        state->requests.screenshotPath = Core::InlineString<512>(savePath.c_str());
+        state->requests.bWantsScreenshot = true;
+        --burstRemaining;
+        ++burstIndex;
     };
 
     switch (phase) {
@@ -274,7 +298,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                 switch (e.op) {
                     case Op::Cam:
                     {
-                        CameraOverride& ov = state->cameraOverride;
+                        CameraOverride& ov = cameraOverride;
                         if (e.camMode == CamMode::Follow) {
                             ov = {};
                         }
@@ -333,21 +357,50 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                     }
                     case Op::Capture:
                     {
+                        if (bSkipCaptures) {
+                            ++cursor;
+                            break;
+                        }
                         if (ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot) {
                             return;
                         }
-                        const Core::Path savePath = Core::Path(outputDir.c_str()) / Core::InlineString<128>::Format("%s.png", e.name.c_str()).c_str();
-                        state->requests.screenshotPath = Core::InlineString<512>(savePath.c_str());
-                        state->requests.bWantsScreenshot = true;
+                        burstRemaining = e.count;
+                        burstIndex = 0;
                         bSawInFlight = false;
                         awaitFrames = 0;
+                        if (e.fps > 0) {
+                            frameLimit = e.fps;
+                        }
                         ++cursor;
-                        phase = Phase::AwaitSaved;
+                        phase = Phase::Capturing;
+                        requestCaptureFrame();
                         return;
+                    }
+                    case Op::Fps:
+                    {
+                        fpsCap = glm::max(0, e.fps);
+                        frameLimit = fpsCap;
+                        ++cursor;
+                        break;
+                    }
+                    case Op::Console:
+                    {
+                        Console::ExecuteCommand(ctx, state, e.name.c_str());
+                        ++cursor;
+                        break;
                     }
                 }
             }
             finish("complete");
+            return;
+        }
+        case Phase::Capturing:
+        {
+            if (burstRemaining > 0) {
+                requestCaptureFrame();
+                return;
+            }
+            phase = Phase::AwaitSaved;
             return;
         }
         case Phase::Waiting:
@@ -375,8 +428,9 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                 LOG_WARN(Engine, "Run: capture '{}' save not observed after {} frames", events[cursor - 1].name.c_str(), awaitFrames);
             }
             else {
-                ++captureCount;
+                captureCount += burstIndex;
             }
+            frameLimit = fpsCap;
             phase = Phase::Step;
             return;
         }

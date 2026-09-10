@@ -8,7 +8,6 @@
 #include <enkiTS/src/TaskScheduler.h>
 
 #include "core/containers/inline_path.h"
-#include "core/memory/tlsf_allocator.h"
 #include "render/interface/render_interface.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -18,30 +17,37 @@ struct RenderScreenCapture
 {
     RenderScreenCapture() = default;
 
-    explicit RenderScreenCapture(VulkanContext* context, enki::TaskScheduler* taskScheduler, Core::TlsfAllocator& renderAllocator)
-        : context(context), taskScheduler(taskScheduler), renderAllocator(&renderAllocator) {}
+    explicit RenderScreenCapture(VulkanContext* context, enki::TaskScheduler* taskScheduler)
+        : context(context), taskScheduler(taskScheduler) {}
 
     ~RenderScreenCapture() = default;
 
     struct ScreenshotTask : enki::ITaskSet
     {
         RenderScreenCapture* capture{};
+        uint32_t slot{0};
 
         void ExecuteRange(enki::TaskSetPartition, uint32_t) override;
     };
 
+    struct ScreenshotSlot
+    {
+        ScreenshotTask task{};
+        std::atomic_flag bInProgress{};
+        AllocatedBuffer readbackBuffer{};
+        uint32_t pendingFrameIndex{UINT32_MAX};
+        Core::Path savePath{};
+    };
+
+    static constexpr uint32_t SCREENSHOT_SLOTS = 4;
 
     VulkanContext* context{};
     enki::TaskScheduler* taskScheduler{};
-    Core::TlsfAllocator* renderAllocator{};
-    ScreenshotTask task{};
-    std::atomic_flag bIsScreenshotInProgress{};
     AllocatedImage screenshotIntermediateImage{};
-    AllocatedBuffer screenshotReadbackBuffer{};
-    uint32_t screenshotPendingSlot{UINT32_MAX};
+    ScreenshotSlot screenshotSlots[SCREENSHOT_SLOTS]{};
+    uint32_t nextScreenshotSlot{0};
     uint32_t screenshotCaptureWidth{0};
     uint32_t screenshotCaptureHeight{0};
-    Core::Path screenshotSavePath{};
 
     std::atomic_flag bIsProbeCaptureInProgress{};
     AllocatedImage probeCaptureIntermediateImage{};
@@ -57,7 +63,7 @@ struct RenderScreenCapture
      */
     void PrepareScreenshotResources(uint32_t width, uint32_t height);
 
-    void StartScreenshot();
+    uint32_t AcquireScreenshotSlot();
 
     void ResolveScreenshot(uint32_t currentFrameIndex);
 

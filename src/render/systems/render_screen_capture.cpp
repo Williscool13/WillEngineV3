@@ -4,45 +4,32 @@
 
 #include "render_screen_capture.h"
 
-#include <stb/stb_image_write.h>
+#include <thread>
 
 #include "engine/logging/engine_log.h"
+#include "utils/image/png_write.h"
 
 namespace Render
 {
 void RenderScreenCapture::ScreenshotTask::ExecuteRange(enki::TaskSetPartition, uint32_t)
 {
-    const uint32_t width   = capture->screenshotCaptureWidth;
-    const uint32_t height  = capture->screenshotCaptureHeight;
-    const size_t rowBytes  = static_cast<size_t>(width) * 4;
-    const uint8_t* src     = static_cast<const uint8_t*>(capture->screenshotReadbackBuffer.allocationInfo.pMappedData);
-
-    // Intermediate is sRGB
-    const size_t bufferSize = rowBytes * height;
-    uint8_t* encoded = static_cast<uint8_t*>(capture->renderAllocator->Alloc(bufferSize, Core::AllocTag::Render));
-    for (uint32_t row = 0; row < height; ++row) {
-        const uint8_t* srcRow = src + (height - 1 - row) * rowBytes;  // y-flip
-        memcpy(encoded + row * rowBytes, srcRow, rowBytes);
+    ScreenshotSlot& s = capture->screenshotSlots[slot];
+    const uint8_t* pixels = static_cast<const uint8_t*>(s.readbackBuffer.allocationInfo.pMappedData);
+    if (Utils::WritePngRgba8(s.savePath.c_str(), capture->screenshotCaptureWidth, capture->screenshotCaptureHeight, pixels, true)) {
+        LOG_INFO(Renderer, "Screenshot saved: {}", s.savePath.c_str());
     }
-
-    stbi_write_png(
-        capture->screenshotSavePath.c_str(),
-        static_cast<int>(width),
-        static_cast<int>(height),
-        4,
-        encoded,
-        static_cast<int>(rowBytes)
-    );
-    capture->renderAllocator->Free(encoded);
-
-    LOG_INFO(Renderer, "Screenshot saved: {}", capture->screenshotSavePath.c_str());
-    capture->bIsScreenshotInProgress.clear();
+    else {
+        LOG_WARN(Renderer, "Screenshot open failed: {}", s.savePath.c_str());
+    }
+    s.bInProgress.clear();
 }
 
 bool RenderScreenCapture::CanScreenshot() const
 {
-    auto bIsSet = bIsScreenshotInProgress.test();
-    return !bIsSet;
+    for (const ScreenshotSlot& s : screenshotSlots) {
+        if (s.bInProgress.test()) { return false; }
+    }
+    return true;
 }
 
 void RenderScreenCapture::PrepareScreenshotResources(uint32_t width, uint32_t height)
@@ -51,8 +38,11 @@ void RenderScreenCapture::PrepareScreenshotResources(uint32_t width, uint32_t he
         return;
     }
 
+    for (ScreenshotSlot& s : screenshotSlots) {
+        while (s.bInProgress.test()) { std::this_thread::yield(); }
+        s.readbackBuffer = AllocatedBuffer{};
+    }
     screenshotIntermediateImage = AllocatedImage{};
-    screenshotReadbackBuffer = AllocatedBuffer{};
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -66,26 +56,34 @@ void RenderScreenCapture::PrepareScreenshotResources(uint32_t width, uint32_t he
     imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     screenshotIntermediateImage = AllocatedImage::CreateAllocatedImage(context, imageInfo);
     screenshotIntermediateImage.SetDebugName("screenshot_intermediate");
-
-    const size_t bufferSize = static_cast<size_t>(width) * height * 4;
-    screenshotReadbackBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, bufferSize);
-    screenshotReadbackBuffer.SetDebugName("screenshot_readback");
     screenshotCaptureWidth = width;
     screenshotCaptureHeight = height;
 }
 
-void RenderScreenCapture::StartScreenshot()
+uint32_t RenderScreenCapture::AcquireScreenshotSlot()
 {
-    auto bWasInProgress = bIsScreenshotInProgress.test_and_set();
-    assert(!bWasInProgress);
+    const uint32_t slot = nextScreenshotSlot;
+    nextScreenshotSlot = (nextScreenshotSlot + 1) % SCREENSHOT_SLOTS;
+    ScreenshotSlot& s = screenshotSlots[slot];
+    while (s.bInProgress.test_and_set()) { std::this_thread::yield(); }
+
+    const size_t bufferSize = static_cast<size_t>(screenshotCaptureWidth) * screenshotCaptureHeight * 4;
+    if (s.readbackBuffer.handle == VK_NULL_HANDLE || s.readbackBuffer.size != bufferSize) {
+        s.readbackBuffer = AllocatedBuffer::CreateAllocatedReceivingBuffer(context, bufferSize);
+        s.readbackBuffer.SetDebugName("screenshot_readback");
+    }
+    return slot;
 }
 
 void RenderScreenCapture::ResolveScreenshot(uint32_t currentFrameIndex)
 {
-    if (screenshotPendingSlot == currentFrameIndex) {
-        screenshotPendingSlot = UINT32_MAX;
-        task.capture = this;
-        taskScheduler->AddTaskSetToPipe(&task);
+    for (uint32_t i = 0; i < SCREENSHOT_SLOTS; ++i) {
+        ScreenshotSlot& s = screenshotSlots[i];
+        if (s.pendingFrameIndex != currentFrameIndex) { continue; }
+        s.pendingFrameIndex = UINT32_MAX;
+        s.task.capture = this;
+        s.task.slot = i;
+        taskScheduler->AddTaskSetToPipe(&s.task);
     }
 }
 
@@ -160,12 +158,16 @@ void RenderScreenCapture::ReleaseProbeCapture()
 void RenderScreenCapture::Reset()
 {
     taskScheduler = {};
-    bIsScreenshotInProgress.clear();
+    for (ScreenshotSlot& s : screenshotSlots) {
+        s.bInProgress.clear();
+        s.readbackBuffer = {};
+        s.pendingFrameIndex = UINT32_MAX;
+        s.savePath = {};
+    }
+    nextScreenshotSlot = 0;
     screenshotIntermediateImage = {};
-    screenshotReadbackBuffer = {};
     screenshotCaptureWidth = {};
     screenshotCaptureHeight = {};
-    screenshotSavePath = {};
     bIsProbeCaptureInProgress.clear();
     probeCaptureIntermediateImage = {};
     probeCaptureReadbackBuffer = {};

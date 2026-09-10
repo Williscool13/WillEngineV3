@@ -1,0 +1,67 @@
+wplay
+version 1 0
+name Ballance roll burst (side cam)
+scene Ballance
+content_version 1
+event_count 17
+end_header
+events|17
+e
+cam|held
+translation|0x40d00000|0x400ccccd|0x00000000
+rotation|0x3f338a69|0xbdb8b877|0x3f338a69|0x3db8b877
+;
+e
+fps|30
+;
+e
+console|gtao 0
+;
+e
+play|1
+;
+e
+wait|45
+;
+e
+action|Move
+axis|0x3f800000|0x00000000
+;
+e
+wait|12
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+wait|20
+;
+e
+capture|roll
+frames|12
+;
+e
+action|Move
+axis|0xbf800000|0x00000000
+;
+e
+wait|12
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+capture|stop
+frames|30
+;
+e
+wait|60
+;
+e
+capture|rest
+;
+e
+console|gtao 1
+;

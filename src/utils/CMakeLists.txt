@@ -1,6 +1,8 @@
 add_library(utils STATIC
         logging/logging.cpp
         logging/logging.h
+        image/png_write.cpp
+        image/png_write.h
 )
 
 
@@ -12,4 +14,5 @@ target_include_directories(utils PRIVATE
 target_link_libraries(utils PUBLIC
         spdlog::spdlog
         core
+        miniz
 )

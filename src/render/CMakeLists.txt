@@ -68,7 +68,6 @@ add_library(render STATIC
 
         interface/render_interface.cpp
         interface/render_interface.h
-        stb_write_impl.cpp
         systems/render_screen_capture.cpp
         systems/render_screen_capture.h
         renderer.cpp
@@ -129,6 +128,7 @@ target_link_libraries(render PUBLIC
         core
         asset-load
         platform
+        utils
         SDL3::SDL3
         volk
         VulkanMemoryAllocator

@@ -173,20 +173,6 @@ struct DDGIConvergeBoost
     uint32_t stashedRadianceCacheAccumCap{0};
 };
 
-struct CameraOverride
-{
-    enum class Mode : uint8_t
-    {
-        None,
-        Held,
-        Track,
-    };
-
-    Mode mode{Mode::None};
-    glm::vec3 translation{0.0f};
-    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
-};
-
 /** One-shot requests raised during the game tick and drained by the next render prepare. */
 struct FrameRequests
 {
@@ -278,7 +264,6 @@ struct EngineState
     DDGIConvergeBoost ddgiConvergeBoost;
     ProbeBakeSystem probeBake{};
     PlaytestSystem playtest{};
-    CameraOverride cameraOverride{};
     Console::ConsoleState console{};
     ProjectConfig projectConfig{};
     AutomationConfig automation{};

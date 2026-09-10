@@ -338,8 +338,55 @@ static ToolResult CaptureScreenshot(EngineContext* ctx, EngineState* state, Call
     return ToolResult::Complete;
 }
 
+static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
+{
+    const char* name = call.GetString("name", "");
+    if (!*name) {
+        call.SetError("Missing name: a .wplay stem, its header name, or an absolute path");
+        return ToolResult::Error;
+    }
+    if (state->playtest.bActive || !state->playtest.pendingPath.IsEmpty()) {
+        call.SetError("A run is already active; poll get_engine_status.playtestActive until false");
+        return ToolResult::Error;
+    }
+
+    const AssetManager::CachedPlayMetadata* found = nullptr;
+    for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
+        const Core::InlineString<128> stem{meta.source.Stem()};
+        if (stem == name || meta.name == name || meta.source == name) {
+            found = &meta;
+            break;
+        }
+    }
+    if (!found) {
+        call.SetError("No .wplay with that stem, name, or path is in the scan; check query_assets");
+        return ToolResult::Error;
+    }
+    if (!(found->sceneName == state->scene.currentSceneName)) {
+        call.SetError(Core::InlineString<256>::Format("Run wants scene '%s' but '%s' is loaded", found->sceneName.c_str(), state->scene.currentSceneName.c_str()).c_str());
+        return ToolResult::Error;
+    }
+
+    state->playtest.Arm(found->source.c_str());
+    call.SetString("name", found->name.c_str());
+    call.SetString("path", found->source.c_str());
+    call.SetInt("eventCount", found->eventCount);
+    return ToolResult::Complete;
+}
+
 void RegisterEngineTools(EngineState* state)
 {
+    RegisterTool(state, {
+        .id = "run_play"_sid,
+        .name = "run_play",
+        .description = "Arms a .wplay run in the loaded scene, as the scene browser's Run button does. Returns immediately; poll get_engine_status.playtestActive until false, then read get_engine_status.playtestOutputDir for the captures.",
+        .inputSchemaJson = R"({"type":"object","required":["name"],"properties":{
+            "name":{"type":"string","description":"The .wplay file stem, its header name, or an absolute path"}}})",
+        .invoke = &RunPlay,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
     RegisterTool(state, {
         .id = "get_frame_timings"_sid,
         .name = "get_frame_timings",

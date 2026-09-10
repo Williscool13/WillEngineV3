@@ -189,6 +189,13 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         state->requests.pendingCacheReset = Core::RenderCacheReset::All;
     });
 
+    Register(state, Origin::Engine, "gtao", "`gtao 0|1` toggles ambient occlusion", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() > 1) {
+            state->lighting.gtaoConfig.bEnabled = args[1][0] != '0';
+        }
+        Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
+    });
+
     Register(state, Origin::Engine, "system_graph_dump", "Print the next frame's SystemGraph waves and access sets", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->systemGraph->RequestDump();
         Print(state, "  dumping next frame");

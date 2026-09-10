@@ -153,6 +153,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
 
         ImGui::SeparatorText("Runs");
         {
+            ImGui::Checkbox("Skip captures", &state->playtest.bSkipCaptures);
             const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty() || ProbeBakeActive(state);
             uint32_t runCount = 0;
             for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {

@@ -8,7 +8,6 @@
 #include <enkiTS/src/TaskScheduler.h>
 #include <glm/gtc/packing.hpp>
 #include <spdlog/spdlog.h>
-#include <stb/stb_image_write.h>
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
@@ -90,7 +89,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
 
     renderArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Render, "render");
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
-    screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler, memoryManager.AssetsScratch());
+    screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler);
     // Vulkan-side NRD init is deferred to the first Record when DenoiserMode::NRD is selected
     nrdDenoiser = new(memoryManager.RenderAllocRaw(sizeof(NrdDenoiser))) NrdDenoiser(context, renderAlloc);
     pipelineStatsQuery.Init(context);
@@ -1162,8 +1161,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     exportPass.ReadBlitImage(targets.colorOutput);
     exportPass.Execute([](VkCommandBuffer, VulkanContext*, RenderGraph&) {});
 
-    if (frameBuffer.bTakeScreenshot && screenCapture->CanScreenshot()) {
+    if (frameBuffer.bTakeScreenshot) {
         screenCapture->PrepareScreenshotResources(postAaExtent[0], postAaExtent[1]);
+        const uint32_t screenshotSlot = screenCapture->AcquireScreenshotSlot();
+        RenderScreenCapture::ScreenshotSlot& slot = screenCapture->screenshotSlots[screenshotSlot];
         renderGraph->CreateTexture("screenshot_intermediate"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 
         auto& screenshotBlitPass = renderGraph->AddPass("Screenshot Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
@@ -1193,7 +1194,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
         auto& screenshotCopyPass = renderGraph->AddPass("Screenshot Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
         screenshotCopyPass.ReadCopyImage("screenshot_intermediate"_sid);
-        screenshotCopyPass.Execute([&](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+        screenshotCopyPass.Execute([&, readback = slot.readbackBuffer.handle](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
             VkBufferImageCopy2 copyRegion{};
             copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
             copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -1203,7 +1204,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
             copyInfo.srcImage = renderGraph->GetImageHandle("screenshot_intermediate"_sid);
             copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            copyInfo.dstBuffer = screenCapture->screenshotReadbackBuffer.handle;
+            copyInfo.dstBuffer = readback;
             copyInfo.regionCount = 1;
             copyInfo.pRegions = &copyRegion;
             vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
@@ -1224,14 +1225,13 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             char timestamp[32];
             std::strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tm);
             const auto filename = Core::InlineString<>::Format("%s_%llu.png", timestamp, static_cast<unsigned long long>(frameNumber));
-            screenCapture->screenshotSavePath = screenshotDir / filename.c_str();
+            slot.savePath = screenshotDir / filename.c_str();
         }
         else {
-            screenCapture->screenshotSavePath = Core::Path(frameBuffer.screenshotPath.c_str());
-            Platform::CreateDirectories(screenCapture->screenshotSavePath.Parent().c_str());
+            slot.savePath = Core::Path(frameBuffer.screenshotPath.c_str());
+            Platform::CreateDirectories(slot.savePath.Parent().c_str());
         }
-        screenCapture->screenshotPendingSlot = frameIndex;
-        screenCapture->StartScreenshot();
+        slot.pendingFrameIndex = frameIndex;
     }
 
 #if WILL_EDITOR

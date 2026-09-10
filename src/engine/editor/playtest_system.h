@@ -22,6 +22,20 @@ enum class InputContext : uint8_t;
 
 namespace Engine
 {
+struct CameraOverride
+{
+    enum class Mode : uint8_t
+    {
+        None,
+        Held,
+        Track,
+    };
+
+    Mode mode{Mode::None};
+    glm::vec3 translation{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+};
+
 /**
  * Runs a .wplay script in file order. Armed by --play or the scene browser's Run button; a script without play events is a plain shot list.
  * Waits count physics steps while playing and render frames otherwise.
@@ -34,6 +48,7 @@ struct PlaytestSystem
         WaitReady,
         Step,
         Waiting,
+        Capturing,
         AwaitSaved,
     };
 
@@ -46,6 +61,8 @@ struct PlaytestSystem
         Wait,
         Reset,
         Capture,
+        Fps,
+        Console,
     };
 
     enum class CamMode : uint8_t
@@ -61,6 +78,7 @@ struct PlaytestSystem
         CamMode camMode{CamMode::Follow};
         bool bFlag{false};
         int32_t count{0};
+        int32_t fps{0};
         glm::vec3 translation{0.0f};
         glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
         glm::vec2 axis{0.0f};
@@ -72,15 +90,22 @@ struct PlaytestSystem
 
     Phase phase{Phase::Idle};
     bool bActive{false};
+    bool bSkipCaptures{false};
     bool bCliRun{false};
-    /** --play arms exactly once per session. */
     bool bCliConsumed{false};
+
+    /** Read by the player controller and the game loop; both fall back to their defaults when None / 0. */
+    CameraOverride cameraOverride{};
+    int32_t frameLimit{0};
 
     Core::InlineString<512> pendingPath{};
     Core::InlineString<128> runName{};
     Core::InlineVector<Event, MAX_EVENTS> events{};
     int32_t cursor{0};
     int32_t captureCount{0};
+    int32_t burstRemaining{0};
+    int32_t burstIndex{0};
+    int32_t fpsCap{0};
     int32_t waitCounter{0};
     uint64_t waitStepBase{0};
     int32_t readyQuietCounter{0};

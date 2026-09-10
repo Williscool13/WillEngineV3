@@ -32,20 +32,32 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     glm::vec3 moveInput{0.0f};
     bool jumpRequested = false;
 
+    const Engine::CameraOverride& camOverride = state->playtest.cameraOverride;
+    const bool bOverride = camOverride.mode != Engine::CameraOverride::Mode::None;
+
     if (state->inputContext == Engine::InputContext::Gameplay) {
-        const Core::ActionState& lookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK);
-        lookYaw += glm::radians(-lookAction.axis.x * lookSpeed) * deltaTime;
-        lookPitch += glm::radians(-lookAction.axis.y * lookSpeed) * deltaTime;
+        if (!bOverride) {
+            const Core::ActionState& lookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK);
+            lookYaw += glm::radians(-lookAction.axis.x * lookSpeed) * deltaTime;
+            lookPitch += glm::radians(-lookAction.axis.y * lookSpeed) * deltaTime;
 
-        const Core::ActionState& gamepadLookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK_GAMEPAD);
-        lookYaw += glm::radians(-gamepadLookAction.axis.x * gamepadLookSpeed) * deltaTime;
-        lookPitch += glm::radians(gamepadLookAction.axis.y * gamepadLookSpeed) * deltaTime;
+            const Core::ActionState& gamepadLookAction = state->input.GetActionState(Game::Actions::ACTION_LOOK_GAMEPAD);
+            lookYaw += glm::radians(-gamepadLookAction.axis.x * gamepadLookSpeed) * deltaTime;
+            lookPitch += glm::radians(gamepadLookAction.axis.y * gamepadLookSpeed) * deltaTime;
 
-        lookPitch = glm::clamp(lookPitch, glm::radians(-89.0f), glm::radians(89.0f));
+            lookPitch = glm::clamp(lookPitch, glm::radians(-89.0f), glm::radians(89.0f));
+        }
 
         const glm::quat horizontalRotation = glm::angleAxis(lookYaw, WORLD_UP);
-        const glm::vec3 forward = horizontalRotation * WORLD_FORWARD;
-        const glm::vec3 right = horizontalRotation * WORLD_RIGHT;
+        glm::vec3 forward = horizontalRotation * WORLD_FORWARD;
+        if (bOverride) {
+            glm::vec3 overrideForward = camOverride.mode == Engine::CameraOverride::Mode::Held ? camOverride.rotation * WORLD_FORWARD : character->GetInterpolatedPosition() - camOverride.translation;
+            overrideForward.y = 0.0f;
+            if (glm::length(overrideForward) > 1e-4f) {
+                forward = glm::normalize(overrideForward);
+            }
+        }
+        const glm::vec3 right = glm::cross(forward, WORLD_UP);
 
         const Core::ActionState& moveAction = state->input.GetActionState(Game::Actions::ACTION_MOVE);
         moveInput += forward * moveAction.axis.y;
@@ -66,7 +78,6 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     const float fov = glm::radians(state->projectConfig.gameCameraFovDegrees);
     const float nearPlane = state->projectConfig.gameCameraNearPlane;
     Core::ViewData viewData{};
-    const Engine::CameraOverride& camOverride = state->cameraOverride;
     if (camOverride.mode == Engine::CameraOverride::Mode::Held) {
         viewData = Engine::BuildPerspectiveView(camOverride.translation, camOverride.rotation * WORLD_FORWARD, WORLD_UP, aspectRatio, fov, nearPlane);
     }

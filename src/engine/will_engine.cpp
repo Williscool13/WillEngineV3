@@ -1383,8 +1383,9 @@ void WillEngine::Run()
         bool bHaveRenderSlot = false;
         {
             ZoneScopedN("FramePacing");
-            if (engineState->projectConfig.bLimitFps && engineState->projectConfig.frameLimitTarget > 0) {
-                const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(engineState->projectConfig.frameLimitTarget)));
+            const int32_t frameLimit = engineState->playtest.frameLimit > 0 ? engineState->playtest.frameLimit : (engineState->projectConfig.bLimitFps ? engineState->projectConfig.frameLimitTarget : 0);
+            if (frameLimit > 0) {
+                const auto interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(1.0 / static_cast<double>(frameLimit)));
                 nextFrameTime += interval;
                 const auto now = std::chrono::steady_clock::now();
                 if (now < nextFrameTime) {
