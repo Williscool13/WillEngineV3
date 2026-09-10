@@ -47,6 +47,9 @@ static const int BUFFER_X = GROUP_X + 3;
 static const int BUFFER_Y = GROUP_Y + 3;
 static const int RENAMED_GROUP_Y = (GROUP_X * GROUP_Y) / BUFFER_X;
 
+static const float DILATION_REJECT_START_PX = 1.0;
+static const float DILATION_REJECT_END_PX = 4.0;
+
 groupshared float4 s_ColorsAndLengths[BUFFER_Y][BUFFER_X]; // .rgb = PQ color, .a = dot(pixelMV, pixelMV)
 groupshared float2 s_MotionVectors[BUFFER_Y][BUFFER_X];
 
@@ -215,6 +218,10 @@ void ComputeDonutTaa(
     float newFrameWeight = pc.newFrameWeight;
 
     float2 longestMV = s_MotionVectors[longestMVPos.y][longestMVPos.x];
+    // A pixel that borrowed a neighbour's vector fetches history displaced by the difference; past a few pixels that lands on unrelated background (rolling silhouettes drag the ring along the edge, not with it)
+    float2 ownMV = s_MotionVectors[inputPosShared.y + 1][inputPosShared.x + 1];
+    float dilationMismatchPx = length((longestMV - ownMV) * pc.outputOverInputViewSize);
+    float dilationReject = smoothstep(DILATION_REJECT_START_PX, DILATION_REJECT_END_PX, dilationMismatchPx);
 
     colorMoment1 /= 9.0;
     colorMoment2 /= 9.0;
@@ -247,7 +254,7 @@ void ComputeDonutTaa(
         float2 distanceToLowResPixel = inputPos - float2(inputPosInt);
         float upscalingFactor = pc.outputOverInputViewSize.x;
         float sampleWeight = saturate(1.0 - upscalingFactor * dot(distanceToLowResPixel, distanceToLowResPixel));
-        float blendWeight = saturate(max(motionWeight, sampleWeight) * newFrameWeight);
+        float blendWeight = max(saturate(max(motionWeight, sampleWeight) * newFrameWeight), dilationReject);
 
         resultPQ = lerp(historyClamped, thisPixelColor, blendWeight);
     }

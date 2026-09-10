@@ -31,7 +31,6 @@ clampingFactor|0x3f800000
 newFrameWeight|0x3dcccccd
 maxRadiance|0x447a0000
 bUseCatmullRom|1
-bUseHistoryClampRelax|0
 ;
 ;
 resolutionScale|0x3f400000

@@ -1,5 +1,5 @@
 postProcess
-bExposureEnabled|1
+bExposureEnabled|0
 exposureTargetLuminance|0x3ecccccd
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000

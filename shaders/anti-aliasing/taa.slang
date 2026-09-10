@@ -13,6 +13,8 @@ static const int APRON_DIM = TILE_DIM + 2;
 static const int APRON_TEXEL_COUNT = APRON_DIM * APRON_DIM;
 
 static const float VIEWZ_CLAMP = 1e6;
+static const float DILATION_REJECT_START_PX = 1.0;
+static const float DILATION_REJECT_END_PX = 4.0;
 
 bool IsFinite3(float3 c)
 {
@@ -195,8 +197,13 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
     float3 minc = max(mean - gamma * stddev, minColor);
     float3 maxc = min(mean + gamma * stddev, maxColor);
 
-    float2 velocityNDC = closestDepth > 0.0 ? UnpackMotionVectors(closestPackedVelocity) : SkyMotionVectorNDC(pc.sceneData.clipToPrevClip, pc.sceneData.jitter, pc.sceneData.prevJitter, uv);
+    float2 skyVelocityNDC = SkyMotionVectorNDC(pc.sceneData.clipToPrevClip, pc.sceneData.jitter, pc.sceneData.prevJitter, uv);
+    float2 velocityNDC = closestDepth > 0.0 ? UnpackMotionVectors(closestPackedVelocity) : skyVelocityNDC;
     float2 velocity = velocityNDC * 0.5;
+    // A pixel that borrowed a neighbour's vector fetches history displaced by the difference; past a few pixels that lands on unrelated background (rolling silhouettes drag the ring along the edge, not with it)
+    float2 ownVelocityNDC = gsDepth[local.y][local.x] > 0.0 ? UnpackMotionVectors(gsPackedVelocity[local.y][local.x]) : skyVelocityNDC;
+    float dilationMismatchPx = length((velocityNDC - ownVelocityNDC) * 0.5 * pc.sceneData.mainRenderTargetSize);
+    float dilationReject = smoothstep(DILATION_REJECT_START_PX, DILATION_REJECT_END_PX, dilationMismatchPx);
     float2 historyUv = uv + velocity;
     bool validHistory = all(historyUv >= float2(0.0)) && all(historyUv <= float2(1.0));
 
@@ -221,7 +228,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
 
         historyYCoCg = ClipToNeighborhood(historyYCoCg, minc, maxc);
 
-        float alpha = lerp(pc.baseBlendAlpha, 1.0, disocclusion);
+        float alpha = lerp(pc.baseBlendAlpha, 1.0, max(disocclusion, dilationReject));
         float lumaDiff = saturate(abs(currentYCoCg.x - historyYCoCg.x) / max(currentYCoCg.x, 0.2 / exposureScale));
         // Luma mismatch may only increase responsiveness; without the max an already-high alpha would be pulled back down toward the cap
         float boostedAlpha = max(alpha, min(alpha * 2.0, pc.lumaBoostCap));
