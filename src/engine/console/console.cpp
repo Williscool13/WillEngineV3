@@ -196,6 +196,20 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
     });
 
+    Register(state, Origin::Engine, "view", "`view <rdg texture>|off` shows a render graph texture in the debug visualizer", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() > 1) {
+            if (strcmp(args[1], "off") == 0) {
+                state->debug.resourceName.Clear();
+            }
+            else {
+                state->debug.resourceName = Core::InlineString(args[1]);
+                state->debug.transformationType = DebugTransformationType::None;
+                state->debug.viewAspect = Core::DebugViewAspect::None;
+            }
+        }
+        Print(state, state->debug.resourceName.IsEmpty() ? "  view off" : Core::InlineString<256>::Format("  view %s", state->debug.resourceName.c_str()).c_str());
+    });
+
     Register(state, Origin::Engine, "system_graph_dump", "Print the next frame's SystemGraph waves and access sets", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->systemGraph->RequestDump();
         Print(state, "  dumping next frame");

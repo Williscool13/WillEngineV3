@@ -126,6 +126,9 @@ static bool LoadPlayFile(const char* path, Core::InlineVector<PlaytestSystem::Ev
         else if (e.Str("console", ev.name)) {
             ev.op = PlaytestSystem::Op::Console;
         }
+        else if (e.Str("profile", ev.name)) {
+            ev.op = PlaytestSystem::Op::Profile;
+        }
         else {
             LOG_ERROR(Engine, "Run: '{}' has an event with no recognised op, skipped", path);
             return;
@@ -247,6 +250,11 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         state->input.scripted.Clear();
         cameraOverride = {};
         frameLimit = 0;
+        if (bProfileStashed) {
+            Profiles::ApplyLightingProfile(*state, stashedProfile);
+            state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+            bProfileStashed = false;
+        }
         state->inputContext = stashedInputContext;
         TeleportEditorCamera(ctx, state, stashedCameraTranslation, stashedCameraRotation);
         LOG_INFO(Engine, "Run '{}' {}: {} capture(s) -> {}", runName.c_str(), outcome, captureCount, outputDir.c_str());
@@ -386,6 +394,23 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                     case Op::Console:
                     {
                         Console::ExecuteCommand(ctx, state, e.name.c_str());
+                        ++cursor;
+                        break;
+                    }
+                    case Op::Profile:
+                    {
+                        if (!bProfileStashed) {
+                            stashedProfile = Profiles::CaptureLightingProfile(*state);
+                            bProfileStashed = true;
+                        }
+                        Profiles::LightingProfileBundle bundle = Profiles::CaptureLightingProfile(*state);
+                        if (Profiles::LoadLightingProfile(e.name.c_str(), bundle)) {
+                            Profiles::ApplyLightingProfile(*state, bundle);
+                            state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+                        }
+                        else {
+                            LOG_WARN(Engine, "Run '{}': lighting profile '{}' not found", runName.c_str(), e.name.c_str());
+                        }
                         ++cursor;
                         break;
                     }

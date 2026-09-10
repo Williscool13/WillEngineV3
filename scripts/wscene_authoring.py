@@ -890,6 +890,11 @@ def ev_console(line):
     return {"console": line}
 
 
+def ev_profile(name):
+    """Applies a lighting profile (config/profiles/lighting/<name>.wprofile); the run restores the live settings when it ends."""
+    return {"profile": name}
+
+
 def shots_to_events(shots, settle=240):
     """Expands shot() entries into held-camera capture events: cam, reset, wait, capture per shot."""
     events = []

@@ -11,6 +11,7 @@
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 #include "engine/core/action_handle.h"
+#include "engine/profiles/profile_library.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine
@@ -63,6 +64,7 @@ struct PlaytestSystem
         Capture,
         Fps,
         Console,
+        Profile,
     };
 
     enum class CamMode : uint8_t
@@ -97,6 +99,10 @@ struct PlaytestSystem
     /** Read by the player controller and the game loop; both fall back to their defaults when None / 0. */
     CameraOverride cameraOverride{};
     int32_t frameLimit{0};
+
+    /** Live lighting bundle captured before the first `profile` op; restored when the run ends. */
+    Profiles::LightingProfileBundle stashedProfile{};
+    bool bProfileStashed{false};
 
     Core::InlineString<512> pendingPath{};
     Core::InlineString<128> runName{};
