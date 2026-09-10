@@ -596,6 +596,23 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("taa_donut"_sid, src / "taa_donut.spv", "ComputeDonutTaa",
                             sizeof(DonutTaaPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline("fsr2_reactive"_sid, src / "fsr2_reactive.spv", "ComputeFsr2Reactive",
+                            sizeof(Fsr2ReactivePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_luminance"_sid, src / "fsr2_luminance.spv", "ComputeFsr2Luminance",
+                            sizeof(Fsr2LuminancePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_exposure"_sid, src / "fsr2_exposure.spv", "ComputeFsr2Exposure",
+                            sizeof(Fsr2ExposurePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_reconstruct"_sid, src / "fsr2_reconstruct.spv", "ComputeFsr2Reconstruct",
+                            sizeof(Fsr2ReconstructPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_depth_clip"_sid, src / "fsr2_depth_clip.spv", "ComputeFsr2DepthClip",
+                            sizeof(Fsr2DepthClipPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_lock"_sid, src / "fsr2_lock.spv", "ComputeFsr2Lock",
+                            sizeof(Fsr2LockPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_accumulate"_sid, src / "fsr2_accumulate.spv", "ComputeFsr2Accumulate",
+                            sizeof(Fsr2AccumulatePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("fsr2_rcas"_sid, src / "fsr2_rcas.spv", "ComputeFsr2Rcas",
+                            sizeof(Fsr2RcasPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline("smaa_luma_edge_detection"_sid, src / "smaa.spv", "LumaEdgeDetectionMain",
                             sizeof(SmaaEdgeDetectionPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("smaa_color_edge_detection"_sid, src / "smaa.spv", "ColorEdgeDetectionMain",

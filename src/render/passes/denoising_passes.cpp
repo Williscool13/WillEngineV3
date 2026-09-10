@@ -147,7 +147,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gSpecMaxFastAccumulatedFrameNum = params.specMaxFastAccumFrames;
     rc.gDiffMaxAccumulatedFrameNum = params.diffMaxAccumFrames;
     rc.gDiffMaxFastAccumulatedFrameNum = params.diffMaxFastAccumFrames;
-    const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.aaConfig.mode, frameNumber);
+    const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.aaConfig.mode, frameNumber, viewFamily.resolutionScale);
     const float disocclusionThresholdBonus = (1.0f + jitterDelta) / static_cast<float>(height);
     rc.gDisocclusionThreshold = params.disocclusionThreshold + disocclusionThresholdBonus;
     rc.gDenoisingRange = params.denoisingRange;

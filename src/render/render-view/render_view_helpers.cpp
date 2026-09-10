@@ -4,6 +4,8 @@
 
 #include "render_view_helpers.h"
 
+#include <cmath>
+
 #include "core/containers/arena_fixed_map.h"
 #include "core/math/math_helpers.h"
 #include "render/interface/render_interface.h"
@@ -13,7 +15,49 @@
 
 namespace Render
 {
-SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime)
+static float RadicalInverse(uint32_t index, uint32_t base)
+{
+    float f = 1.0f;
+    float r = 0.0f;
+    while (index > 0) {
+        f /= static_cast<float>(base);
+        r += f * static_cast<float>(index % base);
+        index /= base;
+    }
+    return r;
+}
+
+uint32_t ComputeJitterPhaseCount(Core::AntiAliasingMode aaMode, float resolutionScale)
+{
+    if (aaMode == Core::AntiAliasingMode::FSR2) {
+        const float scale = glm::max(resolutionScale, 0.1f);
+        return glm::max(1u, static_cast<uint32_t>(std::ceil(8.0f / (scale * scale))));
+    }
+    return HALTON_SEQUENCE_COUNT;
+}
+
+HaltonSample ComputeJitterSample(Core::AntiAliasingMode aaMode, uint64_t frameNumber, uint32_t jitterPhaseCount)
+{
+    switch (aaMode) {
+        case Core::AntiAliasingMode::TAA:
+        case Core::AntiAliasingMode::NaiveTAA:
+        case Core::AntiAliasingMode::DonutTAA:
+            return HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
+        case Core::AntiAliasingMode::SMAAT2X: {
+            constexpr HaltonSample SMAA_T2X_OFFSETS[2] = {{-0.25f, -0.25f}, {0.25f, 0.25f}};
+            return SMAA_T2X_OFFSETS[frameNumber % 2];
+        }
+        case Core::AntiAliasingMode::FSR2: {
+            // Halton(2,3) from index 1
+            const uint32_t index = static_cast<uint32_t>(frameNumber % jitterPhaseCount) + 1u;
+            return HaltonSample{RadicalInverse(index, 2) - 0.5f, RadicalInverse(index, 3) - 0.5f};
+        }
+        default:
+            return HaltonSample{0.0f, 0.0f};
+    }
+}
+
+SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale)
 {
     const glm::mat4 viewMatrix = view.currentViewData.view;
     const glm::mat4 projMatrix = view.currentViewData.proj;
@@ -25,57 +69,28 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     sceneData.view = viewMatrix;
     sceneData.prevView = prevViewMatrix;
 
-    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::DonutTAA) {
-        const HaltonSample& currSample = HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
-        const HaltonSample& prevSample = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
+    const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(aaMode, resolutionScale);
+    const HaltonSample currSample = ComputeJitterSample(aaMode, frameNumber, jitterPhaseCount);
+    const HaltonSample prevSample = ComputeJitterSample(aaMode, frameNumber - 1, jitterPhaseCount);
 
-        glm::mat4 jitteredProj = projMatrix;
-        float jitterX = currSample.x * 2.0f / static_cast<float>(renderExtent[0]);
-        float jitterY = currSample.y * 2.0f / static_cast<float>(renderExtent[1]);
-        jitteredProj[2][0] += jitterX;
-        jitteredProj[2][1] += jitterY;
+    const float jitterX = currSample.x * 2.0f / static_cast<float>(renderExtent[0]);
+    const float jitterY = currSample.y * 2.0f / static_cast<float>(renderExtent[1]);
+    const float prevJitterX = prevSample.x * 2.0f / static_cast<float>(renderExtent[0]);
+    const float prevJitterY = prevSample.y * 2.0f / static_cast<float>(renderExtent[1]);
 
-        glm::mat4 jitteredPrevProj = prevProjMatrix;
-        float prevJitterX = prevSample.x * 2.0f / static_cast<float>(renderExtent[0]);
-        float prevJitterY = prevSample.y * 2.0f / static_cast<float>(renderExtent[1]);
-        jitteredPrevProj[2][0] += prevJitterX;
-        jitteredPrevProj[2][1] += prevJitterY;
+    glm::mat4 jitteredProj = projMatrix;
+    jitteredProj[2][0] += jitterX;
+    jitteredProj[2][1] += jitterY;
 
-        sceneData.jitter = {jitterX, jitterY};
-        sceneData.prevJitter = {prevJitterX, prevJitterY};
-        sceneData.proj = jitteredProj;
-        sceneData.prevProj = jitteredPrevProj;
-    }
-    else if (aaMode == Core::AntiAliasingMode::SMAAT2X) {
-        // Alternates between two canonical SMAA subsample positions each frame.
-        static constexpr glm::vec2 kSubsampleOffsets[2] = {{-0.25f, -0.25f}, {0.25f, 0.25f}};
-        const glm::vec2& curr = kSubsampleOffsets[frameNumber % 2];
-        const glm::vec2& prev = kSubsampleOffsets[(frameNumber + 1) % 2];
+    glm::mat4 jitteredPrevProj = prevProjMatrix;
+    jitteredPrevProj[2][0] += prevJitterX;
+    jitteredPrevProj[2][1] += prevJitterY;
 
-        float jitterX = curr.x * 2.0f / static_cast<float>(renderExtent[0]);
-        float jitterY = curr.y * 2.0f / static_cast<float>(renderExtent[1]);
-        float prevJitterX = prev.x * 2.0f / static_cast<float>(renderExtent[0]);
-        float prevJitterY = prev.y * 2.0f / static_cast<float>(renderExtent[1]);
-
-        glm::mat4 jitteredProj = projMatrix;
-        jitteredProj[2][0] += jitterX;
-        jitteredProj[2][1] += jitterY;
-
-        glm::mat4 jitteredPrevProj = prevProjMatrix;
-        jitteredPrevProj[2][0] += prevJitterX;
-        jitteredPrevProj[2][1] += prevJitterY;
-
-        sceneData.jitter = {jitterX, jitterY};
-        sceneData.prevJitter = {prevJitterX, prevJitterY};
-        sceneData.proj = jitteredProj;
-        sceneData.prevProj = jitteredPrevProj;
-    }
-    else {
-        sceneData.jitter = {0.0f, 0.0f};
-        sceneData.prevJitter = {0.0f, 0.0f};
-        sceneData.proj = projMatrix;
-        sceneData.prevProj = prevProjMatrix;
-    }
+    sceneData.jitter = {jitterX, jitterY};
+    sceneData.prevJitter = {prevJitterX, prevJitterY};
+    sceneData.proj = jitteredProj;
+    sceneData.prevProj = jitteredPrevProj;
+    sceneData.uvDerivativeScale = aaMode == Core::AntiAliasingMode::FSR2 ? resolutionScale * 0.5f : 1.0f;
 
 
     sceneData.viewProj = sceneData.proj * sceneData.view;
@@ -115,19 +130,20 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     return sceneData;
 }
 
-float ComputeRelaxJitterDelta(Core::AntiAliasingMode aaMode, uint64_t frameNumber)
+float ComputeRelaxJitterDelta(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float resolutionScale)
 {
-    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::DonutTAA) {
-        const HaltonSample& curr = HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
-        const HaltonSample& prev = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
+    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::DonutTAA || aaMode == Core::AntiAliasingMode::FSR2) {
+        const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(aaMode, resolutionScale);
+        const HaltonSample curr = ComputeJitterSample(aaMode, frameNumber, jitterPhaseCount);
+        const HaltonSample prev = ComputeJitterSample(aaMode, frameNumber - 1, jitterPhaseCount);
         return glm::clamp(glm::max(glm::abs(curr.x - prev.x), glm::abs(curr.y - prev.y)), 0.0f, 1.0f);
     }
     return 0.0f;
 }
 
-float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps)
+float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps, float resolutionScale)
 {
-    const float jitterDelta = ComputeRelaxJitterDelta(aaMode, frameNumber);
+    const float jitterDelta = ComputeRelaxJitterDelta(aaMode, frameNumber, resolutionScale);
     const float fps = glm::max(renderFps, 30.0f);
     const float nonLinearAccumSpeed = fps * 0.25f / (1.0f + fps * 0.25f);
     return glm::mix(nonLinearAccumSpeed, 0.5f, jitterDelta);

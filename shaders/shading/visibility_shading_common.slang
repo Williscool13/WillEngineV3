@@ -153,8 +153,8 @@ public ReconstructedShadingData ReconstructShadingInputs(
     result.shadingInputs.objPos = bary.x * objPos0 + bary.y * objPos1 + bary.z * objPos2;
     result.shadingInputs.posVS = mul(result.shadingInputs.mv, float4(result.shadingInputs.objPos, 1.0)).xyz;
     result.shadingInputs.interp = InterpolateVertex(bary, vertexAttribute0, vertexAttribute1, vertexAttribute2, result.shadingInputs.mv);
-    result.shadingInputs.uvDdx = baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2;
-    result.shadingInputs.uvDdy = baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2;
+    result.shadingInputs.uvDdx = (baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2) * sceneData->uvDerivativeScale;
+    result.shadingInputs.uvDdy = (baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2) * sceneData->uvDerivativeScale;
 
     float4 currClip = mul(sceneData->viewProj, mul(result.model.modelMatrix, float4(result.shadingInputs.objPos, 1.0)));
     float4 prevClip = mul(sceneData->prevViewProj, mul(result.model.prevModelMatrix, float4(result.shadingInputs.objPos, 1.0)));

@@ -116,6 +116,7 @@ enum class AntiAliasingMode
     SMAAT2X,
     NaiveTAA,
     DonutTAA,
+    FSR2,
 };
 
 enum class SMAAEdgeDetectionMode : int32_t
@@ -155,12 +156,23 @@ struct DonutTAAConfiguration
     bool bUseCatmullRom{true};
 };
 
+struct Fsr2Configuration
+{
+    bool bSharpen{true};
+    float sharpness{0.8f}; // 0 = no sharpening, 1 = maximum
+    bool bAutoExposure{true};
+    bool bReactiveMask{true}; // from the pre-overlay colour snapshot (text, sprites, debug draw)
+    float reactiveScale{1.0f};
+    float reactiveThreshold{0.2f};
+};
+
 struct AntiAliasingConfiguration
 {
     AntiAliasingMode mode{AntiAliasingMode::TAA};
     SMAAConfiguration smaa{};
     TAAConfiguration taa{};
     DonutTAAConfiguration donutTaa{};
+    Fsr2Configuration fsr2{};
 };
 
 struct GTAOConfiguration

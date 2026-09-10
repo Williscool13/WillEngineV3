@@ -124,7 +124,8 @@ SHADER_PUBLIC struct SceneData
     SHADER_PUBLIC float2 ndcToViewAdd;
 
     SHADER_PUBLIC float2 ndcToViewMulXPixelSize;
-    SHADER_PUBLIC float2 _pad0;
+    SHADER_PUBLIC float uvDerivativeScale;
+    SHADER_PUBLIC float _pad0;
 
 
     SHADER_PUBLIC float depthLinearizeMult;

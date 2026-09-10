@@ -154,6 +154,11 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::SeparatorText("Runs");
         {
             ImGui::Checkbox("Skip captures", &state->playtest.bSkipCaptures);
+            ImGui::SameLine();
+            if (ImGui::Button("Refresh")) {
+                ctx->rescan.bResources = true;
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Rescan the assets and scenes roots on the next frame (picks up new .wplay files)"); }
             const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty() || ProbeBakeActive(state);
             uint32_t runCount = 0;
             for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {

@@ -1036,6 +1036,117 @@ SHADER_PUBLIC struct DonutTaaPushConstant
     SHADER_PUBLIC float2 outputOverInputViewSize;
 };
 
+// 8-byte aligned members only so C++ (vec2 = 4) and Slang (float2 = 8) agree on every offset
+SHADER_PUBLIC struct Fsr2Constants
+{
+    SHADER_PUBLIC float2 renderSize;
+    SHADER_PUBLIC float2 displaySize;
+    SHADER_PUBLIC float2 jitter; // pixels, FSR2 sign: content at pixel c was rendered at unjittered c - jitter
+    SHADER_PUBLIC float2 downscaleFactor; // render / display
+    SHADER_PUBLIC float2 lumaMipSize; // allocated shading-change mip texture size
+    SHADER_PUBLIC float2 lumaMipClampSize; // floor(render / 32), sample clamp bound
+    SHADER_PUBLIC float2 depthToView; // viewZ = y / (deviceDepth - x)
+    SHADER_PUBLIC float2 tanHalfFov;
+    SHADER_PUBLIC float preExposure;
+    SHADER_PUBLIC float previousPreExposure;
+    SHADER_PUBLIC float deltaTime;
+    SHADER_PUBLIC float jitterPhaseCount;
+    SHADER_PUBLIC uint32_t frameIndex; // 0 on a history reset frame
+    SHADER_PUBLIC uint32_t _pad0;
+};
+
+SHADER_PUBLIC struct Fsr2ReactivePushConstant
+{
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t preOverlayColorIndex;
+    SHADER_PUBLIC uint32_t reactiveOutIndex;
+    SHADER_PUBLIC float scale;
+    SHADER_PUBLIC float threshold;
+    SHADER_PUBLIC float binaryValue;
+};
+
+SHADER_PUBLIC struct Fsr2LuminancePushConstant
+{
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t lumaMip4OutIndex;
+    SHADER_PUBLIC uint32_t lumaMip5OutIndex;
+};
+
+SHADER_PUBLIC struct Fsr2ExposurePushConstant
+{
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t lumaMip5Index;
+    SHADER_PUBLIC uint32_t previousExposureIndex;
+    SHADER_PUBLIC uint32_t exposureOutIndex;
+};
+
+SHADER_PUBLIC struct Fsr2ReconstructPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t exposureIndex;
+    SHADER_PUBLIC uint32_t dilatedDepthOutIndex;
+    SHADER_PUBLIC uint32_t dilatedMotionOutIndex;
+    SHADER_PUBLIC uint32_t reconstructedDepthOutIndex;
+    SHADER_PUBLIC uint32_t lockInputLumaOutIndex;
+};
+
+SHADER_PUBLIC struct Fsr2DepthClipPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t exposureIndex;
+    SHADER_PUBLIC uint32_t reactiveMaskIndex;
+    SHADER_PUBLIC uint32_t dilatedDepthIndex;
+    SHADER_PUBLIC uint32_t dilatedMotionIndex;
+    SHADER_PUBLIC uint32_t previousDilatedMotionIndex;
+    SHADER_PUBLIC uint32_t reconstructedDepthIndex;
+    SHADER_PUBLIC uint32_t preparedColorOutIndex;
+    SHADER_PUBLIC uint32_t dilatedReactiveOutIndex;
+};
+
+SHADER_PUBLIC struct Fsr2LockPushConstant
+{
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t lockInputLumaIndex;
+    SHADER_PUBLIC uint32_t newLocksOutIndex;
+};
+
+SHADER_PUBLIC struct Fsr2AccumulatePushConstant
+{
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t exposureIndex;
+    SHADER_PUBLIC uint32_t dilatedReactiveIndex;
+    SHADER_PUBLIC uint32_t dilatedMotionIndex;
+    SHADER_PUBLIC uint32_t historyColorIndex;
+    SHADER_PUBLIC uint32_t lockStatusIndex;
+    SHADER_PUBLIC uint32_t preparedColorIndex;
+    SHADER_PUBLIC uint32_t lumaMip4Index;
+    SHADER_PUBLIC uint32_t lumaHistoryIndex;
+    SHADER_PUBLIC uint32_t newLocksIndex; // storage: read then cleared
+    SHADER_PUBLIC uint32_t historyColorOutIndex;
+    SHADER_PUBLIC uint32_t lockStatusOutIndex;
+    SHADER_PUBLIC uint32_t lumaHistoryOutIndex;
+    SHADER_PUBLIC uint32_t outputIndex; // FSR2_INVALID_INDEX when RCAS writes the output
+};
+
+SHADER_PUBLIC struct Fsr2RcasPushConstant
+{
+    SHADER_PUBLIC Fsr2Constants c;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t exposureIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float sharpness; // linear, exp2(-stops)
+};
+
 SHADER_PUBLIC struct SmaaEdgeDetectionPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

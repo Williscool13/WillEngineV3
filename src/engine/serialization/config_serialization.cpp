@@ -517,6 +517,26 @@ void Deserialize(const TextReader& r, Core::DonutTAAConfiguration& p)
     p.bUseCatmullRom = r.Bool("bUseCatmullRom", p.bUseCatmullRom);
 }
 
+void Serialize(const Core::Fsr2Configuration& p, TextWriter& w)
+{
+    w.Key("bSharpen", p.bSharpen);
+    w.Key("sharpness", p.sharpness);
+    w.Key("bAutoExposure", p.bAutoExposure);
+    w.Key("bReactiveMask", p.bReactiveMask);
+    w.Key("reactiveScale", p.reactiveScale);
+    w.Key("reactiveThreshold", p.reactiveThreshold);
+}
+
+void Deserialize(const TextReader& r, Core::Fsr2Configuration& p)
+{
+    p.bSharpen = r.Bool("bSharpen", p.bSharpen);
+    p.sharpness = r.Float("sharpness", p.sharpness);
+    p.bAutoExposure = r.Bool("bAutoExposure", p.bAutoExposure);
+    p.bReactiveMask = r.Bool("bReactiveMask", p.bReactiveMask);
+    p.reactiveScale = r.Float("reactiveScale", p.reactiveScale);
+    p.reactiveThreshold = r.Float("reactiveThreshold", p.reactiveThreshold);
+}
+
 void Serialize(const Core::AntiAliasingConfiguration& p, TextWriter& w)
 {
     w.Key("mode", static_cast<int32_t>(p.mode));
@@ -529,6 +549,9 @@ void Serialize(const Core::AntiAliasingConfiguration& p, TextWriter& w)
     w.BeginBlock("donutTaa");
     Serialize(p.donutTaa, w);
     w.EndBlock();
+    w.BeginBlock("fsr2");
+    Serialize(p.fsr2, w);
+    w.EndBlock();
 }
 
 void Deserialize(const TextReader& r, Core::AntiAliasingConfiguration& p)
@@ -537,6 +560,7 @@ void Deserialize(const TextReader& r, Core::AntiAliasingConfiguration& p)
     Deserialize(r.Block("smaa"), p.smaa);
     Deserialize(r.Block("taa"), p.taa);
     Deserialize(r.Block("donutTaa"), p.donutTaa);
+    Deserialize(r.Block("fsr2"), p.fsr2);
 }
 
 void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)

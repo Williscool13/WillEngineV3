@@ -39,6 +39,21 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         Core::Array<uint32_t, 2> inputExtent,
                                         Core::Array<uint32_t, 2> outputExtent,
                                         const RenderTargets& targets);
+
+/**
+ * In-house FSR 2.2.1 (extern/fsr2). Upscales colorOutput from renderExtent to outputExtent and replaces the AA stage.
+ * @param bHasPreOverlayColor "lit_color_preoverlay" was snapshotted this frame; enables the reactive mask
+ * @param deltaTime seconds, for auto exposure smoothing
+ */
+StringID SetupFsr2(RenderGraph& graph,
+                   PipelineManager* pipelineManager,
+                   const Core::ViewFamily& viewFamily,
+                   Core::Array<uint32_t, 2> renderExtent,
+                   Core::Array<uint32_t, 2> outputExtent,
+                   const RenderTargets& targets,
+                   bool bHasPreOverlayColor,
+                   float deltaTime,
+                   uint64_t frameNumber);
 } // Render
 
 #endif //WILL_ENGINE_ANTI_ALIASING_PASSES_H

@@ -594,7 +594,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     const bool bReflectionScreenSpace = viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
     const bool bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.debug.giGatherDebugMode != 0);
     const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
-    const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace);
+    const bool bFsr2Reactive = viewFamily.aaConfig.mode == Core::AntiAliasingMode::FSR2 && viewFamily.aaConfig.fsr2.bReactiveMask;
+    const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && ((bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace)) || bFsr2Reactive);
     if (bSnapshotLitColor) {
         renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     }
@@ -779,7 +780,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                         const bool bRestirFullRateResolve = restirCheckerboardField != 0u && restir.bCheckerboardFullRateResolve;
                         const bool bRestirDenoised = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR;
                         const uint32_t restirCheckerboardPacked = (!bRestirFullRateResolve && bRestirDenoised) ? 1u : 0u;
-                        const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps);
+                        const float restirCheckerboardResolveSpeed = ComputeCheckerboardResolveAccumSpeed(viewFamily.aaConfig.mode, frameNumber, renderFps, viewFamily.resolutionScale);
                         const uint32_t denoiserCheckerboardField = bRestirFullRateResolve ? 0u : restirCheckerboardField;
                         const float denoiserCheckerboardResolveSpeed = bRestirFullRateResolve ? 0.0f : restirCheckerboardResolveSpeed;
 
@@ -920,6 +921,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 break;
             case Core::AntiAliasingMode::DonutTAA:
                 targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets);
+                postAaExtent = outputExtent;
+                break;
+            case Core::AntiAliasingMode::FSR2:
+                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::SMAAT2X:
@@ -1713,10 +1718,10 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     ZoneScoped;
     // Scene Data
     auto* sceneData = static_cast<SceneData*>(renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE));
-    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
+    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
     // Portal Scene Data
     if (!viewFamily.portalViews.IsEmpty()) {
-        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime);
+        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         sceneData[1] = portalSceneData;

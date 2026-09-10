@@ -13,6 +13,7 @@
 #include "core/memory/tlsf_allocator.h"
 #include "engine/logging/engine_log.h"
 #include "render/render_config.h"
+#include "render/render-view/render_view_helpers.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-graph/render_graph.h"
@@ -479,22 +480,13 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
     stagedCommon.isMotionVectorInWorldSpace = false;
 
     // Same sample sequence and indexing as GenerateSceneData/ComputeRelaxJitterDelta, in pixel units
-    const Core::AntiAliasingMode aaMode = viewFamily.aaConfig.mode;
-    if (aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::DonutTAA) {
-        const HaltonSample& curr = HALTON_SEQUENCE[(frameNumber + 1) % HALTON_SEQUENCE_COUNT];
-        const HaltonSample& prev = HALTON_SEQUENCE[frameNumber % HALTON_SEQUENCE_COUNT];
-        stagedCommon.cameraJitter[0] = curr.x;
-        stagedCommon.cameraJitter[1] = curr.y;
-        stagedCommon.cameraJitterPrev[0] = prev.x;
-        stagedCommon.cameraJitterPrev[1] = prev.y;
-    }
-    else if (aaMode == Core::AntiAliasingMode::SMAAT2X) {
-        constexpr float SMAA_T2X_OFFSETS[2][2] = {{-0.25f, -0.25f}, {0.25f, 0.25f}};
-        stagedCommon.cameraJitter[0] = SMAA_T2X_OFFSETS[frameNumber % 2][0];
-        stagedCommon.cameraJitter[1] = SMAA_T2X_OFFSETS[frameNumber % 2][1];
-        stagedCommon.cameraJitterPrev[0] = SMAA_T2X_OFFSETS[(frameNumber + 1) % 2][0];
-        stagedCommon.cameraJitterPrev[1] = SMAA_T2X_OFFSETS[(frameNumber + 1) % 2][1];
-    }
+    const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(viewFamily.aaConfig.mode, viewFamily.resolutionScale);
+    const HaltonSample currJitter = ComputeJitterSample(viewFamily.aaConfig.mode, frameNumber, jitterPhaseCount);
+    const HaltonSample prevJitter = ComputeJitterSample(viewFamily.aaConfig.mode, frameNumber - 1, jitterPhaseCount);
+    stagedCommon.cameraJitter[0] = currJitter.x;
+    stagedCommon.cameraJitter[1] = currJitter.y;
+    stagedCommon.cameraJitterPrev[0] = prevJitter.x;
+    stagedCommon.cameraJitterPrev[1] = prevJitter.y;
 
     stagedCommon.resourceSize[0] = static_cast<uint16_t>(renderExtent[0]);
     stagedCommon.resourceSize[1] = static_cast<uint16_t>(renderExtent[1]);

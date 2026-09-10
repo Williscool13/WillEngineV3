@@ -7,6 +7,7 @@
 #include "core/containers/array.h"
 #include "core/memory/arena.h"
 #include "render/interface/render_interface.h"
+#include "render/render_config.h"
 #include "render/shaders/common_interop.h"
 #include "render/types/render_types.h"
 
@@ -24,18 +25,22 @@ struct FrameResourceLimits;
  * @param deltaTime
  * @return
  */
-SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime);
+SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale);
+
+uint32_t ComputeJitterPhaseCount(Core::AntiAliasingMode aaMode, float resolutionScale);
+
+HaltonSample ComputeJitterSample(Core::AntiAliasingMode aaMode, uint64_t frameNumber, uint32_t jitterPhaseCount);
 
 /**
  * NRD's checkerboard resolve accumulation speed (InstanceImpl.cpp): lerp(nonLinearAccumSpeed, 0.5, jitterDelta),
  * where nonLinearAccumSpeed is FPS-driven and jitterDelta is the per-frame camera-jitter movement in pixels (0 when not jittering).
  */
-float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps);
+float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float renderFps, float resolutionScale);
 
 /**
  * NRD's per-frame max camera-jitter delta in pixels (0 when not jittering).
  */
-float ComputeRelaxJitterDelta(Core::AntiAliasingMode aaMode, uint64_t frameNumber);
+float ComputeRelaxJitterDelta(Core::AntiAliasingMode aaMode, uint64_t frameNumber, float resolutionScale);
 
 /**
  * Clean up some invalid fields in the view family. E.g. materials w/out compiled shaders (at the time of draw)

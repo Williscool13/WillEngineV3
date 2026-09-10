@@ -241,10 +241,10 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
 
         ImGui::Spacing();
         ImGui::Separator();
-        if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.5f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
+        if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.33f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
 
 
-        const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
+        const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA", "FSR 2"};
         int currentAA = static_cast<int>(state->lighting.aaConfig.mode);
         if (ImGui::Combo("Anti-Aliasing", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
             state->lighting.aaConfig.mode = static_cast<Core::AntiAliasingMode>(currentAA);
@@ -255,6 +255,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         const bool bSMAA = aaMode == Core::AntiAliasingMode::SMAA || aaMode == Core::AntiAliasingMode::SMAAT2X;
         const bool bTAA = aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA;
         const bool bDonutTAA = aaMode == Core::AntiAliasingMode::DonutTAA;
+        const bool bFsr2 = aaMode == Core::AntiAliasingMode::FSR2;
 
         if (bSMAA && ImGui::CollapsingHeader("SMAA")) {
             Core::SMAAConfiguration& smaa = state->lighting.aaConfig.smaa;
@@ -301,6 +302,21 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             if (ImGui::Checkbox("Catmull-Rom History##donuttaa", &donutTaa.bUseCatmullRom)) { changed = true; }
             if (ImGui::Button("Reset Donut TAA")) {
                 donutTaa = defaultDonutTaa;
+                changed = true;
+            }
+        }
+
+        if (bFsr2 && ImGui::CollapsingHeader("FSR 2")) {
+            Core::Fsr2Configuration& fsr2 = state->lighting.aaConfig.fsr2;
+            constexpr Core::Fsr2Configuration defaultFsr2{};
+            if (ImGui::Checkbox("Sharpen (RCAS)##fsr2", &fsr2.bSharpen)) { changed = true; }
+            if (Widgets::SliderFloat("Sharpness##fsr2", &fsr2.sharpness, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (ImGui::Checkbox("Auto Exposure##fsr2", &fsr2.bAutoExposure)) { changed = true; }
+            if (ImGui::Checkbox("Reactive Mask From Overlays##fsr2", &fsr2.bReactiveMask)) { changed = true; }
+            if (Widgets::SliderFloat("Reactive Scale##fsr2", &fsr2.reactiveScale, 0.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Reactive Threshold##fsr2", &fsr2.reactiveThreshold, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (ImGui::Button("Reset FSR 2")) {
+                fsr2 = defaultFsr2;
                 changed = true;
             }
         }
