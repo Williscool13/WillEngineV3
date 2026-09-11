@@ -17,6 +17,12 @@ public float ReGIRCellSizeAtLevel(uint level)
     return REGIR_CELL_SIZE_X * exp2(float(level));
 }
 
+public float ReGIRTargetMinDist2(uint level)
+{
+    float d = REGIR_TARGET_MIN_DIST_SCALE * ReGIRCellSizeAtLevel(level);
+    return d * d;
+}
+
 /** LOD level for a world point from its distance to the camera. */
 public uint ReGIRLevelFromDistance(float dist)
 {

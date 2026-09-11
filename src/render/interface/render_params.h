@@ -545,6 +545,8 @@ struct DebugRenderParams
     bool bFreezeGIField{true};
     bool bFreezeScreenFeedback{true};
     bool bFreezeGatherRay{false};
+    // 0 = auto
+    float framerateScaleOverride{0.0f};
     float ddgiProbeDebugExposure{1.0f};
     int32_t ddgiProbeDebugCascade{-1};
     bool bDDGIHideInactiveProbes{false};

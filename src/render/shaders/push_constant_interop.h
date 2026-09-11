@@ -1051,7 +1051,7 @@ SHADER_PUBLIC struct Fsr2Constants
     SHADER_PUBLIC float deltaTime;
     SHADER_PUBLIC float jitterPhaseCount;
     SHADER_PUBLIC uint32_t frameIndex; // 0 on a history reset frame
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC float framerateScale;
 };
 
 SHADER_PUBLIC struct Fsr2ReactivePushConstant

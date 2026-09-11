@@ -504,15 +504,19 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
     stagedCommon.frameIndex = static_cast<uint32_t>(frameNumber);
     stagedCommon.accumulationMode = bHistoryReset ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
 
+    const auto scaledFrameNum = [](float framesAt60, float framerateScale, uint32_t maxFrameNum) {
+        return glm::min(static_cast<uint32_t>(framesAt60 * framerateScale + 0.5f), maxFrameNum);
+    };
+
     stagedRelax = nrd::RelaxSettings{};
     stagedRelax.antilagSettings.accelerationAmount = params.historyAccelerationAmount;
     stagedRelax.antilagSettings.spatialSigmaScale = params.historyResetSpatialSigmaScale;
     stagedRelax.antilagSettings.temporalSigmaScale = params.historyResetTemporalSigmaScale;
     stagedRelax.antilagSettings.resetAmount = params.historyResetAmount;
-    stagedRelax.diffuseMaxAccumulatedFrameNum = static_cast<uint32_t>(params.diffMaxAccumFrames + 0.5f);
-    stagedRelax.specularMaxAccumulatedFrameNum = static_cast<uint32_t>(params.specMaxAccumFrames + 0.5f);
-    stagedRelax.diffuseMaxFastAccumulatedFrameNum = static_cast<uint32_t>(params.diffMaxFastAccumFrames + 0.5f);
-    stagedRelax.specularMaxFastAccumulatedFrameNum = static_cast<uint32_t>(params.specMaxFastAccumFrames + 0.5f);
+    stagedRelax.diffuseMaxAccumulatedFrameNum = scaledFrameNum(params.diffMaxAccumFrames, params.framerateScale, nrd::RELAX_MAX_HISTORY_FRAME_NUM);
+    stagedRelax.specularMaxAccumulatedFrameNum = scaledFrameNum(params.specMaxAccumFrames, params.framerateScale, nrd::RELAX_MAX_HISTORY_FRAME_NUM);
+    stagedRelax.diffuseMaxFastAccumulatedFrameNum = scaledFrameNum(params.diffMaxFastAccumFrames, params.framerateScale, nrd::RELAX_MAX_HISTORY_FRAME_NUM);
+    stagedRelax.specularMaxFastAccumulatedFrameNum = scaledFrameNum(params.specMaxFastAccumFrames, params.framerateScale, nrd::RELAX_MAX_HISTORY_FRAME_NUM);
     // NRD uploads historyFixFrameNum + 1; the port uploads the engine value directly
     stagedRelax.historyFixFrameNum = static_cast<uint32_t>(glm::clamp(params.historyFixFrameNum - 1.0f, 0.0f, 3.0f));
     stagedRelax.historyFixBasePixelStride = static_cast<uint32_t>(params.historyFixBasePixelStride + 0.5f);
@@ -552,10 +556,10 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
     stagedReblur.convergenceSettings.s = reblurParams.convergenceS;
     stagedReblur.convergenceSettings.b = reblurParams.convergenceB;
     stagedReblur.convergenceSettings.p = reblurParams.convergenceP;
-    stagedReblur.maxAccumulatedFrameNum = static_cast<uint32_t>(reblurParams.maxAccumulatedFrameNum + 0.5f);
-    stagedReblur.maxFastAccumulatedFrameNum = static_cast<uint32_t>(reblurParams.maxFastAccumulatedFrameNum + 0.5f);
+    stagedReblur.maxAccumulatedFrameNum = scaledFrameNum(reblurParams.maxAccumulatedFrameNum, reblurParams.framerateScale, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+    stagedReblur.maxFastAccumulatedFrameNum = scaledFrameNum(reblurParams.maxFastAccumulatedFrameNum, reblurParams.framerateScale, nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
     // NRD derives stabilizationStrength = N / (1 + N) from this; the stabilizationStrength knob is inert here
-    stagedReblur.maxStabilizedFrameNum = reblurParams.enableTemporalStabilization ? static_cast<uint32_t>(reblurParams.maxStabilizedFrameNum + 0.5f) : 0;
+    stagedReblur.maxStabilizedFrameNum = reblurParams.enableTemporalStabilization ? scaledFrameNum(reblurParams.maxStabilizedFrameNum, reblurParams.framerateScale, nrd::REBLUR_MAX_HISTORY_FRAME_NUM) : 0;
     // Unlike RELAX, NRD uploads the REBLUR history-fix values directly (no +1)
     stagedReblur.historyFixFrameNum = static_cast<uint32_t>(reblurParams.historyFixFrameNum + 0.5f);
     stagedReblur.historyFixBasePixelStride = static_cast<uint32_t>(reblurParams.historyFixBasePixelStride + 0.5f);

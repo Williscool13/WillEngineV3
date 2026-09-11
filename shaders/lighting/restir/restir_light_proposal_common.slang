@@ -40,6 +40,7 @@ public struct ReGIRProposal : ILightProposal
     float3 cellCenterVS;
     float cellTargetSum;
     float cellOccupancy;
+    float targetMinDist2;
 
     [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
     {
@@ -48,6 +49,7 @@ public struct ReGIRProposal : ILightProposal
         cellCenterVS = float3(0.0);
         cellTargetSum = 0.0;
         cellOccupancy = 0.0;
+        targetMinDist2 = 0.0;
         if (camDist <= REGIR_MAX_DIST) {
             float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
             float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
@@ -65,6 +67,7 @@ public struct ReGIRProposal : ILightProposal
                         gridBase = ReGIRCellReservoirBase(cellSlot);
                         cellCenterVS = mul(view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
                         cellOccupancy = cd.y;
+                        targetMinDist2 = ReGIRTargetMinDist2(key.level);
                         useGrid = true;
                     }
                 }
@@ -94,7 +97,7 @@ public struct ReGIRProposal : ILightProposal
         // Modeled from cell-average occupancy, not the exact per-reservoir pdf, so it does not partition unity when mBrdf > 0.
         if (!useGrid) { return 1.0 / float(liveCount); }
         float3 color = UnpackUnorm4x8(vs.packedColor).rgb;
-        return cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, color) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(liveCount));
+        return cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, color, targetMinDist2) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(liveCount));
     }
 }
 

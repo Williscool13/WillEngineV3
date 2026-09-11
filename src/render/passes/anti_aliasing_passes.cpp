@@ -432,6 +432,7 @@ StringID SetupFsr2(RenderGraph& graph,
                    bool bHasPreOverlayColor,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
+                   float framerateScale,
                    uint64_t frameNumber,
                    float preExposure,
                    float prevPreExposure)
@@ -506,7 +507,7 @@ StringID SetupFsr2(RenderGraph& graph,
         .deltaTime = glm::clamp(deltaTime, 0.0f, 1.0f),
         .jitterPhaseCount = static_cast<float>(jitterPhaseCount),
         .frameIndex = bHasHistory ? 1u : 0u,
-        ._pad0 = 0u,
+        .framerateScale = framerateScale,
     };
 
     if (bReactive) {

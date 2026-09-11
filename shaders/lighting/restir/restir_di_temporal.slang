@@ -187,7 +187,8 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
     float uSelect1 = HashStep(h);
 
     float Mc = float(r_gen.M);
-    clampedHistoryM = validHistoryReservoir ? min(history.M, pc.mCap) : 0u;
+    uint historyMCap = max(uint(round(float(pc.mCap) * scene.framerateScale)), 1u);
+    clampedHistoryM = validHistoryReservoir ? min(history.M, historyMCap) : 0u;
     float Mi = float(clampedHistoryM);
 
     if (r_gen.lightIdx != ~0u) {

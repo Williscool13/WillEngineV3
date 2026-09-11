@@ -287,7 +287,7 @@ void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass)
     if (graph.HasBuffer(WORLD_GRID_DDGI_INDEX_BUFFER)) { pass.ReadBuffer(WORLD_GRID_DDGI_INDEX_BUFFER); }
 }
 
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos)
+void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale)
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
@@ -510,8 +510,10 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         const uint32_t warmupUpdates = bLocal ? cascades.localWarmup[k] : 0u;
         const bool bWarming = warmupUpdates > 1u && warmupUpdates < DDGI_LOCAL_WARMUP_UPDATES;
         const float runningMeanHysteresis = static_cast<float>(warmupUpdates - 1u) / static_cast<float>(glm::max(warmupUpdates, 1u));
-        const float blendHysteresis = bWarming ? glm::min(glm::clamp(params.hysteresis, 0.0f, 0.995f), runningMeanHysteresis) : glm::clamp(params.hysteresis, 0.0f, 0.995f);
-        const float blendVisibilityHysteresis = bWarming ? glm::min(glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f), runningMeanHysteresis) : glm::clamp(params.visibilityHysteresis, 0.0f, 0.995f);
+        const float scaledHysteresis = glm::clamp(glm::pow(glm::clamp(params.hysteresis, 0.0f, 1.0f), 1.0f / framerateScale), 0.0f, 0.995f);
+        const float scaledVisibilityHysteresis = glm::clamp(glm::pow(glm::clamp(params.visibilityHysteresis, 0.0f, 1.0f), 1.0f / framerateScale), 0.0f, 0.995f);
+        const float blendHysteresis = bWarming ? glm::min(scaledHysteresis, runningMeanHysteresis) : scaledHysteresis;
+        const float blendVisibilityHysteresis = bWarming ? glm::min(scaledVisibilityHysteresis, runningMeanHysteresis) : scaledVisibilityHysteresis;
 
         RenderPass& blendPass = graph.AddPass(DDGI_BLEND_IRRADIANCE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
         blendPass.AsyncCompute();

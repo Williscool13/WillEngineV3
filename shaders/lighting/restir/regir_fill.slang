@@ -41,6 +41,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     key.level = ReGIRActiveLevel(uint(active.w));
     float3 cellCenterWS = ReGIRCellCenterFromKey(key);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
+    float targetMinDist2 = ReGIRTargetMinDist2(key.level);
 
     uint analyticCount = uint(pc.lightData->analyticLightCount);
     uint liveCount = LiveLightCount(lightCount, int(analyticCount));
@@ -48,7 +49,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     for (uint i = localID.x; i < liveCount; i += 64u) {
         uint li = LiveLightIndex(i, int(analyticCount));
         LightView vsl = UnpackLightVS(pc.lightVS[li]);
-        localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb);
+        localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb, targetMinDist2);
     }
     gCellTargetReduce[localID.x] = localSum;
     GroupMemoryBarrierWithGroupSync();
@@ -71,12 +72,14 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
 
     uint localNonEmpty = 0u;
     float cellSize = ReGIRCellSizeAtLevel(key.level);
+    float prevRetention = pow(0.5, 1.0 / scene.framerateScale);
+    float prevConfidence = prevRetention / (1.0 - prevRetention);
     for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
             uint h = (slot * 2654435761u) ^ ((r + 1u) * 0x9E3779B9u) ^ (pc.frameIndex * 0x85EBCA6Bu);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
         uint hj = h ^ 0x68bc21ebu; hj ^= hj >> 15u; hj *= 0x2c1b3c6du; hj ^= hj >> 12u;
-        float3 jitterWS = (float3(HashStep(hj), HashStep(hj), HashStep(hj)) - 0.5) * (2.0 * cellSize);
+        float3 jitterWS = (float3(HashStep(hj), HashStep(hj), HashStep(hj)) - 0.5) * cellSize;
         float3 sampleVS = mul(scene.view, float4(cellCenterWS + jitterWS, 1.0)).xyz;
 
         ReGIRReservoir res = ReGIRReservoirEmpty();
@@ -93,7 +96,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
             if (cand.lightIdx == ~0u || !IsLiveLight(cand.lightIdx, lightCount, int(analyticCount)) || cand.sourcePdf <= 0.0) { continue; }
 
             LightView vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
-            float target = EvalCellLightTarget(vs, sampleVS, UnpackUnorm4x8(vs.packedColor).rgb);
+            float target = EvalCellLightTarget(vs, sampleVS, UnpackUnorm4x8(vs.packedColor).rgb, targetMinDist2);
             float w_i = target / cand.sourcePdf;
             if (ReservoirAddSample(accum, w_i, uSelect)) {
                 res.lightIdx = cand.lightIdx;
@@ -122,14 +125,14 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
                 }
                 if (prev.lightIdx != ~0u) {
                     LightView vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
-                    float pH = EvalCellLightTarget(vsH, sampleVS, UnpackUnorm4x8(vsH.packedColor).rgb);
-                    float wH = pH * ReGIRReservoirW(prev);
+                    float pH = EvalCellLightTarget(vsH, sampleVS, UnpackUnorm4x8(vsH.packedColor).rgb, targetMinDist2);
+                    float wH = pH * ReGIRReservoirW(prev) * prevConfidence;
                     if (ReservoirAddSample(accumM, wH, HashStep(h))) {
                         merged.lightIdx = prev.lightIdx;
                         mergedWinnerTarget = pH;
                     }
                 }
-                FinalizeReservoirReGIR(merged, accumM, mergedWinnerTarget, 2.0);
+                FinalizeReservoirReGIR(merged, accumM, mergedWinnerTarget, 1.0 + prevConfidence);
                 ReGIRClampW(merged, pc.wClamp);
                 res = merged;
             }

@@ -892,10 +892,10 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
 
     ImGui::SeparatorText("Accumulation");
-    relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Default 32; common 30-60.");
-    relaxF("Spec Max Fast Accum Frames", &relax.specMaxFastAccumFrames, relaxDefaults.specMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' specular history used to clamp the slow one (anti-lag). Must be below Spec Max Accum to enable clamping. NRD default 6 (~5x below main). Default 6.");
-    relaxF("Diff Max Accum Frames", &relax.diffMaxAccumFrames, relaxDefaults.diffMaxAccumFrames, 0.f, 64.f, "%.0f", "Max diffuse history length (stable). Higher = cleaner but slower to react to lighting changes (more lag). Default 32; common 30-60.");
-    relaxF("Diff Max Fast Accum Frames", &relax.diffMaxFastAccumFrames, relaxDefaults.diffMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' diffuse history used to clamp the slow one (anti-lag). Lower = snappier response. Must be below Diff Max Accum. NRD default 6. Default 6.");
+    relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Frames at 60 fps, scaled with frame rate. Default 32; common 30-60.");
+    relaxF("Spec Max Fast Accum Frames", &relax.specMaxFastAccumFrames, relaxDefaults.specMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' specular history used to clamp the slow one (anti-lag). Must be below Spec Max Accum to enable clamping. Frames at 60 fps, scaled with frame rate. NRD default 6 (~5x below main). Default 6.");
+    relaxF("Diff Max Accum Frames", &relax.diffMaxAccumFrames, relaxDefaults.diffMaxAccumFrames, 0.f, 64.f, "%.0f", "Max diffuse history length (stable). Higher = cleaner but slower to react to lighting changes (more lag). Frames at 60 fps, scaled with frame rate. Default 32; common 30-60.");
+    relaxF("Diff Max Fast Accum Frames", &relax.diffMaxFastAccumFrames, relaxDefaults.diffMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' diffuse history used to clamp the slow one (anti-lag). Lower = snappier response. Must be below Diff Max Accum. Frames at 60 fps, scaled with frame rate. NRD default 6. Default 6.");
     relaxF("History Acceleration Amount", &relax.historyAccelerationAmount, relaxDefaults.historyAccelerationAmount, 0.f, 1.f, "%.2f", "Strength of anti-lag acceleration pushing the slow history toward the fast one on changes. 0 = off, 1 = max. Default 1.0.");
 
     ImGui::SeparatorText("Prepass");
@@ -988,9 +988,9 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Accumulation");
-    reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Default 30.");
-    reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Default 6.");
-    reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Default 30.");
+    reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Frames at 60 fps, scaled with frame rate. Default 30.");
+    reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Frames at 60 fps, scaled with frame rate. Default 6.");
+    reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Frames at 60 fps, scaled with frame rate. Default 30.");
 
     ImGui::SeparatorText("Blur");
     reblurF("Min Blur Radius", &reblur.minBlurRadius, reblurDefaults.minBlurRadius, 0.f, 10.f, "%.2f", "Min denoising radius (px) for the converged state. Default 1.");
@@ -1284,7 +1284,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtaoF("Steps Per Slice##gtao", &gtao.stepsPerSlice, gtaoDefaults.stepsPerSlice, 1.0f, 9.0f, "%.0f", "Horizon-march steps taken along each slice. More = finer occluder detection, higher cost. Default 3.");
             gtaoF("Denoise Blur Beta##gtao", &gtao.denoiseBlurBeta, gtaoDefaults.denoiseBlurBeta, 0.0f, 10.0f, "%.2f", "Edge-stopping strength of the final denoise blur. Higher = preserves edges but leaves more noise; lower = smoother but softer. Default 1.2.");
             gtaoF("Denoise Passes##gtao", &gtao.denoisePasses, gtaoDefaults.denoisePasses, 1.0f, 8.0f, "%.0f", "Edge-aware denoise passes over the raw AO. Each is a full-res dispatch; intermediate passes blur harder than the last. The XeGTAO default of 1 assumes TAA finishes the job. Default 2.");
-            gtaoF("Temporal Max Accum##gtao", &gtao.temporalMaxAccum, gtaoDefaults.temporalMaxAccum, 0.0f, 64.0f, "%.0f", "Frames of motion-reprojected AO history blended in shadows_resolve, separate from TAA. Higher = smoother, more ghosting on movers; 0 = off. Default 16.");
+            gtaoF("Temporal Max Accum##gtao", &gtao.temporalMaxAccum, gtaoDefaults.temporalMaxAccum, 0.0f, 64.0f, "%.0f", "Frames of motion-reprojected AO history blended in shadows_resolve, separate from TAA. Higher = smoother, more ghosting on movers; 0 = off. Frames at 60 fps, scaled with frame rate. Default 16.");
             gtaoF("Temporal Clamp Scale##gtao", &gtao.temporalClampScale, gtaoDefaults.temporalClampScale, 0.0f, 4.0f, "%.2f", "Width of the 3x3 neighborhood box the AO history is pulled into. Lower = less ghosting behind movers, more residual noise; 0 = no clamp. Default 1.");
 
             ImGui::Spacing();
@@ -1502,8 +1502,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::SameLine();
                 ImGui::Text("Converging... %d frames left", DDGI_CONVERGE_BOOST_FRAMES - state->ddgiConvergeBoost.frame);
             }
-            ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for irradiance (RTXGI parity). Probe updates are 1spp Monte Carlo, so the EMA carries most of the smoothing; the darkening fast path plus the min darkening step keep lights-off response quick. Higher = smoother but laggier; 0 = no history. Default 0.97.");
-            ddgiF("Visibility Hysteresis##ddgi", &ddgi.visibilityHysteresis, ddgiDefaults.visibilityHysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for the distance/Chebyshev atlas. The radiance cache stabilizes radiance only; the visibility integrand still changes every frame with ray rotation, so this stays high. Default 0.97.");
+            ddgiF("Hysteresis##ddgi", &ddgi.hysteresis, ddgiDefaults.hysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for irradiance (RTXGI parity). Probe updates are 1spp Monte Carlo, so the EMA carries most of the smoothing; the darkening fast path plus the min darkening step keep lights-off response quick. Higher = smoother but laggier; 0 = no history. Per update at 60 fps, re-derived for the frame rate. Default 0.97.");
+            ddgiF("Visibility Hysteresis##ddgi", &ddgi.visibilityHysteresis, ddgiDefaults.visibilityHysteresis, 0.0f, 0.995f, "%.3f", "Temporal history weight for the distance/Chebyshev atlas. The radiance cache stabilizes radiance only; the visibility integrand still changes every frame with ray rotation, so this stays high. Per update at 60 fps, re-derived for the frame rate. Default 0.97.");
             int cacheShadeInterval = static_cast<int>(ddgi.radianceCacheShadeInterval);
             if (Widgets::SliderInt("Cache Shade Interval##ddgi", &cacheShadeInterval, 1, 32, {
                                        .tooltip = "Frames between radiance-cache cell re-shades (plus a 0-3 per-slot stagger). Lower = the cache tracks lighting changes faster, at more shade dispatch cost. Interbounce light propagates one cache shade + one probe blend per generation, so this bounds multi-bounce convergence speed. Default 8.", .reset = true,
@@ -1514,7 +1514,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             int cacheAccumCap = static_cast<int>(ddgi.radianceCacheAccumCap);
             if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {
-                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
+                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Shade events at 60 fps, scaled with frame rate. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
                                    })) {
                 ddgi.radianceCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
                 changed = true;

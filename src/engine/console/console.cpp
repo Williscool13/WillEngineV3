@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 
 #include "engine/engine_api.h"
@@ -194,6 +195,20 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             state->lighting.gtaoConfig.bEnabled = args[1][0] != '0';
         }
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
+    });
+
+    Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+        ctx->rescan.bResources = true;
+        Print(state, "  rescan queued");
+    });
+
+    Register(state, Origin::Engine, "framerate_scale", "`framerate_scale <x>|auto` overrides the fps / 60 history scale (0.25-4)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() > 1) {
+            const float value = std::strtof(args[1], nullptr);
+            state->debug.render.framerateScaleOverride = value > 0.0f ? std::clamp(value, 0.25f, 4.0f) : 0.0f;
+        }
+        const float scale = state->debug.render.framerateScaleOverride;
+        Print(state, scale > 0.0f ? Core::InlineString<64>::Format("  framerate_scale %.2f", scale).c_str() : "  framerate_scale auto");
     });
 
     Register(state, Origin::Engine, "view", "`view <rdg texture>|off` shows a render graph texture in the debug visualizer", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {

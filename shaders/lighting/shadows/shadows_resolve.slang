@@ -39,9 +39,10 @@ void ComputeShadowsResolve(uniform ShadowsResolvePushConstant pc, uint3 threadID
             GIGatherScalarHistory history = GIGatherFetchScalarHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent);
             if (history.quality > 0.0) {
                 float motionPixels = length(UnpackMotionVectors(gt1.g) * 0.5 * scene.mainRenderTargetSize);
-                float n = min(history.count * GTAO_TEMPORAL_COUNT_SCALE, pc.temporalMaxAccum - 1.0);
+                float maxAccum = min(pc.temporalMaxAccum * scene.framerateScale, GTAO_TEMPORAL_COUNT_SCALE);
+                float n = min(history.count * GTAO_TEMPORAL_COUNT_SCALE, maxAccum - 1.0);
                 if (motionPixels > GTAO_TEMPORAL_MOTION_PIXELS) {
-                    n = min(n, GTAO_TEMPORAL_MOVING_MAX_ACCUM);
+                    n = min(n, GTAO_TEMPORAL_MOVING_MAX_ACCUM * scene.framerateScale);
                 }
                 n *= history.quality;
 

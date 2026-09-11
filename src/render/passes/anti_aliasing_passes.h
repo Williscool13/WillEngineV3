@@ -45,6 +45,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
  * @param bHasPreOverlayColor "lit_color_preoverlay" was snapshotted this frame; enables the reactive mask
  * @param reflectionConfig roughness caps for the mirror reactive term (fsr2.reflectionReactive)
  * @param deltaTime seconds, for auto exposure smoothing
+ * @param framerateScale fps / 60
  * @param preExposure scale colorOutput was written with this frame
  * @param prevPreExposure scale the history was written with
  */
@@ -57,6 +58,7 @@ StringID SetupFsr2(RenderGraph& graph,
                    bool bHasPreOverlayColor,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
+                   float framerateScale,
                    uint64_t frameNumber,
                    float preExposure,
                    float prevPreExposure);

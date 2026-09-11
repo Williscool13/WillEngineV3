@@ -207,9 +207,11 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float neighborhoodMotionPixels = length(tileMotion * float2(pc.renderExtent));
 
     // Neighborhood object-motion reset: anything moving nearby caps history so indirect shadowing re-converges instead of trailing the mover
-    float n = min(history.count, GI_GATHER_MAX_ACCUM - 1.0);
+    float maxHistory = (GI_GATHER_MAX_ACCUM - 1.0) * scene.framerateScale;
+    float movingMaxHistory = GI_UPSCALE_MOVING_MAX_ACCUM * scene.framerateScale;
+    float n = min(history.count, maxHistory);
     if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
-        n = min(n, GI_UPSCALE_MOVING_MAX_ACCUM);
+        n = min(n, movingMaxHistory);
     }
     
     float nBlend = n * history.quality;
@@ -290,12 +292,12 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float relDev = temporalDev / max(prevMoments.x, 1e-4);
         changeResponse = smoothstep(0.1, 1.0, GI_UPSCALE_CHANGE_SENSITIVITY * temporalChange / max(max(relDev, priorRelDev), 0.02));
         if (changeResponse > 0.0) {
-            n = min(n, lerp(GI_GATHER_MAX_ACCUM - 1.0, GI_UPSCALE_MOVING_MAX_ACCUM, changeResponse));
+            n = min(n, lerp(maxHistory, movingMaxHistory, changeResponse));
             nBlend = n * history.quality;
         }
     }
 
-    float nFast = min(n, GI_UPSCALE_FAST_MAX_ACCUM) * fastHistory.quality;
+    float nFast = min(n, GI_UPSCALE_FAST_MAX_ACCUM * scene.framerateScale) * fastHistory.quality;
     float3 fast = current;
     if (fastHistory.quality > 0.0) {
         fast = bHasCurrent ? (nFast * fastHistory.color + current) / (nFast + 1.0) : fastHistory.color;

@@ -390,7 +390,7 @@ public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePo
 
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
 
-public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightColor)
+public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightColor, float minDist2)
 {
     float3 toCenter = vs.center - cellCenter;
     float dist = max(length(toCenter), 1e-5);
@@ -400,7 +400,7 @@ public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightCo
     if (cosFacing <= 0.0) { return 0.0; }
     atten *= LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter);
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
-    float geom = cosFacing / max(dist * dist, LIGHT_GEOM_MIN_DIST2);
+    float geom = cosFacing / max(dist * dist, max(minDist2, LIGHT_GEOM_MIN_DIST2));
     return geom * vs.area * vs.intensity * colorMax * atten;
 }
 

@@ -198,6 +198,7 @@ private:
     uint64_t frameNumber{0};
     float preExposure{1.0f};
     float prevPreExposure{1.0f};
+    float framerateScale{1.0f};
     std::chrono::steady_clock::time_point lastWallFrameTime{};
     float smoothedWallFrameMs{0.0f};
     float smoothedGpuSpanMs{0.0f};

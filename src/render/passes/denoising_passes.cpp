@@ -22,6 +22,8 @@
 
 namespace Render
 {
+static constexpr float RELAX_MAX_ACCUM_FRAME_NUM = 255.0f;
+static constexpr float REBLUR_MAX_ACCUM_FRAME_NUM = 63.0f;
 
 void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
@@ -144,10 +146,10 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.depthLinearizeAdd = proj[2][2];
     if (rc.depthLinearizeMult * rc.depthLinearizeAdd < 0.0f) { rc.depthLinearizeAdd = -rc.depthLinearizeAdd; }
 
-    rc.gSpecMaxAccumulatedFrameNum = params.specMaxAccumFrames;
-    rc.gSpecMaxFastAccumulatedFrameNum = params.specMaxFastAccumFrames;
-    rc.gDiffMaxAccumulatedFrameNum = params.diffMaxAccumFrames;
-    rc.gDiffMaxFastAccumulatedFrameNum = params.diffMaxFastAccumFrames;
+    rc.gSpecMaxAccumulatedFrameNum = glm::min(params.specMaxAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
+    rc.gSpecMaxFastAccumulatedFrameNum = glm::min(params.specMaxFastAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
+    rc.gDiffMaxAccumulatedFrameNum = glm::min(params.diffMaxAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
+    rc.gDiffMaxFastAccumulatedFrameNum = glm::min(params.diffMaxFastAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
     const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.aaConfig.mode, frameNumber, viewFamily.resolutionScale);
     const float disocclusionThresholdBonus = (1.0f + jitterDelta) / static_cast<float>(height);
     rc.gDisocclusionThreshold = params.disocclusionThreshold + disocclusionThresholdBonus;
@@ -788,12 +790,12 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     rc.gAntilagSettings = glm::vec2(params.antilagLuminanceSigmaScale, params.antilagLuminanceSensitivity);
     rc.gSpecProbabilityThresholdsForMvModification = glm::vec2(params.specProbThresholdMvLow, params.specProbThresholdMvHigh);
 
-    rc.gMaxAccumulatedFrameNum = params.maxAccumulatedFrameNum;
-    rc.gMaxFastAccumulatedFrameNum = params.maxFastAccumulatedFrameNum;
+    rc.gMaxAccumulatedFrameNum = glm::min(params.maxAccumulatedFrameNum * params.framerateScale, REBLUR_MAX_ACCUM_FRAME_NUM);
+    rc.gMaxFastAccumulatedFrameNum = glm::min(params.maxFastAccumulatedFrameNum * params.framerateScale, REBLUR_MAX_ACCUM_FRAME_NUM);
     // Zero-init would give responsiveFactor ~1 (no-op); these defaults invert that into max responsiveness.
     rc.gResponsiveAccumulationInvRoughnessThreshold = 1000.0f;
     rc.gResponsiveAccumulationMinAccumulatedFrameNum = 3u;
-    rc.gMaxStabilizedFrameNum = params.enableTemporalStabilization ? params.maxStabilizedFrameNum : 0.0f;
+    rc.gMaxStabilizedFrameNum = params.enableTemporalStabilization ? glm::min(params.maxStabilizedFrameNum * params.framerateScale, REBLUR_MAX_ACCUM_FRAME_NUM) : 0.0f;
     rc.gDisocclusionThreshold = params.disocclusionThreshold;
     rc.gDisocclusionThresholdAlternate = params.disocclusionThresholdAlternate;
     rc.gDenoisingRange = params.denoisingRange;

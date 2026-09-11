@@ -363,7 +363,7 @@ void RectifyHistory(AccumulationParams params, Fsr2RectificationBox clippingBox,
 
 float3 ComputeBaseAccumulationWeight(AccumulationParams params, float thisFrameReactiveFactor, bool bInMotionLastFrame, float upsampledWeight)
 {
-    float baseAccumulation = FSR2_MAX_ACCUMULATION_LANCZOS_WEIGHT * (params.bIsExistingSample ? 1.0 : 0.0) * (1.0 - thisFrameReactiveFactor) * (1.0 - params.depthClipFactor);
+    float baseAccumulation = FSR2_MAX_ACCUMULATION_LANCZOS_WEIGHT * pc.c.framerateScale * (params.bIsExistingSample ? 1.0 : 0.0) * (1.0 - thisFrameReactiveFactor) * (1.0 - params.depthClipFactor);
 
     baseAccumulation = min(baseAccumulation, lerp(baseAccumulation, upsampledWeight * 10.0, max(bInMotionLastFrame ? 1.0 : 0.0, saturate(params.hrVelocity * 10.0))));
     baseAccumulation = min(baseAccumulation, lerp(baseAccumulation, upsampledWeight, saturate(params.hrVelocity / 20.0)));

@@ -482,6 +482,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             preExposure = ppConfig.exposureTargetLuminance / std::clamp(adaptedLuminance, minLuminance, maxLuminance);
         }
     }
+    const float renderFps = frameBuffer.timeFrame.renderFps;
+    const float autoFramerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.25f, 4.0f);
+    framerateScale = frameBuffer.debug.framerateScaleOverride > 0.0f ? frameBuffer.debug.framerateScaleOverride : autoFramerateScale;
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
     statisticsManager.scratch.radianceCache.occupiedSlots = readbackData->wcOccupied;
     statisticsManager.scratch.radianceCache.cellsCarried = readbackData->wcCarried;
@@ -663,10 +666,11 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
                 const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos);
+                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos, framerateScale);
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
-                SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
+                const auto radianceCacheAccumCap = static_cast<uint32_t>(static_cast<float>(frameBuffer.ddgi.radianceCacheAccumCap) * framerateScale + 0.5f);
+                SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer("readback_buffer"_sid)) {
                     RenderPass& wcStatsReadback = renderGraph->AddPass("Radiance Cache Stats Readback"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
                     wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_STATS);
@@ -725,10 +729,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             const Core::ReSTIRParams& restir = frameBuffer.restir;
             Core::RELAXParams relax = restir.relax;
             Core::ReBLURParams reblur = restir.reblur;
-            const float renderFps = frameBuffer.timeFrame.renderFps;
-            const float denoiserFramerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.25f, 4.0f);
-            relax.framerateScale = denoiserFramerateScale;
-            reblur.framerateScale = denoiserFramerateScale;
+            relax.framerateScale = framerateScale;
+            reblur.framerateScale = framerateScale;
 
             // Ground-truth reference overlays are orthogonal to LightingMode: when one is active it replaces the normal lighting path entirely.
             if (viewFamily.groundTruthMode != Core::GroundTruthMode::None) {
@@ -942,7 +944,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::FSR2:
-                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.reflection, frameBuffer.timeFrame.renderDeltaTime, frameNumber, preExposure, prevPreExposure);
+                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.reflection, frameBuffer.timeFrame.renderDeltaTime, framerateScale, frameNumber, preExposure, prevPreExposure);
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::SMAAT2X:
@@ -1741,6 +1743,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
     sceneData[0].preExposure = preExposure;
     sceneData[0].prevPreExposure = prevPreExposure;
+    sceneData[0].framerateScale = framerateScale;
     // Portal Scene Data
     if (!viewFamily.portalViews.IsEmpty()) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
@@ -1748,6 +1751,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         portalSceneData.preExposure = preExposure;
         portalSceneData.prevPreExposure = prevPreExposure;
+        portalSceneData.framerateScale = framerateScale;
         sceneData[1] = portalSceneData;
     }
 

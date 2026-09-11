@@ -71,7 +71,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
     combined.M = center.M;
 
 #if RESTIR_ENABLE_SPATIAL_DILATE
-    float convergence = saturate(Mc / float(max(pc.adaptiveMReference, 1u)));
+    float convergence = saturate(Mc / max(float(pc.adaptiveMReference) * scene.framerateScale, 1.0));
     float adaptiveBoost = (pc.bAdaptiveSpatial != 0u) ? (1.0 + pc.adaptiveSpatialBoost * (1.0 - convergence)) : 1.0;
     uint spatialNeighbors = clamp(uint(round(float(pc.spatialNeighbors) * adaptiveBoost)), 1u, 32u);
     float spatialRadius = float(pc.spatialRadius) * adaptiveBoost;

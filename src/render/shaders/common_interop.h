@@ -134,7 +134,7 @@ SHADER_PUBLIC struct SceneData
     SHADER_PUBLIC float lodScreenSizeScale;
 
     SHADER_PUBLIC float prevPreExposure;
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float framerateScale;
     SHADER_PUBLIC float _pad1;
     SHADER_PUBLIC float _pad2;
 };
