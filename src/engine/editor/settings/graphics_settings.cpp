@@ -311,7 +311,6 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             constexpr Core::Fsr2Configuration defaultFsr2{};
             if (ImGui::Checkbox("Sharpen (RCAS)##fsr2", &fsr2.bSharpen)) { changed = true; }
             if (Widgets::SliderFloat("Sharpness##fsr2", &fsr2.sharpness, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
-            if (ImGui::Checkbox("Auto Exposure##fsr2", &fsr2.bAutoExposure)) { changed = true; }
             if (ImGui::Checkbox("Reactive Mask From Overlays##fsr2", &fsr2.bReactiveMask)) { changed = true; }
             if (Widgets::SliderFloat("Reactive Scale##fsr2", &fsr2.reactiveScale, 0.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
             if (Widgets::SliderFloat("Reactive Threshold##fsr2", &fsr2.reactiveThreshold, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
@@ -825,6 +824,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::SameLine();
             if (ImGui::Button("Shadow Vis (ReSTIR)")) setDebugTarget("restir_shadow_vis", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Signal (ReSTIR)")) setDebugTarget("restir_signal", DebugTransformationType::None, Core::DebugViewAspect::None);
+            ImGui::SameLine();
+            if (ImGui::Button("Sun Flip (ReSTIR)")) setDebugTarget("restir_sun_flip", DebugTransformationType::None, Core::DebugViewAspect::None);
             ImGui::SameLine();
             if (ImGui::Button("Gradient (ReSTIR)")) setDebugTarget("restir_gradient", DebugTransformationType::None, Core::DebugViewAspect::None);
             if (ImGui::Button("Prev NR")) setDebugTarget("relax_prev_nr", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -1747,7 +1748,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                             changed = true;
                         }
                         if (Widgets::SliderFloat("Confidence Sensitivity##restir", &state->debug.restir.confidenceSensitivity, 0.5f, 16.0f,
-                                                 {.format = "%.2f", .tooltip = "Pow exponent on the gradient->confidence curve. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise).", .reset = true, .resetTo = 3.0f})) {
+                                                 {.format = "%.2f", .tooltip = "Gain on the flipped fraction of a stratum. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise). A static scene flips nothing, so high values are safe.", .reset = true, .resetTo = 8.0f})) {
                             changed = true;
                         }
                         if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 65536.0f,

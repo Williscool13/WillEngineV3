@@ -87,8 +87,6 @@ void ReconstructPrevDepth(int2 pos, float depth, float2 motionVector, int2 size)
 float ComputeLockInputLuma(int2 pos)
 {
     float3 rgb = max(float3(0.0), Fsr2LoadInputColor(pc.colorIndex, pos));
-    rgb /= pc.c.preExposure;
-    rgb *= Fsr2Exposure(pc.exposureIndex, pc.c.preExposure);
     rgb = Fsr2Tonemap(rgb);
     return pow(Fsr2RGBToPerceivedLuma(rgb), 1.0 / 6.0);
 }

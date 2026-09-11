@@ -68,10 +68,10 @@ float3 Min3(float3 a, float3 b, float3 c)
     return min(a, min(b, c));
 }
 
-float3 LoadRcasInput(int2 pos, float exposure)
+float3 LoadRcasInput(int2 pos)
 {
     const float3 color = rdgTexturesFloat4[pc.inputIndex].Load(int3(Fsr2ClampCoord(pos, int2(pc.c.displaySize)), 0)).rgb;
-    return Fsr2PrepareRgb(color, exposure, pc.c.preExposure);
+    return Fsr2PrepareRgb(color);
 }
 
 [shader("compute")]
@@ -82,16 +82,15 @@ void ComputeFsr2Rcas(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (!Fsr2IsOnScreen(pos, int2(pc.c.displaySize))) {
         return;
     }
-    const float exposure = Fsr2Exposure(pc.exposureIndex, pc.c.preExposure);
 
     //    b
     //  d e f
     //    h
-    const float3 b = LoadRcasInput(pos + int2(0, -1), exposure);
-    const float3 d = LoadRcasInput(pos + int2(-1, 0), exposure);
-    const float3 e = LoadRcasInput(pos, exposure);
-    const float3 f = LoadRcasInput(pos + int2(1, 0), exposure);
-    const float3 h = LoadRcasInput(pos + int2(0, 1), exposure);
+    const float3 b = LoadRcasInput(pos + int2(0, -1));
+    const float3 d = LoadRcasInput(pos + int2(-1, 0));
+    const float3 e = LoadRcasInput(pos);
+    const float3 f = LoadRcasInput(pos + int2(1, 0));
+    const float3 h = LoadRcasInput(pos + int2(0, 1));
 
     // Luma times 2.
     const float bL = b.b * 0.5 + (b.r * 0.5 + b.g);
@@ -120,6 +119,5 @@ void ComputeFsr2Rcas(uint3 dispatchThreadId : SV_DispatchThreadID)
     const float rcpL = ApproximateReciprocalMedium(4.0 * lobe + 1.0);
     float3 color = (lobe * b + lobe * d + lobe * h + lobe * f + e) * rcpL;
 
-    color = Fsr2UnprepareRgb(color, exposure, pc.c.preExposure);
     rdgStorageFloat4[pc.outputIndex][pos] = float4(color, 1.0);
 }

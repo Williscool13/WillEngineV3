@@ -35,7 +35,6 @@ bUseCatmullRom|1
 fsr2
 bSharpen|1
 sharpness|0x3f4ccccd
-bAutoExposure|1
 bReactiveMask|1
 reactiveScale|0x3f800000
 reactiveThreshold|0x3e4ccccd

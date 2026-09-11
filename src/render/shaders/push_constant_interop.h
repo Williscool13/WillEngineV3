@@ -1070,15 +1070,6 @@ SHADER_PUBLIC struct Fsr2LuminancePushConstant
     SHADER_PUBLIC Fsr2Constants c;
     SHADER_PUBLIC uint32_t colorIndex;
     SHADER_PUBLIC uint32_t lumaMip4OutIndex;
-    SHADER_PUBLIC uint32_t lumaMip5OutIndex;
-};
-
-SHADER_PUBLIC struct Fsr2ExposurePushConstant
-{
-    SHADER_PUBLIC Fsr2Constants c;
-    SHADER_PUBLIC uint32_t lumaMip5Index;
-    SHADER_PUBLIC uint32_t previousExposureIndex;
-    SHADER_PUBLIC uint32_t exposureOutIndex;
 };
 
 SHADER_PUBLIC struct Fsr2ReconstructPushConstant
@@ -1088,7 +1079,6 @@ SHADER_PUBLIC struct Fsr2ReconstructPushConstant
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t colorIndex;
-    SHADER_PUBLIC uint32_t exposureIndex;
     SHADER_PUBLIC uint32_t dilatedDepthOutIndex;
     SHADER_PUBLIC uint32_t dilatedMotionOutIndex;
     SHADER_PUBLIC uint32_t reconstructedDepthOutIndex;
@@ -1102,7 +1092,6 @@ SHADER_PUBLIC struct Fsr2DepthClipPushConstant
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t colorIndex;
-    SHADER_PUBLIC uint32_t exposureIndex;
     SHADER_PUBLIC uint32_t reactiveMaskIndex;
     SHADER_PUBLIC uint32_t dilatedDepthIndex;
     SHADER_PUBLIC uint32_t dilatedMotionIndex;
@@ -1125,7 +1114,6 @@ SHADER_PUBLIC struct Fsr2LockPushConstant
 SHADER_PUBLIC struct Fsr2AccumulatePushConstant
 {
     SHADER_PUBLIC Fsr2Constants c;
-    SHADER_PUBLIC uint32_t exposureIndex;
     SHADER_PUBLIC uint32_t dilatedReactiveIndex;
     SHADER_PUBLIC uint32_t dilatedMotionIndex;
     SHADER_PUBLIC uint32_t historyColorIndex;
@@ -1144,7 +1132,6 @@ SHADER_PUBLIC struct Fsr2RcasPushConstant
 {
     SHADER_PUBLIC Fsr2Constants c;
     SHADER_PUBLIC uint32_t inputIndex;
-    SHADER_PUBLIC uint32_t exposureIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float sharpness; // linear, exp2(-stops)
 };

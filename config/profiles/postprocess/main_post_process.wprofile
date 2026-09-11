@@ -1,7 +1,7 @@
 postProcess
 bExposureEnabled|1
-exposureMode|1
-exposureTargetLuminance|0x3e00f233
+exposureMode|0
+exposureTargetLuminance|0x3e3851ec
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000
 exposureMinEV100|0x41880000
@@ -9,8 +9,8 @@ exposureMaxEV100|0x41c00000
 exposureLowPercentile|0x3f000000
 exposureHighPercentile|0x3f666666
 exposureManualEV100|0x41840000
-cameraAperture|0x40866f4e
-cameraShutterInv|0x432ee42d
+cameraAperture|0x41a70b22
+cameraShutterInv|0x45f490df
 cameraISO|0x46480000
 bBloomEnabled|1
 bloomThreshold|0x3f800000

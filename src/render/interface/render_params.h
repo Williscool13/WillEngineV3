@@ -172,7 +172,6 @@ struct Fsr2Configuration
 {
     bool bSharpen{true};
     float sharpness{0.8f}; // 0 = no sharpening, 1 = maximum
-    bool bAutoExposure{true};
     bool bReactiveMask{true}; // from the pre-overlay colour snapshot (text, sprites, debug draw)
     float reactiveScale{1.0f};
     float reactiveThreshold{0.2f};

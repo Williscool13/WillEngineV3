@@ -454,7 +454,6 @@ StringID SetupFsr2(RenderGraph& graph,
     const uint32_t displayGroupsX = (displayW + 7) / 8;
     const uint32_t displayGroupsY = (displayH + 7) / 8;
 
-    const bool bAutoExposure = config.bAutoExposure;
     const bool bSharpen = config.bSharpen;
     const bool bReactive = config.bReactiveMask && bHasPreOverlayColor;
 
@@ -462,12 +461,8 @@ StringID SetupFsr2(RenderGraph& graph,
     graph.CreateVersionedTexture("fsr2_lock_status"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CreateVersionedTexture("fsr2_dilated_motion"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderW, renderH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CreateVersionedTexture("fsr2_luma_history"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    if (bAutoExposure) {
-        graph.CreateVersionedTexture("fsr2_exposure"_sid, TextureInfo{VK_FORMAT_R32G32_SFLOAT, 1, 1, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    }
 
     graph.CreateTexture("fsr2_luma_mip4"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, mip4W, mip4H, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("fsr2_luma_mip5"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, mip5W, mip5H, 1}, CLEAR_COLOR_EMPTY, true);
     graph.CreateTexture("fsr2_dilated_depth"_sid, TextureInfo{VK_FORMAT_R32_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
     // Scatter target for InterlockedMax; must be zero before the reconstruct pass
     graph.CreateTexture("fsr2_reconstructed_depth"_sid, TextureInfo{VK_FORMAT_R32_UINT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
@@ -483,7 +478,6 @@ StringID SetupFsr2(RenderGraph& graph,
 
     const bool bHasHistory = graph.ResourceHasVersion("fsr2_history_color"_sid, 1);
     const bool bHasPrevMotion = graph.ResourceHasVersion("fsr2_dilated_motion"_sid, 1);
-    const bool bHasPrevExposure = bAutoExposure && graph.ResourceHasVersion("fsr2_exposure"_sid, 1);
     const StringID prevHistoryColorId = bHasHistory ? graph.ResourceVersionID("fsr2_history_color"_sid, 1) : "fsr2_prepared_color"_sid;
     const StringID prevLockStatusId = bHasHistory ? graph.ResourceVersionID("fsr2_lock_status"_sid, 1) : "fsr2_dilated_reactive"_sid;
     const StringID prevLumaHistoryId = bHasHistory ? graph.ResourceVersionID("fsr2_luma_history"_sid, 1) : "fsr2_prepared_color"_sid;
@@ -533,48 +527,25 @@ StringID SetupFsr2(RenderGraph& graph,
     RenderPass& luminancePass = graph.AddPass("FSR2 Luminance"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     luminancePass.ReadSampledImage(targets.colorOutput);
     luminancePass.WriteStorageImage("fsr2_luma_mip4"_sid);
-    luminancePass.WriteStorageImage("fsr2_luma_mip5"_sid);
     luminancePass.Execute([pipelineManager, constants, colorOutput = targets.colorOutput, mip5W, mip5H](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         Fsr2LuminancePushConstant pushData{
             .c = constants,
             .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
             .lumaMip4OutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_luma_mip4"_sid),
-            .lumaMip5OutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_luma_mip5"_sid),
         };
         DispatchFsr2Pass(pipelineManager, cmd, "fsr2_luminance"_sid, &pushData, sizeof(pushData), mip5W, mip5H);
     });
-
-    if (bAutoExposure) {
-        RenderPass& exposurePass = graph.AddPass("FSR2 Exposure"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-        exposurePass.ReadSampledImage("fsr2_luma_mip5"_sid);
-        if (bHasPrevExposure) {
-            exposurePass.ReadSampledImage(graph.ResourceVersionID("fsr2_exposure"_sid, 1));
-        }
-        exposurePass.WriteStorageImage("fsr2_exposure"_sid);
-        exposurePass.Execute([pipelineManager, constants, bHasPrevExposure](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            Fsr2ExposurePushConstant pushData{
-                .c = constants,
-                .lumaMip5Index = graph.GetSampledImageViewDescriptorIndex("fsr2_luma_mip5"_sid),
-                .previousExposureIndex = bHasPrevExposure ? graph.GetSampledImageViewDescriptorIndex(graph.ResourceVersionID("fsr2_exposure"_sid, 1)) : INVALID_INDEX,
-                .exposureOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_exposure"_sid),
-            };
-            DispatchFsr2Pass(pipelineManager, cmd, "fsr2_exposure"_sid, &pushData, sizeof(pushData), 1, 1);
-        });
-    }
 
     RenderPass& reconstructPass = graph.AddPass("FSR2 Reconstruct"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     reconstructPass.ReadBuffer("scene_data"_sid);
     reconstructPass.ReadSampledImage(targets.depthCopy);
     reconstructPass.ReadSampledImage(targets.gbufferOne);
     reconstructPass.ReadSampledImage(targets.colorOutput);
-    if (bAutoExposure) {
-        reconstructPass.ReadSampledImage("fsr2_exposure"_sid);
-    }
     reconstructPass.WriteStorageImage("fsr2_dilated_depth"_sid);
     reconstructPass.WriteStorageImage("fsr2_dilated_motion"_sid);
     reconstructPass.WriteStorageImage("fsr2_reconstructed_depth"_sid);
     reconstructPass.WriteStorageImage("fsr2_lock_input_luma"_sid);
-    reconstructPass.Execute([pipelineManager, constants, bAutoExposure, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+    reconstructPass.Execute([pipelineManager, constants, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
             renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2ReconstructPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
@@ -582,7 +553,6 @@ StringID SetupFsr2(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthCopy),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
-                .exposureIndex = bAutoExposure ? graph.GetSampledImageViewDescriptorIndex("fsr2_exposure"_sid) : INVALID_INDEX,
                 .dilatedDepthOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_dilated_depth"_sid),
                 .dilatedMotionOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_dilated_motion"_sid),
                 .reconstructedDepthOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_reconstructed_depth"_sid),
@@ -596,9 +566,6 @@ StringID SetupFsr2(RenderGraph& graph,
     depthClipPass.ReadSampledImage(targets.depthCopy);
     depthClipPass.ReadSampledImage(targets.gbufferOne);
     depthClipPass.ReadSampledImage(targets.colorOutput);
-    if (bAutoExposure) {
-        depthClipPass.ReadSampledImage("fsr2_exposure"_sid);
-    }
     if (bReactive) {
         depthClipPass.ReadSampledImage("fsr2_reactive_mask"_sid);
     }
@@ -610,7 +577,7 @@ StringID SetupFsr2(RenderGraph& graph,
     depthClipPass.ReadSampledImage("fsr2_reconstructed_depth"_sid);
     depthClipPass.WriteStorageImage("fsr2_prepared_color"_sid);
     depthClipPass.WriteStorageImage("fsr2_dilated_reactive"_sid);
-    depthClipPass.Execute([pipelineManager, constants, bAutoExposure, bReactive, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+    depthClipPass.Execute([pipelineManager, constants, bReactive, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
             reflectionReactive = config.reflectionReactive, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax, tracedRoughnessMax = reflectionConfig.tracedRoughnessMax,
             renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2DepthClipPushConstant pushData{
@@ -619,7 +586,6 @@ StringID SetupFsr2(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthCopy),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
-                .exposureIndex = bAutoExposure ? graph.GetSampledImageViewDescriptorIndex("fsr2_exposure"_sid) : INVALID_INDEX,
                 .reactiveMaskIndex = bReactive ? graph.GetSampledImageViewDescriptorIndex("fsr2_reactive_mask"_sid) : INVALID_INDEX,
                 .dilatedDepthIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_depth"_sid),
                 .dilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_motion"_sid),
@@ -647,9 +613,6 @@ StringID SetupFsr2(RenderGraph& graph,
     });
 
     RenderPass& accumulatePass = graph.AddPass("FSR2 Accumulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    if (bAutoExposure) {
-        accumulatePass.ReadSampledImage("fsr2_exposure"_sid);
-    }
     accumulatePass.ReadSampledImage("fsr2_dilated_reactive"_sid);
     accumulatePass.ReadSampledImage("fsr2_dilated_motion"_sid);
     accumulatePass.ReadSampledImage("fsr2_prepared_color"_sid);
@@ -666,11 +629,10 @@ StringID SetupFsr2(RenderGraph& graph,
     if (!bSharpen) {
         accumulatePass.WriteStorageImage("fsr2_output"_sid);
     }
-    accumulatePass.Execute([pipelineManager, constants, bAutoExposure, bSharpen, prevHistoryColorId, prevLockStatusId, prevLumaHistoryId,
+    accumulatePass.Execute([pipelineManager, constants, bSharpen, prevHistoryColorId, prevLockStatusId, prevLumaHistoryId,
             displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2AccumulatePushConstant pushData{
                 .c = constants,
-                .exposureIndex = bAutoExposure ? graph.GetSampledImageViewDescriptorIndex("fsr2_exposure"_sid) : INVALID_INDEX,
                 .dilatedReactiveIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_reactive"_sid),
                 .dilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_motion"_sid),
                 .historyColorIndex = graph.GetSampledImageViewDescriptorIndex(prevHistoryColorId),
@@ -692,15 +654,11 @@ StringID SetupFsr2(RenderGraph& graph,
         const float sharpnessLinear = std::exp2(-(2.0f - 2.0f * glm::clamp(config.sharpness, 0.0f, 1.0f)));
         RenderPass& rcasPass = graph.AddPass("FSR2 RCAS"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
         rcasPass.ReadSampledImage("fsr2_history_color"_sid);
-        if (bAutoExposure) {
-            rcasPass.ReadSampledImage("fsr2_exposure"_sid);
-        }
         rcasPass.WriteStorageImage("fsr2_output"_sid);
-        rcasPass.Execute([pipelineManager, constants, bAutoExposure, sharpnessLinear, displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        rcasPass.Execute([pipelineManager, constants, sharpnessLinear, displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2RcasPushConstant pushData{
                 .c = constants,
                 .inputIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_history_color"_sid),
-                .exposureIndex = bAutoExposure ? graph.GetSampledImageViewDescriptorIndex("fsr2_exposure"_sid) : INVALID_INDEX,
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_output"_sid),
                 .sharpness = sharpnessLinear,
             };

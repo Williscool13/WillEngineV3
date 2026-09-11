@@ -3,8 +3,8 @@
 //
 // AMD FidelityFX Super Resolution 2.2.1, ported to WillEngineV3/Slang from
 // GPUOpen-Effects/FidelityFX-FSR2 (ffx_fsr2_compute_luminance_pyramid.h).
-// One 64x64 tile per group; writes the shading-change mip (32x32 blocks) and
-// the exposure mip (64x64 blocks) directly instead of running SPD.
+// One 64x64 tile per group; writes the shading-change mip (32x32 blocks)
+// directly instead of running SPD.
 //
 // ATTRIBUTION & LICENSE (MIT) -- Copyright (c) 2022-2023 Advanced Micro Devices, Inc.
 // All rights reserved. Full LICENSE + README at extern/fsr2/. MIT notice below
@@ -47,8 +47,6 @@ static const int TEXELS_PER_THREAD = TILE_SIZE / GROUP_DIM;
 
 groupshared float gsSum[GROUP_DIM * GROUP_DIM];
 groupshared float gsCount[GROUP_DIM * GROUP_DIM];
-groupshared float gsQuadrantSum[4];
-groupshared float gsQuadrantCount[4];
 
 [shader("compute")]
 [numthreads(GROUP_DIM, GROUP_DIM, 1)]
@@ -69,7 +67,6 @@ void ComputeFsr2Luminance(uint3 groupId : SV_GroupID, uint3 groupThreadId : SV_G
             float2 uv = (float2(pos) + 0.5 + pc.c.jitter) / pc.c.renderSize;
             uv = Fsr2ClampUv(uv, renderSize, renderSize);
             float3 rgb = rdgTexturesFloat4[pc.colorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).rgb;
-            rgb /= pc.c.preExposure;
             sum += log(max(FSR2_EPSILON, Fsr2RGBToLuma(rgb)));
             count += 1.0;
         }
@@ -89,20 +86,9 @@ void ComputeFsr2Luminance(uint3 groupId : SV_GroupID, uint3 groupThreadId : SV_G
                 quadrantCount += gsCount[index];
             }
         }
-        const int quadrantIndex = quadrant.y * 2 + quadrant.x;
-        gsQuadrantSum[quadrantIndex] = quadrantSum;
-        gsQuadrantCount[quadrantIndex] = quadrantCount;
-
         const int2 mip4Pos = int2(groupId.xy) * 2 + quadrant;
         if (Fsr2IsOnScreen(mip4Pos, int2(pc.c.lumaMipSize))) {
             rdgStorageFloat[pc.lumaMip4OutIndex][mip4Pos] = quadrantCount > 0.0 ? quadrantSum / quadrantCount : 0.0;
         }
-    }
-    GroupMemoryBarrierWithGroupSync();
-
-    if (groupIndex == 0) {
-        const float tileSum = gsQuadrantSum[0] + gsQuadrantSum[1] + gsQuadrantSum[2] + gsQuadrantSum[3];
-        const float tileCount = gsQuadrantCount[0] + gsQuadrantCount[1] + gsQuadrantCount[2] + gsQuadrantCount[3];
-        rdgStorageFloat[pc.lumaMip5OutIndex][int2(groupId.xy)] = tileCount > 0.0 ? tileSum / tileCount : 0.0;
     }
 }

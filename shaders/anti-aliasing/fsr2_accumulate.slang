@@ -145,7 +145,7 @@ void ReprojectHistoryColor(AccumulationParams params, out float3 historyColor, o
 {
     const float4 history = HistorySample(params.reprojectedHrUv, int2(pc.c.displaySize));
 
-    historyColor = Fsr2PrepareRgb(history.rgb, Fsr2Exposure(pc.exposureIndex, pc.c.preExposure), pc.c.previousPreExposure);
+    historyColor = Fsr2PrepareRgb(history.rgb * (pc.c.preExposure / pc.c.previousPreExposure));
     historyColor = Fsr2RGBToYCoCg(historyColor);
 
     temporalReactiveFactor = saturate(abs(history.w));
@@ -173,7 +173,7 @@ LockState ReprojectHistoryLockStatus(AccumulationParams params, out float2 repro
 float GetShadingChangeLuma(float2 uv)
 {
     uv = Fsr2ClampUv(uv, int2(pc.c.lumaMipClampSize), int2(pc.c.lumaMipSize));
-    float shadingChangeLuma = Fsr2Exposure(pc.exposureIndex, pc.c.preExposure) * exp(SampleMipLuma(uv));
+    float shadingChangeLuma = exp(SampleMipLuma(uv));
     return pow(shadingChangeLuma, 1.0 / 6.0);
 }
 
@@ -506,8 +506,6 @@ void ComputeFsr2Accumulate(uint3 dispatchThreadId : SV_DispatchThreadID)
         RectifyHistory(params, clippingBox, historyColor, accumulation, lockContributionThisFrame, thisFrameReactiveFactor, lumaInstabilityFactor);
         AccumulateColor(historyColor, accumulation, upsampledColorAndWeight);
     }
-
-    historyColor = Fsr2UnprepareRgb(historyColor, Fsr2Exposure(pc.exposureIndex, pc.c.preExposure), pc.c.preExposure);
 
     FinalizeLockStatus(params, lockStatus, upsampledColorAndWeight.w);
 

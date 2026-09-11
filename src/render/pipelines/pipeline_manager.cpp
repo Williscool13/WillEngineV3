@@ -603,8 +603,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(Fsr2ReactivePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("fsr2_luminance"_sid, src / "fsr2_luminance.spv", "ComputeFsr2Luminance",
                             sizeof(Fsr2LuminancePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("fsr2_exposure"_sid, src / "fsr2_exposure.spv", "ComputeFsr2Exposure",
-                            sizeof(Fsr2ExposurePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("fsr2_reconstruct"_sid, src / "fsr2_reconstruct.spv", "ComputeFsr2Reconstruct",
                             sizeof(Fsr2ReconstructPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("fsr2_depth_clip"_sid, src / "fsr2_depth_clip.spv", "ComputeFsr2DepthClip",

@@ -521,7 +521,6 @@ void Serialize(const Core::Fsr2Configuration& p, TextWriter& w)
 {
     w.Key("bSharpen", p.bSharpen);
     w.Key("sharpness", p.sharpness);
-    w.Key("bAutoExposure", p.bAutoExposure);
     w.Key("bReactiveMask", p.bReactiveMask);
     w.Key("reactiveScale", p.reactiveScale);
     w.Key("reactiveThreshold", p.reactiveThreshold);
@@ -532,7 +531,6 @@ void Deserialize(const TextReader& r, Core::Fsr2Configuration& p)
 {
     p.bSharpen = r.Bool("bSharpen", p.bSharpen);
     p.sharpness = r.Float("sharpness", p.sharpness);
-    p.bAutoExposure = r.Bool("bAutoExposure", p.bAutoExposure);
     p.bReactiveMask = r.Bool("bReactiveMask", p.bReactiveMask);
     p.reactiveScale = r.Float("reactiveScale", p.reactiveScale);
     p.reactiveThreshold = r.Float("reactiveThreshold", p.reactiveThreshold);

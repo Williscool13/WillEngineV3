@@ -46,7 +46,6 @@ public static const float FSR2_RECONSTRUCTED_DEPTH_WEIGHT_THRESHOLD = 0.01;
 public static const float FSR2_UPSAMPLE_LANCZOS_WEIGHT_SCALE = 1.0 / 12.0;
 public static const float FSR2_MAX_ACCUMULATION_LANCZOS_WEIGHT = 1.0;
 public static const float FSR2_AVERAGE_LANCZOS_WEIGHT_PER_FRAME = 0.74 / 12.0;
-public static const float FSR2_RESET_AUTO_EXPOSURE_AVERAGE_SMOOTHING = 1e8;
 public static const uint FSR2_INVALID_INDEX = 0xFFFFFFFF;
 public static const int LOCK_LIFETIME_REMAINING = 0;
 public static const int LOCK_TEMPORAL_LUMA = 1;
@@ -122,17 +121,6 @@ public bool Fsr2IsUvInside(float2 uv)
     return uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
 }
 
-public float Fsr2ComputeAutoExposureFromLavg(float Lavg)
-{
-    Lavg = exp(Lavg);
-    const float S = 100.0;
-    const float K = 12.5;
-    float exposureISO100 = log2((Lavg * S) / K);
-    const float q = 0.65;
-    float Lmax = (78.0 / (q * S)) * pow(2.0, exposureISO100);
-    return 1.0 / Lmax;
-}
-
 public int2 Fsr2ComputeHrPosFromLrPos(int2 lrPos, float2 jitter, float2 renderSize, float2 displaySize)
 {
     float2 srcJitteredPos = float2(lrPos) + 0.5 - jitter;
@@ -153,18 +141,10 @@ public float3 Fsr2GetViewSpacePosition(int2 viewportPos, int2 viewportSize, floa
     return float3(tanHalfFov.x * ndc.x * z, tanHalfFov.y * ndc.y * z, z);
 }
 
-public float3 Fsr2PrepareRgb(float3 rgb, float exposure, float preExposure)
+// Input is already exposed by the engine's pre-exposure, so FSR2's exposure space is the input space.
+public float3 Fsr2PrepareRgb(float3 rgb)
 {
-    rgb /= preExposure;
-    rgb *= exposure;
     return clamp(rgb, 0.0, FSR2_FP16_MAX);
-}
-
-public float3 Fsr2UnprepareRgb(float3 rgb, float exposure, float preExposure)
-{
-    rgb /= exposure;
-    rgb *= preExposure;
-    return rgb;
 }
 
 public struct Fsr2BilinearSamplingData
@@ -271,16 +251,6 @@ public float Fsr2MinDividedByMax(float v0, float v1)
 {
     float m = max(v0, v1);
     return m != 0.0 ? min(v0, v1) / m : 0.0;
-}
-
-// Exposure from the auto-exposure texture (exposure, log Lavg); without one the input is already exposed by preExposure.
-public float Fsr2Exposure(uint exposureIndex, float preExposure)
-{
-    if (exposureIndex == FSR2_INVALID_INDEX) {
-        return preExposure;
-    }
-    float exposure = rdgTexturesFloat2[exposureIndex].Load(int3(0, 0, 0)).x;
-    return exposure == 0.0 ? preExposure : exposure;
 }
 
 public float Fsr2LoadInputDepth(uint depthIndex, int2 pos)
