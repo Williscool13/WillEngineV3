@@ -173,6 +173,7 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
                 : max(dot(-al.normal.xyz, L), 0.0);
             float atten = LightRangeCull(lightDist, al.range);
+            if (al.type == LIGHT_TYPE_AREA) { atten *= LightConeFalloff(cosLight, al.normal.w, al.position.w); }
 
             if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
                 RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];

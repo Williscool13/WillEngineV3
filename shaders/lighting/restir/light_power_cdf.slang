@@ -19,6 +19,11 @@ static float LightPower(LightInfo L)
     }
     float3 color = UnpackUnorm4x8(L.packedColor).rgb;
     float power = L.intensity * area * max(color.r, max(color.g, color.b));
+    if (L.type == LIGHT_TYPE_AREA) {
+        // Lambertian emitter restricted to the cone: exitant fraction = 1 - cos^2 at the falloff midpoint
+        float cosMid = 0.5 * (L.normal.w + L.position.w);
+        power *= 1.0 - cosMid * cosMid;
+    }
     return max(power, 0.0);
 }
 

@@ -73,8 +73,8 @@ SHADER_PUBLIC struct DirectionalLightData
 /** Unified light source tagged by type. Area: rect via normal + right/up half-extents. Sphere: center + radius (right.w); normal/up unused. Triangle: position = v0, right/up = edges e1/e2 (unnormalized), area = 0.5*|cross(e1,e2)|. */
 SHADER_PUBLIC struct LightInfo
 {
-    SHADER_PUBLIC float4 position; // xyz world-space center (area/sphere) / v0 (triangle), w unused
-    SHADER_PUBLIC float4 normal; // xyz world-space normal (area/triangle), w unused
+    SHADER_PUBLIC float4 position; // xyz world-space center (area/sphere) / v0 (triangle), w cos outer cone angle (area, 0 = hemisphere)
+    SHADER_PUBLIC float4 normal; // xyz world-space normal (area/triangle), w cos inner cone angle (area, 0 = hemisphere)
     SHADER_PUBLIC float4 right; // xyz right axis (area) / edge e1 (triangle), w half-width (area) / radius (sphere)
     SHADER_PUBLIC float4 up; // xyz up axis (area) / edge e2 (triangle), w half-height (area)
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
@@ -93,7 +93,7 @@ SHADER_PUBLIC struct LightVSData
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC uint type;
-    SHADER_PUBLIC float _pad1;
+    SHADER_PUBLIC uint packedCone; // f16 pair: cos inner (low), cos outer (high); area only, 0 = hemisphere
 };
 
 SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_GROUPS = 1024;

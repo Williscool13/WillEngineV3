@@ -76,6 +76,8 @@ public struct LightView
     public float intensity;
     public uint packedColor;
     public uint type;
+    public float cosConeInner; // area only; 0/0 = hemisphere
+    public float cosConeOuter;
 }
 
 public LightView TransformLightToView(LightInfo al, float4x4 view)
@@ -86,6 +88,8 @@ public LightView TransformLightToView(LightInfo al, float4x4 view)
     vs.intensity = al.intensity;
     vs.packedColor = al.packedColor;
     vs.type = al.type;
+    vs.cosConeInner = 0.0;
+    vs.cosConeOuter = 0.0;
     if (al.type == LIGHT_TYPE_SPHERE)
     {
         float radius = al.right.w;
@@ -114,6 +118,8 @@ public LightView TransformLightToView(LightInfo al, float4x4 view)
         vs.halfWidth = al.right.w;
         vs.halfHeight = al.up.w;
         vs.area = 4.0 * vs.halfWidth * vs.halfHeight;
+        vs.cosConeInner = al.normal.w;
+        vs.cosConeOuter = al.position.w;
     }
     return vs;
 }
@@ -128,7 +134,7 @@ public LightVSData PackLightVS(LightView vs)
     d.packedColor = vs.packedColor;
     d.intensity = vs.intensity;
     d.type = vs.type;
-    d._pad1 = 0.0;
+    d.packedCone = f32tof16(vs.cosConeInner) | (f32tof16(vs.cosConeOuter) << 16);
     return d;
 }
 
@@ -146,6 +152,8 @@ public LightView UnpackLightVS(LightVSData d)
     vs.packedColor = d.packedColor;
     vs.intensity = d.intensity;
     vs.type = d.type;
+    vs.cosConeInner = f16tof32(d.packedCone & 0xFFFF);
+    vs.cosConeOuter = f16tof32(d.packedCone >> 16);
     return vs;
 }
 
@@ -178,6 +186,10 @@ public LightSample EvalLightSample(LightView vs, float3 samplePos, float3 shadin
     }
 
     s.attenuation = LightRangeCull(s.dist, range);
+    if (vs.type == LIGHT_TYPE_AREA)
+    {
+        s.attenuation *= LightConeFalloff(s.cosLight, vs.cosConeInner, vs.cosConeOuter);
+    }
     return s;
 }
 
@@ -385,6 +397,7 @@ public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightCo
     if (atten <= 0.0) { return 0.0; }
     float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : max(dot(vs.normal, -toCenter / dist), 0.0);
     if (cosFacing <= 0.0) { return 0.0; }
+    if (vs.type == LIGHT_TYPE_AREA) { atten *= LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter); }
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     float geom = cosFacing / max(dist * dist, LIGHT_GEOM_MIN_DIST2);
     return geom * vs.area * vs.intensity * colorMax * atten;

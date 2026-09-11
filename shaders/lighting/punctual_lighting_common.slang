@@ -15,6 +15,8 @@ public struct PunctualLight
     public float range; // attenuation cutoff / cluster bounding radius
     public float sourceRadius; // 0 = delta; >0 drives representative-point specular
     public bool oneSided; // area lights fade to zero across the plane
+    public float cosConeInner; // spot cone on the emitter cosine (area only); 0/0 = hemisphere
+    public float cosConeOuter;
     public float3 rightAxis; // rect axes + extents (area only)
     public float3 upAxis;
     public float halfWidth;
@@ -37,6 +39,8 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
     pl.effectiveIntensity = 0.0;
     pl.sourceRadius = 0.0;
     pl.oneSided = false;
+    pl.cosConeInner = 0.0;
+    pl.cosConeOuter = 0.0;
     pl.valid = true;
 
     if (light.type == LIGHT_TYPE_SPHERE)
@@ -54,6 +58,8 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
         pl.effectiveIntensity = light.intensity * (4.0 * halfWidth * halfHeight);
         pl.sourceRadius = 0.5 * (halfWidth + halfHeight);
         pl.oneSided = true;
+        pl.cosConeInner = light.normal.w;
+        pl.cosConeOuter = light.position.w;
         pl.rightAxis = normalize(mul((float3x3)view, light.right.xyz));
         pl.upAxis = normalize(mul((float3x3)view, light.up.xyz));
         pl.halfWidth = halfWidth;
@@ -107,6 +113,7 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     {
         emitterCos = max(dot(pl.dir, -L), 0.0);
         if (emitterCos <= 0.0) { return float3(0.0); }
+        emitterCos *= LightConeFalloff(emitterCos, pl.cosConeInner, pl.cosConeOuter);
     }
 
     float nDotV = max(dot(N, V), 0.0);
@@ -157,6 +164,7 @@ public float3 ShadePunctualDiffuse(PunctualLight pl, float3 N, float3 V, float3 
     {
         emitterCos = max(dot(pl.dir, -L), 0.0);
         if (emitterCos <= 0.0) { return float3(0.0); }
+        emitterCos *= LightConeFalloff(emitterCos, pl.cosConeInner, pl.cosConeOuter);
     }
 
     float nDotV = max(dot(N, V), 0.0);

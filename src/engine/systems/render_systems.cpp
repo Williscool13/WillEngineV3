@@ -953,6 +953,21 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
         addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
+        if (light.coneOuterDegrees < 90.0f) {
+            const float sinOuter = glm::sin(glm::radians(light.coneOuterDegrees));
+            const float cosOuter = glm::cos(glm::radians(light.coneOuterDegrees));
+            const Vec3 rimCenter = center + forward * (light.range * cosOuter);
+            const float rimRadius = light.range * sinOuter;
+            constexpr int kConeSegments = 24;
+            for (int i = 0; i < kConeSegments; ++i) {
+                const float a0 = (static_cast<float>(i) / kConeSegments) * 6.2831853f;
+                const float a1 = (static_cast<float>(i + 1) / kConeSegments) * 6.2831853f;
+                const Vec3 p0 = rimCenter + rimRadius * (glm::cos(a0) * right + glm::sin(a0) * up);
+                const Vec3 p1 = rimCenter + rimRadius * (glm::cos(a1) * right + glm::sin(a1) * up);
+                DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, editColor, 0.02f});
+                if ((i % 6) == 0) { DEBUG_ADD_LINE(viewFamily.debugLines, {center, p0, editColor, 0.02f}); }
+            }
+        }
     }
 
     for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {

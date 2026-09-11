@@ -49,6 +49,13 @@ public float LightRangeCull(float dist, float range)
     return a * a;
 }
 
+/** Spot cone on an area emitter: 1 inside the inner cone, smoothstep to 0 at the outer cone. cosInner == cosOuter == 0 is the plain hemisphere. */
+public float LightConeFalloff(float cosLight, float cosInner, float cosOuter)
+{
+    float t = saturate((cosLight - cosOuter) / max(cosInner - cosOuter, 1e-4));
+    return t * t * (3.0 - 2.0 * t);
+}
+
 public float LightGeometryTerm(float cosLight, float dist)
 {
     if (LIGHT_INVERSE_SQUARE)

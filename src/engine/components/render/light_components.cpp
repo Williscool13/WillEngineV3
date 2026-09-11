@@ -48,6 +48,14 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         modified |= extentChanged;
         ImGui::EndDisabled();
         modified |= ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
+        if (ImGui::DragFloat("Cone Outer##al", &comp.coneOuterDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg")) {
+            comp.coneInnerDegrees = glm::min(comp.coneInnerDegrees, comp.coneOuterDegrees);
+            modified = true;
+        }
+        if (ImGui::DragFloat("Cone Inner##al", &comp.coneInnerDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg")) {
+            comp.coneOuterDegrees = glm::max(comp.coneOuterDegrees, comp.coneInnerDegrees);
+            modified = true;
+        }
         modified |= ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
         modified |= ImGui::Checkbox("Probe Bake Exclude##al", &comp.bExcludeFromProbeBake);
 
@@ -103,6 +111,8 @@ void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, En
     w.KeyOpt("halfWidth", comp.halfWidth, DEF.halfWidth);
     w.KeyOpt("halfHeight", comp.halfHeight, DEF.halfHeight);
     w.KeyOpt("range", comp.range, DEF.range);
+    w.KeyOpt("coneOuterDegrees", comp.coneOuterDegrees, DEF.coneOuterDegrees);
+    w.KeyOpt("coneInnerDegrees", comp.coneInnerDegrees, DEF.coneInnerDegrees);
     w.KeyOpt("drawEmissiveSurface", comp.drawEmissiveSurface, DEF.drawEmissiveSurface);
     w.KeyOpt("bExcludeFromProbeBake", comp.bExcludeFromProbeBake, DEF.bExcludeFromProbeBake);
 }
@@ -114,6 +124,8 @@ void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const 
     comp.halfWidth = r.Float("halfWidth", comp.halfWidth);
     comp.halfHeight = r.Float("halfHeight", comp.halfHeight);
     comp.range = r.Float("range", comp.range);
+    comp.coneOuterDegrees = glm::clamp(r.Float("coneOuterDegrees", comp.coneOuterDegrees), 0.0f, 90.0f);
+    comp.coneInnerDegrees = glm::clamp(r.Float("coneInnerDegrees", comp.coneInnerDegrees), 0.0f, comp.coneOuterDegrees);
     comp.drawEmissiveSurface = r.Bool("drawEmissiveSurface", comp.drawEmissiveSurface);
     comp.bExcludeFromProbeBake = r.Bool("bExcludeFromProbeBake", comp.bExcludeFromProbeBake);
 }
@@ -176,8 +188,8 @@ LightInfo Component::ComputeAreaLightInfo(const TransformComponent& transform, c
 {
     const glm::mat3 rot = glm::mat3_cast(transform.rotation);
     return LightInfo{
-        .position = {transform.translation, 0.0f},
-        .normal = {rot[2], 0.0f},
+        .position = {transform.translation, glm::cos(glm::radians(light.coneOuterDegrees))},
+        .normal = {rot[2], glm::cos(glm::radians(light.coneInnerDegrees))},
         .right = {rot[0], light.halfWidth * transform.scale.x},
         .up = {rot[1], light.halfHeight * transform.scale.y},
         .packedColor = Render::PackColorRGB8(light.color),
