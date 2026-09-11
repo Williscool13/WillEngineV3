@@ -54,6 +54,7 @@ struct RenderScreenCapture
     AllocatedBuffer probeCaptureReadbackBuffer{};
     uint32_t probeCapturePendingSlot{UINT32_MAX};
     uint32_t probeCaptureSize{0};
+    float probeCapturePreExposure{1.0f};
     std::atomic<bool> bProbeCaptureReady{false};
 
     bool CanScreenshot() const;

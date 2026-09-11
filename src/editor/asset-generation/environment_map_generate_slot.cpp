@@ -135,7 +135,8 @@ void EnvironmentMapGenerateSlot::LaunchProbe(
     Engine::EnvironmentMapID _environmentMapId,
     uint64_t _probeId,
     const Engine::ProbeBakeSnapshot& _snapshot,
-    uint64_t _contentVersion)
+    uint64_t _contentVersion,
+    float _radianceScale)
 {
     slotHandle = _slotHandle;
     imagePath = Core::Path{};
@@ -147,6 +148,7 @@ void EnvironmentMapGenerateSlot::LaunchProbe(
     probeCaptureSize = captureSize;
     probeId = _probeId;
     probeSnapshot = _snapshot;
+    probeRadianceScale = _radianceScale;
     for (uint32_t face = 0; face < 6; ++face) {
         probeFaces[face] = std::move(faces[face]);
     }
@@ -179,6 +181,7 @@ void EnvironmentMapGenerateSlot::Clear()
     probeCaptureSize = 0;
     probeId = 0;
     probeSnapshot = {};
+    probeRadianceScale = 1.0f;
     baseResolution = ENVIRONMENT_MAP_RESOLUTION;
     mipData = {};
     imageStagingAllocator.Reset();
@@ -924,6 +927,7 @@ bool EnvironmentMapGenerateSlot::WriteWProbeFile()
     header.dataSize = realCompressedSize;
     header.resolution = baseResolution;
     header.snapshot = probeSnapshot;
+    header.radianceScale = probeRadianceScale;
 
     Core::InlineString stem{Core::InlineString(outputPath.Stem())};
     const size_t copyLen = std::min(stem.Size(), Engine::WENVMAP_NAME_LENGTH - 1);

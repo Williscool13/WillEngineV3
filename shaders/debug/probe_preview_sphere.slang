@@ -68,5 +68,5 @@ float4 FragmentProbePreviewSphere(PreviewVertexOutput input, uniform ProbePrevie
     }
 
     float3 radiance = assetCubemaps[pc.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(sampleDir), mip).rgb;
-    return float4(radiance, 1.0);
+    return float4(radiance * pc.radianceScale * scene.preExposure, 1.0);
 }

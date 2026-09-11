@@ -113,10 +113,11 @@ float LoadSurfaceMotionBasedPrevData(
         historySpecFastIndex, specFast,
         historyDiffFastIndex, diffFast);
 
-    prevSpecIllum = max(prevSpecIllum, 0);
-    prevSpecResponsiveIllum = max(specFast.rgb, 0);
-    prevDiffIllum = max(prevDiffIllum, 0);
-    prevDiffResponsiveIllum = max(diffFast.rgb, 0);
+    const float r = rc.gHistoryExposureRatio;
+    prevSpecIllum = max(prevSpecIllum, 0) * float4(r, r, r, r * r);
+    prevSpecResponsiveIllum = max(specFast.rgb, 0) * r;
+    prevDiffIllum = max(prevDiffIllum, 0) * float4(r, r, r, r * r);
+    prevDiffResponsiveIllum = max(diffFast.rgb, 0) * r;
 
     // Fetch history length and prevSpecHitDist via bilinear
     float2 gatherOrigin = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
@@ -186,8 +187,9 @@ float LoadVirtualMotionBasedPrevData(
         float4 specFastResult;
         BicubicFilterSingle(prevVirtualPixelPosFloat, rc.gResourceSizeInvPrev, bilinearCustomWeights, useBicubic, historySpecIndex, prevSpecIllum);
         BicubicFilterSingle(prevVirtualPixelPosFloat, rc.gResourceSizeInvPrev, bilinearCustomWeights, useBicubic, historySpecFastIndex, specFastResult);
-        prevSpecIllum = max(prevSpecIllum, 0);
-        prevSpecResponsiveIllum = max(specFastResult, 0);
+        const float r = rc.gHistoryExposureRatio;
+        prevSpecIllum = max(prevSpecIllum, 0) * float4(r, r, r, r * r);
+        prevSpecResponsiveIllum = max(specFastResult, 0) * r;
 
         float2 uvVMB = prevUVVMB * rc.gRectSizePrev * rc.gResourceSizeInvPrev;
         // On reset skip the unwritten same-frame aliased read; keep the finite gDenoisingRange not-found default to avoid NaN in confidence math.

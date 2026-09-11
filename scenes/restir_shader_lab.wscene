@@ -1167,7 +1167,7 @@ sortOrder|27
 ;
 6671021033936836464
 color|0x3f800000|0x3f51eb85|0x3f19999a
-intensity|0x430c0000
+intensity|0x4b0c0000
 radius|0x3eb33333
 range|0x41e00000
 ;
@@ -1187,7 +1187,7 @@ sortOrder|28
 ;
 6671021033936836464
 color|0x3f0ccccd|0x3f333333|0x3f800000
-intensity|0x430c0000
+intensity|0x4b0c0000
 radius|0x3eb33333
 range|0x41e00000
 ;
@@ -1207,7 +1207,7 @@ sortOrder|29
 ;
 3578748455783499142
 color|0x3f800000|0x3f75c28f|0x3f666666
-intensity|0x42b40000
+intensity|0x4ab40000
 halfWidth|0x40c00000
 halfHeight|0x40000000
 range|0x41f00000
@@ -1229,7 +1229,7 @@ sortOrder|30
 ;
 3908699049357945453
 color|0x3f800000|0x3f7851ec|0x3f6b851f
-intensity|0x3fcccccd
+intensity|0x47cccccd
 ;
 ;
 entity
@@ -1246,7 +1246,7 @@ sortOrder|31
 ;
 15708659991543375132
 envMap|18114398600683197140
-intensity|0x3e800000
+intensity|0x46800000
 ;
 ;
 editor_camera

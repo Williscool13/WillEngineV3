@@ -29,7 +29,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
                         const Core::ReflectionConfiguration& reflectionConfig,
-                        uint32_t giGatherMode);
+                        uint32_t giGatherMode,
+                        float historyExposureRatio);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
@@ -44,7 +45,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
                          const Core::ReflectionConfiguration& reflectionConfig,
-                          uint32_t giGatherMode);
+                          uint32_t giGatherMode,
+                          float historyExposureRatio);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

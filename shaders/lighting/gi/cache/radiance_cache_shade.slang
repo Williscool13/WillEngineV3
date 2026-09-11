@@ -49,8 +49,8 @@ void ComputeRadianceCacheShade(uint3 dtid: SV_DispatchThreadID, uniform Radiance
         float3 channelDelta = radiance - previous;
         float lumaDelta = dot(channelDelta, float3(0.2126, 0.7152, 0.0722));
         float maxAbsDelta = max(abs(channelDelta.r), max(abs(channelDelta.g), abs(channelDelta.b)));
-        bool bLargeDelta = maxAbsDelta > RADIANCE_CACHE_CHANGE_THRESHOLD * max(previousLuma, 0.01);
-        if (previousLuma < 0.01 && pc.stats != nullptr) {
+        bool bLargeDelta = maxAbsDelta > RADIANCE_CACHE_CHANGE_THRESHOLD * max(previousLuma, 655.36);
+        if (previousLuma < 655.36 && pc.stats != nullptr) {
             uint prevDark;
             InterlockedAdd(pc.stats->cellsDark, 1u, prevDark);
         }

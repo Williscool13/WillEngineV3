@@ -27,7 +27,7 @@ static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthGIPushConstant pc)
 // NEE through a near-delta GGX lobe. Lights stay transparent to rays, matching the shadow-ray mask. Reuses RTGroundTruthGIPushConstant verbatim.
 
 static const uint GT_FULL_MAX_BOUNCES = 8;
-static const float GT_FIREFLY_CLAMP_BASE = 16.0;
+static const float GT_FIREFLY_CLAMP_BASE = 1048576.0;
 
 static float GTLuminance(float3 c)
 {
@@ -493,7 +493,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
 
         accum = (accum * count + float4(sampleSum, float(spp))) / (count + float(spp));
         pc.accumulationBuffer[pixelIdx] = accum;
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz, 1.0);
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz * scene.preExposure, 1.0);
         return;
     }
 
@@ -507,7 +507,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
             rayDir.y = -rayDir.y;
             background = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, 0).rgb;
         }
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background, 1.0);
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background * scene.preExposure, 1.0);
         return;
     }
 
@@ -634,5 +634,5 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
 
     accum = (accum * count + float4(sampleSum, float(spp))) / (count + float(spp));
     pc.accumulationBuffer[pixelIdx] = accum;
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz * scene.preExposure, 1.0);
 }

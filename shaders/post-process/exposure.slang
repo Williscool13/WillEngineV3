@@ -32,7 +32,7 @@ void ComputeExposureHistogram(uniform HistogramBuildPushConstant pc, uint3 tid :
 
     uint2 pixelCoord = tid.xy * 2u + pc.sampleOffset;
     if (pixelCoord.x < pc.width && pixelCoord.y < pc.height) {
-        float3 hdrColor = rdgTexturesFloat4[pc.hdrImageIndex].Load(int3(pixelCoord, 0)).rgb;
+        float3 hdrColor = rdgTexturesFloat4[pc.hdrImageIndex].Load(int3(pixelCoord, 0)).rgb / pc.preExposure;
         uint binIndex = HDRToHistogramBin(hdrColor, pc.minLogLuminance, pc.oneOverLogLuminanceRange);
         InterlockedAdd(g_sharedHistogram[binIndex], 1);
     }

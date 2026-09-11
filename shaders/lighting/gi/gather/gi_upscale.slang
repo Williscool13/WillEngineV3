@@ -53,7 +53,7 @@ static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene
             irr = lerp(irr, probeIrr, probeBlend.coverage * (1.0 - giW));
         }
     }
-    return irr;
+    return irr * scene.preExposure;
 }
 
 [shader("compute")]
@@ -79,6 +79,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    const float historyRatio = scene.preExposure / scene.prevPreExposure;
     float3 centerNormal = UnpackNormalOct16(gt1.r);
     float3 worldN = normalize(mul((float3x3)scene.invView, centerNormal));
 
@@ -102,7 +103,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     // Restores the sky the gather SH no longer carries: filtered miss fraction times prefiltered sky irradiance.
     float3 skyTerm = float3(0.0);
     if (pc.skyVisIndex != ~0x0u && pc.skyboxIndex >= 0) {
-        skyTerm = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity;
+        skyTerm = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity * scene.preExposure;
     }
 
     float4 shR = float4(0.0);
@@ -198,6 +199,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         if (pc.fastHistoryIndex != ~0x0u) {
             fastHistory = GIGatherFetchHistory(scene, pc.fastHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
         }
+        history.color *= historyRatio;
+        fastHistory.color *= historyRatio;
     }
 
     float2 tileMotion = rdgTexturesFloat2[pc.motionTileIndex].Load(int3(pixel / uint(GI_MOTION_TILE_SIZE), 0)).rg;
@@ -270,7 +273,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     if (pc.bMomentsValid != 0u && history.quality > 0.0) {
         float2 momentsUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
         if (all(momentsUv >= float2(0.0)) && all(momentsUv <= float2(1.0))) {
-            prevMoments = rdgTexturesFloat2[pc.momentsHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], momentsUv, 0).rg;
+            prevMoments = rdgTexturesFloat2[pc.momentsHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], momentsUv, 0).rg * float2(historyRatio, historyRatio * historyRatio);
             bMoments = true;
         }
     }

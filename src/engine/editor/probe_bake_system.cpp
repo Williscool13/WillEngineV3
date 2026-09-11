@@ -22,6 +22,7 @@
 #include "engine/profiles/profile_library.h"
 #include "engine/components/core_components.h"
 #include "engine/components/render/reflection_probe_component.h"
+#include "glm/gtc/packing.hpp"
 
 namespace Engine
 {
@@ -372,6 +373,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 const size_t halfCount = static_cast<size_t>(captureSize) * captureSize * 4;
                 faceBuffers[currentFace] = Core::HeapArray<uint16_t>(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::EngineContext, halfCount);
                 std::memcpy(faceBuffers[currentFace].Data(), capture.pixels.Data(), halfCount * sizeof(uint16_t));
+                facePreExposure[currentFace] = capture.preExposure;
             }
             ctx->ConsumeProbeCapture();
 
@@ -412,7 +414,26 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             if (bAllFacesReady) {
                 Core::InlineString<64> assetName = Core::InlineString<64>::Format("probe_%llu.wprobe", static_cast<unsigned long long>(bakeProbeId));
                 Core::Path outputPath = Platform::GetAssetPath() / "probes" / assetName.c_str();
-                ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath, bakeProbeId, bakeSnapshot);
+
+                float bakePreExposure = facePreExposure[0];
+                for (const float facePre : facePreExposure) {
+                    bakePreExposure = glm::min(bakePreExposure, facePre);
+                }
+                const size_t texelCount = static_cast<size_t>(captureSize) * captureSize;
+                for (uint32_t face = 0; face < 6; ++face) {
+                    const float toBake = bakePreExposure / facePreExposure[face];
+                    if (toBake == 1.0f) {
+                        continue;
+                    }
+                    uint16_t* halves = faceBuffers[face].Data();
+                    for (size_t texel = 0; texel < texelCount; ++texel) {
+                        for (size_t channel = 0; channel < 3; ++channel) {
+                            uint16_t& half = halves[texel * 4 + channel];
+                            half = glm::packHalf1x16(glm::unpackHalf1x16(half) * toBake);
+                        }
+                    }
+                }
+                ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath, bakeProbeId, bakeSnapshot, 1.0f / bakePreExposure);
 
                 if (bInterbounceBatch && bakePass == 1 && !awaitedAssembles.IsFull()) {
                     const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{bakeProbeId});

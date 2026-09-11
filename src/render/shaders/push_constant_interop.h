@@ -1008,9 +1008,6 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float invalidHistoryBlend;
     SHADER_PUBLIC float lumaBoostCap;
     SHADER_PUBLIC float grazingTurnoverStrength;
-    SHADER_PUBLIC SHADER_PTR(float) exposureLuminance;
-    SHADER_PUBLIC float exposureTarget;
-    SHADER_PUBLIC float pad1;
 };
 
 // Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.
@@ -1214,7 +1211,7 @@ SHADER_PUBLIC struct PostProcessFinalizePushConstant
     // -1=None, 0=ACES Fitted, 1=Hable, 2=Reinhard, 3=Lottes, 4=Reinhard-Jodie, 5=Clamp, 6=Hejl-Burgess-Dawson, 7=Uchimura, 8=ACES Narkowicz, 9=AgX, 10=Khronos PBR Neutral
     SHADER_PUBLIC int32_t tonemapOperator;
     SHADER_PUBLIC float targetLuminance;
-    SHADER_PUBLIC float exposureBias; // exp2(colorGradingExposure), multiplied into exposure before tonemapping
+    SHADER_PUBLIC float exposureBias; // exp2(colorGradingExposure) / preExposure, multiplied into exposure before tonemapping
     SHADER_PUBLIC float bloomIntensity; // pre-divided by bloom mip count
     SHADER_PUBLIC float contrast;
     SHADER_PUBLIC float saturation;
@@ -1296,7 +1293,7 @@ SHADER_PUBLIC struct DirectMeshShadingPushConstant
 SHADER_PUBLIC struct HistogramBuildPushConstant
 {
     SHADER_PUBLIC uint32_t hdrImageIndex;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC float preExposure;
     SHADER_PUBLIC SHADER_PTR(uint32_t) histogramBufferAddress;
     SHADER_PUBLIC uint32_t width;
     SHADER_PUBLIC uint32_t height;
@@ -1316,8 +1313,8 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC float alphaDarken; // applied while adapted luminance increases
     SHADER_PUBLIC float lowPercentile;
     SHADER_PUBLIC float highPercentile;
-    SHADER_PUBLIC float minAdaptedLuminance; // targetLuminance * exp2(-maxGainEV)
-    SHADER_PUBLIC float maxAdaptedLuminance; // targetLuminance * exp2(-minGainEV)
+    SHADER_PUBLIC float minAdaptedLuminance; // EV100ToLuminance(exposureMinEV100)
+    SHADER_PUBLIC float maxAdaptedLuminance; // EV100ToLuminance(exposureMaxEV100)
     SHADER_PUBLIC uint32_t totalPixels;
 };
 
@@ -1472,7 +1469,7 @@ SHADER_PUBLIC struct BloomThresholdPushConstant
     SHADER_PUBLIC float clampValue;
     SHADER_PUBLIC float targetLuminance;
     SHADER_PUBLIC uint32_t bExposureEnabled;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC float preExposure;
 };
 
 SHADER_PUBLIC struct BloomDownsamplePushConstant
@@ -1595,6 +1592,8 @@ SHADER_PUBLIC struct ProbePreviewSpherePushConstant
     SHADER_PUBLIC float4 centerRadius;
     SHADER_PUBLIC float roughness;
     SHADER_PUBLIC uint32_t bIrradiance;
+    SHADER_PUBLIC float radianceScale;
+    SHADER_PUBLIC float _pad0;
 };
 
 SHADER_PUBLIC struct GPUDebugCubeDrawPushConstant

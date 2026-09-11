@@ -273,14 +273,14 @@ public float Fsr2MinDividedByMax(float v0, float v1)
     return m != 0.0 ? min(v0, v1) / m : 0.0;
 }
 
-// The auto-exposure texture (exposure, log Lavg); FSR2_INVALID_INDEX means exposure 1.
-public float Fsr2Exposure(uint exposureIndex)
+// Exposure from the auto-exposure texture (exposure, log Lavg); without one the input is already exposed by preExposure.
+public float Fsr2Exposure(uint exposureIndex, float preExposure)
 {
     if (exposureIndex == FSR2_INVALID_INDEX) {
-        return 1.0;
+        return preExposure;
     }
     float exposure = rdgTexturesFloat2[exposureIndex].Load(int3(0, 0, 0)).x;
-    return exposure == 0.0 ? 1.0 : exposure;
+    return exposure == 0.0 ? preExposure : exposure;
 }
 
 public float Fsr2LoadInputDepth(uint depthIndex, int2 pos)

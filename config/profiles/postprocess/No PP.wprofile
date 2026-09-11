@@ -5,7 +5,7 @@ bBloomEnabled|0
 bChromaticAberrationEnabled|0
 bColorGradingEnabled|0
 bDitherEnabled|0
-bExposureEnabled|0
+bExposureEnabled|1
 bFilmGrainEnabled|0
 bMotionBlurEnabled|0
 bMotionBlurObjectOnly|1
@@ -26,8 +26,10 @@ colorGradingTint|0x00000000
 ditherStrength|0x3f800000
 exposureHighPercentile|0x3f666666
 exposureLowPercentile|0x3f000000
-exposureMaxGainEV|0x3f800000
-exposureMinGainEV|0xc0c00000
+exposureManualEV100|0x41840000
+exposureMaxEV100|0x42280000
+exposureMinEV100|0x41780000
+exposureMode|1
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000
 exposureTargetLuminance|0x3e3851ec

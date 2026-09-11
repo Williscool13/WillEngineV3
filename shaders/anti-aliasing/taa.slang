@@ -142,8 +142,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
     int2 renderSize = int2(pc.sceneData.mainRenderTargetSize);
     int2 groupOrigin = int2(groupID.xy) * TILE_DIM - 1;
 
-    float exposureScale = pc.exposureTarget > 0.0 ? ExposureNoiseScale(pc.exposureLuminance[0], pc.exposureTarget) : 1.0;
-    float karisStrength = pc.karisStrength * exposureScale;
+    float karisStrength = pc.karisStrength;
 
     for (int i = int(groupIndex); i < APRON_TEXEL_COUNT; i += TILE_DIM * TILE_DIM) {
         int2 apronCoord = int2(i % APRON_DIM, i / APRON_DIM);
@@ -212,7 +211,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
 
     float3 historyYCoCg = float3(0.0);
     if (validHistory) {
-        historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv), karisStrength);
+        historyYCoCg = KarisTonemap(SampleHistoryCatmullRom(historyUv) * (pc.sceneData.preExposure / pc.sceneData.prevPreExposure), karisStrength);
         // Stop NaNs
         validHistory = IsFinite3(historyYCoCg);
     }
@@ -229,7 +228,7 @@ void ComputeTemporalAntialiasing(uint3 threadID: SV_DispatchThreadID, uint3 grou
         historyYCoCg = ClipToNeighborhood(historyYCoCg, minc, maxc);
 
         float alpha = lerp(pc.baseBlendAlpha, 1.0, max(disocclusion, dilationReject));
-        float lumaDiff = saturate(abs(currentYCoCg.x - historyYCoCg.x) / max(currentYCoCg.x, 0.2 / exposureScale));
+        float lumaDiff = saturate(abs(currentYCoCg.x - historyYCoCg.x) / max(currentYCoCg.x, 0.2));
         // Luma mismatch may only increase responsiveness; without the max an already-high alpha would be pulled back down toward the cap
         float boostedAlpha = max(alpha, min(alpha * 2.0, pc.lumaBoostCap));
         alpha = lerp(alpha, boostedAlpha, lumaDiff);

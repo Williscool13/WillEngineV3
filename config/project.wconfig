@@ -1,5 +1,5 @@
 defaultScene|Ballance
-bLimitFps|0
+bLimitFps|1
 frameLimitTarget|60
 bAutoSaveProjectConfig|0
 bAutoSaveLighting|0
@@ -42,7 +42,7 @@ reactiveThreshold|0x3e4ccccd
 reflectionReactive|0x3f19999a
 ;
 ;
-resolutionScale|0x3f4ccccd
+resolutionScale|0x3f400000
 reflectionProbeLineWidth|0x3dcccccd
 gameCameraFovDegrees|0x428cbb51
 gameCameraNearPlane|0x3dcccccd

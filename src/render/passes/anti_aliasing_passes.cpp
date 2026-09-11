@@ -296,14 +296,8 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 
     const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
 
-    const bool bExposure = viewFamily.postProcessConfig.bExposureEnabled && graph.HasBuffer("luminance_buffer"_sid);
-    const float exposureTarget = bExposure ? viewFamily.postProcessConfig.exposureTargetLuminance : 0.0f;
-
     RenderPass& taaPass = graph.AddPass("TAA Main"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer("scene_data"_sid);
-    if (bExposure) {
-        taaPass.ReadBuffer("luminance_buffer"_sid);
-    }
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.depthCopy);
     taaPass.ReadSampledImage(depthHistory);
@@ -314,7 +308,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.WriteStorageImage("taa_output"_sid);
     taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
-            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig, bExposure, exposureTarget,
+            gbufferOne = targets.gbufferOne, pipelineSID, taaConfig,
             depthHistory, gbufferOneHistory,
             historyId = graph.ResourceVersionID("taa_current"_sid, 1)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             TemporalAntialiasingPushConstant pushData{
@@ -335,8 +329,6 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                 .invalidHistoryBlend = taaConfig.invalidHistoryBlend,
                 .lumaBoostCap = taaConfig.lumaBoostCap,
                 .grazingTurnoverStrength = taaConfig.grazingTurnoverStrength,
-                .exposureLuminance = bExposure ? graph.GetBufferAddress("luminance_buffer"_sid) : 0,
-                .exposureTarget = exposureTarget,
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineSID);
@@ -440,7 +432,9 @@ StringID SetupFsr2(RenderGraph& graph,
                    bool bHasPreOverlayColor,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
-                   uint64_t frameNumber)
+                   uint64_t frameNumber,
+                   float preExposure,
+                   float prevPreExposure)
 {
     ZoneScoped;
     static constexpr uint32_t INVALID_INDEX = 0xFFFFFFFFu;
@@ -507,8 +501,8 @@ StringID SetupFsr2(RenderGraph& graph,
         .lumaMipClampSize = {static_cast<float>(std::max(1u, renderW / 32)), static_cast<float>(std::max(1u, renderH / 32))},
         .depthToView = {0.0f, viewFamily.mainView.currentViewData.nearPlane},
         .tanHalfFov = {1.0f / proj[0][0], 1.0f / proj[1][1]},
-        .preExposure = 1.0f,
-        .previousPreExposure = 1.0f,
+        .preExposure = preExposure,
+        .previousPreExposure = prevPreExposure,
         .deltaTime = glm::clamp(deltaTime, 0.0f, 1.0f),
         .jitterPhaseCount = static_cast<float>(jitterPhaseCount),
         .frameIndex = bHasHistory ? 1u : 0u,

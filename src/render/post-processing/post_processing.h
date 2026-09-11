@@ -33,9 +33,16 @@ struct PostProcessContext
     Core::Array<uint32_t, 2> preAaExtent;
     Core::Array<uint32_t, 2> displayExtent;
     float deltaTime;
+    float preExposure;
     uint64_t frameNumber;
     PipelineManager* pipelines;
 };
+
+/** @returns the average scene luminance that meters to ev100 (ISO 100, K = 12.5). */
+float EV100ToLuminance(float ev100);
+
+/** @returns the EV100 of the manual or physical camera; auto mode meters instead. */
+float CameraEV100(const Core::PostProcessConfiguration& config);
 
 // Sideband passes: produce named side resources, return input unchanged
 StringID PPExposure(PostProcessContext& ctx, StringID input);

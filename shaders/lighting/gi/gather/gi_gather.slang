@@ -21,8 +21,8 @@ import reflection_probe_common;
 // One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
 // Sky misses do not feed the SH; the miss fraction goes to a scalar sky-visibility channel, filtered separately and multiplied by prefiltered sky irradiance at upscale.
 
-static const float GI_GATHER_MAX_RADIANCE = 20.0;
-static const float GI_GATHER_MAX_RADIANCE_MIN = 0.05;
+static const float GI_GATHER_MAX_RADIANCE = 1310720.0;
+static const float GI_GATHER_MAX_RADIANCE_MIN = 3276.8;
 static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
 static const float GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE = 1.0;
@@ -251,7 +251,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                 }
             }
 
-            radiance = GIGatherClampRadiance(radiance, maxRadiance);
+            radiance = GIGatherClampRadiance(radiance, maxRadiance) * scene.preExposure;
             shR = float4(radiance.r, 0.0, 0.0, 0.0);
             shG = float4(radiance.g, 0.0, 0.0, 0.0);
             shB = float4(radiance.b, 0.0, 0.0, 0.0);
@@ -366,7 +366,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                     sumW += w;
                                 }
                                 if (sumW > 1e-3) {
-                                    radiance = sum / sumW;
+                                    radiance = sum / (sumW * scene.prevPreExposure);
                                     // Demodulate the recirculated GI: lit history contains last frame's gather output (composite kD*albedo*gtao*gi), so the loop gain is ~albedo and screen-space artifacts self-sustain (frame-entry seam). Subtract it and re-source the indirect component from the world tiers; direct stays exact. diffuseColor stands in for the composite factor, so the subtraction over-reaches where AO is dark; the floor bounds it.
                                     if (pc.giHistoryIndex != ~0x0u) {
                                         ReflectionProbeBlend demodProbeBlend = ReflectionProbeBlendNone();
@@ -374,7 +374,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                             demodProbeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
                                         }
                                         float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeBlend);
-                                        radiance = max(radiance - hit.diffuseColor * (giPrevSum / sumW), float3(0.0)) + hit.diffuseColor * worldIndirect;
+                                        radiance = max(radiance - hit.diffuseColor * (giPrevSum / (sumW * scene.prevPreExposure)), float3(0.0)) + hit.diffuseColor * worldIndirect;
                                     }
                                     tier = GI_GATHER_TIER_SCREEN;
                                     bResolved = true;
@@ -420,7 +420,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             }
 
             if (validCount > 0u) {
-                float invCount = 1.0 / float(validCount);
+                float invCount = scene.preExposure / float(validCount);
                 shR = sumR * invCount;
                 shG = sumG * invCount;
                 shB = sumB * invCount;

@@ -109,5 +109,5 @@ void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3
     }
 
     pc.accumulationBuffer[pixelIdx] = accum;
-    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(accum.xyz, 1.0);
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(accum.xyz * scene.preExposure, 1.0);
 }

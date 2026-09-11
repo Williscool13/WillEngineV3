@@ -339,7 +339,7 @@ sortOrder|8
 folderId|5877117893270021960
 ;
 3578748455783499142
-intensity|0x437a0000
+intensity|0x4b7a0000
 halfWidth|0x3f4ccccd
 halfHeight|0x3f4ccccd
 ;
@@ -698,7 +698,7 @@ sortOrder|17
 folderId|3804804646411266664
 ;
 3578748455783499142
-intensity|0x437a0000
+intensity|0x4b7a0000
 halfWidth|0x3f4ccccd
 halfHeight|0x3f4ccccd
 ;
@@ -1057,7 +1057,7 @@ sortOrder|26
 folderId|1272563978575844562
 ;
 3578748455783499142
-intensity|0x437a0000
+intensity|0x4b7a0000
 halfWidth|0x3f4ccccd
 halfHeight|0x3f4ccccd
 ;
@@ -1844,7 +1844,7 @@ folderId|1449085648584573311
 ;
 3578748455783499142
 color|0x3f800000|0x3f733333|0x3f666666
-intensity|0x43fa0000
+intensity|0x4bfa0000
 halfWidth|0x3f4ccccd
 range|0x41600000
 ;
@@ -2739,7 +2739,7 @@ sortOrder|69
 folderId|7056534224953438295
 ;
 3578748455783499142
-intensity|0x44960000
+intensity|0x4c960000
 halfWidth|0x40e00000
 halfHeight|0x3f99999a
 range|0x41100000
@@ -3866,7 +3866,7 @@ sortOrder|94
 folderId|4121901484779107126
 ;
 3578748455783499142
-intensity|0x43a00000
+intensity|0x4ba00000
 halfWidth|0x3f19999a
 halfHeight|0x3f19999a
 ;
@@ -4540,7 +4540,7 @@ folderId|8374882251091192209
 ;
 3578748455783499142
 color|0x3f800000|0x3f666666|0x3f400000
-intensity|0x43960000
+intensity|0x4b960000
 range|0x41400000
 ;
 ;
@@ -4561,7 +4561,7 @@ folderId|8374882251091192209
 ;
 3578748455783499142
 color|0x3f333333|0x3f4ccccd|0x3f800000
-intensity|0x42f00000
+intensity|0x4af00000
 halfWidth|0x3f19999a
 halfHeight|0x3f19999a
 ;

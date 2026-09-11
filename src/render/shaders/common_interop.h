@@ -125,13 +125,18 @@ SHADER_PUBLIC struct SceneData
 
     SHADER_PUBLIC float2 ndcToViewMulXPixelSize;
     SHADER_PUBLIC float uvDerivativeScale;
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float preExposure;
 
 
     SHADER_PUBLIC float depthLinearizeMult;
     SHADER_PUBLIC float depthLinearizeAdd;
     SHADER_PUBLIC float deltaTime;
     SHADER_PUBLIC float lodScreenSizeScale;
+
+    SHADER_PUBLIC float prevPreExposure;
+    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float _pad1;
+    SHADER_PUBLIC float _pad2;
 };
 
 SHADER_PUBLIC struct ReadbackStruct
@@ -157,6 +162,8 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t culledMeshletOcclusion;
     SHADER_PUBLIC uint32_t meshletRegionExpanded[4];
     SHADER_PUBLIC uint32_t meshletRegionVisible[4];
+    SHADER_PUBLIC float adaptedLuminance;
+    SHADER_PUBLIC uint32_t _pad1;
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

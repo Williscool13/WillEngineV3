@@ -84,8 +84,8 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
 
-    float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb;
-    float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb;
+    float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
+    float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
 
     // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
     float3 indirectDiffuse = float3(0.0);
@@ -103,7 +103,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
 
         if (pc.giGatherMode != 0u) {
             // Upscaled gather; already contains the skybox and probe fallbacks.
-            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb;
+            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
         } else {
             indirectDiffuse = skyIrradiance;
             float giW = 0.0;
@@ -147,7 +147,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         if (pc.bReflectionMerged != 0u && roughness <= pc.reflectionRoughnessMax) {
             reflectionSpecular = float3(0.0);
         } else if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
-            float3 tracedReflection = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb;
+            float3 tracedReflection = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
             reflectionSpecular = tracedReflection * specReflectance;
         }
 
@@ -171,5 +171,5 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
         litAlpha = 1.0 - saturate(Luma(specular * specReflectance + reflectionSpecular) / max(Luma(finalColor), 1e-4));
     }
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, litAlpha);
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor * scene.preExposure, litAlpha);
 }

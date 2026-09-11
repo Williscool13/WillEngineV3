@@ -413,6 +413,7 @@ struct ProbePreviewSphere
 {
     uint32_t cubemapIndex{0};
     glm::vec3 position{0.0f};
+    float radianceScale{1.0f};
 };
 
 /** Shared settings for the probe preview spheres. */

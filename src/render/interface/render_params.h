@@ -10,16 +10,28 @@
 /** Every tunable the game hands the renderer. Engine-side authoring state embeds these structs directly. */
 namespace Core
 {
+enum class ExposureMode : int32_t
+{
+    Auto = 0,
+    Manual,
+    Physical,
+};
+
 struct PostProcessConfiguration
 {
     bool bExposureEnabled{true};
+    ExposureMode exposureMode{ExposureMode::Auto};
     float exposureTargetLuminance{0.18f};
     float exposureSpeedBrighten{2.0f}; // 1/s, applied while adapted luminance decreases (image brightening)
     float exposureSpeedDarken{6.0f}; // 1/s, applied while adapted luminance increases (image darkening)
-    float exposureMinGainEV{-6.0f}; // final exposure gain clamped to [exp2(min), exp2(max)]
-    float exposureMaxGainEV{4.0f};
+    float exposureMinEV100{12.5f}; // auto exposure adaptation range, absolute EV100 (ISO 100, K = 12.5)
+    float exposureMaxEV100{22.5f};
     float exposureLowPercentile{0.5f}; // histogram band metered, fraction of non-black pixels
     float exposureHighPercentile{0.9f};
+    float exposureManualEV100{16.5f};
+    float cameraAperture{16.0f}; // f-number
+    float cameraShutterInv{100.0f}; // shutter speed denominator, 100 = 1/100 s
+    float cameraISO{100.0f};
 
     bool bBloomEnabled{true};
     float bloomThreshold{1.0f}; // display-relative (post-exposure) luminance
@@ -370,7 +382,7 @@ struct ReSTIRParams
     bool bInitialVisibility{true};
     bool bSunLight{true};
     float regirWClamp{0.0f};
-    float restirWClamp{20.0f};
+    float restirWClamp{0.0003052f};
     bool bResetReGIR{false};
     // WorldGridBin = cascaded strongest-K analytic bin (default, sparse analytic scenes)
     // ReGIR = reservoir hash grid (retained for dense/emissive-triangle scenes). Only ReGIR schedules the presample/fill producer chain.
@@ -378,12 +390,12 @@ struct ReSTIRParams
     LightProposal lightProposal{LightProposal::WorldGridBin};
     // Emissive triangle lights
     bool bEmissiveTriangleLights{true};
-    float emissiveTriRangeMultiplier{8.0f};
+    float emissiveTriRangeMultiplier{0.03125f};
     // Temporal-gradient antilag confidence (RELAX only)
     bool bEnableConfidence{true};
     float confidenceStrength{0.75f};
     float confidenceSensitivity{3.0f};
-    float confidenceDarknessBias{0.01f};
+    float confidenceDarknessBias{655.36f};
     float confidenceHistoryLength{4.0f};
     uint32_t confidenceBlurRadius{2u};
 
@@ -447,15 +459,15 @@ struct DDGIParams
     bool bClassification{true};
     bool bInfiniteBounce{true};
     float bounceIntensity{0.75f};
-    float maxRayRadiance{20.0f};
+    float maxRayRadiance{1310720.0f};
     uint32_t radianceCacheShadeInterval{8};
     uint32_t radianceCacheAccumCap{16};
 
     float hysteresis{0.97f};
     float visibilityHysteresis{0.97f};
     float irradianceGamma{5.0f};
-    float irradianceThreshold{0.25f};
-    float brightnessThreshold{0.10f};
+    float irradianceThreshold{2.297f};
+    float brightnessThreshold{0.919f};
     float distanceExponent{50.0f};
 
     bool bApplyToLighting{true};

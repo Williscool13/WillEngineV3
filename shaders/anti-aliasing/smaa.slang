@@ -477,6 +477,7 @@ void TemporalResolveMain(uniform SmaaTemporalResolvePushConstant pc, uint3 threa
 
     float4 current  = rdgTexturesFloat4[pc.currentColorIndex].Load(int3(coord, 0));
     float4 previous = rdgTexturesFloat4[pc.previousColorIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv + velocity, 0);
+    previous.rgb *= pc.sceneData.preExposure / pc.sceneData.prevPreExposure;
 
     float delta  = length(velocity);
     float weight = 0.5 * saturate(1.0 - delta * SMAA_REPROJECTION_WEIGHT_SCALE);

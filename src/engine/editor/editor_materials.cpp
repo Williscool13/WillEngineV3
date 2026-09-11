@@ -768,7 +768,7 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
 
     ImGui::SeparatorText("Emissive");
     changed |= ImGui::ColorEdit3("Emissive Color", &props.emissiveFactor.x);
-    changed |= ImGui::DragFloat("Emissive Strength", &props.emissiveFactor.w, 0.01f, 0.0f, 100.0f);
+    changed |= ImGui::DragFloat("Emissive Luminance (nits)", &props.emissiveFactor.w, glm::max(props.emissiveFactor.w * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
 
     ImGui::SeparatorText("Alpha");
     const char* alphaModes[] = {"Opaque", "Mask", "Blend"};

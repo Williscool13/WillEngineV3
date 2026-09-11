@@ -219,6 +219,7 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
                 .centerRadius = {spheres[i].position, settings.radius},
                 .roughness = settings.roughness,
                 .bIrradiance = settings.bIrradiance ? 1u : 0u,
+                .radianceScale = spheres[i].radianceScale,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
             vkCmdDraw(cmd, PROBE_PREVIEW_SPHERE_VERTEX_COUNT, 1, 0, 0);

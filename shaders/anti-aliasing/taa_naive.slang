@@ -26,7 +26,7 @@ void ComputeNaiveTemporalAntialiasing(uint3 threadID : SV_DispatchThreadID) {
     if (!validHistory) {
         resultRGB = currentColor;
     } else {
-        float3 historyColor = rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUv, 0).rgb;
+        float3 historyColor = rdgTexturesFloat4[pc.colorHistoryIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], historyUv, 0).rgb * (pc.sceneData.preExposure / pc.sceneData.prevPreExposure);
         resultRGB = lerp(historyColor, currentColor, 0.01);
     }
 

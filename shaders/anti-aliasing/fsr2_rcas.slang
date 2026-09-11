@@ -82,7 +82,7 @@ void ComputeFsr2Rcas(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (!Fsr2IsOnScreen(pos, int2(pc.c.displaySize))) {
         return;
     }
-    const float exposure = Fsr2Exposure(pc.exposureIndex);
+    const float exposure = Fsr2Exposure(pc.exposureIndex, pc.c.preExposure);
 
     //    b
     //  d e f

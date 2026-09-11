@@ -56,6 +56,7 @@ struct ReflectionProbeComponent
     bool bParallax{true};
     Resolution resolution{Resolution::Res256};
     Engine::EnvironmentMapID standInEnvMap{};
+    float standInIntensity{65536.0f}; // stand-in env map texel value to nits
 
     // Runtime-only
     // Resident cubemap for the current content, recorded on load resolve.

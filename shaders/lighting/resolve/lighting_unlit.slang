@@ -26,6 +26,6 @@ void ComputeLightingUnlit(uniform VisibilityLightingPushConstant pc, uint3 gid :
         return;
     }
 
-    float3 finalColor = li.albedo.xyz + li.emissiveRGB;
+    float3 finalColor = li.albedo.xyz + li.emissiveRGB * pc.sceneData[pc.sceneDataIndex].preExposure;
     rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
 }

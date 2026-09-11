@@ -316,6 +316,7 @@ public: // Reflection probes
         uint32_t resolution{};
         ProbeBakeSnapshot snapshot{};
         uint64_t contentVersion{0};
+        float radianceScale{1.0f};
     };
 
     /** Resolves a probe to its runtime cubemap and loads it through the shared cubemap path (keyed by the probe's EnvironmentMapID). @returns INVALID if the probe is not in the registry. */

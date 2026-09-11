@@ -34,7 +34,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t activeCheckerboardField,
                        const Core::ReflectionConfiguration& reflectionConfig,
                        bool bResetHistory,
-                       bool bSkipReflectionPiggyback)
+                       bool bSkipReflectionPiggyback,
+                       float preExposure)
 {
     ZoneScoped;
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
@@ -518,7 +519,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         resolvePass.ReadSampledImage(targets.gbufferOne);
         resolvePass.WriteStorageImage("restir_confidence"_sid);
         resolvePass.Execute([&, pipelineManager, renderExtent, gradientExtent, bHasPrevConfidence, prevConfidence, gbufferOne = targets.gbufferOne,
-                confStrength = restirParams.confidenceStrength, sensitivity = restirParams.confidenceSensitivity, darknessBias = restirParams.confidenceDarknessBias,
+                confStrength = restirParams.confidenceStrength, sensitivity = restirParams.confidenceSensitivity, darknessBias = restirParams.confidenceDarknessBias * preExposure,
                 blendFactor = 1.0f / (restirParams.confidenceHistoryLength + 1.0f), blurRadius = restirParams.confidenceBlurRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_confidence_resolve"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

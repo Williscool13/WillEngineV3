@@ -123,12 +123,13 @@ float LoadSurfaceMotionBasedPrevData(
 
     bool useBicubic = bicubicFootprintValid > 0;
     BicubicFilterSingle(prevPixelPosFloat, rc.gResourceSizeInvPrev, bilinearCustomWeights, useBicubic, historyDiffIndex, prevDiffIllum);
+    prevDiffIllum.xyz *= rc.gHistoryExposureRatio;
 
     // Fast history uses the same occlusion-aware custom weights as slow history so disoccluded corner
     // taps don't bleed across silhouettes into the fast clamp box.
     float2 gatherOrigin = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
     float4 prevDiffFasts = rdgTexturesFloat[historyDiffFastIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-    prevDiffResponsiveLuma = max(RelaxBilinearWeightedFloat(prevDiffFasts.x, prevDiffFasts.y, prevDiffFasts.z, prevDiffFasts.w, bilinearCustomWeights), 0.0);
+    prevDiffResponsiveLuma = max(RelaxBilinearWeightedFloat(prevDiffFasts.x, prevDiffFasts.y, prevDiffFasts.z, prevDiffFasts.w, bilinearCustomWeights), 0.0) * rc.gHistoryExposureRatio;
     // Per-lobe accumulated frame counts (already incremented at pack time).
     uint4 prevInternalDatas = rdgTexturesUInt[prevInternalDataIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
     float3 id00 = ReblurUnpackInternalData(prevInternalDatas.x);
@@ -605,10 +606,11 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
     float4 specHistory;
     BicubicFilterSingle(specPixelPosFloat, rc.gResourceSizeInvPrev, specOcclusionWeights, specAllowCatRom, pc.historySpecIndex, specHistory);
     specHistory = ReblurClampNegativeToZero(specHistory);
+    specHistory.xyz *= rc.gHistoryExposureRatio;
 
     float2 specGatherOrigin = (floor(specPixelPosFloat - 0.5) + 1.0) * rc.gResourceSizeInvPrev;
     float4 specFasts = rdgTexturesFloat[pc.historySpecFastIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], specGatherOrigin).wzxy;
-    float specFastHistory = max(RelaxBilinearWeightedFloat(specFasts.x, specFasts.y, specFasts.z, specFasts.w, specOcclusionWeights), 0.0);
+    float specFastHistory = max(RelaxBilinearWeightedFloat(specFasts.x, specFasts.y, specFasts.z, specFasts.w, specOcclusionWeights), 0.0) * rc.gHistoryExposureRatio;
 
     if (rc.gResetHistory != 0)
     {

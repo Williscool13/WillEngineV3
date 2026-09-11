@@ -31,6 +31,8 @@ namespace Editor
  * A BLAS build needs roughly 200 bytes of scratch per triangle, so this keeps every primitive under the loader's fixed per-slot scratch buffer (AssetLoad::BLAS_SCRATCH_SLOT_SIZE) with margin for driver variance.
  */
 static constexpr uint32_t BLAS_SPLIT_TRIANGLE_TARGET = 16384;
+// glTF emissive strength is unitless; strength 1 imports as 65536 nits
+static constexpr float GLTF_EMISSIVE_STRENGTH_TO_NITS = 65536.0f;
 
 static uint32_t ComputeBlasSplitCount(uint32_t triangleCount, uint32_t remainingPrimitiveSlots)
 {
@@ -1348,7 +1350,7 @@ MaterialProperties StaticModelGenerateSlot::ExtractMaterial(const cgltf_data& gl
         gltfMaterial.emissive_factor[0],
         gltfMaterial.emissive_factor[1],
         gltfMaterial.emissive_factor[2],
-        gltfMaterial.has_emissive_strength ? gltfMaterial.emissive_strength.emissive_strength : 1.0f);
+        (gltfMaterial.has_emissive_strength ? gltfMaterial.emissive_strength.emissive_strength : 1.0f) * GLTF_EMISSIVE_STRENGTH_TO_NITS);
 
     material.physicalProperties.x = gltfMaterial.has_ior ? gltfMaterial.ior.ior : 1.5f;
     material.physicalProperties.y = gltfMaterial.has_dispersion ? gltfMaterial.dispersion.dispersion : 0.0f;

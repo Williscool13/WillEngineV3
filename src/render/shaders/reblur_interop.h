@@ -97,7 +97,7 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC float depthLinearizeMult;
     SHADER_PUBLIC float depthLinearizeAdd;
     SHADER_PUBLIC float gDebug;
-    SHADER_PUBLIC float _padF0;
+    SHADER_PUBLIC float gHistoryExposureRatio;
 
     // Uint parameters (40 bytes, even count)
     SHADER_PUBLIC uint gFrameIndex;

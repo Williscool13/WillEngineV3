@@ -65,7 +65,7 @@ SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_DUMP_KEEP_COUNT = 2u; // count a 
 
 SHADER_PUBLIC struct RadianceCacheCell
 {
-    SHADER_PUBLIC uint2 packedRadiance; // fp16x3 non-emissive outgoing radiosity (RGB9E5 EMA round-trips quantize chroma); .y high half 0xFFFF = unshaded, matching the 0xFFFFFFFF clear fill
+    SHADER_PUBLIC uint2 packedRadiance; // fp16x3 non-emissive outgoing radiosity / RADIANCE_CACHE_PACK_SCALE (RGB9E5 EMA round-trips quantize chroma); .y high half 0xFFFF = unshaded, matching the 0xFFFFFFFF clear fill
     SHADER_PUBLIC uint packedEmissive; // RGB9E5
     SHADER_PUBLIC uint lastTouched;
     SHADER_PUBLIC uint lastShaded;

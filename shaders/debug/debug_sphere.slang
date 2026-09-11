@@ -43,9 +43,9 @@ SphereVertexOutput VertexDebugSphere(uint vid: SV_VertexID, uint iid: SV_Instanc
     SphereVertexOutput output;
     output.position = mul(scene.proj, float4(viewPos, 1.0));
     output.normal = normal;
-    output.shR = inst.shR;
-    output.shG = inst.shG;
-    output.shB = inst.shB;
+    output.shR = inst.shR * scene.preExposure;
+    output.shG = inst.shG * scene.preExposure;
+    output.shB = inst.shB * scene.preExposure;
     return output;
 }
 

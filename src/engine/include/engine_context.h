@@ -92,6 +92,7 @@ struct ProbeCaptureStaging
 {
     Core::HeapArray<uint16_t> pixels{};
     uint32_t captureSize{0};
+    float preExposure{1.0f};
     std::atomic<bool> bReady{false};
 };
 
@@ -104,6 +105,7 @@ struct ProbeAssembleStaging
     Core::Path outputPath{};
     uint64_t probeId{0};
     ProbeBakeSnapshot snapshot{};
+    float radianceScale{1.0f};
     std::atomic<bool> bPending{false};
 };
 
@@ -217,7 +219,7 @@ struct EngineContext
     ProbeAssembleStaging probeAssemble{};
 
     /** Hands a finished bake's 6 face buffers off (moved) for engine-side assembly; the engine forwards it to the asset generator next frame. */
-    void SubmitProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const ProbeBakeSnapshot& snapshot)
+    void SubmitProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const ProbeBakeSnapshot& snapshot, float radianceScale)
     {
         for (uint32_t face = 0; face < 6; ++face) { probeAssemble.faces[face] = std::move(faces[face]); }
         probeAssemble.captureSize = captureSize;
@@ -225,6 +227,7 @@ struct EngineContext
         probeAssemble.outputPath = outputPath;
         probeAssemble.probeId = probeId;
         probeAssemble.snapshot = snapshot;
+        probeAssemble.radianceScale = radianceScale;
         probeAssemble.bPending.store(true, std::memory_order_release);
     }
 

@@ -568,13 +568,18 @@ void Deserialize(const TextReader& r, Core::AntiAliasingConfiguration& p)
 void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
 {
     w.Key("bExposureEnabled", p.bExposureEnabled);
+    w.Key("exposureMode", static_cast<int32_t>(p.exposureMode));
     w.Key("exposureTargetLuminance", p.exposureTargetLuminance);
     w.Key("exposureSpeedBrighten", p.exposureSpeedBrighten);
     w.Key("exposureSpeedDarken", p.exposureSpeedDarken);
-    w.Key("exposureMinGainEV", p.exposureMinGainEV);
-    w.Key("exposureMaxGainEV", p.exposureMaxGainEV);
+    w.Key("exposureMinEV100", p.exposureMinEV100);
+    w.Key("exposureMaxEV100", p.exposureMaxEV100);
     w.Key("exposureLowPercentile", p.exposureLowPercentile);
     w.Key("exposureHighPercentile", p.exposureHighPercentile);
+    w.Key("exposureManualEV100", p.exposureManualEV100);
+    w.Key("cameraAperture", p.cameraAperture);
+    w.Key("cameraShutterInv", p.cameraShutterInv);
+    w.Key("cameraISO", p.cameraISO);
     w.Key("bBloomEnabled", p.bBloomEnabled);
     w.Key("bloomThreshold", p.bloomThreshold);
     w.Key("bloomSoftThreshold", p.bloomSoftThreshold);
@@ -635,13 +640,18 @@ void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
 void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p)
 {
     p.bExposureEnabled = r.Bool("bExposureEnabled", p.bExposureEnabled);
+    p.exposureMode = static_cast<Core::ExposureMode>(r.Int("exposureMode", static_cast<int32_t>(p.exposureMode)));
     p.exposureTargetLuminance = r.Float("exposureTargetLuminance", p.exposureTargetLuminance);
     p.exposureSpeedBrighten = r.Float("exposureSpeedBrighten", p.exposureSpeedBrighten);
     p.exposureSpeedDarken = r.Float("exposureSpeedDarken", p.exposureSpeedDarken);
-    p.exposureMinGainEV = r.Float("exposureMinGainEV", p.exposureMinGainEV);
-    p.exposureMaxGainEV = r.Float("exposureMaxGainEV", p.exposureMaxGainEV);
+    p.exposureMinEV100 = r.Float("exposureMinEV100", p.exposureMinEV100);
+    p.exposureMaxEV100 = r.Float("exposureMaxEV100", p.exposureMaxEV100);
     p.exposureLowPercentile = r.Float("exposureLowPercentile", p.exposureLowPercentile);
     p.exposureHighPercentile = r.Float("exposureHighPercentile", p.exposureHighPercentile);
+    p.exposureManualEV100 = r.Float("exposureManualEV100", p.exposureManualEV100);
+    p.cameraAperture = r.Float("cameraAperture", p.cameraAperture);
+    p.cameraShutterInv = r.Float("cameraShutterInv", p.cameraShutterInv);
+    p.cameraISO = r.Float("cameraISO", p.cameraISO);
     p.bBloomEnabled = r.Bool("bBloomEnabled", p.bBloomEnabled);
     p.bloomThreshold = r.Float("bloomThreshold", p.bloomThreshold);
     p.bloomSoftThreshold = r.Float("bloomSoftThreshold", p.bloomSoftThreshold);

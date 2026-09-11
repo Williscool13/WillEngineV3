@@ -89,6 +89,7 @@ struct ProbeBakeSystem
     Core::GroundTruthMode stashedGroundTruthMode{Core::GroundTruthMode::None};
     int32_t stashedGroundTruthSpp{1};
     Core::HeapArray<uint16_t> faceBuffers[6]{};
+    float facePreExposure[6]{};
 
     /** Probe entities awaiting a bake; drained one at a time from the Idle phase. */
     Core::InlineVector<entt::entity, 64> bakeQueue{};

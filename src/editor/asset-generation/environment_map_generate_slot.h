@@ -53,7 +53,7 @@ struct EnvironmentMapGenerateSlot
     void Launch(EnvironmentMapGenerateSlotHandle _slotHandle, const Core::Path& _imagePath, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId, uint64_t _contentVersion);
 
     /** Assembles a prefiltered cubemap asset from 6 captured RGBA16F probe faces (S x S) downsampled to targetResolution, writing a .wprobe at _outputPath. Faces are moved in. */
-    void LaunchProbe(EnvironmentMapGenerateSlotHandle _slotHandle, Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId, uint64_t _probeId, const Engine::ProbeBakeSnapshot& _snapshot, uint64_t _contentVersion);
+    void LaunchProbe(EnvironmentMapGenerateSlotHandle _slotHandle, Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& _outputPath, Engine::EnvironmentMapID _environmentMapId, uint64_t _probeId, const Engine::ProbeBakeSnapshot& _snapshot, uint64_t _contentVersion, float _radianceScale);
 
     void Clear();
 
@@ -100,6 +100,7 @@ private:
     uint32_t probeCaptureSize{0};
     uint64_t probeId{0};
     Engine::ProbeBakeSnapshot probeSnapshot{};
+    float probeRadianceScale{1.0f};
     Core::HeapArray<uint16_t> probeFaces[6]{};
 
     Render::AllocatedImage probeSourceImage;

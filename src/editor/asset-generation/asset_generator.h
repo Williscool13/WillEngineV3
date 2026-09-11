@@ -125,6 +125,7 @@ struct ProbeAssembleRequest
     uint64_t probeId{0};
     Engine::ProbeBakeSnapshot snapshot{};
     uint64_t contentVersion{1};
+    float radianceScale{1.0f};
 };
 
 struct FontGenerateRequest
@@ -175,7 +176,7 @@ public:
     void RequestEnvironmentMapGenerate(const Core::Path& hdriPath, const Core::Path& outputPath);
 
     /** Assembles the 6 captured probe faces (moved in) into a prefiltered .wprobe; completion is surfaced through the environment-map complete queue. */
-    void RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot);
+    void RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot, float radianceScale);
 
     bool TryDequeueCubemapGenerateComplete(EnvironmentMapGenerateComplete& outResult);
 

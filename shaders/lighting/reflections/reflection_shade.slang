@@ -123,7 +123,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                                 float3 hitN = normalize(mul(float3x3(scene.invView), normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(hitCoord, 0)).r))));
                                 float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
                                 if (dot(hitN, prevWorldN) > 0.5) {
-                                    radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb;
+                                    radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb / scene.prevPreExposure;
                                     bShaded = true;
                                 }
                             }
@@ -196,7 +196,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                                 float3 hitN = DecodeHitNormal(pc, inst, hit.primIndex, hit.bary);
                                 float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
                                 if (dot(hitN, prevWorldN) > 0.5) {
-                                    radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb;
+                                    radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb / scene.prevPreExposure;
                                     bShaded = true;
                                 }
                             }
@@ -236,7 +236,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
 
     // Incoming radiance is already the demodulated form: the outgoing specular is specReflectance * radiance, and every consumer applies that factor at remodulation.
     // Packed (rcoord) when a checkerboard-aware consumer (the merged lighting resolve or the reflection RELAX prepass) will resolve it; otherwise dense-duplicated to both fields so a direct .Load(pixel) fallback (denoiser off, full-rate resolve, or ReBLUR/plain modes) sees no holes. Matches lighting_pbr_restir.slang's writeCoord logic exactly.
-    float4 outColor = float4(radiance, hitTOut);
+    float4 outColor = float4(radiance * scene.preExposure, hitTOut);
     uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
     rdgStorageFloat4[pc.outputIndex][writeCoord] = outColor;
     if (field != 0u && pc.bCheckerboardPacked == 0u) {

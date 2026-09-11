@@ -16,7 +16,8 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              Core::Array<uint32_t, 2> displayExtent,
                              const RenderTargets& targets,
                              float deltaTime,
-                             uint64_t frameNumber)
+                             uint64_t frameNumber,
+                             float preExposure)
 {
     PostProcessContext ctx{
         .graph = graph,
@@ -27,6 +28,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
         .preAaExtent = preAaExtent,
         .displayExtent = displayExtent,
         .deltaTime = deltaTime,
+        .preExposure = preExposure,
         .frameNumber = frameNumber,
         .pipelines = pipelineManager,
     };

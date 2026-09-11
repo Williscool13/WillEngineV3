@@ -88,7 +88,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
 
         if (pc.giGatherMode != 0u) {
-            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb;
+            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb / pc.sceneData[pc.sceneDataIndex].preExposure;
         } else {
             if (pc.skyboxIndex >= 0) {
                 indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
@@ -114,7 +114,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         float3 reflectionSpecular = float3(0.0);
         if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
             float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
-            reflectionSpecular = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb * (F0 * envBRDF.x + envBRDF.y);
+            reflectionSpecular = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb / pc.sceneData[pc.sceneDataIndex].preExposure * (F0 * envBRDF.x + envBRDF.y);
         } else {
             if (pc.skyboxIndex >= 0) {
                 reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
@@ -140,5 +140,5 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;
-    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor * pc.sceneData[pc.sceneDataIndex].preExposure, 1.0);
 }

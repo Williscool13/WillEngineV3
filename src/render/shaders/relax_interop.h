@@ -98,7 +98,7 @@ SHADER_PUBLIC struct RelaxDiffuseSpecularConstants
     SHADER_PUBLIC uint gDiffCheckerboard;
     SHADER_PUBLIC uint gSpecCheckerboard;
     SHADER_PUBLIC uint gResetHistory;
-    SHADER_PUBLIC uint _pad1;
+    SHADER_PUBLIC float gHistoryExposureRatio;
 };
 
 #endif // WILL_ENGINE_RELAX_INTEROP_H

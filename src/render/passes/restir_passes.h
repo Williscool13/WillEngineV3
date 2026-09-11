@@ -33,7 +33,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        uint32_t activeCheckerboardField,
                        const Core::ReflectionConfiguration& reflectionConfig,
                        bool bResetHistory,
-                       bool bSkipReflectionPiggyback);
+                       bool bSkipReflectionPiggyback,
+                       float preExposure);
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,

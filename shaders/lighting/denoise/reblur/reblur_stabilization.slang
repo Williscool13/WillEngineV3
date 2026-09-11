@@ -145,7 +145,7 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     // The carried luma history aliases unwritten memory on the first frame, so seed it from the current signal.
     float smbDiffLumaHistory = diffLuma;
     if (rc.gResetHistory == 0) {
-        smbDiffLumaHistory = max(FetchLumaHistory(pc.prevDiffLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0);
+        smbDiffLumaHistory = max(FetchLumaHistory(pc.prevDiffLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0) * rc.gHistoryExposureRatio;
     }
 
     float diffAntilag = ReblurComputeAntilag(smbDiffLumaHistory, diffLumaM1, diffLumaSigma, smbFootprintQuality * data1.x, rc.gAntilagSettings, rc.gFramerateScale);
@@ -190,8 +190,8 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     float smbSpecLumaHistory = specLuma;
     float vmbSpecLumaHistory = specLuma;
     if (rc.gResetHistory == 0) {
-        smbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0);
-        vmbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, vmbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, vmbOcclusion), 0.0);
+        smbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0) * rc.gHistoryExposureRatio;
+        vmbSpecLumaHistory = max(FetchLumaHistory(pc.prevSpecLumaStabIndex, vmbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, vmbOcclusion), 0.0) * rc.gHistoryExposureRatio;
     }
     float specLumaHistory = lerp(smbSpecLumaHistory, vmbSpecLumaHistory, virtualHistoryAmount);
 

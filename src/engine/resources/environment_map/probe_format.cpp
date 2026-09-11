@@ -45,6 +45,7 @@ bool WriteWProbeHeader(Core::Vector<std::byte>& out, const WProbeHeader& header)
     AppendTextF(out, "rotation 0x%08x 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.rotation[0]), FloatBits(header.snapshot.rotation[1]), FloatBits(header.snapshot.rotation[2]), FloatBits(header.snapshot.rotation[3]));
     AppendTextF(out, "scale 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.scale[0]), FloatBits(header.snapshot.scale[1]), FloatBits(header.snapshot.scale[2]));
     AppendTextF(out, "capture_offset 0x%08x 0x%08x 0x%08x\n", FloatBits(header.snapshot.captureOffset[0]), FloatBits(header.snapshot.captureOffset[1]), FloatBits(header.snapshot.captureOffset[2]));
+    AppendTextF(out, "radiance_scale 0x%08x\n", FloatBits(header.radianceScale));
     AppendText(out, "end_header\n");
     return true;
 }
@@ -97,6 +98,7 @@ static std::optional<WProbeHeader> ReadWProbeHeaderInternal(const void* data, ui
         else if (strncmp(line, "rotation ", 9) == 0) { ParseFloats(line + 9, lineEnd, header.snapshot.rotation, 4); }
         else if (strncmp(line, "scale ", 6) == 0) { ParseFloats(line + 6, lineEnd, header.snapshot.scale, 3); }
         else if (strncmp(line, "capture_offset ", 15) == 0) { ParseFloats(line + 15, lineEnd, header.snapshot.captureOffset, 3); }
+        else if (strncmp(line, "radiance_scale ", 15) == 0) { ParseFloats(line + 15, lineEnd, &header.radianceScale, 1); }
     }
     return std::nullopt;
 }

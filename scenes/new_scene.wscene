@@ -1072,7 +1072,7 @@ translation|0xc0e80000|0xc0300000|0xc29d8000
 ;
 3578748455783499142
 color|0x00000000|0x3cc0c0c1|0x3f52d2d3
-intensity|0x40000000
+intensity|0x48000000
 range|0x41f00000
 ;
 ;
@@ -1134,7 +1134,7 @@ translation|0xc1240000|0xc0300000|0xc29d8000
 ;
 3578748455783499142
 color|0x3f4ccccd|0x3cc0c0c1|0x00000000
-intensity|0x40000000
+intensity|0x48000000
 range|0x41f00000
 ;
 ;
@@ -6744,7 +6744,7 @@ rotation|0xbed25a98|0xbe4285b0|0x3f4fd88f|0xbebcc643
 scale|0x3f7fffdc|0x3f7fffdc|0x3f7fffdc
 ;
 3908699049357945453
-intensity|0x40800000
+intensity|0x48800000
 angularRadiusDegrees|0x3e851eb8
 ;
 15708659991543375132
@@ -9684,7 +9684,7 @@ scale|0x3fffff9c|0x3fffff9c|0x3fffff9c
 ;
 3578748455783499142
 color|0x3f4ccccd|0x3cc0c0c1|0x00000000
-intensity|0x41200000
+intensity|0x49200000
 range|0x41a00000
 ;
 ;
@@ -10543,7 +10543,7 @@ scale|0x3e7fff2b|0x3e7fff2b|0x3e7fff2b
 ;
 3578748455783499142
 color|0x3f4ccccd|0x3cc0c0c1|0x00000000
-intensity|0x41200000
+intensity|0x49200000
 range|0x41a00000
 ;
 ;

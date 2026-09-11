@@ -104,7 +104,7 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
                     }
                     float3 lerpDelta = (1.0 - hysteresis) * delta;
                     if (DDGIMaxComponent(result) < DDGIMaxComponent(previous.rgb)) {
-                        const float minDarkeningStep = 1.0 / 1024.0;
+                        const float minDarkeningStep = 9.1896 / 1024.0;
                         lerpDelta = min(max(float3(minDarkeningStep), abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
                     }
                     result = previous.rgb + lerpDelta;

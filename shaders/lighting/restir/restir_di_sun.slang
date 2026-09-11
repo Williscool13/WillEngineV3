@@ -173,7 +173,7 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
         }
         float sunFlip = clamp((winnerVis - visPrev) + blockerFlip, -1.0, 1.0);
         float sunMag = max(max(winnerVis, visPrev), abs(blockerFlip));
-        float2 sunSig = float2(pSun * sunFlip, pSun * sunMag);
+        float2 sunSig = float2(pSun * sunFlip, pSun * sunMag) * scene.preExposure;
 
         rdgStorageFloat2[pc.signalIndex][pixel] = rdgStorageFloat2[pc.signalIndex][pixel] + sunSig;
         if (field != 0u) {

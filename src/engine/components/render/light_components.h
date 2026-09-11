@@ -27,7 +27,7 @@ struct AreaLightComponent
     static constexpr const char* COMPONENT_NAME = "AreaLightComponent";
 
     Vec3 color{1.0f, 1.0f, 1.0f};
-    float intensity{1.0f};
+    float intensity{65536.0f}; // nits
     float halfWidth{1.0f};
     float halfHeight{1.0f};
     float range{10.0f};
@@ -66,7 +66,7 @@ struct SphereLightComponent
     static constexpr const char* COMPONENT_NAME = "SphereLightComponent";
 
     Vec3 color{1.0f, 1.0f, 1.0f};
-    float intensity{1.0f};
+    float intensity{65536.0f}; // nits
     float radius{0.5f};
     float range{10.0f};
     bool drawEmissiveSurface{true};
@@ -115,7 +115,7 @@ struct DirectionalLightComponent
     static constexpr const char* COMPONENT_NAME = "DirectionalLightComponent";
 
     Vec3 color{1.0f, 1.0f, 1.0f};
-    float intensity{2.0f};
+    float intensity{131072.0f}; // lux
     int32_t priority{0};
     float angularRadiusDegrees{1.0f}; // sun-disk half-angle for soft shadows; 0 = hard
 
@@ -134,7 +134,7 @@ struct SkyboxComponent
     static constexpr const char* COMPONENT_NAME = "SkyboxComponent";
 
     Engine::EnvironmentMapID envMap{};
-    float intensity{1.0f};
+    float intensity{65536.0f}; // env map texel value to nits
     int32_t priority{0};
 
     // Runtime-only: refcounted cubemap acquired lazily by the skybox gather.

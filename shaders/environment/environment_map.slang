@@ -9,10 +9,10 @@ import shader_constants;
 [shader("fragment")]
 float4 FragmentSkybox(uniform EnvironmentSkyboxPushConstant pc, FullscreenPassVertexOutput input) : SV_Target0
 {
-    if (pc.cubemapIndex == -1) {
-        return float4(0.0, 0.1, 0.2, 1.0);
-    }
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
+    if (pc.cubemapIndex == -1) {
+        return float4(float3(0.0, 0.1, 0.2) * 65536.0 * scene.preExposure, 1.0);
+    }
 
     float2 uv = input.uv;
     float2 ndc = uv * 2.0 - 1.0;
@@ -22,5 +22,5 @@ float4 FragmentSkybox(uniform EnvironmentSkyboxPushConstant pc, FullscreenPassVe
 
     int mip = pc.skyboxLOD < 4 ? pc.skyboxLOD : ENVIRONMENT_MAP_DIFFUSE_MIP;
     float4 sky = assetCubemaps[pc.cubemapIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, mip);
-    return float4(sky.rgb * pc.intensity, sky.a);
+    return float4(sky.rgb * pc.intensity * scene.preExposure, sky.a);
 }

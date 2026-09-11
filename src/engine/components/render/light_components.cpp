@@ -40,7 +40,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     if (open) {
         auto& comp = registry.get<AreaLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##al", &comp.color.r);
-        modified |= ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::DragFloat("Luminance (nits)##al", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
         if (ImGui::Checkbox("Disk##al", &comp.bDisk)) {
             registry.emplace_or_replace<LightSurfacePendingTag>(entity);
             modified = true;
@@ -150,7 +150,7 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
     if (open) {
         auto& comp = registry.get<DirectionalLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##dl", &comp.color.r);
-        modified |= ImGui::DragFloat("Intensity##dl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::DragFloat("Illuminance (lux)##dl", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e6f, "%.0f");
         modified |= ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
         modified |= ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
     }
@@ -240,7 +240,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
     if (open) {
         auto& comp = registry.get<SphereLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##sl", &comp.color.r);
-        modified |= ImGui::DragFloat("Intensity##sl", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::DragFloat("Luminance (nits)##sl", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
         modified |= ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f);
         modified |= ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
         modified |= ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
@@ -370,7 +370,7 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
         }
         ImGui::Checkbox("Show Probes In Selection##sky", &bShowProbes);
 
-        modified |= ImGui::DragFloat("Intensity##sky", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        modified |= ImGui::DragFloat("Intensity##sky", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
         modified |= ImGui::DragInt("Priority##sky", &comp.priority, 1.0f, -100, 100);
     }
 

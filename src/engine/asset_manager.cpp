@@ -1545,6 +1545,7 @@ void AssetManager::Scan()
                     probeInfo.resolution = header->resolution;
                     probeInfo.snapshot = header->snapshot;
                     probeInfo.contentVersion = header->contentVersion;
+                    probeInfo.radianceScale = header->radianceScale;
 
                     // A probe is a cubemap at runtime; register it into the cubemap cache keyed by its EnvironmentMapID so LoadCubemap and the existing hot-reload path cover probes unchanged.
                     CachedCubemapMetadata& cached = cubemapCache[envMapId];

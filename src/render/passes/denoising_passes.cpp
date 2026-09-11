@@ -36,7 +36,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                         float checkerboardResolveAccumSpeed,
                         bool bDDGIApply,
                         const Core::ReflectionConfiguration& reflectionConfig,
-                        uint32_t giGatherMode)
+                        uint32_t giGatherMode,
+                        float historyExposureRatio)
 {
     ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
@@ -178,6 +179,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gOrthoMode = 0.0f;
     rc.gUnproject = tanHalfFovY * 2.0f / static_cast<float>(height);
     rc.gFramerateScale = params.framerateScale;
+    rc.gHistoryExposureRatio = historyExposureRatio;
     rc.gMinHitDistanceWeight = params.minHitDistanceWeight;
     rc.gRoughnessEdgeStoppingEnabled = params.roughnessEdgeStoppingEnabled ? 1u : 0u;
     rc.gFrameIndex = static_cast<uint32_t>(frameNumber);
@@ -671,7 +673,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          float checkerboardResolveAccumSpeed,
                          bool bDDGIApply,
                          const Core::ReflectionConfiguration& reflectionConfig,
-                          uint32_t giGatherMode)
+                          uint32_t giGatherMode,
+                          float historyExposureRatio)
 {
     ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
@@ -796,6 +799,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     rc.gDenoisingRange = params.denoisingRange;
     rc.gPlaneDistSensitivity = params.planeDistanceSensitivity;
     rc.gFramerateScale = params.framerateScale;
+    rc.gHistoryExposureRatio = historyExposureRatio;
     rc.gMinBlurRadius = params.minBlurRadius;
     rc.gMaxBlurRadius = params.maxBlurRadius;
     // Checkerboard forces the prepass to run for hole resolve; "prepass disabled" is radius 0.

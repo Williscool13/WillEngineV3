@@ -22,7 +22,8 @@
 namespace Render
 {
 static constexpr float EXPOSURE_MIN_LOG_LUMINANCE = -8.0f;
-static constexpr float EXPOSURE_MAX_LOG_LUMINANCE = 6.0f;
+static constexpr float EXPOSURE_MIN_LOG_RANGE = 14.0f;
+static constexpr float EXPOSURE_LOG_HEADROOM = 2.0f;
 
 static uint32_t BloomMipCount(uint32_t width)
 {
@@ -70,6 +71,31 @@ static glm::mat3 ComputeWhiteBalanceMatrix(float temperature, float tint)
     return m / std::max(luma, 1e-4f);
 }
 
+float EV100ToLuminance(float ev100)
+{
+    return std::exp2(ev100) * 0.125f;
+}
+
+float CameraEV100(const Core::PostProcessConfiguration& config)
+{
+    if (config.exposureMode == Core::ExposureMode::Physical) {
+        return std::log2(config.cameraAperture * config.cameraAperture * config.cameraShutterInv * 100.0f / config.cameraISO);
+    }
+    return config.exposureManualEV100;
+}
+
+static void ReadbackAdaptedLuminance(RenderGraph& graph)
+{
+    if (!graph.HasBuffer("readback_buffer"_sid)) { return; }
+    auto& readbackPass = graph.AddPass("[Exposure] Readback Adapted Luminance"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::PostProcessing);
+    readbackPass.ReadTransferBuffer("luminance_buffer"_sid);
+    readbackPass.WriteTransferBuffer("readback_buffer"_sid);
+    readbackPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const VkBufferCopy copy{0, offsetof(ReadbackStruct, adaptedLuminance), sizeof(float)};
+        vkCmdCopyBuffer(cmd, graph.GetBufferHandle("luminance_buffer"_sid), graph.GetBufferHandle("readback_buffer"_sid), 1, &copy);
+    });
+}
+
 StringID PPExposure(PostProcessContext& ctx, StringID input)
 {
     if (!ctx.config.bExposureEnabled) { return input; }
@@ -80,6 +106,16 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     const Core::PostProcessConfiguration& config = ctx.config;
     float deltaTime = ctx.deltaTime;
 
+    if (config.exposureMode != Core::ExposureMode::Auto) {
+        auto& cameraPass = graph.AddPass("[Exposure] Camera Luminance"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
+        cameraPass.WriteTransferBuffer("luminance_buffer"_sid);
+        cameraPass.Execute([luminance = EV100ToLuminance(CameraEV100(config))](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            vkCmdUpdateBuffer(cmd, graph.GetBufferHandle("luminance_buffer"_sid), 0, sizeof(float), &luminance);
+        });
+        ReadbackAdaptedLuminance(graph);
+        return input;
+    }
+
     // Overlays (text/sprites/debug lines) composite pre-AA into the chain input; meter the clean snapshot when it exists
     StringID meteringSource = input;
     if (graph.HasTexture("lit_color_preoverlay"_sid) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
@@ -88,7 +124,7 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
     graph.CreateBuffer("luminance_histogram"_sid, POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
 
-    // The persistent luminance buffer is declared by the frame setup (TAA reads it first); a first life still needs its seed.
+    // The persistent luminance buffer is declared by the frame setup; a first life still needs its seed.
     const bool bInitLuminance = !graph.ResourceHasVersion("luminance_buffer"_sid, 0);
     if (bInitLuminance) {
         auto& initPass = graph.AddPass("[Exposure] Init Luminance"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::PostProcessing);
@@ -109,13 +145,15 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     const uint32_t gridHeight = (height + 1) / 2;
     const uint32_t phase = static_cast<uint32_t>(ctx.frameNumber) & 3u;
 
+    const float logLuminanceRange = std::max(EXPOSURE_MIN_LOG_RANGE, std::log2(EV100ToLuminance(config.exposureMaxEV100)) + EXPOSURE_LOG_HEADROOM - EXPOSURE_MIN_LOG_LUMINANCE);
+
     auto& histogramPass = graph.AddPass("[Exposure] Build Histogram"_sid, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     histogramPass.ReadSampledImage(meteringSource);
     histogramPass.ReadWriteBuffer("luminance_histogram"_sid);
-    histogramPass.Execute([width, height, gridWidth, gridHeight, phase, meteringSource, pipelines](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        constexpr float logLuminanceRange = EXPOSURE_MAX_LOG_LUMINANCE - EXPOSURE_MIN_LOG_LUMINANCE;
+    histogramPass.Execute([width, height, gridWidth, gridHeight, phase, meteringSource, pipelines, logLuminanceRange, preExposure = ctx.preExposure](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         HistogramBuildPushConstant pc{
             .hdrImageIndex = graph.GetSampledImageViewDescriptorIndex(meteringSource),
+            .preExposure = preExposure,
             .histogramBufferAddress = graph.GetBufferAddress("luminance_histogram"_sid),
             .width = width,
             .height = height,
@@ -136,18 +174,18 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     const float highPercentile = std::clamp(config.exposureHighPercentile, lowPercentile + 0.01f, 1.0f);
     const float alphaBrighten = 1.0f - std::exp2(-config.exposureSpeedBrighten * deltaTime);
     const float alphaDarken = 1.0f - std::exp2(-config.exposureSpeedDarken * deltaTime);
-    const float minAdaptedLuminance = config.exposureTargetLuminance * std::exp2(-config.exposureMaxGainEV);
-    const float maxAdaptedLuminance = config.exposureTargetLuminance * std::exp2(-config.exposureMinGainEV);
+    const float minAdaptedLuminance = EV100ToLuminance(config.exposureMinEV100);
+    const float maxAdaptedLuminance = std::max(minAdaptedLuminance, EV100ToLuminance(config.exposureMaxEV100));
 
     auto& exposurePass = graph.AddPass("[Exposure] Calculate Exposure"_sid, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     exposurePass.ReadBuffer("luminance_histogram"_sid);
     exposurePass.ReadWriteBuffer("luminance_buffer"_sid);
-    exposurePass.Execute([gridWidth, gridHeight, pipelines, lowPercentile, highPercentile, alphaBrighten, alphaDarken, minAdaptedLuminance, maxAdaptedLuminance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    exposurePass.Execute([gridWidth, gridHeight, pipelines, logLuminanceRange, lowPercentile, highPercentile, alphaBrighten, alphaDarken, minAdaptedLuminance, maxAdaptedLuminance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         ExposureCalculatePushConstant pc{
             .histogramBufferAddress = graph.GetBufferAddress("luminance_histogram"_sid),
             .luminanceBufferAddress = graph.GetBufferAddress("luminance_buffer"_sid),
             .minLogLuminance = EXPOSURE_MIN_LOG_LUMINANCE,
-            .logLuminanceRange = EXPOSURE_MAX_LOG_LUMINANCE - EXPOSURE_MIN_LOG_LUMINANCE,
+            .logLuminanceRange = logLuminanceRange,
             .alphaBrighten = alphaBrighten,
             .alphaDarken = alphaDarken,
             .lowPercentile = lowPercentile,
@@ -162,6 +200,8 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, 1, 1, 1);
     });
+
+    ReadbackAdaptedLuminance(graph);
 
     return input;
 }
@@ -603,7 +643,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     thresholdPass.ReadSampledImage(input);
     if (bExposureEnabled) { thresholdPass.ReadBuffer("luminance_buffer"_sid); }
     thresholdPass.ReadWriteImage("bloom_chain"_sid);
-    thresholdPass.Execute([width, height, halfWidth, halfHeight, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp, targetLuminance, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    thresholdPass.Execute([width, height, halfWidth, halfHeight, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp, targetLuminance, bExposureEnabled, preExposure = ctx.preExposure](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         BloomThresholdPushConstant pc{
             .outputExtent = {halfWidth, halfHeight},
             .inputExtent = {width, height},
@@ -615,6 +655,7 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
             .clampValue = bloomClamp,
             .targetLuminance = targetLuminance,
             .bExposureEnabled = bExposureEnabled ? 1u : 0u,
+            .preExposure = preExposure,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("bloom_threshold"_sid);
@@ -700,7 +741,7 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
     constants.outputExtent = {width, height};
     constants.tonemapOperator = config.tonemapOperator;
     constants.targetLuminance = config.exposureTargetLuminance;
-    constants.exposureBias = config.bColorGradingEnabled ? std::exp2(config.colorGradingExposure) : 1.0f;
+    constants.exposureBias = (config.bColorGradingEnabled ? std::exp2(config.colorGradingExposure) : 1.0f) / ctx.preExposure;
     constants.bloomIntensity = config.bloomIntensity / static_cast<float>(BloomMipCount(width));
     constants.aspect = aspect;
 

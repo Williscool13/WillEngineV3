@@ -7,7 +7,13 @@
 # Header: WStaticModelHeader in model_format.h
 
 ================================================================================
-VERSION 6  (current)
+VERSION 9  (current)
+================================================================================
+- Material `emissiveFactor.w` is luminance in nits (physical light units). Import maps a unitless
+  glTF emissive strength of 1 to 65536 nits; version 8 files were migrated in place (x65536).
+
+================================================================================
+VERSION 6
 ================================================================================
 - Added per-primitive bounds to `PrimitiveProperty`: `boundingBoxMin`/`boundingBoxMax`
   (Vec3) and `boundingSphere` (Vec4, xyz center + w radius). `primitiveProperties` is

@@ -244,6 +244,7 @@ void ComputeDonutTaa(
         } else {
             history = rdgTexturesFloat4[pc.feedbackInputIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], sourcePos * pc.outputTextureSizeInv, 0).rgb;
         }
+        history = PQEncode(PQDecode(history) * (pc.sceneData.preExposure / pc.sceneData.prevPreExposure));
 
         float3 historyClamped = history;
         if (clampingFactor >= 0.0) {

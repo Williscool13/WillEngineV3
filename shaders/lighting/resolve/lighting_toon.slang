@@ -43,8 +43,8 @@ void ComputeLightingToon(uniform VisibilityLightingPushConstant pc, uint3 gid : 
     const float3 lightColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb;
     float3 directLight = li.albedo.xyz * toonDiffuse * lightIntensity * lightColor;
 
-    float3 ambient = li.albedo.xyz * 0.15 * gtao;
+    float3 ambient = li.albedo.xyz * 9830.4 * gtao;
 
     float3 finalColor = directLight + ambient + li.emissiveRGB;
-    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor * pc.sceneData[pc.sceneDataIndex].preExposure, 1.0);
 }

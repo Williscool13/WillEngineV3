@@ -467,6 +467,21 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         statisticsManager.scratch.meshletRegionVisible[r] = readbackData->meshletRegionVisible[r];
     }
     statisticsManager.scratch.shadingDispatches = readbackData->shadingDispatches;
+
+    const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
+    prevPreExposure = preExposure;
+    preExposure = 1.0f;
+    if (ppConfig.bExposureEnabled) {
+        if (ppConfig.exposureMode != Core::ExposureMode::Auto) {
+            preExposure = ppConfig.exposureTargetLuminance / EV100ToLuminance(CameraEV100(ppConfig));
+        }
+        else {
+            const float minLuminance = EV100ToLuminance(ppConfig.exposureMinEV100);
+            const float maxLuminance = std::max(minLuminance, EV100ToLuminance(ppConfig.exposureMaxEV100));
+            const float adaptedLuminance = readbackData->adaptedLuminance > 0.0f ? readbackData->adaptedLuminance : minLuminance;
+            preExposure = ppConfig.exposureTargetLuminance / std::clamp(adaptedLuminance, minLuminance, maxLuminance);
+        }
+    }
     statisticsManager.scratch.lightingDispatches = readbackData->lightingDispatches;
     statisticsManager.scratch.radianceCache.occupiedSlots = readbackData->wcOccupied;
     statisticsManager.scratch.radianceCache.cellsCarried = readbackData->wcCarried;
@@ -601,7 +616,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     }
 
     if (viewFamily.postProcessConfig.bExposureEnabled) {
-        renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+        renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0,
+                                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
     }
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
@@ -790,7 +806,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                         previousRestirCheckerboardField = restirCheckerboardField;
                         previousRestirFullRateResolve = bRestirFullRateResolve;
                         const bool bScreenSpaceTrace = frameBuffer.reflection.bScreenSpaceTrace;
-                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection, bResetReSTIRHistory, bScreenSpaceTrace);
+                        SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection, bResetReSTIRHistory, bScreenSpaceTrace, preExposure);
                         if (bScreenSpaceTrace) {
                             SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection);
                         }
@@ -802,10 +818,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                         const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
                         if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
+                            SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode);
+                            SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField, denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure);
                         }
                         else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
                             const NrdBackend nrdBackend = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR ? NrdBackend::Reblur : NrdBackend::Relax;
@@ -926,7 +942,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::FSR2:
-                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.reflection, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.reflection, frameBuffer.timeFrame.renderDeltaTime, frameNumber, preExposure, prevPreExposure);
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::SMAAT2X:
@@ -985,12 +1001,13 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     vkCmdCopyImageToBuffer2(_cmd, &copyInfo);
                 });
 
+                screenCapture->probeCapturePreExposure = preExposure;
                 screenCapture->probeCapturePendingSlot = frameIndex;
                 screenCapture->StartProbeCapture();
             }
         }
 
-        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+        targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber, preExposure);
 
         if (!viewFamily.screenFade.bDrawOverUI) {
             targets.colorOutput = PPScreenFade(*renderGraph, pipelineManager, viewFamily.screenFade, postAaExtent, targets.colorOutput);
@@ -1487,6 +1504,7 @@ void RenderThread::RegisterDebugReadbacks()
             ImGui::Text("Pixel (%u, %u)", debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]);
             ImGui::Text("HDR: %.5f  %.5f  %.5f  (A %.3f)", rg.x, rg.y, ba.x, ba.y);
             ImGui::Text("Luminance: %.5f", luminance);
+            ImGui::Text("Scene luminance: %.5f", luminance / preExposure);
         }
     );
 
@@ -1721,11 +1739,15 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     // Scene Data
     auto* sceneData = static_cast<SceneData*>(renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE));
     sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
+    sceneData[0].preExposure = preExposure;
+    sceneData[0].prevPreExposure = prevPreExposure;
     // Portal Scene Data
     if (!viewFamily.portalViews.IsEmpty()) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
+        portalSceneData.preExposure = preExposure;
+        portalSceneData.prevPreExposure = prevPreExposure;
         sceneData[1] = portalSceneData;
     }
 

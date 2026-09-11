@@ -204,11 +204,11 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
         }
     }
 
-    float3 diffuseOut = ToonBandDiffuse(diffuseRadiance / max(li.albedo.rgb, float3(0.01, 0.01, 0.01)));
+    float3 diffuseOut = ToonBandDiffuse(diffuseRadiance * scene.preExposure / max(li.albedo.rgb, float3(0.01, 0.01, 0.01)));
 
     float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
     float3 specReflectance = F0 * envBRDF.x + envBRDF.y;
-    float3 specularOut = specularRadiance / max(specReflectance, float3(0.01, 0.01, 0.01));
+    float3 specularOut = specularRadiance * scene.preExposure / max(specReflectance, float3(0.01, 0.01, 0.01));
 
     float diffHitT = (isnan(diffHitDistance) || isinf(diffHitDistance)) ? 0.0 : diffHitDistance;
     float specHitT = specHitDistance;

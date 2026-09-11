@@ -1521,7 +1521,7 @@ void WillEngine::Run()
 
             if (engineContext->IsProbeAssemblePending()) {
                 Engine::ProbeAssembleStaging& probeReq = engineContext->probeAssemble;
-                assetGenerator->RequestProbeAssemble(probeReq.faces, probeReq.captureSize, probeReq.targetResolution, probeReq.outputPath, probeReq.probeId, probeReq.snapshot);
+                assetGenerator->RequestProbeAssemble(probeReq.faces, probeReq.captureSize, probeReq.targetResolution, probeReq.outputPath, probeReq.probeId, probeReq.snapshot, probeReq.radianceScale);
                 probeReq.bPending.store(false, std::memory_order_release);
             }
         }
@@ -1642,6 +1642,7 @@ void WillEngine::Run()
                         engineContext->probeCapture.pixels = Core::HeapArray<uint16_t>(&memoryManager.AssetsScratch(), Core::AllocTag::EngineContext, halfCount);
                         memcpy(engineContext->probeCapture.pixels.Data(), capturePixels, halfCount * sizeof(uint16_t));
                         engineContext->probeCapture.captureSize = captureSquare;
+                        engineContext->probeCapture.preExposure = renderThread->GetProbeCapturePreExposure();
                         engineContext->probeCapture.bReady.store(true, std::memory_order_release);
                     }
                     renderThread->ReleaseProbeCapture();

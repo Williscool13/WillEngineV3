@@ -4,7 +4,12 @@
 # Loaders reject major != *_MAJOR_VERSION. Stale .wprobe requires re-bake.
 
 ================================================================================
-.wprobe VERSION 2.0  (current)
+.wprobe VERSION 2.1  (current)
+================================================================================
+- "radiance_scale" (hex float bits): stored radiance * scale = nits. Bakes rescale every face to the smallest face pre-exposure.
+
+================================================================================
+.wprobe VERSION 2.0
 ================================================================================
 - Header snapshot floats now hex bits ("0x%08x").
 

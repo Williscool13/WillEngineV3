@@ -743,8 +743,10 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         glm::quat srcRotation = worldTransform.rotation;
         glm::vec3 srcScale = worldTransform.scale;
         glm::vec3 srcCaptureOffset = probe.captureOffset;
+        float radianceScale = probe.standInIntensity;
         if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
             if (const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+                radianceScale = info->radianceScale;
                 const Engine::ProbeBakeSnapshot& snap = info->snapshot;
                 srcTranslation = glm::vec3(snap.translation[0], snap.translation[1], snap.translation[2]);
                 srcRotation = glm::quat(snap.rotation[0], snap.rotation[1], snap.rotation[2], snap.rotation[3]);
@@ -767,6 +769,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
             vf.probePreviews.PushBack(Core::ProbePreviewSphere{
                 .cubemapIndex = cubemap->bindlessHandle.index,
                 .position = capturePos,
+                .radianceScale = radianceScale,
             });
         }
         if (!probe.bEnabled) { continue; }
@@ -781,7 +784,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
             .cubemapIndex = cubemap->bindlessHandle.index,
             .fadeMargin = probe.fadeMargin,
             .flags = flags,
-            .intensity = config.intensity,
+            .intensity = config.intensity * radianceScale,
         });
     }
 }

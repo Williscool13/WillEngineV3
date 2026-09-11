@@ -133,6 +133,7 @@ public:
     bool IsProbeCaptureReady() const { return screenCapture->IsProbeCaptureReady(); }
     const uint16_t* GetProbeCapturePixels() const { return screenCapture->GetProbeCapturePixels(); }
     uint32_t GetProbeCaptureSize() const { return screenCapture->GetProbeCaptureCaptureSize(); }
+    float GetProbeCapturePreExposure() const { return screenCapture->probeCapturePreExposure; }
     void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
 
 private:
@@ -195,6 +196,8 @@ private:
 
     uint32_t currentFrameInFlight{0};
     uint64_t frameNumber{0};
+    float preExposure{1.0f};
+    float prevPreExposure{1.0f};
     std::chrono::steady_clock::time_point lastWallFrameTime{};
     float smoothedWallFrameMs{0.0f};
     float smoothedGpuSpanMs{0.0f};

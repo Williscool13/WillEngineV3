@@ -184,7 +184,7 @@ void AssetGenerator::ThreadMain()
                 Core::Handle<EnvironmentMapGenerateSlot> slotHandle = environmentMapGenerateAllocator.Add();
                 if (slotHandle.IsValid()) {
                     EnvironmentMapGenerateSlot& task = environmentMapeGenerateTasks[slotHandle.index];
-                    task.LaunchProbe(slotHandle, req.faces, req.captureSize, req.targetResolution, req.outputPath, req.environmentMapId, req.probeId, req.snapshot, req.contentVersion);
+                    task.LaunchProbe(slotHandle, req.faces, req.captureSize, req.targetResolution, req.outputPath, req.environmentMapId, req.probeId, req.snapshot, req.contentVersion, req.radianceScale);
                 }
                 else {
                     probeAssembleRequestQueue.enqueue(std::move(req));
@@ -355,7 +355,7 @@ void AssetGenerator::RequestEnvironmentMapGenerate(const Core::Path& hdriPath, c
     Wake();
 }
 
-void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot)
+void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const Engine::ProbeBakeSnapshot& snapshot, float radianceScale)
 {
     ZoneScoped;
 
@@ -382,6 +382,7 @@ void AssetGenerator::RequestProbeAssemble(Core::HeapArray<uint16_t>* faces, uint
     req.probeId = probeId;
     req.snapshot = snapshot;
     req.contentVersion = contentVersion;
+    req.radianceScale = radianceScale;
     probeAssembleRequestQueue.enqueue(std::move(req));
     Wake();
 }

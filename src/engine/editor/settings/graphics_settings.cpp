@@ -1325,7 +1325,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                   "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 0.3 (= traced max; DI owns rough spec, probe bakes hide light proxies to avoid double count).");
             reflF("Mirror Roughness Max##reflection", &reflection.mirrorRoughnessMax, reflectionDefaults.mirrorRoughnessMax, 0.0f, 0.3f, "%.3f", "At/below this roughness the reflection ray is the exact mirror direction instead of a GGX sample (no lobe-tail grain, no emitter fireflies) and the ReSTIR BRDF technique is skipped for the pixel. Default 0.08.");
             reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
-            reflF("Max Ray Intensity##reflection", &reflection.maxRayIntensity, reflectionDefaults.maxRayIntensity, 0.0f, 1000.0f, "%.0f", "Luminance clamp on a single reflection ray's radiance (before demodulation). Bounds what one emitter hit can inject into the denoiser; biased darker on bright emitters. 0 = off. Default 0.");
+            reflF("Max Ray Intensity##reflection", &reflection.maxRayIntensity, reflectionDefaults.maxRayIntensity, 0.0f, 65536000.0f, "%.0f", "Luminance clamp on a single reflection ray's radiance (before demodulation). Bounds what one emitter hit can inject into the denoiser; biased darker on bright emitters. 0 = off. Default 0.");
             reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
             if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
             if (Widgets::SliderInt("Hit Local Shadow Rays##reflection", &reflection.hitLocalShadowRays, 0, static_cast<int>(REFLECTION_HIT_SHADOW_RAYS_MAX), {.tooltip = "Analytic hit shading: shadow rays spent on the brightest local-light contributions at the hit (sun has its own ray via Hit Sun Mode). Remaining lights stay unshadowed. 0 = none. Default 1.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.hitLocalShadowRays)})) { changed = true; }
@@ -1488,7 +1488,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f",
                   "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
-            ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 100.0f, "%.1f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 20.");
+            ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 6553600.0f, "%.0f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 1310720.");
 
             ImGui::SeparatorText("Blend");
             if (ImGui::Button("Converge Now##ddgi")) {
@@ -1520,8 +1520,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 changed = true;
             }
             ddgiF("Irradiance Gamma##ddgi", &ddgi.irradianceGamma, ddgiDefaults.irradianceGamma, 1.0f, 10.0f, "%.1f", "Perceptual encoding exponent: the atlas stores pow(E, 1/gamma) and blends in that space, so rare bright rays (sky through a small opening) cannot pulse the average. 1 = linear. Default 5.");
-            ddgiF("Irradiance Threshold##ddgi", &ddgi.irradianceThreshold, ddgiDefaults.irradianceThreshold, 0.0f, 1.0f, "%.2f", "Encoded-space darkening that counts as a real lighting change (lights turning off, the low-variance direction; RTXGI): hysteresis drops by 0.75 so the probe re-converges fast. Brightening spikes stay damped by hysteresis + the delta clamp. Default 0.25.");
-            ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 1.0f, "%.2f", "Encoded-space per-frame change clamp: deltas above this are scaled to 25% (firefly/pulse suppression). Default 0.10.");
+            ddgiF("Irradiance Threshold##ddgi", &ddgi.irradianceThreshold, ddgiDefaults.irradianceThreshold, 0.0f, 10.0f, "%.2f", "Encoded-space darkening that counts as a real lighting change (lights turning off, the low-variance direction; RTXGI): hysteresis drops by 0.75 so the probe re-converges fast. Brightening spikes stay damped by hysteresis + the delta clamp. Default 2.30.");
+            ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 10.0f, "%.2f", "Encoded-space per-frame change clamp: deltas above this are scaled to 25% (firefly/pulse suppression). Default 0.92.");
             ddgiF("Distance Exponent##ddgi", &ddgi.distanceExponent, ddgiDefaults.distanceExponent, 1.0f, 100.0f, "%.0f", "Sharpness of the cosine lobe used when integrating ray distances into the visibility atlas; higher = tighter Chebyshev occlusion, more leak-proof but noisier. Default 50.");
 
             ImGui::SeparatorText("Sampling");
@@ -1681,7 +1681,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                         restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
                         changed = true;
                     }
-                    if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 100.0f)) {
+                    if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
                         changed = true;
                     }
                     ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
@@ -1702,15 +1702,15 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
 
                 featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
-                    if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 64.0f,
-                                             {.format = "%.1f", .tooltip = "Attenuation cutoff per emissive mesh, shared by all its triangles: range = multiplier * sqrt(intensity * total area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 8.0f})) {
+                    if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 0.25f,
+                                             {.format = "%.4f", .tooltip = "Attenuation cutoff per emissive mesh, shared by all its triangles: range = multiplier * sqrt(intensity * total area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 0.03125f})) {
                         changed = true;
                     }
                 });
 
                 if (bReGIR && restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
                     ImGui::SeparatorText("ReGIR");
-                    if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 100.0f)) {
+                    if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
                         changed = true;
                     }
                     if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
@@ -1750,8 +1750,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                                                  {.format = "%.2f", .tooltip = "Pow exponent on the gradient->confidence curve. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise).", .reset = true, .resetTo = 3.0f})) {
                             changed = true;
                         }
-                        if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 1.0f,
-                                                 {.format = "%.4f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 0.01f})) {
+                        if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 65536.0f,
+                                                 {.format = "%.1f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 655.36f})) {
                             changed = true;
                         }
                         if (Widgets::SliderFloat("Confidence History##restir", &state->debug.restir.confidenceHistoryLength, 0.0f, 16.0f,
@@ -1861,13 +1861,32 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
 
     if (ImGui::CollapsingHeader("Exposure")) {
         check("Enabled##exposure", &pp.bExposureEnabled);
+        const char* exposureModes[] = {"Auto", "Manual EV100", "Physical Camera"};
+        int exposureMode = static_cast<int>(pp.exposureMode);
+        if (ImGui::Combo("Mode##exposure", &exposureMode, exposureModes, IM_ARRAYSIZE(exposureModes))) {
+            pp.exposureMode = static_cast<Core::ExposureMode>(exposureMode);
+            changed = true;
+        }
         ppF("Target Luminance", &pp.exposureTargetLuminance, defaults.exposureTargetLuminance, 0.005f, 1.0f, "%.3f", "Post-exposure key the metered scene average maps to. 0.18 = standard mid-gray.");
-        ppF("Speed Brighten", &pp.exposureSpeedBrighten, defaults.exposureSpeedBrighten, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image brightens (entering darkness). Slower than darken, like the eye.");
-        ppF("Speed Darken", &pp.exposureSpeedDarken, defaults.exposureSpeedDarken, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image darkens (entering light).");
-        ppF("Min Gain EV", &pp.exposureMinGainEV, defaults.exposureMinGainEV, -12.0f, 0.0f, "%.1f", "Lower bound on exposure gain in stops; limits how far bright scenes are darkened.");
-        ppF("Max Gain EV", &pp.exposureMaxGainEV, defaults.exposureMaxGainEV, 0.0f, 12.0f, "%.1f", "Upper bound on exposure gain in stops; dark scenes stop brightening here instead of amplifying GI noise to mid-gray.");
-        ppF("Low Percentile", &pp.exposureLowPercentile, defaults.exposureLowPercentile, 0.0f, 0.9f, "%.2f", "Fraction of the darkest non-black pixels excluded from metering.");
-        ppF("High Percentile", &pp.exposureHighPercentile, defaults.exposureHighPercentile, 0.1f, 1.0f, "%.2f", "Metering cutoff for the brightest pixels; keeps fireflies, emissives, and the sun from steering exposure.");
+        switch (pp.exposureMode) {
+            case Core::ExposureMode::Auto:
+                ppF("Speed Brighten", &pp.exposureSpeedBrighten, defaults.exposureSpeedBrighten, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image brightens (entering darkness). Slower than darken, like the eye.");
+                ppF("Speed Darken", &pp.exposureSpeedDarken, defaults.exposureSpeedDarken, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image darkens (entering light).");
+                ppF("Min EV100", &pp.exposureMinEV100, defaults.exposureMinEV100, -10.0f, 30.0f, "%.1f", "Darkest scene exposure adapts to; darker scenes stop brightening here instead of amplifying GI noise to mid-gray. EV100 = log2(average luminance * 8).");
+                ppF("Max EV100", &pp.exposureMaxEV100, defaults.exposureMaxEV100, -10.0f, 30.0f, "%.1f", "Brightest scene exposure adapts to; brighter scenes stop darkening here.");
+                ppF("Low Percentile", &pp.exposureLowPercentile, defaults.exposureLowPercentile, 0.0f, 0.9f, "%.2f", "Fraction of the darkest non-black pixels excluded from metering.");
+                ppF("High Percentile", &pp.exposureHighPercentile, defaults.exposureHighPercentile, 0.1f, 1.0f, "%.2f", "Metering cutoff for the brightest pixels; keeps fireflies, emissives, and the sun from steering exposure.");
+                break;
+            case Core::ExposureMode::Manual:
+                ppF("EV100##exposure", &pp.exposureManualEV100, defaults.exposureManualEV100, -10.0f, 30.0f, "%.2f", "Fixed exposure; the same image auto exposure produces when the scene meters at this EV100.");
+                break;
+            case Core::ExposureMode::Physical:
+                ppF("Aperture (f)", &pp.cameraAperture, defaults.cameraAperture, 1.0f, 32.0f, "%.1f");
+                ppF("Shutter (1/s)", &pp.cameraShutterInv, defaults.cameraShutterInv, 1.0f, 8000.0f, "%.0f", "Shutter speed denominator: 100 = 1/100 s.");
+                ppF("ISO", &pp.cameraISO, defaults.cameraISO, 50.0f, 12800.0f, "%.0f");
+                ImGui::Text("EV100: %.2f", std::log2(pp.cameraAperture * pp.cameraAperture * pp.cameraShutterInv * 100.0f / pp.cameraISO));
+                break;
+        }
     }
 
     if (ImGui::CollapsingHeader("Bloom")) {

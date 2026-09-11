@@ -284,23 +284,25 @@ float3 UnpackNormalOct16(uint p)
     return OctDecode(oct);
 }
 
-// Emissive: E5B9G9R9 shared-exponent (same bit layout as VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)
+// Emissive: E5B9G9R9 shared-exponent bit layout; bias 4 spans ~1e-4 to ~1.3e8 nits
+static const float EMISSIVE_RGBE_EXP_BIAS = 4.0;
+
 uint PackEmissiveRGBE(float3 e)
 {
     float maxC = max(max(e.r, e.g), max(e.b, 1e-5f));
-    float exp_ = floor(log2(maxC)) + 1.0;
+    float exp_ = clamp(floor(log2(maxC)) + 1.0, -EMISSIVE_RGBE_EXP_BIAS, 31.0 - EMISSIVE_RGBE_EXP_BIAS);
     float scale = pow(2.0, -(exp_ - 9.0));
     uint re = uint(clamp(e.r * scale, 0.0, 511.0) + 0.5);
     uint ge = uint(clamp(e.g * scale, 0.0, 511.0) + 0.5);
     uint be = uint(clamp(e.b * scale, 0.0, 511.0) + 0.5);
-    uint biasedExp = uint(clamp(exp_ + 15.0, 0.0, 31.0));
+    uint biasedExp = uint(exp_ + EMISSIVE_RGBE_EXP_BIAS);
     return re | (ge << 9) | (be << 18) | (biasedExp << 27);
 }
 
 float3 UnpackEmissiveRGBE(uint p)
 {
     uint biasedExp = p >> 27;
-    float scale = pow(2.0, float(biasedExp) - 15.0 - 9.0);
+    float scale = pow(2.0, float(biasedExp) - EMISSIVE_RGBE_EXP_BIAS - 9.0);
     return float3(float(p & 0x1FF), float((p >> 9) & 0x1FF), float((p >> 18) & 0x1FF)) * scale;
 }
 
@@ -353,11 +355,5 @@ float UnpackViewZDelta(uint p)
 float Luma(float3 c)
 {
     return dot(c, float3(0.2126, 0.7152, 0.0722));
-}
-
-// Target-to-adapted luminance ratio, clamped to [1, 32]; tightens noise thresholds in dim scenes, never loosens them in bright ones
-float ExposureNoiseScale(float adaptedLuminance, float targetLuminance)
-{
-    return clamp(targetLuminance / max(adaptedLuminance, 1e-3), 1.0, 32.0);
 }
 

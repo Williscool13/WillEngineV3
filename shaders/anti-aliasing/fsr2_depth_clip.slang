@@ -241,7 +241,7 @@ void PreProcessReactiveMasks(int2 pos, float motionDivergence)
 float3 ComputePreparedInputColor(int2 pos)
 {
     float3 rgb = max(float3(0.0), Fsr2LoadInputColor(pc.colorIndex, pos));
-    rgb = Fsr2PrepareRgb(rgb, Fsr2Exposure(pc.exposureIndex), pc.c.preExposure);
+    rgb = Fsr2PrepareRgb(rgb, Fsr2Exposure(pc.exposureIndex, pc.c.preExposure), pc.c.preExposure);
     return Fsr2RGBToYCoCg(rgb);
 }
 

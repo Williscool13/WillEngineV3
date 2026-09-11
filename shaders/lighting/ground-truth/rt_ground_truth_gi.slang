@@ -208,7 +208,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             rayDir.y = -rayDir.y;
             background = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, 0).rgb;
         }
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background, 1.0);
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background * scene.preExposure, 1.0);
         return;
     }
 
@@ -406,5 +406,5 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     float count = float(pc.accumulationCount);
     accum = (accum * count + float4(newSample, 1.0)) / (count + 1.0);
     pc.accumulationBuffer[pixelIdx] = accum;
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(accum.xyz * scene.preExposure, 1.0);
 }

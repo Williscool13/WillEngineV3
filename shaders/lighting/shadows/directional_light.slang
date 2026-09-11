@@ -100,5 +100,5 @@ void ComputeDirectionalLight(uniform DirectionalLightPushConstant pc, uint3 thre
     float3 sun = (diffuse + specular) * nDotL * visibility * intensity * lightColor;
 
     float3 existing = rdgStorageFloat4[pc.outputIndex][pixel].rgb;
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(existing + sun, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(existing + sun * scene.preExposure, 1.0);
 }

@@ -38,7 +38,8 @@ StringID SetupPostProcessing(RenderGraph& graph,
                              Core::Array<uint32_t, 2> displayExtent,
                              const RenderTargets& targets,
                              float deltaTime,
-                             uint64_t frameNumber);
+                             uint64_t frameNumber,
+                             float preExposure);
 } // Render
 
 #endif //WILL_ENGINE_RENDERER_H

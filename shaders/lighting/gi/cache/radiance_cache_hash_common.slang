@@ -9,14 +9,17 @@ public bool RadianceCacheRadianceShaded(uint2 packed)
     return (packed.y >> 16u) != 0xFFFFu;
 }
 
+// Keeps lit surfaces up to ~1.7e7 nits inside the half float range
+static const float RADIANCE_CACHE_PACK_SCALE = 256.0;
+
 public float3 RadianceCacheUnpackRadiance(uint2 packed)
 {
-    return UnpackHalf2x16Pair(packed).rgb;
+    return UnpackHalf2x16Pair(packed).rgb * RADIANCE_CACHE_PACK_SCALE;
 }
 
 public uint2 RadianceCachePackRadiance(float3 radiance)
 {
-    return PackHalf2x16Pair(float4(radiance, 0.0));
+    return PackHalf2x16Pair(float4(min(radiance / RADIANCE_CACHE_PACK_SCALE, float3(65504.0)), 0.0));
 }
 
 public struct RadianceCacheKey

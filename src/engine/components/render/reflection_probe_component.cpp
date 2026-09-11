@@ -130,6 +130,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             }
             ImGui::EndCombo();
         }
+        modified |= ImGui::DragFloat("Stand-in Intensity##rp", &comp.standInIntensity, glm::max(comp.standInIntensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
 
         ProbeBakeSystem& bake = ProbeBakeGet(registry.ctx().get<Engine::EngineState*>());
         const bool bBakeInFlight = bake.bBakeActive && bake.probeEntity == entity;
@@ -285,6 +286,7 @@ void ReflectionProbeComponent::Serialize(const ReflectionProbeComponent& comp, E
     w.KeyOpt("bParallax", comp.bParallax, DEF.bParallax);
     w.KeyOpt("resolution", static_cast<uint32_t>(comp.resolution), static_cast<uint32_t>(DEF.resolution));
     w.KeyOpt("standInEnvMap", comp.standInEnvMap.id, DEF.standInEnvMap.id);
+    w.KeyOpt("standInIntensity", comp.standInIntensity, DEF.standInIntensity);
 }
 
 void ReflectionProbeComponent::Deserialize(ReflectionProbeComponent& comp, const Engine::TextReader& r)
@@ -297,6 +299,7 @@ void ReflectionProbeComponent::Deserialize(ReflectionProbeComponent& comp, const
     comp.bParallax = r.Bool("bParallax", comp.bParallax);
     comp.resolution = static_cast<Resolution>(r.UInt("resolution", static_cast<uint32_t>(comp.resolution)));
     comp.standInEnvMap = Engine::EnvironmentMapID{r.U64("standInEnvMap", comp.standInEnvMap.id)};
+    comp.standInIntensity = r.Float("standInIntensity", comp.standInIntensity);
 }
 
 void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entity entity)
