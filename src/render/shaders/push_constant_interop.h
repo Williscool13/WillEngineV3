@@ -868,6 +868,8 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t varGuideIndex;
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC uint32_t debugPathIndex;
+    SHADER_PUBLIC uint32_t fastIndex;
+    SHADER_PUBLIC uint32_t fastHistoryIndex;
 };
 
 SHADER_PUBLIC struct GIMotionTileMaxPushConstant

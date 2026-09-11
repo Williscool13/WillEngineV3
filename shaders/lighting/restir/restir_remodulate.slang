@@ -90,6 +90,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
     float3 indirectDiffuse = float3(0.0);
     float3 ibl = float3(0.0);
+    float3 reflectionSpecular = float3(0.0);
     {
         float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
         float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
@@ -124,7 +125,6 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
             }
         }
 
-        float3 reflectionSpecular = float3(0.0);
         if (pc.skyboxIndex >= 0) {
             reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl, envBRDF) * pc.iblIntensity;
 #if GI_SKY_SPECULAR_OCCLUSION
@@ -159,6 +159,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     }
 
     float3 finalColor;
+    float litAlpha = 1.0;
     if (pc.outputMode == 1u) {
         finalColor = diffuse * albedo + ibl + emissive;
     } else if (pc.outputMode == 2u) {
@@ -168,6 +169,7 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         finalColor = indirectDiffuse;
     } else {
         finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
+        litAlpha = 1.0 - saturate(Luma(specular * specReflectance + reflectionSpecular) / max(Luma(finalColor), 1e-4));
     }
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, 1.0);
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor, litAlpha);
 }

@@ -71,8 +71,10 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateTexture(GI_GATHER_GUIDE, TextureInfo{VK_FORMAT_R32G32_UINT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
     graph.CreateVersionedTexture(GI_GATHER_RESOLVED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CreateVersionedTexture(GI_GATHER_MOMENTS, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture(GI_GATHER_FAST, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID gatherHistory = graph.ResourceVersionID(GI_GATHER_RESOLVED, 1);
     const StringID gatherMomentsHistory = graph.ResourceVersionID(GI_GATHER_MOMENTS, 1);
+    const StringID gatherFastHistory = graph.ResourceVersionID(GI_GATHER_FAST, 1);
 
     const StringID litHistory = graph.ResourceVersionID("lit_color_preoverlay"_sid, 1);
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
@@ -330,6 +332,11 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         upscale.ReadSampledImage(gatherMomentsHistory);
     }
     upscale.WriteStorageImage(GI_GATHER_MOMENTS);
+    const bool bFast = bTemporal && graph.ResourceHasVersion(GI_GATHER_FAST, 1);
+    if (bFast) {
+        upscale.ReadSampledImage(gatherFastHistory);
+    }
+    upscale.WriteStorageImage(GI_GATHER_FAST);
     if (bAO) {
         upscale.ReadSampledImage("shadows_resolve_target"_sid);
     }
@@ -344,7 +351,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         upscale.WriteStorageImage(GI_UPSCALE_PATH_DEBUG);
     }
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, bDebugUpscalePath, gatherHistory, gatherMomentsHistory, depthHistory, gbufferOneHistory,
+    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bFast, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, bDebugUpscalePath, gatherHistory, gatherMomentsHistory, gatherFastHistory, depthHistory, gbufferOneHistory,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_upscale"_sid);
@@ -387,6 +394,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .varGuideIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
             .gatherScale = gatherScale,
             .debugPathIndex = bDebugUpscalePath ? graph.GetStorageImageViewDescriptorIndex(GI_UPSCALE_PATH_DEBUG) : ~0x0u,
+            .fastIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_FAST),
+            .fastHistoryIndex = bFast ? graph.GetSampledImageViewDescriptorIndex(gatherFastHistory) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

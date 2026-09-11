@@ -27,6 +27,9 @@ static const float GI_UPSCALE_CHANGE_SENSITIVITY = 0.05;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 static const float GI_UPSCALE_SUPPORT_FULL = 2.0;
+static const bool GI_UPSCALE_FAST_CLAMP = true;
+static const float GI_UPSCALE_FAST_MAX_ACCUM = 5.0;
+static const float GI_UPSCALE_FAST_CLAMP_SIGMA = 3.0;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -68,6 +71,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
         // The bilinear moments fetch touches these texels at geometry/sky boundaries, and aliased RDG memory is never zeroed.
         rdgStorageFloat2[pc.momentsIndex][pixel] = float2(0.0);
+        rdgStorageFloat4[pc.fastIndex][pixel] = float4(0.0);
         if (pc.debugPathIndex != ~0x0u) {
             rdgStorageFloat4[pc.debugPathIndex][pixel] = float4(0.0);
         }
@@ -187,9 +191,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
+    GIGatherHistory fastHistory = { float3(0.0), 0.0, 0.0 };
     if (pc.bHistoryValid != 0u) {
         float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
         history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        if (pc.fastHistoryIndex != ~0x0u) {
+            fastHistory = GIGatherFetchHistory(scene, pc.fastHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        }
     }
 
     float2 tileMotion = rdgTexturesFloat2[pc.motionTileIndex].Load(int3(pixel / uint(GI_MOTION_TILE_SIZE), 0)).rg;
@@ -284,12 +292,27 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
+    float nFast = min(n, GI_UPSCALE_FAST_MAX_ACCUM) * fastHistory.quality;
+    float3 fast = current;
+    if (fastHistory.quality > 0.0) {
+        fast = bHasCurrent ? (nFast * fastHistory.color + current) / (nFast + 1.0) : fastHistory.color;
+    }
+
     float3 result = current;
     float accum = 1.0;
     if (history.quality > 0.0) {
         if (bHasCurrent) {
-            // A short history cannot ghost, and min() keeps the relative floor from collapsing on 1-spp noise while still shrinking to the smaller side on a real step change.
-            if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
+            if (GI_UPSCALE_FAST_CLAMP) {
+                // Luma-only, hue kept from the slow history; the window is the fast estimate's own noise (per-frame temporal dev over sqrt of its sample count).
+                if (bMoments && fastHistory.quality > 0.0 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
+                    float window = max(GI_UPSCALE_FAST_CLAMP_SIGMA * temporalDev / sqrt(nFast + 1.0), GI_UPSCALE_CLAMP_EPS);
+                    float histLuma = Luma(history.color);
+                    float fastLuma = Luma(fast);
+                    float clampedLuma = clamp(histLuma, fastLuma - window, fastLuma + window);
+                    history.color = histLuma > 1e-4 ? history.color * (clampedLuma / histLuma) : fast * (clampedLuma / max(fastLuma, 1e-4));
+                }
+            } else if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
+                // A short history cannot ghost, and min() keeps the relative floor from collapsing on 1-spp noise while still shrinking to the smaller side on a real step change.
                 float3 mean = irrM1 / clampTaps;
                 float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
 
@@ -312,6 +335,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(result, accum);
+    rdgStorageFloat4[pc.fastIndex][pixel] = float4(fast, 0.0);
 
     if (pc.debugPathIndex != ~0x0u) {
         float3 tint = debugPath == 1u ? (sumW < 0.1 ? float3(1.0, 0.1, 0.1) : float3(0.1, 0.6, 0.1)) : debugPath == 2u ? float3(1.0, 0.1, 1.0) : debugPath == 3u ? float3(0.1, 0.8, 1.0) : float3(1.0, 0.9, 0.1);

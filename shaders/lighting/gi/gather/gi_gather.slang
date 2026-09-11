@@ -25,6 +25,7 @@ static const float GI_GATHER_MAX_RADIANCE = 20.0;
 static const float GI_GATHER_MAX_RADIANCE_MIN = 0.05;
 static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
+static const float GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE = 1.0;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
@@ -324,6 +325,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                 float3 sum = float3(0.0);
                                 float3 giPrevSum = float3(0.0);
                                 float sumW = 0.0;
+                                float receiverAgreement = saturate(dot(normalize(mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz - hitWorldPos), -direction));
                                 [unroll]
                                 for (uint c = 0; c < 4; c++) {
                                     int2 offset = int2(int(c & 1u), int((c >> 1u) & 1u));
@@ -353,7 +355,11 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
                                     if ((prevGt1.w & 2u) != 0u) {
                                         continue;
                                     }
-                                    sum += rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
+
+                                    float4 lit = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0));
+                                    float lobeAlpha2 = max(prevRoughness * prevRoughness * prevRoughness * prevRoughness * GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE, 1e-4);
+                                    float specularKeep = exp(-(1.0 - receiverAgreement) * 0.5 / lobeAlpha2);
+                                    sum += lit.rgb * (1.0 - (1.0 - lit.a) * (1.0 - specularKeep)) * w;
                                     if (pc.giHistoryIndex != ~0x0u) {
                                         giPrevSum += rdgTexturesFloat4[pc.giHistoryIndex].Load(int3(corner, 0)).rgb * w;
                                     }
