@@ -85,7 +85,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
-        uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u) ^ (pc.frameIndex * 0xB5297A4Du);
+        uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u) ^ (pc.frameIndex * 0xB5297A4Du) ^ ((r + 1u) * 0x27d4eb2du);
         tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
         uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
         uint startSlot = h % REGIR_TILE_SIZE;

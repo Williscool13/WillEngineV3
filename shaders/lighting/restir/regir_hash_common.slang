@@ -34,9 +34,11 @@ public uint ReGIRLevelFromDistance(float dist)
 public ReGIRHashKey ReGIRComputeKey(float3 worldPos, float3 cameraPos)
 {
     ReGIRHashKey key;
-    key.level = ReGIRLevelFromDistance(distance(worldPos, cameraPos));
+    float dist = distance(worldPos, cameraPos);
+    key.level = ReGIRLevelFromDistance(dist);
     float cs = ReGIRCellSizeAtLevel(key.level);
-    key.cellPos = int3(floor(worldPos / cs));
+    float3 keyPos = worldPos + (cameraPos - worldPos) * (REGIR_KEY_CAMERA_OFFSET_SCALE * cs / max(dist, 1e-4));
+    key.cellPos = int3(floor(keyPos / cs));
     return key;
 }
 
