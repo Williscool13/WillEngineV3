@@ -41,10 +41,14 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         auto& comp = registry.get<AreaLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##al", &comp.color.r);
         modified |= ImGui::DragFloat("Intensity##al", &comp.intensity, 0.05f, 0.0f, 100.0f);
+        if (ImGui::Checkbox("Disk##al", &comp.bDisk)) {
+            registry.emplace_or_replace<LightSurfacePendingTag>(entity);
+            modified = true;
+        }
         ImGui::BeginDisabled(!bEditing);
         bool extentChanged = false;
-        extentChanged |= ImGui::DragFloat("Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
-        extentChanged |= ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f);
+        extentChanged |= ImGui::DragFloat(comp.bDisk ? "Radius##al" : "Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
+        if (!comp.bDisk) { extentChanged |= ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f); }
         modified |= extentChanged;
         ImGui::EndDisabled();
         modified |= ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
@@ -91,11 +95,13 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
                           [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); modified = true; },
                           Editor::COLOR_AXIS_X);
 
-        const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
-        Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 1, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
-                          vd.view, vd.proj, viewport, vd.cameraPos, state,
-                          [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); modified = true; },
-                          Editor::COLOR_AXIS_Y);
+        if (!comp.bDisk) {
+            const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
+            Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 1, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
+                              vd.view, vd.proj, viewport, vd.cameraPos, state,
+                              [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); modified = true; },
+                              Editor::COLOR_AXIS_Y);
+        }
     }
 
     if (modified) { registry.emplace_or_replace<MultiframeDirtyComponent>(entity); }
@@ -113,6 +119,7 @@ void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, En
     w.KeyOpt("range", comp.range, DEF.range);
     w.KeyOpt("coneOuterDegrees", comp.coneOuterDegrees, DEF.coneOuterDegrees);
     w.KeyOpt("coneInnerDegrees", comp.coneInnerDegrees, DEF.coneInnerDegrees);
+    w.KeyOpt("bDisk", comp.bDisk, DEF.bDisk);
     w.KeyOpt("drawEmissiveSurface", comp.drawEmissiveSurface, DEF.drawEmissiveSurface);
     w.KeyOpt("bExcludeFromProbeBake", comp.bExcludeFromProbeBake, DEF.bExcludeFromProbeBake);
 }
@@ -126,6 +133,7 @@ void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const 
     comp.range = r.Float("range", comp.range);
     comp.coneOuterDegrees = glm::clamp(r.Float("coneOuterDegrees", comp.coneOuterDegrees), 0.0f, 90.0f);
     comp.coneInnerDegrees = glm::clamp(r.Float("coneInnerDegrees", comp.coneInnerDegrees), 0.0f, comp.coneOuterDegrees);
+    comp.bDisk = r.Bool("bDisk", comp.bDisk);
     comp.drawEmissiveSurface = r.Bool("drawEmissiveSurface", comp.drawEmissiveSurface);
     comp.bExcludeFromProbeBake = r.Bool("bExcludeFromProbeBake", comp.bExcludeFromProbeBake);
 }
@@ -174,7 +182,7 @@ glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transf
     const glm::vec3 up = rot[1];
     const glm::vec3 normal = rot[2];
     const float halfWidth = light.halfWidth * transform.scale.x;
-    const float halfHeight = light.halfHeight * transform.scale.y;
+    const float halfHeight = light.bDisk ? halfWidth : light.halfHeight * transform.scale.y;
 
     glm::mat4 m(1.0f);
     m[0] = glm::vec4(right * (2.0f * halfWidth), 0.0f);
@@ -187,15 +195,16 @@ glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transf
 LightInfo Component::ComputeAreaLightInfo(const TransformComponent& transform, const AreaLightComponent& light)
 {
     const glm::mat3 rot = glm::mat3_cast(transform.rotation);
+    const float halfWidth = light.halfWidth * transform.scale.x;
     return LightInfo{
         .position = {transform.translation, glm::cos(glm::radians(light.coneOuterDegrees))},
         .normal = {rot[2], glm::cos(glm::radians(light.coneInnerDegrees))},
-        .right = {rot[0], light.halfWidth * transform.scale.x},
-        .up = {rot[1], light.halfHeight * transform.scale.y},
+        .right = {rot[0], halfWidth},
+        .up = {rot[1], light.bDisk ? halfWidth : light.halfHeight * transform.scale.y},
         .packedColor = Render::PackColorRGB8(light.color),
         .intensity = light.intensity,
         .range = light.range,
-        .type = LIGHT_TYPE_AREA,
+        .type = light.bDisk ? LIGHT_TYPE_DISK : LIGHT_TYPE_AREA,
     };
 }
 

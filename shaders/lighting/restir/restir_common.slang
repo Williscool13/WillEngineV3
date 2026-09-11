@@ -117,7 +117,7 @@ public LightView TransformLightToView(LightInfo al, float4x4 view)
         vs.up = normalize(mul((float3x3)view, al.up.xyz));
         vs.halfWidth = al.right.w;
         vs.halfHeight = al.up.w;
-        vs.area = 4.0 * vs.halfWidth * vs.halfHeight;
+        vs.area = (al.type == LIGHT_TYPE_DISK) ? PI * vs.halfWidth * vs.halfWidth : 4.0 * vs.halfWidth * vs.halfHeight;
         vs.cosConeInner = al.normal.w;
         vs.cosConeOuter = al.position.w;
     }
@@ -185,11 +185,7 @@ public LightSample EvalLightSample(LightView vs, float3 samplePos, float3 shadin
         s.cosLight = max(dot(-vs.normal, s.L), 0.0);
     }
 
-    s.attenuation = LightRangeCull(s.dist, range);
-    if (vs.type == LIGHT_TYPE_AREA)
-    {
-        s.attenuation *= LightConeFalloff(s.cosLight, vs.cosConeInner, vs.cosConeOuter);
-    }
+    s.attenuation = LightRangeCull(s.dist, range) * LightConeFalloff(s.cosLight, vs.cosConeInner, vs.cosConeOuter);
     return s;
 }
 
@@ -218,6 +214,11 @@ public float3 SampleLightPos(LightView vs, float uU, float uV)
         float b1 = 1.0 - su;
         float b2 = uV * su;
         return vs.center + b1 * vs.right + b2 * vs.up;
+    }
+    if (vs.type == LIGHT_TYPE_DISK)
+    {
+        float2 d = ConcentricSampleDisk(uU, uV) * vs.halfWidth;
+        return vs.center + d.x * vs.right + d.y * vs.up;
     }
     return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
 }
@@ -368,7 +369,7 @@ public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePo
         float cosLight = max(dot(outwardN, -L), 0.0);
         return pdfSolidAngle * cosLight / dist2;
     }
-    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    if (vs.type == LIGHT_TYPE_TRIANGLE || vs.type == LIGHT_TYPE_DISK)
     {
         return 1.0 / vs.area;
     }
@@ -397,7 +398,7 @@ public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightCo
     if (atten <= 0.0) { return 0.0; }
     float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : max(dot(vs.normal, -toCenter / dist), 0.0);
     if (cosFacing <= 0.0) { return 0.0; }
-    if (vs.type == LIGHT_TYPE_AREA) { atten *= LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter); }
+    atten *= LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter);
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     float geom = cosFacing / max(dist * dist, LIGHT_GEOM_MIN_DIST2);
     return geom * vs.area * vs.intensity * colorMax * atten;
@@ -800,6 +801,15 @@ public bool RayIntersectLight(LightView vs, float3 rayOrigin, float3 rayDir, out
         if (v < 0.0 || u + v > 1.0) { t = -1.0; return false; }
         t = dot(vs.up, qvec) * invDet;
         return t > 0.0;
+    }
+    if (vs.type == LIGHT_TYPE_DISK)
+    {
+        float denom = dot(vs.normal, rayDir);
+        if (denom >= 0.0) { t = -1.0; return false; }
+        t = dot(vs.normal, vs.center - rayOrigin) / denom;
+        if (t <= 0.0) { return false; }
+        float3 local = rayOrigin + t * rayDir - vs.center;
+        return dot(local, local) <= vs.halfWidth * vs.halfWidth;
     }
     return RayIntersectQuad(rayOrigin, rayDir, vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, t);
 }

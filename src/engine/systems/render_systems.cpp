@@ -950,7 +950,19 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
-        DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
+        if (light.bDisk) {
+            const float radius = light.halfWidth * transform.scale.x;
+            constexpr int kDiskSegments = 32;
+            for (int i = 0; i < kDiskSegments; ++i) {
+                const float a0 = (static_cast<float>(i) / kDiskSegments) * 6.2831853f;
+                const float a1 = (static_cast<float>(i + 1) / kDiskSegments) * 6.2831853f;
+                const Vec3 p0 = center + radius * (glm::cos(a0) * right + glm::sin(a0) * up);
+                const Vec3 p1 = center + radius * (glm::cos(a1) * right + glm::sin(a1) * up);
+                DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, editColor, 0.03f});
+            }
+        } else {
+            DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
+        }
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
         addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
         if (light.coneOuterDegrees < 90.0f) {

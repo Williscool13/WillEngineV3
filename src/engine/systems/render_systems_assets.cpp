@@ -491,7 +491,9 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
 
-        const Engine::StaticModelHandle handle = areaLight ? state->builtinAssets.GetUnitQuad(ctx->assetManager) : state->builtinAssets.GetUnitSphere(ctx->assetManager);
+        const Engine::StaticModelHandle handle = areaLight
+            ? (areaLight->bDisk ? state->builtinAssets.GetUnitDisk(ctx->assetManager) : state->builtinAssets.GetUnitQuad(ctx->assetManager))
+            : state->builtinAssets.GetUnitSphere(ctx->assetManager);
         Engine::StaticModel* model = ctx->assetManager->GetModel(handle);
         if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) { continue; }
 

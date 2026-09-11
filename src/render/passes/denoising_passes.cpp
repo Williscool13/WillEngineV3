@@ -302,7 +302,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         }
         if (graph.HasTexture("restir_confidence"_sid)) { pass.ReadSampledImage("restir_confidence"_sid); }
         if (graph.HasTexture(REFLECTION_HIT_DELTA_TARGET)) { pass.ReadSampledImage(REFLECTION_HIT_DELTA_TARGET); }
-        if (graph.ResourceHasVersion(REFLECTION_HIT_DELTA_TARGET, 1)) { pass.ReadSampledImage(graph.ResourceVersionID(REFLECTION_HIT_DELTA_TARGET, 1)); }
+        if (graph.HasTexture(REFLECTION_HIT_DELTA_TARGET) && graph.ResourceHasVersion(REFLECTION_HIT_DELTA_TARGET, 1)) { pass.ReadSampledImage(graph.ResourceVersionID(REFLECTION_HIT_DELTA_TARGET, 1)); }
         pass.WriteStorageImage("relax_spec_illum"_sid);
         pass.WriteStorageImage("relax_diff_illum"_sid);
         pass.WriteStorageImage("relax_spec_fast"_sid);
@@ -321,7 +321,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID fallbackSpecHitD = graph.ResourceHasVersion("relax_spec_hit_dist"_sid, 1) ? graph.ResourceVersionID("relax_spec_hit_dist"_sid, 1) : "relax_spec_hit_dist"_sid;
         const StringID fallbackPrevNR = graph.ResourceHasVersion("relax_prev_nr"_sid, 1) ? graph.ResourceVersionID("relax_prev_nr"_sid, 1) : "relax_prev_nr"_sid;
         const StringID fallbackViewZ = graph.ResourceHasVersion("relax_viewz"_sid, 1) ? graph.ResourceVersionID("relax_viewz"_sid, 1) : "relax_viewz"_sid;
-        const bool hasHitDeltaHistory = graph.ResourceHasVersion(REFLECTION_HIT_DELTA_TARGET, 1);
+        const bool hasHitDeltaHistory = graph.HasTexture(REFLECTION_HIT_DELTA_TARGET) && graph.ResourceHasVersion(REFLECTION_HIT_DELTA_TARGET, 1);
         const StringID hitDeltaHistory = hasHitDeltaHistory ? graph.ResourceVersionID(REFLECTION_HIT_DELTA_TARGET, 1) : StringID{};
 
         pass.Execute([pipelineManager, specIn, diffIn, width, height, fallbackSpec, fallbackDiff, fallbackSpecFast, fallbackDiffFast, fallbackHistLen, fallbackSpecHitD, fallbackPrevNR, fallbackViewZ, hasHitDeltaHistory, hitDeltaHistory,

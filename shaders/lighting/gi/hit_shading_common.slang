@@ -101,6 +101,10 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
         float phi = 2.0 * PI * u2;
         lightSamplePos = light.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
         lightArea = 4.0 * PI * radius * radius;
+    } else if (light.type == LIGHT_TYPE_DISK) {
+        float2 d = ConcentricSampleDisk(u1, u2) * light.right.w;
+        lightSamplePos = light.position.xyz + light.right.xyz * d.x + light.up.xyz * d.y;
+        lightArea = PI * light.right.w * light.right.w;
     } else {
         lightSamplePos = light.position.xyz + light.right.xyz * (u1 * 2.0 - 1.0) * light.right.w + light.up.xyz * (u2 * 2.0 - 1.0) * light.up.w;
         lightArea = 4.0 * light.right.w * light.up.w;
@@ -113,8 +117,7 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
     float cosLight = light.type == LIGHT_TYPE_SPHERE
         ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
         : max(dot(-light.normal.xyz, L), 0.0);
-    float atten = LightRangeCull(lightDist, light.range);
-    if (light.type == LIGHT_TYPE_AREA) { atten *= LightConeFalloff(cosLight, light.normal.w, light.position.w); }
+    float atten = LightRangeCull(lightDist, light.range) * LightConeFalloff(cosLight, light.normal.w, light.position.w);
     if (cosShade <= 0.0 || cosLight <= 0.0 || atten <= 0.0) {
         return float3(0.0);
     }

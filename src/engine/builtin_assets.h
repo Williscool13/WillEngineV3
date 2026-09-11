@@ -21,6 +21,8 @@ class BuiltinAssets
 public:
     StaticModelHandle GetUnitQuad(AssetManager* assetManager); // 1x1 XZ plane, +Y normal
 
+    StaticModelHandle GetUnitDisk(AssetManager* assetManager);
+
     StaticModelHandle GetUnitCube(AssetManager* assetManager);
 
     StaticModelHandle GetUnitSphere(AssetManager* assetManager);
@@ -45,6 +47,7 @@ public:
 
 private:
     StaticModelHandle unitQuad{};
+    StaticModelHandle unitDisk{};
     StaticModelHandle unitCube{};
     StaticModelHandle unitSphere{};
     StaticModelHandle unitCylinder{};

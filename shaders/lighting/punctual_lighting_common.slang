@@ -15,6 +15,7 @@ public struct PunctualLight
     public float range; // attenuation cutoff / cluster bounding radius
     public float sourceRadius; // 0 = delta; >0 drives representative-point specular
     public bool oneSided; // area lights fade to zero across the plane
+    public bool bDisk;
     public float cosConeInner; // spot cone on the emitter cosine (area only); 0/0 = hemisphere
     public float cosConeOuter;
     public float3 rightAxis; // rect axes + extents (area only)
@@ -39,6 +40,7 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
     pl.effectiveIntensity = 0.0;
     pl.sourceRadius = 0.0;
     pl.oneSided = false;
+    pl.bDisk = false;
     pl.cosConeInner = 0.0;
     pl.cosConeOuter = 0.0;
     pl.valid = true;
@@ -50,13 +52,14 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
         pl.effectiveIntensity = light.intensity * PI * radius * radius;
         pl.sourceRadius = radius;
     }
-    else if (light.type == LIGHT_TYPE_AREA)
+    else if (light.type == LIGHT_TYPE_AREA || light.type == LIGHT_TYPE_DISK)
     {
         float halfWidth = light.right.w;
         float halfHeight = light.up.w;
+        pl.bDisk = light.type == LIGHT_TYPE_DISK;
         pl.dir = normalize(mul((float3x3)view, light.normal.xyz));
-        pl.effectiveIntensity = light.intensity * (4.0 * halfWidth * halfHeight);
-        pl.sourceRadius = 0.5 * (halfWidth + halfHeight);
+        pl.effectiveIntensity = light.intensity * (pl.bDisk ? PI * halfWidth * halfWidth : 4.0 * halfWidth * halfHeight);
+        pl.sourceRadius = pl.bDisk ? halfWidth : 0.5 * (halfWidth + halfHeight);
         pl.oneSided = true;
         pl.cosConeInner = light.normal.w;
         pl.cosConeOuter = light.position.w;
@@ -87,8 +90,20 @@ float3 RepresentativePointL(PunctualLight pl, float3 N, float3 V, float3 viewPos
         float t = dot(toCenter, pl.dir) / denom;
         bool bHitsPlane = abs(denom) >= 1e-4 && t > 0.0;
         float3 rel = (viewPos + R * (bHitsPlane ? t : 1e4)) - pl.pos;
-        float u = clamp(dot(rel, pl.rightAxis), -pl.halfWidth, pl.halfWidth);
-        float v = clamp(dot(rel, pl.upAxis), -pl.halfHeight, pl.halfHeight);
+        float u = dot(rel, pl.rightAxis);
+        float v = dot(rel, pl.upAxis);
+        if (pl.bDisk)
+        {
+            float2 uv = float2(u, v);
+            uv *= saturate(pl.halfWidth / max(length(uv), 1e-5));
+            u = uv.x;
+            v = uv.y;
+        }
+        else
+        {
+            u = clamp(u, -pl.halfWidth, pl.halfWidth);
+            v = clamp(v, -pl.halfHeight, pl.halfHeight);
+        }
         return normalize((pl.pos + u * pl.rightAxis + v * pl.upAxis) - viewPos);
     }
 

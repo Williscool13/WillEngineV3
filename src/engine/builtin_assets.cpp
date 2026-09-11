@@ -18,6 +18,7 @@ static StaticModelHandle GetOrLoad(AssetManager* assetManager, StaticModelHandle
 }
 
 StaticModelHandle BuiltinAssets::GetUnitQuad(AssetManager* assetManager) { return GetOrLoad(assetManager, unitQuad, PlaneParams{.sizeX = 1.0f, .sizeZ = 1.0f, .tilesX = 1, .tilesZ = 1}); }
+StaticModelHandle BuiltinAssets::GetUnitDisk(AssetManager* assetManager) { return GetOrLoad(assetManager, unitDisk, RingParams{.outerRadius = 0.5f, .innerRadius = 0.0f, .slices = 128, .bDoubleSided = false}); }
 StaticModelHandle BuiltinAssets::GetUnitCube(AssetManager* assetManager) { return GetOrLoad(assetManager, unitCube, BoxParams{.sizeX = 1.0f, .sizeY = 1.0f, .sizeZ = 1.0f}); }
 StaticModelHandle BuiltinAssets::GetUnitSphere(AssetManager* assetManager) { return GetOrLoad(assetManager, unitSphere, SphereParams{.radius = 0.5f, .slices = 32, .stacks = 16}); }
 StaticModelHandle BuiltinAssets::GetUnitCylinder(AssetManager* assetManager) { return GetOrLoad(assetManager, unitCylinder, CylinderParams{.radius = 0.5f, .height = 1.0f, .slices = 32, .bCapped = true}); }

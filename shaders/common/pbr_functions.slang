@@ -49,11 +49,31 @@ public float LightRangeCull(float dist, float range)
     return a * a;
 }
 
-/** Spot cone on an area emitter: 1 inside the inner cone, smoothstep to 0 at the outer cone. cosInner == cosOuter == 0 is the plain hemisphere. */
+/** Spot cone on an emitter cosine: 1 inside the inner cone, smoothstep to 0 at the outer cone. cosInner == cosOuter == 0 is identity, so every light type can apply it unconditionally. */
 public float LightConeFalloff(float cosLight, float cosInner, float cosOuter)
 {
     float t = saturate((cosLight - cosOuter) / max(cosInner - cosOuter, 1e-4));
     return t * t * (3.0 - 2.0 * t);
+}
+
+/** Shirley-Chiu concentric map: unit square -> unit disk, area preserving. */
+public float2 ConcentricSampleDisk(float u1, float u2)
+{
+    float2 o = 2.0 * float2(u1, u2) - 1.0;
+    if (o.x == 0.0 && o.y == 0.0) { return float2(0.0); }
+    float r;
+    float theta;
+    if (abs(o.x) > abs(o.y))
+    {
+        r = o.x;
+        theta = (PI / 4.0) * (o.y / o.x);
+    }
+    else
+    {
+        r = o.y;
+        theta = (PI / 2.0) - (PI / 4.0) * (o.x / o.y);
+    }
+    return r * float2(cos(theta), sin(theta));
 }
 
 public float LightGeometryTerm(float cosLight, float dist)

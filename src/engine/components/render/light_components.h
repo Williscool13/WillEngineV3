@@ -33,6 +33,7 @@ struct AreaLightComponent
     float range{10.0f};
     float coneOuterDegrees{90.0f}; // half-angle from the normal; 90 = plain hemisphere emitter
     float coneInnerDegrees{90.0f}; // full intensity inside, smoothstep to zero at outer
+    bool bDisk{false};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
 

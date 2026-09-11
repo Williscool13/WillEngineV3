@@ -14,16 +14,16 @@ static float LightPower(LightInfo L)
         area = 4.0 * PI * radius * radius;
     } else if (L.type == LIGHT_TYPE_TRIANGLE) {
         area = 0.5 * length(cross(L.right.xyz, L.up.xyz));
+    } else if (L.type == LIGHT_TYPE_DISK) {
+        area = PI * L.right.w * L.right.w;
     } else {
         area = 4.0 * L.right.w * L.up.w;
     }
     float3 color = UnpackUnorm4x8(L.packedColor).rgb;
     float power = L.intensity * area * max(color.r, max(color.g, color.b));
-    if (L.type == LIGHT_TYPE_AREA) {
-        // Lambertian emitter restricted to the cone: exitant fraction = 1 - cos^2 at the falloff midpoint
-        float cosMid = 0.5 * (L.normal.w + L.position.w);
-        power *= 1.0 - cosMid * cosMid;
-    }
+    // Lambertian emitter restricted to the spot cone: exitant fraction = 1 - cos^2 at the falloff midpoint (1 for 0/0)
+    float cosMid = 0.5 * (L.normal.w + L.position.w);
+    power *= 1.0 - cosMid * cosMid;
     return max(power, 0.0);
 }
 

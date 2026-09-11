@@ -60,6 +60,8 @@ public float WorldGridLightPower(LightInfo light)
     if (light.type == LIGHT_TYPE_SPHERE) {
         float r = light.right.w;
         area = 4.0 * 3.14159265358979 * r * r;
+    } else if (light.type == LIGHT_TYPE_DISK) {
+        area = 3.14159265358979 * light.right.w * light.right.w;
     } else {
         area = 4.0 * light.right.w * light.up.w;
     }
