@@ -438,6 +438,7 @@ StringID SetupFsr2(RenderGraph& graph,
                    Core::Array<uint32_t, 2> outputExtent,
                    const RenderTargets& targets,
                    bool bHasPreOverlayColor,
+                   const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
                    uint64_t frameNumber)
 {
@@ -615,6 +616,7 @@ StringID SetupFsr2(RenderGraph& graph,
     depthClipPass.WriteStorageImage("fsr2_prepared_color"_sid);
     depthClipPass.WriteStorageImage("fsr2_dilated_reactive"_sid);
     depthClipPass.Execute([pipelineManager, constants, bAutoExposure, bReactive, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+            reflectionReactive = config.reflectionReactive, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax, tracedRoughnessMax = reflectionConfig.tracedRoughnessMax,
             renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2DepthClipPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
@@ -630,6 +632,9 @@ StringID SetupFsr2(RenderGraph& graph,
                 .reconstructedDepthIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_reconstructed_depth"_sid),
                 .preparedColorOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_prepared_color"_sid),
                 .dilatedReactiveOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_dilated_reactive"_sid),
+                .reflectionReactive = reflectionReactive,
+                .mirrorRoughnessMax = mirrorRoughnessMax,
+                .tracedRoughnessMax = tracedRoughnessMax,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_depth_clip"_sid, &pushData, sizeof(pushData), renderGroupsX, renderGroupsY);
         });

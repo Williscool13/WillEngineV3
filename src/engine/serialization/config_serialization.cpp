@@ -525,6 +525,7 @@ void Serialize(const Core::Fsr2Configuration& p, TextWriter& w)
     w.Key("bReactiveMask", p.bReactiveMask);
     w.Key("reactiveScale", p.reactiveScale);
     w.Key("reactiveThreshold", p.reactiveThreshold);
+    w.Key("reflectionReactive", p.reflectionReactive);
 }
 
 void Deserialize(const TextReader& r, Core::Fsr2Configuration& p)
@@ -535,6 +536,7 @@ void Deserialize(const TextReader& r, Core::Fsr2Configuration& p)
     p.bReactiveMask = r.Bool("bReactiveMask", p.bReactiveMask);
     p.reactiveScale = r.Float("reactiveScale", p.reactiveScale);
     p.reactiveThreshold = r.Float("reactiveThreshold", p.reactiveThreshold);
+    p.reflectionReactive = r.Float("reflectionReactive", p.reflectionReactive);
 }
 
 void Serialize(const Core::AntiAliasingConfiguration& p, TextWriter& w)

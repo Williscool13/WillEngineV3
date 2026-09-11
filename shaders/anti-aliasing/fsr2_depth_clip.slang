@@ -33,6 +33,7 @@
 
 import common_interop;
 import constants_interop;
+import flags_interop;
 import shader_functions;
 import push_constant_interop;
 import bindless_declarations;
@@ -179,11 +180,30 @@ float ComputeTemporalMotionDivergence(int2 pos)
     return pxDistance > 1.0 ? lerp(0.0, 1.0 - saturate(length(prevMotionVector) / length(motionVector)), saturate(pow(pxDistance / 20.0, 3.0))) : 0.0;
 }
 
+// Mirror-like surfaces carry reflected content whose motion the surface MV does not describe; drop their history while the camera moves
+float ComputeReflectionReactive(int2 pos)
+{
+    if (pc.reflectionReactive <= 0.0 || Fsr2LoadInputDepth(pc.depthIndex, pos) <= 0.0) {
+        return 0.0;
+    }
+    const uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pos, 0));
+    if ((gt1.w & GBUFFER1_LIT_BIT) == 0u) {
+        return 0.0;
+    }
+    float roughness;
+    float metallic;
+    UnpackPBR(gt1.b, roughness, metallic);
+    const float mirror = 1.0 - smoothstep(pc.mirrorRoughnessMax, pc.tracedRoughnessMax, roughness);
+    const float2 motionVector = UnpackMotionVectors(gt1.g) * 0.5;
+    const float moving = saturate(length(motionVector * pc.c.displaySize) * 0.5);
+    return mirror * moving * pc.reflectionReactive;
+}
+
 void PreProcessReactiveMasks(int2 pos, float motionDivergence)
 {
     const int2 renderSize = int2(pc.c.renderSize);
     const float3 referenceColor = Fsr2LoadInputColor(pc.colorIndex, pos);
-    float2 reactiveFactor = float2(0.0, motionDivergence);
+    float2 reactiveFactor = float2(ComputeReflectionReactive(pos), motionDivergence);
 
     float masksSum = 0.0;
     float3 colorSamples[9];

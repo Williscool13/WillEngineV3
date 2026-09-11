@@ -600,7 +600,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     }
 
-    renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    if (viewFamily.postProcessConfig.bExposureEnabled) {
+        renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    }
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
@@ -924,7 +926,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::FSR2:
-                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
+                targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, bSnapshotLitColor, frameBuffer.reflection, frameBuffer.timeFrame.renderDeltaTime, frameNumber);
                 postAaExtent = outputExtent;
                 break;
             case Core::AntiAliasingMode::SMAAT2X:

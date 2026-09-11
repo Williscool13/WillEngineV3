@@ -1111,6 +1111,9 @@ SHADER_PUBLIC struct Fsr2DepthClipPushConstant
     SHADER_PUBLIC uint32_t reconstructedDepthIndex;
     SHADER_PUBLIC uint32_t preparedColorOutIndex;
     SHADER_PUBLIC uint32_t dilatedReactiveOutIndex;
+    SHADER_PUBLIC float reflectionReactive; // 0 = off
+    SHADER_PUBLIC float mirrorRoughnessMax;
+    SHADER_PUBLIC float tracedRoughnessMax;
 };
 
 SHADER_PUBLIC struct Fsr2LockPushConstant

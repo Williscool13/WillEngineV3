@@ -164,6 +164,7 @@ struct Fsr2Configuration
     bool bReactiveMask{true}; // from the pre-overlay colour snapshot (text, sprites, debug draw)
     float reactiveScale{1.0f};
     float reactiveThreshold{0.2f};
+    float reflectionReactive{0.6f}; // mirror-roughness surfaces under camera motion; 0 = off
 };
 
 struct AntiAliasingConfiguration
