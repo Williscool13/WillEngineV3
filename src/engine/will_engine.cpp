@@ -1284,14 +1284,6 @@ void WillEngine::EditorImgui()
             }
         }
 
-        ImGui::SeparatorText("Procedural Textures:");
-        if (ImGui::Button("Load Yellow Texture")) {
-            assetManager->LoadProceduralTexture("yellow_texture"_sid, 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
-        }
-        if (ImGui::Button("Load Domain Warp")) {
-            assetManager->LoadProceduralTexture("domain_warp"_sid, 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true, Texture::Origin::RuntimeProcedural);
-        }
-
         ImGui::Separator();
         ImGui::Text("Generation Progress:");
         const auto& genProgresses = assetGenerator->GetModelGenerationProgresses();
@@ -1478,6 +1470,14 @@ void WillEngine::Run()
         gameDllWatcher.Poll();
 #endif
         shaderWatcher.Poll();
+        if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
+            StringID reloadedPipeline{};
+            while (pipelineManager->TryDequeueReloadedPipeline(reloadedPipeline)) {
+                const Engine::TextureID reloadedTextureId{reloadedPipeline.id};
+                if (!assetManager->IsTextureLoaded(reloadedTextureId) || engineState->assetLoad.pendingHotReloadTextureIds.IsFull()) { continue; }
+                engineState->assetLoad.pendingHotReloadTextureIds.PushBack(reloadedTextureId);
+            }
+        }
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();

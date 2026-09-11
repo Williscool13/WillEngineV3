@@ -1669,6 +1669,7 @@ void AssetManager::RegisterProceduralTextures()
 
     addProceduralToRegistry(Core::InlineString<128>("yellow_texture"), "yellow_texture"_sid, 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true);
     addProceduralToRegistry(Core::InlineString<128>("domain_warp"), "domain_warp"_sid, 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true);
+    addProceduralToRegistry(Core::InlineString<128>("greybox"), "greybox"_sid, 1024, 1024, VK_FORMAT_R8G8B8A8_UNORM, true);
 }
 
 Texture* AssetManager::LoadTexture(TextureID textureId)
@@ -1767,7 +1768,7 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
 
     uint32_t mipCount = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1u : 1u;
 
-    Core::InlineString<128> name = displayName.IsEmpty() ? displayName : Core::InlineString<128>::Format("procedural_%llu", textureId.id);
+    Core::InlineString<128> name = displayName.IsEmpty() ? Core::InlineString<128>::Format("procedural_%llu", textureId.id) : displayName;
     const StringID nameSid{name.c_str(), name.Size()};
 
     Texture& texture = textures[handle.index];
@@ -1804,20 +1805,49 @@ void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextu
         if (const TextureHandle* lh = textureIdToHandle.Find(texId); lh && textureAllocator.IsValid(*lh)) {
             mipCount = textures[lh->index].mipCount;
         }
-        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount, TextureCategory::Builtin};
+        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount, TextureCategory::Procedural};
     }
     for (const auto& [texId, handle] : textureIdToHandle) {
         if (!textureAllocator.IsValid(handle)) { continue; }
         const Texture& tex = textures[handle.index];
         if (tex.origin == Texture::Origin::RuntimeProcedural) {
-            out[texId] = {texId, tex.name, tex.width, tex.height, tex.mipCount, TextureCategory::Builtin};
+            out[texId] = {texId, tex.name, tex.width, tex.height, tex.mipCount, TextureCategory::Procedural};
         }
     }
+}
+
+bool AssetManager::ReloadProceduralTexture(TextureID textureId)
+{
+    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
+    if (existingPtr == nullptr || !textureAllocator.IsValid(*existingPtr)) {
+        return false;
+    }
+
+    Texture& texture = textures[existingPtr->index];
+    if (texture.origin == Texture::Origin::Disk) {
+        return false;
+    }
+    if (texture.loadState == Texture::LoadState::Loading) {
+        LOG_WARN(Asset, "Procedural texture '{}' reload requested while still generating; skipping", texture.name.c_str());
+        return false;
+    }
+
+    texture.loadState = Texture::LoadState::Loading;
+    deferredTextureBindingReleases.PushBack({texture.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4, std::move(texture.image), std::move(texture.imageView)});
+    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+
+    LOG_INFO(Asset, "Regenerating procedural texture '{}'", texture.name.c_str());
+    assetLoadManager->RequestProceduralTextureLoad(&texture, StringID{textureId.id});
+
+    return true;
 }
 
 bool AssetManager::ReloadTexture(TextureID textureId)
 {
     if (!textureRegistry.Contains(textureId)) {
+        if (ReloadProceduralTexture(textureId)) {
+            return true;
+        }
         LOG_ERROR(Asset, "Texture {:x} not found in registry", textureId.id);
         return false;
     }

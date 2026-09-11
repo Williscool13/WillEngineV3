@@ -299,6 +299,9 @@ void PipelineManager::HandlePipelineCompletion(PipelineData& pipeline, bool bSuc
     if (bSuccess) {
         pipeline.retiredEntry = pipeline.activeEntry;
         pipeline.retirementFrame = currentFrame + 3;
+        if (pipeline.retiredEntry.pipeline != VK_NULL_HANDLE) {
+            reloadedPipelineQueue.enqueue(pipeline.pipelineId);
+        }
         {
             std::scoped_lock lock(activeEntryMutex);
             pipeline.activeEntry = pipeline.loadingEntry;
@@ -741,6 +744,8 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture.spv", "ComputeYellowTexture",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
     RegisterComputePipelineCustomLayout("domain_warp"_sid, src / "domain_warp.spv", "ComputeDomainWarp",
+                                        sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
+    RegisterComputePipelineCustomLayout("greybox"_sid, src / "greybox.spv", "ComputeGreybox",
                                         sizeof(ProceduralTextureBasePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));
     RegisterComputePipelineCustomLayout("procedural_mip_downsample"_sid, src / "procedural_mip_downsample.spv", "ComputeProceduralMipDownsample",
                                         sizeof(ProceduralMipDownsamplePushConstant), PipelineCategory::Critical, Core::Span(&proceduralTexLayout, 1));

@@ -72,6 +72,8 @@ public:
     /** Retries texture resolve for runtime-loaded materials with unresolved slots; call after a rescan makes new textures loadable (e.g. freshly generated stubs). */
     void ResolveMissingTextures();
 
+    void RebindTexture(TextureID textureId, int32_t bindlessIndex);
+
     void LoadMutableMaterials();
 
     // TextMaterial management

@@ -19,6 +19,7 @@
 #include "core/containers/inline_path.h"
 #include "core/containers/map.h"
 #include "core/containers/span.h"
+#include "core/memory/concurrent_queue_traits.h"
 #include "core/string_id.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_resources.h"
@@ -37,6 +38,8 @@ class PipelineManager
 {
 public: // Thread-Safe
     void RequestReload() { bReloadRequested.store(true, std::memory_order_relaxed); }
+
+    bool TryDequeueReloadedPipeline(StringID& out) { return reloadedPipelineQueue.try_dequeue(out); }
 
     PipelineEntry GetPipelineEntrySnapshot(StringID pipelineId);
 
@@ -157,6 +160,7 @@ private:
 
     std::atomic<bool> bReloadRequested{false};
     std::mutex activeEntryMutex;
+    Core::ConcurrentQueue<StringID> reloadedPipelineQueue;
 
     int32_t registeredComputeCount{0};
     int32_t registeredGraphicsCount{0};

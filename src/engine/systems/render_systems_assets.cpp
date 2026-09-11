@@ -244,8 +244,8 @@ void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (state->assetLoad.pendingHotReloadTextureIds.IsEmpty()) { return; }
 
     for (auto hotId : state->assetLoad.pendingHotReloadTextureIds) {
-        if (ctx->assetManager->IsTextureLoaded(hotId)) {
-            ctx->assetManager->ReloadTexture(hotId);
+        if (ctx->assetManager->IsTextureLoaded(hotId) && ctx->assetManager->ReloadTexture(hotId)) {
+            ctx->materialManager->RebindTexture(hotId, ctx->assetManager->GetTextureBindlessIndex(hotId));
         }
     }
 

@@ -351,6 +351,22 @@ void MaterialManager::ResolveMissingTextures()
     }
 }
 
+void MaterialManager::RebindTexture(TextureID textureId, int32_t bindlessIndex)
+{
+    for (auto pair : materials) {
+        Material& mat = pair.value;
+        for (int32_t i = 0; i < 6; ++i) {
+            if (mat.textureRefs[i] != textureId) { continue; }
+            if (i < 4) {
+                mat.props.textureImageIndices[i] = bindlessIndex;
+            }
+            else {
+                mat.props.textureImageIndices2[i - 4] = bindlessIndex;
+            }
+        }
+    }
+}
+
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
 {
     const MaterialID* mat = nameToMaterialMap.Find(name);;

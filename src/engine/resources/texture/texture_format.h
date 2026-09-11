@@ -24,6 +24,7 @@ enum class TextureCategory : uint32_t
     Standalone = 0,
     Model = 1,
     Builtin = 2,
+    Procedural = 3,
 };
 
 /**

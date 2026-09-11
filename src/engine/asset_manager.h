@@ -209,6 +209,13 @@ public: // Textures
     {
         return textureIdToHandle.Contains(textureId);
     }
+    
+    [[nodiscard]] int32_t GetTextureBindlessIndex(const TextureID textureId) const
+    {
+        const TextureHandle* handle = textureIdToHandle.Find(textureId);
+        if (handle == nullptr || !textureAllocator.IsValid(*handle)) { return -1; }
+        return static_cast<int32_t>(textures[handle->index].bindlessHandle.index);
+    }
 
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
     {
@@ -223,6 +230,8 @@ public: // Textures
     Texture* LoadTexture(TextureID textureId);
 
     bool ReloadTexture(TextureID textureId);
+
+    bool ReloadProceduralTexture(TextureID textureId);
 
     /**
      * Load a procedurally generated texture. If already loaded, returns the existing instance (deduplication by pipelineId).
@@ -543,6 +552,8 @@ private: // Asset Registry
     {
         Render::BindlessTextureHandle handle{};
         uint64_t releaseFrame{0};
+        Render::AllocatedImage image{};
+        Render::ImageView imageView{};
     };
 
     struct DeferredCubemapBindingRelease

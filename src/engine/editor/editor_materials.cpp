@@ -32,6 +32,7 @@ namespace Engine
 {
 static bool INCLUDE_MODEL_TEXTURES = false;
 static bool INCLUDE_BUILTIN_TEXTURES = false;
+static bool INCLUDE_PROCEDURAL_TEXTURES = true;
 
 static constexpr uint32_t MAX_GROUP_DEPTH = 8;
 static constexpr int32_t MATERIAL_TEXTURE_SLOTS = 6;
@@ -45,6 +46,7 @@ static bool IsTextureFiltered(const Engine::AssetManager::EditorTextureInfo& inf
 {
     if (!INCLUDE_MODEL_TEXTURES && info.category == Engine::TextureCategory::Model) { return true; }
     if (!INCLUDE_BUILTIN_TEXTURES && info.category == Engine::TextureCategory::Builtin) { return true; }
+    if (!INCLUDE_PROCEDURAL_TEXTURES && info.category == Engine::TextureCategory::Procedural) { return true; }
     return false;
 }
 
@@ -579,6 +581,8 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
                 ImGui::Checkbox("Include Model Textures", &INCLUDE_MODEL_TEXTURES);
                 ImGui::SameLine();
                 ImGui::Checkbox("Include Builtin Textures", &INCLUDE_BUILTIN_TEXTURES);
+                ImGui::SameLine();
+                ImGui::Checkbox("Include Procedural Textures", &INCLUDE_PROCEDURAL_TEXTURES);
 
                 const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
                 auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount + 1);
