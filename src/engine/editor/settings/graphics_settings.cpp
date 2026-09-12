@@ -316,6 +316,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             if (Widgets::SliderFloat("Reactive Scale##fsr2", &fsr2.reactiveScale, 0.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
             if (Widgets::SliderFloat("Reactive Threshold##fsr2", &fsr2.reactiveThreshold, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
             if (Widgets::SliderFloat("Reflection Reactive##fsr2", &fsr2.reflectionReactive, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Mip Bias##fsr2", &fsr2.mipBias, -2.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
             if (ImGui::Button("Reset FSR 2")) {
                 fsr2 = defaultFsr2;
                 changed = true;

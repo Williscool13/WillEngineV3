@@ -19,13 +19,13 @@ struct FrameResourceLimits;
 /**
  * Generate scene data based on information from the render view among other things like AA mode
  * @param view
- * @param aaMode
+ * @param aaConfig
  * @param renderExtent
  * @param frameNumber
  * @param deltaTime
  * @return
  */
-SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale);
+SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasingConfiguration& aaConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale);
 
 uint32_t ComputeJitterPhaseCount(Core::AntiAliasingMode aaMode, float resolutionScale);
 

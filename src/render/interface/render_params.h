@@ -176,6 +176,7 @@ struct Fsr2Configuration
     float reactiveScale{1.0f};
     float reactiveThreshold{0.2f};
     float reflectionReactive{0.6f}; // mirror-roughness surfaces under camera motion; 0 = off
+    float mipBias{-1.0f}; // FSR2 recommends -1
 };
 
 struct AntiAliasingConfiguration

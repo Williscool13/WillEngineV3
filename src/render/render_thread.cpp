@@ -1761,13 +1761,13 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     ZoneScoped;
     // Scene Data
     auto* sceneData = static_cast<SceneData*>(renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE));
-    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
+    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
     sceneData[0].preExposure = preExposure;
     sceneData[0].prevPreExposure = prevPreExposure;
     sceneData[0].framerateScale = framerateScale;
     // Portal Scene Data
     if (!viewFamily.portalViews.IsEmpty()) {
-        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig.mode, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
+        SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
         portalSceneData.clipPlane = glm::vec4(viewFamily.portalViews[0].exitPortalNormal,
                                               -glm::dot(viewFamily.portalViews[0].exitPortalNormal, viewFamily.portalViews[0].exitPortalTransform.translation));
         portalSceneData.preExposure = preExposure;

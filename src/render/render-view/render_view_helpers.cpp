@@ -57,8 +57,9 @@ HaltonSample ComputeJitterSample(Core::AntiAliasingMode aaMode, uint64_t frameNu
     }
 }
 
-SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode aaMode, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale)
+SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasingConfiguration& aaConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale)
 {
+    const Core::AntiAliasingMode aaMode = aaConfig.mode;
     const glm::mat4 viewMatrix = view.currentViewData.view;
     const glm::mat4 projMatrix = view.currentViewData.proj;
 
@@ -90,7 +91,7 @@ SceneData GenerateSceneData(const Core::RenderView& view, Core::AntiAliasingMode
     sceneData.prevJitter = {prevJitterX, prevJitterY};
     sceneData.proj = jitteredProj;
     sceneData.prevProj = jitteredPrevProj;
-    sceneData.uvDerivativeScale = aaMode == Core::AntiAliasingMode::FSR2 ? resolutionScale * 0.5f : 1.0f;
+    sceneData.uvDerivativeScale = aaMode == Core::AntiAliasingMode::FSR2 ? resolutionScale * std::exp2(aaConfig.fsr2.mipBias) : 1.0f;
 
 
     sceneData.viewProj = sceneData.proj * sceneData.view;
