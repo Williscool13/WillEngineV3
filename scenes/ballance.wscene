@@ -1,7 +1,7 @@
 wscene
 version 2 0
 id 6680640857240007171
-content_version 20
+content_version 23
 name Ballance
 entity_count 8
 end_header
@@ -115,7 +115,7 @@ sortOrder|4
 ;
 entity
 13819805800635272091
-name|Directional Light
+name|Spotlight
 ;
 14478730078215061411
 id|1723284322162056267
@@ -124,16 +124,16 @@ sortOrder|2
 5878230453007731534
 ;
 8357514868041474787
-translation|0x00000000|0x41440000|0x43238000
+translation|0x00000000|0x41440000|0x43218f06
 rotation|0x3f5a7329|0x3f0579b0|0x00000000|0x00000000
 scale|0x3f7ffef4|0x3f7ffef4|0x3f7ffef4
 ;
 3578748455783499142
-intensity|0x4a960000
+intensity|0x499cec68
 halfWidth|0x4023257d
 halfHeight|0x40326f94
-range|0x42020000
-coneOuterDegrees|0x41ac0000
+range|0x43958000
+coneOuterDegrees|0x41f00000
 coneInnerDegrees|0x00000000
 bDisk|1
 ;
@@ -184,7 +184,7 @@ halfExtents|0x43480000|0x3f000000|0x43480000
 ;
 entity
 13819805800635272091
-name|Directional Light1
+name|Directional Light
 ;
 14478730078215061411
 id|2022742610528798385
@@ -198,9 +198,13 @@ rotation|0x3effe595|0x3f5dbb77|0x00000000|0x00000000
 scale|0x3f7ffff4|0x3f7ffff4|0x3f7ffff4
 ;
 3908699049357945453
+color|0x3f800000|0x3f73f3f4|0x3f62e2e3
+intensity|0x47c35000
+angularRadiusDegrees|0x3e8a3d71
 ;
 15708659991543375132
 envMap|15612003328391769489
+intensity|0x46ea6000
 ;
 ;
 entity
@@ -249,6 +253,6 @@ halfExtents|0x43480000|0x3f000000|0x43480000
 ;
 ;
 editor_camera
-translation|0xc1497da5|0x401e89e2|0x4323a5e5
-rotation|0xbf2b00f9|0x3d9acc04|0xbf3c5275|0xbdaa79a0
+translation|0x4112323d|0x4119c8f7|0x4322138a
+rotation|0x3f0b7567|0xbdc5d756|0x3f51f979|0x3e14f070
 ;

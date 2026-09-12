@@ -10,6 +10,7 @@
 #include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 #include "engine/editor/editor_gizmo_helpers.h"
+#include "engine/editor/editor_widgets.h"
 #include "engine/components/core_components.h"
 #include "engine/components/render_components.h"
 #include "engine/include/engine_context.h"
@@ -17,6 +18,28 @@
 
 namespace Engine
 {
+static constexpr float LIGHT_PI = 3.14159265358979f;
+
+static Vec3 EditorLightScale(entt::registry& registry, entt::entity entity)
+{
+    const auto* transform = registry.try_get<Component::TransformComponent>(entity);
+    return transform ? transform->scale : Vec3{1.0f, 1.0f, 1.0f};
+}
+
+static float AreaLightLumensPerNit(const Component::AreaLightComponent& light, const Vec3& scale)
+{
+    const float halfWidth = light.halfWidth * scale.x;
+    const float area = light.bDisk ? LIGHT_PI * halfWidth * halfWidth : 4.0f * halfWidth * light.halfHeight * scale.y;
+    const float sinOuter = glm::sin(glm::radians(light.coneOuterDegrees));
+    return LIGHT_PI * area * sinOuter * sinOuter;
+}
+
+static float SphereLightLumensPerNit(const Component::SphereLightComponent& light, const Vec3& scale)
+{
+    const float radius = light.radius * scale.x;
+    return 4.0f * LIGHT_PI * LIGHT_PI * radius * radius;
+}
+
 Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
 {
     static entt::entity editEntity = entt::null;
@@ -40,7 +63,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     if (open) {
         auto& comp = registry.get<AreaLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##al", &comp.color.r);
-        modified |= ImGui::DragFloat("Luminance (nits)##al", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
+        modified |= Widgets::DragLightIntensity("Intensity##al", &comp.intensity, {.lumensPerNit = AreaLightLumensPerNit(comp, EditorLightScale(registry, entity))});
         if (ImGui::Checkbox("Disk##al", &comp.bDisk)) {
             registry.emplace_or_replace<LightSurfacePendingTag>(entity);
             modified = true;
@@ -150,7 +173,7 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
     if (open) {
         auto& comp = registry.get<DirectionalLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##dl", &comp.color.r);
-        modified |= ImGui::DragFloat("Illuminance (lux)##dl", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e6f, "%.0f");
+        modified |= Widgets::DragLightIntensity("Intensity##dl", &comp.intensity, {.bIlluminance = true});
         modified |= ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
         modified |= ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
     }
@@ -240,7 +263,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
     if (open) {
         auto& comp = registry.get<SphereLightComponent>(entity);
         modified |= ImGui::ColorEdit3("Color##sl", &comp.color.r);
-        modified |= ImGui::DragFloat("Luminance (nits)##sl", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
+        modified |= Widgets::DragLightIntensity("Intensity##sl", &comp.intensity, {.lumensPerNit = SphereLightLumensPerNit(comp, EditorLightScale(registry, entity))});
         modified |= ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f);
         modified |= ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
         modified |= ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
@@ -370,7 +393,7 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
         }
         ImGui::Checkbox("Show Probes In Selection##sky", &bShowProbes);
 
-        modified |= ImGui::DragFloat("Intensity##sky", &comp.intensity, glm::max(comp.intensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
+        modified |= Widgets::DragLightIntensity("Intensity##sky", &comp.intensity, {.tooltip = "Env map texel value to nits"});
         modified |= ImGui::DragInt("Priority##sky", &comp.priority, 1.0f, -100, 100);
     }
 

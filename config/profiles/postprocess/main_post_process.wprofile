@@ -4,11 +4,11 @@ exposureMode|0
 exposureTargetLuminance|0x3e3851ec
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000
-exposureMinEV100|0x41880000
-exposureMaxEV100|0x41c00000
+exposureMinEV100|0x41000000
+exposureMaxEV100|0x41900000
 exposureLowPercentile|0x3f000000
 exposureHighPercentile|0x3f666666
-exposureManualEV100|0x41840000
+exposureManualEV100|0x41523d70
 cameraAperture|0x41a70b22
 cameraShutterInv|0x45f490df
 cameraISO|0x46480000

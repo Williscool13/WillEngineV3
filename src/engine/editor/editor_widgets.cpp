@@ -4,6 +4,7 @@
 
 #include "editor_widgets.h"
 
+#include <cmath>
 #include <cstring>
 
 #include "imgui.h"
@@ -133,6 +134,226 @@ bool SliderInt(const char* name, int* v, int vMin, int vMax, const SliderOpts& o
 
     ImGui::PopID();
     return changed;
+}
+
+constexpr float EV_LUMINANCE_REF = 0.125f;
+constexpr float EV_ILLUMINANCE_REF = 2.5f;
+constexpr float EV_MIN = -6.0f;
+constexpr float EV_MAX = 30.0f;
+constexpr float SIMPLE_LUMINANCE_REF = 65536.0f;
+constexpr float SIMPLE_ILLUMINANCE_REF = 131072.0f;
+constexpr float LUMEN_MAX = 1.0e7f;
+constexpr float NITS_MAX = 1.0e9f;
+constexpr float LUX_MAX = 1.0e6f;
+
+static LightUnitDisplay lightUnitPreference = LightUnitDisplay::Lumens;
+
+struct IntensityReference
+{
+    const char* label;
+    float lo;
+    float hi;
+};
+
+static constexpr IntensityReference LUMINANCE_REFERENCES[] = {
+    {"Moonlit ground", 0.01f, 0.1f},
+    {"Dim interior surface", 10.0f, 50.0f},
+    {"Monitor / TV white", 100.0f, 400.0f},
+    {"Overcast sky", 1000.0f, 2000.0f},
+    {"Clear blue sky", 3000.0f, 8000.0f},
+    {"Fluorescent tube surface", 10000.0f, 30000.0f},
+    {"Sunlit white paper", 20000.0f, 30000.0f},
+    {"Frosted bulb surface", 50000.0f, 100000.0f},
+    {"Bare filament / LED die", 1.0e6f, 1.0e7f},
+    {"Sun disk", 1.6e9f, 1.6e9f},
+};
+
+static constexpr IntensityReference ILLUMINANCE_REFERENCES[] = {
+    {"Full moon", 0.05f, 0.3f},
+    {"Street lighting", 5.0f, 30.0f},
+    {"Living room", 50.0f, 150.0f},
+    {"Office", 300.0f, 500.0f},
+    {"Overcast daylight", 1000.0f, 10000.0f},
+    {"Full daylight, no sun", 10000.0f, 25000.0f},
+    {"Direct midday sun", 80000.0f, 120000.0f},
+};
+
+static constexpr IntensityReference FLUX_REFERENCES[] = {
+    {"Candle", 12.0f, 12.0f},
+    {"Phone torch", 50.0f, 100.0f},
+    {"40W incandescent", 450.0f, 450.0f},
+    {"60W incandescent", 800.0f, 800.0f},
+    {"100W incandescent", 1600.0f, 1600.0f},
+    {"Car headlight, low beam", 700.0f, 1200.0f},
+    {"Ceiling panel 600x600", 3000.0f, 5000.0f},
+    {"Street lamp", 8000.0f, 30000.0f},
+    {"Stadium floodlight", 100000.0f, 500000.0f},
+};
+
+static void DrawReferenceValue(const IntensityReference& row, LightUnitDisplay unit, float evRef, float simpleRef, const char* unitLabel)
+{
+    if (unit == LightUnitDisplay::Simple) {
+        if (row.lo == row.hi) { ImGui::Text("%.4g %s", row.lo / simpleRef, unitLabel); }
+        else { ImGui::Text("%.4g - %.4g %s", row.lo / simpleRef, row.hi / simpleRef, unitLabel); }
+        return;
+    }
+
+    if (unit == LightUnitDisplay::EV100) {
+        if (row.lo == row.hi) { ImGui::Text("EV %.1f", std::log2(row.lo / evRef)); }
+        else { ImGui::Text("EV %.1f - %.1f", std::log2(row.lo / evRef), std::log2(row.hi / evRef)); }
+        return;
+    }
+
+    float div = 1.0f;
+    const char* prefix = "";
+    if (row.hi >= 1.0e6f) {
+        div = 1.0e6f;
+        prefix = "M";
+    }
+    else if (row.hi >= 1000.0f) {
+        div = 1000.0f;
+        prefix = "k";
+    }
+
+    if (row.lo == row.hi) { ImGui::Text("%.4g %s%s", row.lo / div, prefix, unitLabel); }
+    else { ImGui::Text("%.4g - %.4g %s%s", row.lo / div, row.hi / div, prefix, unitLabel); }
+}
+
+static void DrawIntensityReferenceTooltip(LightUnitDisplay unit, bool bIlluminance, float evRef, float simpleRef, const char* unitLabel)
+{
+    const IntensityReference* rows = LUMINANCE_REFERENCES;
+    size_t count = sizeof(LUMINANCE_REFERENCES) / sizeof(LUMINANCE_REFERENCES[0]);
+    const char* title = "Common surface brightness";
+    if (unit == LightUnitDisplay::Lumens) {
+        rows = FLUX_REFERENCES;
+        count = sizeof(FLUX_REFERENCES) / sizeof(FLUX_REFERENCES[0]);
+        title = "Common total light output";
+    }
+    else if (bIlluminance) {
+        rows = ILLUMINANCE_REFERENCES;
+        count = sizeof(ILLUMINANCE_REFERENCES) / sizeof(ILLUMINANCE_REFERENCES[0]);
+        title = "Common light arriving on a surface";
+    }
+
+    ImGui::BeginTooltip();
+    ImGui::TextUnformatted(title);
+    ImGui::Separator();
+    if (ImGui::BeginTable("##intensityref", 2, ImGuiTableFlags_SizingFixedFit)) {
+        for (size_t i = 0; i < count; ++i) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(rows[i].label);
+            ImGui::TableSetColumnIndex(1);
+            DrawReferenceValue(rows[i], unit, evRef, simpleRef, unitLabel);
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndTooltip();
+}
+
+bool DragLightIntensity(const char* name, float* value, const LightIntensityOpts& opts)
+{
+    const bool bLumensAvailable = opts.lumensPerNit > 0.0f && !opts.bIlluminance;
+    const float evRef = opts.bIlluminance ? EV_ILLUMINANCE_REF : EV_LUMINANCE_REF;
+    const float simpleRef = opts.bIlluminance ? SIMPLE_ILLUMINANCE_REF : SIMPLE_LUMINANCE_REF;
+    const char* nativeLabel = opts.bIlluminance ? "lux" : "nits";
+    const char* simpleLabel = opts.bIlluminance ? "x131k" : "x65k";
+
+    LightUnitDisplay unit = lightUnitPreference;
+    if (unit == LightUnitDisplay::Lumens && !bLumensAvailable) { unit = LightUnitDisplay::Native; }
+
+    float display = *value;
+    float dragMin = 0.0f;
+    float dragMax = opts.bIlluminance ? LUX_MAX : NITS_MAX;
+    float dragSpeed = 0.0f;
+    const char* format = "%.0f";
+    const char* unitLabel = nativeLabel;
+
+    switch (unit) {
+        case LightUnitDisplay::Lumens:
+            display = *value * opts.lumensPerNit;
+            dragMax = LUMEN_MAX;
+            unitLabel = "lm";
+            break;
+        case LightUnitDisplay::Simple:
+            display = *value / simpleRef;
+            dragMax /= simpleRef;
+            dragSpeed = display * 0.005f < 0.001f ? 0.001f : display * 0.005f;
+            format = "%.3f";
+            unitLabel = simpleLabel;
+            break;
+        case LightUnitDisplay::EV100:
+            display = *value > 0.0f ? std::log2(*value / evRef) : EV_MIN;
+            dragMin = EV_MIN;
+            dragMax = EV_MAX;
+            dragSpeed = 0.02f;
+            format = "%.2f";
+            unitLabel = "EV";
+            break;
+        default:
+            break;
+    }
+    if (dragSpeed <= 0.0f) { dragSpeed = display * 0.005f < 1.0f ? 1.0f : display * 0.005f; }
+
+    const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+    const float comboWidth = ImGui::CalcTextSize("x131k").x + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float helpWidth = ImGui::CalcTextSize("(?)").x + spacing;
+    float dragWidth = ImGui::CalcItemWidth() - comboWidth - helpWidth - spacing;
+    if (dragWidth < kMinSliderWidth) { dragWidth = kMinSliderWidth; }
+
+    ImGui::PushID(name);
+
+    ImGui::SetNextItemWidth(dragWidth);
+    const bool changed = ImGui::DragFloat("##v", &display, dragSpeed, dragMin, dragMax, format);
+    DrawTooltip(opts.tooltip);
+
+    ImGui::SameLine(0.0f, spacing);
+    ImGui::SetNextItemWidth(comboWidth);
+    if (ImGui::BeginCombo("##unit", unitLabel, ImGuiComboFlags_HeightSmall)) {
+        if (ImGui::Selectable(nativeLabel, unit == LightUnitDisplay::Native)) { lightUnitPreference = LightUnitDisplay::Native; }
+        if (bLumensAvailable && ImGui::Selectable("lm", unit == LightUnitDisplay::Lumens)) { lightUnitPreference = LightUnitDisplay::Lumens; }
+        if (ImGui::Selectable(simpleLabel, unit == LightUnitDisplay::Simple)) { lightUnitPreference = LightUnitDisplay::Simple; }
+        if (ImGui::Selectable("EV", unit == LightUnitDisplay::EV100)) { lightUnitPreference = LightUnitDisplay::EV100; }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Display unit for every light intensity field"); }
+
+    ImGui::SameLine(0.0f, spacing);
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) { DrawIntensityReferenceTooltip(unit, opts.bIlluminance, evRef, simpleRef, unitLabel); }
+
+    ImGui::SameLine(0.0f, spacing);
+    DrawName(name);
+    if (ImGui::IsItemHovered()) {
+        const float ev = *value > 0.0f ? std::log2(*value / evRef) : EV_MIN;
+        if (bLumensAvailable) {
+            ImGui::SetTooltip("%.0f %s\n%.0f lm\n%.3f %s\nEV %.2f", *value, nativeLabel, *value * opts.lumensPerNit, *value / simpleRef, simpleLabel, ev);
+        }
+        else {
+            ImGui::SetTooltip("%.0f %s\n%.3f %s\nEV %.2f", *value, nativeLabel, *value / simpleRef, simpleLabel, ev);
+        }
+    }
+
+    ImGui::PopID();
+
+    if (!changed) { return false; }
+
+    switch (unit) {
+        case LightUnitDisplay::Lumens:
+            *value = display / opts.lumensPerNit;
+            break;
+        case LightUnitDisplay::Simple:
+            *value = display * simpleRef;
+            break;
+        case LightUnitDisplay::EV100:
+            *value = evRef * std::exp2(display);
+            break;
+        default:
+            *value = display;
+            break;
+    }
+    if (*value < 0.0f) { *value = 0.0f; }
+    return true;
 }
 
 bool SaveBar(const char* id, bool* autoSave)

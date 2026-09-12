@@ -17,6 +17,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/editor_state.h"
+#include "engine/editor/editor_widgets.h"
 #include "engine/material_manager.h"
 #include "engine/asset_manager.h"
 #include "engine/resources/texture/texture.h"
@@ -768,7 +769,7 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
 
     ImGui::SeparatorText("Emissive");
     changed |= ImGui::ColorEdit3("Emissive Color", &props.emissiveFactor.x);
-    changed |= ImGui::DragFloat("Emissive Luminance (nits)", &props.emissiveFactor.w, glm::max(props.emissiveFactor.w * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
+    changed |= Widgets::DragLightIntensity("Emissive Luminance", &props.emissiveFactor.w);
 
     ImGui::SeparatorText("Alpha");
     const char* alphaModes[] = {"Opaque", "Mask", "Blend"};
