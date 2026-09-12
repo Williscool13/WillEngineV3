@@ -61,8 +61,13 @@ public uint ReGIRActiveLevel(uint packed) { return packed >> 24u; }
 
 static uint ReGIRHashInt3(int3 p, uint level, uint seed)
 {
-    uint h = uint(p.x) * 0x8da6b343u ^ uint(p.y) * 0xd8163841u ^ uint(p.z) * 0xcb1ab31fu ^ (level * 0x9e3779b1u) ^ (seed * 0x9E3779B9u);
-    h ^= h >> 15u; h *= 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
+    // Sequential xor-multiply: an xor of per-axis products collides for every mirrored cell pair (x,y,z) vs (-x,-y,z)
+    uint h = seed * 0x9E3779B9u;
+    h = (h ^ uint(p.x)) * 0x8da6b343u; h ^= h >> 15u;
+    h = (h ^ uint(p.y)) * 0xd8163841u; h ^= h >> 13u;
+    h = (h ^ uint(p.z)) * 0xcb1ab31fu; h ^= h >> 16u;
+    h = (h ^ level) * 0x9e3779b1u; h ^= h >> 15u;
+    h *= 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
     return h;
 }
 
