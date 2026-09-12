@@ -296,7 +296,7 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 #endif
 #if RESTIR_ENABLE_CONFIDENCE
     if (pc.signalIndex != ~0u) {
-        float2 sig = float2(pHatUnshadowed * (winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev)) * scene.preExposure;
+        float2 sig = float2(pHatUnshadowed * abs(winnerVisibility - visPrev), pHatUnshadowed * max(winnerVisibility, visPrev)) * scene.preExposure;
         rdgStorageFloat2[pc.signalIndex][pixel] = sig;
         if (field != 0u) {
             int2 o = OppositeFieldPixel(pixel, field);

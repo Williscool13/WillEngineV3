@@ -62,7 +62,12 @@ void RelaxHistoryFixMain(uniform RelaxHistoryFixPushConstant pc, int2 pixelPos :
 
     float baseStride = rc.gHistoryFixBasePixelStride;
     float r = baseStride / (1.0 + historyLength);
+    if (pc.confidenceIndex != ~0u)
+    {
+        r *= rdgTexturesFloat[pc.confidenceIndex].Load(int3(pixelPos, 0)).r;
+    }
     r = round(r);
+    if (r < 1.0) { return; }
 
     [unroll]
     for (int j = -2; j <= 2; j++)

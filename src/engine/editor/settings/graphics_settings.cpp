@@ -681,7 +681,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::Button("History W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryW, Core::DebugViewAspect::Depth);
             if (ImGui::Button("ReGIR Cell (hue) / Occupancy (brightness)")) setDebugTarget("depth_target", DebugTransformationType::ReGIRCell, Core::DebugViewAspect::Depth);
             if (ImGui::Button("ReGIR Cell Majority Light")) setDebugTarget("depth_target", DebugTransformationType::ReGIRCellLight, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("ReGIR Cell Majority Light Target Share")) setDebugTarget("depth_target", DebugTransformationType::ReGIRCellLightTarget, Core::DebugViewAspect::Depth);
         }
         if (ImGui::CollapsingHeader("Reflections")) {
             if (ImGui::Button("Raw Traced (Demodulated)")) setDebugTarget("reflection_spec_noisy", DebugTransformationType::None, Core::DebugViewAspect::None);
@@ -1727,7 +1726,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                         // Cell under the mouse while a ReGIR debug view
                         const Engine::ReGIRCursorProbe& probe = ctx->regirStats.cursor;
                         if (probe.valid != 0u) {
-                            ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u reservoirs, empty %u, other %u, target sum %.3g, occupancy %.2f", probe.level, probe.cell[0], probe.cell[1], probe.cell[2], probe.slot, REGIR_RESERVOIRS_PER_CELL, probe.empty, probe.other, probe.targetSum, probe.occupancy);
+                            ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u reservoirs, empty %u, other %u, occupancy %.2f", probe.level, probe.cell[0], probe.cell[1], probe.cell[2], probe.slot, REGIR_RESERVOIRS_PER_CELL, probe.empty, probe.other, probe.occupancy);
                             for (uint32_t k = 0; k < 4; k++) {
                                 if (probe.topCount[k] == 0u) { continue; }
                                 ImGui::Text("  light %u x%u, target at centre %.3g, at (%.1f, %.1f, %.1f)", probe.topIdx[k], probe.topCount[k], probe.topTarget[k], probe.topPos[k * 3], probe.topPos[k * 3 + 1], probe.topPos[k * 3 + 2]);

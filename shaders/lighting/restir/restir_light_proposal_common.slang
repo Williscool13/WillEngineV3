@@ -32,7 +32,7 @@ public struct ReGIRProposal : ILightProposal
 {
     public uint* hashEntries;
     public ReGIRReservoir* reservoirs;
-    public float2* cellData;
+    public float* cellData;
     public int analyticCount;
     public int realLightCount;
 
@@ -58,12 +58,11 @@ public struct ReGIRProposal : ILightProposal
                 ReGIRHashKey key = ReGIRComputeKey(queryPos, cameraPos);
                 uint cellSlot = ReGIRHashFind(hashEntries, key);
                 if (cellSlot != REGIR_HASH_INVALID) {
-                    float2 cd = cellData[cellSlot];
-                    // Gate on occupancy, not the centre target sum: a cell whose centre sits in or behind a panel's plane sums to zero yet its jittered fill points still populate reservoirs
-                    if (cd.y > 0.0) {
+                    float occupancy = cellData[cellSlot];
+                    if (occupancy > 0.0) {
                         gridBase = ReGIRCellReservoirBase(cellSlot);
-                        cellOccupancy = cd.y;
-                        cellOccupied = uint(cd.y * float(REGIR_RESERVOIRS_PER_CELL) + 0.5);
+                        cellOccupancy = occupancy;
+                        cellOccupied = uint(occupancy * float(REGIR_RESERVOIRS_PER_CELL) + 0.5);
                         useGrid = true;
                     }
                 }

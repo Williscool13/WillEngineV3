@@ -11,8 +11,9 @@ import restir_common;
 import random_common;
 import regir_hash_common;
 
-groupshared float gCellTargetReduce[64];
-groupshared float gCellOccupancyReduce[64];
+static const uint FILL_GROUP = REGIR_RESERVOIRS_PER_CELL;
+
+groupshared float gCellOccupancyReduce[FILL_GROUP];
 groupshared uint gKey[REGIR_RESERVOIRS_PER_CELL];
 groupshared float gW[REGIR_RESERVOIRS_PER_CELL];
 groupshared uint gRun[REGIR_RESERVOIRS_PER_CELL];
@@ -26,7 +27,7 @@ static void SortAndShareW(uint tid)
     const uint N = REGIR_RESERVOIRS_PER_CELL;
     for (uint k = 2u; k <= N; k <<= 1u) {
         for (uint j = k >> 1u; j > 0u; j >>= 1u) {
-            for (uint i = tid; i < N; i += 64u) {
+            for (uint i = tid; i < N; i += FILL_GROUP) {
                 uint ixj = i ^ j;
                 if (ixj > i) {
                     bool ascending = (i & k) == 0u;
@@ -42,7 +43,7 @@ static void SortAndShareW(uint tid)
         }
     }
 
-    for (uint i = tid; i < N; i += 64u) {
+    for (uint i = tid; i < N; i += FILL_GROUP) {
         uint head = (i == 0u || gKey[i] != gKey[i - 1u]) ? 1u : 0u;
         gRun[i] = head;
         gFlag[i] = head;
@@ -52,11 +53,11 @@ static void SortAndShareW(uint tid)
 
     // Inclusive prefix count of run heads (run id + 1) and a segmented inclusive sum of W per run
     for (uint d = 1u; d < N; d <<= 1u) {
-        uint addRun[REGIR_RESERVOIRS_PER_CELL / 64u];
-        float addSum[REGIR_RESERVOIRS_PER_CELL / 64u];
-        uint addFlag[REGIR_RESERVOIRS_PER_CELL / 64u];
-        for (uint e = 0u; e < REGIR_RESERVOIRS_PER_CELL / 64u; e++) {
-            uint i = tid + e * 64u;
+        uint addRun[REGIR_RESERVOIRS_PER_CELL / FILL_GROUP];
+        float addSum[REGIR_RESERVOIRS_PER_CELL / FILL_GROUP];
+        uint addFlag[REGIR_RESERVOIRS_PER_CELL / FILL_GROUP];
+        for (uint e = 0u; e < REGIR_RESERVOIRS_PER_CELL / FILL_GROUP; e++) {
+            uint i = tid + e * FILL_GROUP;
             bool take = i >= d;
             addRun[e] = take ? gRun[i - d] : 0u;
             bool open = take && gFlag[i] == 0u;
@@ -64,8 +65,8 @@ static void SortAndShareW(uint tid)
             addFlag[e] = open ? gFlag[i - d] : 0u;
         }
         GroupMemoryBarrierWithGroupSync();
-        for (uint e = 0u; e < REGIR_RESERVOIRS_PER_CELL / 64u; e++) {
-            uint i = tid + e * 64u;
+        for (uint e = 0u; e < REGIR_RESERVOIRS_PER_CELL / FILL_GROUP; e++) {
+            uint i = tid + e * FILL_GROUP;
             gRun[i] += addRun[e];
             gSum[i] += addSum[e];
             gFlag[i] |= addFlag[e];
@@ -73,11 +74,11 @@ static void SortAndShareW(uint tid)
         GroupMemoryBarrierWithGroupSync();
     }
 
-    for (uint i = tid; i < N; i += 64u) {
+    for (uint i = tid; i < N; i += FILL_GROUP) {
         if (i == 0u || gRun[i] != gRun[i - 1u]) { gRunMean[gRun[i] - 1u] = float(i); }
     }
     GroupMemoryBarrierWithGroupSync();
-    for (uint i = tid; i < N; i += 64u) {
+    for (uint i = tid; i < N; i += FILL_GROUP) {
         if (i == N - 1u || gRun[i + 1u] != gRun[i]) {
             uint run = gRun[i] - 1u;
             float count = float(i) - gRunMean[run] + 1.0;
@@ -88,7 +89,7 @@ static void SortAndShareW(uint tid)
 }
 
 [shader("compute")]
-[numthreads(64, 1, 1)]
+[numthreads(256, 1, 1)]
 void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID) {
     uint cellIdx = groupID.x;
     if (cellIdx >= pc.activeCount[0]) {
@@ -101,10 +102,10 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     int lightCount = pc.lightData->lightCount;
 
     if (lightCount <= 0) {
-        for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
+        for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += FILL_GROUP) {
             pc.reservoirs[baseOut + r] = ReGIRReservoirEmpty();
         }
-        if (localID.x == 0u) { pc.cellData[slot] = float2(0.0, 0.0); }
+        if (localID.x == 0u) { pc.cellData[slot] = 0.0; }
         return;
     }
 
@@ -118,21 +119,6 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     float cellHalfDiag = ReGIRCellHalfDiag(key.level);
 
     uint analyticCount = uint(pc.lightData->analyticLightCount);
-    uint liveCount = LiveLightCount(lightCount, int(analyticCount));
-    float localSum = 0.0;
-    for (uint i = localID.x; i < liveCount; i += 64u) {
-        uint li = LiveLightIndex(i, int(analyticCount));
-        LightView vsl = UnpackLightVS(pc.lightVS[li]);
-        localSum += EvalCellLightTarget(vsl, cellCenterVS, cellCenterVS, cellHalfDiag, UnpackUnorm4x8(vsl.packedColor).rgb, targetMinDist2);
-    }
-    gCellTargetReduce[localID.x] = localSum;
-    GroupMemoryBarrierWithGroupSync();
-    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
-        if (localID.x < stride) {
-            gCellTargetReduce[localID.x] += gCellTargetReduce[localID.x + stride];
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
 
     uint prevBase = 0u;
     bool hasPrev = false;
@@ -151,7 +137,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     uint cellRotation = (cellTile >> 16u) % REGIR_TILE_SIZE;
     float prevRetention = pow(0.5, 1.0 / scene.framerateScale);
     float prevConfidence = prevRetention / (1.0 - prevRetention);
-    for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
+    for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += FILL_GROUP) {
             uint h = (slot * 2654435761u) ^ ((r + 1u) * 0x9E3779B9u) ^ (pc.frameIndex * 0x85EBCA6Bu);
         h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
@@ -221,7 +207,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
 
     gCellOccupancyReduce[localID.x] = float(localNonEmpty);
     GroupMemoryBarrierWithGroupSync();
-    for (uint stride = 32u; stride > 0u; stride >>= 1u) {
+    for (uint stride = FILL_GROUP >> 1u; stride > 0u; stride >>= 1u) {
         if (localID.x < stride) {
             gCellOccupancyReduce[localID.x] += gCellOccupancyReduce[localID.x + stride];
         }
@@ -229,12 +215,12 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     }
 
     SortAndShareW(localID.x);
-    for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
+    for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += FILL_GROUP) {
         ReGIRReservoir res;
         res.lightIdx = gKey[r];
         res.W = gW[r];
         res.sharedW = (res.lightIdx != ~0u) ? gRunMean[gRun[r] - 1u] : 0.0;
         pc.reservoirs[baseOut + r] = res;
     }
-    if (localID.x == 0u) { pc.cellData[slot] = float2(gCellTargetReduce[0], gCellOccupancyReduce[0] / float(REGIR_RESERVOIRS_PER_CELL)); }
+    if (localID.x == 0u) { pc.cellData[slot] = gCellOccupancyReduce[0] / float(REGIR_RESERVOIRS_PER_CELL); }
 }

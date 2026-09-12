@@ -35,7 +35,6 @@ struct ReGIRCursorProbe
     uint32_t topCount[4]{};
     float topTarget[4]{};
     float topPos[12]{};
-    float targetSum{};
     float occupancy{};
 };
 

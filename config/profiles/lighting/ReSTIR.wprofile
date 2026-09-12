@@ -21,12 +21,12 @@ restirWClamp|0x00000000
 lightProposal|1
 bEmissiveTriangleLights|1
 emissiveTriRangeMultiplier|0x3d000000
-bEnableConfidence|0
-confidenceStrength|0x3e17b426
-confidenceSensitivity|0x3f000000
-confidenceDarknessBias|0x466700dd
-confidenceHistoryLength|0x40800000
-confidenceBlurRadius|6
+bEnableConfidence|1
+confidenceStrength|0x3f800000
+confidenceSensitivity|0x41000000
+confidenceDarknessBias|0x41800000
+confidenceHistoryLength|0x3f400000
+confidenceBlurRadius|2
 denoiserMode|3
 remodulateOutput|0
 atrous
@@ -77,7 +77,7 @@ historyResetSpatialSigmaScale|0x3f800000
 historyResetAmount|0x3f4ccccd
 enablePrepass|0
 enableAntiFirefly|1
-bChromaAtrous|1
+bChromaAtrous|0
 chromaAtrousIterations|1
 chromaLumaPower|0x40800000
 ;
@@ -205,7 +205,7 @@ denoisePasses|0x3f800000
 temporalMaxAccum|0x41800000
 temporalClampScale|0x3f800000
 ;
-iblIntensity|0x3f800000
+iblIntensity|0x00000000
 indirectIntensity|0x3f333333
 shadingShaderOverride|16532098932897623660
 lightingShaderOverride|6423489698308471953

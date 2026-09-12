@@ -6,7 +6,10 @@ import restir_interop;
 import shader_constants;
 import packing_functions;
 
-groupshared float gScan[256];
+static const uint CDF_GROUP = 256u;
+
+groupshared float gScan[CDF_GROUP];
+groupshared float gWaveTotal[CDF_GROUP / 32u];
 groupshared uint gMaxIdx;
 
 static float ReduceSum(uint tid, float v)
@@ -69,31 +72,36 @@ static float LightPower(LightInfo L)
     return max(power, 0.0);
 }
 
-// Dispatched as a single workgroup; runningTotal chains the 256-wide chunks sequentially.
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ComputeLightPowerCDF(uniform LightPowerCDFPushConstant pc, uint3 localID : SV_GroupThreadID)
 {
     uint tid = localID.x;
+    uint waveId = tid / WaveGetLaneCount();
+    uint waveCount = CDF_GROUP / WaveGetLaneCount();
     float runningTotal = 0.0;
-    for (uint base = 0u; base < pc.liveCount; base += 256u) {
+    for (uint base = 0u; base < pc.liveCount; base += CDF_GROUP) {
         uint i = base + tid;
         float p = 0.0;
         if (i < pc.liveCount) {
             p = LightPower(pc.lightData->lights[LiveLightIndex(i, pc.analyticCount)]);
         }
-        gScan[tid] = p;
+        float inclusive = WavePrefixSum(p) + p;
+        float waveTotal = WaveActiveSum(p);
+        if (WaveIsFirstLane()) { gWaveTotal[waveId] = waveTotal; }
         GroupMemoryBarrierWithGroupSync();
-        for (uint offset = 1u; offset < 256u; offset <<= 1u) {
-            float v = tid >= offset ? gScan[tid - offset] : 0.0;
-            GroupMemoryBarrierWithGroupSync();
-            gScan[tid] += v;
-            GroupMemoryBarrierWithGroupSync();
+
+        float waveBase = 0.0;
+        float chunkTotal = 0.0;
+        for (uint w = 0u; w < waveCount; w++) {
+            float t = gWaveTotal[w];
+            if (w < waveId) { waveBase += t; }
+            chunkTotal += t;
         }
         if (i < pc.liveCount) {
-            pc.cdf[i] = runningTotal + gScan[tid];
+            pc.cdf[i] = runningTotal + waveBase + inclusive;
         }
-        runningTotal += gScan[255];
+        runningTotal += chunkTotal;
         GroupMemoryBarrierWithGroupSync();
     }
 

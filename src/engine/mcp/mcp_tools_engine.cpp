@@ -127,7 +127,6 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
         call.SetInt("slot", probe.slot);
         call.SetInt("empty", probe.empty);
         call.SetInt("other", probe.other);
-        call.SetFloat("targetSum", probe.targetSum);
         call.SetFloat("occupancy", probe.occupancy);
         call.BeginArray("top");
         for (uint32_t k = 0; k < 4; k++) {

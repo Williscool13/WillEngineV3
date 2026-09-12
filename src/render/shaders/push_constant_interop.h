@@ -102,7 +102,7 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(uint) regirHashEntries;
-    SHADER_PUBLIC SHADER_PTR(float2) regirCellData;
+    SHADER_PUBLIC SHADER_PTR(float) regirCellData;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) regirReservoirs;
     SHADER_PUBLIC SHADER_PTR(LightVSData) restirLightVS;
     SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback; // Null when GPU stats are off
@@ -465,7 +465,7 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(int4) activeCells;
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
-    SHADER_PUBLIC SHADER_PTR(float2) cellData;
+    SHADER_PUBLIC SHADER_PTR(float) cellData;
     SHADER_PUBLIC SHADER_PTR(uint) hashEntriesPrev;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirsPrev;
     SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles;
@@ -501,7 +501,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) hashEntries;
     SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
-    SHADER_PUBLIC SHADER_PTR(float2) cellData;
+    SHADER_PUBLIC SHADER_PTR(float) cellData;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
@@ -580,13 +580,9 @@ SHADER_PUBLIC struct ReSTIRDISunPushConstant
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t visIndex;
-    SHADER_PUBLIC uint32_t prevGbufferOneIndex;
-    SHADER_PUBLIC uint32_t prevDepthIndex;
     SHADER_PUBLIC uint32_t tlasIndex;
     SHADER_PUBLIC uint32_t prevTlasIndex;
-    SHADER_PUBLIC uint32_t signalIndex;
-    SHADER_PUBLIC uint32_t blockerIndex;
-    SHADER_PUBLIC uint32_t prevBlockerIndex;
+    SHADER_PUBLIC uint32_t flipIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
@@ -617,6 +613,7 @@ SHADER_PUBLIC struct ReSTIRConfidenceResolvePushConstant
     SHADER_PUBLIC uint32_t gradientIndex;
     SHADER_PUBLIC uint32_t prevConfidenceIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t sunFlipIndex;
     SHADER_PUBLIC uint32_t confidenceIndex;
     SHADER_PUBLIC float confidenceStrength;
     SHADER_PUBLIC float sensitivity;
@@ -2014,6 +2011,7 @@ SHADER_PUBLIC struct RelaxHistoryFixPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
+    SHADER_PUBLIC uint32_t confidenceIndex;
 };
 
 SHADER_PUBLIC struct RelaxHistoryClampingPushConstant

@@ -405,6 +405,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                         }
                         Profiles::LightingProfileBundle bundle = Profiles::CaptureLightingProfile(*state);
                         if (Profiles::LoadLightingProfile(e.name.c_str(), bundle)) {
+                            bundle.gtao.bEnabled = state->lighting.gtaoConfig.bEnabled;
                             Profiles::ApplyLightingProfile(*state, bundle);
                             state->requests.pendingCacheReset = Core::RenderCacheReset::All;
                         }

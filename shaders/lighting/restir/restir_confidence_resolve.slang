@@ -13,45 +13,49 @@ void ComputeReSTIRConfidenceResolve(uniform ReSTIRConfidenceResolvePushConstant 
         return;
     }
 
-    int2 gcenter = int2(pixel / GRAD_FACTOR);
+    float dip = 0.0;
 
-    float2 g = float2(0.0, 0.0);
-    float wsum = 0.0;
-    int r = int(pc.blurRadius);
-    for (int dy = -r; dy <= r; dy++) {
-        for (int dx = -r; dx <= r; dx++) {
-            int2 q = gcenter + int2(dx, dy);
-            if (any(q < int2(0, 0)) || any(q >= int2(pc.gradientExtent))) {
-                continue;
+    if (pc.gradientIndex != ~0u) {
+        int2 gcenter = int2(pixel / GRAD_FACTOR);
+
+        float ratio = 0.0;
+        int r = int(pc.blurRadius);
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                int2 q = gcenter + int2(dx, dy);
+                if (any(q < int2(0, 0)) || any(q >= int2(pc.gradientExtent))) {
+                    continue;
+                }
+                float2 g = rdgTexturesFloat2[pc.gradientIndex].Load(int3(q, 0));
+                ratio = max(ratio, g.x / max(g.y + pc.darknessBias, 1e-6));
             }
-            float w = 1.0 / (1.0 + float(abs(dx) + abs(dy)));
-            g += rdgTexturesFloat2[pc.gradientIndex].Load(int3(q, 0)) * w;
-            wsum += w;
         }
-    }
-    if (wsum > 0.0) {
-        g /= wsum;
+        dip += ratio * pc.sensitivity;
     }
 
-    float conf = saturate(1.0 - abs(g.x) / max(g.y + pc.darknessBias, 1e-6));
-    conf = saturate(pow(conf, pc.sensitivity));
+    if (pc.sunFlipIndex != ~0u) {
+        float flip = 0.0;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int2 q = clamp(int2(pixel) + int2(dx, dy), int2(0, 0), int2(pc.renderExtent) - int2(1, 1));
+                flip = max(flip, rdgTexturesFloat[pc.sunFlipIndex].Load(int3(q, 0)).r);
+            }
+        }
+        dip += flip;
+    }
 
-    conf = 1.0 - pc.confidenceStrength * (1.0 - conf);
-
-    if (pc.prevConfidenceIndex != ~0u && pc.blendFactor < 1.0) {
-        uint2 fullPixel = pixel;
-        uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(fullPixel, 0));
+    if (pc.prevConfidenceIndex != ~0u && pc.blendFactor < 1.0 && pc.confidenceStrength > 0.0) {
+        uint4 g1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
         float2 velocityNDC = UnpackMotionVectors(g1.g);
         float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
         float2 historyUV = uv + velocityNDC * 0.5;
         if (all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0))) {
             uint2 prevPixel = clamp(uint2(historyUV * float2(pc.renderExtent)), uint2(0, 0), pc.renderExtent - uint2(1, 1));
             float prevConf = rdgTexturesFloat[pc.prevConfidenceIndex].Load(int3(prevPixel, 0)).r;
-            const float power = 0.25;
-            float blended = lerp(pow(saturate(prevConf), power), pow(saturate(conf), power), pc.blendFactor);
-            conf = pow(saturate(blended), 1.0 / power);
+            dip += (1.0 - prevConf) / pc.confidenceStrength * (1.0 - pc.blendFactor);
         }
     }
 
+    float conf = 1.0 - pc.confidenceStrength * saturate(dip);
     rdgStorageFloat[pc.confidenceIndex][pixel] = conf;
 }

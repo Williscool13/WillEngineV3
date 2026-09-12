@@ -362,14 +362,13 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             if (cellSlot == REGIR_HASH_INVALID) {
                 srcPixel.xyz = float3(1.0, 0.0, 1.0);
             } else {
-                float2 cd = pc.regirCellData[cellSlot];
+                float occupancy = pc.regirCellData[cellSlot];
                 uint h = ReGIRChecksum(key) * 2654435761u;
                 float3 hue = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
-                srcPixel.xyz = hue * max(cd.y, 0.05);
+                srcPixel.xyz = hue * max(occupancy, 0.05);
             }
             break;
         }
-        case 51:
         case 50: { // ReGIRCellLight: colour of the light held by the most reservoirs in the pixel's ReGIR cell (emissive triangles counted per group), brightness = that share of the cell's reservoirs. Magenta = cell absent, black = sky.
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0 || pc.regirHashEntries == nullptr || pc.regirReservoirs == nullptr) { srcPixel.xyz = float3(0.0); break; }
@@ -395,15 +394,6 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
                 if (CollapseLightIdxToGroup(pc.regirReservoirs[base + r].lightIdx) == candidate) { count++; }
             }
             srcPixel.xyz = LightIdxColor(candidate) * max(float(count) / float(REGIR_RESERVOIRS_PER_CELL), 0.05);
-            if (pc.valueTransformationType == 51u && candidate != ~0u && pc.restirLightVS != nullptr) {
-                // ReGIRCellLightTarget: same hue, brightness = the majority light's share of the cell's fill target sum at the cell centre. Dark hue = it is in the cell without a target there.
-                float3 centerVS = mul(pc.sceneData->view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
-                float minDist2 = ReGIRTargetMinDist2(key.level);
-                LightView vs = UnpackLightVS(pc.restirLightVS[candidate]);
-                float target = EvalCellLightTarget(vs, centerVS, centerVS, ReGIRCellHalfDiag(key.level), UnpackUnorm4x8(vs.packedColor).rgb, minDist2);
-                float sum = pc.regirCellData[cellSlot].x;
-                srcPixel.xyz = LightIdxColor(candidate) * max((sum > 0.0) ? saturate(target / sum) : 0.0, 0.05);
-            }
             break;
         }
         case 42: { // DofCoc: signed circle of confusion in dof_color_coc.a. Red = near field, blue = far, black = sharp; sqrt ramp over a 64px reference (the radius slider cap) so typical radii do not read black.
@@ -493,11 +483,9 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
                     pc.readback->regirCursorTopPos[k * 3u + 1u] = pos.y;
                     pc.readback->regirCursorTopPos[k * 3u + 2u] = pos.z;
                 }
-                float2 cd = pc.regirCellData[cellSlot];
                 pc.readback->regirCursorEmpty = empty;
                 pc.readback->regirCursorOther = other;
-                pc.readback->regirCursorTargetSum = cd.x;
-                pc.readback->regirCursorOccupancy = cd.y;
+                pc.readback->regirCursorOccupancy = pc.regirCellData[cellSlot];
                 pc.readback->regirCursorValid = 1u;
             }
         }

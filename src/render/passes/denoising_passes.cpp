@@ -382,6 +382,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.ReadSampledImage("relax_diff_illum"_sid);
         pass.ReadWriteImage("relax_spec_fast"_sid);
         pass.ReadWriteImage("relax_diff_fast"_sid);
+        if (graph.HasTexture("restir_confidence"_sid)) { pass.ReadSampledImage("restir_confidence"_sid); }
         pass.Execute([pipelineManager, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxHistoryFixPushConstant pc{
                 .constants = graph.GetBufferAddress("relax_constants"_sid),
@@ -392,6 +393,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex("relax_diff_illum"_sid),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("relax_spec_fast"_sid),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("relax_diff_fast"_sid),
+                .confidenceIndex = graph.HasTexture("restir_confidence"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_confidence"_sid) : ~0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_history_fix"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

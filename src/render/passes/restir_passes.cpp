@@ -44,23 +44,18 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const uint32_t reflectionBufferSize = pixelCount * static_cast<uint32_t>(sizeof(ReflectionHitDescriptor));
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
-    // tlasIndex (and the carried prev-TLAS index) resolve inside the Execute lambdas: the AS resource's physical + RT descriptor are assigned during Compile, after pass setup.
-    // Temporal reuse pass; off => spatial/shading read the base reservoir directly.
     const bool bTemporalReuse = restirParams.bEnableTemporal;
-    // RELAX moving-shadow confidence
     const bool bConfidence = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
-    // restir_shadow_vis is antilag-only
+    const bool bSunFlip = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
     const bool bAntilag = bTemporalReuse && RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
     const bool bShadowVis = bAntilag;
 
     const bool bReGIRProposal = restirParams.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
     const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
 
-    // Temporal-gradient confidence runs at 1/GRAD_FACTOR of the half-res ReSTIR grid (must match GRAD_FACTOR in the confidence shaders).
     const uint32_t GRAD_FACTOR = 3u;
     const Core::Array<uint32_t, 2> gradientExtent = {(renderExtent[0] + GRAD_FACTOR - 1u) / GRAD_FACTOR, (renderExtent[1] + GRAD_FACTOR - 1u) / GRAD_FACTOR};
 
-    // Transform all lights (area + sphere) to view space once; every ReSTIR pass and the resolve read this instead of transforming per pixel.
     graph.CreateBuffer("restir_lights_vs"_sid, MAX_LIGHTS * sizeof(LightVSData), false);
 
     const uint32_t liveLightCount = viewFamily.analyticLightCount + viewFamily.triLightCount;
@@ -93,7 +88,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
         graph.CreateVersionedBuffer("regir_hash_entries"_sid, entriesSize, 1, VersionSource::Fresh);
         graph.CreateVersionedBuffer("regir_hash_reservoirs"_sid, reservoirsSize, 1, VersionSource::Fresh);
-        graph.CreateBuffer("regir_cell_data"_sid, REGIR_HASH_CAPACITY * 2u * static_cast<uint32_t>(sizeof(float)), false);
+        graph.CreateBuffer("regir_cell_data"_sid, REGIR_HASH_CAPACITY * static_cast<uint32_t>(sizeof(float)), false);
         graph.CreateBuffer("regir_active_cells"_sid, activeCellsSize, false);
         graph.CreateBuffer("regir_active_count"_sid, sizeof(uint32_t), false);
         graph.CreateBuffer("regir_fill_indirect"_sid, 3u * static_cast<uint32_t>(sizeof(uint32_t)), false);
@@ -258,7 +253,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const bool bHasPrevVis = bShadowVis && graph.ResourceHasVersion("restir_shadow_vis"_sid, 1);
         const StringID prevShadowVis = bHasPrevVis ? graph.ResourceVersionID("restir_shadow_vis"_sid, 1) : StringID{};
         if (bConfidence) {
-            graph.CreateVersionedTexture("restir_confidence"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
             graph.CreateTexture("restir_signal"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
             graph.CreateTexture("restir_gradient"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gradientExtent[0], gradientExtent[1], 1}, {std::nullopt}, true);
         }
@@ -375,7 +369,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             temporalPass.WriteBuffer("restir_reservoir_temporal"_sid);
             if (bShadowVis) { temporalPass.WriteStorageImage("restir_shadow_vis"_sid); }
             if (bConfidence) { temporalPass.WriteStorageImage("restir_signal"_sid); }
-            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, prevShadowVis, reservoirHistory, gbufferOneHistory, depthHistory, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, prevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, prevShadowVis, reservoirHistory, gbufferOneHistory, depthHistory, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_temporal"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -431,16 +425,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
         const uint32_t sunVisWidth = (sunCheckerboardField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
         graph.CreateTexture("restir_sun_vis"_sid, TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent[1], 1}, {std::nullopt}, true);
-        const bool bHasPrevTlas = bConfidence && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
+        const bool bHasPrevTlas = bSunFlip && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
         const StringID prevTlas = bHasPrevTlas ? graph.ResourceVersionID(RT_TLAS_BUFFER, 1) : StringID{};
-        if (bConfidence) {
-            graph.CreateVersionedTexture("restir_sun_blocker"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (bSunFlip) {
+            graph.CreateTexture("restir_sun_flip"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
         }
-        const bool bHasPrevBlocker = bConfidence && graph.ResourceHasVersion("restir_sun_blocker"_sid, 1);
-        const StringID prevSunBlocker = bHasPrevBlocker ? graph.ResourceVersionID("restir_sun_blocker"_sid, 1) : StringID{};
-        const bool bSunReproject = bConfidence && !bResetHistory && graph.ResourceHasVersion(targets.gbufferOne, 1) && graph.ResourceHasVersion(targets.depthCopy, 1);
-        const StringID gbufferOneHistory = bSunReproject ? graph.ResourceVersionID(targets.gbufferOne, 1) : StringID{};
-        const StringID depthHistory = bSunReproject ? graph.ResourceVersionID(targets.depthCopy, 1) : StringID{};
 
         RenderPass& sunPass = graph.AddPass("[ReSTIR DI] Sun"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
         sunPass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -453,15 +442,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         sunPass.ReadSampledImage(targets.gbufferOne);
         sunPass.ReadSampledImage(targets.gbufferTwo);
         sunPass.ReadSampledImage(targets.depthCopy);
-        if (bSunReproject) { sunPass.ReadSampledImage(gbufferOneHistory); }
-        if (bSunReproject) { sunPass.ReadSampledImage(depthHistory); }
         sunPass.ReadTLASBuffer(RT_TLAS_BUFFER);
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(prevTlas); }
         sunPass.WriteStorageImage("restir_sun_vis"_sid);
-        if (bConfidence) { sunPass.WriteStorageImage("restir_signal"_sid); }
-        if (bConfidence) { sunPass.WriteStorageImage("restir_sun_blocker"_sid); }
-        if (bHasPrevBlocker) { sunPass.ReadSampledImage(prevSunBlocker); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bSunReproject, bHasPrevTlas, bConfidence, bHasPrevBlocker, prevSunBlocker, gbufferOneHistory, depthHistory, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        if (bSunFlip) { sunPass.WriteStorageImage("restir_sun_flip"_sid); }
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_sun"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -478,13 +463,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .visIndex = graph.GetStorageImageViewDescriptorIndex("restir_sun_vis"_sid),
-                .prevGbufferOneIndex = bSunReproject ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
-                .prevDepthIndex = bSunReproject ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0u,
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
                 .prevTlasIndex = bHasPrevTlas ? graph.GetAccelerationStructureDescriptorIndex(prevTlas) : ~0u,
-                .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex("restir_signal"_sid) : ~0u,
-                .blockerIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex("restir_sun_blocker"_sid) : ~0u,
-                .prevBlockerIndex = bHasPrevBlocker ? graph.GetSampledImageViewDescriptorIndex(prevSunBlocker) : ~0u,
+                .flipIndex = bSunFlip ? graph.GetStorageImageViewDescriptorIndex("restir_sun_flip"_sid) : ~0u,
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .activeCheckerboardField = field,
@@ -499,34 +480,38 @@ void SetupReSTIRPasses(RenderGraph& graph,
         });
     }
 
-    // Temporal-gradient antilag confidence: gradient (stratum mean of the re-shade signal) -> resolve (blur + convert + asymmetric temporal) -> restir_confidence, consumed by RELAX.
-    if (bConfidence) {
+    const bool bSunFlipReady = bSunFlip && graph.HasTexture("restir_sun_flip"_sid);
+    if (bConfidence || bSunFlipReady) {
+        graph.CreateVersionedTexture("restir_confidence"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         const bool bHasPrevConfidence = graph.ResourceHasVersion("restir_confidence"_sid, 1);
         const StringID prevConfidence = bHasPrevConfidence ? graph.ResourceVersionID("restir_confidence"_sid, 1) : StringID{};
 
-        RenderPass& gradientPass = graph.AddPass("[ReSTIR DI] Confidence Gradient"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
-        gradientPass.ReadSampledImage("restir_signal"_sid);
-        gradientPass.WriteStorageImage("restir_gradient"_sid);
-        gradientPass.Execute([&, pipelineManager, renderExtent, gradientExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_confidence_gradient"_sid);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        if (bConfidence) {
+            RenderPass& gradientPass = graph.AddPass("[ReSTIR DI] Confidence Gradient"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+            gradientPass.ReadSampledImage("restir_signal"_sid);
+            gradientPass.WriteStorageImage("restir_gradient"_sid);
+            gradientPass.Execute([&, pipelineManager, renderExtent, gradientExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_confidence_gradient"_sid);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
-            ReSTIRConfidenceGradientPushConstant pc{
-                .renderExtent = {renderExtent[0], renderExtent[1]},
-                .gradientExtent = {gradientExtent[0], gradientExtent[1]},
-                .signalIndex = graph.GetSampledImageViewDescriptorIndex("restir_signal"_sid),
-                .gradientIndex = graph.GetStorageImageViewDescriptorIndex("restir_gradient"_sid),
-            };
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (gradientExtent[0] + 7) / 8, (gradientExtent[1] + 7) / 8, 1);
-        });
+                ReSTIRConfidenceGradientPushConstant pc{
+                    .renderExtent = {renderExtent[0], renderExtent[1]},
+                    .gradientExtent = {gradientExtent[0], gradientExtent[1]},
+                    .signalIndex = graph.GetSampledImageViewDescriptorIndex("restir_signal"_sid),
+                    .gradientIndex = graph.GetStorageImageViewDescriptorIndex("restir_gradient"_sid),
+                };
+                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+                vkCmdDispatch(cmd, (gradientExtent[0] + 7) / 8, (gradientExtent[1] + 7) / 8, 1);
+            });
+        }
 
         RenderPass& resolvePass = graph.AddPass("[ReSTIR DI] Confidence Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
-        resolvePass.ReadSampledImage("restir_gradient"_sid);
+        if (bConfidence) { resolvePass.ReadSampledImage("restir_gradient"_sid); }
         if (bHasPrevConfidence) { resolvePass.ReadSampledImage(prevConfidence); }
+        if (bSunFlipReady) { resolvePass.ReadSampledImage("restir_sun_flip"_sid); }
         resolvePass.ReadSampledImage(targets.gbufferOne);
         resolvePass.WriteStorageImage("restir_confidence"_sid);
-        resolvePass.Execute([&, pipelineManager, renderExtent, gradientExtent, bHasPrevConfidence, prevConfidence, gbufferOne = targets.gbufferOne,
+        resolvePass.Execute([&, pipelineManager, renderExtent, gradientExtent, bConfidence, bHasPrevConfidence, prevConfidence, bSunFlipReady, gbufferOne = targets.gbufferOne,
                 confStrength = restirParams.confidenceStrength, sensitivity = restirParams.confidenceSensitivity, darknessBias = restirParams.confidenceDarknessBias * preExposure,
                 blendFactor = 1.0f / (restirParams.confidenceHistoryLength + 1.0f), blurRadius = restirParams.confidenceBlurRadius](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_confidence_resolve"_sid);
@@ -535,9 +520,10 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 ReSTIRConfidenceResolvePushConstant pc{
                     .renderExtent = {renderExtent[0], renderExtent[1]},
                     .gradientExtent = {gradientExtent[0], gradientExtent[1]},
-                    .gradientIndex = graph.GetSampledImageViewDescriptorIndex("restir_gradient"_sid),
+                    .gradientIndex = bConfidence ? graph.GetSampledImageViewDescriptorIndex("restir_gradient"_sid) : ~0u,
                     .prevConfidenceIndex = bHasPrevConfidence ? graph.GetSampledImageViewDescriptorIndex(prevConfidence) : ~0u,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                    .sunFlipIndex = bSunFlipReady ? graph.GetSampledImageViewDescriptorIndex("restir_sun_flip"_sid) : ~0u,
                     .confidenceIndex = graph.GetStorageImageViewDescriptorIndex("restir_confidence"_sid),
                     .confidenceStrength = confStrength,
                     .sensitivity = sensitivity,

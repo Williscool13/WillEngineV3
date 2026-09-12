@@ -90,7 +90,6 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     GTAOResolved = 48,
     ReGIRCell = 49,
     ReGIRCellLight = 50,
-    ReGIRCellLightTarget = 51,
 };
 
 SHADER_PUBLIC struct Frustum
@@ -179,7 +178,6 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t regirCursorTopCount[4];
     SHADER_PUBLIC float regirCursorTopTarget[4];
     SHADER_PUBLIC float regirCursorTopPos[12];
-    SHADER_PUBLIC float regirCursorTargetSum;
     SHADER_PUBLIC float regirCursorOccupancy;
     // Light power CDF
     SHADER_PUBLIC float cdfTotalPower;

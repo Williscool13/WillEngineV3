@@ -26,13 +26,16 @@ import rt_alpha_test_common;
 
 #include "restir_features_macros.h"
 
-// Blocker-distance drift as a pseudo-flip for the confidence signal: coherent occluder motion along the
-// ray survives the gradient's stratum mean, stochastic penumbra noise cancels.
-static const float BLOCKER_SENSITIVITY = 4.0;
-static const float BLOCKER_NORM_BASE = 1.0;
-static const float BLOCKER_FRACTION_ALPHA = 0.125;
-static const float BLOCKER_DIST_ALPHA = 0.25;
-static const float BLOCKER_TRUST_FRACTION = 0.25;
+static void WriteSunFlip(ReSTIRDISunPushConstant pc, uint2 pixel, uint field, float flip)
+{
+    rdgStorageFloat[pc.flipIndex][pixel] = flip;
+    if (field != 0u) {
+        int2 o = OppositeFieldPixel(pixel, field);
+        if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
+            rdgStorageFloat[pc.flipIndex][uint2(o)] = flip;
+        }
+    }
+}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -55,6 +58,7 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     if (depth <= 0.0) {
         rdgStorageUInt[pc.visIndex][coord] = SUN_VIS_EMPTY;
+        if (pc.flipIndex != ~0u) { WriteSunFlip(pc, pixel, field, 0.0); }
         return;
     }
 
@@ -90,98 +94,23 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
     rdgStorageUInt[pc.visIndex][coord] = (bTraced && !bOccluded) ? EncodeSunVis(candXi) : SUN_VIS_EMPTY;
 
 #if RESTIR_ENABLE_CONFIDENCE
-    if (pc.signalIndex == ~0u && pc.blockerIndex == ~0u) {
+    if (pc.flipIndex == ~0u) {
         return;
     }
 
-    // Reprojection exists only to fetch the blocker-distance accumulator; the visibility result itself never reuses history.
-    float2 velocityNDC = UnpackMotionVectors(g1.g);
-    float2 historyUV = uv + velocityNDC * 0.5;
-    bool bHistoryUsable = false;
-    uint2 historyPixel = uint2(0, 0);
+    float flip = 0.0;
+    bool bFlipLane = (field != 0u) || (((pixel.x + pixel.y + pc.frameIndex) & 1u) == 0u);
+    if (bFlipLane && bTraced && pc.prevTlasIndex != ~0u) {
+        float4 prevClip = mul(scene.prevViewProj, float4(worldPos, 1.0));
+        float2 prevUv = (prevClip.xy / max(prevClip.w, 1e-6)) * float2(0.5, 0.5) + 0.5;
+        float2 historyUv = uv + UnpackMotionVectors(g1.g) * 0.5;
 
-    if (pc.prevGbufferOneIndex != ~0u && all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0))) {
-        uint2 tapPixel = clamp(uint2(historyUV * float2(pc.renderExtent)), uint2(0, 0), pc.renderExtent - uint2(1, 1));
-        bool bInBounds = true;
-        if (field != 0u) {
-            int2 snapped = ActivateCheckerboardPixel(int2(tapPixel), true, field);
-            bInBounds = all(snapped >= int2(0, 0)) && all(snapped < int2(pc.renderExtent));
-            if (bInBounds) { tapPixel = uint2(snapped); }
-        }
-        if (bInBounds) {
-            float NoV = abs(dot(N, normalize(viewPosition)));
-            float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
-            float disocclusionThreshold = saturate(0.01 / lerp(0.05, 1.0, NoV)) * frustumSize;
-            float expectedPrevViewDepth = viewSpaceDepth + UnpackViewZDelta(g1.w);
-
-            float3 historyN = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.prevGbufferOneIndex].Load(int3(tapPixel, 0)).r));
-            float3 historyWorldN = normalize(mul(transpose(float3x3(scene.prevView)), historyN));
-            if (dot(worldN, historyWorldN) >= 0.5) {
-                float historyRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(tapPixel, 0)).r;
-                float historyViewDepth = ScreenToViewSpaceDepth(historyRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                if (abs(historyViewDepth - expectedPrevViewDepth) * NoV <= disocclusionThreshold) {
-                    historyPixel = tapPixel;
-                    bHistoryUsable = true;
-                }
-            }
+        bool bStaticReceiver = all(abs(prevUv - historyUv) * float2(pc.renderExtent) < 1.0);
+        if (bStaticReceiver) {
+            bool bVisiblePrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest);
+            flip = (bVisiblePrev == bOccluded) ? 1.0 : 0.0;
         }
     }
-
-    if (!bTraced) {
-        if (pc.blockerIndex != ~0u) {
-            // No trace this frame: decay the occluded fraction, keep the accumulated distance.
-            float2 prevAcc = (bHistoryUsable && pc.prevBlockerIndex != ~0u) ? rdgTexturesFloat2[pc.prevBlockerIndex].Load(int3(historyPixel, 0)).rg : float2(0.0, 0.0);
-            if (any(isnan(prevAcc)) || any(isinf(prevAcc))) { prevAcc = float2(0.0, 0.0); }
-            rdgStorageFloat2[pc.blockerIndex][pixel] = float2(prevAcc.x, prevAcc.y * (1.0 - BLOCKER_FRACTION_ALPHA));
-        }
-        return;
-    }
-
-    float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
-    float pSun = EvalSunPHat(candDirV, V, N, li.albedo.xyz, F0, li.metallic, roughness, SunIlluminance(sun));
-    float winnerVis = bOccluded ? 0.0 : 1.0;
-
-    float blockerFlip = 0.0;
-    if (pc.blockerIndex != ~0u) {
-        float2 prevAcc = float2(0.0, 0.0);
-        bool bAccValid = false;
-        if (bHistoryUsable && pc.prevBlockerIndex != ~0u) {
-            prevAcc = rdgTexturesFloat2[pc.prevBlockerIndex].Load(int3(historyPixel, 0)).rg;
-            if (!any(isnan(prevAcc)) && !any(isinf(prevAcc))) { bAccValid = true; }
-        }
-        float accT = bAccValid ? prevAcc.x : 0.0;
-        float fr = bAccValid ? prevAcc.y : 0.0;
-        float frNew = lerp(fr, bOccluded ? 1.0 : 0.0, bAccValid ? BLOCKER_FRACTION_ALPHA : 1.0);
-        float accTNew = accT;
-        if (bOccluded) {
-            // Delta vs the ACCUMULATED blocker distance, and only where occluded history exists:
-            // raw-vs-raw at 1spp is a noise detector, and lit<->shadowed transitions belong to the
-            // visibility-flip term below, so unshadowed samples need no sentinel here.
-            if (bAccValid && fr > BLOCKER_TRUST_FRACTION) {
-                blockerFlip = clamp(BLOCKER_SENSITIVITY * (blockerT - accT) / (abs(viewSpaceDepth) + BLOCKER_NORM_BASE), -1.0, 1.0);
-            }
-            accTNew = (bAccValid && fr > 0.0) ? lerp(accT, blockerT, BLOCKER_DIST_ALPHA) : blockerT;
-        }
-        rdgStorageFloat2[pc.blockerIndex][pixel] = float2(accTNew, frNew);
-    }
-
-    if (pc.signalIndex != ~0u) {
-        float visPrev = winnerVis;
-        if (pc.prevTlasIndex != ~0u) {
-            visPrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest) ? 1.0 : 0.0;
-        }
-        float sunFlip = clamp((winnerVis - visPrev) + blockerFlip, -1.0, 1.0);
-        float sunMag = max(max(winnerVis, visPrev), abs(blockerFlip));
-        float2 sunSig = float2(pSun * sunFlip, pSun * sunMag) * scene.preExposure;
-
-        rdgStorageFloat2[pc.signalIndex][pixel] = rdgStorageFloat2[pc.signalIndex][pixel] + sunSig;
-        if (field != 0u) {
-            int2 o = OppositeFieldPixel(pixel, field);
-            if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
-                rdgStorageFloat2[pc.signalIndex][uint2(o)] = rdgStorageFloat2[pc.signalIndex][uint2(o)] + sunSig;
-            }
-        }
-    }
+    WriteSunFlip(pc, pixel, field, flip);
 #endif
 }
