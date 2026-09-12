@@ -22,10 +22,18 @@ void ComputeReGIRPresampleTiles(uniform ReGIRPresampleTilesPushConstant pc, uint
         return;
     }
 
-    uint h = SeedRng(uint2(slotIdx & 0xFFFFu, slotIdx >> 16u), pc.frameIndex, 0x9E3779B9u);
+    uint tile = slotIdx / REGIR_TILE_SIZE;
+    uint stratum = slotIdx % REGIR_TILE_SIZE;
+    uint h = SeedRng(uint2(tile, 0u), pc.frameIndex, 0x9E3779B9u);
+    float jitter = HashStep(h);
+    uint mulOdd = (h | 1u) & (REGIR_TILE_SIZE - 1u);
+    uint add = (h >> 10u) & (REGIR_TILE_SIZE - 1u);
+    uint perm = (stratum * mulOdd + add) & (REGIR_TILE_SIZE - 1u);
+    perm ^= perm >> 5u;
+    uint outIdx = tile * REGIR_TILE_SIZE + perm;
 
     float total = pc.cdf[count - 1u];
-    float u = HashStep(h);
+    float u = (float(stratum) + jitter) / float(REGIR_TILE_SIZE);
     if (total <= 0.0) {
         slot.lightIdx = LiveLightIndex(min(uint(u * float(count)), count - 1u), pc.analyticCount);
         slot.sourcePdf = 1.0 / float(count);
@@ -42,5 +50,5 @@ void ComputeReGIRPresampleTiles(uniform ReGIRPresampleTilesPushConstant pc, uint
         slot.sourcePdf = (pc.cdf[lo] - lower) / total;
     }
 
-    pc.tiles[slotIdx] = slot;
+    pc.tiles[outIdx] = slot;
 }

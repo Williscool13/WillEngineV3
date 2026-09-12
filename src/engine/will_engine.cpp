@@ -1656,6 +1656,8 @@ void WillEngine::Run()
                 engineContext->regirStats.insertsFailed = regirStats.insertsFailed;
                 static_assert(sizeof(Engine::ReGIRCursorProbe) == sizeof(Render::ReGIRCursorProbe));
                 std::memcpy(&engineContext->regirStats.cursor, &regirStats.cursor, sizeof(Engine::ReGIRCursorProbe));
+                static_assert(sizeof(Engine::ReGIRCdfStats) == sizeof(Render::ReGIRCdfStats));
+                std::memcpy(&engineContext->regirStats.cdf, &regirStats.cdf, sizeof(Engine::ReGIRCdfStats));
 
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();

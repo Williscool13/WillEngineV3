@@ -163,6 +163,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& cdfPass = graph.AddPass("[ReGIR] Light Power CDF"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         cdfPass.ReadBuffer("light_data"_sid);
         cdfPass.WriteBuffer("light_power_cdf"_sid);
+        if (GPU_STATS_ENABLED) { cdfPass.ReadWriteBuffer("readback_buffer"_sid); }
         cdfPass.Execute([pipelineManager, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("light_power_cdf"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -170,6 +171,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             LightPowerCDFPushConstant pc{
                 .lightData = graph.GetBufferAddress("light_data"_sid),
                 .cdf = graph.GetBufferAddress("light_power_cdf"_sid),
+                .readback = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) : 0,
                 .liveCount = fillLightCount,
                 .analyticCount = static_cast<int32_t>(analyticLightCount),
             };

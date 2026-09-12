@@ -1717,7 +1717,13 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     ImGui::SeparatorText("ReGIR");
                     ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u", ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed);
                     {
-                        // Cell under the mouse while a ReGIR debug view (49-51) is showing
+                        const Engine::ReGIRCdfStats& cdf = ctx->regirStats.cdf;
+                        ImGui::Text("Power CDF: %u lights, total %.3g. Below 1/tile (1/%u): %u lights carrying %.2f%% of power, below 1/cell (1/%u): %u. Share min %.2e, max %.3f (light %u)",
+                                    cdf.liveCount, cdf.totalPower, REGIR_TILE_SIZE, cdf.belowTile, cdf.rareShare * 100.0f, REGIR_RESERVOIRS_PER_CELL * REGIR_FILL_CANDIDATES, cdf.belowCell, cdf.minShare, cdf.maxShare, cdf.maxIdx);
+                    }
+                    //
+                    {
+                        // Cell under the mouse while a ReGIR debug view
                         const Engine::ReGIRCursorProbe& probe = ctx->regirStats.cursor;
                         if (probe.valid != 0u) {
                             ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u reservoirs, empty %u, other %u, target sum %.3g, occupancy %.2f", probe.level, probe.cell[0], probe.cell[1], probe.cell[2], probe.slot, REGIR_RESERVOIRS_PER_CELL, probe.empty, probe.other, probe.targetSum, probe.occupancy);

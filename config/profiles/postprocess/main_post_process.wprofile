@@ -1,7 +1,7 @@
 postProcess
 bExposureEnabled|1
 exposureMode|0
-exposureTargetLuminance|0x3e3851ec
+exposureTargetLuminance|0x3ea1815a
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000
 exposureMinEV100|0x41880000

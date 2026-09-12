@@ -145,6 +145,9 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
 
     uint localNonEmpty = 0u;
     float cellSize = ReGIRCellSizeAtLevel(key.level);
+    uint cellTile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u) ^ (pc.frameIndex * 0xB5297A4Du);
+    cellTile ^= cellTile >> 15u; cellTile *= 0x2c1b3c6du; cellTile ^= cellTile >> 12u;
+    uint cellRotation = (cellTile >> 16u) % REGIR_TILE_SIZE;
     float prevRetention = pow(0.5, 1.0 / scene.framerateScale);
     float prevConfidence = prevRetention / (1.0 - prevRetention);
     for (uint r = localID.x; r < REGIR_RESERVOIRS_PER_CELL; r += 64u) {
@@ -158,10 +161,9 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
         ReGIRReservoir res = ReGIRReservoirEmpty();
         ReservoirAccum accum = ReservoirAccumEmpty();
         float winnerTarget = 0.0;
-        uint tile = (slot * 2654435761u) ^ (key.level * 0x9E3779B9u) ^ (pc.frameIndex * 0xB5297A4Du) ^ ((r + 1u) * 0x27d4eb2du);
-        tile ^= tile >> 15u; tile *= 0x2c1b3c6du; tile ^= tile >> 12u;
-        uint tileBase = (tile % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
-        uint startSlot = h % REGIR_TILE_SIZE;
+        uint group = r / (REGIR_TILE_SIZE / REGIR_FILL_CANDIDATES);
+        uint tileBase = ((cellTile + group * 37u) % REGIR_TILE_COUNT) * REGIR_TILE_SIZE;
+        uint startSlot = (cellRotation + (r % (REGIR_TILE_SIZE / REGIR_FILL_CANDIDATES)) * REGIR_FILL_CANDIDATES) % REGIR_TILE_SIZE;
         for (uint i = 0; i < REGIR_FILL_CANDIDATES; i++) {
             uint slotInTile = (startSlot + i) % REGIR_TILE_SIZE;
             ReGIRTileSlot cand = pc.tiles[tileBase + slotInTile];

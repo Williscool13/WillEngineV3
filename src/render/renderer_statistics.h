@@ -39,11 +39,24 @@ struct ReGIRCursorProbe
     float occupancy{};
 };
 
+struct ReGIRCdfStats
+{
+    float totalPower{};
+    uint32_t liveCount{};
+    uint32_t belowTile{};
+    uint32_t belowCell{};
+    float rareShare{};
+    float minShare{};
+    float maxShare{};
+    uint32_t maxIdx{};
+};
+
 struct ReGIRStatistics
 {
     uint32_t activeCells{};
     uint32_t insertsFailed{};
     ReGIRCursorProbe cursor{};
+    ReGIRCdfStats cdf{};
 };
 
 struct RendererStatistics

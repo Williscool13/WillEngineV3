@@ -102,6 +102,21 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
     call.SetInt("hashCapacity", REGIR_HASH_CAPACITY);
     call.SetInt("insertsFailed", s.regir.insertsFailed);
     {
+        const Render::ReGIRCdfStats& cdf = s.regir.cdf;
+        call.BeginObject("powerCdf");
+        call.SetInt("liveCount", cdf.liveCount);
+        call.SetFloat("totalPower", cdf.totalPower);
+        call.SetInt("tileSize", REGIR_TILE_SIZE);
+        call.SetInt("candidatesPerCell", REGIR_RESERVOIRS_PER_CELL * REGIR_FILL_CANDIDATES);
+        call.SetInt("lightsBelowTileShare", cdf.belowTile);
+        call.SetFloat("powerShareBelowTile", cdf.rareShare);
+        call.SetInt("lightsBelowCellShare", cdf.belowCell);
+        call.SetFloat("minShare", cdf.minShare);
+        call.SetFloat("maxShare", cdf.maxShare);
+        call.SetInt("maxShareLightIdx", cdf.maxIdx);
+        call.End();
+    }
+    {
         const Render::ReGIRCursorProbe& probe = s.regir.cursor;
         call.BeginObject("cursorCell");
         call.SetBool("valid", probe.valid != 0u);

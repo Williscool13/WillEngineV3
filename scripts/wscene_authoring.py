@@ -269,28 +269,28 @@ def add_procedural(entity, ptype_idx, fields, motion=0, friction=0.5, restitutio
 
 # ---- lights (no physics; a light entity is just Transform + light component) ----
 # All keys/fields verified 2026-07-21 against light_components.cpp + isolated_*_light.wscene.
-# HDR brightness comes from `intensity`; `color` is clamped to 8-bit [0,1] on upload.
-def add_area_light(entity, color=(1.0, 1.0, 1.0), intensity=100.0, half_width=1.0, half_height=1.0, draw_range=100.0, draw_emissive=True):
+# HDR brightness comes from `intensity` (nits for area/sphere, lux for directional); `color` is clamped to 8-bit [0,1] on upload.
+def add_area_light(entity, color=(1.0, 1.0, 1.0), intensity=6553600.0, half_width=1.0, half_height=1.0, draw_range=100.0, draw_emissive=True):
     """Rectangular area light. World extent = (half_width,half_height)*transform.scale; emissive quad lies in the local XZ plane.
     `draw_range` is the influence/falloff+cull radius, NOT the emissive size."""
     entity[LIGHT_AREA] = {"color": list(color), "intensity": intensity, "halfWidth": half_width,
                            "halfHeight": half_height, "range": draw_range, "drawEmissiveSurface": draw_emissive}
     return entity
 
-def add_sphere_light(entity, color=(1.0, 1.0, 1.0), intensity=100.0, radius=0.5, draw_range=100.0, draw_emissive=True):
+def add_sphere_light(entity, color=(1.0, 1.0, 1.0), intensity=6553600.0, radius=0.5, draw_range=100.0, draw_emissive=True):
     """Sphere (point-like) light. World radius = radius*transform.scale.x. Use radius~0.05 for a near-point emitter."""
     entity[LIGHT_SPHERE] = {"color": list(color), "intensity": intensity, "radius": radius,
                              "range": draw_range, "drawEmissiveSurface": draw_emissive}
     return entity
 
-def add_directional_light(entity, color=(1.0, 1.0, 1.0), intensity=2.0, priority=0, angular_radius_deg=1.0):
+def add_directional_light(entity, color=(1.0, 1.0, 1.0), intensity=131072.0, priority=0, angular_radius_deg=1.0):
     """Sun. Direction = transform.rotation * (0,0,1) (local +Z). Highest `priority` wins when several exist.
     angular_radius_deg = sun-disk half-angle (0 = hard shadow, larger = softer penumbra)."""
     entity[LIGHT_DIRECTIONAL] = {"color": list(color), "intensity": intensity, "priority": priority,
                                   "angularRadiusDegrees": angular_radius_deg}
     return entity
 
-def add_skybox(entity, envmap_id, intensity=1.0, priority=0):
+def add_skybox(entity, envmap_id, intensity=65536.0, priority=0):
     """Scene-declared sky. envmap_id = env map asset id (asset_index.envmap(name)). Highest priority
     wins; while active it drives the skybox and its intensity MULTIPLIES the lighting profile's
     iblIntensity (background pass included). Transform is ignored."""
@@ -891,7 +891,7 @@ def ev_console(line):
 
 
 def ev_profile(name):
-    """Applies a lighting profile (config/profiles/lighting/<name>.wprofile); the run restores the live settings when it ends."""
+    """Applies a lighting profile (config/profiles/lighting/<name>.wprofile); the run's gtao toggle survives it and the live settings come back when the run ends."""
     return {"profile": name}
 
 

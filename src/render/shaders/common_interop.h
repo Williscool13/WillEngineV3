@@ -168,7 +168,7 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC float adaptedLuminance;
     SHADER_PUBLIC uint32_t regirActiveCells;
     SHADER_PUBLIC uint32_t regirInsertsFailed;
-    // ReGIR cursor probe: the cell under the mouse while a ReGIR debug view is up (top 4 lights by reservoir count)
+    // ReGIR cursor probe
     SHADER_PUBLIC uint32_t regirCursorValid;
     SHADER_PUBLIC uint32_t regirCursorLevel;
     SHADER_PUBLIC int32_t regirCursorCell[3];
@@ -181,6 +181,15 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC float regirCursorTopPos[12];
     SHADER_PUBLIC float regirCursorTargetSum;
     SHADER_PUBLIC float regirCursorOccupancy;
+    // Light power CDF
+    SHADER_PUBLIC float cdfTotalPower;
+    SHADER_PUBLIC uint32_t cdfLiveCount;
+    SHADER_PUBLIC uint32_t cdfBelowTile;
+    SHADER_PUBLIC uint32_t cdfBelowCell;
+    SHADER_PUBLIC float cdfRareShare;
+    SHADER_PUBLIC float cdfMinShare;
+    SHADER_PUBLIC float cdfMaxShare;
+    SHADER_PUBLIC uint32_t cdfMaxIdx;
     SHADER_PUBLIC uint32_t _pad1;
 };
 

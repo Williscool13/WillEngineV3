@@ -103,11 +103,24 @@ struct ReGIRCursorProbe
     float occupancy{};
 };
 
+struct ReGIRCdfStats
+{
+    float totalPower{};
+    uint32_t liveCount{};
+    uint32_t belowTile{};
+    uint32_t belowCell{};
+    float rareShare{};
+    float minShare{};
+    float maxShare{};
+    uint32_t maxIdx{};
+};
+
 struct ReGIRStatsSnapshot
 {
     uint32_t activeCells{};
     uint32_t insertsFailed{};
     ReGIRCursorProbe cursor{};
+    ReGIRCdfStats cdf{};
 };
 
 /** Game-side landing zone for a captured probe face; pixels are S x S RGBA16F half-floats (4 per texel). */

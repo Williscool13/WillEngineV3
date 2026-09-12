@@ -498,6 +498,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     statisticsManager.scratch.regir.insertsFailed = readbackData->regirInsertsFailed;
     static_assert(sizeof(ReGIRCursorProbe) == offsetof(ReadbackStruct, regirCursorOccupancy) + sizeof(float) - offsetof(ReadbackStruct, regirCursorValid));
     std::memcpy(&statisticsManager.scratch.regir.cursor, &readbackData->regirCursorValid, sizeof(ReGIRCursorProbe));
+    static_assert(sizeof(ReGIRCdfStats) == offsetof(ReadbackStruct, cdfMaxIdx) + sizeof(uint32_t) - offsetof(ReadbackStruct, cdfTotalPower));
+    std::memcpy(&statisticsManager.scratch.regir.cdf, &readbackData->cdfTotalPower, sizeof(ReGIRCdfStats));
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);

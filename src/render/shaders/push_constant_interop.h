@@ -479,6 +479,7 @@ SHADER_PUBLIC struct LightPowerCDFPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(float) cdf;
+    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback; // Null when GPU stats are off
     SHADER_PUBLIC uint32_t liveCount;
     SHADER_PUBLIC int32_t analyticCount;
 };
