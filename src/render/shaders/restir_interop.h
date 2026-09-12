@@ -53,18 +53,17 @@ SHADER_PUBLIC struct Reservoir
 };
 
 /**
- * Grid reservoir for ReGIR (RTG2 Ch.23). Stores raw RIS pieces from fill (not a pre-divided W):
- *   totalWeight = wSum / M_build  (running reservoir weight)
- *   targetPdf   = survivor's cell-center build target (intensity * geom, EvalCellTarget); kept separate for BRDF-MIS denom + temporal merge
- * Shading-side grid tap source pdf = targetPdf / totalWeight (per-reservoir 1/W), unbiased at any fill count.
- * lightIdx == ~0u indicates an empty reservoir.
+ * Grid reservoir for ReGIR (RTG2 Ch.23). A cell's reservoirs are stored sorted by lightIdx with empties (~0u) last.
+ *   W       = this reservoir's own RIS weight wSum / (M * targetPdf); feeds next frame's temporal merge
+ *   sharedW = mean W over every reservoir in the cell holding the same light; the shading-side tap weight
+ * Drawing a reservoir uniformly from the occupied prefix and weighting by sharedW * occupied / REGIR_RESERVOIRS_PER_CELL averages
+ * the per-reservoir RIS estimators exactly, so it stays unbiased while the per-light W noise averages out.
  */
 SHADER_PUBLIC struct ReGIRReservoir
 {
-    SHADER_PUBLIC uint sampleOffsetPacked;
     SHADER_PUBLIC uint lightIdx;
-    SHADER_PUBLIC float totalWeight;
-    SHADER_PUBLIC float targetPdf;
+    SHADER_PUBLIC float W;
+    SHADER_PUBLIC float sharedW;
 };
 
 /**
@@ -93,6 +92,9 @@ SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_X = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Y = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Z = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_MIN_DIST_SCALE = 0.5;
+SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_CONE_FLOOR = 0.05;
+SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_RANGE_FLOOR = 0.05;
+SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_FACING_FLOOR = 0.1;
 SHADER_PUBLIC SHADER_CONST float REGIR_KEY_CAMERA_OFFSET_SCALE = 0.005;
 
 // Presampled light tiles

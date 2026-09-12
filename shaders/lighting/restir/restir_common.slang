@@ -396,11 +396,12 @@ public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightCo
     float dist = max(length(toCenter), 1e-5);
     float atten = LightRangeCull(dist, vs.range);
     if (atten <= 0.0) { return 0.0; }
+    atten = max(atten, REGIR_TARGET_RANGE_FLOOR);
     float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : max(dot(vs.normal, -toCenter / dist), 0.0);
     if (cosFacing <= 0.0) { return 0.0; }
-    atten *= LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter);
+    atten *= max(LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter), REGIR_TARGET_CONE_FLOOR);
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
-    float geom = cosFacing / max(dist * dist, max(minDist2, LIGHT_GEOM_MIN_DIST2));
+    float geom = max(cosFacing, REGIR_TARGET_FACING_FLOOR) / max(dist * dist, max(minDist2, LIGHT_GEOM_MIN_DIST2));
     return geom * vs.area * vs.intensity * colorMax * atten;
 }
 
@@ -429,31 +430,29 @@ public Reservoir ReservoirEmpty()
 public ReGIRReservoir ReGIRReservoirEmpty()
 {
     ReGIRReservoir r;
-    r.sampleOffsetPacked = 0u;
     r.lightIdx = ~0u;
-    r.totalWeight = 0.0;
-    r.targetPdf = 0.0;
+    r.W = 0.0;
+    r.sharedW = 0.0;
     return r;
 }
 
 public void FinalizeReservoirReGIR(inout ReGIRReservoir r, ReservoirAccum accum, float targetPdf, float M_total)
 {
-    r.targetPdf = targetPdf;
     if (targetPdf <= 0.0 || M_total <= 0.0) {
-        r.totalWeight = 0.0;
+        r.W = 0.0;
     } else {
-        r.totalWeight = accum.wSum / M_total;
+        r.W = accum.wSum / (M_total * targetPdf);
     }
 }
 
 public float ReGIRReservoirW(ReGIRReservoir r)
 {
-    return (r.targetPdf > 0.0) ? (r.totalWeight / r.targetPdf) : 0.0;
+    return r.W;
 }
 
 public void ReGIRClampW(inout ReGIRReservoir r, float wClamp)
 {
-    if (wClamp > 0.0 && r.targetPdf > 0.0) { r.totalWeight = min(r.totalWeight, wClamp * r.targetPdf); }
+    if (wClamp > 0.0) { r.W = min(r.W, wClamp); }
 }
 
 // 32-bit sample-point packing: sphere = oct16 local direction, triangle = 2x16 unorm barycentrics, quad = 2x snorm16 uv

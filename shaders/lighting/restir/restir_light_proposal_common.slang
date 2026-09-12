@@ -26,7 +26,8 @@ public interface ILightProposal
     float Marginal(int lightIdx, LightView vs, int liveCount);
 }
 
-/** ReGIR: per-cell RIS reservoirs from the hash grid. Grid-tap source pdf is the exact per-reservoir targetPdf/totalWeight. */
+/** ReGIR: per-cell RIS reservoirs from the hash grid, sorted by light with empties last. A tap draws uniformly from the occupied
+ *  prefix and uses the light's cell-shared mean W, so pSelect = 1 / (occupancy * sharedW) is one value per light per cell. */
 public struct ReGIRProposal : ILightProposal
 {
     public uint* hashEntries;
@@ -37,19 +38,15 @@ public struct ReGIRProposal : ILightProposal
 
     bool useGrid;
     uint gridBase;
-    float3 cellCenterVS;
-    float cellTargetSum;
+    uint cellOccupied;
     float cellOccupancy;
-    float targetMinDist2;
 
     [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
     {
         useGrid = false;
         gridBase = 0u;
-        cellCenterVS = float3(0.0);
-        cellTargetSum = 0.0;
+        cellOccupied = 0u;
         cellOccupancy = 0.0;
-        targetMinDist2 = 0.0;
         if (camDist <= REGIR_MAX_DIST) {
             float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
             float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
@@ -64,11 +61,9 @@ public struct ReGIRProposal : ILightProposal
                     float2 cd = cellData[cellSlot];
                     // Gate on occupancy, not the centre target sum: a cell whose centre sits in or behind a panel's plane sums to zero yet its jittered fill points still populate reservoirs
                     if (cd.y > 0.0) {
-                        cellTargetSum = cd.x;
                         gridBase = ReGIRCellReservoirBase(cellSlot);
-                        cellCenterVS = mul(view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
                         cellOccupancy = cd.y;
-                        targetMinDist2 = ReGIRTargetMinDist2(key.level);
+                        cellOccupied = uint(cd.y * float(REGIR_RESERVOIRS_PER_CELL) + 0.5);
                         useGrid = true;
                     }
                 }
@@ -81,13 +76,13 @@ public struct ReGIRProposal : ILightProposal
         lightIdx = -1;
         pSelect = 0.0;
         if (!useGrid) { return false; }
-        // Stratified over the candidate loop so the taps hit distinct cell regions (RTXDI parity).
+        // Stratified over the occupied prefix: the sorted layout spreads the taps across the cell's lights in proportion to their runs
         float uStrat = (float(i) + HashStep(h)) / float(m);
-        uint slotInCell = min(uint(uStrat * float(REGIR_RESERVOIRS_PER_CELL)), REGIR_RESERVOIRS_PER_CELL - 1u);
+        uint slotInCell = min(uint(uStrat * float(cellOccupied)), cellOccupied - 1u);
         ReGIRReservoir gr = reservoirs[gridBase + slotInCell];
-        if (gr.lightIdx != ~0u && IsLiveLight(gr.lightIdx, realLightCount, analyticCount) && gr.totalWeight > 0.0) {
+        if (gr.lightIdx != ~0u && IsLiveLight(gr.lightIdx, realLightCount, analyticCount) && gr.sharedW > 0.0) {
             lightIdx = int(gr.lightIdx);
-            pSelect = gr.targetPdf / gr.totalWeight;
+            pSelect = 1.0 / (cellOccupancy * gr.sharedW);
             return true;
         }
         return false;
@@ -95,11 +90,20 @@ public struct ReGIRProposal : ILightProposal
 
     public float Marginal(int lightIdx, LightView vs, int liveCount)
     {
-        // Modeled from cell-average occupancy, not the exact per-reservoir pdf, so it does not partition unity when mBrdf > 0.
         if (!useGrid) { return 1.0 / float(liveCount); }
-        float3 color = UnpackUnorm4x8(vs.packedColor).rgb;
-        float gridTerm = (cellTargetSum > 0.0) ? (EvalCellLightTarget(vs, cellCenterVS, color, targetMinDist2) / cellTargetSum) : 0.0;
-        return cellOccupancy * gridTerm + (1.0 - cellOccupancy) * (1.0 / float(liveCount));
+        // Binary search the sorted occupied prefix: a light the cell does not hold cannot come from the grid, so its light-strategy pdf is 0
+        uint target = uint(lightIdx);
+        uint lo = 0u;
+        uint hi = cellOccupied;
+        while (lo < hi) {
+            uint mid = (lo + hi) >> 1u;
+            if (reservoirs[gridBase + mid].lightIdx < target) { lo = mid + 1u; } else { hi = mid; }
+        }
+        if (lo < cellOccupied) {
+            ReGIRReservoir gr = reservoirs[gridBase + lo];
+            if (gr.lightIdx == target && gr.sharedW > 0.0) { return 1.0 / (cellOccupancy * gr.sharedW); }
+        }
+        return 0.0;
     }
 }
 
