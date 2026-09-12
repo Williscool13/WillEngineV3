@@ -23,6 +23,29 @@ struct RadianceCacheStatistics
     uint32_t cellsShaded{};
 };
 
+struct ReGIRCursorProbe
+{
+    uint32_t valid{};
+    uint32_t level{};
+    int32_t cell[3]{};
+    uint32_t slot{};
+    uint32_t empty{};
+    uint32_t other{};
+    uint32_t topIdx[4]{};
+    uint32_t topCount[4]{};
+    float topTarget[4]{};
+    float topPos[12]{};
+    float targetSum{};
+    float occupancy{};
+};
+
+struct ReGIRStatistics
+{
+    uint32_t activeCells{};
+    uint32_t insertsFailed{};
+    ReGIRCursorProbe cursor{};
+};
+
 struct RendererStatistics
 {
     // Geometry pass
@@ -43,6 +66,7 @@ struct RendererStatistics
 
     // Radiance cache occupancy (multi-frame readback latency)
     RadianceCacheStatistics radianceCache{};
+    ReGIRStatistics regir{};
 
     // Pipeline statistics (whole-frame query)
     uint64_t meshInvocations{};

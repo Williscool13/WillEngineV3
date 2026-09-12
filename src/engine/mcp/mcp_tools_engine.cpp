@@ -12,6 +12,7 @@
 #include "core/containers/inline_string.h"
 #include "core/time/frame_stamp.h"
 #include "engine/engine_api.h"
+#include "render/shaders/restir_interop.h"
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_logger.h"
 #include "engine/logging/log_category.h"
@@ -94,6 +95,40 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
         call.SetFloat(Render::RENDER_CATEGORY_NAMES[i], s.gpuProfile.leafMs[i]);
     }
     call.End();
+    call.End();
+
+    call.BeginObject("regir");
+    call.SetInt("activeCells", s.regir.activeCells);
+    call.SetInt("hashCapacity", REGIR_HASH_CAPACITY);
+    call.SetInt("insertsFailed", s.regir.insertsFailed);
+    {
+        const Render::ReGIRCursorProbe& probe = s.regir.cursor;
+        call.BeginObject("cursorCell");
+        call.SetBool("valid", probe.valid != 0u);
+        call.SetInt("level", probe.level);
+        call.BeginArray("cell");
+        for (int32_t c : probe.cell) { call.PushInt(c); }
+        call.End();
+        call.SetInt("slot", probe.slot);
+        call.SetInt("empty", probe.empty);
+        call.SetInt("other", probe.other);
+        call.SetFloat("targetSum", probe.targetSum);
+        call.SetFloat("occupancy", probe.occupancy);
+        call.BeginArray("top");
+        for (uint32_t k = 0; k < 4; k++) {
+            if (probe.topCount[k] == 0u) { continue; }
+            call.PushObject();
+            call.SetInt("lightIdx", probe.topIdx[k]);
+            call.SetInt("count", probe.topCount[k]);
+            call.SetFloat("targetAtCentre", probe.topTarget[k]);
+            call.BeginArray("pos");
+            for (uint32_t c = 0; c < 3; c++) { call.PushFloat(probe.topPos[k * 3 + c]); }
+            call.End();
+            call.End();
+        }
+        call.End();
+        call.End();
+    }
     call.End();
 
     call.BeginObject("culling");

@@ -62,7 +62,8 @@ public struct ReGIRProposal : ILightProposal
                 uint cellSlot = ReGIRHashFind(hashEntries, key);
                 if (cellSlot != REGIR_HASH_INVALID) {
                     float2 cd = cellData[cellSlot];
-                    if (cd.x > 0.0) {
+                    // Gate on occupancy, not the centre target sum: a cell whose centre sits in or behind a panel's plane sums to zero yet its jittered fill points still populate reservoirs
+                    if (cd.y > 0.0) {
                         cellTargetSum = cd.x;
                         gridBase = ReGIRCellReservoirBase(cellSlot);
                         cellCenterVS = mul(view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
@@ -97,7 +98,8 @@ public struct ReGIRProposal : ILightProposal
         // Modeled from cell-average occupancy, not the exact per-reservoir pdf, so it does not partition unity when mBrdf > 0.
         if (!useGrid) { return 1.0 / float(liveCount); }
         float3 color = UnpackUnorm4x8(vs.packedColor).rgb;
-        return cellOccupancy * (EvalCellLightTarget(vs, cellCenterVS, color, targetMinDist2) / cellTargetSum) + (1.0 - cellOccupancy) * (1.0 / float(liveCount));
+        float gridTerm = (cellTargetSum > 0.0) ? (EvalCellLightTarget(vs, cellCenterVS, color, targetMinDist2) / cellTargetSum) : 0.0;
+        return cellOccupancy * gridTerm + (1.0 - cellOccupancy) * (1.0 / float(liveCount));
     }
 }
 

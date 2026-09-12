@@ -4,6 +4,7 @@
 
 #include "will_engine.h"
 
+#include <cstring>
 #include <mutex>
 
 #include <tracy/Tracy.hpp>
@@ -1650,6 +1651,11 @@ void WillEngine::Run()
 
                 const Render::RadianceCacheStatistics wcStats = renderThread->GetRendererStatistics().radianceCache;
                 engineContext->radianceCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsDumped, wcStats.cellsDark, wcStats.cellsShaded};
+                const Render::ReGIRStatistics regirStats = renderThread->GetRendererStatistics().regir;
+                engineContext->regirStats.activeCells = regirStats.activeCells;
+                engineContext->regirStats.insertsFailed = regirStats.insertsFailed;
+                static_assert(sizeof(Engine::ReGIRCursorProbe) == sizeof(Render::ReGIRCursorProbe));
+                std::memcpy(&engineContext->regirStats.cursor, &regirStats.cursor, sizeof(Engine::ReGIRCursorProbe));
 
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();

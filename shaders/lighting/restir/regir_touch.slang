@@ -47,6 +47,12 @@ void ComputeReGIRTouch(uint3 dtid : SV_DispatchThreadID, uniform ReGIRTouchPushC
                         InterlockedAdd(pc.activeCount[0], 1u, idx);
                         pc.activeCells[idx] = int4(key.cellPos, int(ReGIRPackActive(key.level, slot)));
                     }
+#if WILL_EDITOR
+                    else if (slot == REGIR_HASH_INVALID && pc.insertFailures != nullptr) {
+                        uint d;
+                        InterlockedAdd(pc.insertFailures[0], 1u, d);
+                    }
+#endif
                 }
                 done = true;
             }

@@ -211,15 +211,19 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, scale > 0.0f ? Core::InlineString<64>::Format("  framerate_scale %.2f", scale).c_str() : "  framerate_scale auto");
     });
 
-    Register(state, Origin::Engine, "view", "`view <rdg texture>|off` shows a render graph texture in the debug visualizer", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "view", "`view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() > 1) {
             if (strcmp(args[1], "off") == 0) {
                 state->debug.resourceName.Clear();
             }
             else {
                 state->debug.resourceName = Core::InlineString(args[1]);
-                state->debug.transformationType = DebugTransformationType::None;
+                state->debug.transformationType = args.Size() > 2 ? static_cast<DebugTransformationType>(std::strtoul(args[2], nullptr, 10)) : DebugTransformationType::None;
                 state->debug.viewAspect = Core::DebugViewAspect::None;
+                if (args.Size() > 3) {
+                    if (strcmp(args[3], "depth") == 0) { state->debug.viewAspect = Core::DebugViewAspect::Depth; }
+                    else if (strcmp(args[3], "stencil") == 0) { state->debug.viewAspect = Core::DebugViewAspect::Stencil; }
+                }
             }
         }
         Print(state, state->debug.resourceName.IsEmpty() ? "  view off" : Core::InlineString<256>::Format("  view %s", state->debug.resourceName.c_str()).c_str());

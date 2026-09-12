@@ -88,6 +88,9 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     GTAOTemporalAO = 46,
     GTAOTemporalCount = 47,
     GTAOResolved = 48,
+    ReGIRCell = 49,
+    ReGIRCellLight = 50,
+    ReGIRCellLightTarget = 51,
 };
 
 SHADER_PUBLIC struct Frustum
@@ -163,6 +166,21 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t meshletRegionExpanded[4];
     SHADER_PUBLIC uint32_t meshletRegionVisible[4];
     SHADER_PUBLIC float adaptedLuminance;
+    SHADER_PUBLIC uint32_t regirActiveCells;
+    SHADER_PUBLIC uint32_t regirInsertsFailed;
+    // ReGIR cursor probe: the cell under the mouse while a ReGIR debug view is up (top 4 lights by reservoir count)
+    SHADER_PUBLIC uint32_t regirCursorValid;
+    SHADER_PUBLIC uint32_t regirCursorLevel;
+    SHADER_PUBLIC int32_t regirCursorCell[3];
+    SHADER_PUBLIC uint32_t regirCursorSlot;
+    SHADER_PUBLIC uint32_t regirCursorEmpty;
+    SHADER_PUBLIC uint32_t regirCursorOther;
+    SHADER_PUBLIC uint32_t regirCursorTopIdx[4];
+    SHADER_PUBLIC uint32_t regirCursorTopCount[4];
+    SHADER_PUBLIC float regirCursorTopTarget[4];
+    SHADER_PUBLIC float regirCursorTopPos[12];
+    SHADER_PUBLIC float regirCursorTargetSum;
+    SHADER_PUBLIC float regirCursorOccupancy;
     SHADER_PUBLIC uint32_t _pad1;
 };
 

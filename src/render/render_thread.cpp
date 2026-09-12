@@ -4,6 +4,7 @@
 
 #include "render_thread.h"
 
+#include <cstring>
 #include <chrono>
 #include <enkiTS/src/TaskScheduler.h>
 #include <glm/gtc/packing.hpp>
@@ -493,6 +494,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     statisticsManager.scratch.radianceCache.cellsDumped = readbackData->wcDumped;
     statisticsManager.scratch.radianceCache.cellsDark = readbackData->wcDark;
     statisticsManager.scratch.radianceCache.cellsShaded = readbackData->wcShaded;
+    statisticsManager.scratch.regir.activeCells = readbackData->regirActiveCells;
+    statisticsManager.scratch.regir.insertsFailed = readbackData->regirInsertsFailed;
+    static_assert(sizeof(ReGIRCursorProbe) == offsetof(ReadbackStruct, regirCursorOccupancy) + sizeof(float) - offsetof(ReadbackStruct, regirCursorValid));
+    std::memcpy(&statisticsManager.scratch.regir.cursor, &readbackData->regirCursorValid, sizeof(ReGIRCursorProbe));
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
@@ -1081,6 +1086,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     REFLECTION_PROBE_BUFFER,
                     "world_grid_probe_grid"_sid,
                     LIGHT_DATA_BUFFER,
+                    "regir_hash_entries"_sid,
+                    "regir_cell_data"_sid,
+                    "regir_hash_reservoirs"_sid,
+                    "restir_lights_vs"_sid,
                 };
                 for (const StringID bufferId : debugVisBuffers) {
                     if (renderGraph->HasBuffer(bufferId)) {
@@ -1088,6 +1097,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     }
                 }
                 debugVisPass.WriteStorageImage(targets.colorOutput);
+                if (GPU_STATS_ENABLED) { debugVisPass.ReadWriteBuffer("readback_buffer"_sid); }
                 debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                     VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
@@ -1168,6 +1178,15 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                         .dofPackedRadii = glm::packHalf2x16(glm::vec2(viewFamily.postProcessConfig.dofNearRadiusPx, viewFamily.postProcessConfig.dofFarRadiusPx)),
                         .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress("world_grid_probe_grid"_sid),
                         .lightData = renderGraph->TryGetBufferAddress(LIGHT_DATA_BUFFER),
+                        .regirHashEntries = renderGraph->TryGetBufferAddress("regir_hash_entries"_sid),
+                        .regirCellData = renderGraph->TryGetBufferAddress("regir_cell_data"_sid),
+                        .regirReservoirs = renderGraph->TryGetBufferAddress("regir_hash_reservoirs"_sid),
+                        .restirLightVS = renderGraph->TryGetBufferAddress("restir_lights_vs"_sid),
+                        .readback = GPU_STATS_ENABLED ? renderGraph->TryGetBufferAddress("readback_buffer"_sid) : 0,
+                        .cursorPixel = {
+                            debugCursorReadback.litTexture != StringID{} ? static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * postAaExtent[0] / static_cast<float>(outputExtent[0]))) : ~0u,
+                            debugCursorReadback.litTexture != StringID{} ? static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * postAaExtent[1] / static_cast<float>(outputExtent[1]))) : ~0u,
+                        },
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize"_sid);
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -106,9 +106,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& clearPass = graph.AddPass("[ReGIR] Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReGIR);
         clearPass.WriteTransferBuffer("regir_hash_entries"_sid);
         clearPass.WriteTransferBuffer("regir_active_count"_sid);
+        if (GPU_STATS_ENABLED) { clearPass.WriteTransferBuffer("readback_buffer"_sid); }
         clearPass.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             vkCmdFillBuffer(cmd, graph.GetBufferHandle("regir_hash_entries"_sid), 0, VK_WHOLE_SIZE, 0);
             vkCmdFillBuffer(cmd, graph.GetBufferHandle("regir_active_count"_sid), 0, VK_WHOLE_SIZE, 0);
+            if (GPU_STATS_ENABLED) { vkCmdFillBuffer(cmd, graph.GetBufferHandle("readback_buffer"_sid), offsetof(ReadbackStruct, regirInsertsFailed), sizeof(uint32_t), 0); }
         });
 
         RenderPass& touchPass = graph.AddPass("[ReGIR] Touch"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
@@ -117,6 +119,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         touchPass.WriteBuffer("regir_hash_entries"_sid);
         touchPass.WriteBuffer("regir_active_cells"_sid);
         touchPass.WriteBuffer("regir_active_count"_sid);
+        if (GPU_STATS_ENABLED) { touchPass.ReadWriteBuffer("readback_buffer"_sid); }
         touchPass.Execute([&, pipelineManager, sceneIndex, fullW, fullH, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_touch"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -126,6 +129,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .hashEntries = graph.GetBufferAddress("regir_hash_entries"_sid),
                 .activeCells = graph.GetBufferAddress("regir_active_cells"_sid),
                 .activeCount = graph.GetBufferAddress("regir_active_count"_sid),
+                .insertFailures = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, regirInsertsFailed) : 0,
                 .renderExtent = {fullW, fullH},
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .sceneDataIndex = sceneIndex,
@@ -137,6 +141,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         RenderPass& indirectPass = graph.AddPass("[ReGIR] Build Indirect"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
         indirectPass.ReadBuffer("regir_active_count"_sid);
         indirectPass.WriteBuffer("regir_fill_indirect"_sid);
+        if (GPU_STATS_ENABLED) { indirectPass.ReadWriteBuffer("readback_buffer"_sid); }
         indirectPass.Execute([pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("regir_build_indirect"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -144,6 +149,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             ReGIRBuildIndirectPushConstant pc{
                 .activeCount = graph.GetBufferAddress("regir_active_count"_sid),
                 .indirectArgs = graph.GetBufferAddress("regir_fill_indirect"_sid),
+                .activeCellStat = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, regirActiveCells) : 0,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);

@@ -101,6 +101,12 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC uint dofPackedRadii;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(uint) regirHashEntries;
+    SHADER_PUBLIC SHADER_PTR(float2) regirCellData;
+    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) regirReservoirs;
+    SHADER_PUBLIC SHADER_PTR(LightVSData) restirLightVS;
+    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback; // Null when GPU stats are off
+    SHADER_PUBLIC uint2 cursorPixel;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
@@ -438,6 +444,7 @@ SHADER_PUBLIC struct ReGIRTouchPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) hashEntries;
     SHADER_PUBLIC SHADER_PTR(int4) activeCells;
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
+    SHADER_PUBLIC SHADER_PTR(uint) insertFailures; // Null when GPU stats are off
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
@@ -447,6 +454,7 @@ SHADER_PUBLIC struct ReGIRBuildIndirectPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
     SHADER_PUBLIC SHADER_PTR(uint) indirectArgs;
+    SHADER_PUBLIC SHADER_PTR(uint) activeCellStat; // Null when GPU stats are off
 };
 
 SHADER_PUBLIC struct ReGIRFillPushConstant

@@ -8,4 +8,7 @@ void ComputeReGIRBuildIndirect(uniform ReGIRBuildIndirectPushConstant pc)
     pc.indirectArgs[0] = min(pc.activeCount[0], REGIR_HASH_CAPACITY);
     pc.indirectArgs[1] = 1u;
     pc.indirectArgs[2] = 1u;
+#if WILL_EDITOR
+    if (pc.activeCellStat != nullptr) { pc.activeCellStat[0] = pc.activeCount[0]; }
+#endif
 }

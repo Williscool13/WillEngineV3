@@ -87,6 +87,29 @@ struct RadianceCacheStatsSnapshot
     uint32_t cellsShaded{};
 };
 
+struct ReGIRCursorProbe
+{
+    uint32_t valid{};
+    uint32_t level{};
+    int32_t cell[3]{};
+    uint32_t slot{};
+    uint32_t empty{};
+    uint32_t other{};
+    uint32_t topIdx[4]{};
+    uint32_t topCount[4]{};
+    float topTarget[4]{};
+    float topPos[12]{};
+    float targetSum{};
+    float occupancy{};
+};
+
+struct ReGIRStatsSnapshot
+{
+    uint32_t activeCells{};
+    uint32_t insertsFailed{};
+    ReGIRCursorProbe cursor{};
+};
+
 /** Game-side landing zone for a captured probe face; pixels are S x S RGBA16F half-floats (4 per texel). */
 struct ProbeCaptureStaging
 {
@@ -208,6 +231,7 @@ struct EngineContext
     Render::RendererStatisticsManager* rendererStatistics{nullptr};
 
     RadianceCacheStatsSnapshot radianceCacheStats{};
+    ReGIRStatsSnapshot regirStats{};
 
     ProbeCaptureStaging probeCapture{};
 

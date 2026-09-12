@@ -532,8 +532,10 @@ public ReservoirAccum ReservoirAccumEmpty()
 
 public bool ReservoirAddSample(inout ReservoirAccum accum, float candidateWeight, float u)
 {
-    accum.wSum += candidateWeight;
     accum.M += 1;
+    // Dead candidates never win: 0/0 on an empty accumulator is not reliably NaN on the GPU and would select the last zero-weight sample
+    if (!(candidateWeight > 0.0)) { return false; }
+    accum.wSum += candidateWeight;
     return u < candidateWeight / accum.wSum;
 }
 
