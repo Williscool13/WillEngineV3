@@ -132,6 +132,9 @@ namespace IMGUIZMO_NAMESPACE
    // expose method to set imgui context
    IMGUI_API void SetImGuiContext(ImGuiContext* ctx);
 
+   // the static context owns an ImVector, so it must be released while the ImGui allocator is still alive
+   IMGUI_API void DestroyContext();
+
    // return true if mouse cursor is over any gizmo control (axis, plan or screen component)
    IMGUI_API bool IsOver();
 

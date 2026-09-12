@@ -14,6 +14,7 @@
 #include "physics/physics_system.h"
 
 #include "imgui.h"
+#include "ImGuizmo.h"
 #include "audio/audio_manager.h"
 
 #include "fwd_components.h"
@@ -222,4 +223,6 @@ GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* stat
     SPDLOG_TRACE("Game Shutdown");
 
     ctx->GetGameState<Game::GameState>()->~GameState();
+
+    ImGuizmo::DestroyContext();
 }

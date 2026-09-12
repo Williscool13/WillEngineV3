@@ -8,6 +8,7 @@
 #include <SDL3/SDL.h>
 #include <imgui/backends/imgui_impl_vulkan.h>
 #include <imgui/backends/imgui_impl_sdl3.h>
+#include <ImGuizmo.h>
 
 #include "vk_context.h"
 #include "vk_utils.h"
@@ -104,6 +105,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
 
 ImguiWrapper::~ImguiWrapper()
 {
+    ImGuizmo::DestroyContext();
     ImGui_ImplVulkan_Shutdown();
     vkDestroyDescriptorPool(context->device, imguiPool, context->HostAllocCallbacks());
 }

@@ -980,6 +980,11 @@ namespace IMGUIZMO_NAMESPACE
       ImGui::SetCurrentContext(ctx);
    }
 
+   void DestroyContext()
+   {
+      gContext.mIDStack.clear();
+   }
+
    void BeginFrame()
    {
       const ImU32 flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus;

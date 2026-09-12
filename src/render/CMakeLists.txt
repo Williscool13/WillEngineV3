@@ -140,6 +140,7 @@ target_link_libraries(render PUBLIC
         lz4
         zstd
         imgui
+        imguizmo
         tracy_interface
         bc7enc_rdo
         clay
