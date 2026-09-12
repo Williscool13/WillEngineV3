@@ -607,11 +607,15 @@ void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
     w.Key("dofNearRadiusPx", p.dofNearRadiusPx);
     w.Key("dofFarRadiusPx", p.dofFarRadiusPx);
     w.Key("bMotionBlurEnabled", p.bMotionBlurEnabled);
-    w.Key("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
     w.Key("motionBlurVelocityScale", p.motionBlurVelocityScale);
     w.Key("motionBlurTargetFps", p.motionBlurTargetFps);
     w.Key("motionBlurDepthScale", p.motionBlurDepthScale);
     w.Key("motionBlurMaxRadiusPx", p.motionBlurMaxRadiusPx);
+    w.Key("motionBlurObjectScale", p.motionBlurObjectScale);
+    w.Key("motionBlurCameraRotationScale", p.motionBlurCameraRotationScale);
+    w.Key("motionBlurCameraTranslationScale", p.motionBlurCameraTranslationScale);
+    w.Key("motionBlurCameraDeadZonePx", p.motionBlurCameraDeadZonePx);
+    w.Key("motionBlurCameraMaxRadiusPx", p.motionBlurCameraMaxRadiusPx);
     w.Key("bColorGradingEnabled", p.bColorGradingEnabled);
     w.Key("colorGradingExposure", p.colorGradingExposure);
     w.Key("colorGradingContrast", p.colorGradingContrast);
@@ -679,11 +683,19 @@ void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p)
     p.dofNearRadiusPx = r.Float("dofNearRadiusPx", p.dofNearRadiusPx);
     p.dofFarRadiusPx = r.Float("dofFarRadiusPx", p.dofFarRadiusPx);
     p.bMotionBlurEnabled = r.Bool("bMotionBlurEnabled", p.bMotionBlurEnabled);
-    p.bMotionBlurObjectOnly = r.Bool("bMotionBlurObjectOnly", p.bMotionBlurObjectOnly);
     p.motionBlurVelocityScale = r.Float("motionBlurVelocityScale", p.motionBlurVelocityScale);
     p.motionBlurTargetFps = r.Float("motionBlurTargetFps", p.motionBlurTargetFps);
     p.motionBlurDepthScale = r.Float("motionBlurDepthScale", p.motionBlurDepthScale);
     p.motionBlurMaxRadiusPx = r.Float("motionBlurMaxRadiusPx", p.motionBlurMaxRadiusPx);
+    p.motionBlurObjectScale = r.Float("motionBlurObjectScale", p.motionBlurObjectScale);
+    p.motionBlurCameraRotationScale = r.Float("motionBlurCameraRotationScale", p.motionBlurCameraRotationScale);
+    p.motionBlurCameraTranslationScale = r.Float("motionBlurCameraTranslationScale", p.motionBlurCameraTranslationScale);
+    p.motionBlurCameraDeadZonePx = r.Float("motionBlurCameraDeadZonePx", p.motionBlurCameraDeadZonePx);
+    p.motionBlurCameraMaxRadiusPx = r.Float("motionBlurCameraMaxRadiusPx", p.motionBlurCameraMaxRadiusPx);
+    if (!r.Has("motionBlurCameraRotationScale") && r.Bool("bMotionBlurObjectOnly", false)) {
+        p.motionBlurCameraRotationScale = 0.0f;
+        p.motionBlurCameraTranslationScale = 0.0f;
+    }
     p.bColorGradingEnabled = r.Bool("bColorGradingEnabled", p.bColorGradingEnabled);
     p.colorGradingExposure = r.Float("colorGradingExposure", p.colorGradingExposure);
     p.colorGradingContrast = r.Float("colorGradingContrast", p.colorGradingContrast);

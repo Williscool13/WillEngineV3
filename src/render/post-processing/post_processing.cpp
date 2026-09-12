@@ -472,31 +472,37 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     const float maxRadiusPx = std::max(1.0f, ctx.config.motionBlurMaxRadiusPx);
     const uint32_t dilationRadius = static_cast<uint32_t>(std::ceil(maxRadiusPx / static_cast<float>(POST_PROCESS_MOTION_BLUR_TILE_SIZE)));
 
-    const bool bObjectOnly = ctx.config.bMotionBlurObjectOnly;
-    if (bObjectOnly) {
-        SetupObjectMotion(graph, pipelines, ctx.preAaExtent, ctx.targets, 0);
-    }
+    const float objectScale = ctx.config.motionBlurObjectScale;
+    const float cameraRotationScale = ctx.config.motionBlurCameraRotationScale;
+    const float cameraTranslationScale = ctx.config.motionBlurCameraTranslationScale;
+    const float cameraDeadZonePx = ctx.config.motionBlurCameraDeadZonePx;
+    const float cameraMaxRadiusPx = std::min(ctx.config.motionBlurCameraMaxRadiusPx, maxRadiusPx);
+
+    SetupObjectMotion(graph, pipelines, ctx.preAaExtent, ctx.targets, 0);
 
     graph.CreateTexture("motion_blur_velocity"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, width, height, 1}, std::nullopt, true);
     RenderPass& velocityExtractPass = graph.AddPass("[Motion Blur] Velocity Extract"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     velocityExtractPass.ReadBuffer("scene_data"_sid);
-    if (bObjectOnly) {
-        velocityExtractPass.ReadSampledImage(OBJECT_MOTION);
-    } else {
-        velocityExtractPass.ReadSampledImage(velocity);
-        velocityExtractPass.ReadSampledImage(depthStencil);
-    }
+    velocityExtractPass.ReadSampledImage(OBJECT_MOTION);
+    velocityExtractPass.ReadSampledImage(velocity);
+    velocityExtractPass.ReadSampledImage(depthStencil);
     velocityExtractPass.WriteStorageImage("motion_blur_velocity"_sid);
-    velocityExtractPass.Execute([width, height, renderWidth, renderHeight, pipelines, velocity, depthStencil, bObjectOnly](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    velocityExtractPass.Execute([width, height, renderWidth, renderHeight, pipelines, velocity, depthStencil, velocityScale, objectScale, cameraRotationScale, cameraTranslationScale,
+                                 cameraDeadZonePx, cameraMaxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurVelocityExtractPushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"_sid),
             .extent = {width, height},
             .renderExtent = {renderWidth, renderHeight},
-            .gbufferOneIndex = bObjectOnly ? ~0u : graph.GetSampledImageViewDescriptorIndex(velocity),
-            .depthBufferIndex = bObjectOnly ? ~0u : graph.GetSampledImageViewDescriptorIndex(depthStencil),
+            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(velocity),
+            .depthBufferIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
+            .objectMotionIndex = graph.GetSampledImageViewDescriptorIndex(OBJECT_MOTION),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex("motion_blur_velocity"_sid),
-            .bObjectOnly = bObjectOnly ? 1u : 0u,
-            .objectMotionIndex = bObjectOnly ? graph.GetSampledImageViewDescriptorIndex(OBJECT_MOTION) : ~0u,
+            .objectScale = objectScale,
+            .cameraRotationScale = cameraRotationScale,
+            .cameraTranslationScale = cameraTranslationScale,
+            .cameraDeadZonePx = cameraDeadZonePx,
+            .cameraMaxRadiusPx = cameraMaxRadiusPx,
+            .velocityScale = velocityScale,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("motion_blur_velocity_extract"_sid);

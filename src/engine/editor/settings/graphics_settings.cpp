@@ -1934,12 +1934,15 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
 
     if (ImGui::CollapsingHeader("Motion Blur")) {
         check("Enabled##motionblur", &pp.bMotionBlurEnabled);
-        check("Object Only##motionblur", &pp.bMotionBlurObjectOnly);
-        ImGui::SetItemTooltip("Subtract the camera-only reprojection so only moving objects smear. Off = full camera + object blur.");
-        ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter.");
+        ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter. Shared by camera and object blur.");
         ppF("Target FPS", &pp.motionBlurTargetFps, defaults.motionBlurTargetFps, 0.0f, 240.0f, "%.0f", "Frame rate the shutter is normalized to, so blur length stays constant as fps varies and hitches do not smear. 0 = physical shutter (blur grows with frame time).");
         ppF("Depth Scale", &pp.motionBlurDepthScale, defaults.motionBlurDepthScale, 0.1f, 10.0f, "%.2f", "1 / soft depth band (view units) for foreground/background classification. 1.0 = 1m band.");
         ppF("Max Radius", &pp.motionBlurMaxRadiusPx, defaults.motionBlurMaxRadiusPx, 4.0f, 64.0f, "%.0f", "Cap on blur reach in output pixels. Faster movers saturate here and read as solid; tile dilation and sample count scale with it.");
+        ppF("Object Scale", &pp.motionBlurObjectScale, defaults.motionBlurObjectScale, 0.0f, 2.0f, "%.2f", "Share of object-only motion that smears, after the camera reprojection is subtracted out. 0 = moving objects never blur.");
+        ppF("Camera Rotation Scale", &pp.motionBlurCameraRotationScale, defaults.motionBlurCameraRotationScale, 0.0f, 2.0f, "%.2f", "Share of camera pan/tilt motion that smears. Drives the sky, which has no other motion.");
+        ppF("Camera Translation Scale", &pp.motionBlurCameraTranslationScale, defaults.motionBlurCameraTranslationScale, 0.0f, 2.0f, "%.2f", "Share of camera dolly motion that smears. Lower than rotation keeps near geometry readable while walking.");
+        ppF("Camera Dead Zone", &pp.motionBlurCameraDeadZonePx, defaults.motionBlurCameraDeadZonePx, 0.0f, 8.0f, "%.2f", "Camera blur shorter than this many output pixels is trimmed away, so idle drift and controller noise stay sharp.");
+        ppF("Camera Max Radius", &pp.motionBlurCameraMaxRadiusPx, defaults.motionBlurCameraMaxRadiusPx, 1.0f, 64.0f, "%.0f", "Cap on camera blur reach in output pixels, so fast spins do not smear the whole frame. Clamped to Max Radius.");
     }
 
     if (ImGui::CollapsingHeader("Color Grading")) {

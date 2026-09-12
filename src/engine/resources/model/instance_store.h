@@ -38,7 +38,7 @@ struct InstanceSource
     Mat4 modelSpaceTransform{1.0f};
     uint64_t stableId{0};
     uint32_t lightIndex{~0u};
-    uint32_t flags{INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE};
+    uint32_t flags{INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR};
     bool bVisible{true};
 
     /**

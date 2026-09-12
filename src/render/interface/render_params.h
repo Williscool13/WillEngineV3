@@ -83,11 +83,15 @@ struct PostProcessConfiguration
     float dofFarRadiusPx{16.0f}; // max CoC radius behind focus, output pixels
 
     bool bMotionBlurEnabled{false};
-    bool bMotionBlurObjectOnly{true}; // subtract camera reprojection so only moving objects smear
-    float motionBlurVelocityScale{0.8f}; // shutter fraction of inter-frame displacement
-    float motionBlurTargetFps{60.0f}; // reference rate the shutter is normalized to; 0 = physical shutter (blur scales with frame time)
-    float motionBlurDepthScale{1.0f}; // 1 / soft depth-classification band in view units
-    float motionBlurMaxRadiusPx{32.0f}; // cap on blur reach in output pixels; neighbor-max dilation grows to match
+    float motionBlurVelocityScale{0.8f};
+    float motionBlurTargetFps{60.0f}; // 0 = physical shutter (blur scales with frame time)
+    float motionBlurDepthScale{1.0f};
+    float motionBlurMaxRadiusPx{32.0f};
+    float motionBlurObjectScale{1.0f};
+    float motionBlurCameraRotationScale{1.0f};
+    float motionBlurCameraTranslationScale{1.0f};
+    float motionBlurCameraDeadZonePx{1.0f};
+    float motionBlurCameraMaxRadiusPx{32.0f};
 
     bool bColorGradingEnabled{true};
     float colorGradingExposure = 0.0f; // EV bias folded into exposure before tonemapping

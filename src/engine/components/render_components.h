@@ -42,7 +42,8 @@ struct RenderFlagsComponent
     static constexpr uint32_t MOTION_BLUR = 1u << 3;
     static constexpr uint32_t ALPHA_CUTOUT = 1u << 4;
     static constexpr uint32_t EMISSIVE_LIGHT = 1u << 5;
-    static constexpr uint32_t DEFAULT_FLAGS = VISIBLE | PROBE_BAKE_INCLUDE | DDGI_CONTRIBUTE | MOTION_BLUR | ALPHA_CUTOUT;
+    static constexpr uint32_t CAMERA_MOTION_BLUR = 1u << 6;
+    static constexpr uint32_t DEFAULT_FLAGS = VISIBLE | PROBE_BAKE_INCLUDE | DDGI_CONTRIBUTE | MOTION_BLUR | ALPHA_CUTOUT | CAMERA_MOTION_BLUR;
 
     uint32_t flags{DEFAULT_FLAGS};
 

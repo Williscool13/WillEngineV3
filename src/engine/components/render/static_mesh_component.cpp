@@ -204,6 +204,11 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
         }
         ImGui::SameLine();
+        bool cameraMotionBlurExclude = !renderFlags.Has(RenderFlagsComponent::CAMERA_MOTION_BLUR);
+        if (ImGui::Checkbox("Camera Motion Blur Exclude", &cameraMotionBlurExclude)) {
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::CAMERA_MOTION_BLUR, !cameraMotionBlurExclude);
+        }
+        ImGui::SameLine();
         bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
         if (ImGui::Checkbox("Alpha Cutout Exclude", &alphaCutoutExclude)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);

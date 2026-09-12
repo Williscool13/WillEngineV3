@@ -1329,12 +1329,16 @@ SHADER_PUBLIC struct MotionBlurVelocityExtractPushConstant
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC uint2 extent;
     SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t gbufferOneIndex; // full-camera mode only, ~0u in object-only mode
-    SHADER_PUBLIC uint32_t depthBufferIndex; // full-camera mode only
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t depthBufferIndex;
+    SHADER_PUBLIC uint32_t objectMotionIndex;
     SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC uint32_t bObjectOnly; // 0 keeps full camera+object motion
-    SHADER_PUBLIC uint32_t objectMotionIndex; // object-only mode source, ~0u otherwise
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC float objectScale;
+    SHADER_PUBLIC float cameraRotationScale;
+    SHADER_PUBLIC float cameraTranslationScale;
+    SHADER_PUBLIC float cameraDeadZonePx;
+    SHADER_PUBLIC float cameraMaxRadiusPx;
+    SHADER_PUBLIC float velocityScale;
 };
 
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant

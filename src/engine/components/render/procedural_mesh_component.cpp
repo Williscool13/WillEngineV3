@@ -618,6 +618,11 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
         }
         ImGui::SameLine();
+        bool cameraMotionBlurExclude = !renderFlags.Has(RenderFlagsComponent::CAMERA_MOTION_BLUR);
+        if (ImGui::Checkbox("Camera Motion Blur Exclude##proceduralmesh", &cameraMotionBlurExclude)) {
+            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::CAMERA_MOTION_BLUR, !cameraMotionBlurExclude);
+        }
+        ImGui::SameLine();
         bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
         if (ImGui::Checkbox("Emissive Light##proceduralmesh", &emissiveLight)) {
             SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);

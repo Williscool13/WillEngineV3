@@ -39,6 +39,7 @@ bReactiveMask|1
 reactiveScale|0x3f800000
 reactiveThreshold|0x3e4ccccd
 reflectionReactive|0x3f19999a
+mipBias|0xbf800000
 ;
 ;
 resolutionScale|0x3f400000

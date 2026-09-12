@@ -25,6 +25,7 @@ static constexpr struct { const char* key; uint32_t bit; } RENDER_FLAG_KEYS[] = 
     {"motionBlur", RenderFlagsComponent::MOTION_BLUR},
     {"alphaCutout", RenderFlagsComponent::ALPHA_CUTOUT},
     {"emissiveLight", RenderFlagsComponent::EMISSIVE_LIGHT},
+    {"cameraMotionBlur", RenderFlagsComponent::CAMERA_MOTION_BLUR},
 };
 
 void RenderFlagsComponent::Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w)

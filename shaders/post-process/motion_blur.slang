@@ -39,7 +39,7 @@ void ComputeObjectMotionExtract(uniform ObjectMotionExtractPushConstant pc, uint
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(objectMotion, viewZ, blurMask);
 }
 
-// Output per pixel: (motionUv.xy with the blur mask folded in, linear viewZ, unused).
+// Output per pixel: (motionUv.xy with the per-type scales and masks folded in, linear viewZ, unused).
 [shader("compute")]
 [numthreads(POST_PROCESS_MOTION_BLUR_DISPATCH_X, POST_PROCESS_MOTION_BLUR_DISPATCH_Y, 1)]
 void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConstant pc, uint3 dtid : SV_DispatchThreadID) {
@@ -47,21 +47,37 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
     uint2 pixelCoord = dtid.xy;
 
     int2 srcCoord = min(int2((float2(pixelCoord) + 0.5) * float2(pc.renderExtent) / float2(pc.extent)), int2(pc.renderExtent) - 1);
-
-    if (pc.bObjectOnly != 0u) {
-        float4 om = rdgTexturesFloat4[pc.objectMotionIndex].Load(int3(srcCoord, 0));
-        rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(om.xy * om.w, om.z, 0.0);
-        return;
-    }
+    SceneData scene = pc.sceneData[0];
 
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(srcCoord, 0));
     float depth = rdgTexturesFloat[pc.depthBufferIndex].Load(int3(srcCoord, 0)).r;
-    float viewZ = depth > 0.0 ? ScreenToViewSpaceDepth(depth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd) : OBJECT_MOTION_FAR_VIEWZ;
-    float2 velocityUv = float2(0.0, 0.0);
-    if ((gt1.w & GBUFFER1_LIT_BIT) != 0u && (gt1.w & GBUFFER1_NO_MOTION_BLUR_BIT) == 0u && depth > 0.0) {
-        velocityUv = UnpackMotionVectors(gt1.g) * 0.5;
+    float2 uv = (float2(srcCoord) + 0.5) / float2(pc.renderExtent);
+
+    // Rotation about the eye is depth independent, so the infinite-distance delta is the rotation term for sky and geometry alike
+    float2 rotationUv = SkyMotionVectorNDC(scene.clipToPrevClip, scene.jitter, scene.prevJitter, uv) * 0.5;
+    float viewZ = OBJECT_MOTION_FAR_VIEWZ;
+    float2 objectUv = float2(0.0, 0.0);
+    float2 translationUv = float2(0.0, 0.0);
+    float objectMask = 1.0;
+    float cameraMask = 1.0;
+
+    if (depth > 0.0 && (gt1.w & GBUFFER1_LIT_BIT) != 0u) {
+        float4 om = rdgTexturesFloat4[pc.objectMotionIndex].Load(int3(srcCoord, 0));
+        viewZ = om.z;
+        objectMask = om.w;
+        objectUv = om.xy * objectMask;
+        translationUv = (UnpackMotionVectors(gt1.g) * 0.5 - om.xy) - rotationUv;
+        cameraMask = (gt1.w & GBUFFER1_NO_CAMERA_MOTION_BLUR_BIT) != 0u ? 0.0 : 1.0;
     }
-    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(velocityUv, viewZ, 0.0);
+
+    float2 cameraUvScaled = cameraMask * (pc.cameraRotationScale * rotationUv + pc.cameraTranslationScale * translationUv);
+    float cameraLenPx = length(cameraUvScaled * float2(pc.extent)) * pc.velocityScale;
+    if (cameraLenPx > 1e-5) {
+        cameraUvScaled *= min(max(cameraLenPx - pc.cameraDeadZonePx, 0.0), pc.cameraMaxRadiusPx) / cameraLenPx;
+    }
+
+    // w = may this pixel smear over its neighbours; 0 only once every channel that could move it is masked off
+    rdgStorageFloat4[pc.outputIndex][pixelCoord] = float4(pc.objectScale * objectUv + cameraUvScaled, viewZ, max(objectMask, cameraMask));
 }
 
 groupshared float g_velLenSq[POST_PROCESS_MOTION_BLUR_TILE_SIZE * POST_PROCESS_MOTION_BLUR_TILE_SIZE];
@@ -198,6 +214,7 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
 
         float3 pairColor[2] = { float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0) };
         float pairWeight[2] = { 0.0, 0.0 };
+        float pairShare[2] = { 1.0, 1.0 };
         bool pairValid[2] = { false, false };
 
         [ForceUnroll]
@@ -217,20 +234,24 @@ void ComputeMotionBlurReconstruction(uniform MotionBlurReconstructionPushConstan
             float2 d = DepthCmp(centerViewZ, sampleViewZ, pc.depthScale);
             float2 s = SpreadCmp(offsetLen, float2(centerSpreadLen, sampleSpreadLen));
             pairWeight[side] = dot(d, s);
+            // A foreground sample excluded from blur must not be dragged outward by the shared max below
+            pairShare[side] = (sampleVelocity.w < 0.5 && sampleViewZ < centerViewZ) ? 0.0 : 1.0;
         }
 
         if (pairValid[0] && pairValid[1]) {
             // Shared max keeps background reconstruction symmetric across the mover (Jimenez)
             float w = max(pairWeight[0], pairWeight[1]);
-            colorAccum += (pairColor[0] + pairColor[1]) * w;
-            weightAccum += 2.0 * w;
+            float w0 = w * pairShare[0];
+            float w1 = w * pairShare[1];
+            colorAccum += pairColor[0] * w0 + pairColor[1] * w1;
+            weightAccum += w0 + w1;
             sampleCount += 2.0;
         } else {
             [ForceUnroll]
             for (int side = 0; side < 2; ++side) {
                 if (pairValid[side]) {
-                    colorAccum += pairColor[side] * pairWeight[side];
-                    weightAccum += pairWeight[side];
+                    colorAccum += pairColor[side] * pairWeight[side] * pairShare[side];
+                    weightAccum += pairWeight[side] * pairShare[side];
                     sampleCount += 1.0;
                 }
             }

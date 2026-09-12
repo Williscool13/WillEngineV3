@@ -154,6 +154,8 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     }
     bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
     if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
+    bool cameraMotionBlurExclude = !renderFlags.Has(RenderFlagsComponent::CAMERA_MOTION_BLUR);
+    if (ImGui::Checkbox("Camera Motion Blur Exclude##text3d", &cameraMotionBlurExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::CAMERA_MOTION_BLUR, !cameraMotionBlurExclude); }
 
     bool modified = false;
     ImGui::BeginDisabled(busy);

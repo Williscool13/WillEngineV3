@@ -418,7 +418,8 @@ static uint32_t InstanceFlagsFrom(const Component::RenderFlagsComponent& renderF
 {
     return (renderFlags.Has(Component::RenderFlagsComponent::MOTION_BLUR) ? INSTANCE_FLAG_MOTION_BLUR : 0u)
            | (renderFlags.Has(Component::RenderFlagsComponent::ALPHA_CUTOUT) ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
-           | (renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE) ? INSTANCE_FLAG_DDGI_VISIBLE : 0u);
+           | (renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE) ? INSTANCE_FLAG_DDGI_VISIBLE : 0u)
+           | (renderFlags.Has(Component::RenderFlagsComponent::CAMERA_MOTION_BLUR) ? INSTANCE_FLAG_CAMERA_MOTION_BLUR : 0u);
 }
 
 void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity)

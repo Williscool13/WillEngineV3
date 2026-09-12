@@ -247,7 +247,7 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
     Engine::InstanceStore& store = state->instanceStore;
     Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
     emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
-    constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE;
+    constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR;
 
     const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0
                               || state->registry.view<Component::ProbeBakeProxyHiddenTag>().size() > 0;

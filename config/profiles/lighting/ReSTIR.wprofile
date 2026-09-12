@@ -190,7 +190,7 @@ bakedDiffuseClampK|0x40800000
 bBruteForcePick|0
 ;
 gtao
-bEnabled|1
+bEnabled|0
 effectRadius|0x3f000000
 radiusMultiplier|0x3fba7efa
 effectFalloffRange|0x3f1dbcc5

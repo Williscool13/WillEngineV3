@@ -40,7 +40,8 @@ void ComputeShadingErrorUnlit(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThrea
         PackNormalOct16(shadingInputs.interp.normalVS),
         PackMotionVectors(shadingInputs.velocity),
         PackPBR(1.0, 0.0),
-        GBUFFER1_LIT_BIT | ((data.instance.flags & INSTANCE_FLAG_MOTION_BLUR) == 0u ? GBUFFER1_NO_MOTION_BLUR_BIT : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
+        GBUFFER1_LIT_BIT | ((data.instance.flags & INSTANCE_FLAG_MOTION_BLUR) == 0u ? GBUFFER1_NO_MOTION_BLUR_BIT : 0u)
+        | ((data.instance.flags & INSTANCE_FLAG_CAMERA_MOTION_BLUR) == 0u ? GBUFFER1_NO_CAMERA_MOTION_BLUR_BIT : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
     );
     rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(albedo), PackEmissiveRGBE(float3(0.0)));
 }
