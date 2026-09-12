@@ -400,7 +400,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
                 float3 centerVS = mul(pc.sceneData->view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
                 float minDist2 = ReGIRTargetMinDist2(key.level);
                 LightView vs = UnpackLightVS(pc.restirLightVS[candidate]);
-                float target = EvalCellLightTarget(vs, centerVS, UnpackUnorm4x8(vs.packedColor).rgb, minDist2);
+                float target = EvalCellLightTarget(vs, centerVS, centerVS, ReGIRCellHalfDiag(key.level), UnpackUnorm4x8(vs.packedColor).rgb, minDist2);
                 float sum = pc.regirCellData[cellSlot].x;
                 srcPixel.xyz = LightIdxColor(candidate) * max((sum > 0.0) ? saturate(target / sum) : 0.0, 0.05);
             }
@@ -485,7 +485,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
                     float3 pos = float3(0.0);
                     if (topIdx[k] != ~0u && pc.restirLightVS != nullptr) {
                         LightView vs = UnpackLightVS(pc.restirLightVS[topIdx[k]]);
-                        target = EvalCellLightTarget(vs, centerVS, UnpackUnorm4x8(vs.packedColor).rgb, minDist2);
+                        target = EvalCellLightTarget(vs, centerVS, centerVS, ReGIRCellHalfDiag(key.level), UnpackUnorm4x8(vs.packedColor).rgb, minDist2);
                         pos = mul(pc.sceneData->invView, float4(vs.center, 1.0)).xyz;
                     }
                     pc.readback->regirCursorTopTarget[k] = target;

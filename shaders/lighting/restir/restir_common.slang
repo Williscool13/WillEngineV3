@@ -390,15 +390,15 @@ public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePo
 
 public float3 ReGIRCellSize() { return float3(REGIR_CELL_SIZE_X, REGIR_CELL_SIZE_Y, REGIR_CELL_SIZE_Z); }
 
-public float EvalCellLightTarget(LightView vs, float3 cellCenter, float3 lightColor, float minDist2)
+public float EvalCellLightTarget(LightView vs, float3 samplePos, float3 cellCenter, float cellHalfDiag, float3 lightColor, float minDist2)
 {
-    float3 toCenter = vs.center - cellCenter;
-    float dist = max(length(toCenter), 1e-5);
-    float atten = LightRangeCull(dist, vs.range);
-    if (atten <= 0.0) { return 0.0; }
-    atten = max(atten, REGIR_TARGET_RANGE_FLOOR);
-    float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : max(dot(vs.normal, -toCenter / dist), 0.0);
-    if (cosFacing <= 0.0) { return 0.0; }
+    float3 toCellCenter = vs.center - cellCenter;
+    if (length(toCellCenter) - cellHalfDiag >= vs.range) { return 0.0; }
+    if (vs.type != LIGHT_TYPE_SPHERE && dot(vs.normal, toCellCenter) > cellHalfDiag) { return 0.0; }
+    float3 toSample = vs.center - samplePos;
+    float dist = max(length(toSample), 1e-5);
+    float atten = max(LightRangeCull(dist, vs.range), REGIR_TARGET_RANGE_FLOOR);
+    float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : max(dot(vs.normal, -toSample / dist), 0.0);
     atten *= max(LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter), REGIR_TARGET_CONE_FLOOR);
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     float geom = max(cosFacing, REGIR_TARGET_FACING_FLOOR) / max(dist * dist, max(minDist2, LIGHT_GEOM_MIN_DIST2));

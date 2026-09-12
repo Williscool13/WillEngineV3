@@ -115,6 +115,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     float3 cellCenterWS = ReGIRCellCenterFromKey(key);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
     float targetMinDist2 = ReGIRTargetMinDist2(key.level);
+    float cellHalfDiag = ReGIRCellHalfDiag(key.level);
 
     uint analyticCount = uint(pc.lightData->analyticLightCount);
     uint liveCount = LiveLightCount(lightCount, int(analyticCount));
@@ -122,7 +123,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     for (uint i = localID.x; i < liveCount; i += 64u) {
         uint li = LiveLightIndex(i, int(analyticCount));
         LightView vsl = UnpackLightVS(pc.lightVS[li]);
-        localSum += EvalCellLightTarget(vsl, cellCenterVS, UnpackUnorm4x8(vsl.packedColor).rgb, targetMinDist2);
+        localSum += EvalCellLightTarget(vsl, cellCenterVS, cellCenterVS, cellHalfDiag, UnpackUnorm4x8(vsl.packedColor).rgb, targetMinDist2);
     }
     gCellTargetReduce[localID.x] = localSum;
     GroupMemoryBarrierWithGroupSync();
@@ -171,7 +172,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
             if (cand.lightIdx == ~0u || !IsLiveLight(cand.lightIdx, lightCount, int(analyticCount)) || cand.sourcePdf <= 0.0) { continue; }
 
             LightView vs = UnpackLightVS(pc.lightVS[cand.lightIdx]);
-            float target = EvalCellLightTarget(vs, sampleVS, UnpackUnorm4x8(vs.packedColor).rgb, targetMinDist2);
+            float target = EvalCellLightTarget(vs, sampleVS, cellCenterVS, cellHalfDiag, UnpackUnorm4x8(vs.packedColor).rgb, targetMinDist2);
             float w_i = target / cand.sourcePdf;
             if (ReservoirAddSample(accum, w_i, uSelect)) {
                 res.lightIdx = cand.lightIdx;
@@ -200,7 +201,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
                 }
                 if (prev.lightIdx != ~0u) {
                     LightView vsH = UnpackLightVS(pc.lightVS[prev.lightIdx]);
-                    float pH = EvalCellLightTarget(vsH, sampleVS, UnpackUnorm4x8(vsH.packedColor).rgb, targetMinDist2);
+                    float pH = EvalCellLightTarget(vsH, sampleVS, cellCenterVS, cellHalfDiag, UnpackUnorm4x8(vsH.packedColor).rgb, targetMinDist2);
                     float wH = pH * ReGIRReservoirW(prev) * prevConfidence;
                     if (ReservoirAddSample(accumM, wH, HashStep(h))) {
                         merged.lightIdx = prev.lightIdx;

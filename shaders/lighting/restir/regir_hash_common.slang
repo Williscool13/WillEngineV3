@@ -23,6 +23,11 @@ public float ReGIRTargetMinDist2(uint level)
     return d * d;
 }
 
+public float ReGIRCellHalfDiag(uint level)
+{
+    return 0.5 * sqrt(3.0) * ReGIRCellSizeAtLevel(level);
+}
+
 /** LOD level for a world point from its distance to the camera. */
 public uint ReGIRLevelFromDistance(float dist)
 {
