@@ -30,6 +30,7 @@ static const float GI_UPSCALE_SUPPORT_FULL = 2.0;
 static const bool GI_UPSCALE_FAST_CLAMP = true;
 static const float GI_UPSCALE_FAST_MAX_ACCUM = 5.0;
 static const float GI_UPSCALE_FAST_CLAMP_SIGMA = 3.0;
+static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 128.0;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -72,6 +73,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         // The bilinear moments fetch touches these texels at geometry/sky boundaries, and aliased RDG memory is never zeroed.
         rdgStorageFloat2[pc.momentsIndex][pixel] = float2(0.0);
         rdgStorageFloat4[pc.fastIndex][pixel] = float4(0.0);
+        rdgStorageFloat2[pc.skyVisAccumIndex][pixel] = float2(0.0);
         if (pc.debugPathIndex != ~0x0u) {
             rdgStorageFloat4[pc.debugPathIndex][pixel] = float4(0.0);
         }
@@ -148,8 +150,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
         float tapV = pc.skyVisIndex != ~0x0u ? rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r : 0.0;
-        // Clamp moments must see the same total the blend produces, or the box drags history toward the sky-less SH.
-        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) + tapV * skyTerm;
+        float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0));
         irrM1 += tapIrr;
         irrM2 += tapIrr * tapIrr;
         clampTaps += 1.0;
@@ -171,16 +172,23 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
     bool bHasCurrent = true;
     float3 current;
+    bool bSkyCurrent = false;
+    float skyVisCurrent = 0.0;
     uint debugPath = 0u;
     float debugSupport = 1.0;
+    float support = 1.0;
     if (sumW > 1e-4) {
         float invW = 1.0 / sumW;
-        current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0)) + sumV * invW * skyTerm;
+        current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0));
+        skyVisCurrent = sumV * invW;
+        bSkyCurrent = true;
         debugPath = 1u;
     } else if (fbW > 1e-4) {
         // All taps guide-rejected but valid geometry exists (sub-half-res features: slots, trim): bilinear over the valid taps only. A single best tap is quad-constant and shows as 2x2 blocks; bilinear is continuous, and backface/sky texels never enter (validity-gated above).
         float invW = 1.0 / fbW;
-        current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0)) + fbV * invW * skyTerm;
+        current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0));
+        skyVisCurrent = fbV * invW;
+        bSkyCurrent = true;
         debugPath = 2u;
     } else if (!bAnyBackfaceTap) {
         current = GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv);
@@ -193,8 +201,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
     GIGatherHistory fastHistory = { float3(0.0), 0.0, 0.0 };
+    float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
     if (pc.bHistoryValid != 0u) {
-        float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
         history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
         if (pc.fastHistoryIndex != ~0x0u) {
             fastHistory = GIGatherFetchHistory(scene, pc.fastHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
@@ -223,6 +231,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         if (stride >= 1) {
             int2 gatherCenter = int2(pixel / pc.gatherScale);
             float3 fixSum = current;
+            float fixV = skyVisCurrent;
             float fixW = 1.0;
             [unroll]
             for (int fy = -1; fy <= 1; fy++) {
@@ -250,21 +259,54 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
                     float3 fixIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0));
                     if (pc.skyVisIndex != ~0x0u) {
-                        fixIrr += rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r * skyTerm;
+                        fixV += rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r * w;
                     }
                     fixSum += fixIrr * w;
                     fixW += w;
                 }
             }
-            current = fixSum / fixW;
+            if (bSkyCurrent) {
+                current = fixSum / fixW;
+                skyVisCurrent = fixV / fixW;
+            } else {
+                current = (fixSum + fixV * skyTerm) / fixW;
+            }
 
             // Thin geometry (railings, trim): nothing else lies on the surface, so the footprint and fix taps reject, jitter keeps history from accumulating, and the pixel shows raw 1spp and boils. Trade precision for stability with the world tiers.
-            float support = max(saturate((sumW + fixW - 1.0) / GI_UPSCALE_SUPPORT_FULL), nBlend / GI_UPSCALE_HISTORY_FIX_FRAMES);
+            support = max(saturate((sumW + fixW - 1.0) / GI_UPSCALE_SUPPORT_FULL), nBlend / GI_UPSCALE_HISTORY_FIX_FRAMES);
             debugSupport = support;
-            if (support < 1.0) {
-                current = lerp(GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv), current, support);
+        }
+    }
+
+    float skyVis = skyVisCurrent;
+    float skyVisCount = bSkyCurrent ? 1.0 : 0.0;
+    if (pc.skyVisAccumHistoryIndex != ~0x0u) {
+        GIGatherScalarHistory skyHistory = GIGatherFetchScalarHistory(scene, pc.skyVisAccumHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        if (skyHistory.quality > 0.0) {
+            float nSky = min(skyHistory.count, (GI_UPSCALE_SKY_VIS_MAX_ACCUM - 1.0) * scene.framerateScale);
+            if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
+                nSky = min(nSky, movingMaxHistory);
+            }
+            if (bSkyCurrent) {
+                float nSkyBlend = nSky * skyHistory.quality;
+                skyVis = (nSkyBlend * skyHistory.value + skyVisCurrent) / (nSkyBlend + 1.0);
+                skyVisCount = nSky + 1.0;
+            } else {
+                skyVis = skyHistory.value;
+                skyVisCount = max(nSky, 1.0);
             }
         }
+    }
+    rdgStorageFloat2[pc.skyVisAccumIndex][pixel] = float2(skyVis, skyVisCount);
+
+    if (bSkyCurrent) {
+        float3 skyIrr = skyVis * skyTerm;
+        current += skyIrr;
+        irrM2 += 2.0 * skyIrr * irrM1 + clampTaps * skyIrr * skyIrr;
+        irrM1 += clampTaps * skyIrr;
+    }
+    if (support < 1.0) {
+        current = lerp(GIUpscaleWorldIrradiance(pc, scene, worldPos, evalN, centerXv), current, support);
     }
 
     // Temporal luma moments: spatial dev over 4 correlated post-atrous taps underestimates true 1rpp deviation, so stationary noise is measured over time instead.

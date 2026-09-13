@@ -1638,10 +1638,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
                     changed = true;
                 }
-                if (Widgets::Checkbox("Far Field##gigather", &ddgi.bGatherFarField,
-                                      "Hits beyond the far-field distance resolve from probe irradiance at the distance point, facing along the ray (a cosine-filtered radiance), instead of the hit tiers. A bright aperture past that range then contributes to every ray heading roughly toward it, not only the rare ray that finds it. Misses take the same path instead of the sky channel.")) { changed = true; }
-                Widgets::SameLine();
-                if (Widgets::SliderFloat("Far Field Distance##gigather", &ddgi.gatherFarFieldDistance, 0.5f, 16.0f, {.format = "%.2f m", .tooltip = "Hit distance past which gather rays switch to the probe far field. Default 3.0 m.", .reset = true, .resetTo = 3.0})) { changed = true; }
                 int gatherChromaPasses = static_cast<int>(ddgi.gatherChromaDenoisePasses);
                 if (Widgets::SliderInt("Chroma Passes##gigather", &gatherChromaPasses, 1, 4, {.tooltip = "Chroma-only denoise pass count; strides 8/16/32/64, each added pass doubles the hue-smoothing reach. Default 2.", .reset = true, .resetTo = 2.0})) {
                     ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);

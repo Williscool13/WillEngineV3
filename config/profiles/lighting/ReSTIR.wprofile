@@ -160,8 +160,6 @@ gatherChromaLumaPower|0x40000000
 bFinalGatherTemporal|1
 bGatherSkipRay|0
 gatherRaysPerPixel|2
-bGatherFarField|0
-gatherFarFieldDistance|0x40000000
 normalBias|0x3e4a0f69
 viewBias|0x3e7d6e73
 bRelocation|1

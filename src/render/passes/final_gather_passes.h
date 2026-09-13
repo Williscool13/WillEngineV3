@@ -35,6 +35,7 @@ inline const StringID GI_GATHER_TMP_SKY_VIS = "gi_gather_tmp_sky_vis"_sid;
 inline const StringID GI_GATHER_RESOLVED = "gi_gather_resolved"_sid;
 inline const StringID GI_GATHER_MOMENTS = "gi_gather_moments"_sid;
 inline const StringID GI_GATHER_FAST = "gi_gather_fast"_sid;
+inline const StringID GI_GATHER_SKY_VIS_ACCUM = "gi_gather_sky_vis_accum"_sid;
 inline const StringID GI_MOTION_TILED_MAX = "gi_motion_tiled_max"_sid;
 inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = "gi_motion_tiled_neighbor_max"_sid;
 inline const StringID OBJECT_MOTION = "object_motion"_sid;
