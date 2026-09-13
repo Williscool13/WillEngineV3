@@ -356,7 +356,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         Render::Cubemap* bestCubemap = nullptr;
         float bestIntensity = 1.0f;
         for (const auto& [entity, sky] : registry.view<Component::SkyboxComponent>().each()) {
-            if (!sky.handle.IsValid()) { continue; }
+            if (!sky.bEnabled || !sky.handle.IsValid()) { continue; }
             Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(sky.handle);
             if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
                 bestPriority = sky.priority;

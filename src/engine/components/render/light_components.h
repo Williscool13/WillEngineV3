@@ -136,6 +136,7 @@ struct SkyboxComponent
     Engine::EnvironmentMapID envMap{};
     float intensity{65536.0f}; // env map texel value to nits
     int32_t priority{0};
+    bool bEnabled{true};
 
     // Runtime-only: refcounted cubemap acquired lazily by the skybox gather.
     Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};

@@ -372,6 +372,8 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
         auto& comp = registry.get<SkyboxComponent>(entity);
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
 
+        modified |= ImGui::Checkbox("Enabled##sky", &comp.bEnabled);
+
         static bool bShowProbes = false;
 
         const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.envMap);
@@ -406,6 +408,7 @@ void Component::SkyboxComponent::Serialize(const SkyboxComponent& comp, Engine::
     w.KeyOpt("envMap", comp.envMap.id, DEF.envMap.id);
     w.KeyOpt("intensity", comp.intensity, DEF.intensity);
     w.KeyOpt("priority", comp.priority, DEF.priority);
+    w.KeyOpt("bEnabled", comp.bEnabled, DEF.bEnabled);
 }
 
 void Component::SkyboxComponent::Deserialize(SkyboxComponent& comp, const Engine::TextReader& r)
@@ -413,6 +416,7 @@ void Component::SkyboxComponent::Deserialize(SkyboxComponent& comp, const Engine
     comp.envMap = Engine::EnvironmentMapID{r.U64("envMap", comp.envMap.id)};
     comp.intensity = r.Float("intensity", comp.intensity);
     comp.priority = r.Int("priority", comp.priority);
+    comp.bEnabled = r.Bool("bEnabled", comp.bEnabled);
 }
 
 void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)
