@@ -665,7 +665,8 @@ static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state
         Engine::CameraPreset& preset = state->projectConfig.cameraPresets[i];
         ImGui::SameLine();
         ImGui::PushID(i);
-        if (preset.bSet) {
+        const bool bOccupied = preset.bSet;
+        if (bOccupied) {
             ImGui::PushStyleColor(ImGuiCol_Button, occupiedColor);
         }
         if (ImGui::Button(Core::InlineString<8>::Format("%d", i + 1).c_str(), buttonSize) && editorCam != entt::null) {
@@ -681,7 +682,7 @@ static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state
                 tf.rotation = preset.rotation;
             }
         }
-        if (preset.bSet) {
+        if (bOccupied) {
             ImGui::PopStyleColor();
         }
         if (ImGui::IsItemHovered()) {

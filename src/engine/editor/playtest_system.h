@@ -72,6 +72,8 @@ struct PlaytestSystem
         Follow,
         Held,
         Track,
+        /** Held at project camera bookmark `count` (1-based) plus a camera-local offset in `translation`. */
+        Preset,
     };
 
     struct Event

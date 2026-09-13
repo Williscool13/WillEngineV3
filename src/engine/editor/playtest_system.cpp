@@ -88,9 +88,16 @@ static bool LoadPlayFile(const char* path, Core::InlineVector<PlaytestSystem::Ev
         Core::InlineString<64> action{};
         if (e.Str("cam", cam)) {
             ev.op = PlaytestSystem::Op::Cam;
-            ev.camMode = cam == "held" ? PlaytestSystem::CamMode::Held : cam == "track" ? PlaytestSystem::CamMode::Track : PlaytestSystem::CamMode::Follow;
-            ev.translation = e.Vec3("translation");
-            ev.rotation = e.Quat("rotation");
+            ev.camMode = cam == "held" ? PlaytestSystem::CamMode::Held : cam == "track" ? PlaytestSystem::CamMode::Track : cam == "preset" ? PlaytestSystem::CamMode::Preset : PlaytestSystem::CamMode::Follow;
+            if (ev.camMode == PlaytestSystem::CamMode::Preset) {
+                ev.count = e.Int("preset");
+                ev.translation = e.Has("offset") ? e.Vec3("offset") : glm::vec3(0.0f);
+            }
+            else {
+                ev.translation = e.Vec3("translation");
+                ev.rotation = e.Quat("rotation");
+            }
+            ev.bFlag = e.Bool("cut", true);
         }
         else if (e.Has("play")) {
             ev.op = PlaytestSystem::Op::Play;
@@ -142,7 +149,8 @@ static bool LoadPlayFile(const char* path, Core::InlineVector<PlaytestSystem::Ev
     return true;
 }
 
-static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation)
+/** bCut drops last frame's view so the move reads as a cut (zero camera motion vectors); false keeps it, so a cam event per frame renders as real camera motion. */
+static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation, bool bCut = true)
 {
     auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
@@ -153,7 +161,9 @@ static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState
     const float aspect = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);
     camera.currentViewData = BuildPerspectiveView(translation, rotation * WORLD_FORWARD, WORLD_UP, aspect,
                                                   glm::radians(state->projectConfig.editorCameraFovDegrees), state->projectConfig.editorCameraNearPlane);
-    camera.previousViewData = camera.currentViewData;
+    if (bCut) {
+        camera.previousViewData = camera.currentViewData;
+    }
 }
 
 static void SetScriptedAction(Engine::InputState& input, ActionHandle action, const glm::vec2& axis, bool bDown)
@@ -300,11 +310,22 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                         if (e.camMode == CamMode::Follow) {
                             ov = {};
                         }
+                        else if (e.camMode == CamMode::Preset) {
+                            if (e.count < 1 || e.count > MAX_CAMERA_PRESETS || !state->projectConfig.cameraPresets[e.count - 1].bSet) {
+                                finish("aborted: cam preset slot is out of range or empty");
+                                return;
+                            }
+                            const CameraPreset& preset = state->projectConfig.cameraPresets[e.count - 1];
+                            ov.mode = CameraOverride::Mode::Held;
+                            ov.rotation = preset.rotation;
+                            ov.translation = preset.translation + preset.rotation * e.translation;
+                            TeleportEditorCamera(ctx, state, ov.translation, ov.rotation, e.bFlag);
+                        }
                         else {
                             ov.mode = e.camMode == CamMode::Held ? CameraOverride::Mode::Held : CameraOverride::Mode::Track;
                             ov.translation = e.translation;
                             ov.rotation = e.rotation;
-                            TeleportEditorCamera(ctx, state, e.translation, e.rotation);
+                            TeleportEditorCamera(ctx, state, e.translation, e.rotation, e.bFlag);
                         }
                         ++cursor;
                         break;

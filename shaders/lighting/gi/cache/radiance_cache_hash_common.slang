@@ -122,8 +122,13 @@ public RadianceCacheKey RadianceCacheUnpackKey(uint2 packed)
 
 static uint RadianceCacheHashInt3(int3 p, uint level, uint bucket, uint seed)
 {
-    uint h = uint(p.x) * 0x8da6b343u ^ uint(p.y) * 0xd8163841u ^ uint(p.z) * 0xcb1ab31fu ^ (level * 0x9e3779b1u) ^ (bucket * 0x85ebca77u) ^ (seed * 0x9E3779B9u);
-    h ^= h >> 15u; h *= 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
+    uint h = seed * 0x9E3779B9u;
+    h = (h ^ uint(p.x)) * 0x8da6b343u; h ^= h >> 15u;
+    h = (h ^ uint(p.y)) * 0xd8163841u; h ^= h >> 13u;
+    h = (h ^ uint(p.z)) * 0xcb1ab31fu; h ^= h >> 16u;
+    h = (h ^ level) * 0x9e3779b1u; h ^= h >> 15u;
+    h = (h ^ bucket) * 0x85ebca77u; h ^= h >> 13u;
+    h *= 0x2c1b3c6du; h ^= h >> 12u; h *= 0x297a2d39u; h ^= h >> 15u;
     return h;
 }
 

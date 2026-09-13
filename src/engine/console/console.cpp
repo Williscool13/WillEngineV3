@@ -197,6 +197,29 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
     });
 
+    Register(state, Origin::Engine, "cam", "`cam <1-8>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
+        if (slot < 0 || slot >= Engine::MAX_CAMERA_PRESETS) {
+            Print(state, "  usage: cam <1-8>");
+            return;
+        }
+        const Engine::CameraPreset& preset = state->projectConfig.cameraPresets[slot];
+        if (!preset.bSet) {
+            Print(state, Core::InlineString<64>::Format("  cam %d is empty", slot + 1).c_str());
+            return;
+        }
+        auto camView = state->registry.view<Component::TransformComponent, Component::EditorCameraTag>();
+        const entt::entity camEntity = camView.front();
+        if (camEntity == entt::null) {
+            Print(state, "  no editor camera");
+            return;
+        }
+        auto& transform = camView.get<Component::TransformComponent>(camEntity);
+        transform.translation = preset.translation;
+        transform.rotation = preset.rotation;
+        Print(state, Core::InlineString<64>::Format("  cam %d", slot + 1).c_str());
+    });
+
     Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->rescan.bResources = true;
         Print(state, "  rescan queued");

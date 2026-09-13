@@ -10,8 +10,11 @@
 
 #include "mcp_tool.h"
 #include "core/containers/inline_string.h"
+#include "core/math/constants.h"
 #include "core/time/frame_stamp.h"
 #include "engine/engine_api.h"
+#include "engine/components/camera_components.h"
+#include "engine/components/core_components.h"
 #include "render/shaders/restir_interop.h"
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_logger.h"
@@ -401,6 +404,33 @@ static ToolResult CaptureScreenshot(EngineContext* ctx, EngineState* state, Call
     return ToolResult::Complete;
 }
 
+static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
+{
+    auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+    const entt::entity camEntity = camView.front();
+    if (camEntity == entt::null) {
+        call.SetError("No editor camera in the registry");
+        return ToolResult::Error;
+    }
+    const Component::TransformComponent& transform = camView.get<Component::TransformComponent>(camEntity);
+    const glm::vec3 forward = transform.rotation * WORLD_FORWARD;
+
+    call.BeginArray("translation");
+    for (int32_t i = 0; i < 3; ++i) { call.PushFloat(transform.translation[i]); }
+    call.End();
+    call.BeginArray("rotationWXYZ");
+    call.PushFloat(transform.rotation.w);
+    call.PushFloat(transform.rotation.x);
+    call.PushFloat(transform.rotation.y);
+    call.PushFloat(transform.rotation.z);
+    call.End();
+    call.BeginArray("forward");
+    for (int32_t i = 0; i < 3; ++i) { call.PushFloat(forward[i]); }
+    call.End();
+    call.SetFloat("fovDegrees", state->projectConfig.editorCameraFovDegrees);
+    return ToolResult::Complete;
+}
+
 static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
 {
     const char* name = call.GetString("name", "");
@@ -446,6 +476,16 @@ void RegisterEngineTools(EngineState* state)
         .inputSchemaJson = R"({"type":"object","required":["name"],"properties":{
             "name":{"type":"string","description":"The .wplay file stem, its header name, or an absolute path"}}})",
         .invoke = &RunPlay,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
+    RegisterTool(state, {
+        .id = "get_camera"_sid,
+        .name = "get_camera",
+        .description = "The editor camera's world translation, rotation (w, x, y, z, the .wplay order), forward vector and vertical field of view. Use it to author .wplay camera paths from the current view.",
+        .inputSchemaJson = nullptr,
+        .invoke = &GetCamera,
         .origin = Origin::Engine,
         .bNeedsDrain = true,
     });

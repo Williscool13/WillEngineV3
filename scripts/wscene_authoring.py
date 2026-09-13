@@ -839,9 +839,31 @@ def shot(name, pos, target, settle_frames=None):
 
 
 # .wplay events (playtest_system.cpp). One op per event; keys other than the op are its arguments.
-def ev_cam_held(pos, target):
+def ev_cam_held(pos, target, cut=True):
+    """cut=False keeps last frame's view, so one held cam per rendered frame reads as real camera motion (motion vectors, history reprojection)."""
     d = (target[0] - pos[0], target[1] - pos[1], target[2] - pos[2])
-    return {"cam": "held", "translation": list(pos), "rotation": list(camera_look_quat(*d))}
+    e = {"cam": "held", "translation": list(pos), "rotation": list(camera_look_quat(*d))}
+    if not cut:
+        e["cut"] = 0
+    return e
+
+
+def ev_cam_pose(pos, rotation_wxyz, cut=True):
+    """Held cam from an explicit pose, e.g. get_camera's translation + rotationWXYZ."""
+    e = {"cam": "held", "translation": list(pos), "rotation": list(rotation_wxyz)}
+    if not cut:
+        e["cut"] = 0
+    return e
+
+
+def ev_cam_preset(slot, offset=(0.0, 0.0, 0.0), cut=True):
+    """Held cam at project camera bookmark `slot` (1-8, the editor's Cam buttons) moved by a camera-local offset (+x right, +y up, -z forward)."""
+    e = {"cam": "preset", "preset": int(slot)}
+    if any(offset):
+        e["offset"] = list(offset)
+    if not cut:
+        e["cut"] = 0
+    return e
 
 
 def ev_cam_track(pos):
@@ -916,7 +938,7 @@ def write_play(path, name, scene, events, content_version=1):
     for e in events:
         lines.append("e")
         for k, v in e.items():
-            if k in ("translation", "rotation", "axis"):
+            if k in ("translation", "rotation", "axis", "offset"):
                 lines.append(k + "|" + "|".join(wtext_serialize.hx(x) for x in v))
             elif isinstance(v, str):
                 lines.append(k + "|" + v.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n"))
