@@ -46,11 +46,154 @@ static void SaveProjectConfigTab(Engine::EngineState* state)
     Engine::WriteProjectConfig(cfg, state->allocator);
 }
 
+using LightingBundle = Engine::Profiles::LightingProfileBundle;
+using LightingSectionCopy = void(*)(const LightingBundle& from, LightingBundle& to);
+
+struct LightingBaseline
+{
+    LightingBundle bundle{};
+    Core::InlineString<> name{};
+    bool bValid{false};
+};
+
+/** Active profile as on disk. */
+static LightingBaseline lightingBaseline{};
+
+static void RefreshLightingBaseline(Engine::EngineState* state)
+{
+    const Core::InlineString<>& name = state->projectConfig.activeLightingProfile;
+    if (lightingBaseline.bValid && lightingBaseline.name == name) { return; }
+    lightingBaseline.name = name;
+    lightingBaseline.bValid = false;
+    if (name.IsEmpty()) { return; }
+    lightingBaseline.bundle = Engine::Profiles::CaptureLightingProfile(*state);
+    lightingBaseline.bValid = Engine::Profiles::LoadLightingProfile(name.c_str(), lightingBaseline.bundle);
+}
+
+static void CopyEnvironmentSection(const LightingBundle& from, LightingBundle& to)
+{
+    to.iblIntensity = from.iblIntensity;
+    to.indirectIntensity = from.indirectIntensity;
+}
+
+static void CopyReSTIRDenoiserFields(const Core::ReSTIRParams& from, Core::ReSTIRParams& to)
+{
+    to.denoiserMode = from.denoiserMode;
+    to.bEnableConfidence = from.bEnableConfidence;
+    to.confidenceStrength = from.confidenceStrength;
+    to.confidenceSensitivity = from.confidenceSensitivity;
+    to.confidenceDarknessBias = from.confidenceDarknessBias;
+    to.confidenceHistoryLength = from.confidenceHistoryLength;
+    to.confidenceBlurRadius = from.confidenceBlurRadius;
+    to.atrous = from.atrous;
+    to.svgf = from.svgf;
+    to.relax = from.relax;
+    to.reblur = from.reblur;
+}
+
+static void CopyDirectLightingSection(const LightingBundle& from, LightingBundle& to)
+{
+    Core::ReSTIRParams restir = from.restir;
+    CopyReSTIRDenoiserFields(to.restir, restir);
+    restir.remodulateOutput = to.restir.remodulateOutput;
+    restir.bResetReGIR = to.restir.bResetReGIR;
+    restir.bTemporalSearch = to.restir.bTemporalSearch;
+    to.restir = restir;
+}
+
+static void CopyReSTIRDenoiserSection(const LightingBundle& from, LightingBundle& to)
+{
+    CopyReSTIRDenoiserFields(from.restir, to.restir);
+}
+
+static void CopyGTAOSection(const LightingBundle& from, LightingBundle& to)
+{
+    to.gtao = from.gtao;
+}
+
+static void CopyDDGISection(const LightingBundle& from, LightingBundle& to)
+{
+    Core::DDGIParams ddgi = from.ddgi;
+    ddgi.bDebugDrawVolumes = to.ddgi.bDebugDrawVolumes;
+    ddgi.bCascadeSampling = to.ddgi.bCascadeSampling;
+    ddgi.bWorldVolumeGridCull = to.ddgi.bWorldVolumeGridCull;
+    to.ddgi = ddgi;
+}
+
+static void CopyReflectionsSection(const LightingBundle& from, LightingBundle& to)
+{
+    to.reflection = from.reflection;
+}
+
+static void CopyReflectionProbesSection(const LightingBundle& from, LightingBundle& to)
+{
+    Core::ReflectionProbeConfiguration probe = from.reflectionProbe;
+    probe.bDebugDraw = to.reflectionProbe.bDebugDraw;
+    probe.bBruteForcePick = to.reflectionProbe.bBruteForcePick;
+    to.reflectionProbe = probe;
+}
+
+static void CopyDiagnosticsSection(const LightingBundle& from, LightingBundle& to)
+{
+    to.shadingOverride = from.shadingOverride;
+    to.lightingOverride = from.lightingOverride;
+    to.restir.remodulateOutput = from.restir.remodulateOutput;
+    to.reflectionProbe.bBruteForcePick = from.reflectionProbe.bBruteForcePick;
+    to.ddgi.bCascadeSampling = from.ddgi.bCascadeSampling;
+    to.ddgi.bWorldVolumeGridCull = from.ddgi.bWorldVolumeGridCull;
+}
+
+/** @param copy null for sections not stored in profiles */
+static Widgets::SectionHeader MakeLightingSectionHeader(const LightingBundle& live, LightingSectionCopy copy)
+{
+    Widgets::SectionHeader header{};
+    header.bSaveRevert = true;
+    if (copy == nullptr) {
+        header.disabledTooltip = "Not stored in lighting profiles.";
+        return header;
+    }
+    if (!lightingBaseline.bValid) {
+        header.disabledTooltip = "No active lighting profile.";
+        return header;
+    }
+    LightingBundle merged = lightingBaseline.bundle;
+    copy(live, merged);
+    header.bDirty = !(merged == lightingBaseline.bundle);
+    header.bCanSave = header.bDirty;
+    header.bCanRevert = header.bDirty;
+    return header;
+}
+
+static void HandleLightingSectionAction(Engine::EngineState* state, const Widgets::SectionHeader& header, LightingSectionCopy copy)
+{
+    if (copy == nullptr || !lightingBaseline.bValid) { return; }
+
+    if (header.action == Widgets::SectionAction::Save) {
+        const char* name = state->projectConfig.activeLightingProfile.c_str();
+        LightingBundle bundle = lightingBaseline.bundle;
+        Engine::Profiles::LoadLightingProfile(name, bundle);
+        copy(Engine::Profiles::CaptureLightingProfile(*state), bundle);
+        if (Engine::Profiles::SaveLightingProfile(name, bundle, state->allocator)) {
+            lightingBaseline.bundle = bundle;
+        }
+    }
+    else if (header.action == Widgets::SectionAction::Revert) {
+        LightingBundle live = Engine::Profiles::CaptureLightingProfile(*state);
+        copy(lightingBaseline.bundle, live);
+        Engine::Profiles::ApplyLightingProfile(*state, live);
+    }
+}
+
 static void SaveLightingTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activeLightingProfile.IsEmpty()) {
-        Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), Engine::Profiles::CaptureLightingProfile(*state), state->allocator);
+        const LightingBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
+        if (Engine::Profiles::SaveLightingProfile(cfg.activeLightingProfile.c_str(), bundle, state->allocator)) {
+            lightingBaseline.bundle = bundle;
+            lightingBaseline.name = cfg.activeLightingProfile;
+            lightingBaseline.bValid = true;
+        }
     }
     Engine::WriteProjectConfig(cfg, state->allocator);
 }
@@ -74,6 +217,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activeLightingProfile == names[i])) {
                 cfg.activeLightingProfile = names[i];
+                lightingBaseline.bValid = false;
                 Engine::Profiles::LightingProfileBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
                 if (Engine::Profiles::LoadLightingProfile(names[i].c_str(), bundle)) {
                     Engine::Profiles::ApplyLightingProfile(*state, bundle);
@@ -100,6 +244,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
     if (ImGui::Button("Save As##lightingprofile") && lightingNewName[0] != '\0') {
         Engine::Profiles::SaveLightingProfile(lightingNewName, Engine::Profiles::CaptureLightingProfile(*state), state->allocator);
         cfg.activeLightingProfile = Core::InlineString<64>(lightingNewName);
+        lightingBaseline.bValid = false;
         Engine::WriteProjectConfig(cfg, state->allocator);
         lightingNewName[0] = '\0';
     }
@@ -871,11 +1016,6 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     ImGui::PushID(idScope);
 
     static const Core::RELAXParams relaxDefaults{};
-    auto relaxTip = [&](const char* tip) {
-        if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("%s", tip);
-        }
-    };
     auto relaxF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.4f", const char* tip = nullptr) {
         changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
     };
@@ -883,37 +1023,34 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
         changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
     };
 
-    if (ImGui::Checkbox("Prepass##relax", &relax.enablePrepass)) { changed = true; }
-    relaxTip("Spatial pre-blur before temporal accumulation, lowering the input noise fed into history. Default on.");
-    ImGui::SameLine();
-    if (ImGui::Checkbox("Anti-Firefly##relax", &relax.enableAntiFirefly)) { changed = true; }
-    relaxTip("Suppresses isolated bright outlier pixels (fireflies) before accumulation. Default on.");
-    if (ImGui::Checkbox("Roughness Edge Stopping##relax", &relax.roughnessEdgeStoppingEnabled)) { changed = true; }
-    relaxTip("Roughness-aware specular edge stopping (roughness + oriented-normal weights). Off uses a simpler normal-only weight. Default on.");
+    changed |= Widgets::Checkbox("Prepass##relax", &relax.enablePrepass, "Spatial pre-blur before temporal accumulation, lowering the input noise fed into history. Default on.");
+    Widgets::SameLine();
+    changed |= Widgets::Checkbox("Anti-Firefly##relax", &relax.enableAntiFirefly, "Suppresses isolated bright outlier pixels (fireflies) before accumulation. Default on.");
+    changed |= Widgets::Checkbox("Roughness Edge Stopping##relax", &relax.roughnessEdgeStoppingEnabled, "Roughness-aware specular edge stopping (roughness + oriented-normal weights). Off uses a simpler normal-only weight. Default on.");
 
-    ImGui::SeparatorText("General");
+    Widgets::SubHeader("General");
     relaxF("Denoising Range", &relax.denoisingRange, relaxDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through untouched. Default 1000; set to roughly cover your scene depth.");
     relaxF("Disocclusion Threshold", &relax.disocclusionThreshold, relaxDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Higher accepts more (less ghosting rejection); lower resets more on edges/motion. A jitter/1px depth bonus is added on top. Default 0.01.");
     relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
 
-    ImGui::SeparatorText("Accumulation");
+    Widgets::SubHeader("Accumulation");
     relaxF("Spec Max Accum Frames", &relax.specMaxAccumFrames, relaxDefaults.specMaxAccumFrames, 0.f, 64.f, "%.0f", "Max specular history length (stable). Higher = cleaner but laggier reflections. Frames at 60 fps, scaled with frame rate. Default 32; common 30-60.");
     relaxF("Spec Max Fast Accum Frames", &relax.specMaxFastAccumFrames, relaxDefaults.specMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' specular history used to clamp the slow one (anti-lag). Must be below Spec Max Accum to enable clamping. Frames at 60 fps, scaled with frame rate. NRD default 6 (~5x below main). Default 6.");
     relaxF("Diff Max Accum Frames", &relax.diffMaxAccumFrames, relaxDefaults.diffMaxAccumFrames, 0.f, 64.f, "%.0f", "Max diffuse history length (stable). Higher = cleaner but slower to react to lighting changes (more lag). Frames at 60 fps, scaled with frame rate. Default 32; common 30-60.");
     relaxF("Diff Max Fast Accum Frames", &relax.diffMaxFastAccumFrames, relaxDefaults.diffMaxFastAccumFrames, 0.f, 16.f, "%.0f", "Length of the noisy 'fast' diffuse history used to clamp the slow one (anti-lag). Lower = snappier response. Must be below Diff Max Accum. Frames at 60 fps, scaled with frame rate. NRD default 6. Default 6.");
     relaxF("History Acceleration Amount", &relax.historyAccelerationAmount, relaxDefaults.historyAccelerationAmount, 0.f, 1.f, "%.2f", "Strength of anti-lag acceleration pushing the slow history toward the fast one on changes. 0 = off, 1 = max. Default 1.0.");
 
-    ImGui::SeparatorText("Prepass");
+    Widgets::SubHeader("Prepass");
     relaxF("Diff Blur Radius", &relax.diffBlurRadius, relaxDefaults.diffBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the diffuse pre-blur applied before accumulation. Larger knocks down more input noise but loses detail. 0 disables. Default 30.");
     relaxF("Spec Blur Radius", &relax.specBlurRadius, relaxDefaults.specBlurRadius, 0.f, 100.f, "%.1f", "Radius (px) of the specular pre-blur before accumulation. 0 disables. Default 50.");
     relaxF("Min Hit Distance Weight", &relax.minHitDistanceWeight, relaxDefaults.minHitDistanceWeight, 0.f, 1.f, "%.2f", "Minimum weight for ray hit-distance when reconstructing specular in the prepass. 0 ignores hitT. Default 0; NRD commonly ~0.1-0.2.");
 
-    ImGui::SeparatorText("A-Trous / Edge Stopping");
+    Widgets::SubHeader("A-Trous / Edge Stopping");
     relaxI("ATrous Iterations", &relax.atrousIterations, relaxDefaults.atrousIterations, 2, 8, "Number of A-trous wavelet (spatial) passes; step doubles each pass (reach ~2^n px). More = wider denoising, costlier. NRD default 5. Default 5.");
     if (bShowChromaAtrous) {
         ImGui::BeginDisabled(bNrdMode);
-        if (ImGui::Checkbox("Chroma Widening##relax", &relax.bChromaAtrous)) { changed = true; }
-        relaxTip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on.");
+        changed |= Widgets::Checkbox("Chroma Widening##relax", &relax.bChromaAtrous,
+                                     "Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on.");
         relaxI("Chroma Widening Passes", &relax.chromaAtrousIterations, relaxDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
         relaxF("Chroma Luma Ratio Power", &relax.chromaLumaPower, relaxDefaults.chromaLumaPower, 0.f, 6.f, "%.2f",
                "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.");
@@ -934,19 +1071,19 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     relaxF("Roughness Edge Stop Relax", &relax.roughnessEdgeStoppingRelaxation, relaxDefaults.roughnessEdgeStoppingRelaxation, 0.f, 1.f, "%.2f", "Relaxes the view vector used in specular weighting, loosening rejection on curved/rough surfaces. NRD effective default 1.0. Default 1.0.");
     relaxF("Spec Variance Boost", &relax.specVarianceBoost, relaxDefaults.specVarianceBoost, 0.f, 8.f, "%.2f", "Boosts specular variance while history is short so fresh pixels filter more aggressively. 0 = no boost (NRD default). Default 0.0.");
 
-    ImGui::SeparatorText("History Fix");
+    Widgets::SubHeader("History Fix");
     relaxF("Hist Fix Edge Stop Normal Pow", &relax.historyFixEdgeStoppingNormalPower, relaxDefaults.historyFixEdgeStoppingNormalPower, 0.f, 32.f, "%.1f", "Normal-match strictness for the history-fix fill that bootstraps fresh pixels. Higher = stricter normal matching. Default 8.");
     relaxF("Hist Fix Frame Num", &relax.historyFixFrameNum, relaxDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill (bootstrap) instead of relying on accumulation. 0 disables. Default 4.");
     relaxF("Hist Fix Base Pixel Stride", &relax.historyFixBasePixelStride, relaxDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Larger = wider initial fill. Default 14.");
 
-    ImGui::SeparatorText("History Clamp / Reset");
+    Widgets::SubHeader("History Clamp / Reset");
     relaxF("Fast History Clamp Sigma", &relax.fastHistoryClampingSigmaScale, relaxDefaults.fastHistoryClampingSigmaScale, 0.f, 8.f, "%.2f", "Width (in sigmas) of the fast-history color box that clamps the slow history (anti-lag/anti-ghosting). Lower = tighter clamp, less lag but more noise. Default 2.0; common 1-2.");
     relaxF("History Reset Temporal Sigma", &relax.historyResetTemporalSigmaScale, relaxDefaults.historyResetTemporalSigmaScale, 0.f, 10.f, "%.2f", "Temporal noise sigma scale in history-reset detection; larger tolerates more temporal noise before resetting. Default 5.");
     relaxF("History Reset Spatial Sigma", &relax.historyResetSpatialSigmaScale, relaxDefaults.historyResetSpatialSigmaScale, 0.f, 10.f, "%.2f", "Spatial noise sigma scale in history-reset detection; larger tolerates more spatial noise before resetting. Default 1.");
     relaxF("History Reset Amount", &relax.historyResetAmount, relaxDefaults.historyResetAmount, 0.f, 1.f, "%.2f", "How hard to snap history to the current noisy signal on big lighting changes. 0 = off (rely on clamping); 1 = aggressive. Default 0.5.");
 
     ImGui::Spacing();
-    if (ImGui::Button("Reset RELAX")) {
+    if (Widgets::Button("Reset RELAX")) {
         relax = Core::RELAXParams{};
         changed = true;
     }
@@ -964,18 +1101,17 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
         changed |= Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)});
     };
 
-    if (ImGui::Checkbox("Prepass##reblur", &reblur.enablePrepass)) { changed = true; }
-    ImGui::SameLine();
-    if (ImGui::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly)) { changed = true; }
-    if (ImGui::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization)) { changed = true; }
-    ImGui::SameLine();
+    changed |= Widgets::Checkbox("Prepass##reblur", &reblur.enablePrepass);
+    Widgets::SameLine();
+    changed |= Widgets::Checkbox("Anti-Firefly##reblur", &reblur.enableAntiFirefly);
+    changed |= Widgets::Checkbox("Temporal Stabilization##reblur", &reblur.enableTemporalStabilization);
+    Widgets::SameLine();
     // No NRD counterpart (engine extension)
     ImGui::BeginDisabled(bNrdMode);
-    if (ImGui::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup)) { changed = true; }
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF."); }
+    changed |= Widgets::Checkbox("Stab. Firefly Cleanup##reblur", &reblur.enableStabilizationFireflyCleanup, "NRD short-history luma cap. Eats sparse disoccluded-pixel energy (black band on fast camera motion); keep OFF.");
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("General");
+    Widgets::SubHeader("General");
     reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");
     reblurF("Disocclusion Threshold", &reblur.disocclusionThreshold, reblurDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Default 0.01.");
     reblurF("Plane Distance Sensitivity", &reblur.planeDistanceSensitivity, reblurDefaults.planeDistanceSensitivity, 0.001f, 0.2f, "%.4f", "Max allowed deviation from the local tangent plane for spatial edge stopping. Default 0.02.");
@@ -983,7 +1119,7 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     reblurF("Roughness Fraction", &reblur.roughnessFraction, reblurDefaults.roughnessFraction, 0.f, 1.f, "%.3f", "Roughness edge-stopping tolerance (fraction). Default 0.15.");
     reblurF("Min Hit Distance Weight", &reblur.minHitDistanceWeight, reblurDefaults.minHitDistanceWeight, 0.f, 0.2f, "%.3f", "Sensitivity to hit distance in spatial passes; smaller for clean RTXDI-style hitT. Default 0.1.");
 
-    ImGui::SeparatorText("Hit Distance Normalization (A/B/C/D)");
+    Widgets::SubHeader("Hit Distance Normalization (A/B/C/D)");
     reblurF("Hit Dist A", &reblur.hitDistA, reblurDefaults.hitDistA, 0.f, 50.f, "%.2f", "Constant term (units). Default 3.");
     reblurF("Hit Dist B", &reblur.hitDistB, reblurDefaults.hitDistB, 0.f, 5.f, "%.3f", "viewZ-based linear scale. Default 0.1.");
     reblurF("Hit Dist C", &reblur.hitDistC, reblurDefaults.hitDistC, 1.f, 100.f, "%.1f", "Roughness-based scale (>1 = larger hit distance for low roughness). Default 20.");
@@ -992,31 +1128,31 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     reblurF("Hit Dist D", &reblur.hitDistD, reblurDefaults.hitDistD, -50.f, 0.f, "%.1f", "Roughness falloff exponent (<=0). Default -25.");
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("Accumulation");
+    Widgets::SubHeader("Accumulation");
     reblurF("Max Accum Frames", &reblur.maxAccumulatedFrameNum, reblurDefaults.maxAccumulatedFrameNum, 0.f, 63.f, "%.0f", "Max (stable) history length. Higher = cleaner but laggier. Frames at 60 fps, scaled with frame rate. Default 30.");
     reblurF("Max Fast Accum Frames", &reblur.maxFastAccumulatedFrameNum, reblurDefaults.maxFastAccumulatedFrameNum, 0.f, 32.f, "%.0f", "Fast (responsive) history length used for anti-lag clamping. Usually ~1/6 of max. Frames at 60 fps, scaled with frame rate. Default 6.");
     reblurF("Max Stabilized Frames", &reblur.maxStabilizedFrameNum, reblurDefaults.maxStabilizedFrameNum, 0.f, 63.f, "%.0f", "History length for the temporal stabilization pass. 0 disables stabilization. Frames at 60 fps, scaled with frame rate. Default 30.");
 
-    ImGui::SeparatorText("Blur");
+    Widgets::SubHeader("Blur");
     reblurF("Min Blur Radius", &reblur.minBlurRadius, reblurDefaults.minBlurRadius, 0.f, 10.f, "%.2f", "Min denoising radius (px) for the converged state. Default 1.");
     reblurF("Max Blur Radius", &reblur.maxBlurRadius, reblurDefaults.maxBlurRadius, 0.f, 60.f, "%.1f", "Base (max) denoising radius (px); shrinks as history grows. Default 30.");
     reblurF("Diffuse Prepass Blur Radius", &reblur.diffusePrepassBlurRadius, reblurDefaults.diffusePrepassBlurRadius, 0.f, 100.f, "%.1f", "Diffuse pre-blur radius (px). 0 disables. Default 30.");
     reblurF("Specular Prepass Blur Radius", &reblur.specularPrepassBlurRadius, reblurDefaults.specularPrepassBlurRadius, 0.f, 100.f, "%.1f", "Specular pre-blur radius (px). 0 disables. Default 50.");
 
     ImGui::BeginDisabled(bNrdMode);
-    if (ImGui::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous)) { changed = true; }
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on."); }
+    changed |= Widgets::Checkbox("Chroma Widening##reblur", &reblur.bChromaAtrous,
+                                 "Extra diffuse-only passes filtering chroma (CoCg chromaticity) with geometric weights only; luminance untouched. Targets low-frequency hue blotches from spatially-reused light selection, which sit past the main chain's reach. Default on.");
     reblurI("Chroma Widening Passes", &reblur.chromaAtrousIterations, reblurDefaults.chromaAtrousIterations, 1, 4, "Chroma pass count; strides 32/64/128/256, so each added pass doubles the hue-smoothing reach. Default 2.");
     reblurF("Chroma Luma Ratio Power", &reblur.chromaLumaPower, reblurDefaults.chromaLumaPower, 0.f, 6.f, "%.2f",
             "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight here is geometric, so without this a cast shadow (same plane, same normal) takes the lit side's hue as a colored halo. 0 = off. Integer values compile to a multiply chain. Default 2.");
     ImGui::EndDisabled();
 
-    ImGui::SeparatorText("History Fix");
+    Widgets::SubHeader("History Fix");
     reblurF("Hist Fix Frame Num", &reblur.historyFixFrameNum, reblurDefaults.historyFixFrameNum, 0.f, 32.f, "%.1f", "Pixels with history shorter than this get a sparse spatial fill. Default 3.");
     reblurF("Hist Fix Base Pixel Stride", &reblur.historyFixBasePixelStride, reblurDefaults.historyFixBasePixelStride, 0.f, 32.f, "%.1f", "Base sample spacing (px) for the history-fix fill; shrinks as history grows. Default 14.");
     reblurF("Fast History Clamp Sigma", &reblur.fastHistoryClampingSigmaScale, reblurDefaults.fastHistoryClampingSigmaScale, 1.f, 3.f, "%.2f", "Width (sigmas) of the fast-history color box clamping the slow history. Default 2.");
 
-    ImGui::SeparatorText("Stabilization / Antilag");
+    Widgets::SubHeader("Stabilization / Antilag");
 
     ImGui::BeginDisabled(bNrdMode);
     reblurF("Stabilization Strength", &reblur.stabilizationStrength, reblurDefaults.stabilizationStrength, 0.f, 1.f, "%.2f", "Blend toward the reprojected stabilized history. 0 = off. Default 1.");
@@ -1025,7 +1161,7 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     reblurF("Firefly Suppressor Min Scale", &reblur.fireflySuppressorMinRelativeScale, reblurDefaults.fireflySuppressorMinRelativeScale, 1.f, 3.f, "%.2f", "Outlier suppression strength (smaller = stronger). Default 2.");
 
     ImGui::Spacing();
-    if (ImGui::Button("Reset ReBLUR")) {
+    if (Widgets::Button("Reset ReBLUR")) {
         reblur = Core::ReBLURParams{};
         changed = true;
     }
@@ -1113,6 +1249,16 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         bool changed = false;
 
         auto featureSection = [&](const char* label, bool* enabled, auto&& body) {
+            if (!Widgets::IsShowingAll()) {
+                if (Widgets::BeginSection(label)) {
+                    if (Widgets::Checkbox(label, enabled)) { changed = true; }
+                    ImGui::BeginDisabled(!*enabled);
+                    body();
+                    ImGui::EndDisabled();
+                    Widgets::EndSection();
+                }
+                return;
+            }
             ImGui::PushID(label);
             if (ImGui::Checkbox("##enabled", enabled)) { changed = true; }
             ImGui::SameLine();
@@ -1152,60 +1298,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const bool bIsGroundTruth = state->lighting.groundTruthMode != Core::GroundTruthMode::None;
-        ImGui::BeginDisabled(bIsGroundTruth);
-        // Shading Pipeline Overrides
-        {
-            Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
-            const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
-            Core::Arena& arena = ctx->editorArena.Get();
-
-            int currentShader = pipelineCount; // "None"
-            for (int32_t i = 0; i < pipelineCount; ++i) {
-                if (state->debug.shadingShaderOverride == shadingPipelines[i]) {
-                    currentShader = i;
-                    break;
-                }
-            }
-
-            Core::ArenaArray<Core::InlineString<> > labels(&arena, pipelineCount + 1);
-            labels[0] = Core::InlineString("None");
-            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString(shadingPipelines[i].ToString()); }
-            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
-            int selected = comboIndex;
-            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
-            if (ImGui::Combo("Shading Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
-                state->debug.shadingShaderOverride = selected == 0 ? StringID{} : shadingPipelines[selected - 1];
-            }
-        }
-        // Lighting Pipeline Overrides
-        {
-            Core::Arena& arena = ctx->editorArena.Get();
-            Core::ArenaFixedVector<StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelinesForMode(state->lighting.lightingMode, arena);
-            const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
-
-            int currentShader = pipelineCount; // "None"
-            for (int32_t i = 0; i < pipelineCount; ++i) {
-                if (state->debug.lightingShaderOverride == lightingPipelines[i]) {
-                    currentShader = i;
-                    break;
-                }
-            }
-
-            Core::ArenaArray<Core::InlineString<> > labels(&arena, pipelineCount + 1);
-            labels[0] = Core::InlineString("None");
-            for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString(lightingPipelines[i].ToString()); }
-            const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
-            int selected = comboIndex;
-            auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
-            if (ImGui::Combo("Lighting Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
-                state->debug.lightingShaderOverride = selected == 0 ? StringID{} : lightingPipelines[selected - 1];
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::Separator();
-
         const char* lightingModeLabels[] = {"Default", "ReSTIR", "Path Tracing"};
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
         if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, IM_ARRAYSIZE(lightingModeLabels))) {
@@ -1232,47 +1324,256 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtToggle("GI", Core::GroundTruthMode::GI);
             ImGui::SameLine();
             gtToggle("Full", Core::GroundTruthMode::Full);
-            ImGui::SliderInt("Samples/Frame##gt", &state->lighting.groundTruthSpp, 1, 32);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Path-traced samples per pixel per frame; Full mode only, DI/GI stay 1. The probe bake overrides this with its own GT Samples/Frame while baking.");
-            }
-            ImGui::SliderFloat("DoF Aperture##gt", &state->lighting.groundTruthDofAperture, 0.0f, 0.25f, "%.3f");
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Thin-lens aperture radius in meters; 0 = pinhole. Full mode only. Focus distance is shared with the Depth of Field settings. While active the raster DoF is skipped so the two never stack. A physical lens has one aperture: match the artist near/far radii one side at a time.");
-            }
-        }
-
-        ImGui::SeparatorText("Render Cache Reset"); {
-            if (ImGui::Button("Full Renderer Clear")) {
-                state->requests.pendingCacheReset = Core::RenderCacheReset::All;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Screen History")) {
-                state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
-            }
+            Widgets::SliderInt("GT Samples/Frame##gt", &state->lighting.groundTruthSpp, 1, 32,
+                               {.tooltip = "Path-traced samples per pixel per frame; Full mode only, DI/GI stay 1. The probe bake overrides this with its own GT Samples/Frame while baking."});
+            Widgets::SliderFloat("GT DoF Aperture##gt", &state->lighting.groundTruthDofAperture, 0.0f, 0.25f,
+                                 {.tooltip = "Thin-lens aperture radius in meters; 0 = pinhole. Full mode only. Focus distance is shared with the Depth of Field settings. While active the raster DoF is skipped so the two never stack. A physical lens has one aperture: match the artist near/far radii one side at a time."});
         }
 
         ImGui::Separator();
 
+        static ImGuiTextFilter lightingFilter;
+        const float clearWidth = ImGui::CalcTextSize("Clear").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SetNextItemWidth(-(clearWidth + ImGui::GetStyle().ItemSpacing.x));
+        if (ImGui::InputTextWithHint("##lightingfilter", "Search groups or fields", lightingFilter.InputBuf, IM_ARRAYSIZE(lightingFilter.InputBuf))) {
+            lightingFilter.Build();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear##lightingfilter")) {
+            lightingFilter.Clear();
+        }
+
+        ImGui::Separator();
+
+        const bool bIsGroundTruth = state->lighting.groundTruthMode != Core::GroundTruthMode::None;
         const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;
         const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
 
-        ImGui::SeparatorText("Both");
+        RefreshLightingBaseline(state);
+        const LightingBundle liveLighting = Engine::Profiles::CaptureLightingProfile(*state);
 
-        if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
+        Widgets::BeginFilter(&lightingFilter);
+
+        Widgets::SectionHeader environmentHeader = MakeLightingSectionHeader(liveLighting, CopyEnvironmentSection);
+        if (Widgets::BeginSection("Environment", &environmentHeader)) {
             if (Widgets::SliderFloat("IBL Intensity##env", &state->lighting.iblIntensity, 0.0f, 2.0f)) {
                 changed = true;
             }
             if (Widgets::SliderFloat("Indirect Intensity##env", &state->lighting.indirectIntensity, 0.0f, 1.0f, {.tooltip = "Scales the indirect diffuse term at the final composite only (gather/probe/sky fill). Lower = darker shadows. Does not feed back into probe or cache convergence. Default 1.", .reset = true, .resetTo = 1.0})) {
                 changed = true;
             }
+            Widgets::EndSection();
+        }
+        HandleLightingSectionAction(state, environmentHeader, CopyEnvironmentSection);
+
+        Widgets::SectionHeader directHeader = MakeLightingSectionHeader(liveLighting, CopyDirectLightingSection);
+        if (bReSTIRMode && Widgets::BeginSection("Direct Lighting (ReSTIR)", &directHeader)) {
+            Core::ReSTIRParams& restir = state->debug.restir;
+
+            // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
+            Widgets::SubHeader("Candidate Generation");
+            const char* proposalModes[] = {"World Grid Bin", "ReGIR"};
+            int proposalIdx = static_cast<int>(restir.lightProposal);
+            if (Widgets::Combo("Light Proposal", &proposalIdx, proposalModes, IM_ARRAYSIZE(proposalModes),
+                               "Candidate source for ReSTIR DI. World Grid Bin: cascaded strongest-K analytic bin (sparse analytic scenes). ReGIR: reservoir hash grid (dense/emissive-triangle scenes).")) {
+                restir.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(proposalIdx);
+                changed = true;
+            }
+            if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
+                if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
+                    changed = true;
+                }
+            }
+            ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
+            if (Widgets::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
+                if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 0.25f,
+                                         {.format = "%.4f", .tooltip = "Attenuation cutoff per emissive mesh, shared by all its triangles: range = multiplier * sqrt(intensity * total area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 0.03125f})) {
+                    changed = true;
+                }
+            });
+
+            Widgets::SubHeader("Temporal");
+            if (Widgets::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {
+                changed = true;
+            }
+            int temporalMCap = static_cast<int>(restir.temporalMCap);
+            if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
+                restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
+                changed = true;
+            }
+            if (Widgets::Checkbox("Checkerboard Rendering", &restir.bCheckerboard)) {
+                changed = true;
+            }
+            ImGui::BeginDisabled(!restir.bCheckerboard);
+            if (Widgets::Checkbox("Full-Rate Resolve", &restir.bCheckerboardFullRateResolve,
+                                  "Keeps the expensive local-light reservoir passes half-rate, but traces sun visibility full-rate and shades every pixel. Hole pixels borrow a depth-matched horizontal neighbor's local reservoir and re-shade it at their own surface. The denoisers then receive a full-rate signal with no checkerboard reconstruction.")) {
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
+            if (Widgets::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
+                changed = true;
+            }
+            ImGui::BeginDisabled(!RESTIR_ENABLE_ANTILAG);
+            featureSection("Antilag", &restir.bEnableAntilag, [&] {
+                if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
+                                         {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
+                    changed = true;
+                }
+            });
+            ImGui::EndDisabled();
+
+            Widgets::SubHeader("Sun");
+            if (Widgets::Checkbox("Sun Visibility Pass", &restir.bSunLight, "Directional sun as a 1spp cone-traced visibility pass, denoised by RELAX with the local lights. Off: SIGMA + directional composite path.")) {
+                changed = true;
+            }
+            if (restir.bSunLight) {
+                if (Widgets::Checkbox("Sun Alpha Test Cutout", &state->lighting.sigmaParams.bAlphaTest, "Sun visibility rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid.")) {
+                    changed = true;
+                }
+            }
+
+            Widgets::SubHeader("Spatial Reuse");
+            int spatialPasses = static_cast<int>(restir.spatialPasses);
+            if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
+                restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
+                changed = true;
+            }
+            if (restir.spatialPasses > 0u) {
+                int spatialRadius = static_cast<int>(restir.spatialRadius);
+                if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
+                    restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
+                    changed = true;
+                }
+                int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
+                if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
+                    restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
+                    changed = true;
+                }
+                int spatialMCap = static_cast<int>(restir.spatialMCap);
+                if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
+                    restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
+                    changed = true;
+                }
+                if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
+                    changed = true;
+                }
+                ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
+                featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
+                    if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
+                        changed = true;
+                    }
+                });
+                ImGui::EndDisabled();
+            }
+            Widgets::EndSection();
+        }
+        HandleLightingSectionAction(state, directHeader, CopyDirectLightingSection);
+
+        Widgets::SectionHeader sigmaHeader = MakeLightingSectionHeader(liveLighting, nullptr);
+        if ((bDefaultMode || (bReSTIRMode && !state->debug.restir.bSunLight)) && Widgets::BeginSection("Sun Shadow (SIGMA)", &sigmaHeader)) {
+            Core::SIGMAParams& sigma = state->lighting.sigmaParams;
+            static const Core::SIGMAParams sigmaDefaults{};
+
+            if (Widgets::Checkbox("Half Res##sigma", &sigma.bHalfRes, "Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.")) { changed = true; }
+            if (Widgets::Checkbox("Alpha Test Cutout##sigma", &sigma.bAlphaTest, "Sun shadow rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid. Costs a texture fetch per cutout candidate along the ray.")) { changed = true; }
+            if (Widgets::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur, "Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.")) { changed = true; }
+
+            auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+            sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.875f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Saturates at 0.875 (SIGMA history cap). Default 0.8.");
+            sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
+            sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
+
+            if (Widgets::Button("Reset SIGMA")) {
+                sigma = Core::SIGMAParams{};
+                changed = true;
+            }
+            Widgets::EndSection();
         }
 
-        if (ImGui::CollapsingHeader("Ground Truth Ambient Occlusion")) {
+        Widgets::SectionHeader denoiserHeader = MakeLightingSectionHeader(liveLighting, CopyReSTIRDenoiserSection);
+        if (bReSTIRMode && Widgets::BeginSection("ReSTIR Denoiser", &denoiserHeader)) {
+            Core::ReSTIRParams& restir = state->debug.restir;
+
+            const char* denoiserModes[] = {"None", "RELAX", "ReBLUR", "NRD RELAX (reference)", "NRD ReBLUR (reference)"};
+            constexpr Core::ReSTIRParams::DenoiserMode DENOISER_MODE_ORDER[] = {
+                Core::ReSTIRParams::DenoiserMode::None,
+                Core::ReSTIRParams::DenoiserMode::RELAX,
+                Core::ReSTIRParams::DenoiserMode::ReBLUR,
+                Core::ReSTIRParams::DenoiserMode::NRD,
+                Core::ReSTIRParams::DenoiserMode::NRDReBLUR,
+            };
+            int denoiserIdx = 0;
+            for (int i = 0; i < IM_ARRAYSIZE(denoiserModes); i++) {
+                if (restir.denoiserMode == DENOISER_MODE_ORDER[i]) { denoiserIdx = i; }
+            }
+            if (Widgets::Combo("Denoiser Mode##denoiser", &denoiserIdx, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
+                restir.denoiserMode = DENOISER_MODE_ORDER[denoiserIdx];
+                changed = true;
+            }
+
+            if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+                ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
+                featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
+                    if (Widgets::SliderFloat("History Confidence##restir", &restir.confidenceStrength, 0.0f, 1.0f,
+                                             {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("Confidence Sensitivity##restir", &restir.confidenceSensitivity, 0.5f, 16.0f,
+                                             {.format = "%.2f", .tooltip = "Gain on the flipped fraction of a stratum. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise). A static scene flips nothing, so high values are safe.", .reset = true, .resetTo = 8.0f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &restir.confidenceDarknessBias, 0.0f, 65536.0f,
+                                             {.format = "%.1f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 655.36f})) {
+                        changed = true;
+                    }
+                    if (Widgets::SliderFloat("Confidence History##restir", &restir.confidenceHistoryLength, 0.0f, 16.0f,
+                                             {.format = "%.1f", .tooltip = "Frames the confidence temporal filter holds a dip. Drops fast, recovers slowly; gives ReSTIR time to re-converge before RELAX trusts history again. 0 = no temporal filter.", .reset = true, .resetTo = 4.0f})) {
+                        changed = true;
+                    }
+                    int confidenceBlurRadius = static_cast<int>(restir.confidenceBlurRadius);
+                    if (Widgets::SliderInt("Confidence Blur##restir", &confidenceBlurRadius, 0, 6,
+                                           {.tooltip = "Gradient blur radius (in downsampled gradient texels). Wider = smoother penumbra confidence, less noise; too wide blurs the antilag region."})) {
+                        restir.confidenceBlurRadius = static_cast<uint32_t>(confidenceBlurRadius);
+                        changed = true;
+                    }
+                });
+                ImGui::EndDisabled();
+
+                DrawRELAXParamsUI(changed, restir.relax, "main_relax", true);
+            }
+
+            if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD) {
+                DrawRELAXParamsUI(changed, restir.relax, "main_relax", true, true);
+            }
+
+            if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
+                DrawReBLURParamsUI(changed, restir.reblur);
+            }
+
+            if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
+                DrawReBLURParamsUI(changed, restir.reblur, true);
+            }
+            Widgets::EndSection();
+        }
+        HandleLightingSectionAction(state, denoiserHeader, CopyReSTIRDenoiserSection);
+
+        Widgets::SectionHeader gtaoHeader = MakeLightingSectionHeader(liveLighting, CopyGTAOSection);
+        if (Widgets::BeginSection("Ambient Occlusion (GTAO)", &gtaoHeader)) {
             Core::GTAOConfiguration& gtao = state->lighting.gtaoConfig;
             static const Core::GTAOConfiguration gtaoDefaults{};
 
-            if (ImGui::Checkbox("Enable GTAO", &gtao.bEnabled)) { changed = true; }
+            if (Widgets::Checkbox("Enable GTAO", &gtao.bEnabled)) { changed = true; }
 
             auto gtaoF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
                 if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
@@ -1293,76 +1594,16 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             gtaoF("Temporal Clamp Scale##gtao", &gtao.temporalClampScale, gtaoDefaults.temporalClampScale, 0.0f, 4.0f, "%.2f", "Width of the 3x3 neighborhood box the AO history is pulled into. Lower = less ghosting behind movers, more residual noise; 0 = no clamp. Default 1.");
 
             ImGui::Spacing();
-            if (ImGui::Button("Reset GTAO")) {
+            if (Widgets::Button("Reset GTAO")) {
                 gtao = Core::GTAOConfiguration{};
                 changed = true;
             }
+            Widgets::EndSection();
         }
+        HandleLightingSectionAction(state, gtaoHeader, CopyGTAOSection);
 
-        if (ImGui::CollapsingHeader("Reflections")) {
-            Core::ReflectionConfiguration& reflection = state->lighting.reflection;
-            static const Core::ReflectionConfiguration reflectionDefaults{};
-
-            if (ImGui::Checkbox("Enable Reflections", &reflection.bEnabled)) { changed = true; }
-            if (ImGui::Checkbox("Merged Denoise", &reflection.bMergedDenoise)) { changed = true; }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("ReSTIR mode only: sum the traced reflection radiance into the main denoiser's specular channel at the lighting resolve, so one denoiser covers lights + sun + reflections. Off: the raw noisy shade output composites directly in remodulate."); }
-            if (ImGui::Checkbox("Screen-Space Hit Lighting", &reflection.bScreenSpaceLighting)) { changed = true; }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded."); }
-            if (ImGui::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace)) { changed = true; }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Default mode only: march the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox."); }
-            if (ImGui::Checkbox("Alpha Test Mirror Hits", &reflection.bAlphaTest)) { changed = true; }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("At/below Mirror Roughness Max, alpha-test cutout surfaces the reflection ray hit and continue the ray through transparent texels. Also alpha-tests the sun and local shadow rays at analytic hits. Off: cutout reflects and shadows as solid."); }
-
-            static const char* reflectionSunModes[] = {"Shadow Ray", "Always Lit", "Always Unlit"};
-            int reflectionSunMode = static_cast<int>(reflection.sunMode);
-            if (ImGui::Combo("Hit Sun Mode##reflection", &reflectionSunMode, reflectionSunModes, IM_ARRAYSIZE(reflectionSunModes))) {
-                reflection.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(reflectionSunMode);
-                changed = true;
-            }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Sun term when a reflection hit falls back to analytic shading (screen-space reuse missed). Shadow Ray traces sun visibility at the hit; Always Lit skips the ray and assumes visible; Always Unlit drops the sun entirely (indoor scenes)."); }
-
-            auto reflF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
-                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
-            };
-
-            reflF("Traced Roughness Max##reflection", &reflection.tracedRoughnessMax, reflectionDefaults.tracedRoughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
-            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f",
-                  "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 0.3 (= traced max; DI owns rough spec, probe bakes hide light proxies to avoid double count).");
-            reflF("Mirror Roughness Max##reflection", &reflection.mirrorRoughnessMax, reflectionDefaults.mirrorRoughnessMax, 0.0f, 0.3f, "%.3f", "At/below this roughness the reflection ray is the exact mirror direction instead of a GGX sample (no lobe-tail grain, no emitter fireflies) and the ReSTIR BRDF technique is skipped for the pixel. Default 0.08.");
-            reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
-            reflF("Max Ray Intensity##reflection", &reflection.maxRayIntensity, reflectionDefaults.maxRayIntensity, 0.0f, 65536000.0f, "%.0f", "Luminance clamp on a single reflection ray's radiance (before demodulation). Bounds what one emitter hit can inject into the denoiser; biased darker on bright emitters. 0 = off. Default 0.");
-            reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "Screen-space trace only: view-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
-            if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Screen-space trace only: maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
-            if (Widgets::SliderInt("Hit Local Shadow Rays##reflection", &reflection.hitLocalShadowRays, 0, static_cast<int>(REFLECTION_HIT_SHADOW_RAYS_MAX), {.tooltip = "Analytic hit shading: shadow rays spent on the brightest local-light contributions at the hit (sun has its own ray via Hit Sun Mode). Remaining lights stay unshadowed. 0 = none. Default 1.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.hitLocalShadowRays)})) { changed = true; }
-            reflF("Hit Texture LOD##reflection", &reflection.hitTextureLod, reflectionDefaults.hitTextureLod, 0.0f, 8.0f, "%.1f", "Analytic hit shading: fixed mip level for albedo/emissive/metal-rough sampling at the hit. 0 = full-res (sharper, more cache pressure). Default 3.");
-
-
-            ImGui::Spacing();
-            if (ImGui::Button("Reset RT Reflections")) {
-                reflection = Core::ReflectionConfiguration{};
-                changed = true;
-            }
-        }
-
-        if (ImGui::CollapsingHeader("Reflection Probes")) {
-            Core::ReflectionProbeConfiguration& reflectionProbe = state->lighting.reflectionProbe;
-
-            if (ImGui::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
-            if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
-            if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the radiance-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
-            if (ImGui::Checkbox("Brute-Force Probe Pick", &reflectionProbe.bBruteForcePick)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Debug: bypass the world-grid probe bin and scan all probes per pixel.");
-            }
-
-            ImGui::Spacing();
-            if (ImGui::Button("Reset Reflection Probes")) {
-                reflectionProbe = Core::ReflectionProbeConfiguration{};
-                changed = true;
-            }
-        }
-
-        if (ImGui::CollapsingHeader("DDGI")) {
+        Widgets::SectionHeader ddgiHeader = MakeLightingSectionHeader(liveLighting, CopyDDGISection);
+        if (Widgets::BeginSection("Diffuse GI (DDGI)", &ddgiHeader)) {
             Core::DDGIParams& ddgi = state->lighting.ddgi;
             static const Core::DDGIParams ddgiDefaults{};
 
@@ -1373,62 +1614,50 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (Widgets::SliderInt(label, v, mn, mx, {.tooltip = tip, .reset = true, .resetTo = static_cast<double>(def)})) { changed = true; }
             };
 
-            if (ImGui::Checkbox("Enabled##ddgi", &ddgi.bEnabled)) { changed = true; }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Apply To Lighting##ddgi", &ddgi.bApplyToLighting)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Use the probes as the indirect diffuse in lighting (replaces the skybox irradiance where the volume covers). Off = probes still update, for A/B and the debug viz.");
-            }
-            if (ImGui::Checkbox("GI Diffuse Gather##ddgi", &ddgi.bFinalGather)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("TDA-style resolve: one cosine ray per half-res pixel reads last frame's screen at its hit, then the radiance cache (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Debug views live in the Debug View window.");
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Denoise##gigather", &ddgi.bFinalGatherDenoise)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.");
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Chroma##gigather", &ddgi.bFinalGatherChromaDenoise)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Extra denoise iterations on chroma (CoCg chromaticity) only, luminance carried. Targets the low-frequency red/blue patching without softening luminance detail. Requires Denoise.");
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.");
-            }
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Quarter Res##gigather", &ddgi.bFinalGatherQuarterRes)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Gather at quarter render resolution instead of half: 1/4 the rays and denoise cost. Each gather texel covers 4x4 full-res pixels, so contact detail leans harder on the bilateral guides and history.");
-            }
-            int gatherRaysPerPixel = static_cast<int>(ddgi.gatherRaysPerPixel);
-            if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {
-                                       .tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true,
-                                       .resetTo = 1.0
-                                   })) {
-                ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
-                changed = true;
-            }
-            int gatherChromaPasses = static_cast<int>(ddgi.gatherChromaDenoisePasses);
-            if (Widgets::SliderInt("Chroma Passes##gigather", &gatherChromaPasses, 1, 4, {.tooltip = "Chroma-only denoise pass count; strides 8/16/32/64, each added pass doubles the hue-smoothing reach. Default 2.", .reset = true, .resetTo = 2.0})) {
-                ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);
-                changed = true;
-            }
-            if (Widgets::SliderFloat("Chroma Luma Ratio Power##gigather", &ddgi.gatherChromaLumaPower, 0.0f, 6.0f, {
-                                         .tooltip = "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight in these passes is geometric, so without this a cast shadow (same plane, same normal, same AO) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.", .reset = true,
-                                         .resetTo = 2.0
-                                     })) {
-                changed = true;
-            }
-            if (ImGui::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(
-                    "Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.");
+            if (Widgets::Checkbox("Enabled##ddgi", &ddgi.bEnabled)) { changed = true; }
+            Widgets::SameLine();
+            if (Widgets::Checkbox("Apply To Lighting##ddgi", &ddgi.bApplyToLighting, "Use the probes as the indirect diffuse in lighting (replaces the skybox irradiance where the volume covers). Off = probes still update, for A/B and the debug viz.")) { changed = true; }
+
+            Widgets::SubHeader("Gather");
+            if (Widgets::Checkbox("GI Diffuse Gather##ddgi", &ddgi.bFinalGather,
+                                  "TDA-style resolve: one cosine ray per half-res pixel reads last frame's screen at its hit, then the radiance cache (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Debug views live in the Debug View window.")) { changed = true; }
+            if (ddgi.bFinalGather) {
+                if (Widgets::Checkbox("Denoise##gigather", &ddgi.bFinalGatherDenoise, "Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.")) { changed = true; }
+                Widgets::SameLine();
+                if (Widgets::Checkbox("Chroma##gigather", &ddgi.bFinalGatherChromaDenoise, "Extra denoise iterations on chroma (CoCg chromaticity) only, luminance carried. Targets the low-frequency red/blue patching without softening luminance detail. Requires Denoise.")) { changed = true; }
+                Widgets::SameLine();
+                if (Widgets::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal, "Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.")) { changed = true; }
+                Widgets::SameLine();
+                if (Widgets::Checkbox("Quarter Res##gigather", &ddgi.bFinalGatherQuarterRes,
+                                      "Gather at quarter render resolution instead of half: 1/4 the rays and denoise cost. Each gather texel covers 4x4 full-res pixels, so contact detail leans harder on the bilateral guides and history.")) { changed = true; }
+                int gatherRaysPerPixel = static_cast<int>(ddgi.gatherRaysPerPixel);
+                if (Widgets::SliderInt("Rays Per Pixel##gigather", &gatherRaysPerPixel, 1, static_cast<int>(Render::GI_GATHER_MAX_RAYS_PER_PIXEL), {
+                                           .tooltip = "Gather rays per half-res pixel, uniform across the frame so cost stays flat and rays stay coherent. Relative noise falls as 1/sqrt(n), which is the only lever that reaches the bright-to-dark gradients near small light slits, where one ray finds the aperture too rarely for any reweighting to help. Trace cost is linear.", .reset = true,
+                                           .resetTo = 1.0
+                                       })) {
+                    ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
+                    changed = true;
+                }
+                if (Widgets::Checkbox("Far Field##gigather", &ddgi.bGatherFarField,
+                                      "Hits beyond the far-field distance resolve from probe irradiance at the distance point, facing along the ray (a cosine-filtered radiance), instead of the hit tiers. A bright aperture past that range then contributes to every ray heading roughly toward it, not only the rare ray that finds it. Misses take the same path instead of the sky channel.")) { changed = true; }
+                Widgets::SameLine();
+                if (Widgets::SliderFloat("Far Field Distance##gigather", &ddgi.gatherFarFieldDistance, 0.5f, 16.0f, {.format = "%.2f m", .tooltip = "Hit distance past which gather rays switch to the probe far field. Default 3.0 m.", .reset = true, .resetTo = 3.0})) { changed = true; }
+                int gatherChromaPasses = static_cast<int>(ddgi.gatherChromaDenoisePasses);
+                if (Widgets::SliderInt("Chroma Passes##gigather", &gatherChromaPasses, 1, 4, {.tooltip = "Chroma-only denoise pass count; strides 8/16/32/64, each added pass doubles the hue-smoothing reach. Default 2.", .reset = true, .resetTo = 2.0})) {
+                    ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);
+                    changed = true;
+                }
+                if (Widgets::SliderFloat("Chroma Luma Ratio Power##gigather", &ddgi.gatherChromaLumaPower, 0.0f, 6.0f, {
+                                             .tooltip = "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight in these passes is geometric, so without this a cast shadow (same plane, same normal, same AO) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.", .reset = true,
+                                             .resetTo = 2.0
+                                         })) {
+                    changed = true;
+                }
+                if (Widgets::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay,
+                                      "Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.")) { changed = true; }
             }
 
-            ImGui::SeparatorText("Volume");
+            Widgets::SubHeader("Volume");
             ddgiI("Probe Count X##ddgi", &ddgi.probeCountX, ddgiDefaults.probeCountX, 2, 32, "Probes along X. The volume is a camera-following rolling window; changing counts restarts probe history.");
             ddgiI("Probe Count Y##ddgi", &ddgi.probeCountY, ddgiDefaults.probeCountY, 2, 32, "Probes along Y (vertical).");
             ddgiI("Probe Count Z##ddgi", &ddgi.probeCountZ, ddgiDefaults.probeCountZ, 2, 32, "Probes along Z.");
@@ -1441,14 +1670,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 changed = true;
             }
             ddgiF("Edge Blend Cells##ddgi", &ddgi.edgeBlendCells, ddgiDefaults.edgeBlendCells, 1.0f, 8.0f, "%.1f", "Width (in probe cells) of each cascade's edge fade into the next coarser cascade (and the outermost cascade's fade to skybox). Wider = softer, less visible cascade boundary; costs double-sampling in the band.");
-            if (ImGui::Checkbox("Scale Biases Per Cascade##ddgi", &ddgi.bScaleBiasPerCascade)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Multiply normal/view bias by each cascade's spacing scale (RTXGI-style). Off = all cascades sample at the same world-space bias, which can reduce fine-vs-coarse disagreement at cascade boundaries.");
-            }
-            if (ImGui::Checkbox("Local Volumes##ddgi", &ddgi.bLocalVolumes)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Hand-placed fine-spacing probe volumes (LocalDDGIVolumeComponent entities), sampled before cascade 0 where they cover. Nearest few volumes stay resident, one updates per frame.");
-            }
+            if (Widgets::Checkbox("Scale Biases Per Cascade##ddgi", &ddgi.bScaleBiasPerCascade,
+                                  "Multiply normal/view bias by each cascade's spacing scale (RTXGI-style). Off = all cascades sample at the same world-space bias, which can reduce fine-vs-coarse disagreement at cascade boundaries.")) { changed = true; }
+            if (Widgets::Checkbox("Local Volumes##ddgi", &ddgi.bLocalVolumes, "Hand-placed fine-spacing probe volumes (LocalDDGIVolumeComponent entities), sampled before cascade 0 where they cover. Nearest few volumes stay resident, one updates per frame.")) { changed = true; }
             int maxResidentWorldVolumes = static_cast<int>(ddgi.maxResidentWorldVolumes);
             if (Widgets::SliderInt("Max Resident Volumes##ddgi", &maxResidentWorldVolumes, 1, static_cast<int>(DDGI_MAX_RESIDENT_LOCAL_VOLUMES), {
                                        .tooltip = "Hand-placed world volumes kept resident (nearest first). The shared probe atlas is allocated in buckets of 10 rows, so it shrinks with this and every volume reconverges whenever the bucket changes.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.maxResidentWorldVolumes)
@@ -1463,16 +1687,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ddgi.worldVolumeWarmupBoost = worldVolumeWarmupBoost;
                 changed = true;
             }
-            if (ImGui::Checkbox("Cascade Sampling##ddgi", &ddgi.bCascadeSampling)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Debug: off = consumers (composite, gather, cache shade, bounce feedback) sample local volumes only; cascade windows keep updating and still suppress sky via edge fade, so toggling back is instant.");
-            }
-            if (ImGui::Checkbox("World Volume Grid Cull##ddgi", &ddgi.bWorldVolumeGridCull)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Debug: off = the sampler walks every resident world volume instead of the world grid's per-cell overlap list. Same result, slower; a difference means the bin is dropping volumes.");
-            }
 
-            ImGui::SeparatorText("Trace");
+            Widgets::SubHeader("Trace");
             int raysPerProbe = static_cast<int>(ddgi.raysPerProbe);
             if (Widgets::SliderInt("Rays Per Probe##ddgi", &raysPerProbe, 16, 256, {.tooltip = "Rays traced per probe per frame. More rays = less temporal noise per frame, linearly more trace cost.", .reset = true, .resetTo = 128.0})) {
                 ddgi.raysPerProbe = static_cast<uint32_t>(raysPerProbe);
@@ -1483,27 +1699,21 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ddgi.outerRaysPerProbe = static_cast<uint32_t>(outerRaysPerProbe);
                 changed = true;
             }
-            if (ImGui::Checkbox("Probe Classification##ddgi", &ddgi.bClassification)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Probes with no geometry within ~1.5 cells drop to 16 sentinel rays and freeze their atlas tiles (nothing within sampling reach reads them); a sentinel hit reactivates the probe with a temporal restart. Requires Relocation (classification rides that pass). Inactive probes draw flat blue in the probe debug view.");
-            }
-            if (ImGui::Checkbox("Infinite Bounce##ddgi", &ddgi.bInfiniteBounce)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Ray hits also sample last frame's probe atlas, so light keeps bouncing (one extra bounce lands per frame, damped by hysteresis). Also gives area/sphere lights indirect, since probes see their proxies directly.");
-            }
+            if (Widgets::Checkbox("Probe Classification##ddgi", &ddgi.bClassification,
+                                  "Probes with no geometry within ~1.5 cells drop to 16 sentinel rays and freeze their atlas tiles (nothing within sampling reach reads them); a sentinel hit reactivates the probe with a temporal restart. Requires Relocation (classification rides that pass). Inactive probes draw flat blue in the probe debug view.")) { changed = true; }
+            if (Widgets::Checkbox("Infinite Bounce##ddgi", &ddgi.bInfiniteBounce,
+                                  "Ray hits also sample last frame's probe atlas, so light keeps bouncing (one extra bounce lands per frame, damped by hysteresis). Also gives area/sphere lights indirect, since probes see their proxies directly.")) { changed = true; }
             ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f",
                   "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
             ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 6553600.0f, "%.0f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 1310720.");
 
-            ImGui::SeparatorText("Blend");
-            if (ImGui::Button("Converge Now##ddgi")) {
+            Widgets::SubHeader("Blend");
+            if (Widgets::Button("Converge Now##ddgi",
+                                "Temporarily drops hysteresis, maxes rays, and accelerates radiance-cache shading (interval + accumulation window) for ~70 frames so dark multi-bounce rooms converge quickly, then restores the values below. Retrigger to restart the schedule.")) {
                 state->debug.bGIFreeze = false;
                 DDGIConvergeBoostTrigger(state->ddgiConvergeBoost, ddgi);
             }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Temporarily drops hysteresis, maxes rays, and accelerates radiance-cache shading (interval + accumulation window) for ~70 frames so dark multi-bounce rooms converge quickly, then restores the values below. Retrigger to restart the schedule.");
-            }
-            if (state->ddgiConvergeBoost.bActive) {
+            if (state->ddgiConvergeBoost.bActive && Widgets::PassFilter("Converge Now")) {
                 ImGui::SameLine();
                 ImGui::Text("Converging... %d frames left", DDGI_CONVERGE_BOOST_FRAMES - state->ddgiConvergeBoost.frame);
             }
@@ -1529,18 +1739,164 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 10.0f, "%.2f", "Encoded-space per-frame change clamp: deltas above this are scaled to 25% (firefly/pulse suppression). Default 0.92.");
             ddgiF("Distance Exponent##ddgi", &ddgi.distanceExponent, ddgiDefaults.distanceExponent, 1.0f, 100.0f, "%.0f", "Sharpness of the cosine lobe used when integrating ray distances into the visibility atlas; higher = tighter Chebyshev occlusion, more leak-proof but noisier. Default 50.");
 
-            ImGui::SeparatorText("Sampling");
+            Widgets::SubHeader("Sampling");
             ddgiF("Normal Bias##ddgi", &ddgi.normalBias, ddgiDefaults.normalBias, 0.0f, 1.0f, "%.2f", "Meters the sample point is pushed along the surface normal before probe lookup; fights self-shadowing (dark stripes on walls). Default 0.10.");
             ddgiF("View Bias##ddgi", &ddgi.viewBias, ddgiDefaults.viewBias, 0.0f, 2.0f, "%.2f", "Meters the sample point is pushed toward the viewer before probe lookup; fights leaks through thin walls near the camera ray. Default 0.30.");
 
-            ImGui::SeparatorText("Relocation");
-            if (ImGui::Checkbox("Relocation##ddgi", &ddgi.bRelocation)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Probes inside geometry step out through the nearest backface (capped at 45% of spacing); probes still buried past the cap are classified dead and skipped at sampling (drawn red in the probe debug view).");
-            }
+            Widgets::SubHeader("Relocation");
+            if (Widgets::Checkbox("Relocation##ddgi", &ddgi.bRelocation,
+                                  "Probes inside geometry step out through the nearest backface (capped at 45% of spacing); probes still buried past the cap are classified dead and skipped at sampling (drawn red in the probe debug view).")) { changed = true; }
             ddgiF("Min Frontface Distance##ddgi", &ddgi.minFrontfaceDistance, ddgiDefaults.minFrontfaceDistance, 0.0f, 1.0f, "%.2f", "Meters of clearance relocation keeps between a probe and nearby geometry; probes closer than this to a wall get nudged away from it. Default 0.30.");
 
-            ImGui::SeparatorText("Radiance Cache Occupancy"); {
+            ImGui::Spacing();
+            if (Widgets::Button("Reset DDGI")) {
+                ddgi = Core::DDGIParams{};
+                changed = true;
+            }
+            Widgets::EndSection();
+        }
+        HandleLightingSectionAction(state, ddgiHeader, CopyDDGISection);
+
+        Widgets::SectionHeader reflectionsHeader = MakeLightingSectionHeader(liveLighting, CopyReflectionsSection);
+        if (Widgets::BeginSection("Reflections", &reflectionsHeader)) {
+            Core::ReflectionConfiguration& reflection = state->lighting.reflection;
+            static const Core::ReflectionConfiguration reflectionDefaults{};
+
+            if (Widgets::Checkbox("Enable Reflections", &reflection.bEnabled)) { changed = true; }
+            if (bReSTIRMode) {
+                if (Widgets::Checkbox("Merged Denoise", &reflection.bMergedDenoise,
+                                      "Sum the traced reflection radiance into the main denoiser's specular channel at the lighting resolve, so one denoiser covers lights + sun + reflections. Off: the raw noisy shade output composites directly in remodulate.")) { changed = true; }
+            }
+            if (Widgets::Checkbox("Screen-Space Hit Lighting", &reflection.bScreenSpaceLighting,
+                                  "Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded.")) { changed = true; }
+            if (bDefaultMode) {
+                if (Widgets::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace,
+                                      "March the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox.")) { changed = true; }
+            }
+            if (Widgets::Checkbox("Alpha Test Mirror Hits", &reflection.bAlphaTest,
+                                  "At/below Mirror Roughness Max, alpha-test cutout surfaces the reflection ray hit and continue the ray through transparent texels. Also alpha-tests the sun and local shadow rays at analytic hits. Off: cutout reflects and shadows as solid.")) { changed = true; }
+
+            static const char* reflectionSunModes[] = {"Shadow Ray", "Always Lit", "Always Unlit"};
+            int reflectionSunMode = static_cast<int>(reflection.sunMode);
+            if (Widgets::Combo("Hit Sun Mode##reflection", &reflectionSunMode, reflectionSunModes, IM_ARRAYSIZE(reflectionSunModes),
+                               "Sun term when a reflection hit falls back to analytic shading (screen-space reuse missed). Shadow Ray traces sun visibility at the hit; Always Lit skips the ray and assumes visible; Always Unlit drops the sun entirely (indoor scenes).")) {
+                reflection.sunMode = static_cast<Core::ReflectionConfiguration::SunMode>(reflectionSunMode);
+                changed = true;
+            }
+
+            auto reflF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+
+            reflF("Traced Roughness Max##reflection", &reflection.tracedRoughnessMax, reflectionDefaults.tracedRoughnessMax, 0.0f, 1.0f, "%.2f", "Surfaces rougher than this fall back to the prefiltered skybox reflection instead of being ray traced. Lower = only near-mirror surfaces get traced reflections, cheaper. Default 0.3.");
+            reflF("Light Specular From Reflections Max##reflection", &reflection.lightSpecularFromReflectionsMax, reflectionDefaults.lightSpecularFromReflectionsMax, 0.0f, 1.0f, "%.2f",
+                  "Roughness at/below which local-light specular is left to the reflection providers (probes/RT) instead of shaded analytically. 1.0 = providers own all specular; low = only near-mirror deferred. Default 0.3 (= traced max; DI owns rough spec, probe bakes hide light proxies to avoid double count).");
+            reflF("Mirror Roughness Max##reflection", &reflection.mirrorRoughnessMax, reflectionDefaults.mirrorRoughnessMax, 0.0f, 0.3f, "%.3f", "At/below this roughness the reflection ray is the exact mirror direction instead of a GGX sample (no lobe-tail grain, no emitter fireflies) and the ReSTIR BRDF technique is skipped for the pixel. Default 0.08.");
+            reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
+            reflF("Max Ray Intensity##reflection", &reflection.maxRayIntensity, reflectionDefaults.maxRayIntensity, 0.0f, 65536000.0f, "%.0f", "Luminance clamp on a single reflection ray's radiance (before demodulation). Bounds what one emitter hit can inject into the denoiser; biased darker on bright emitters. 0 = off. Default 0.");
+            if (bDefaultMode && reflection.bScreenSpaceTrace) {
+                reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "View-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
+                if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
+            }
+            if (Widgets::SliderInt("Hit Local Shadow Rays##reflection", &reflection.hitLocalShadowRays, 0, static_cast<int>(REFLECTION_HIT_SHADOW_RAYS_MAX), {.tooltip = "Analytic hit shading: shadow rays spent on the brightest local-light contributions at the hit (sun has its own ray via Hit Sun Mode). Remaining lights stay unshadowed. 0 = none. Default 1.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.hitLocalShadowRays)})) { changed = true; }
+            reflF("Hit Texture LOD##reflection", &reflection.hitTextureLod, reflectionDefaults.hitTextureLod, 0.0f, 8.0f, "%.1f", "Analytic hit shading: fixed mip level for albedo/emissive/metal-rough sampling at the hit. 0 = full-res (sharper, more cache pressure). Default 3.");
+
+            ImGui::Spacing();
+            if (Widgets::Button("Reset RT Reflections")) {
+                reflection = Core::ReflectionConfiguration{};
+                changed = true;
+            }
+            Widgets::EndSection();
+        }
+        HandleLightingSectionAction(state, reflectionsHeader, CopyReflectionsSection);
+
+        Widgets::SectionHeader probesHeader = MakeLightingSectionHeader(liveLighting, CopyReflectionProbesSection);
+        if (Widgets::BeginSection("Reflection Probes", &probesHeader)) {
+            Core::ReflectionProbeConfiguration& reflectionProbe = state->lighting.reflectionProbe;
+
+            if (Widgets::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
+            if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
+            if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the radiance-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
+
+            ImGui::Spacing();
+            if (Widgets::Button("Reset Reflection Probes")) {
+                reflectionProbe = Core::ReflectionProbeConfiguration{};
+                changed = true;
+            }
+            Widgets::EndSection();
+        }
+        HandleLightingSectionAction(state, probesHeader, CopyReflectionProbesSection);
+
+        Widgets::SectionHeader diagnosticsHeader = MakeLightingSectionHeader(liveLighting, CopyDiagnosticsSection);
+        if (Widgets::BeginSection("Diagnostics", &diagnosticsHeader)) {
+            Widgets::SubHeader("Pipeline Overrides");
+            ImGui::BeginDisabled(bIsGroundTruth);
+            if (Widgets::PassFilter("Shading Override")) {
+                Core::Span<const StringID> shadingPipelines = ctx->pipelineManager->GetShadingPipelines();
+                const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
+                Core::Arena& arena = ctx->editorArena.Get();
+
+                int currentShader = pipelineCount; // "None"
+                for (int32_t i = 0; i < pipelineCount; ++i) {
+                    if (state->debug.shadingShaderOverride == shadingPipelines[i]) {
+                        currentShader = i;
+                        break;
+                    }
+                }
+
+                Core::ArenaArray<Core::InlineString<> > labels(&arena, pipelineCount + 1);
+                labels[0] = Core::InlineString("None");
+                for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString(shadingPipelines[i].ToString()); }
+                const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
+                int selected = comboIndex;
+                auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
+                if (ImGui::Combo("Shading Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                    state->debug.shadingShaderOverride = selected == 0 ? StringID{} : shadingPipelines[selected - 1];
+                }
+            }
+            if (Widgets::PassFilter("Lighting Override")) {
+                Core::Arena& arena = ctx->editorArena.Get();
+                Core::ArenaFixedVector<StringID> lightingPipelines = ctx->pipelineManager->GetLightingPipelinesForMode(state->lighting.lightingMode, arena);
+                const int32_t pipelineCount = static_cast<int32_t>(lightingPipelines.Size());
+
+                int currentShader = pipelineCount; // "None"
+                for (int32_t i = 0; i < pipelineCount; ++i) {
+                    if (state->debug.lightingShaderOverride == lightingPipelines[i]) {
+                        currentShader = i;
+                        break;
+                    }
+                }
+
+                Core::ArenaArray<Core::InlineString<> > labels(&arena, pipelineCount + 1);
+                labels[0] = Core::InlineString("None");
+                for (int32_t i = 0; i < pipelineCount; ++i) { labels[i + 1] = Core::InlineString(lightingPipelines[i].ToString()); }
+                const int comboIndex = currentShader == pipelineCount ? 0 : currentShader + 1;
+                int selected = comboIndex;
+                auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<> >*>(data))[idx].c_str(); };
+                if (ImGui::Combo("Lighting Override", &selected, getter, &labels, static_cast<int32_t>(labels.Size()))) {
+                    state->debug.lightingShaderOverride = selected == 0 ? StringID{} : lightingPipelines[selected - 1];
+                }
+            }
+            ImGui::EndDisabled();
+
+            Widgets::SubHeader("Render Cache Reset");
+            if (Widgets::Button("Full Renderer Clear")) {
+                state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+            }
+            Widgets::SameLine();
+            if (Widgets::Button("Reset Screen History")) {
+                state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+            }
+
+            Widgets::SubHeader("Probes");
+            if (Widgets::Checkbox("Brute-Force Probe Pick", &state->lighting.reflectionProbe.bBruteForcePick, "Bypass the world-grid probe bin and scan all probes per pixel.")) { changed = true; }
+            if (Widgets::Checkbox("DDGI Cascade Sampling##ddgi", &state->lighting.ddgi.bCascadeSampling,
+                                  "Off = consumers (composite, gather, cache shade, bounce feedback) sample local volumes only; cascade windows keep updating and still suppress sky via edge fade, so toggling back is instant.")) { changed = true; }
+            if (Widgets::Checkbox("DDGI World Volume Grid Cull##ddgi", &state->lighting.ddgi.bWorldVolumeGridCull,
+                                  "Off = the sampler walks every resident world volume instead of the world grid's per-cell overlap list. Same result, slower; a difference means the bin is dropping volumes.")) { changed = true; }
+
+            Widgets::SubHeader("Radiance Cache Occupancy");
+            if (Widgets::IsShowingAll()) {
                 // Read-only; multi-frame readback latency, so values trail the live cache by 2-3 frames.
                 const Engine::RadianceCacheStatsSnapshot& wc = ctx->radianceCacheStats;
                 const float occupancyPct = 100.0f * static_cast<float>(wc.occupiedSlots) / static_cast<float>(RADIANCE_CACHE_HASH_CAPACITY);
@@ -1562,250 +1918,46 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
             }
 
-            ImGui::Spacing();
-            if (ImGui::Button("Reset DDGI")) {
-                ddgi = Core::DDGIParams{};
-                changed = true;
-            }
-        }
-
-        if (bDefaultMode || bReSTIRMode) {
-            ImGui::SeparatorText("Directional Sun Shadow");
-
-            if (ImGui::CollapsingHeader("SIGMA Shadow Denoiser")) {
-                Core::SIGMAParams& sigma = state->lighting.sigmaParams;
-                static const Core::SIGMAParams sigmaDefaults{};
-
-                auto sigmaTip = [&](const char* tip) {
-                    if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("%s", tip); }
-                };
-
-                if (ImGui::Checkbox("Half Res##sigma", &sigma.bHalfRes)) { changed = true; }
-                sigmaTip("Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.");
-                if (ImGui::Checkbox("Alpha Test Cutout##sigma", &sigma.bAlphaTest)) { changed = true; }
-                sigmaTip("Sun shadow rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid. Costs a texture fetch per cutout candidate along the ray.");
-                if (ImGui::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur)) { changed = true; }
-                sigmaTip("Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.");
-
-                auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
-                    if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
-                };
-                sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.875f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Saturates at 0.875 (SIGMA history cap). Default 0.8.");
-                sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
-                sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
-
-                if (ImGui::Button("Reset SIGMA")) {
-                    sigma = Core::SIGMAParams{};
-                    changed = true;
-                }
-            }
-        }
-
-        if (bReSTIRMode) {
-            ImGui::SeparatorText("ReSTIR Rendering");
-
-            if (ImGui::CollapsingHeader("ReSTIR Options", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (bReSTIRMode) {
                 Core::ReSTIRParams& restir = state->debug.restir;
-                const bool bReGIR = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
 
-                // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
-                ImGui::SeparatorText("Base (Candidate Generation)");
-                const char* proposalModes[] = {"World Grid Bin", "ReGIR"};
-                int proposalIdx = static_cast<int>(restir.lightProposal);
-                if (ImGui::Combo("Light Proposal", &proposalIdx, proposalModes, IM_ARRAYSIZE(proposalModes))) {
-                    restir.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(proposalIdx);
-                    changed = true;
-                }
-                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Candidate source for ReSTIR DI. World Grid Bin: cascaded strongest-K analytic bin (sparse analytic scenes). ReGIR: reservoir hash grid (dense/emissive-triangle scenes)."); }
-                ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
-                if (ImGui::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
-                    changed = true;
-                }
-                ImGui::EndDisabled();
-
-                ImGui::SeparatorText("Temporal");
-                if (ImGui::Checkbox("Temporal Reuse", &restir.bEnableTemporal)) {
-                    changed = true;
-                }
-                int temporalMCap = static_cast<int>(restir.temporalMCap);
-                if (Widgets::SliderInt("Temporal M Cap", &temporalMCap, 1, 2000)) {
-                    restir.temporalMCap = static_cast<uint32_t>(temporalMCap);
-                    changed = true;
-                }
-                if (ImGui::Checkbox("Checkerboard Rendering", &restir.bCheckerboard)) {
-                    changed = true;
-                }
-                ImGui::BeginDisabled(!restir.bCheckerboard);
-                if (ImGui::Checkbox("Full-Rate Resolve", &restir.bCheckerboardFullRateResolve)) {
-                    changed = true;
-                }
-                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Keeps the expensive local-light reservoir passes half-rate, but traces sun visibility full-rate and shades every pixel. Hole pixels borrow a depth-matched horizontal neighbor's local reservoir and re-shade it at their own surface. The denoisers then receive a full-rate signal with no checkerboard reconstruction."); }
-                ImGui::EndDisabled();
-                ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
-                if (ImGui::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
-                    changed = true;
-                }
-                ImGui::EndDisabled();
-                if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
-                    changed = true;
-                }
-                ImGui::SeparatorText("Sun");
-                if (ImGui::Checkbox("Sun Visibility Pass", &restir.bSunLight)) {
-                    changed = true;
-                }
-                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Directional sun as a 1spp cone-traced visibility pass, denoised by RELAX with the local lights. Off: SIGMA + directional composite path."); }
-
-                ImGui::BeginDisabled(!RESTIR_ENABLE_ANTILAG);
-                featureSection("Antilag", &restir.bEnableAntilag, [&] {
-                    if (Widgets::SliderFloat("Antilag Strength##restir", &restir.antilagStrength, 0.0f, 1.0f,
-                                             {.format = "%.2f", .tooltip = "Shrinks carried temporal M where the shadow term flipped vs reprojected history, so moving shadows lose their ghost trail. May add noise in soft-shadow boundaries.", .reset = true, .resetTo = 0.5f})) {
-                        changed = true;
-                    }
-                });
-                ImGui::EndDisabled();
-
-                ImGui::SeparatorText("Spatial Reuse");
-                int spatialPasses = static_cast<int>(restir.spatialPasses);
-                if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
-                    restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
-                    changed = true;
-                }
-                if (restir.spatialPasses > 0u) {
-                    int spatialRadius = static_cast<int>(restir.spatialRadius);
-                    if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
-                        restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
-                        changed = true;
-                    }
-                    int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
-                    if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
-                        restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
-                        changed = true;
-                    }
-                    int spatialMCap = static_cast<int>(restir.spatialMCap);
-                    if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
-                        restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
-                        changed = true;
-                    }
-                    if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
-                        changed = true;
-                    }
-                    ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
-                    featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
-                        if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
-                            changed = true;
-                        }
-                    });
-                    ImGui::EndDisabled();
-                }
-
-                ImGui::SeparatorText("Options");
+                Widgets::SubHeader("ReSTIR");
                 const char* remodulateOutputModes[] = {"Both", "Diffuse Only", "Specular Only", "Indirect Diffuse (DDGI)"};
                 int currentRemodulateOutput = static_cast<int>(restir.remodulateOutput);
-                if (ImGui::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
+                if (Widgets::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
                     restir.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(currentRemodulateOutput);
                     changed = true;
                 }
 
-                featureSection("Emissive Triangle Lights", &restir.bEmissiveTriangleLights, [&] {
-                    if (Widgets::SliderFloat("Emissive Range Multiplier", &restir.emissiveTriRangeMultiplier, 0.0f, 0.25f,
-                                             {.format = "%.4f", .tooltip = "Attenuation cutoff per emissive mesh, shared by all its triangles: range = multiplier * sqrt(intensity * total area). Raise if emissive fixtures darken with distance vs ground truth.", .reset = true, .resetTo = 0.03125f})) {
-                        changed = true;
-                    }
-                });
-
-                if (bReGIR && restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
-                    ImGui::SeparatorText("ReGIR");
-                    ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u", ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed);
-                    {
-                        const Engine::ReGIRCdfStats& cdf = ctx->regirStats.cdf;
-                        ImGui::Text("Power CDF: %u lights, total %.3g. Below 1/tile (1/%u): %u lights carrying %.2f%% of power, below 1/cell (1/%u): %u. Share min %.2e, max %.3f (light %u)",
-                                    cdf.liveCount, cdf.totalPower, REGIR_TILE_SIZE, cdf.belowTile, cdf.rareShare * 100.0f, REGIR_RESERVOIRS_PER_CELL * REGIR_FILL_CANDIDATES, cdf.belowCell, cdf.minShare, cdf.maxShare, cdf.maxIdx);
-                    }
-                    //
-                    {
-                        // Cell under the mouse while a ReGIR debug view
-                        const Engine::ReGIRCursorProbe& probe = ctx->regirStats.cursor;
-                        if (probe.valid != 0u) {
-                            ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u reservoirs, empty %u, other %u, occupancy %.2f", probe.level, probe.cell[0], probe.cell[1], probe.cell[2], probe.slot, REGIR_RESERVOIRS_PER_CELL, probe.empty, probe.other, probe.occupancy);
-                            for (uint32_t k = 0; k < 4; k++) {
-                                if (probe.topCount[k] == 0u) { continue; }
-                                ImGui::Text("  light %u x%u, target at centre %.3g, at (%.1f, %.1f, %.1f)", probe.topIdx[k], probe.topCount[k], probe.topTarget[k], probe.topPos[k * 3], probe.topPos[k * 3 + 1], probe.topPos[k * 3 + 2]);
+                if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
+                    Widgets::SubHeader("ReGIR");
+                    if (Widgets::IsShowingAll()) {
+                        ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u", ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed);
+                        {
+                            const Engine::ReGIRCdfStats& cdf = ctx->regirStats.cdf;
+                            ImGui::Text("Power CDF: %u lights, total %.3g. Below 1/tile (1/%u): %u lights carrying %.2f%% of power, below 1/cell (1/%u): %u. Share min %.2e, max %.3f (light %u)",
+                                        cdf.liveCount, cdf.totalPower, REGIR_TILE_SIZE, cdf.belowTile, cdf.rareShare * 100.0f, REGIR_RESERVOIRS_PER_CELL * REGIR_FILL_CANDIDATES, cdf.belowCell, cdf.minShare, cdf.maxShare, cdf.maxIdx);
+                        }
+                        {
+                            // Cell under the mouse while a ReGIR debug view
+                            const Engine::ReGIRCursorProbe& probe = ctx->regirStats.cursor;
+                            if (probe.valid != 0u) {
+                                ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u reservoirs, empty %u, other %u, occupancy %.2f", probe.level, probe.cell[0], probe.cell[1], probe.cell[2], probe.slot, REGIR_RESERVOIRS_PER_CELL, probe.empty, probe.other, probe.occupancy);
+                                for (uint32_t k = 0; k < 4; k++) {
+                                    if (probe.topCount[k] == 0u) { continue; }
+                                    ImGui::Text("  light %u x%u, target at centre %.3g, at (%.1f, %.1f, %.1f)", probe.topIdx[k], probe.topCount[k], probe.topTarget[k], probe.topPos[k * 3], probe.topPos[k * 3 + 1], probe.topPos[k * 3 + 2]);
+                                }
                             }
                         }
                     }
-                    if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
-                        changed = true;
-                    }
-                    if (ImGui::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
+                    if (Widgets::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
                 }
             }
-
-            if (ImGui::CollapsingHeader("Denoiser", ImGuiTreeNodeFlags_DefaultOpen)) {
-                Core::ReSTIRParams& restir = state->debug.restir;
-
-                const char* denoiserModes[] = {"None", "RELAX", "ReBLUR", "NRD RELAX (reference)", "NRD ReBLUR (reference)"};
-                constexpr Core::ReSTIRParams::DenoiserMode DENOISER_MODE_ORDER[] = {
-                    Core::ReSTIRParams::DenoiserMode::None,
-                    Core::ReSTIRParams::DenoiserMode::RELAX,
-                    Core::ReSTIRParams::DenoiserMode::ReBLUR,
-                    Core::ReSTIRParams::DenoiserMode::NRD,
-                    Core::ReSTIRParams::DenoiserMode::NRDReBLUR,
-                };
-                int denoiserIdx = 0;
-                for (int i = 0; i < IM_ARRAYSIZE(denoiserModes); i++) {
-                    if (restir.denoiserMode == DENOISER_MODE_ORDER[i]) { denoiserIdx = i; }
-                }
-                if (ImGui::Combo("Mode##denoiser", &denoiserIdx, denoiserModes, IM_ARRAYSIZE(denoiserModes))) {
-                    restir.denoiserMode = DENOISER_MODE_ORDER[denoiserIdx];
-                    changed = true;
-                }
-
-                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-                    Core::RELAXParams& relax = restir.relax;
-
-                    ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
-                    featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
-                        if (Widgets::SliderFloat("History Confidence##restir", &state->debug.restir.confidenceStrength, 0.0f, 1.0f,
-                                                 {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
-                            changed = true;
-                        }
-                        if (Widgets::SliderFloat("Confidence Sensitivity##restir", &state->debug.restir.confidenceSensitivity, 0.5f, 16.0f,
-                                                 {.format = "%.2f", .tooltip = "Gain on the flipped fraction of a stratum. Higher = collapses history on smaller lighting changes (more aggressive antilag, more noise). A static scene flips nothing, so high values are safe.", .reset = true, .resetTo = 8.0f})) {
-                            changed = true;
-                        }
-                        if (Widgets::SliderFloat("Confidence Darkness Bias##restir", &state->debug.restir.confidenceDarknessBias, 0.0f, 65536.0f,
-                                                 {.format = "%.1f", .tooltip = "Floor added to the gradient normalizer so dark-region noise does not produce a large relative gradient (false history collapse).", .reset = true, .resetTo = 655.36f})) {
-                            changed = true;
-                        }
-                        if (Widgets::SliderFloat("Confidence History##restir", &state->debug.restir.confidenceHistoryLength, 0.0f, 16.0f,
-                                                 {.format = "%.1f", .tooltip = "Frames the confidence temporal filter holds a dip. Drops fast, recovers slowly; gives ReSTIR time to re-converge before RELAX trusts history again. 0 = no temporal filter.", .reset = true, .resetTo = 4.0f})) {
-                            changed = true;
-                        }
-                        int confidenceBlurRadius = static_cast<int>(state->debug.restir.confidenceBlurRadius);
-                        if (Widgets::SliderInt("Confidence Blur##restir", &confidenceBlurRadius, 0, 6,
-                                               {.tooltip = "Gradient blur radius (in downsampled gradient texels). Wider = smoother penumbra confidence, less noise; too wide blurs the antilag region."})) {
-                            state->debug.restir.confidenceBlurRadius = static_cast<uint32_t>(confidenceBlurRadius);
-                            changed = true;
-                        }
-                    });
-                    ImGui::EndDisabled();
-
-                    DrawRELAXParamsUI(changed, relax, "main_relax", true);
-                }
-
-                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD) {
-                    DrawRELAXParamsUI(changed, restir.relax, "main_relax", true, true);
-                }
-
-                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-                    DrawReBLURParamsUI(changed, restir.reblur);
-                }
-
-                if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
-                    DrawReBLURParamsUI(changed, restir.reblur, true);
-                }
-            }
+            Widgets::EndSection();
         }
+        HandleLightingSectionAction(state, diagnosticsHeader, CopyDiagnosticsSection);
+
+        Widgets::EndFilter();
 
         if (changed && state->projectConfig.bAutoSaveLighting) {
             SaveLightingTab(state);

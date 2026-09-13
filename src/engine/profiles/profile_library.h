@@ -41,6 +41,8 @@ struct LightingProfileBundle
     StringID lightingOverride{};
     float iblIntensity{1.0f};
     float indirectIntensity{1.0f};
+
+    bool operator==(const LightingProfileBundle&) const = default;
 };
 
 /**

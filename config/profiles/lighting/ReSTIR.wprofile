@@ -160,6 +160,8 @@ gatherChromaLumaPower|0x40000000
 bFinalGatherTemporal|1
 bGatherSkipRay|0
 gatherRaysPerPixel|2
+bGatherFarField|0
+gatherFarFieldDistance|0x40000000
 normalBias|0x3e4a0f69
 viewBias|0x3e7d6e73
 bRelocation|1
@@ -172,8 +174,8 @@ bScreenSpaceLighting|0
 bScreenSpaceTrace|0
 bAlphaTest|1
 sunMode|0
-tracedRoughnessMax|0x3e4ccccd
-lightSpecularFromReflectionsMax|0x3e4ccccd
+tracedRoughnessMax|0x3e51408e
+lightSpecularFromReflectionsMax|0x3da84acd
 mirrorRoughnessMax|0x3da3d70a
 intensity|0x3f800000
 maxRayIntensity|0x00000000

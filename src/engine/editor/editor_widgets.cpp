@@ -9,6 +9,7 @@
 
 #include "imgui.h"
 
+#include "core/containers/inline_string.h"
 #include "render/render-graph/render_graph_resources.h"
 
 namespace Engine::Widgets
@@ -45,8 +46,188 @@ static float ClampF(float v, float lo, float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+struct FilterSection
+{
+    const char* title;
+    bool bDirty;
+    bool bEmitted;
+    bool bShowAll;
+    bool bSubHeaderShowAll;
+};
+
+constexpr int32_t MAX_FILTER_SECTION_DEPTH = 8;
+static const ImGuiTextFilter* activeFilter = nullptr;
+static FilterSection filterSections[MAX_FILTER_SECTION_DEPTH];
+static int32_t filterSectionDepth = 0;
+
+static bool IsFiltering()
+{
+    return activeFilter != nullptr && activeFilter->IsActive();
+}
+
+static bool LabelPasses(const char* label)
+{
+    return activeFilter->PassFilter(label, std::strstr(label, "##"));
+}
+
+static void SectionTitleText(const char* title, bool bDirty)
+{
+    if (bDirty) {
+        ImGui::SeparatorText(Core::InlineString<128>::Format("%s *", title).c_str());
+    }
+    else {
+        ImGui::SeparatorText(title);
+    }
+}
+
+static void EmitPendingTitles()
+{
+    for (int32_t i = 0; i < filterSectionDepth; ++i) {
+        if (!filterSections[i].bEmitted) {
+            SectionTitleText(filterSections[i].title, filterSections[i].bDirty);
+            filterSections[i].bEmitted = true;
+        }
+    }
+}
+
+static void DrawSectionButtons(SectionHeader& header, float rightEdge)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float saveWidth = ImGui::CalcTextSize("Save").x + style.FramePadding.x * 2.0f;
+    const float revertWidth = ImGui::CalcTextSize("Revert").x + style.FramePadding.x * 2.0f;
+    ImGui::SameLine(rightEdge - saveWidth - revertWidth - style.ItemSpacing.x);
+
+    ImGui::BeginDisabled(!header.bCanSave);
+    if (ImGui::Button("Save")) { header.action = SectionAction::Save; }
+    ImGui::EndDisabled();
+    if (!header.bCanSave) { DrawTooltip(header.disabledTooltip); }
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!header.bCanRevert);
+    if (ImGui::Button("Revert")) { header.action = SectionAction::Revert; }
+    ImGui::EndDisabled();
+    if (!header.bCanRevert) { DrawTooltip(header.disabledTooltip); }
+}
+
+void BeginFilter(const ImGuiTextFilter* filter)
+{
+    activeFilter = filter;
+    filterSectionDepth = 0;
+}
+
+void EndFilter()
+{
+    activeFilter = nullptr;
+    filterSectionDepth = 0;
+}
+
+bool IsShowingAll()
+{
+    if (!IsFiltering()) { return true; }
+    if (filterSectionDepth == 0) { return false; }
+    const FilterSection& section = filterSections[filterSectionDepth - 1];
+    return section.bShowAll || section.bSubHeaderShowAll;
+}
+
+bool PassFilter(const char* label)
+{
+    if (IsShowingAll()) { return true; }
+    if (!LabelPasses(label)) { return false; }
+    EmitPendingTitles();
+    return true;
+}
+
+bool BeginSection(const char* title, SectionHeader* header)
+{
+    if (filterSectionDepth >= MAX_FILTER_SECTION_DEPTH) { return false; }
+
+    const bool bDirty = header != nullptr && header->bDirty;
+    bool bShowAll = true;
+    bool bEmitted = true;
+    if (!IsFiltering()) {
+        const bool bButtons = header != nullptr && header->bSaveRevert;
+        const float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+        const auto label = Core::InlineString<128>::Format(bDirty ? "%s *###%s" : "%s###%s", title, title);
+        const bool bOpen = ImGui::CollapsingHeader(label.c_str(), bButtons ? ImGuiTreeNodeFlags_AllowOverlap : ImGuiTreeNodeFlags_None);
+        if (bButtons) {
+            ImGui::PushID(title);
+            DrawSectionButtons(*header, rightEdge);
+            ImGui::PopID();
+        }
+        if (!bOpen) { return false; }
+    }
+    else if (IsShowingAll() || LabelPasses(title)) {
+        EmitPendingTitles();
+        SectionTitleText(title, bDirty);
+    }
+    else {
+        bShowAll = false;
+        bEmitted = false;
+    }
+
+    filterSections[filterSectionDepth++] = {title, bDirty, bEmitted, bShowAll, false};
+    ImGui::PushID(title);
+    return true;
+}
+
+void EndSection()
+{
+    ImGui::PopID();
+    --filterSectionDepth;
+}
+
+void SubHeader(const char* title)
+{
+    if (!IsFiltering() || filterSectionDepth == 0) {
+        if (!IsFiltering()) { ImGui::SeparatorText(title); }
+        return;
+    }
+
+    FilterSection& section = filterSections[filterSectionDepth - 1];
+    if (section.bShowAll) {
+        ImGui::SeparatorText(title);
+        return;
+    }
+    section.bSubHeaderShowAll = LabelPasses(title);
+    if (section.bSubHeaderShowAll) {
+        EmitPendingTitles();
+        ImGui::SeparatorText(title);
+    }
+}
+
+void SameLine()
+{
+    if (IsShowingAll()) { ImGui::SameLine(); }
+}
+
+bool Checkbox(const char* name, bool* v, const char* tooltip)
+{
+    if (!PassFilter(name)) { return false; }
+    const bool changed = ImGui::Checkbox(name, v);
+    DrawTooltip(tooltip);
+    return changed;
+}
+
+bool Combo(const char* name, int* current, const char* const items[], int count, const char* tooltip)
+{
+    if (!PassFilter(name)) { return false; }
+    const bool changed = ImGui::Combo(name, current, items, count);
+    DrawTooltip(tooltip);
+    return changed;
+}
+
+bool Button(const char* name, const char* tooltip)
+{
+    if (!PassFilter(name)) { return false; }
+    const bool pressed = ImGui::Button(name);
+    DrawTooltip(tooltip);
+    return pressed;
+}
+
 bool SliderFloat(const char* name, float* v, float vMin, float vMax, const SliderOpts& opts)
 {
+    if (!PassFilter(name)) { return false; }
+
     const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
     const float resetWidth = ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f;
 
@@ -105,6 +286,8 @@ bool SliderFloat(const char* name, float* v, float vMin, float vMax, const Slide
 
 bool SliderInt(const char* name, int* v, int vMin, int vMax, const SliderOpts& opts)
 {
+    if (!PassFilter(name)) { return false; }
+
     const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
     const float resetWidth = ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f;
 

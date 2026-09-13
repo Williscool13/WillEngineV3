@@ -7,8 +7,52 @@
 
 #include <cstdint>
 
+struct ImGuiTextFilter;
+
 namespace Engine::Widgets
 {
+/** Widgets below hide when their label misses the filter; a matching section or sub-header title shows its whole block. */
+void BeginFilter(const ImGuiTextFilter* filter);
+void EndFilter();
+
+/** Guard raw ImGui content with this. */
+bool IsShowingAll();
+
+/** Emits pending section titles on a match. */
+bool PassFilter(const char* label);
+
+enum class SectionAction : uint8_t
+{
+    None = 0,
+    Save,
+    Revert,
+};
+
+struct SectionHeader
+{
+    bool bDirty = false;
+    bool bSaveRevert = false;
+    bool bCanSave = false;
+    bool bCanRevert = false;
+    const char* disabledTooltip = nullptr;
+    SectionAction action = SectionAction::None;
+};
+
+/** Call EndSection only when this returns true; header->action is set even while collapsed. */
+bool BeginSection(const char* title, SectionHeader* header = nullptr);
+void EndSection();
+
+void SubHeader(const char* title);
+
+/** No-op while filtering, so surviving widgets don't pair up with unrelated ones. */
+void SameLine();
+
+bool Checkbox(const char* name, bool* v, const char* tooltip = nullptr);
+
+bool Combo(const char* name, int* current, const char* const items[], int count, const char* tooltip = nullptr);
+
+bool Button(const char* name, const char* tooltip = nullptr);
+
 struct SliderOpts
 {
     const char* format = "%.3f";

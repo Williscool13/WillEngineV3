@@ -212,6 +212,8 @@ struct GTAOConfiguration
     float temporalMaxAccum{16.0f};
     /** Scale on the 3x3 neighborhood box the AO history is clamped into; smaller cuts ghosting harder, 0 disables the clamp. */
     float temporalClampScale{1.0f};
+
+    bool operator==(const GTAOConfiguration&) const = default;
 };
 
 enum class LightingMode : uint8_t
@@ -289,6 +291,8 @@ struct RELAXParams
 
     bool enablePrepass{true};
     bool enableAntiFirefly{true};
+
+    bool operator==(const RELAXParams&) const = default;
 };
 
 struct SIGMAParams
@@ -363,6 +367,8 @@ struct ReBLURParams
     bool enableAntiFirefly{true};
     bool enableStabilizationFireflyCleanup{false};
     bool enableTemporalStabilization{true};
+
+    bool operator==(const ReBLURParams&) const = default;
 };
 
 struct ReSTIRParams
@@ -418,6 +424,8 @@ struct ReSTIRParams
         float sigmaLuminance{2.0f};
         float sigmaNormal{128.0f};
         float sigmaDepth{0.01f};
+
+        bool operator==(const ATrousParams&) const = default;
     };
 
     ATrousParams atrous{};
@@ -430,6 +438,8 @@ struct ReSTIRParams
         float sigmaNormal{64.0f};
         float sigmaDepth{0.05f};
         int32_t atrousIterations{4};
+
+        bool operator==(const SVGFParams&) const = default;
     };
 
     SVGFParams svgf{};
@@ -437,6 +447,8 @@ struct ReSTIRParams
     RELAXParams relax{};
 
     ReBLURParams reblur{};
+
+    bool operator==(const ReSTIRParams&) const = default;
 };
 
 struct DDGIParams
@@ -484,11 +496,15 @@ struct DDGIParams
     bool bFinalGatherTemporal{true};
     bool bGatherSkipRay{false};
     uint32_t gatherRaysPerPixel{1};
+    bool bGatherFarField{false};
+    float gatherFarFieldDistance{3.0f};
     float normalBias{0.1f};
     float viewBias{0.3f};
 
     bool bRelocation{true};
     float minFrontfaceDistance{0.3f};
+
+    bool operator==(const DDGIParams&) const = default;
 };
 
 struct ReflectionConfiguration
@@ -511,6 +527,8 @@ struct ReflectionConfiguration
     int32_t ssrMaxSteps{64};
     int32_t hitLocalShadowRays{1};
     float hitTextureLod{3.0f};
+
+    bool operator==(const ReflectionConfiguration&) const = default;
 };
 
 struct ReflectionProbeConfiguration
@@ -520,6 +538,8 @@ struct ReflectionProbeConfiguration
     bool bDebugDraw{false};
     float bakedDiffuseClampK{4.0f};
     bool bBruteForcePick{false};
+
+    bool operator==(const ReflectionProbeConfiguration&) const = default;
 };
 
 enum class BucketDebugMode : int32_t
