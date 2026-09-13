@@ -109,8 +109,6 @@ struct PlaytestSystem
     Core::InlineVector<Event, MAX_EVENTS> events{};
     int32_t cursor{0};
     int32_t captureCount{0};
-    int32_t burstRemaining{0};
-    int32_t burstIndex{0};
     int32_t fpsCap{0};
     int32_t waitCounter{0};
     uint64_t waitStepBase{0};

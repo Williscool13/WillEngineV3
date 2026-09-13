@@ -179,6 +179,10 @@ struct FrameRequests
     bool bWantsScreenshot{false};
     /** Empty means the renderer picks a timestamped name under the user screenshots folder. */
     Core::InlineString<512> screenshotPath{};
+    /** Consecutive render frames still to capture */
+    int32_t screenshotBurstRemaining{0};
+    int32_t screenshotBurstIndex{0};
+    Core::InlineString<512> screenshotBurstBase{};
     bool bViewportClickPending{false};
     bool bRequestedQuit{false};
     bool bLogRDG{false};

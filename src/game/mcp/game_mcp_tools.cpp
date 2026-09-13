@@ -74,7 +74,7 @@ static ToolResult GetEngineStatus(Engine::EngineContext* ctx, Engine::EngineStat
     call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
     call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
     call.SetBool("rescanResources", ctx->rescan.bResources);
-    call.SetBool("screenshotInFlight", ctx->frameStatus.bScreenshotInFlight);
+    call.SetBool("screenshotInFlight", ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot || state->requests.screenshotBurstRemaining > 0);
     call.SetString("sceneId", Engine::MCP::HexId(state->scene.currentSceneId.id).c_str());
     call.SetString("sceneName", state->scene.currentSceneName.c_str());
     call.SetInt("stableEntityCount", static_cast<int64_t>(state->stableIdToEntityMap.Size()));

@@ -55,6 +55,12 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
+    if (state->requests.screenshotBurstRemaining > 0) {
+        state->requests.screenshotPath = Core::InlineString<512>::Format("%s_%03d.png", state->requests.screenshotBurstBase.c_str(), state->requests.screenshotBurstIndex);
+        state->requests.bWantsScreenshot = true;
+        --state->requests.screenshotBurstRemaining;
+        ++state->requests.screenshotBurstIndex;
+    }
     frameBuffer->bTakeScreenshot = state->requests.bWantsScreenshot;
     if (!state->requests.screenshotPath.IsEmpty()) {
         frameBuffer->screenshotPath = state->requests.screenshotPath;

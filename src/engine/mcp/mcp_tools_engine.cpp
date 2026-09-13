@@ -361,28 +361,42 @@ static ToolResult QueryScene(EngineContext*, EngineState* state, Call& call)
     return ToolResult::Complete;
 }
 
+static constexpr int64_t MAX_SCREENSHOT_BURST_FRAMES = 120;
+
 static ToolResult CaptureScreenshot(EngineContext* ctx, EngineState* state, Call& call)
 {
-    if (ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot) {
-        call.SetError("A screenshot is already in flight; poll get_frame_timings.screenshotInFlight until it clears");
+    if (ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot || state->requests.screenshotBurstRemaining > 0) {
+        call.SetError("A screenshot is already in flight; poll get_engine_status.screenshotInFlight until it clears");
         return ToolResult::Error;
     }
 
-    const char* requested = call.GetString("path", "");
-    Core::InlineString<512> path{};
-    if (*requested) {
-        path = Core::InlineString<512>(std::string_view(requested));
+    const int32_t frames = static_cast<int32_t>(std::clamp<int64_t>(call.GetInt("frames", 1), 1, MAX_SCREENSHOT_BURST_FRAMES));
+    std::string_view base = call.GetString("path", "");
+    Core::InlineString<512> defaultBase{};
+    if (base.empty()) {
+        const auto filename = Core::InlineString<64>::Format("mcp_%llu", static_cast<unsigned long long>(Core::gGameFrame.load(std::memory_order_relaxed)));
+        const Core::Path full = Platform::GetUserDataPath() / "screenshots" / filename.c_str();
+        defaultBase = Core::InlineString<512>(std::string_view(full.c_str()));
+        base = defaultBase.View();
+    }
+    else if (base.ends_with(".png")) {
+        base.remove_suffix(4);
+    }
+
+    if (frames > 1) {
+        state->requests.screenshotBurstBase = Core::InlineString<512>(base);
+        state->requests.screenshotBurstRemaining = frames;
+        state->requests.screenshotBurstIndex = 0;
+        call.SetString("path", Core::InlineString<512>::Format("%s_000.png", state->requests.screenshotBurstBase.c_str()).c_str());
     }
     else {
-        const auto filename = Core::InlineString<64>::Format("mcp_%llu.png", static_cast<unsigned long long>(Core::gGameFrame.load(std::memory_order_relaxed)));
-        const Core::Path full = Platform::GetUserDataPath() / "screenshots" / filename.c_str();
-        path = Core::InlineString<512>(std::string_view(full.c_str()));
+        state->requests.screenshotPath = Core::InlineString<512>(base);
+        state->requests.screenshotPath.Append(".png");
+        state->requests.bWantsScreenshot = true;
+        call.SetString("path", state->requests.screenshotPath.c_str());
     }
 
-    state->requests.bWantsScreenshot = true;
-    state->requests.screenshotPath = path;
-
-    call.SetString("path", path.c_str());
+    call.SetInt("frames", frames);
     call.SetBool("inFlight", true);
     return ToolResult::Complete;
 }
@@ -487,9 +501,10 @@ void RegisterEngineTools(EngineState* state)
     RegisterTool(state, {
         .id = "capture_screenshot"_sid,
         .name = "capture_screenshot",
-        .description = "Requests a PNG of the current viewport (editor UI included) and returns the path immediately. The file lands a few frames later: poll get_frame_timings.screenshotInFlight until false, then read it.",
+        .description = "Requests a PNG of the current viewport (editor UI included) and returns the path immediately. With frames > 1, captures that many consecutive render frames as <path stem>_000.png, _001.png, ... Files land over the following frames: poll get_engine_status.screenshotInFlight until false, then read them.",
         .inputSchemaJson = R"({"type":"object","properties":{
-            "path":{"type":"string","description":"Absolute output path; omit for <UserData>/screenshots/mcp_<frame>.png"}}})",
+            "path":{"type":"string","description":"Absolute output path; omit for <UserData>/screenshots/mcp_<frame>.png"},
+            "frames":{"type":"integer","default":1,"minimum":1,"maximum":120,"description":"Consecutive render frames to capture"}}})",
         .invoke = &CaptureScreenshot,
         .origin = Origin::Engine,
         .bNeedsDrain = true,

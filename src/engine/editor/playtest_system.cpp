@@ -266,16 +266,6 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         bCliRun = false;
     };
 
-    auto requestCaptureFrame = [&]() {
-        const Event& e = events[cursor - 1];
-        const Core::InlineString<128> file = e.count > 1 ? Core::InlineString<128>::Format("%s_%03d.png", e.name.c_str(), burstIndex) : Core::InlineString<128>::Format("%s.png", e.name.c_str());
-        const Core::Path savePath = Core::Path(outputDir.c_str()) / file.c_str();
-        state->requests.screenshotPath = Core::InlineString<512>(savePath.c_str());
-        state->requests.bWantsScreenshot = true;
-        --burstRemaining;
-        ++burstIndex;
-    };
-
     switch (phase) {
         case Phase::Idle:
         {
@@ -369,11 +359,19 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                             ++cursor;
                             break;
                         }
-                        if (ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot) {
+                        if (ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot || state->requests.screenshotBurstRemaining > 0) {
                             return;
                         }
-                        burstRemaining = e.count;
-                        burstIndex = 0;
+                        const Core::Path base = Core::Path(outputDir.c_str()) / e.name.c_str();
+                        if (e.count > 1) {
+                            state->requests.screenshotBurstBase = Core::InlineString<512>(base.c_str());
+                            state->requests.screenshotBurstRemaining = e.count;
+                            state->requests.screenshotBurstIndex = 0;
+                        }
+                        else {
+                            state->requests.screenshotPath = Core::InlineString<512>::Format("%s.png", base.c_str());
+                            state->requests.bWantsScreenshot = true;
+                        }
                         bSawInFlight = false;
                         awaitFrames = 0;
                         if (e.fps > 0) {
@@ -381,7 +379,6 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                         }
                         ++cursor;
                         phase = Phase::Capturing;
-                        requestCaptureFrame();
                         return;
                     }
                     case Op::Fps:
@@ -422,8 +419,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         }
         case Phase::Capturing:
         {
-            if (burstRemaining > 0) {
-                requestCaptureFrame();
+            if (state->requests.screenshotBurstRemaining > 0) {
                 return;
             }
             phase = Phase::AwaitSaved;
@@ -454,7 +450,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                 LOG_WARN(Engine, "Run: capture '{}' save not observed after {} frames", events[cursor - 1].name.c_str(), awaitFrames);
             }
             else {
-                captureCount += burstIndex;
+                captureCount += glm::max(events[cursor - 1].count, 1);
             }
             frameLimit = fpsCap;
             phase = Phase::Step;
