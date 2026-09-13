@@ -140,7 +140,7 @@ raysPerProbe|80
 outerRaysPerProbe|40
 bClassification|1
 bInfiniteBounce|1
-bounceIntensity|0x3f000000
+bounceIntensity|0x3f400000
 maxRayRadiance|0x49a00000
 radianceCacheShadeInterval|8
 radianceCacheAccumCap|16
@@ -205,7 +205,7 @@ denoisePasses|0x3f800000
 temporalMaxAccum|0x41800000
 temporalClampScale|0x3f800000
 ;
-iblIntensity|0x00000000
-indirectIntensity|0x3f333333
+iblIntensity|0x3f800000
+indirectIntensity|0x3f800000
 shadingShaderOverride|16532098932897623660
 lightingShaderOverride|6423489698308471953

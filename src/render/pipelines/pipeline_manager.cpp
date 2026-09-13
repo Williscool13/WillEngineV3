@@ -880,7 +880,7 @@ void PipelineManager::RegisterPipelines()
         builder.AddShaderStage(src / "environment_map.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentSkybox");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
         builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.SetupDepthState(VK_TRUE, VK_FALSE, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
         VkFormat colorFormats[1] = {
             COLOR_ATTACHMENT_FORMAT,

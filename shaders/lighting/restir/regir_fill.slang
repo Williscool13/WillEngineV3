@@ -89,7 +89,7 @@ static void SortAndShareW(uint tid)
 }
 
 [shader("compute")]
-[numthreads(256, 1, 1)]
+[numthreads(FILL_GROUP, 1, 1)]
 void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID) {
     uint cellIdx = groupID.x;
     if (cellIdx >= pc.activeCount[0]) {

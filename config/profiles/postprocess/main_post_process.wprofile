@@ -1,11 +1,11 @@
 postProcess
 bExposureEnabled|1
 exposureMode|0
-exposureTargetLuminance|0x3e3851ec
+exposureTargetLuminance|0x3dd7b535
 exposureSpeedBrighten|0x40000000
 exposureSpeedDarken|0x40c00000
-exposureMinEV100|0x41000000
-exposureMaxEV100|0x41900000
+exposureMinEV100|0xc0121644
+exposureMaxEV100|0x41c642c8
 exposureLowPercentile|0x3f000000
 exposureHighPercentile|0x3f666666
 exposureManualEV100|0x41523d70
