@@ -78,11 +78,8 @@ void ComputeFinalize(uniform PostProcessFinalizePushConstant pc, uint3 dtid : SV
     if (any(isnan(hdrColor))) { hdrColor = float3(0.0, 0.0, 0.0); }
     hdrColor = max(hdrColor, 0.0);
 
-    float exposure = pc.exposureBias;
-    if ((pc.flags & POST_PROCESS_FINALIZE_FLAG_EXPOSURE) != 0) {
-        float avgLuminance = pc.luminanceBufferAddress[0];
-        exposure = pc.targetLuminance / max(avgLuminance, 1e-4) * pc.exposureBias;
-    }
+    float avgLuminance = pc.luminanceBufferAddress[0];
+    float exposure = pc.targetLuminance / max(avgLuminance, 1e-4) * pc.exposureBias;
     float3 exposedColor = hdrColor * exposure;
 
     float4 p0 = pc.params0;

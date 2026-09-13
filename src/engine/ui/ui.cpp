@@ -493,7 +493,6 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
             bAnyPPActive = true;
         };
         appendPPTag(state->lighting.gtaoConfig.bEnabled, "GTAO");
-        appendPPTag(pp.bExposureEnabled, "Exposure");
         appendPPTag(pp.bBloomEnabled, "Bloom");
         appendPPTag(pp.bMotionBlurEnabled, "MotionBlur");
         appendPPTag(pp.bColorGradingEnabled, "ColorGrade");

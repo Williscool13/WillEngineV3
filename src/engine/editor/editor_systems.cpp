@@ -12,6 +12,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "engine/editor/debug_hotkeys.h"
+#include "engine/editor/editor_widgets.h"
 #include "engine/editor/settings/graphics_settings.h"
 #include "engine/editor/settings/input_settings.h"
 #include "engine/input/engine_actions.h"
@@ -554,6 +555,27 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
     }
 }
 
+static void DrawScreenFadeConfig(Core::ScreenFadeState& fade)
+{
+    const char* modes[] = {"None", "Fade", "Iris", "Wipe", "Dissolve", "Letterbox"};
+    int currentMode = static_cast<int>(fade.mode);
+    if (ImGui::Combo("Fade Mode", &currentMode, modes, IM_ARRAYSIZE(modes))) {
+        fade.mode = static_cast<Core::ScreenFadeMode>(currentMode);
+    }
+    if (fade.mode == Core::ScreenFadeMode::None) { return; }
+
+    Engine::Widgets::SliderFloat("Progress", &fade.progress, 0.0f, 1.0f, {.reset = true, .resetTo = 0.0f});
+    Engine::Widgets::SliderFloat("Softness", &fade.softness, 0.0f, 0.5f, {.reset = true, .resetTo = 0.03f});
+    ImGui::ColorEdit3("Fade Color", &fade.color.x);
+    ImGui::Checkbox("Draw Over UI", &fade.bDrawOverUI);
+    if (fade.mode == Core::ScreenFadeMode::Iris || fade.mode == Core::ScreenFadeMode::Dissolve) {
+        ImGui::DragFloat2("Center", &fade.center.x, 0.01f, -1.0f, 2.0f);
+    }
+    if (fade.mode == Core::ScreenFadeMode::Wipe) {
+        ImGui::DragFloat2("Direction", &fade.direction.x, 0.01f, -1.0f, 1.0f);
+    }
+}
+
 static void DrawGameplayWindow(Engine::EngineState* state)
 {
     if (ImGui::Begin("Gameplay")) {
@@ -564,6 +586,9 @@ static void DrawGameplayWindow(Engine::EngineState* state)
         else {
             ImGui::TextDisabled("Not playing");
         }
+
+        ImGui::SeparatorText("Screen Fade");
+        DrawScreenFadeConfig(state->screenFade);
     }
     ImGui::End();
 }
@@ -625,6 +650,76 @@ static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::En
             ImGui::Text("%.0f FPS (%.2f ms) | GPU %.2f ms", wallMs > 0.0f ? 1000.0f / wallMs : 0.0f, wallMs, frameBuffer->timeFrame.gpuFrameMs);
         }
         ImGui::End();
+    }
+}
+
+static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    const ImVec4 occupiedColor(0.20f, 0.45f, 0.25f, 1.0f);
+    const ImVec2 buttonSize(22.0f, 0.0f);
+
+    auto editorCamView = state->registry.view<Component::TransformComponent, Component::EditorCameraTag>();
+    const entt::entity editorCam = editorCamView.front();
+    ImGui::TextUnformatted("Cam");
+    for (int i = 0; i < Engine::MAX_CAMERA_PRESETS; ++i) {
+        Engine::CameraPreset& preset = state->projectConfig.cameraPresets[i];
+        ImGui::SameLine();
+        ImGui::PushID(i);
+        if (preset.bSet) {
+            ImGui::PushStyleColor(ImGuiCol_Button, occupiedColor);
+        }
+        if (ImGui::Button(Core::InlineString<8>::Format("%d", i + 1).c_str(), buttonSize) && editorCam != entt::null) {
+            auto& tf = state->registry.get<Component::TransformComponent>(editorCam);
+            if (ImGui::GetIO().KeyShift) {
+                preset.translation = tf.translation;
+                preset.rotation = tf.rotation;
+                preset.bSet = true;
+                Engine::WriteProjectConfig(state->projectConfig, state->allocator);
+            }
+            else if (preset.bSet) {
+                tf.translation = preset.translation;
+                tf.rotation = preset.rotation;
+            }
+        }
+        if (preset.bSet) {
+            ImGui::PopStyleColor();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Editor camera bookmark %d. Shift-click to save the current view; click to jump to it. Green = occupied.", i + 1);
+        }
+        ImGui::PopID();
+    }
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted("Scene");
+    for (int i = 0; i < Engine::MAX_SCENE_SLOTS; ++i) {
+        Engine::SceneSlot& slot = state->projectConfig.sceneSlots[i];
+        ImGui::SameLine();
+        ImGui::PushID(1000 + i);
+        const bool bOccupied = static_cast<bool>(slot.sceneId);
+        if (bOccupied) {
+            ImGui::PushStyleColor(ImGuiCol_Button, occupiedColor);
+        }
+        if (ImGui::Button(Core::InlineString<8>::Format("%d", i + 1).c_str(), buttonSize)) {
+            if (ImGui::GetIO().KeyShift) {
+                SaveSceneSlot(state, i);
+            }
+            else {
+                LoadSceneSlot(ctx, state, i);
+            }
+        }
+        if (bOccupied) {
+            ImGui::PopStyleColor();
+        }
+        if (ImGui::IsItemHovered()) {
+            if (bOccupied) {
+                ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1, slot.sceneName.c_str(), i + 1, i + 1);
+            }
+            else {
+                ImGui::SetTooltip("Numpad %d: empty.\nShift-click or Ctrl+Numpad %d to bind the current scene.", i + 1, i + 1);
+            }
+        }
+        ImGui::PopID();
     }
 }
 
@@ -734,6 +829,11 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
                 ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "game.dll missing");
             }
         }
+
+        ImGui::SameLine();
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+        DrawBookmarks(ctx, state);
 
         // Right-aligned controls: sprite checkbox + light debug combo + physics debug combo
         {

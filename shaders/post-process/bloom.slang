@@ -34,12 +34,8 @@ void ComputeBloomThreshold(uniform BloomThresholdPushConstant pc, uint3 dtid : S
         return;
     }
 
-    float exposure = 1.0;
-    if (pc.bExposureEnabled != 0) {
-        float avgLuminance = pc.luminanceBufferAddress[0];
-        exposure = pc.targetLuminance / max(avgLuminance, 1e-4);
-    }
-    exposure /= pc.preExposure;
+    float avgLuminance = pc.luminanceBufferAddress[0];
+    float exposure = pc.targetLuminance / max(avgLuminance, 1e-4) / pc.preExposure;
 
     float2 uv = (float2(pixelCoord) + 0.5) / float2(pc.outputExtent);
     float2 texelSize = 1.0 / float2(pc.inputExtent);

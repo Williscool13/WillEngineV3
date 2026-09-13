@@ -143,25 +143,34 @@ static void CopyDiagnosticsSection(const LightingBundle& from, LightingBundle& t
     to.ddgi.bWorldVolumeGridCull = from.ddgi.bWorldVolumeGridCull;
 }
 
-/** @param copy null for sections not stored in profiles */
-static Widgets::SectionHeader MakeLightingSectionHeader(const LightingBundle& live, LightingSectionCopy copy)
+/**
+ * @param baseline null when no profile is active
+ * @param copy null for sections not stored in profiles
+ */
+template<typename T>
+static Widgets::SectionHeader MakeProfileSectionHeader(const T* baseline, const T& live, void (*copy)(const T&, T&))
 {
     Widgets::SectionHeader header{};
     header.bSaveRevert = true;
     if (copy == nullptr) {
-        header.disabledTooltip = "Not stored in lighting profiles.";
+        header.disabledTooltip = "Not stored in profiles.";
         return header;
     }
-    if (!lightingBaseline.bValid) {
-        header.disabledTooltip = "No active lighting profile.";
+    if (baseline == nullptr) {
+        header.disabledTooltip = "No active profile.";
         return header;
     }
-    LightingBundle merged = lightingBaseline.bundle;
+    T merged = *baseline;
     copy(live, merged);
-    header.bDirty = !(merged == lightingBaseline.bundle);
+    header.bDirty = !(merged == *baseline);
     header.bCanSave = header.bDirty;
     header.bCanRevert = header.bDirty;
     return header;
+}
+
+static Widgets::SectionHeader MakeLightingSectionHeader(const LightingBundle& live, LightingSectionCopy copy)
+{
+    return MakeProfileSectionHeader(lightingBaseline.bValid ? &lightingBaseline.bundle : nullptr, live, copy);
 }
 
 static void HandleLightingSectionAction(Engine::EngineState* state, const Widgets::SectionHeader& header, LightingSectionCopy copy)
@@ -198,11 +207,168 @@ static void SaveLightingTab(Engine::EngineState* state)
     Engine::WriteProjectConfig(cfg, state->allocator);
 }
 
+using PostProcessSectionCopy = void(*)(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to);
+
+struct PostProcessBaseline
+{
+    Core::PostProcessConfiguration config{};
+    Core::InlineString<> name{};
+    bool bValid{false};
+};
+
+/** Active profile as on disk. */
+static PostProcessBaseline postProcessBaseline{};
+
+static void RefreshPostProcessBaseline(Engine::EngineState* state)
+{
+    const Core::InlineString<>& name = state->projectConfig.activePostProcessProfile;
+    if (postProcessBaseline.bValid && postProcessBaseline.name == name) { return; }
+    postProcessBaseline.name = name;
+    postProcessBaseline.bValid = false;
+    if (name.IsEmpty()) { return; }
+    postProcessBaseline.config = state->lighting.postProcess;
+    postProcessBaseline.bValid = Engine::Profiles::LoadPostProcessProfile(name.c_str(), postProcessBaseline.config);
+}
+
+static void CopyExposureSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.exposureMode = from.exposureMode;
+    to.exposureTargetLuminance = from.exposureTargetLuminance;
+    to.exposureSpeedBrighten = from.exposureSpeedBrighten;
+    to.exposureSpeedDarken = from.exposureSpeedDarken;
+    to.exposureMinEV100 = from.exposureMinEV100;
+    to.exposureMaxEV100 = from.exposureMaxEV100;
+    to.exposureLowPercentile = from.exposureLowPercentile;
+    to.exposureHighPercentile = from.exposureHighPercentile;
+    to.exposureManualEV100 = from.exposureManualEV100;
+    to.cameraAperture = from.cameraAperture;
+    to.cameraShutterInv = from.cameraShutterInv;
+    to.cameraISO = from.cameraISO;
+}
+
+static void CopyDepthOfFieldSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bDepthOfFieldEnabled = from.bDepthOfFieldEnabled;
+    to.dofFocusDistance = from.dofFocusDistance;
+    to.dofFocusRange = from.dofFocusRange;
+    to.dofNearTransition = from.dofNearTransition;
+    to.dofFarTransition = from.dofFarTransition;
+    to.dofNearRadiusPx = from.dofNearRadiusPx;
+    to.dofFarRadiusPx = from.dofFarRadiusPx;
+}
+
+static void CopyMotionBlurSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bMotionBlurEnabled = from.bMotionBlurEnabled;
+    to.motionBlurVelocityScale = from.motionBlurVelocityScale;
+    to.motionBlurTargetFps = from.motionBlurTargetFps;
+    to.motionBlurDepthScale = from.motionBlurDepthScale;
+    to.motionBlurMaxRadiusPx = from.motionBlurMaxRadiusPx;
+    to.motionBlurObjectScale = from.motionBlurObjectScale;
+    to.motionBlurCameraRotationScale = from.motionBlurCameraRotationScale;
+    to.motionBlurCameraTranslationScale = from.motionBlurCameraTranslationScale;
+    to.motionBlurCameraDeadZonePx = from.motionBlurCameraDeadZonePx;
+    to.motionBlurCameraMaxRadiusPx = from.motionBlurCameraMaxRadiusPx;
+}
+
+static void CopyBloomSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bBloomEnabled = from.bBloomEnabled;
+    to.bloomThreshold = from.bloomThreshold;
+    to.bloomSoftThreshold = from.bloomSoftThreshold;
+    to.bloomRadius = from.bloomRadius;
+    to.bloomIntensity = from.bloomIntensity;
+    to.bloomClamp = from.bloomClamp;
+}
+
+static void CopyPaniniSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bPaniniEnabled = from.bPaniniEnabled;
+    to.paniniStrength = from.paniniStrength;
+}
+
+static void CopyChromaticAberrationSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bChromaticAberrationEnabled = from.bChromaticAberrationEnabled;
+    to.chromaticAberrationStrength = from.chromaticAberrationStrength;
+}
+
+static void CopyColorGradingSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bColorGradingEnabled = from.bColorGradingEnabled;
+    to.colorGradingExposure = from.colorGradingExposure;
+    to.colorGradingContrast = from.colorGradingContrast;
+    to.colorGradingSaturation = from.colorGradingSaturation;
+    to.colorGradingTemperature = from.colorGradingTemperature;
+    to.colorGradingTint = from.colorGradingTint;
+}
+
+static void CopyTonemappingSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.tonemapOperator = from.tonemapOperator;
+    to.uchimuraParams = from.uchimuraParams;
+    to.hableParams = from.hableParams;
+    to.reinhardParams = from.reinhardParams;
+    to.agxParams = from.agxParams;
+    to.khronosParams = from.khronosParams;
+}
+
+static void CopyVignetteSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bVignetteEnabled = from.bVignetteEnabled;
+    to.vignetteStrength = from.vignetteStrength;
+    to.vignetteRadius = from.vignetteRadius;
+    to.vignetteSmoothness = from.vignetteSmoothness;
+    to.vignetteRoundness = from.vignetteRoundness;
+}
+
+static void CopySharpeningSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bSharpeningEnabled = from.bSharpeningEnabled;
+    to.sharpeningStrength = from.sharpeningStrength;
+}
+
+static void CopyFilmGrainSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bFilmGrainEnabled = from.bFilmGrainEnabled;
+    to.grainStrength = from.grainStrength;
+    to.grainSize = from.grainSize;
+    to.grainResponse = from.grainResponse;
+}
+
+static void CopyDitherSection(const Core::PostProcessConfiguration& from, Core::PostProcessConfiguration& to)
+{
+    to.bDitherEnabled = from.bDitherEnabled;
+    to.ditherStrength = from.ditherStrength;
+}
+
+static void HandlePostProcessSectionAction(Engine::EngineState* state, const Widgets::SectionHeader& header, PostProcessSectionCopy copy)
+{
+    if (copy == nullptr || !postProcessBaseline.bValid) { return; }
+
+    if (header.action == Widgets::SectionAction::Save) {
+        const char* name = state->projectConfig.activePostProcessProfile.c_str();
+        Core::PostProcessConfiguration config = postProcessBaseline.config;
+        Engine::Profiles::LoadPostProcessProfile(name, config);
+        copy(state->lighting.postProcess, config);
+        if (Engine::Profiles::SavePostProcessProfile(name, config, state->allocator)) {
+            postProcessBaseline.config = config;
+        }
+    }
+    else if (header.action == Widgets::SectionAction::Revert) {
+        copy(postProcessBaseline.config, state->lighting.postProcess);
+    }
+}
+
 static void SavePostProcessTab(Engine::EngineState* state)
 {
     Engine::ProjectConfig& cfg = state->projectConfig;
     if (!cfg.activePostProcessProfile.IsEmpty()) {
-        Engine::Profiles::SavePostProcessProfile(cfg.activePostProcessProfile.c_str(), state->lighting.postProcess, state->allocator);
+        if (Engine::Profiles::SavePostProcessProfile(cfg.activePostProcessProfile.c_str(), state->lighting.postProcess, state->allocator)) {
+            postProcessBaseline.config = state->lighting.postProcess;
+            postProcessBaseline.name = cfg.activePostProcessProfile;
+            postProcessBaseline.bValid = true;
+        }
     }
     Engine::WriteProjectConfig(cfg, state->allocator);
 }
@@ -260,6 +426,7 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
         for (uint32_t i = 0; i < count; ++i) {
             if (ImGui::Selectable(names[i].c_str(), cfg.activePostProcessProfile == names[i])) {
                 cfg.activePostProcessProfile = names[i];
+                postProcessBaseline.bValid = false;
                 Engine::Profiles::LoadPostProcessProfile(names[i].c_str(), state->lighting.postProcess);
                 Engine::WriteProjectConfig(cfg, state->allocator);
             }
@@ -282,6 +449,7 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
     if (ImGui::Button("Save As##ppprofile") && ppNewName[0] != '\0') {
         Engine::Profiles::SavePostProcessProfile(ppNewName, state->lighting.postProcess, state->allocator);
         cfg.activePostProcessProfile = Core::InlineString<64>(ppNewName);
+        postProcessBaseline.bValid = false;
         Engine::WriteProjectConfig(cfg, state->allocator);
         ppNewName[0] = '\0';
     }
@@ -295,102 +463,16 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             SaveProjectConfigTab(state);
         }
 
-        ImGui::Separator();
-
+        ImGui::SeparatorText("Rendering");
         if (ImGui::Checkbox("Limit FPS", &state->projectConfig.bLimitFps)) { changed = true; }
         if (state->projectConfig.bLimitFps) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(160.0f);
             if (Widgets::SliderInt("##fps_cap", &state->projectConfig.frameLimitTarget, 15, 240)) { changed = true; }
         }
-
-        ImGui::SeparatorText("Cameras");
-        if (Widgets::SliderFloat("Game FOV##cam", &state->projectConfig.gameCameraFovDegrees, 30.0f, 120.0f, {.format = "%.0f deg"})) { changed = true; }
-        if (Widgets::SliderFloat("Game Near##cam", &state->projectConfig.gameCameraNearPlane, 0.01f, 5.0f, {.format = "%.3f"})) { changed = true; }
-        if (Widgets::SliderFloat("Editor FOV##cam", &state->projectConfig.editorCameraFovDegrees, 30.0f, 120.0f, {.format = "%.0f deg"})) { changed = true; }
-        if (Widgets::SliderFloat("Editor Near##cam", &state->projectConfig.editorCameraNearPlane, 0.01f, 5.0f, {.format = "%.3f"})) { changed = true; }
-        if (ImGui::Checkbox("Lock Game Aspect##cam", &state->projectConfig.gameCameraLockAspect)) { changed = true; }
-        if (state->projectConfig.gameCameraLockAspect) {
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::InputFloat2("##game_aspect", &state->projectConfig.gameCameraAspect.x, "%.2f")) { changed = true; }
-        } {
-            auto editorCamView = state->registry.view<Component::TransformComponent, Component::EditorCameraTag>();
-            const entt::entity editorCam = editorCamView.front();
-            ImGui::Text("Presets:");
-            for (int i = 0; i < Engine::MAX_CAMERA_PRESETS; ++i) {
-                Engine::CameraPreset& preset = state->projectConfig.cameraPresets[i];
-                ImGui::SameLine();
-                ImGui::PushID(i);
-                const bool bTinted = preset.bSet;
-                if (bTinted) {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.25f, 1.0f));
-                }
-                Core::InlineString<8> label;
-                label.Format("%d", i + 1);
-                if (ImGui::Button(label.c_str(), ImVec2(24.0f, 0.0f)) && editorCam != entt::null) {
-                    auto& tf = state->registry.get<Component::TransformComponent>(editorCam);
-                    if (ImGui::GetIO().KeyShift) {
-                        preset.translation = tf.translation;
-                        preset.rotation = tf.rotation;
-                        preset.bSet = true;
-                        changed = true;
-                    }
-                    else if (preset.bSet) {
-                        tf.translation = preset.translation;
-                        tf.rotation = preset.rotation;
-                    }
-                }
-                if (bTinted) {
-                    ImGui::PopStyleColor();
-                }
-                ImGui::PopID();
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Editor camera bookmarks. Shift-click to save the current view; click to jump to a saved one. Green = occupied.");
-            }
-        } {
-            ImGui::Text("Scenes:");
-            for (int i = 0; i < Engine::MAX_SCENE_SLOTS; ++i) {
-                Engine::SceneSlot& slot = state->projectConfig.sceneSlots[i];
-                ImGui::SameLine();
-                ImGui::PushID(1000 + i);
-                const bool bTinted = static_cast<bool>(slot.sceneId);
-                if (bTinted) {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.25f, 1.0f));
-                }
-                Core::InlineString<8> label;
-                label.Format("%d", i + 1);
-                if (ImGui::Button(label.c_str(), ImVec2(24.0f, 0.0f))) {
-                    if (ImGui::GetIO().KeyShift) {
-                        SaveSceneSlot(state, i);
-                    }
-                    else {
-                        LoadSceneSlot(ctx, state, i);
-                    }
-                }
-                if (bTinted) {
-                    ImGui::PopStyleColor();
-                }
-                if (ImGui::IsItemHovered()) {
-                    if (bTinted) {
-                        ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1,
-                                          slot.sceneName.c_str(), i + 1, i + 1);
-                    }
-                    else {
-                        ImGui::SetTooltip("Numpad %d: empty.\nShift-click or Ctrl+Numpad %d to bind the current scene.", i + 1, i + 1);
-                    }
-                }
-                ImGui::PopID();
-            }
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
         if (Widgets::SliderFloat("Render Resolution##graphics", &state->projectConfig.resolutionScale, 0.33f, 1.0f, {.format = "%.3f", .commitOnRelease = true})) { changed = true; }
 
-
-        const char* aaModes[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA", "FSR 2"};
+        const char* aaModes[] = {"None", "SMAA (reference)", "TAA (reference)", "SMAA T2X (reference)", "Naive TAA (reference)", "Donut TAA (reference)", "FSR 2"};
         int currentAA = static_cast<int>(state->lighting.aaConfig.mode);
         if (ImGui::Combo("Anti-Aliasing", &currentAA, aaModes, IM_ARRAYSIZE(aaModes))) {
             state->lighting.aaConfig.mode = static_cast<Core::AntiAliasingMode>(currentAA);
@@ -403,7 +485,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
         const bool bDonutTAA = aaMode == Core::AntiAliasingMode::DonutTAA;
         const bool bFsr2 = aaMode == Core::AntiAliasingMode::FSR2;
 
-        if (bSMAA && ImGui::CollapsingHeader("SMAA")) {
+        if (bSMAA) {
+            ImGui::SeparatorText("SMAA");
             Core::SMAAConfiguration& smaa = state->lighting.aaConfig.smaa;
             constexpr Core::SMAAConfiguration defaultSMAA{};
             const char* edgeModes[] = {"Luma", "Color", "Depth"};
@@ -422,7 +505,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             }
         }
 
-        if (bTAA && ImGui::CollapsingHeader("TAA")) {
+        if (bTAA) {
+            ImGui::SeparatorText("TAA");
             Core::TAAConfiguration& taa = state->lighting.aaConfig.taa;
             constexpr Core::TAAConfiguration defaultTAA{};
             if (Widgets::SliderFloat("Base Blend Alpha##taa", &taa.baseBlendAlpha, 0.01f, 0.5f, {.format = "%.4f"})) { changed = true; }
@@ -439,7 +523,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             }
         }
 
-        if (bDonutTAA && ImGui::CollapsingHeader("Donut TAA")) {
+        if (bDonutTAA) {
+            ImGui::SeparatorText("Donut TAA");
             Core::DonutTAAConfiguration& donutTaa = state->lighting.aaConfig.donutTaa;
             constexpr Core::DonutTAAConfiguration defaultDonutTaa{};
             if (Widgets::SliderFloat("Clamping Factor##donuttaa", &donutTaa.clampingFactor, -1.0f, 4.0f, {.format = "%.2f"})) { changed = true; }
@@ -452,7 +537,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             }
         }
 
-        if (bFsr2 && ImGui::CollapsingHeader("FSR 2")) {
+        if (bFsr2) {
+            ImGui::SeparatorText("FSR 2");
             Core::Fsr2Configuration& fsr2 = state->lighting.aaConfig.fsr2;
             constexpr Core::Fsr2Configuration defaultFsr2{};
             if (ImGui::Checkbox("Sharpen (RCAS)##fsr2", &fsr2.bSharpen)) { changed = true; }
@@ -466,6 +552,18 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
                 fsr2 = defaultFsr2;
                 changed = true;
             }
+        }
+
+        ImGui::SeparatorText("Cameras");
+        if (Widgets::SliderFloat("Game FOV##cam", &state->projectConfig.gameCameraFovDegrees, 30.0f, 120.0f, {.format = "%.0f deg"})) { changed = true; }
+        if (Widgets::SliderFloat("Game Near##cam", &state->projectConfig.gameCameraNearPlane, 0.01f, 5.0f, {.format = "%.3f"})) { changed = true; }
+        if (Widgets::SliderFloat("Editor FOV##cam", &state->projectConfig.editorCameraFovDegrees, 30.0f, 120.0f, {.format = "%.0f deg"})) { changed = true; }
+        if (Widgets::SliderFloat("Editor Near##cam", &state->projectConfig.editorCameraNearPlane, 0.01f, 5.0f, {.format = "%.3f"})) { changed = true; }
+        if (ImGui::Checkbox("Lock Game Aspect##cam", &state->projectConfig.gameCameraLockAspect)) { changed = true; }
+        if (state->projectConfig.gameCameraLockAspect) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::InputFloat2("##game_aspect", &state->projectConfig.gameCameraAspect.x, "%.2f")) { changed = true; }
         }
 
         if (changed && state->projectConfig.bAutoSaveProjectConfig) {
@@ -492,7 +590,7 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
     const uint32_t triLightCapacity = static_cast<uint32_t>(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS);
 
     if (!state->debug.restir.bEmissiveTriangleLights) {
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Emissive Triangle Lights is OFF (Lighting > ReSTIR DI)");
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Emissive Triangle Lights is OFF (Lighting > Direct Lighting (ReSTIR))");
     }
     ImGui::Text("Reserved instances    %u / %d groups", emissive.reservedInstances, MAX_EMISSIVE_GROUPS);
     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("TriLightStore reservations held at fill time. Refused past the group cap."); }
@@ -566,447 +664,504 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
     }
 }
 
+static void DrawSearchBar(ImGuiTextFilter& filter, const char* id)
+{
+    const float clearWidth = ImGui::CalcTextSize("Clear").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::PushID(id);
+    ImGui::SetNextItemWidth(-(clearWidth + ImGui::GetStyle().ItemSpacing.x));
+    if (ImGui::InputTextWithHint("##filter", "Search groups or fields", filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf))) {
+        filter.Build();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) {
+        filter.Clear();
+    }
+    ImGui::PopID();
+}
+
+static void SetDebugViewTarget(Engine::EngineState* state, const char* resourceName, bool bEnabled)
+{
+    if (bEnabled) {
+        state->debug.resourceName = Core::InlineString(resourceName);
+        state->debug.transformationType = DebugTransformationType::None;
+        state->debug.viewAspect = Core::DebugViewAspect::None;
+    }
+    else if (state->debug.resourceName == resourceName) {
+        state->debug.resourceName.Clear();
+    }
+}
+
+static void DebugViewButton(Engine::EngineState* state, const char* label, const char* resourceName, DebugTransformationType transform, Core::DebugViewAspect aspect)
+{
+    const bool bActive = state->debug.resourceName == resourceName && state->debug.transformationType == transform && state->debug.viewAspect == aspect;
+    if (!Widgets::ToggleButton(label, bActive)) { return; }
+    if (bActive) {
+        state->debug.resourceName.Clear();
+    }
+    else {
+        state->debug.resourceName = Core::InlineString(resourceName);
+        state->debug.transformationType = transform;
+        state->debug.viewAspect = aspect;
+    }
+}
+
 void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Begin("Debug View")) {
-        ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
-        ImGui::SameLine();
-        ImGui::Checkbox("Wireframe", &state->debug.render.bWireframe);
+        Core::DebugRenderParams& render = state->debug.render;
+        const Core::ReSTIRParams& restir = state->debug.restir;
+        const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
+        const bool bSigmaActive = state->lighting.lightingMode == Core::LightingMode::Default || (bReSTIRMode && !restir.bSunLight);
+        const Core::AntiAliasingMode aaMode = state->lighting.aaConfig.mode;
 
-        ImGui::SeparatorText("Debug Visualizations");
-
-        ImGui::Checkbox("Enable GPU Debug Draw", &state->debug.render.bEnableGPUDebug);
-        ImGui::SameLine();
-        ImGui::Checkbox("Lock##GPUDebug", &state->debug.render.bLockGPUDebug);
-
-        if (ImGui::Checkbox("Cluster Grid##GPUDebug", &state->debug.render.bClusterGridDebug) && state->debug.render.bClusterGridDebug) {
-            state->debug.render.bWorldGridDebug = false;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("FrustumBinning: screen-frustum-tied clusters. Only actually bound in ReSTIR mode (feeds the reflection pass); Default-mode shading uses World Grid instead.");
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("World Grid##GPUDebug", &state->debug.render.bWorldGridDebug) && state->debug.render.bWorldGridDebug) {
-            state->debug.render.bClusterGridDebug = false;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.");
-        } {
-            const char* worldGridLevelLabels[] = {"All", "0", "1", "2", "3", "4", "5", "6", "7"};
-            int worldGridLevelChoice = state->debug.render.worldGridDebugLevel + 1;
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(80.0f);
-            if (ImGui::Combo("Level##WorldGridDebug", &worldGridLevelChoice, worldGridLevelLabels, static_cast<int>(std::size(worldGridLevelLabels)))) {
-                state->debug.render.worldGridDebugLevel = worldGridLevelChoice - 1;
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("All draws every cascade with an identification tint; picking one cascade draws only it, untinted. 0 is the finest (32m) cascade, doubling per level.");
-            }
-        }
-
-        ImGui::Checkbox("Probe Preview##GPUDebug", &state->debug.bProbePreview);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Draws a sphere at every reflection probe's capture position, shaded from its cubemap (disabled probes included if their content is loaded). Specular samples the roughness-selected prefilter mip along the mirror reflection vector; Irradiance samples the diffuse mip along the normal.");
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("Irradiance##ProbePreview", &state->debug.bProbePreviewIrradiance);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(200.0f);
-        ImGui::BeginDisabled(state->debug.bProbePreviewIrradiance);
-        Widgets::SliderFloat("Roughness##ProbePreview", &state->debug.probePreviewRoughness, 0.0f, 1.0f, {.format = "%.2f", .tooltip = "Roughness whose prefilter mip the preview sphere displays; matches the mapping shading uses.", .reset = true, .resetTo = 0.0});
-        ImGui::EndDisabled();
-
-        ImGui::Checkbox("Radiance Cache##GPUDebug", &state->debug.render.bRadianceCacheDebug);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Radiance cache: one solid cube per occupied hash-table cell, colored by decoded radiance (black = occupied but not yet shaded). Cube size follows the cell's LOD; shrunk slightly so neighbors don't merge.");
-        }
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(200.0f);
-        Widgets::SliderFloat("Cache Exposure##GPUDebug", &state->debug.render.radianceCacheDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
-            const char* bucketLabels[] = {"All", "+X", "-X", "+Y", "-Y", "+Z", "-Z"};
-            int bucketChoice = state->debug.render.radianceCacheDebugBucket + 1;
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(80.0f);
-            if (ImGui::Combo("Direction##RadianceCacheDebug", &bucketChoice, bucketLabels, static_cast<int>(std::size(bucketLabels)))) {
-                state->debug.render.radianceCacheDebugBucket = bucketChoice - 1;
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("All draws every normal bucket; picking one draws only cells whose normal bucket matches (front/back separation only, not fine direction).");
-            }
-        }
-
-        ImGui::SeparatorText("DDGI Probes");
-        ImGui::Checkbox("Draw Probes##DDGIDebug", &state->debug.render.bDDGIProbeDebug);
-        ImGui::SameLine();
-        ImGui::Checkbox("Bounce Only##DDGIDebug", &state->debug.render.bDDGIBounceOnly);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + emissive + light-proxy emission at hits)");
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("Hide Inactive##DDGIDebug", &state->debug.render.bDDGIHideInactiveProbes);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Skip classification-inactive probes in the debug view instead of drawing them flat blue.");
-        }
-        const char* cascadeLabels[] = {"All", "Locals", "0", "1", "2", "3"};
-        int cascadeOptionCount = static_cast<int>(state->lighting.ddgi.cascadeCount) + 2;
-        if (cascadeOptionCount < 3) { cascadeOptionCount = 3; }
-        if (cascadeOptionCount > 6) { cascadeOptionCount = 6; }
-        if (state->debug.render.ddgiProbeDebugCascade + 2 >= cascadeOptionCount) {
-            state->debug.render.ddgiProbeDebugCascade = -1;
-        }
-        int cascadeChoice = state->debug.render.ddgiProbeDebugCascade == Render::DDGI_PROBE_DEBUG_LOCALS_ONLY ? 1 : state->debug.render.ddgiProbeDebugCascade + 2;
-        if (state->debug.render.ddgiProbeDebugCascade == -1) { cascadeChoice = 0; }
-        ImGui::SetNextItemWidth(80.0f);
-        if (ImGui::Combo("Cascade##DDGIDebug", &cascadeChoice, cascadeLabels, cascadeOptionCount)) {
-            state->debug.render.ddgiProbeDebugCascade = cascadeChoice == 0 ? -1 : cascadeChoice == 1 ? Render::DDGI_PROBE_DEBUG_LOCALS_ONLY : cascadeChoice - 2;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("All draws every entry with an identification tint (cascade 0 white, 1 red, 2 green, 3 blue; locals continue the palette). Locals draws only the resident hand-placed volumes, tinted. Picking one cascade draws only it, untinted.");
-        }
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(240.0f);
-        Widgets::SliderFloat("Probe Exposure##GPUDebug", &state->debug.render.ddgiProbeDebugExposure, 0.1f, 10.0f, {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0}); {
-            const char* probeDisplayLabels[] = {"Irradiance", "Visibility", "Placement", "Age"};
-            ImGui::SetNextItemWidth(120.0f);
-            ImGui::Combo("Display##DDGIDebug", &state->debug.render.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)));
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Visibility shows the probe's distance atlas as L1 lobes: red = mean distance relative to the miss clamp per direction, green = std/mean. A red-hot lobe pointing into the room from an exterior probe is a miss-inflated mean, which bypasses the Chebyshev occlusion test at sampling. Placement drops the shading entirely and draws flat per-volume tint, for reading probe positions and window coverage; dead (red) and inactive (blue) probes still show through. Age tints each world volume by its update count: green ramp while warming (0-16), then black to white as it ages toward the cap; camera cascades always show full age.");
-            }
-        }
-
-        ImGui::SeparatorText("GI Diffuse Gather"); {
-            const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape", "Variance Guide", "Upscale Path"};
-            ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::Combo("View##GIGatherDebug", &state->debug.render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)))) {
-                if (state->debug.render.giGatherDebugMode != 0) {
-                    state->debug.resourceName = Core::InlineString("gi_gather_debug_target");
-                    state->debug.transformationType = DebugTransformationType::None;
-                    state->debug.viewAspect = Core::DebugViewAspect::None;
-                }
-                else if (state->debug.resourceName == "gi_gather_debug_target") {
-                    state->debug.resourceName.Clear();
-                }
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Final-gather view in the debug visualizer; runs the gather even when it is not applied, and lighting/lit history stay live so the screen tier behaves as in normal play. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where the first ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history). Escape = first-ray classification: yellow sky miss, magenta backface, front-face hit distance green to red over 2-10m; red/yellow/magenta at interior texels means the ray left the room.");
-            }
-        }
-
-        ImGui::SeparatorText("GI Deconstruct"); {
-            const char* giDeconstructLabels[] = {"Off", "Cache Cell ID", "Cache Radiance", "DDGI Cheb Gate", "DDGI Mean vs Dist", "DDGI Coverage", "DDGI Irradiance", "World Volume Coverage"};
-            ImGui::SetNextItemWidth(160.0f);
-            if (ImGui::Combo("View##GIDeconstruct", &state->debug.render.giDeconstructMode, giDeconstructLabels, static_cast<int>(std::size(giDeconstructLabels)))) {
-                if (state->debug.render.giDeconstructMode != 0) {
-                    state->debug.resourceName = Core::InlineString("gi_deconstruct_target");
-                    state->debug.transformationType = DebugTransformationType::None;
-                    state->debug.viewAspect = Core::DebugViewAspect::None;
-                }
-                else if (state->debug.resourceName == "gi_deconstruct_target") {
-                    state->debug.resourceName.Clear();
-                }
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip(
-                    "Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved radiance-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel. World Volume Coverage = volume placement aid: green means an authored volume owns the surface, yellow is its fade band, red means cascades serve it (leaky at interior corners), magenta means nothing covers it; brightness tracks coverage so starved pockets read dark.");
-            }
-        }
-
-        ImGui::SeparatorText("Occlusion"); {
-            ImGui::Checkbox("Inst Frustum##Cull", &state->debug.render.bCullInstanceFrustum);
-            ImGui::SameLine();
-            ImGui::Checkbox("Inst Contribution##Cull", &state->debug.render.bCullInstanceContribution);
-            ImGui::SameLine();
-            ImGui::Checkbox("Mlet Frustum##Cull", &state->debug.render.bCullMeshletFrustum);
-            ImGui::SameLine();
-            ImGui::Checkbox("Mlet Cone##Cull", &state->debug.render.bCullMeshletCone);
-            ImGui::SameLine();
-            ImGui::Checkbox("Mlet Contribution##Cull", &state->debug.render.bCullMeshletContribution);
-            ImGui::Checkbox("Occlusion Culling##HiZ", &state->debug.render.bOcclusionCulling);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Two-phase Hi-Z occlusion culling of the visibility-buffer geometry pass. Phase 1 draws what was visible last frame, phase 2 re-tests everything against the fresh depth pyramid and late-draws disocclusions, so the final image is identical to no culling. Off = frustum-only.");
-            }
-            ImGui::SameLine();
-            ImGui::Checkbox("Freeze##HiZ", &state->debug.render.bOcclusionFreeze);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Locks the visibility bits and stops phase 2, so only the frozen visible set draws. Move the camera or flip wireframe to see the culled geometry as holes. Debug only; the image is intentionally wrong while frozen.");
-            }
-            ImGui::SameLine();
-            int hizMip = state->debug.render.hizDebugMip;
-            ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::SliderInt("Hi-Z Mip##HiZDebug", &hizMip, -1, 11, hizMip < 0 ? "Off" : "%d")) {
-                state->debug.render.hizDebugMip = hizMip;
-                if (hizMip >= 0) {
-                    state->debug.resourceName = Core::InlineString("hiz_debug_target");
-                    state->debug.transformationType = DebugTransformationType::None;
-                    state->debug.viewAspect = Core::DebugViewAspect::None;
-                }
-                else if (state->debug.resourceName == "hiz_debug_target") {
-                    state->debug.resourceName.Clear();
-                }
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Shows the occlusion Hi-Z depth pyramid at the chosen mip, nearest-upscaled, grayscale = pow(depth, 0.25) so reversed-Z far reads dark. Mip 0 is pow2-down of half render resolution; each level is a conservative min (farthest) reduce. Sky is black; higher mips should only ever get darker.");
-            }
-        }
-
-        ImGui::SeparatorText("Render Target Views");
-
-        ImGui::Text("Current Debug View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
-        ImGui::SameLine();
-        if (ImGui::Button("Disable Debug View")) {
-            state->debug.resourceName.Clear();
-        }
-
-        if (ImGui::CollapsingHeader("Hotkeys")) {
-            const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
-            for (size_t i = 0; i < std::size(DEBUG_HOTKEYS); ++i) {
-                ImGui::Text("%s: %s (%s)", keyNames[i], DEBUG_HOTKEYS[i].name, DEBUG_HOTKEYS[i].resourceName);
-            }
-        }
-
-        if (ImGui::CollapsingHeader("Emissive Tri Lights")) {
-            DrawEmissiveTriLightSection(state);
-        }
-
-#ifdef WDEBUG
-        if (ImGui::Button("Verify Dirty Stores")) {
-            state->debug.bVerifyStoresOnce = true;
-        }
-        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Runs for one frame: reports lights and instances that drifted from their store, and re-sends every live model and instance. Geometry twitching means a mutation skipped its dirty mark."); }
-#endif
-
-        auto setDebugTarget = [&](const char* name, DebugTransformationType _transform, Core::DebugViewAspect aspect) {
-            if (state->debug.resourceName == name && state->debug.viewAspect == aspect && state->debug.transformationType == _transform) {
-                state->debug.resourceName.Clear();
-            }
-            else {
-                state->debug.resourceName = Core::InlineString(name);
-                state->debug.transformationType = _transform;
-                state->debug.viewAspect = aspect;
-            }
+        auto view = [&](const char* label, const char* resourceName, DebugTransformationType transform = DebugTransformationType::None, Core::DebugViewAspect aspect = Core::DebugViewAspect::None) {
+            DebugViewButton(state, label, resourceName, transform, aspect);
+        };
+        auto depthView = [&](const char* label, DebugTransformationType transform) {
+            DebugViewButton(state, label, "depth_target", transform, Core::DebugViewAspect::Depth);
         };
 
-        if (ImGui::CollapsingHeader("Visibility Buffer")) {
-            if (ImGui::Button("Visibility Buffer (Instance)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffInstance, Core::DebugViewAspect::None);
-            if (ImGui::Button("Visibility Buffer (Meshlet)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffMeshlet, Core::DebugViewAspect::None);
-            if (ImGui::Button("Visibility Buffer (Triangle)")) setDebugTarget("visibility_target", DebugTransformationType::VisBuffTriangle, Core::DebugViewAspect::None);
-            auto setBucketDebug = [&](const char* label, Core::BucketDebugMode mode) {
-                if (!ImGui::Button(label)) {
-                    return;
-                }
-                if (state->debug.render.bucketDebugMode == mode) {
-                    state->debug.render.bucketDebugMode = Core::BucketDebugMode::Off;
-                    state->debug.resourceName.Clear();
-                }
-                else {
-                    state->debug.render.bucketDebugMode = mode;
-                    state->debug.resourceName = Core::InlineString("bucket_debug_target");
-                    state->debug.transformationType = DebugTransformationType::None;
-                    state->debug.viewAspect = Core::DebugViewAspect::None;
-                }
-            };
-            setBucketDebug("Bucket Tiles (Shading)", Core::BucketDebugMode::ShadeBuckets);
-            ImGui::SameLine();
-            setBucketDebug("Bucket Heat (Shading)", Core::BucketDebugMode::ShadeHeat);
-            setBucketDebug("Bucket Tiles (Lighting)", Core::BucketDebugMode::LightBuckets);
-            ImGui::SameLine();
-            setBucketDebug("Bucket Heat (Lighting)", Core::BucketDebugMode::LightHeat);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Tiles: fill = the pixel's own bucket (dim), one bright ring per bucket dispatched to the tile, outermost = lowest index; a ring hue with no matching fill is over-dispatch. Heat: tile color by bucket count, black 0, blue 1, cyan 2, green 3, yellow 4, orange 5, red 6, magenta 7+.");
+        ImGui::Checkbox("Enable UI", &state->debug.bEnableUI);
+        ImGui::SameLine();
+        ImGui::Checkbox("Wireframe", &render.bWireframe);
+
+        ImGui::Text("View: %s", state->debug.resourceName.IsEmpty() ? "None" : state->debug.resourceName.c_str());
+        ImGui::SameLine();
+        ImGui::BeginDisabled(state->debug.resourceName.IsEmpty());
+        if (ImGui::Button("Disable##debugview")) {
+            state->debug.resourceName.Clear();
+        }
+        ImGui::EndDisabled();
+
+        static ImGuiTextFilter debugViewFilter;
+        DrawSearchBar(debugViewFilter, "debugviewfilter");
+        ImGui::Separator();
+
+        Widgets::BeginFilter(&debugViewFilter);
+
+        if (Widgets::BeginSection("Overlays")) {
+            Widgets::Checkbox("Enable GPU Debug Draw", &render.bEnableGPUDebug);
+            Widgets::SameLine();
+            Widgets::Checkbox("Lock##GPUDebug", &render.bLockGPUDebug);
+
+            if (Widgets::Checkbox("Cluster Grid##GPUDebug", &render.bClusterGridDebug,
+                                  "FrustumBinning: screen-frustum-tied clusters. Only actually bound in ReSTIR mode (feeds the reflection pass); Default-mode shading uses World Grid instead.") && render.bClusterGridDebug) {
+                render.bWorldGridDebug = false;
             }
-        }
-        if (ImGui::CollapsingHeader("ReSTIR DI Visualize")) {
-            if (ImGui::Button("Generate Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirLightIdx, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Generate W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirGenerateW, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Temporal Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirTemporalLightIdx, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Temporal W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirTemporalW, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Spatial Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirSpatialLightIdx, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Spatial W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirSpatialW, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("History Light Index")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryLightIdx, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("History W")) setDebugTarget("depth_target", DebugTransformationType::ReservoirHistoryW, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("ReGIR Cell (hue) / Occupancy (brightness)")) setDebugTarget("depth_target", DebugTransformationType::ReGIRCell, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("ReGIR Cell Majority Light")) setDebugTarget("depth_target", DebugTransformationType::ReGIRCellLight, Core::DebugViewAspect::Depth);
-        }
-        if (ImGui::CollapsingHeader("Reflections")) {
-            if (ImGui::Button("Raw Traced (Demodulated)")) setDebugTarget("reflection_spec_noisy", DebugTransformationType::None, Core::DebugViewAspect::None);
-        }
-        if (ImGui::CollapsingHeader("Reflection Probes")) {
-            if (ImGui::Button("Reflection Probe Index")) setDebugTarget("depth_target", DebugTransformationType::ReflectionProbeIndex, Core::DebugViewAspect::Depth);
-            if (ImGui::Button("Probe Bin Disagreement")) setDebugTarget("depth_target", DebugTransformationType::ReflectionProbeBinDisagreement, Core::DebugViewAspect::Depth);
-        }
-        if (ImGui::CollapsingHeader("G-Buffer")) {
-            if (ImGui::Button("Depth")) setDebugTarget("depth_target", DebugTransformationType::DepthRemap, Core::DebugViewAspect::Depth);
-            ImGui::SameLine();
-            if (ImGui::Button("Stencil")) setDebugTarget("depth_target", DebugTransformationType::StencilRemap, Core::DebugViewAspect::Stencil);
+            Widgets::SameLine();
+            if (Widgets::Checkbox("World Grid##GPUDebug", &render.bWorldGridDebug, "WorldGridBinning: camera-centered cascaded world-space grid used by Default-mode shading.") && render.bWorldGridDebug) {
+                render.bClusterGridDebug = false;
+            }
+            if (Widgets::PassFilter("World Grid Level")) {
+                const char* worldGridLevelLabels[] = {"All", "0", "1", "2", "3", "4", "5", "6", "7"};
+                int worldGridLevelChoice = render.worldGridDebugLevel + 1;
+                Widgets::SameLine();
+                ImGui::SetNextItemWidth(80.0f);
+                if (Widgets::Combo("Level##WorldGridDebug", &worldGridLevelChoice, worldGridLevelLabels, static_cast<int>(std::size(worldGridLevelLabels)),
+                                   "All draws every cascade with an identification tint; picking one cascade draws only it, untinted. 0 is the finest (32m) cascade, doubling per level.")) {
+                    render.worldGridDebugLevel = worldGridLevelChoice - 1;
+                }
+            }
 
-            if (ImGui::Button("Albedo")) setDebugTarget("gbuffer_two", DebugTransformationType::GBufferAlbedo, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Normal")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferNormal, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("PBR")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferPBR, Core::DebugViewAspect::None);
+            Widgets::Checkbox("Probe Preview##GPUDebug", &state->debug.bProbePreview,
+                              "Draws a sphere at every reflection probe's capture position, shaded from its cubemap (disabled probes included if their content is loaded). Specular samples the roughness-selected prefilter mip along the mirror reflection vector; Irradiance samples the diffuse mip along the normal.");
+            Widgets::SameLine();
+            Widgets::Checkbox("Irradiance##ProbePreview", &state->debug.bProbePreviewIrradiance);
+            if (Widgets::PassFilter("Probe Preview Roughness")) {
+                Widgets::SameLine();
+                ImGui::SetNextItemWidth(200.0f);
+                ImGui::BeginDisabled(state->debug.bProbePreviewIrradiance);
+                Widgets::SliderFloat("Roughness##ProbePreview", &state->debug.probePreviewRoughness, 0.0f, 1.0f, {.format = "%.2f", .tooltip = "Roughness whose prefilter mip the preview sphere displays; matches the mapping shading uses.", .reset = true, .resetTo = 0.0});
+                ImGui::EndDisabled();
+            }
 
-            if (ImGui::Button("Emissive")) setDebugTarget("gbuffer_two", DebugTransformationType::GBufferEmissive, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Motion Vectors")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferMotionVectors, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("View Z Delta")) setDebugTarget("gbuffer_one", DebugTransformationType::GBufferViewZDelta, Core::DebugViewAspect::None);
+            Widgets::Checkbox("Radiance Cache##GPUDebug", &render.bRadianceCacheDebug,
+                              "Radiance cache: one solid cube per occupied hash-table cell, colored by decoded radiance (black = occupied but not yet shaded). Cube size follows the cell's LOD; shrunk slightly so neighbors don't merge.");
+            if (Widgets::PassFilter("Radiance Cache Exposure")) {
+                Widgets::SameLine();
+                ImGui::SetNextItemWidth(200.0f);
+                Widgets::SliderFloat("Cache Exposure##GPUDebug", &render.radianceCacheDebugExposure, 0.1f, 10.0f,
+                                     {.format = "%.2f", .tooltip = "Linear exposure applied only to the radiance cache debug cubes so bright cells do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
+            }
+            if (Widgets::PassFilter("Radiance Cache Direction")) {
+                const char* bucketLabels[] = {"All", "+X", "-X", "+Y", "-Y", "+Z", "-Z"};
+                int bucketChoice = render.radianceCacheDebugBucket + 1;
+                Widgets::SameLine();
+                ImGui::SetNextItemWidth(80.0f);
+                if (Widgets::Combo("Direction##RadianceCacheDebug", &bucketChoice, bucketLabels, static_cast<int>(std::size(bucketLabels)),
+                                   "All draws every normal bucket; picking one draws only cells whose normal bucket matches (front/back separation only, not fine direction).")) {
+                    render.radianceCacheDebugBucket = bucketChoice - 1;
+                }
+            }
 
-            if (ImGui::Button("Intermediate One (Diffuse)")) setDebugTarget("intermediate_one", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Intermediate Two (Specular)")) setDebugTarget("intermediate_two", DebugTransformationType::None, Core::DebugViewAspect::None);
+            Widgets::SubHeader("DDGI Probes");
+            Widgets::Checkbox("Draw Probes##DDGIDebug", &render.bDDGIProbeDebug);
+            Widgets::SameLine();
+            Widgets::Checkbox("Bounce Only##DDGIDebug", &render.bDDGIBounceOnly,
+                              "Zero skybox radiance in the DDGI trace (feedback also disabled); anything left in the probes is one-bounce surface shading (sun + emissive + light-proxy emission at hits)");
+            Widgets::SameLine();
+            Widgets::Checkbox("Hide Inactive##DDGIDebug", &render.bDDGIHideInactiveProbes, "Skip classification-inactive probes in the debug view instead of drawing them flat blue.");
 
-            if (ImGui::Button("View Space Position")) setDebugTarget("depth_target", DebugTransformationType::ViewSpacePosition, Core::DebugViewAspect::Depth);
-            ImGui::SameLine();
-            if (ImGui::Button("NdotV")) setDebugTarget("gbuffer_one", DebugTransformationType::NdotV, Core::DebugViewAspect::None);
-        }
-
-        if (ImGui::CollapsingHeader("Lighting")) {
-            if (ImGui::Button("Shading Output")) setDebugTarget("shading_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("GTAO Depth")) setDebugTarget("gtao_depth", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("GTAO Edges")) setDebugTarget("gtao_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("GTAO Bent Normals")) setDebugTarget("gtao_bent_normals", DebugTransformationType::BentNormal, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("GTAO AO")) setDebugTarget("gtao_ao", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("GTAO Filtered")) setDebugTarget("gtao_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("GTAO Temporal")) setDebugTarget("gtao_temporal", DebugTransformationType::GTAOTemporalAO, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("GTAO Resolved")) setDebugTarget("shadows_resolve_target", DebugTransformationType::GTAOResolved, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("GTAO Temporal Count")) setDebugTarget("gtao_temporal", DebugTransformationType::GTAOTemporalCount, Core::DebugViewAspect::None);
-        }
-
-        if (ImGui::CollapsingHeader("SIGMA")) {
-            if (ImGui::Button("Trace Visibility")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Trace Penumbra")) setDebugTarget("rt_sun_shadow", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Tiles (Classify)")) setDebugTarget("sigma_tiles", DebugTransformationType::SunShadowTiles, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Tiles (Smoothed)")) setDebugTarget("sigma_tiles_smoothed", DebugTransformationType::SunShadowTileValue, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Blur Visibility")) setDebugTarget("sigma_shadow", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Blur Penumbra")) setDebugTarget("sigma_shadow", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Post-Blur Visibility")) setDebugTarget("sigma_shadow_2", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Stabilized Visibility")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowVisibility, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Stabilized Penumbra")) setDebugTarget("sigma_stabilized", DebugTransformationType::SunShadowPenumbra, Core::DebugViewAspect::None);
-        }
-
-
-        if (ImGui::CollapsingHeader("ReBLUR")) {
-            if (ImGui::Button("Frames (DATA1)")) setDebugTarget("reblur_data1", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Carried Frames")) setDebugTarget("reblur_internal_data", DebugTransformationType::ReblurInternalData, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Occlusion+VHA")) setDebugTarget("reblur_data2", DebugTransformationType::ReblurData2, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Packed Diff")) setDebugTarget("reblur_diff_packed", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Packed Spec")) setDebugTarget("reblur_spec_packed", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Accum Diff")) setDebugTarget("reblur_diff_accum", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Accum Spec")) setDebugTarget("reblur_spec_accum", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("HistoryFix Diff")) setDebugTarget("reblur_diff_hfix", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("HistoryFix Spec")) setDebugTarget("reblur_spec_hfix", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Blur Diff")) setDebugTarget("reblur_diff_blur", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Blur Spec")) setDebugTarget("reblur_spec_blur", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("PostBlur Diff")) setDebugTarget("reblur_diff_hist", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("PostBlur Spec")) setDebugTarget("reblur_spec_hist", DebugTransformationType::YCoCgSignal, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Fast Diff")) setDebugTarget("reblur_diff_fast_fixed", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Fast Spec")) setDebugTarget("reblur_spec_fast_fixed", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Spec HitDist")) setDebugTarget("reblur_spec_hit_dist", DebugTransformationType::None, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Luma Stab Diff")) setDebugTarget("reblur_diff_luma_stab", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Luma Stab Spec")) setDebugTarget("reblur_spec_luma_stab", DebugTransformationType::None, Core::DebugViewAspect::None);
+            const char* cascadeLabels[] = {"All", "Locals", "0", "1", "2", "3"};
+            int cascadeOptionCount = static_cast<int>(state->lighting.ddgi.cascadeCount) + 2;
+            if (cascadeOptionCount < 3) { cascadeOptionCount = 3; }
+            if (cascadeOptionCount > 6) { cascadeOptionCount = 6; }
+            if (render.ddgiProbeDebugCascade + 2 >= cascadeOptionCount) {
+                render.ddgiProbeDebugCascade = -1;
+            }
+            if (Widgets::PassFilter("Probe Cascade")) {
+                int cascadeChoice = render.ddgiProbeDebugCascade == Render::DDGI_PROBE_DEBUG_LOCALS_ONLY ? 1 : render.ddgiProbeDebugCascade + 2;
+                if (render.ddgiProbeDebugCascade == -1) { cascadeChoice = 0; }
+                ImGui::SetNextItemWidth(80.0f);
+                if (Widgets::Combo("Cascade##DDGIDebug", &cascadeChoice, cascadeLabels, cascadeOptionCount,
+                                   "All draws every entry with an identification tint (cascade 0 white, 1 red, 2 green, 3 blue; locals continue the palette). Locals draws only the resident hand-placed volumes, tinted. Picking one cascade draws only it, untinted.")) {
+                    render.ddgiProbeDebugCascade = cascadeChoice == 0 ? -1 : cascadeChoice == 1 ? Render::DDGI_PROBE_DEBUG_LOCALS_ONLY : cascadeChoice - 2;
+                }
+                Widgets::SameLine();
+            }
+            if (Widgets::PassFilter("Probe Exposure")) {
+                ImGui::SetNextItemWidth(240.0f);
+                Widgets::SliderFloat("Probe Exposure##GPUDebug", &render.ddgiProbeDebugExposure, 0.1f, 10.0f,
+                                     {.format = "%.2f", .tooltip = "Linear exposure applied only to the DDGI probe debug spheres so bright probes do not blow out to flat white. Visualization only; does not affect lighting.", .reset = true, .resetTo = 1.0});
+            }
+            if (Widgets::PassFilter("Probe Display")) {
+                const char* probeDisplayLabels[] = {"Irradiance", "Visibility", "Placement", "Age"};
+                ImGui::SetNextItemWidth(120.0f);
+                Widgets::Combo("Display##DDGIDebug", &render.ddgiProbeDebugMode, probeDisplayLabels, static_cast<int>(std::size(probeDisplayLabels)),
+                               "Visibility shows the probe's distance atlas as L1 lobes: red = mean distance relative to the miss clamp per direction, green = std/mean. A red-hot lobe pointing into the room from an exterior probe is a miss-inflated mean, which bypasses the Chebyshev occlusion test at sampling. Placement drops the shading entirely and draws flat per-volume tint, for reading probe positions and window coverage; dead (red) and inactive (blue) probes still show through. Age tints each world volume by its update count: green ramp while warming (0-16), then black to white as it ages toward the cap; camera cascades always show full age.");
+            }
+            Widgets::EndSection();
         }
 
-        if (ImGui::CollapsingHeader("Anti-Aliasing")) {
-            if (ImGui::Button("TAA Current")) setDebugTarget("taa_current", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("TAA Output")) setDebugTarget("taa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::Separator();
-            if (ImGui::Button("SMAA Edges")) setDebugTarget("smaa_edges", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("SMAA Blend Weights")) setDebugTarget("smaa_blend", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("SMAA Output")) setDebugTarget("smaa_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+        if (Widgets::BeginSection("G-Buffer")) {
+            Widgets::SubHeader("Visibility Buffer");
+            view("Instance##visbuffer", "visibility_target", DebugTransformationType::VisBuffInstance);
+            Widgets::SameLine();
+            view("Meshlet##visbuffer", "visibility_target", DebugTransformationType::VisBuffMeshlet);
+            Widgets::SameLine();
+            view("Triangle##visbuffer", "visibility_target", DebugTransformationType::VisBuffTriangle);
+
+            auto bucketView = [&](const char* label, Core::BucketDebugMode mode, const char* tooltip = nullptr) {
+                const bool bActive = render.bucketDebugMode == mode && state->debug.resourceName == "bucket_debug_target";
+                if (!Widgets::ToggleButton(label, bActive, tooltip)) { return; }
+                render.bucketDebugMode = bActive ? Core::BucketDebugMode::Off : mode;
+                SetDebugViewTarget(state, "bucket_debug_target", !bActive);
+            };
+            constexpr const char* BUCKET_TOOLTIP = "Tiles: fill = the pixel's own bucket (dim), one bright ring per bucket dispatched to the tile, outermost = lowest index; a ring hue with no matching fill is over-dispatch. Heat: tile color by bucket count, black 0, blue 1, cyan 2, green 3, yellow 4, orange 5, red 6, magenta 7+.";
+            bucketView("Bucket Tiles (Shading)", Core::BucketDebugMode::ShadeBuckets, BUCKET_TOOLTIP);
+            Widgets::SameLine();
+            bucketView("Bucket Heat (Shading)", Core::BucketDebugMode::ShadeHeat, BUCKET_TOOLTIP);
+            bucketView("Bucket Tiles (Lighting)", Core::BucketDebugMode::LightBuckets, BUCKET_TOOLTIP);
+            Widgets::SameLine();
+            bucketView("Bucket Heat (Lighting)", Core::BucketDebugMode::LightHeat, BUCKET_TOOLTIP);
+
+            Widgets::SubHeader("Surface");
+            depthView("Depth", DebugTransformationType::DepthRemap);
+            Widgets::SameLine();
+            view("Stencil", "depth_target", DebugTransformationType::StencilRemap, Core::DebugViewAspect::Stencil);
+            Widgets::SameLine();
+            depthView("View Space Position", DebugTransformationType::ViewSpacePosition);
+            view("Albedo", "gbuffer_two", DebugTransformationType::GBufferAlbedo);
+            Widgets::SameLine();
+            view("Normal", "gbuffer_one", DebugTransformationType::GBufferNormal);
+            Widgets::SameLine();
+            view("PBR", "gbuffer_one", DebugTransformationType::GBufferPBR);
+            Widgets::SameLine();
+            view("Emissive", "gbuffer_two", DebugTransformationType::GBufferEmissive);
+            view("Motion Vectors", "gbuffer_one", DebugTransformationType::GBufferMotionVectors);
+            Widgets::SameLine();
+            view("View Z Delta", "gbuffer_one", DebugTransformationType::GBufferViewZDelta);
+            Widgets::SameLine();
+            view("NdotV", "gbuffer_one", DebugTransformationType::NdotV);
+
+            Widgets::SubHeader("Shading");
+            view("Shading Output", "shading_output");
+            view("Intermediate One (Diffuse)", "intermediate_one");
+            Widgets::SameLine();
+            view("Intermediate Two (Specular)", "intermediate_two");
+            Widgets::EndSection();
         }
 
-        if (ImGui::CollapsingHeader("RELAX Denoiser")) {
-            // Tiles
-            if (ImGui::Button("Tiles")) setDebugTarget("relax_tiles", DebugTransformationType::None, Core::DebugViewAspect::None);
-            // Prepass
-            if (ImGui::Button("Spec Prepass")) setDebugTarget("relax_spec_prepass", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Diff Prepass")) setDebugTarget("relax_diff_prepass", DebugTransformationType::None, Core::DebugViewAspect::None);
+        if (bReSTIRMode && Widgets::BeginSection("Direct Lighting (ReSTIR)")) {
+            Widgets::SubHeader("Reservoirs");
+            depthView("Generate Light Index", DebugTransformationType::ReservoirLightIdx);
+            Widgets::SameLine();
+            depthView("Generate W", DebugTransformationType::ReservoirGenerateW);
+            depthView("Temporal Light Index", DebugTransformationType::ReservoirTemporalLightIdx);
+            Widgets::SameLine();
+            depthView("Temporal W", DebugTransformationType::ReservoirTemporalW);
+            depthView("Spatial Light Index", DebugTransformationType::ReservoirSpatialLightIdx);
+            Widgets::SameLine();
+            depthView("Spatial W", DebugTransformationType::ReservoirSpatialW);
+            depthView("History Light Index", DebugTransformationType::ReservoirHistoryLightIdx);
+            Widgets::SameLine();
+            depthView("History W", DebugTransformationType::ReservoirHistoryW);
 
-            if (ImGui::Button("Spec Illum")) setDebugTarget("relax_spec_illum", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Diff Illum")) setDebugTarget("relax_diff_illum", DebugTransformationType::None, Core::DebugViewAspect::None);
+            if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
+                Widgets::SubHeader("ReGIR");
+                depthView("ReGIR Cell (hue) / Occupancy (brightness)", DebugTransformationType::ReGIRCell);
+                depthView("ReGIR Cell Majority Light", DebugTransformationType::ReGIRCellLight);
+            }
 
-            if (ImGui::Button("Spec Illum Hist")) setDebugTarget("relax_spec_hist", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Diff Illum Hist")) setDebugTarget("relax_diff_hist", DebugTransformationType::None, Core::DebugViewAspect::None);
-
-            if (ImGui::Button("Spec Fast")) setDebugTarget("relax_spec_fast", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Diff Fast")) setDebugTarget("relax_diff_fast", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("History Length")) setDebugTarget("relax_history_length", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Spec Hit Dist")) setDebugTarget("relax_spec_hit_dist", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Reproj Confidence")) setDebugTarget("relax_spec_reproj_confidence", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("History Confidence (ReSTIR)")) setDebugTarget("restir_confidence", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Shadow Vis (ReSTIR)")) setDebugTarget("restir_shadow_vis", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Signal (ReSTIR)")) setDebugTarget("restir_signal", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Sun Flip (ReSTIR)")) setDebugTarget("restir_sun_flip", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Gradient (ReSTIR)")) setDebugTarget("restir_gradient", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Prev NR")) setDebugTarget("relax_prev_nr", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("ATrous Spec 0")) setDebugTarget("relax_atrous_spec_0", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Spec History")) setDebugTarget("relax_spec_hist", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("ATrous Diff 0")) setDebugTarget("relax_atrous_diff_0", DebugTransformationType::None, Core::DebugViewAspect::None);
-            ImGui::SameLine();
-            if (ImGui::Button("Diff History")) setDebugTarget("relax_diff_hist", DebugTransformationType::None, Core::DebugViewAspect::None);
+            Widgets::SubHeader("Confidence");
+            view("History Confidence", "restir_confidence");
+            Widgets::SameLine();
+            view("Gradient", "restir_gradient");
+            view("Signal", "restir_signal");
+            Widgets::SameLine();
+            view("Shadow Vis", "restir_shadow_vis");
+            Widgets::SameLine();
+            view("Sun Flip", "restir_sun_flip");
+            Widgets::EndSection();
         }
 
-        if (ImGui::CollapsingHeader("Post-Processing")) {
-            if (ImGui::Button("Bloom Chain")) setDebugTarget("bloom_chain", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Half-Res Color")) setDebugTarget("dof_color_coc", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Circle of Confusion")) setDebugTarget("dof_color_coc", DebugTransformationType::DofCoc, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Zones")) setDebugTarget("dof_color_coc", DebugTransformationType::DofZones, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Tiled Max")) setDebugTarget("dof_tiled_max", DebugTransformationType::DofTileMax, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Tiled Neighbor Max")) setDebugTarget("dof_tiled_neighbor_max", DebugTransformationType::DofTileMax, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Near Layer")) setDebugTarget("dof_near", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Near Coverage")) setDebugTarget("dof_near", DebugTransformationType::AlphaOnly, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Far Layer")) setDebugTarget("dof_far", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Near Filtered")) setDebugTarget("dof_near_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Far Filtered")) setDebugTarget("dof_far_filtered", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("DoF Output")) setDebugTarget("dof_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Motion Blur Velocity")) setDebugTarget("motion_blur_velocity", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Motion Blur Tiled Max")) setDebugTarget("motion_blur_tiled_max", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Motion Blur Neighbor Max")) setDebugTarget("motion_blur_tiled_neighbor_max", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Motion Blur Output")) setDebugTarget("motion_blur_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Finalize Output")) setDebugTarget("tonemap_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Post Process Output")) setDebugTarget("post_process_output", DebugTransformationType::None, Core::DebugViewAspect::None);
-            if (ImGui::Button("Screen Fade Output")) setDebugTarget("screen_fade_output", DebugTransformationType::None, Core::DebugViewAspect::None);
+        if (bSigmaActive && Widgets::BeginSection("Sun Shadow (SIGMA)")) {
+            view("Trace Visibility", "rt_sun_shadow", DebugTransformationType::SunShadowVisibility);
+            Widgets::SameLine();
+            view("Trace Penumbra", "rt_sun_shadow", DebugTransformationType::SunShadowPenumbra);
+            view("Tiles (Classify)", "sigma_tiles", DebugTransformationType::SunShadowTiles);
+            Widgets::SameLine();
+            view("Tiles (Smoothed)", "sigma_tiles_smoothed", DebugTransformationType::SunShadowTileValue);
+            view("Blur Visibility", "sigma_shadow", DebugTransformationType::SunShadowVisibility);
+            Widgets::SameLine();
+            view("Blur Penumbra", "sigma_shadow", DebugTransformationType::SunShadowPenumbra);
+            Widgets::SameLine();
+            view("Post-Blur Visibility", "sigma_shadow_2", DebugTransformationType::SunShadowVisibility);
+            view("Stabilized Visibility", "sigma_stabilized", DebugTransformationType::SunShadowVisibility);
+            Widgets::SameLine();
+            view("Stabilized Penumbra", "sigma_stabilized", DebugTransformationType::SunShadowPenumbra);
+            Widgets::EndSection();
         }
+
+        if (bReSTIRMode && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && Widgets::BeginSection("Denoiser (RELAX)")) {
+            view("Tiles##relax", "relax_tiles");
+            Widgets::SameLine();
+            view("History Length##relax", "relax_history_length");
+            Widgets::SameLine();
+            view("Reproj Confidence##relax", "relax_spec_reproj_confidence");
+            Widgets::SameLine();
+            view("Prev NR##relax", "relax_prev_nr");
+            Widgets::SubHeader("Diffuse");
+            view("Prepass##relaxdiff", "relax_diff_prepass");
+            Widgets::SameLine();
+            view("Illum##relaxdiff", "relax_diff_illum");
+            Widgets::SameLine();
+            view("Fast##relaxdiff", "relax_diff_fast");
+            Widgets::SameLine();
+            view("History##relaxdiff", "relax_diff_hist");
+            Widgets::SameLine();
+            view("ATrous 0##relaxdiff", "relax_atrous_diff_0");
+            Widgets::SubHeader("Specular");
+            view("Prepass##relaxspec", "relax_spec_prepass");
+            Widgets::SameLine();
+            view("Illum##relaxspec", "relax_spec_illum");
+            Widgets::SameLine();
+            view("Fast##relaxspec", "relax_spec_fast");
+            Widgets::SameLine();
+            view("History##relaxspec", "relax_spec_hist");
+            Widgets::SameLine();
+            view("ATrous 0##relaxspec", "relax_atrous_spec_0");
+            Widgets::SameLine();
+            view("Hit Dist##relaxspec", "relax_spec_hit_dist");
+            Widgets::EndSection();
+        }
+
+        if (bReSTIRMode && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR && Widgets::BeginSection("Denoiser (ReBLUR)")) {
+            view("Frames (DATA1)", "reblur_data1");
+            Widgets::SameLine();
+            view("Carried Frames", "reblur_internal_data", DebugTransformationType::ReblurInternalData);
+            Widgets::SameLine();
+            view("Occlusion+VHA", "reblur_data2", DebugTransformationType::ReblurData2);
+            Widgets::SubHeader("Diffuse");
+            view("Packed##reblurdiff", "reblur_diff_packed", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("Accum##reblurdiff", "reblur_diff_accum", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("HistoryFix##reblurdiff", "reblur_diff_hfix", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("Blur##reblurdiff", "reblur_diff_blur", DebugTransformationType::YCoCgSignal);
+            view("PostBlur##reblurdiff", "reblur_diff_hist", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("Fast##reblurdiff", "reblur_diff_fast_fixed");
+            Widgets::SameLine();
+            view("Luma Stab##reblurdiff", "reblur_diff_luma_stab");
+            Widgets::SubHeader("Specular");
+            view("Packed##reblurspec", "reblur_spec_packed", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("Accum##reblurspec", "reblur_spec_accum", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("HistoryFix##reblurspec", "reblur_spec_hfix", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("Blur##reblurspec", "reblur_spec_blur", DebugTransformationType::YCoCgSignal);
+            view("PostBlur##reblurspec", "reblur_spec_hist", DebugTransformationType::YCoCgSignal);
+            Widgets::SameLine();
+            view("Fast##reblurspec", "reblur_spec_fast_fixed");
+            Widgets::SameLine();
+            view("Luma Stab##reblurspec", "reblur_spec_luma_stab");
+            Widgets::SameLine();
+            view("HitDist##reblurspec", "reblur_spec_hit_dist");
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Ambient Occlusion (GTAO)")) {
+            view("Depth##gtao", "gtao_depth");
+            Widgets::SameLine();
+            view("Edges##gtao", "gtao_edges");
+            Widgets::SameLine();
+            view("Bent Normals##gtao", "gtao_bent_normals", DebugTransformationType::BentNormal);
+            view("AO##gtao", "gtao_ao");
+            Widgets::SameLine();
+            view("Filtered##gtao", "gtao_filtered");
+            Widgets::SameLine();
+            view("Temporal##gtao", "gtao_temporal", DebugTransformationType::GTAOTemporalAO);
+            Widgets::SameLine();
+            view("Temporal Count##gtao", "gtao_temporal", DebugTransformationType::GTAOTemporalCount);
+            Widgets::SameLine();
+            view("Resolved##gtao", "shadows_resolve_target", DebugTransformationType::GTAOResolved);
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Diffuse GI")) {
+            if (Widgets::PassFilter("Gather View")) {
+                const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape", "Variance Guide", "Upscale Path"};
+                ImGui::SetNextItemWidth(160.0f);
+                if (Widgets::Combo("Gather View##GIGatherDebug", &render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)),
+                                   "Final-gather view in the debug visualizer; runs the gather even when it is not applied, and lighting/lit history stay live so the screen tier behaves as in normal play. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where the first ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history). Escape = first-ray classification: yellow sky miss, magenta backface, front-face hit distance green to red over 2-10m; red/yellow/magenta at interior texels means the ray left the room.")) {
+                    SetDebugViewTarget(state, "gi_gather_debug_target", render.giGatherDebugMode != 0);
+                }
+            }
+            if (Widgets::PassFilter("Deconstruct View")) {
+                const char* giDeconstructLabels[] = {"Off", "Cache Cell ID", "Cache Radiance", "DDGI Cheb Gate", "DDGI Mean vs Dist", "DDGI Coverage", "DDGI Irradiance", "World Volume Coverage"};
+                ImGui::SetNextItemWidth(160.0f);
+                if (Widgets::Combo("Deconstruct View##GIDeconstruct", &render.giDeconstructMode, giDeconstructLabels, static_cast<int>(std::size(giDeconstructLabels)),
+                                   "Per-pixel GI leak deconstruction at the primary surface. Cache Cell ID = hash color of the resolved radiance-cache cell; the same color on both sides of a wall means interior and exterior share one cell. Cache Radiance = what gather tier 1 would return (magenta = found but not servable). DDGI Cheb Gate = weight fractions: red = occlusion test bypassed with a miss-inflated mean, green = bypassed with a plausible mean, blue = test ran. Mean vs Dist = dominant probe's (mean - distance)/spacing: red = bypassed, green = tested; blue overlays std/mean. Coverage = R coverage, G confidence, B serving cascade. Irradiance = raw DDGI injection at the pixel. World Volume Coverage = volume placement aid: green means an authored volume owns the surface, yellow is its fade band, red means cascades serve it (leaky at interior corners), magenta means nothing covers it; brightness tracks coverage so starved pockets read dark.")) {
+                    SetDebugViewTarget(state, "gi_deconstruct_target", render.giDeconstructMode != 0);
+                }
+            }
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Reflections")) {
+            view("Raw Traced (Demodulated)", "reflection_spec_noisy");
+            Widgets::SubHeader("Reflection Probes");
+            depthView("Reflection Probe Index", DebugTransformationType::ReflectionProbeIndex);
+            Widgets::SameLine();
+            depthView("Probe Bin Disagreement", DebugTransformationType::ReflectionProbeBinDisagreement);
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Culling")) {
+            Widgets::Checkbox("Inst Frustum##Cull", &render.bCullInstanceFrustum);
+            Widgets::SameLine();
+            Widgets::Checkbox("Inst Contribution##Cull", &render.bCullInstanceContribution);
+            Widgets::Checkbox("Mlet Frustum##Cull", &render.bCullMeshletFrustum);
+            Widgets::SameLine();
+            Widgets::Checkbox("Mlet Cone##Cull", &render.bCullMeshletCone);
+            Widgets::SameLine();
+            Widgets::Checkbox("Mlet Contribution##Cull", &render.bCullMeshletContribution);
+            Widgets::Checkbox("Occlusion Culling##HiZ", &render.bOcclusionCulling,
+                              "Two-phase Hi-Z occlusion culling of the visibility-buffer geometry pass. Phase 1 draws what was visible last frame, phase 2 re-tests everything against the fresh depth pyramid and late-draws disocclusions, so the final image is identical to no culling. Off = frustum-only.");
+            Widgets::SameLine();
+            Widgets::Checkbox("Freeze##HiZ", &render.bOcclusionFreeze,
+                              "Locks the visibility bits and stops phase 2, so only the frozen visible set draws. Move the camera or flip wireframe to see the culled geometry as holes. Debug only; the image is intentionally wrong while frozen.");
+            if (Widgets::PassFilter("Hi-Z Mip")) {
+                Widgets::SameLine();
+                int hizMip = render.hizDebugMip;
+                ImGui::SetNextItemWidth(120.0f);
+                if (ImGui::SliderInt("Hi-Z Mip##HiZDebug", &hizMip, -1, 11, hizMip < 0 ? "Off" : "%d")) {
+                    render.hizDebugMip = hizMip;
+                    SetDebugViewTarget(state, "hiz_debug_target", hizMip >= 0);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Shows the occlusion Hi-Z depth pyramid at the chosen mip, nearest-upscaled, grayscale = pow(depth, 0.25) so reversed-Z far reads dark. Mip 0 is pow2-down of half render resolution; each level is a conservative min (farthest) reduce. Sky is black; higher mips should only ever get darker.");
+                }
+            }
+            Widgets::EndSection();
+        }
+
+        const bool bTAAViews = aaMode == Core::AntiAliasingMode::TAA || aaMode == Core::AntiAliasingMode::NaiveTAA || aaMode == Core::AntiAliasingMode::SMAAT2X;
+        const bool bSMAAViews = aaMode == Core::AntiAliasingMode::SMAA || aaMode == Core::AntiAliasingMode::SMAAT2X;
+        if ((bTAAViews || bSMAAViews) && Widgets::BeginSection("Anti-Aliasing")) {
+            if (bTAAViews) {
+                view("TAA Current", "taa_current");
+                Widgets::SameLine();
+                view("TAA Output", "taa_output");
+            }
+            if (bSMAAViews) {
+                view("SMAA Edges", "smaa_edges");
+                Widgets::SameLine();
+                view("SMAA Blend Weights", "smaa_blend");
+                Widgets::SameLine();
+                view("SMAA Output", "smaa_output");
+            }
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Post-Processing")) {
+            Widgets::SubHeader("Bloom");
+            view("Bloom Chain", "bloom_chain");
+            Widgets::SubHeader("Depth of Field");
+            view("Half-Res Color##dof", "dof_color_coc");
+            Widgets::SameLine();
+            view("Circle of Confusion##dof", "dof_color_coc", DebugTransformationType::DofCoc);
+            Widgets::SameLine();
+            view("Zones##dof", "dof_color_coc", DebugTransformationType::DofZones);
+            view("Tiled Max##dof", "dof_tiled_max", DebugTransformationType::DofTileMax);
+            Widgets::SameLine();
+            view("Tiled Neighbor Max##dof", "dof_tiled_neighbor_max", DebugTransformationType::DofTileMax);
+            view("Near Layer##dof", "dof_near");
+            Widgets::SameLine();
+            view("Near Coverage##dof", "dof_near", DebugTransformationType::AlphaOnly);
+            Widgets::SameLine();
+            view("Near Filtered##dof", "dof_near_filtered");
+            view("Far Layer##dof", "dof_far");
+            Widgets::SameLine();
+            view("Far Filtered##dof", "dof_far_filtered");
+            Widgets::SameLine();
+            view("DoF Output##dof", "dof_output");
+            Widgets::SubHeader("Motion Blur");
+            view("Velocity##motionblur", "motion_blur_velocity");
+            Widgets::SameLine();
+            view("Tiled Max##motionblur", "motion_blur_tiled_max");
+            Widgets::SameLine();
+            view("Neighbor Max##motionblur", "motion_blur_tiled_neighbor_max");
+            Widgets::SameLine();
+            view("Motion Blur Output##motionblur", "motion_blur_output");
+            Widgets::SubHeader("Output");
+            view("Finalize Output", "tonemap_output");
+            Widgets::SameLine();
+            view("Post Process Output", "post_process_output");
+            Widgets::SameLine();
+            view("Screen Fade Output", "screen_fade_output");
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Stats")) {
+            Widgets::SubHeader("Emissive Triangle Lights");
+            if (Widgets::IsShowingAll()) {
+                DrawEmissiveTriLightSection(state);
+            }
+#ifdef WDEBUG
+            Widgets::SubHeader("Stores");
+            if (Widgets::Button("Verify Dirty Stores",
+                                "Runs for one frame: reports lights and instances that drifted from their store, and re-sends every live model and instance. Geometry twitching means a mutation skipped its dirty mark.")) {
+                state->debug.bVerifyStoresOnce = true;
+            }
+#endif
+            Widgets::EndSection();
+        }
+
+        if (Widgets::BeginSection("Hotkeys")) {
+            if (Widgets::IsShowingAll()) {
+                const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
+                for (size_t i = 0; i < std::size(DEBUG_HOTKEYS); ++i) {
+                    ImGui::Text("%s: %s (%s)", keyNames[i], DEBUG_HOTKEYS[i].name, DEBUG_HOTKEYS[i].resourceName);
+                }
+            }
+            Widgets::EndSection();
+        }
+
+        Widgets::EndFilter();
     }
     ImGui::End();
 }
@@ -1308,16 +1463,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SeparatorText("Ground-Truth Reference"); {
             auto gtToggle = [&](const char* label, Core::GroundTruthMode mode) {
                 const bool active = state->lighting.groundTruthMode == mode;
-                if (active) {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.75f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.85f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.40f, 0.70f, 1.0f));
-                }
-                if (ImGui::Button(label)) {
+                if (Widgets::ToggleButton(label, active)) {
                     state->lighting.groundTruthMode = active ? Core::GroundTruthMode::None : mode;
                     state->lighting.bResetGroundTruth = true;
                 }
-                if (active) { ImGui::PopStyleColor(3); }
             };
             gtToggle("DI", Core::GroundTruthMode::DI);
             ImGui::SameLine();
@@ -1333,15 +1482,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Separator();
 
         static ImGuiTextFilter lightingFilter;
-        const float clearWidth = ImGui::CalcTextSize("Clear").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        ImGui::SetNextItemWidth(-(clearWidth + ImGui::GetStyle().ItemSpacing.x));
-        if (ImGui::InputTextWithHint("##lightingfilter", "Search groups or fields", lightingFilter.InputBuf, IM_ARRAYSIZE(lightingFilter.InputBuf))) {
-            lightingFilter.Build();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Clear##lightingfilter")) {
-            lightingFilter.Clear();
-        }
+        DrawSearchBar(lightingFilter, "lightingfilter");
 
         ImGui::Separator();
 
@@ -1962,43 +2103,114 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     ImGui::End();
 }
 
-static void DrawScreenFadeConfig(Core::ScreenFadeState& fade)
-{
-    const char* modes[] = {"None", "Fade", "Iris", "Wipe", "Dissolve", "Letterbox"};
-    int currentMode = static_cast<int>(fade.mode);
-    if (ImGui::Combo("Fade Mode", &currentMode, modes, IM_ARRAYSIZE(modes))) {
-        fade.mode = static_cast<Core::ScreenFadeMode>(currentMode);
-    }
-    if (fade.mode == Core::ScreenFadeMode::None) { return; }
-
-    Widgets::SliderFloat("Progress", &fade.progress, 0.0f, 1.0f, {.reset = true, .resetTo = 0.0f});
-    Widgets::SliderFloat("Softness", &fade.softness, 0.0f, 0.5f, {.reset = true, .resetTo = 0.03f});
-    ImGui::ColorEdit3("Fade Color", &fade.color.x);
-    ImGui::Checkbox("Draw Over UI", &fade.bDrawOverUI);
-    if (fade.mode == Core::ScreenFadeMode::Iris || fade.mode == Core::ScreenFadeMode::Dissolve) {
-        ImGui::DragFloat2("Center", &fade.center.x, 0.01f, -1.0f, 2.0f);
-    }
-    if (fade.mode == Core::ScreenFadeMode::Wipe) {
-        ImGui::DragFloat2("Direction", &fade.direction.x, 0.01f, -1.0f, 1.0f);
-    }
-}
-
-bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
+bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp, Engine::EngineState* profileState)
 {
     constexpr Core::PostProcessConfiguration defaults{};
     bool changed = false;
 
-    auto check = [&](const char* label, bool* v) {
-        if (ImGui::Checkbox(label, v)) { changed = true; }
-    };
     auto ppF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt = "%.3f", const char* tip = nullptr) {
         changed |= Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def});
     };
 
-    if (ImGui::CollapsingHeader("Tonemapping")) {
+    if (profileState != nullptr) {
+        RefreshPostProcessBaseline(profileState);
+    }
+    const Core::PostProcessConfiguration live = pp;
+    const Core::PostProcessConfiguration* baseline = postProcessBaseline.bValid ? &postProcessBaseline.config : nullptr;
+
+    auto section = [&](const char* title, bool* enabled, PostProcessSectionCopy copy, auto&& body) {
+        Widgets::SectionHeader header = profileState != nullptr ? MakeProfileSectionHeader(baseline, live, copy) : Widgets::SectionHeader{};
+        header.enabled = enabled;
+        if (Widgets::BeginSection(title, &header)) {
+            body();
+            Widgets::EndSection();
+        }
+        if (header.bEnabledChanged) { changed = true; }
+        if (profileState != nullptr) {
+            HandlePostProcessSectionAction(profileState, header, copy);
+        }
+    };
+
+    section("Exposure", nullptr, CopyExposureSection, [&] {
+        const char* exposureModes[] = {"Auto", "Manual EV100", "Physical Camera"};
+        int exposureMode = static_cast<int>(pp.exposureMode);
+        if (Widgets::Combo("Mode##exposure", &exposureMode, exposureModes, IM_ARRAYSIZE(exposureModes))) {
+            pp.exposureMode = static_cast<Core::ExposureMode>(exposureMode);
+            changed = true;
+        }
+        ppF("Target Luminance", &pp.exposureTargetLuminance, defaults.exposureTargetLuminance, 0.005f, 1.0f, "%.3f", "Post-exposure key the metered scene average maps to. 0.18 = standard mid-gray.");
+        switch (pp.exposureMode) {
+            case Core::ExposureMode::Auto:
+                ppF("Speed Brighten", &pp.exposureSpeedBrighten, defaults.exposureSpeedBrighten, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image brightens (entering darkness). Slower than darken, like the eye.");
+                ppF("Speed Darken", &pp.exposureSpeedDarken, defaults.exposureSpeedDarken, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image darkens (entering light).");
+                ppF("Min EV100", &pp.exposureMinEV100, defaults.exposureMinEV100, -10.0f, 30.0f, "%.1f", "Darkest scene exposure adapts to; darker scenes stop brightening here instead of amplifying GI noise to mid-gray. EV100 = log2(average luminance * 8).");
+                ppF("Max EV100", &pp.exposureMaxEV100, defaults.exposureMaxEV100, -10.0f, 30.0f, "%.1f", "Brightest scene exposure adapts to; brighter scenes stop darkening here.");
+                ppF("Low Percentile", &pp.exposureLowPercentile, defaults.exposureLowPercentile, 0.0f, 0.9f, "%.2f", "Fraction of the darkest non-black pixels excluded from metering.");
+                ppF("High Percentile", &pp.exposureHighPercentile, defaults.exposureHighPercentile, 0.1f, 1.0f, "%.2f", "Metering cutoff for the brightest pixels; keeps fireflies, emissives, and the sun from steering exposure.");
+                break;
+            case Core::ExposureMode::Manual:
+                ppF("EV100##exposure", &pp.exposureManualEV100, defaults.exposureManualEV100, -10.0f, 30.0f, "%.2f", "Fixed exposure; the same image auto exposure produces when the scene meters at this EV100.");
+                break;
+            case Core::ExposureMode::Physical:
+                ppF("Aperture (f)", &pp.cameraAperture, defaults.cameraAperture, 1.0f, 32.0f, "%.1f");
+                ppF("Shutter (1/s)", &pp.cameraShutterInv, defaults.cameraShutterInv, 1.0f, 8000.0f, "%.0f", "Shutter speed denominator: 100 = 1/100 s.");
+                ppF("ISO", &pp.cameraISO, defaults.cameraISO, 50.0f, 12800.0f, "%.0f");
+                if (Widgets::IsShowingAll()) {
+                    ImGui::Text("EV100: %.2f", std::log2(pp.cameraAperture * pp.cameraAperture * pp.cameraShutterInv * 100.0f / pp.cameraISO));
+                }
+                break;
+        }
+    });
+
+    section("Depth of Field", &pp.bDepthOfFieldEnabled, CopyDepthOfFieldSection, [&] {
+        ppF("Focus Distance", &pp.dofFocusDistance, defaults.dofFocusDistance, 0.1f, 200.0f, "%.2f", "View-space distance to the focal plane; everything at this depth stays sharp.");
+        ppF("Focus Range", &pp.dofFocusRange, defaults.dofFocusRange, 0.0f, 20.0f, "%.2f", "Depth band centered on the focal plane that stays fully sharp.");
+        ppF("Near Transition", &pp.dofNearTransition, defaults.dofNearTransition, 0.05f, 20.0f, "%.2f", "View units in front of the sharp band over which the blur ramps to its max near radius.");
+        ppF("Far Transition", &pp.dofFarTransition, defaults.dofFarTransition, 0.05f, 200.0f, "%.2f", "View units behind the sharp band over which the blur ramps to its max far radius. The sky always sits at max.");
+        ppF("Near Radius", &pp.dofNearRadiusPx, defaults.dofNearRadiusPx, 0.0f, 64.0f, "%.0f", "Max blur radius in output pixels for foreground (in front of focus).");
+        ppF("Far Radius", &pp.dofFarRadiusPx, defaults.dofFarRadiusPx, 0.0f, 64.0f, "%.0f", "Max blur radius in output pixels for background (behind focus).");
+    });
+
+    section("Motion Blur", &pp.bMotionBlurEnabled, CopyMotionBlurSection, [&] {
+        ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter. Shared by camera and object blur.");
+        ppF("Target FPS", &pp.motionBlurTargetFps, defaults.motionBlurTargetFps, 0.0f, 240.0f, "%.0f", "Frame rate the shutter is normalized to, so blur length stays constant as fps varies and hitches do not smear. 0 = physical shutter (blur grows with frame time).");
+        ppF("Depth Scale", &pp.motionBlurDepthScale, defaults.motionBlurDepthScale, 0.1f, 10.0f, "%.2f", "1 / soft depth band (view units) for foreground/background classification. 1.0 = 1m band.");
+        ppF("Max Radius", &pp.motionBlurMaxRadiusPx, defaults.motionBlurMaxRadiusPx, 4.0f, 64.0f, "%.0f", "Cap on blur reach in output pixels. Faster movers saturate here and read as solid; tile dilation and sample count scale with it.");
+        ppF("Object Scale", &pp.motionBlurObjectScale, defaults.motionBlurObjectScale, 0.0f, 2.0f, "%.2f", "Share of object-only motion that smears, after the camera reprojection is subtracted out. 0 = moving objects never blur.");
+        ppF("Camera Rotation Scale", &pp.motionBlurCameraRotationScale, defaults.motionBlurCameraRotationScale, 0.0f, 2.0f, "%.2f", "Share of camera pan/tilt motion that smears. Drives the sky, which has no other motion.");
+        ppF("Camera Translation Scale", &pp.motionBlurCameraTranslationScale, defaults.motionBlurCameraTranslationScale, 0.0f, 2.0f, "%.2f", "Share of camera dolly motion that smears. Lower than rotation keeps near geometry readable while walking.");
+        ppF("Camera Dead Zone", &pp.motionBlurCameraDeadZonePx, defaults.motionBlurCameraDeadZonePx, 0.0f, 8.0f, "%.2f", "Camera blur shorter than this many output pixels is trimmed away, so idle drift and controller noise stay sharp.");
+        ppF("Camera Max Radius", &pp.motionBlurCameraMaxRadiusPx, defaults.motionBlurCameraMaxRadiusPx, 1.0f, 64.0f, "%.0f", "Cap on camera blur reach in output pixels, so fast spins do not smear the whole frame. Clamped to Max Radius.");
+    });
+
+    section("Bloom", &pp.bBloomEnabled, CopyBloomSection, [&] {
+        ppF("Intensity", &pp.bloomIntensity, defaults.bloomIntensity, 0.0f, 1.0f);
+        ppF("Threshold", &pp.bloomThreshold, defaults.bloomThreshold, 0.0f, 2.0f, "%.2f", "Display-relative luminance where bloom starts; 1.0 = displayed white. Stable under auto-exposure.");
+        ppF("Soft Threshold", &pp.bloomSoftThreshold, defaults.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
+        ppF("Radius", &pp.bloomRadius, defaults.bloomRadius, 0.5f, 1.25f, "%.2f", "Tent-filter tap spacing in mip texels; above ~1.25 the upsample starts skipping texels and shimmers.");
+        ppF("Clamp", &pp.bloomClamp, defaults.bloomClamp, 0.1f, 100.0f, "%.1f", "Display-relative cap applied before thresholding; secondary firefly defense behind the Karis average.");
+    });
+
+    section("Panini Projection", &pp.bPaniniEnabled, CopyPaniniSection, [&] {
+        ppF("Strength##panini", &pp.paniniStrength, defaults.paniniStrength, 0.0f, 1.0f, "%.2f", "Cylindrical projection blend; 0 = rectilinear. Typical game values 0.15-0.35.");
+    });
+
+    section("Chromatic Aberration", &pp.bChromaticAberrationEnabled, CopyChromaticAberrationSection, [&] {
+        ppF("Strength##chromab", &pp.chromaticAberrationStrength, defaults.chromaticAberrationStrength, 0.0f, 10.0f, "%.2f", "Pixels of R/B separation at unit radius, uniform in all directions. Above ~4 the single-tap fringes read as ghosting.");
+    });
+
+    section("Color Grading", &pp.bColorGradingEnabled, CopyColorGradingSection, [&] {
+        ppF("Exposure Bias", &pp.colorGradingExposure, defaults.colorGradingExposure, -2.0f, 2.0f, "%.2f", "EV bias folded into exposure before tonemapping, so highlights roll off instead of clipping.");
+        ppF("Contrast", &pp.colorGradingContrast, defaults.colorGradingContrast, 0.5f, 2.0f, "%.2f", "Log-space contrast pivoted at mid-gray.");
+        ppF("Saturation", &pp.colorGradingSaturation, defaults.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
+        ppF("Temperature", &pp.colorGradingTemperature, defaults.colorGradingTemperature, -1.0f, 1.0f, "%.2f", "White balance warm/cool via CAT02 gains; preserves black and overall luminance.");
+        ppF("Tint", &pp.colorGradingTint, defaults.colorGradingTint, -1.0f, 1.0f, "%.2f", "White balance green/magenta axis.");
+    });
+
+    section("Tonemapping", nullptr, CopyTonemappingSection, [&] {
         const char* tonemapOperators[] = {"None", "[Simple] ACES (Hill)", "[Simple] Hable", "[Simple] Reinhard", "[Simple] Lottes", "[Simple] Reinhard-Jodie", "[Simple] Clamp", "[Filmic] Hejl-Burgess-Dawson", "[Filmic] Uchimura", "[Filmic] ACES (Narkowicz)", "[Modern] AgX", "[Modern] Khronos PBR Neutral"};
         int currentItem = pp.tonemapOperator + 1;
-        if (ImGui::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
+        if (Widgets::Combo("Operator", &currentItem, tonemapOperators, IM_ARRAYSIZE(tonemapOperators))) {
             pp.tonemapOperator = currentItem - 1;
             changed = true;
         }
@@ -2028,113 +2240,28 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp)
             default:
                 break;
         }
-    }
+    });
 
-    if (ImGui::CollapsingHeader("Exposure")) {
-        check("Enabled##exposure", &pp.bExposureEnabled);
-        const char* exposureModes[] = {"Auto", "Manual EV100", "Physical Camera"};
-        int exposureMode = static_cast<int>(pp.exposureMode);
-        if (ImGui::Combo("Mode##exposure", &exposureMode, exposureModes, IM_ARRAYSIZE(exposureModes))) {
-            pp.exposureMode = static_cast<Core::ExposureMode>(exposureMode);
-            changed = true;
-        }
-        ppF("Target Luminance", &pp.exposureTargetLuminance, defaults.exposureTargetLuminance, 0.005f, 1.0f, "%.3f", "Post-exposure key the metered scene average maps to. 0.18 = standard mid-gray.");
-        switch (pp.exposureMode) {
-            case Core::ExposureMode::Auto:
-                ppF("Speed Brighten", &pp.exposureSpeedBrighten, defaults.exposureSpeedBrighten, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image brightens (entering darkness). Slower than darken, like the eye.");
-                ppF("Speed Darken", &pp.exposureSpeedDarken, defaults.exposureSpeedDarken, 0.1f, 10.0f, "%.1f", "Adaptation speed (1/s) while the image darkens (entering light).");
-                ppF("Min EV100", &pp.exposureMinEV100, defaults.exposureMinEV100, -10.0f, 30.0f, "%.1f", "Darkest scene exposure adapts to; darker scenes stop brightening here instead of amplifying GI noise to mid-gray. EV100 = log2(average luminance * 8).");
-                ppF("Max EV100", &pp.exposureMaxEV100, defaults.exposureMaxEV100, -10.0f, 30.0f, "%.1f", "Brightest scene exposure adapts to; brighter scenes stop darkening here.");
-                ppF("Low Percentile", &pp.exposureLowPercentile, defaults.exposureLowPercentile, 0.0f, 0.9f, "%.2f", "Fraction of the darkest non-black pixels excluded from metering.");
-                ppF("High Percentile", &pp.exposureHighPercentile, defaults.exposureHighPercentile, 0.1f, 1.0f, "%.2f", "Metering cutoff for the brightest pixels; keeps fireflies, emissives, and the sun from steering exposure.");
-                break;
-            case Core::ExposureMode::Manual:
-                ppF("EV100##exposure", &pp.exposureManualEV100, defaults.exposureManualEV100, -10.0f, 30.0f, "%.2f", "Fixed exposure; the same image auto exposure produces when the scene meters at this EV100.");
-                break;
-            case Core::ExposureMode::Physical:
-                ppF("Aperture (f)", &pp.cameraAperture, defaults.cameraAperture, 1.0f, 32.0f, "%.1f");
-                ppF("Shutter (1/s)", &pp.cameraShutterInv, defaults.cameraShutterInv, 1.0f, 8000.0f, "%.0f", "Shutter speed denominator: 100 = 1/100 s.");
-                ppF("ISO", &pp.cameraISO, defaults.cameraISO, 50.0f, 12800.0f, "%.0f");
-                ImGui::Text("EV100: %.2f", std::log2(pp.cameraAperture * pp.cameraAperture * pp.cameraShutterInv * 100.0f / pp.cameraISO));
-                break;
-        }
-    }
-
-    if (ImGui::CollapsingHeader("Bloom")) {
-        check("Enabled##bloom", &pp.bBloomEnabled);
-        ppF("Intensity", &pp.bloomIntensity, defaults.bloomIntensity, 0.0f, 1.0f);
-        ppF("Threshold", &pp.bloomThreshold, defaults.bloomThreshold, 0.0f, 2.0f, "%.2f", "Display-relative luminance where bloom starts; 1.0 = displayed white. Stable under auto-exposure.");
-        ppF("Soft Threshold", &pp.bloomSoftThreshold, defaults.bloomSoftThreshold, 0.0f, 1.0f, "%.2f");
-        ppF("Radius", &pp.bloomRadius, defaults.bloomRadius, 0.5f, 1.25f, "%.2f", "Tent-filter tap spacing in mip texels; above ~1.25 the upsample starts skipping texels and shimmers.");
-        ppF("Clamp", &pp.bloomClamp, defaults.bloomClamp, 0.1f, 100.0f, "%.1f", "Display-relative cap applied before thresholding; secondary firefly defense behind the Karis average.");
-    }
-
-    if (ImGui::CollapsingHeader("Depth of Field")) {
-        check("Enabled##dof", &pp.bDepthOfFieldEnabled);
-        ppF("Focus Distance", &pp.dofFocusDistance, defaults.dofFocusDistance, 0.1f, 200.0f, "%.2f", "View-space distance to the focal plane; everything at this depth stays sharp.");
-        ppF("Focus Range", &pp.dofFocusRange, defaults.dofFocusRange, 0.0f, 20.0f, "%.2f", "Depth band centered on the focal plane that stays fully sharp.");
-        ppF("Near Transition", &pp.dofNearTransition, defaults.dofNearTransition, 0.05f, 20.0f, "%.2f", "View units in front of the sharp band over which the blur ramps to its max near radius.");
-        ppF("Far Transition", &pp.dofFarTransition, defaults.dofFarTransition, 0.05f, 200.0f, "%.2f", "View units behind the sharp band over which the blur ramps to its max far radius. The sky always sits at max.");
-        ppF("Near Radius", &pp.dofNearRadiusPx, defaults.dofNearRadiusPx, 0.0f, 64.0f, "%.0f", "Max blur radius in output pixels for foreground (in front of focus).");
-        ppF("Far Radius", &pp.dofFarRadiusPx, defaults.dofFarRadiusPx, 0.0f, 64.0f, "%.0f", "Max blur radius in output pixels for background (behind focus).");
-    }
-
-    if (ImGui::CollapsingHeader("Motion Blur")) {
-        check("Enabled##motionblur", &pp.bMotionBlurEnabled);
-        ppF("Velocity Scale", &pp.motionBlurVelocityScale, defaults.motionBlurVelocityScale, 0.0f, 2.0f, "%.2f", "Shutter fraction of the inter-frame displacement; 0.5 = cinematic 180-degree shutter. Shared by camera and object blur.");
-        ppF("Target FPS", &pp.motionBlurTargetFps, defaults.motionBlurTargetFps, 0.0f, 240.0f, "%.0f", "Frame rate the shutter is normalized to, so blur length stays constant as fps varies and hitches do not smear. 0 = physical shutter (blur grows with frame time).");
-        ppF("Depth Scale", &pp.motionBlurDepthScale, defaults.motionBlurDepthScale, 0.1f, 10.0f, "%.2f", "1 / soft depth band (view units) for foreground/background classification. 1.0 = 1m band.");
-        ppF("Max Radius", &pp.motionBlurMaxRadiusPx, defaults.motionBlurMaxRadiusPx, 4.0f, 64.0f, "%.0f", "Cap on blur reach in output pixels. Faster movers saturate here and read as solid; tile dilation and sample count scale with it.");
-        ppF("Object Scale", &pp.motionBlurObjectScale, defaults.motionBlurObjectScale, 0.0f, 2.0f, "%.2f", "Share of object-only motion that smears, after the camera reprojection is subtracted out. 0 = moving objects never blur.");
-        ppF("Camera Rotation Scale", &pp.motionBlurCameraRotationScale, defaults.motionBlurCameraRotationScale, 0.0f, 2.0f, "%.2f", "Share of camera pan/tilt motion that smears. Drives the sky, which has no other motion.");
-        ppF("Camera Translation Scale", &pp.motionBlurCameraTranslationScale, defaults.motionBlurCameraTranslationScale, 0.0f, 2.0f, "%.2f", "Share of camera dolly motion that smears. Lower than rotation keeps near geometry readable while walking.");
-        ppF("Camera Dead Zone", &pp.motionBlurCameraDeadZonePx, defaults.motionBlurCameraDeadZonePx, 0.0f, 8.0f, "%.2f", "Camera blur shorter than this many output pixels is trimmed away, so idle drift and controller noise stay sharp.");
-        ppF("Camera Max Radius", &pp.motionBlurCameraMaxRadiusPx, defaults.motionBlurCameraMaxRadiusPx, 1.0f, 64.0f, "%.0f", "Cap on camera blur reach in output pixels, so fast spins do not smear the whole frame. Clamped to Max Radius.");
-    }
-
-    if (ImGui::CollapsingHeader("Color Grading")) {
-        check("Enabled##colorgrading", &pp.bColorGradingEnabled);
-        ppF("Exposure Bias", &pp.colorGradingExposure, defaults.colorGradingExposure, -2.0f, 2.0f, "%.2f", "EV bias folded into exposure before tonemapping, so highlights roll off instead of clipping.");
-        ppF("Contrast", &pp.colorGradingContrast, defaults.colorGradingContrast, 0.5f, 2.0f, "%.2f", "Log-space contrast pivoted at mid-gray.");
-        ppF("Saturation", &pp.colorGradingSaturation, defaults.colorGradingSaturation, 0.0f, 2.0f, "%.2f");
-        ppF("Temperature", &pp.colorGradingTemperature, defaults.colorGradingTemperature, -1.0f, 1.0f, "%.2f", "White balance warm/cool via CAT02 gains; preserves black and overall luminance.");
-        ppF("Tint", &pp.colorGradingTint, defaults.colorGradingTint, -1.0f, 1.0f, "%.2f", "White balance green/magenta axis.");
-    }
-
-    if (ImGui::CollapsingHeader("Vignette")) {
-        check("Enabled##vignette", &pp.bVignetteEnabled);
+    section("Vignette", &pp.bVignetteEnabled, CopyVignetteSection, [&] {
         ppF("Strength##vignette", &pp.vignetteStrength, defaults.vignetteStrength, 0.0f, 1.0f, "%.2f");
         ppF("Radius##vignette", &pp.vignetteRadius, defaults.vignetteRadius, 0.5f, 1.0f, "%.2f");
         ppF("Smoothness##vignette", &pp.vignetteSmoothness, defaults.vignetteSmoothness, 0.05f, 1.0f, "%.2f");
         ppF("Roundness##vignette", &pp.vignetteRoundness, defaults.vignetteRoundness, 0.0f, 1.0f, "%.2f", "0 = screen-fit ellipse, 1 = circular on any aspect ratio.");
-    }
+    });
 
-    if (ImGui::CollapsingHeader("Chromatic Aberration")) {
-        check("Enabled##chromab", &pp.bChromaticAberrationEnabled);
-        ppF("Strength##chromab", &pp.chromaticAberrationStrength, defaults.chromaticAberrationStrength, 0.0f, 10.0f, "%.2f", "Pixels of R/B separation at unit radius, uniform in all directions. Above ~4 the single-tap fringes read as ghosting.");
-    }
-
-    if (ImGui::CollapsingHeader("Sharpening")) {
-        check("Enabled##sharpening", &pp.bSharpeningEnabled);
+    section("Sharpening", &pp.bSharpeningEnabled, CopySharpeningSection, [&] {
         ppF("Strength##sharpening", &pp.sharpeningStrength, defaults.sharpeningStrength, 0.0f, 1.0f, "%.2f", "Display-referred unsharp mask with a bounded delta; runs after tonemapping so strength is perceptually uniform.");
-    }
+    });
 
-    if (ImGui::CollapsingHeader("Panini Projection")) {
-        check("Enabled##panini", &pp.bPaniniEnabled);
-        ppF("Strength##panini", &pp.paniniStrength, defaults.paniniStrength, 0.0f, 1.0f, "%.2f", "Cylindrical projection blend; 0 = rectilinear. Typical game values 0.15-0.35.");
-    }
-
-    if (ImGui::CollapsingHeader("Film Grain")) {
-        check("Enabled##filmgrain", &pp.bFilmGrainEnabled);
+    section("Film Grain", &pp.bFilmGrainEnabled, CopyFilmGrainSection, [&] {
         ppF("Strength##grain", &pp.grainStrength, defaults.grainStrength, 0.0f, 0.05f);
         ppF("Size##grain", &pp.grainSize, defaults.grainSize, 1.0f, 4.0f, "%.2f", "Grain cell size in pixels.");
         ppF("Response##grain", &pp.grainResponse, defaults.grainResponse, 0.0f, 1.0f, "%.2f", "0 = flat video-style noise, 1 = film response (strongest in mids, vanishing in crushed blacks and clipped whites).");
-    }
+    });
 
-    if (ImGui::CollapsingHeader("Dither")) {
-        check("Enabled##dither", &pp.bDitherEnabled);
+    section("Dither", &pp.bDitherEnabled, CopyDitherSection, [&] {
         ppF("Strength##dither", &pp.ditherStrength, defaults.ditherStrength, 0.0f, 2.0f, "%.2f", "Amplitude in encoded 8-bit LSBs, matched to the sRGB step at each pixel. Auto-disabled while render scale rescales the output.");
-    }
+    });
 
     return changed;
 }
@@ -2158,8 +2285,9 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
         if (ImGui::Button("Disable All Effects")) {
             Core::PostProcessConfiguration& pp = state->lighting.postProcess;
             pp.tonemapOperator = -1;
-            pp.bExposureEnabled = false;
+            pp.exposureMode = Core::ExposureMode::Manual;
             pp.bBloomEnabled = false;
+            pp.bDepthOfFieldEnabled = false;
             pp.bMotionBlurEnabled = false;
             pp.bColorGradingEnabled = false;
             pp.bVignetteEnabled = false;
@@ -2171,17 +2299,17 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
             changed = true;
         }
 
-        ImGui::Spacing();
-        ImGui::SeparatorText("Image Effects");
-        changed |= DrawPostProcessConfig(state->lighting.postProcess);
+        static ImGuiTextFilter postProcessFilter;
+        DrawSearchBar(postProcessFilter, "postprocessfilter");
+        ImGui::Separator();
+
+        Widgets::BeginFilter(&postProcessFilter);
+        changed |= DrawPostProcessConfig(state->lighting.postProcess, state);
+        Widgets::EndFilter();
 
         if (changed && state->projectConfig.bAutoSavePostProcess) {
             SavePostProcessTab(state);
         }
-
-        ImGui::Spacing();
-        ImGui::SeparatorText("Screen Fade");
-        DrawScreenFadeConfig(state->screenFade);
     }
     ImGui::End();
 }

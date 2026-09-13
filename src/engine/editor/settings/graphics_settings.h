@@ -19,12 +19,12 @@ struct PostProcessConfiguration;
 namespace Engine
 {
 /**
- * Draws the "Debug View" window: render debug toggles, shader pipeline overrides, hotkey reference, and debug-view target buttons.
+ * Draws the "Debug View" window: overlays, debug-view target buttons grouped by pipeline stage (only for paths that are running), culling toggles, stats, and the hotkey reference.
  */
 void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
- * Draws the "Project Config" window: lighting mode, anti-aliasing (mode + SMAA), and TAA - the global, non-profile render settings persisted directly in project.wconfig.
+ * Draws the "Project Config" window: frame limit, render resolution, anti-aliasing with the active mode's settings, and cameras - the global, non-profile settings persisted directly in project.wconfig.
  */
 void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
@@ -37,9 +37,10 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
  * Draws the collapsible editor for one PostProcessConfiguration (tonemapping, exposure, bloom ... dither).
  * Operates solely on pp so it backs both the settings window and future per-volume overrides; wrap in ImGui::PushID/PopID when drawing more than one in the same window.
  * @param pp config edited in place.
+ * @param profileState when set, groups get Save/Revert against the active post-process profile; pp must be its live config
  * @return true if any value changed this frame.
  */
-bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp);
+bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp, Engine::EngineState* profileState = nullptr);
 
 /**
  * Draws the "Post-Processing" window: per-tab save + post-process profile picker and the per-config image effects via DrawPostProcessConfig.

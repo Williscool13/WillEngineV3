@@ -49,7 +49,7 @@ static float ClampF(float v, float lo, float hi)
 struct FilterSection
 {
     const char* title;
-    bool bDirty;
+    SectionHeader* header;
     bool bEmitted;
     bool bShowAll;
     bool bSubHeaderShowAll;
@@ -70,9 +70,19 @@ static bool LabelPasses(const char* label)
     return activeFilter->PassFilter(label, std::strstr(label, "##"));
 }
 
-static void SectionTitleText(const char* title, bool bDirty)
+static void DrawSectionEnabled(const char* title, SectionHeader* header)
 {
-    if (bDirty) {
+    if (header == nullptr || header->enabled == nullptr) { return; }
+    ImGui::PushID(title);
+    if (ImGui::Checkbox("##enabled", header->enabled)) { header->bEnabledChanged = true; }
+    ImGui::PopID();
+    ImGui::SameLine();
+}
+
+static void SectionTitleText(const char* title, SectionHeader* header)
+{
+    DrawSectionEnabled(title, header);
+    if (header != nullptr && header->bDirty) {
         ImGui::SeparatorText(Core::InlineString<128>::Format("%s *", title).c_str());
     }
     else {
@@ -84,7 +94,7 @@ static void EmitPendingTitles()
 {
     for (int32_t i = 0; i < filterSectionDepth; ++i) {
         if (!filterSections[i].bEmitted) {
-            SectionTitleText(filterSections[i].title, filterSections[i].bDirty);
+            SectionTitleText(filterSections[i].title, filterSections[i].header);
             filterSections[i].bEmitted = true;
         }
     }
@@ -147,6 +157,7 @@ bool BeginSection(const char* title, SectionHeader* header)
     if (!IsFiltering()) {
         const bool bButtons = header != nullptr && header->bSaveRevert;
         const float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+        DrawSectionEnabled(title, header);
         const auto label = Core::InlineString<128>::Format(bDirty ? "%s *###%s" : "%s###%s", title, title);
         const bool bOpen = ImGui::CollapsingHeader(label.c_str(), bButtons ? ImGuiTreeNodeFlags_AllowOverlap : ImGuiTreeNodeFlags_None);
         if (bButtons) {
@@ -158,14 +169,14 @@ bool BeginSection(const char* title, SectionHeader* header)
     }
     else if (IsShowingAll() || LabelPasses(title)) {
         EmitPendingTitles();
-        SectionTitleText(title, bDirty);
+        SectionTitleText(title, header);
     }
     else {
         bShowAll = false;
         bEmitted = false;
     }
 
-    filterSections[filterSectionDepth++] = {title, bDirty, bEmitted, bShowAll, false};
+    filterSections[filterSectionDepth++] = {title, header, bEmitted, bShowAll, false};
     ImGui::PushID(title);
     return true;
 }
@@ -220,6 +231,20 @@ bool Button(const char* name, const char* tooltip)
 {
     if (!PassFilter(name)) { return false; }
     const bool pressed = ImGui::Button(name);
+    DrawTooltip(tooltip);
+    return pressed;
+}
+
+bool ToggleButton(const char* name, bool bActive, const char* tooltip)
+{
+    if (!PassFilter(name)) { return false; }
+    if (bActive) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.75f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.85f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.15f, 0.40f, 0.70f, 1.0f));
+    }
+    const bool pressed = ImGui::Button(name);
+    if (bActive) { ImGui::PopStyleColor(3); }
     DrawTooltip(tooltip);
     return pressed;
 }

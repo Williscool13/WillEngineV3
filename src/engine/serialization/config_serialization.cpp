@@ -567,7 +567,6 @@ void Deserialize(const TextReader& r, Core::AntiAliasingConfiguration& p)
 
 void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
 {
-    w.Key("bExposureEnabled", p.bExposureEnabled);
     w.Key("exposureMode", static_cast<int32_t>(p.exposureMode));
     w.Key("exposureTargetLuminance", p.exposureTargetLuminance);
     w.Key("exposureSpeedBrighten", p.exposureSpeedBrighten);
@@ -643,7 +642,6 @@ void Serialize(const Core::PostProcessConfiguration& p, TextWriter& w)
 
 void Deserialize(const TextReader& r, Core::PostProcessConfiguration& p)
 {
-    p.bExposureEnabled = r.Bool("bExposureEnabled", p.bExposureEnabled);
     p.exposureMode = static_cast<Core::ExposureMode>(r.Int("exposureMode", static_cast<int32_t>(p.exposureMode)));
     p.exposureTargetLuminance = r.Float("exposureTargetLuminance", p.exposureTargetLuminance);
     p.exposureSpeedBrighten = r.Float("exposureSpeedBrighten", p.exposureSpeedBrighten);

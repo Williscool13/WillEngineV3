@@ -471,17 +471,14 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
     const Core::PostProcessConfiguration& ppConfig = viewFamily.postProcessConfig;
     prevPreExposure = preExposure;
-    preExposure = 1.0f;
-    if (ppConfig.bExposureEnabled) {
-        if (ppConfig.exposureMode != Core::ExposureMode::Auto) {
-            preExposure = ppConfig.exposureTargetLuminance / EV100ToLuminance(CameraEV100(ppConfig));
-        }
-        else {
-            const float minLuminance = EV100ToLuminance(ppConfig.exposureMinEV100);
-            const float maxLuminance = std::max(minLuminance, EV100ToLuminance(ppConfig.exposureMaxEV100));
-            const float adaptedLuminance = readbackData->adaptedLuminance > 0.0f ? readbackData->adaptedLuminance : minLuminance;
-            preExposure = ppConfig.exposureTargetLuminance / std::clamp(adaptedLuminance, minLuminance, maxLuminance);
-        }
+    if (ppConfig.exposureMode != Core::ExposureMode::Auto) {
+        preExposure = ppConfig.exposureTargetLuminance / EV100ToLuminance(CameraEV100(ppConfig));
+    }
+    else {
+        const float minLuminance = EV100ToLuminance(ppConfig.exposureMinEV100);
+        const float maxLuminance = std::max(minLuminance, EV100ToLuminance(ppConfig.exposureMaxEV100));
+        const float adaptedLuminance = readbackData->adaptedLuminance > 0.0f ? readbackData->adaptedLuminance : minLuminance;
+        preExposure = ppConfig.exposureTargetLuminance / std::clamp(adaptedLuminance, minLuminance, maxLuminance);
     }
     const float renderFps = frameBuffer.timeFrame.renderFps;
     const float autoFramerateScale = glm::clamp(renderFps > 0.0f ? renderFps / 60.0f : 1.0f, 0.25f, 4.0f);
@@ -625,10 +622,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     }
 
-    if (viewFamily.postProcessConfig.bExposureEnabled) {
-        renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0,
-                                          VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
-    }
+    renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0,
+                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 

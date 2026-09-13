@@ -19,7 +19,6 @@ enum class ExposureMode : int32_t
 
 struct PostProcessConfiguration
 {
-    bool bExposureEnabled{true};
     ExposureMode exposureMode{ExposureMode::Auto};
     float exposureTargetLuminance{0.18f};
     float exposureSpeedBrighten{2.0f}; // 1/s, applied while adapted luminance decreases (image brightening)
@@ -50,28 +49,38 @@ struct PostProcessConfiguration
         float l{0.4f}; // linear section length
         float c{1.33f}; // black (toe power)
         float b{0.0f}; // pedestal
+
+        bool operator==(const UchimuraParams&) const = default;
     } uchimuraParams;
 
     struct HableParams
     {
         float whitePoint{11.2f};
+
+        bool operator==(const HableParams&) const = default;
     } hableParams;
 
     struct ReinhardParams
     {
         float whitePoint{4.0f};
+
+        bool operator==(const ReinhardParams&) const = default;
     } reinhardParams;
 
     struct AgXParams
     {
         float minEV{-12.47393f};
         float maxEV{4.026069f};
+
+        bool operator==(const AgXParams&) const = default;
     } agxParams;
 
     struct KhronosParams
     {
         float startCompression{0.76f};
         float desaturation{0.15f};
+
+        bool operator==(const KhronosParams&) const = default;
     } khronosParams;
 
     bool bDepthOfFieldEnabled{false};
@@ -122,6 +131,8 @@ struct PostProcessConfiguration
 
     bool bDitherEnabled{true};
     float ditherStrength{1.0f};
+
+    bool operator==(const PostProcessConfiguration&) const = default;
 };
 
 enum class AntiAliasingMode

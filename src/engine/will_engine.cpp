@@ -719,7 +719,7 @@ void WillEngine::EditorImgui()
     ImGui::DockSpaceOverViewport(dockspaceID, viewport, ImGuiDockNodeFlags_PassthruCentralNode);
 
     ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceID);
-    if (centralNode) {
+    if (centralNode && !bMinimized) {
         auto newOffsetX = static_cast<uint32_t>(centralNode->Pos.x);
         auto newOffsetY = static_cast<uint32_t>(centralNode->Pos.y);
         auto newWidth = std::max(2u, static_cast<uint32_t>(centralNode->Size.x) & ~1u);

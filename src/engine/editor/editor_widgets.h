@@ -35,10 +35,13 @@ struct SectionHeader
     bool bCanSave = false;
     bool bCanRevert = false;
     const char* disabledTooltip = nullptr;
+    /** Checkbox drawn before the title. */
+    bool* enabled = nullptr;
+    bool bEnabledChanged = false;
     SectionAction action = SectionAction::None;
 };
 
-/** Call EndSection only when this returns true; header->action is set even while collapsed. */
+/** Call EndSection only when this returns true; header->action and bEnabledChanged are set even while collapsed. */
 bool BeginSection(const char* title, SectionHeader* header = nullptr);
 void EndSection();
 
@@ -52,6 +55,9 @@ bool Checkbox(const char* name, bool* v, const char* tooltip = nullptr);
 bool Combo(const char* name, int* current, const char* const items[], int count, const char* tooltip = nullptr);
 
 bool Button(const char* name, const char* tooltip = nullptr);
+
+/** Button highlighted while @p bActive. */
+bool ToggleButton(const char* name, bool bActive, const char* tooltip = nullptr);
 
 struct SliderOpts
 {
