@@ -31,6 +31,9 @@ static const bool GI_UPSCALE_FAST_CLAMP = true;
 static const float GI_UPSCALE_FAST_MAX_ACCUM = 5.0;
 static const float GI_UPSCALE_FAST_CLAMP_SIGMA = 3.0;
 static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 128.0;
+static const bool GI_UPSCALE_YOUNG_PRIOR = false;
+static const float GI_UPSCALE_YOUNG_FRAMES = 16.0;
+static const float GI_UPSCALE_YOUNG_RADIUS = 32.0;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -278,8 +281,10 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
+
+    const bool bFallbackCurrent = debugPath == 2u;
     float skyVis = skyVisCurrent;
-    float skyVisCount = bSkyCurrent ? 1.0 : 0.0;
+    float skyVisCount = bSkyCurrent && !bFallbackCurrent ? 1.0 : 0.0;
     if (pc.skyVisAccumHistoryIndex != ~0x0u) {
         GIGatherScalarHistory skyHistory = GIGatherFetchScalarHistory(scene, pc.skyVisAccumHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
         if (skyHistory.quality > 0.0) {
@@ -287,13 +292,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
             if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
                 nSky = min(nSky, movingMaxHistory);
             }
+
+            float nSkyBlend = nSky * skyHistory.quality;
             if (bSkyCurrent) {
-                float nSkyBlend = nSky * skyHistory.quality;
                 skyVis = (nSkyBlend * skyHistory.value + skyVisCurrent) / (nSkyBlend + 1.0);
-                skyVisCount = nSky + 1.0;
+                skyVisCount = bFallbackCurrent ? nSkyBlend : nSkyBlend + 1.0;
             } else {
                 skyVis = skyHistory.value;
-                skyVisCount = max(nSky, 1.0);
+                skyVisCount = max(nSkyBlend, 1.0);
             }
         }
     }
@@ -346,7 +352,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     float3 result = current;
-    float accum = 1.0;
+    float accum = bFallbackCurrent ? 0.0 : 1.0;
     if (history.quality > 0.0) {
         if (bHasCurrent) {
             if (GI_UPSCALE_FAST_CLAMP) {
@@ -374,10 +380,56 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                 history.color = lerp(history.color, closest, smoothstep(float3(1.0), float3(3.0), histDist));
             }
             result = (nBlend * history.color + current) / (nBlend + 1.0);
-            accum = n + 1.0;
+            accum = bFallbackCurrent ? n : n + 1.0;
         } else {
             result = history.color;
             accum = max(n, 1.0);
+        }
+    }
+
+    float age = min(history.count, maxHistory) * history.quality;
+    if (GI_UPSCALE_YOUNG_PRIOR && pc.bHistoryValid != 0u && bHasCurrent && age < GI_UPSCALE_YOUNG_FRAMES && neighborhoodMotionPixels <= GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
+        float youth = 1.0 - age / GI_UPSCALE_YOUNG_FRAMES;
+        float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
+        float3 prevXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, historyUv, centerViewZ + UnpackViewZDelta(gt1.w));
+        float3 prevN = normalize(mul((float3x3)scene.prevView, worldN));
+        int2 prevPixel = int2(floor(historyUv * float2(pc.renderExtent)));
+        float3 priorSum = float3(0.0);
+        float priorW = 0.0;
+        [unroll]
+        for (uint ring = 0u; ring < 2u; ring++) {
+            float radius = ring == 0u ? GI_UPSCALE_YOUNG_RADIUS * 0.4 : GI_UPSCALE_YOUNG_RADIUS;
+            [unroll]
+            for (uint d = 0u; d < 8u; d++) {
+                float angle = (float(d) + 0.5 * float(ring)) * 0.785398;
+                int2 offset = int2(round(float2(cos(angle), sin(angle)) * radius));
+                int2 tap = prevPixel + offset;
+                if (any(tap < int2(0)) || any(tap >= int2(pc.renderExtent))) {
+                    continue;
+                }
+                float tapRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(tap, 0)).r;
+                if (tapRawDepth <= 0.0) {
+                    continue;
+                }
+                float4 tapHistory = rdgTexturesFloat4[pc.historyIndex].Load(int3(tap, 0));
+                float w = saturate((tapHistory.a - age) / GI_UPSCALE_YOUNG_FRAMES);
+                if (w <= 0.0) {
+                    continue;
+                }
+                float tapViewZ = ScreenToViewSpaceDepth(tapRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, (float2(tap) + 0.5) / float2(pc.renderExtent), tapViewZ);
+                w *= exp(-abs(dot(prevN, tapXv - prevXv)) * invPlaneSigma);
+                w *= pow(saturate(dot(prevN, UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(tap, 0)).r))), GI_UPSCALE_NORMAL_POWER);
+                if (pc.aoIndex != ~0x0u) {
+                    int2 aoTap = clamp(int2(pixel) + offset, int2(0), int2(pc.renderExtent) - 1);
+                    w *= exp2(-20.0 * abs(rdgTexturesFloat2[pc.aoIndex].Load(int3(aoTap, 0)).y - centerAO));
+                }
+                priorSum += tapHistory.rgb * w;
+                priorW += w;
+            }
+        }
+        if (priorW > 1e-3) {
+            result = lerp(result, priorSum / priorW * historyRatio, youth * saturate(priorW));
         }
     }
 
