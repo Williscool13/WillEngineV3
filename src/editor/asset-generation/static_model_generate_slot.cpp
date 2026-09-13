@@ -674,13 +674,19 @@ bool StaticModelGenerateSlot::LoadGltf()
                                 lodInformation[lod].indexCount = prevIndexCount;
                             }
                             else {
-                                size_t simplifiedCount = meshopt_simplify(
+                                constexpr float normalWeights[3]{1.0f, 1.0f, 1.0f};
+                                size_t simplifiedCount = meshopt_simplifyWithAttributes(
                                     lodIndices[lod].Data(),
                                     lodIndices[lod - 1].Data(),
                                     prevIndexCount,
                                     &primitiveVertices[0].position.x,
                                     primitiveVertices.Size(),
                                     sizeof(Engine::FullVertex),
+                                    &primitiveVertices[0].normal.x,
+                                    sizeof(Engine::FullVertex),
+                                    normalWeights,
+                                    3,
+                                    nullptr,
                                     targetIndexCount,
                                     0.01f
                                 );

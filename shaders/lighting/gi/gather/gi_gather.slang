@@ -26,6 +26,7 @@ static const float GI_GATHER_MAX_RADIANCE_MIN = 3276.8;
 static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
 static const float GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE = 1.0;
+static const float GI_GATHER_RAY_MIN_OFFSET = 0.01;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
@@ -284,7 +285,7 @@ void ComputeGIGather(uniform GIGatherPushConstant pc, uint3 dtid: SV_DispatchThr
             float lastHitT = 0.0;
             uint lastTier = GI_GATHER_TIER_BACKFACE;
             float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
-            float3 rayOrigin = OffsetGBufferRayOrigin(worldPosition, worldN, footprint, 2.0);
+            float3 rayOrigin = worldPosition + worldN * max(GI_GATHER_RAY_MIN_OFFSET, footprint * 2.0);
             uint2 originCellKey = RadianceCachePackKey(RadianceCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz));
             for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {
                 float2 xi = SpatioTemporalBlueNoise2D(gatherPixel, pc.frameIndex, sampleIndex);

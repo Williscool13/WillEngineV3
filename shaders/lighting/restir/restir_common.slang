@@ -567,9 +567,17 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;
 }
 
+public static const float RESTIR_SHADOW_RAY_ORIGIN_SCALE = 3.0;
+public static const float RESTIR_SHADOW_RAY_MIN_OFFSET = 0.01;
+
+static float3 RestirShadowRayOrigin(float3 worldShadingPos, float3 worldN, float worldTexelSize)
+{
+    return worldShadingPos + worldN * max(RESTIR_SHADOW_RAY_MIN_OFFSET, worldTexelSize * RESTIR_SHADOW_RAY_ORIGIN_SCALE);
+}
+
 public bool RestirShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldyStar, float worldTexelSize)
 {
-    float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
+    float3 rayOrigin = RestirShadowRayOrigin(worldShadingPos, worldN, worldTexelSize);
     float3 toLight = worldyStar - rayOrigin;
     float lightDist = length(toLight);
     RayDesc shadowRay;
@@ -643,8 +651,7 @@ public float EvalSunPHat(float3 LsunView, float3 V, float3 N, float3 albedo, flo
 
 public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize, RTAlphaTestBuffers alphaBuffers, bool bAlphaTest)
 {
-    // Matches the SIGMA sun trace: footprint-scaled normal offset, no NoL division.
-    float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
+    float3 rayOrigin = RestirShadowRayOrigin(worldShadingPos, worldN, worldTexelSize);
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;
     shadowRay.Direction = worldLsun;
@@ -659,7 +666,7 @@ public bool RestirSunShadowVisible(RaytracingAccelerationStructure tlas, float3 
 public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float3 worldShadingPos, float3 worldN, float3 worldLsun, float worldTexelSize, RTAlphaTestBuffers alphaBuffers, bool bAlphaTest)
 {
     // First accepted hit, not nearest (same as the SIGMA trace): an approximate blocker distance is enough.
-    float3 rayOrigin = OffsetGBufferRayOrigin(worldShadingPos, worldN, worldTexelSize, 1.0);
+    float3 rayOrigin = RestirShadowRayOrigin(worldShadingPos, worldN, worldTexelSize);
     RayDesc shadowRay;
     shadowRay.Origin = rayOrigin;
     shadowRay.Direction = worldLsun;
