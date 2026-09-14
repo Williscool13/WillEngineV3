@@ -179,6 +179,9 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->mainViewFamily.iblIntensity = state->lighting.iblIntensity;
     frameBuffer->mainViewFamily.indirectIntensity = state->lighting.indirectIntensity;
     frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;
+    frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
+    frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
+    frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
     if (state->debug.bEnablePortal) {
         BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
     }

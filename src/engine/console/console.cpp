@@ -234,19 +234,52 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, scale > 0.0f ? Core::InlineString<64>::Format("  framerate_scale %.2f", scale).c_str() : "  framerate_scale auto");
     });
 
-    Register(state, Origin::Engine, "view", "`view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "fpsmax", "`fpsmax <n>` caps the frame rate (15-240); 0 = uncapped", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        Engine::ProjectConfig& config = state->projectConfig;
         if (args.Size() > 1) {
-            if (strcmp(args[1], "off") == 0) {
-                state->debug.resourceName.Clear();
+            const int32_t value = static_cast<int32_t>(std::strtol(args[1], nullptr, 10));
+            config.bLimitFps = value > 0;
+            if (config.bLimitFps) {
+                config.frameLimitTarget = std::clamp(value, 15, 240);
             }
-            else {
-                state->debug.resourceName = Core::InlineString(args[1]);
-                state->debug.transformationType = args.Size() > 2 ? static_cast<DebugTransformationType>(std::strtoul(args[2], nullptr, 10)) : DebugTransformationType::None;
-                state->debug.viewAspect = Core::DebugViewAspect::None;
-                if (args.Size() > 3) {
-                    if (strcmp(args[3], "depth") == 0) { state->debug.viewAspect = Core::DebugViewAspect::Depth; }
-                    else if (strcmp(args[3], "stencil") == 0) { state->debug.viewAspect = Core::DebugViewAspect::Stencil; }
-                }
+        }
+        Print(state, config.bLimitFps ? Core::InlineString<64>::Format("  fpsmax %d", config.frameLimitTarget).c_str() : "  fpsmax uncapped");
+    });
+
+    Register(state, Origin::Engine, "view", "`view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() <= 1) {
+            static constexpr const char* COMMON_VIEWS[] = {
+                "  intermediate_one - demodulated diffuse (denoised)",
+                "  intermediate_two - demodulated specular (denoised)",
+                "  relax_spec_prepass / relax_diff_prepass - RELAX prepass input",
+                "  relax_spec_illum / relax_diff_illum - RELAX temporal accumulation",
+                "  relax_spec_hist / relax_diff_hist - RELAX history",
+                "  relax_history_length, relax_spec_reproj_confidence",
+                "  reflection_spec_noisy - raw traced reflections (demodulated)",
+                "  gi_gather_resolved, gi_gather_sky_vis_accum",
+                "  shading_output - lit color before post",
+                "  shadow_origin_offset - world-space shadow terminator lift",
+                "  gbuffer_one 10|11|12 - normal / motion vectors / PBR",
+                "  gbuffer_two 13 - albedo",
+                "  depth_target 1 depth, depth_target 6 stencil",
+            };
+            Print(state, state->debug.resourceName.IsEmpty() ? "  view off" : Core::InlineString<256>::Format("  view %s", state->debug.resourceName.c_str()).c_str());
+            Print(state, "  common targets:");
+            for (const char* line : COMMON_VIEWS) {
+                Print(state, line);
+            }
+            return;
+        }
+        if (strcmp(args[1], "off") == 0) {
+            state->debug.resourceName.Clear();
+        }
+        else {
+            state->debug.resourceName = Core::InlineString(args[1]);
+            state->debug.transformationType = args.Size() > 2 ? static_cast<DebugTransformationType>(std::strtoul(args[2], nullptr, 10)) : DebugTransformationType::None;
+            state->debug.viewAspect = Core::DebugViewAspect::None;
+            if (args.Size() > 3) {
+                if (strcmp(args[3], "depth") == 0) { state->debug.viewAspect = Core::DebugViewAspect::Depth; }
+                else if (strcmp(args[3], "stencil") == 0) { state->debug.viewAspect = Core::DebugViewAspect::Stencil; }
             }
         }
         Print(state, state->debug.resourceName.IsEmpty() ? "  view off" : Core::InlineString<256>::Format("  view %s", state->debug.resourceName.c_str()).c_str());

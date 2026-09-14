@@ -31,14 +31,14 @@ inline constexpr VkFormat DEPTH_ATTACHMENT_FORMAT = VK_FORMAT_D32_SFLOAT_S8_UINT
 inline constexpr VkFormat VISIBILITY_BUFFER_FORMAT = VK_FORMAT_R32G32_UINT;
 inline constexpr VkFormat GBUFFER_STABLE_ID_FORMAT = VK_FORMAT_R32G32_UINT;
 
-// R: Normal oct16 RG16 packed into R32
-// G: Motion vectors XY R16G16 | 16-bit spare
-// B: Roughness 15-bit | Metalness 1-bit
-// A: bit 0 = geometry marker (shading passes write 1; cleared 0 = sky/no geometry) | bits 16-31 = world-space Z delta float16
+// R: Normal oct16 (bits 0-15 X, 16-31 Y)
+// G: Motion vectors float16 (bits 0-15 X, 16-31 Y)
+// B: bits 0-14 roughness | bits 15-30 spare | bit 31 metalness
+// A: bit 0 lit (cleared 0 = sky/no geometry) | bit 1 emissive | bit 2 no motion blur | bit 3 no camera motion blur | bits 4-15 spare | bits 16-31 view depth delta float16 (prev - current)
 inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 
-// R: Albedo RGB8 | 8-bit spare
-// G: Emissive RGBE 9:9:9:5 packed into R32
+// R: Albedo RGBA8 (alpha written but unread)
+// G: Emissive RGBE 9:9:9:5
 inline constexpr VkFormat GBUFFER_TARGET_TWO = VK_FORMAT_R32G32_UINT;
 } // Render
 

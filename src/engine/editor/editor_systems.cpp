@@ -332,10 +332,6 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     DrawSceneStatsWindow(state);
     DrawMaterialsWindow(ctx, state);
     DrawTexturesWindow(ctx, state);
-
-    frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
-    frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
-    frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
 }
 
 static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineState* state)
