@@ -82,6 +82,16 @@ void GPUDispatcher::DrainGraphics()
     }
 }
 
+void GPUDispatcher::SubmitAsyncCompute(const VkSubmitInfo2& submitInfo)
+{
+    if (computeWorker.queue == VK_NULL_HANDLE) {
+        VK_CHECK(vkQueueSubmit2(context->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
+        return;
+    }
+    std::lock_guard lock(computeWorker.queueMutex);
+    VK_CHECK(vkQueueSubmit2(computeWorker.queue, 1, &submitInfo, VK_NULL_HANDLE));
+}
+
 void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadName)
 {
     ZoneScoped;
@@ -105,7 +115,10 @@ void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadN
                     const VkSemaphoreSubmitInfo* pWaitInfo = batch[i].waitSemaphore != VK_NULL_HANDLE ? &waitInfo : nullptr;
                     const VkSemaphoreSubmitInfo* pSignalInfo = batch[i].signalSemaphore != VK_NULL_HANDLE ? &signalInfo : nullptr;
                     VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&cmdSubmitInfo, pWaitInfo, pSignalInfo);
-                    VK_CHECK(vkQueueSubmit2(channel.queue, 1, &submitInfo, batch[i].fence));
+                    {
+                        std::lock_guard lock(channel.queueMutex);
+                        VK_CHECK(vkQueueSubmit2(channel.queue, 1, &submitInfo, batch[i].fence));
+                    }
                     batch[i].submittedSignal->release();
                 }
             }

@@ -111,7 +111,6 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
 
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
     uint pixelIdx = rcoord.y * stride + rcoord.x;
-    uint2 sunCoord = bFullRate ? pixel : rcoord;
 
     bool bAnyLight = pc.reservoirBuffer != 0;
     if (bAnyLight)
@@ -164,7 +163,7 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
 
     if (pc.sunVisIndex != ~0x0u)
     {
-        uint sunVis = rdgTexturesUInt[pc.sunVisIndex].Load(int3(sunCoord, 0)).r;
+        uint sunVis = rdgTexturesUInt[pc.sunVisIndex].Load(int3(rcoord, 0)).r;
         if (sunVis != SUN_VIS_EMPTY)
         {
             DirectionalLightData sun = pc.lightData->directionalLight;

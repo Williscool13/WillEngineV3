@@ -68,6 +68,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     float centerMisAccum = 0.0;
     uint neighborCount = 0;
+    bool winnerIsCenter = false;
     combined.M = center.M;
 
 #if RESTIR_ENABLE_SPATIAL_DILATE
@@ -156,6 +157,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         if (ReservoirAddSample(accum, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
+            winnerIsCenter = false;
         }
         float mFactor = (p_hat_neighbor_atNeighbor > 0.0) ? saturate(p_hat_neighbor_atCenter / p_hat_neighbor_atNeighbor) : 1.0;
         combined.M += uint(float(neighbor.M) * mFactor + 0.5);
@@ -174,13 +176,14 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         if (ReservoirAddSample(accum, w_center, HashStep(h))) {
             combined.lightIdx = center.lightIdx;
             combined.sampleOffsetPacked = center.sampleOffsetPacked;
+            winnerIsCenter = true;
         }
     }
 
     if (combined.lightIdx != ~0u) {
         LightView winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float p_hat_final;
-        if (pc.bValidateVisibility != 0u) {
+        if (pc.bValidateVisibility != 0u && !(winnerIsCenter && pc.bCenterVisible != 0u)) {
             float3 shadowViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
             float3 worldPos = mul(scene.invView, float4(shadowViewPosition, 1.0)).xyz + rdgTexturesFloat4[pc.shadowOriginOffsetIndex].Load(int3(fullPixel, 0)).xyz;
             float3 worldN = normalize(mul(float3x3(scene.invView), N));

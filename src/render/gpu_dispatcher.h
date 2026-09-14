@@ -6,6 +6,7 @@
 #define WILL_ENGINE_GPU_DISPATCHER_H
 
 #include <atomic>
+#include <mutex>
 #include <semaphore>
 #include <thread>
 
@@ -68,6 +69,11 @@ public:
      */
     void DrainGraphics();
 
+    /**
+     * Render thread only.
+     */
+    void SubmitAsyncCompute(const VkSubmitInfo2& submitInfo);
+
     void Shutdown();
 
     /**
@@ -87,6 +93,7 @@ private:
         std::jthread thread;
         Core::Semaphore workSemaphore;
         VkQueue queue{};
+        std::mutex queueMutex;
     };
 
     void WorkerThreadMain(WorkerChannel& channel, const char* threadName);

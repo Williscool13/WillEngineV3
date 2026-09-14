@@ -565,6 +565,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC float wClamp;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
+    SHADER_PUBLIC uint32_t bCenterVisible;
 };
 
 SHADER_PUBLIC struct ReSTIRDISunPushConstant

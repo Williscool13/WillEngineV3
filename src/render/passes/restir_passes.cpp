@@ -425,9 +425,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
     }
 
     if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && bHasTLAS) {
-        const uint32_t sunCheckerboardField = (activeCheckerboardField != 0u && restirParams.bCheckerboardFullRateResolve) ? 0u : activeCheckerboardField;
         // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
-        const uint32_t sunVisWidth = (sunCheckerboardField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+        const uint32_t sunVisWidth = (activeCheckerboardField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
         graph.CreateTexture("restir_sun_vis"_sid, TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent[1], 1}, {std::nullopt}, true);
         const bool bHasPrevTlas = bSunFlip && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
         const StringID prevTlas = bHasPrevTlas ? graph.ResourceVersionID(RT_TLAS_BUFFER, 1) : StringID{};
@@ -451,7 +450,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(prevTlas); }
         sunPass.WriteStorageImage("restir_sun_vis"_sid);
         if (bSunFlip) { sunPass.WriteStorageImage("restir_sun_flip"_sid); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = activeCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_sun"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -603,7 +602,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         spatialPass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         spatialPass.WriteBuffer(outputName);
-        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), bCenterVisible = (i == 0u && bTemporalReuse && bHasTLAS), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_spatial"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -634,6 +633,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .wClamp = restirParams.restirWClamp,
                 .activeCheckerboardField = field,
                 .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
+                .bCenterVisible = bCenterVisible ? 1u : 0u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

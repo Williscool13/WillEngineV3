@@ -330,8 +330,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
         VkCommandBufferSubmitInfo asyncCmdSubmitInfo = VkHelpers::CommandBufferSubmitInfo(renderSync.asyncComputeCommandBuffer);
         VkSemaphoreSubmitInfo timelineSignalInfo = VkHelpers::TimelineSemaphoreSubmitInfo(asyncComputeTimelineSemaphore, asyncComputeTimelineValue, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
         VkSubmitInfo2 submitInfo = VkHelpers::SubmitInfo(&asyncCmdSubmitInfo, nullptr, &timelineSignalInfo);
-        VkQueue asyncQueue = context->computeQueue != VK_NULL_HANDLE ? context->computeQueue : context->graphicsQueue;
-        VK_CHECK(vkQueueSubmit2(asyncQueue, 1, &submitInfo, VK_NULL_HANDLE));
+        gpuDispatcher->SubmitAsyncCompute(submitInfo);
     }
 
     const VkPipelineStageFlags2 crossCutMask = renderGraph->GetCrossCutWaitStageMask();
