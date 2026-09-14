@@ -93,4 +93,5 @@ void ComputeShadingDefaultLit(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThrea
     );
     rdgStorageUInt4[pc.gbufferOneIndex][pixel] = gbufferOne;
     rdgStorageUInt2[pc.gbufferTwoIndex][pixel] = uint2(PackAlbedoRGBA8(albedo), PackEmissiveRGBE(emissiveColor));
+    rdgStorageFloat4[pc.shadowOriginOffsetIndex][pixel] = float4(data.shadowOriginOffsetWS, 0.0);
 }

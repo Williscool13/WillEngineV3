@@ -412,6 +412,7 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     // Out
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
 };
 
 SHADER_PUBLIC struct ShadowsResolvePushConstant
@@ -511,7 +512,7 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridEmissiveGrid;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridEmissiveIndexList;
     SHADER_PUBLIC SHADER_PTR(float2) worldGridCellPower;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -545,7 +546,7 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -587,6 +588,7 @@ SHADER_PUBLIC struct ReSTIRDISunPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bAlphaTest;
+    SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant

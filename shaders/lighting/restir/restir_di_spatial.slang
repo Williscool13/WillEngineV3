@@ -43,7 +43,7 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
+    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0);
     float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -181,7 +181,8 @@ void ComputeReSTIRDISpatial(uniform ReSTIRDISpatialPushConstant pc, uint3 thread
         LightView winnerVS = UnpackLightVS(pc.lightVS[combined.lightIdx]);
         float p_hat_final;
         if (pc.bValidateVisibility != 0u) {
-            float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+            float3 shadowViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
+            float3 worldPos = mul(scene.invView, float4(shadowViewPosition, 1.0)).xyz + rdgTexturesFloat4[pc.shadowOriginOffsetIndex].Load(int3(fullPixel, 0)).xyz;
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
             p_hat_final = EvalReservoirPHatVisibilityLight(winnerVS, combined.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, scene.invView, rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldTexelSize, pc.lightSpecularFromReflectionsMax);
         } else {

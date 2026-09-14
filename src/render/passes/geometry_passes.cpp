@@ -783,9 +783,10 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     if (graph.HasBuffer(SHADING_TILE_LIST_BUFFER)) { visShading.ReadBuffer(SHADING_TILE_LIST_BUFFER); }
     visShading.WriteStorageImage(targets.gbufferOne);
     visShading.WriteStorageImage(targets.gbufferTwo);
+    visShading.WriteStorageImage(targets.shadowOriginOffset);
     visShading.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility,
-            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
+            gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset,
             sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress tileListAddress = graph.GetBufferAddress(SHADING_TILE_LIST_BUFFER);
 
@@ -822,6 +823,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetStorageImageViewDescriptorIndex(gbufferTwo),
+                    .shadowOriginOffsetIndex = graph.GetStorageImageViewDescriptorIndex(shadowOriginOffset),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER), entry.materialIndex * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));

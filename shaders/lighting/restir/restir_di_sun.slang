@@ -71,9 +71,11 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
+    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0);
 
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+    float3 shadowViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
+    float3 shadowWorldPos = mul(scene.invView, float4(shadowViewPosition, 1.0)).xyz + rdgTexturesFloat4[pc.shadowOriginOffsetIndex].Load(int3(pixel, 0)).xyz;
     float3 worldN = normalize(mul(float3x3(scene.invView), N));
 
     DirectionalLightData sun = pc.lightData->directionalLight;
@@ -87,7 +89,7 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
     bool bTraced = dot(N, candDirV) > 0.0;
     float blockerT = -1.0;
     if (bTraced) {
-        blockerT = RestirSunShadowBlockerT(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest);
+        blockerT = RestirSunShadowBlockerT(rdgAccelerationStructures[pc.tlasIndex], shadowWorldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest);
     }
     bool bOccluded = blockerT >= 0.0;
 
@@ -107,7 +109,7 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
 
         bool bStaticReceiver = all(abs(prevUv - historyUv) * float2(pc.renderExtent) < 1.0);
         if (bStaticReceiver) {
-            bool bVisiblePrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest);
+            bool bVisiblePrev = RestirSunShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], shadowWorldPos, worldN, candDirW, worldTexelSize, alphaBuffers, bAlphaTest);
             flip = (bVisiblePrev == bOccluded) ? 1.0 : 0.0;
         }
     }

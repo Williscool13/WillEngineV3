@@ -32,6 +32,7 @@ struct RenderTargets
     // GBuffer
     StringID gbufferOne;
     StringID gbufferTwo;
+    StringID shadowOriginOffset;
     StringID shadows;
 
     // Any purpose textures for use between gbuffer and color output. Same format as color output.

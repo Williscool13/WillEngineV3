@@ -586,6 +586,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         .visibility = "visibility_target"_sid,
         .gbufferOne = "gbuffer_one"_sid,
         .gbufferTwo = "gbuffer_two"_sid,
+        .shadowOriginOffset = "shadow_origin_offset"_sid,
         .shadows = "shadows_resolve_target"_sid,
         .intermediateOne = "intermediate_one"_sid,
         .intermediateTwo = "intermediate_two"_sid,
@@ -604,6 +605,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     };
     declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY);
     renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.shadowOriginOffset, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
     renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);

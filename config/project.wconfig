@@ -1,5 +1,5 @@
 defaultScene|Ballance
-bLimitFps|1
+bLimitFps|0
 frameLimitTarget|60
 bAutoSaveProjectConfig|0
 bAutoSaveLighting|0
@@ -109,8 +109,8 @@ id|6251551709931360063
 name|instance_stress
 ;
 s
-id|6134422189197649093
-name|ReSTIR Shader Lab
+id|5884551260028924107
+name|Bistro Area Lights
 ;
 s
 id|13079833564594591779

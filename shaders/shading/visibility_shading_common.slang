@@ -27,6 +27,7 @@ public struct ReconstructedShadingData
     public Instance instance;
     public Primitive primitive;
     public Model model;
+    public float3 shadowOriginOffsetWS;
 }
 
 struct BarycentricDeriv
@@ -164,6 +165,18 @@ public ReconstructedShadingData ReconstructShadingInputs(
 
     // clip.w = +viewDepth with this projection, so this is the view-depth delta (viewZprev - viewZ) NRD expects as mv.z
     result.shadingInputs.viewZDelta = prevClip.w - currClip.w;
+
+    // Hanika shadow terminator offset.
+    float3x3 model3 = (float3x3)result.model.modelMatrix;
+    float3x3 normalMatrix = Adjugate(model3);
+    float3 posWS = mul(model3, result.shadingInputs.objPos);
+    float3 n0 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute0)));
+    float3 n1 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute1)));
+    float3 n2 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute2)));
+    float3 d0 = min(0.0, dot(posWS - mul(model3, objPos0), n0)) * n0;
+    float3 d1 = min(0.0, dot(posWS - mul(model3, objPos1), n1)) * n1;
+    float3 d2 = min(0.0, dot(posWS - mul(model3, objPos2), n2)) * n2;
+    result.shadowOriginOffsetWS = -(bary.x * d0 + bary.y * d1 + bary.z * d2);
 
     result.valid = true;
     return result;

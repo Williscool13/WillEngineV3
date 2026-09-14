@@ -567,9 +567,10 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;
 }
 
-public static const float RESTIR_SHADOW_RAY_ORIGIN_SCALE = 3.0;
-public static const float RESTIR_SHADOW_RAY_MIN_OFFSET = 0.01;
+public static const float RESTIR_SHADOW_RAY_ORIGIN_SCALE = 1.5;
+public static const float RESTIR_SHADOW_RAY_MIN_OFFSET = 0.002;
 
+// worldTexelSize excludes 1/NoV; a grazing lift clears short distant occluders.
 static float3 RestirShadowRayOrigin(float3 worldShadingPos, float3 worldN, float worldTexelSize)
 {
     return worldShadingPos + worldN * max(RESTIR_SHADOW_RAY_MIN_OFFSET, worldTexelSize * RESTIR_SHADOW_RAY_ORIGIN_SCALE);

@@ -77,11 +77,13 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
+    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0);
     float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
+    float3 shadowViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv + scene.jitter * 0.5, viewSpaceDepth);
+    float3 shadowWorldPos = mul(scene.invView, float4(shadowViewPosition, 1.0)).xyz + rdgTexturesFloat4[pc.shadowOriginOffsetIndex].Load(int3(fullPixel, 0)).xyz;
 
     float2 velocityNDC = UnpackMotionVectors(g1.g);
     float2 historyUV = uv + velocityNDC * 0.5;
@@ -257,10 +259,10 @@ void ComputeReSTIRDITemporal(uniform ReSTIRDICombinedTemporalPushConstant pc, ui
         LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
         pHatUnshadowed = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity, pc.lightSpecularFromReflectionsMax);
         p_hat_winner = bSkipWinnerTrace ? pHatUnshadowed
-            : (RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? pHatUnshadowed : 0.0);
+            : (RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize) ? pHatUnshadowed : 0.0);
 #if RESTIR_ENABLE_CONFIDENCE
         if (pc.prevTlasIndex != ~0u) {
-            visPrevTrace = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], worldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
+            visPrevTrace = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
         }
 #endif
         ReservoirFinalize(combined, accum_combined, p_hat_winner, 1.0);

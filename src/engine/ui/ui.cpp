@@ -471,7 +471,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         const Clay_String gpuString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gpuText.Size()), .chars = gpuText.c_str()};
         const Clay_String gameFpsString{.isStaticallyAllocated = false, .length = static_cast<int32_t>(gameFpsText.Size()), .chars = gameFpsText.c_str()};
 
-        static constexpr const char* AA_MODE_NAMES[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA"};
+        static constexpr const char* AA_MODE_NAMES[] = {"None", "SMAA", "TAA", "SMAA T2X", "Naive TAA", "Donut TAA", "FSR 2"};
         const char* aaModeName = AA_MODE_NAMES[static_cast<int32_t>(state->lighting.aaConfig.mode)];
         const char* profileName = state->projectConfig.activeLightingProfile.IsEmpty() ? "(none)" : state->projectConfig.activeLightingProfile.c_str();
         const auto profileText = Core::InlineString<80>::Format("Profile: %s", profileName);

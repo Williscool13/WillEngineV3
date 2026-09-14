@@ -26,7 +26,7 @@ static const float GI_GATHER_MAX_RADIANCE_MIN = 3276.8;
 static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
 static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
 static const float GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE = 1.0;
-static const float GI_GATHER_RAY_MIN_OFFSET = 0.01;
+static const float GI_GATHER_RAY_MIN_OFFSET = 0.02;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)

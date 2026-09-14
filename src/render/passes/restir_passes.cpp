@@ -291,11 +291,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
         basePass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
         basePass.ReadSampledImage(targets.gbufferOne);
         basePass.ReadSampledImage(targets.gbufferTwo);
+        basePass.ReadSampledImage(targets.shadowOriginOffset);
         basePass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { basePass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         basePass.WriteBuffer("restir_reservoir_base"_sid);
         if (reflectionRoughnessMax >= 0.0f) { basePass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER); }
-        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bReGIRProposal ? "restir_di_base_regir"_sid : "restir_di_base_bin"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -319,6 +320,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .worldGridEmissiveGrid = bBin ? graph.GetBufferAddress("world_grid_emissive_grid"_sid) : 0,
                 .worldGridEmissiveIndexList = bBin ? graph.GetBufferAddress("world_grid_emissive_index_list"_sid) : 0,
                 .worldGridCellPower = bBin ? graph.GetBufferAddress("world_grid_cell_power"_sid) : 0,
+                .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -360,6 +362,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             if (bHasHistory) { temporalPass.ReadBuffer(reservoirHistory); }
             temporalPass.ReadSampledImage(targets.gbufferOne);
             temporalPass.ReadSampledImage(targets.gbufferTwo);
+            temporalPass.ReadSampledImage(targets.shadowOriginOffset);
             temporalPass.ReadSampledImage(targets.depthCopy);
             if (bHasHistory) { temporalPass.ReadSampledImage(gbufferOneHistory); }
             if (bHasHistory) { temporalPass.ReadSampledImage(depthHistory); }
@@ -369,7 +372,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             temporalPass.WriteBuffer("restir_reservoir_temporal"_sid);
             if (bShadowVis) { temporalPass.WriteStorageImage("restir_shadow_vis"_sid); }
             if (bConfidence) { temporalPass.WriteStorageImage("restir_signal"_sid); }
-            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, prevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, prevShadowVis, reservoirHistory, gbufferOneHistory, depthHistory, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, prevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, prevShadowVis, reservoirHistory, gbufferOneHistory, depthHistory, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_temporal"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -388,6 +391,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .genBuffer = graph.GetBufferAddress("restir_reservoir_base"_sid),
                     .outputBuffer = graph.GetBufferAddress("restir_reservoir_temporal"_sid),
                     .reflectionDescriptors = 0,
+                    .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                     .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                     .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -441,12 +445,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
         sunPass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         sunPass.ReadSampledImage(targets.gbufferOne);
         sunPass.ReadSampledImage(targets.gbufferTwo);
+        sunPass.ReadSampledImage(targets.shadowOriginOffset);
         sunPass.ReadSampledImage(targets.depthCopy);
         sunPass.ReadTLASBuffer(RT_TLAS_BUFFER);
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(prevTlas); }
         sunPass.WriteStorageImage("restir_sun_vis"_sid);
         if (bSunFlip) { sunPass.WriteStorageImage("restir_sun_flip"_sid); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = sunCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_sun"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -470,6 +475,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .activeCheckerboardField = field,
                 .bAlphaTest = bAlphaTest ? 1u : 0u,
+                .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -593,10 +599,11 @@ void SetupReSTIRPasses(RenderGraph& graph,
         spatialPass.ReadBuffer(inputName);
         spatialPass.ReadSampledImage(targets.gbufferOne);
         spatialPass.ReadSampledImage(targets.gbufferTwo);
+        spatialPass.ReadSampledImage(targets.shadowOriginOffset);
         spatialPass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
         spatialPass.WriteBuffer(outputName);
-        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_spatial"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -608,6 +615,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
                 .inputBuffer = graph.GetBufferAddress(inputName),
                 .outputBuffer = graph.GetBufferAddress(outputName),
+                .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
