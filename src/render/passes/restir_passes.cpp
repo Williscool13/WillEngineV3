@@ -61,6 +61,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const uint32_t liveLightCount = viewFamily.analyticLightCount + viewFamily.triLightCount;
 
     RenderPass& transformPass = graph.AddPass("[ReSTIR DI] Transform Lights"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+    transformPass.AsyncCompute();
     transformPass.ReadBuffer(SCENE_DATA_BUFFER);
     transformPass.ReadBuffer("light_data"_sid);
     transformPass.WriteBuffer("restir_lights_vs"_sid);
@@ -154,19 +155,22 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const uint32_t fillLightCount = liveLightCount;
 
         graph.CreateBuffer("light_power_cdf"_sid, MAX_LIGHTS * sizeof(float), false);
+        const bool bCdfStats = GPU_STATS_ENABLED && graph.HasBuffer("readback_buffer"_sid);
+        if (bCdfStats) { graph.CreateBuffer("regir_cdf_stats"_sid, sizeof(ReadbackStruct), false); }
 
         RenderPass& cdfPass = graph.AddPass("[ReGIR] Light Power CDF"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+        cdfPass.AsyncCompute();
         cdfPass.ReadBuffer("light_data"_sid);
         cdfPass.WriteBuffer("light_power_cdf"_sid);
-        if (GPU_STATS_ENABLED) { cdfPass.ReadWriteBuffer("readback_buffer"_sid); }
-        cdfPass.Execute([pipelineManager, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        if (bCdfStats) { cdfPass.WriteBuffer("regir_cdf_stats"_sid); }
+        cdfPass.Execute([pipelineManager, fillLightCount, analyticLightCount, bCdfStats](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("light_power_cdf"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
             LightPowerCDFPushConstant pc{
                 .lightData = graph.GetBufferAddress("light_data"_sid),
                 .cdf = graph.GetBufferAddress("light_power_cdf"_sid),
-                .readback = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) : 0,
+                .readback = bCdfStats ? graph.GetBufferAddress("regir_cdf_stats"_sid) : 0,
                 .liveCount = fillLightCount,
                 .analyticCount = static_cast<int32_t>(analyticLightCount),
             };
@@ -174,9 +178,21 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, 1, 1, 1);
         });
 
+        if (bCdfStats) {
+            RenderPass& cdfStatsReadback = graph.AddPass("[ReGIR] CDF Stats Readback"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::ReGIR);
+            cdfStatsReadback.ReadTransferBuffer("regir_cdf_stats"_sid);
+            cdfStatsReadback.WriteTransferBuffer("readback_buffer"_sid);
+            cdfStatsReadback.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                const VkDeviceSize first = offsetof(ReadbackStruct, cdfTotalPower);
+                const VkBufferCopy copy{first, first, offsetof(ReadbackStruct, cdfMaxIdx) + sizeof(uint32_t) - first};
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("regir_cdf_stats"_sid), graph.GetBufferHandle("readback_buffer"_sid), 1, &copy);
+            });
+        }
+
         // Presample tiles
         {
             RenderPass& presamplePass = graph.AddPass("[ReGIR] Presample Tiles"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReGIR);
+            presamplePass.AsyncCompute();
             presamplePass.ReadBuffer("light_power_cdf"_sid);
             presamplePass.WriteBuffer("regir_tiles"_sid);
             presamplePass.Execute([pipelineManager, frameNumber, fillLightCount, analyticLightCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
