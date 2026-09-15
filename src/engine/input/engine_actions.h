@@ -56,6 +56,16 @@ inline const Engine::ActionHandle ACTION_SCENE_SLOT_7{"SceneSlot_7"_sid.id};
 inline const Engine::ActionHandle ACTION_SCENE_SLOT_8{"SceneSlot_8"_sid.id};
 inline const Engine::ActionHandle ACTION_SCENE_SLOT_9{"SceneSlot_9"_sid.id};
 
+inline const Engine::ActionHandle ACTION_PROFILE_MODE{"ProfileMode"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_1{"ProfileCam_1"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_2{"ProfileCam_2"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_3{"ProfileCam_3"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_4{"ProfileCam_4"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_5{"ProfileCam_5"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_6{"ProfileCam_6"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_7{"ProfileCam_7"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_8{"ProfileCam_8"_sid.id};
+
 inline const Engine::ActionHandle ACTION_UI_POINTER_DOWN{"UI_PointerDown"_sid.id};
 inline const Engine::ActionHandle ACTION_UI_SCROLL{"UI_Scroll"_sid.id};
 inline const Engine::ActionHandle ACTION_UI_PAGE_UP{"UI_PageUp"_sid.id};

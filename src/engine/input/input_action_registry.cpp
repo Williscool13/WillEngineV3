@@ -180,6 +180,18 @@ void RegisterEngineInputActions(InputState& input)
     AddDefaultAllContexts(input, ORIGIN, Actions::ACTION_SCENE_SLOT_8, BindingSource::FromKey(Key::KP_8));
     AddDefaultAllContexts(input, ORIGIN, Actions::ACTION_SCENE_SLOT_9, BindingSource::FromKey(Key::KP_9));
 
+#ifdef WDEBUG
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_MODE, InputContext::Gameplay, BindingSource::FromKey(Key::F12));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_1, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_1));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_2, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_2));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_3, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_3));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_4, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_4));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_5, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_5));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_6, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_6));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_7, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_7));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_8, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_8));
+#endif
+
     FinalizeActionRegistration(input);
 }
 

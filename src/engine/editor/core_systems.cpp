@@ -19,6 +19,13 @@ static const Engine::ActionHandle SCENE_SLOT_ACTIONS[Engine::MAX_SCENE_SLOTS] = 
     Actions::ACTION_SCENE_SLOT_7, Actions::ACTION_SCENE_SLOT_8, Actions::ACTION_SCENE_SLOT_9
 };
 
+#ifdef WDEBUG
+static const Engine::ActionHandle PROFILE_CAM_ACTIONS[Engine::MAX_CAMERA_PRESETS] = {
+    Actions::ACTION_PROFILE_CAM_1, Actions::ACTION_PROFILE_CAM_2, Actions::ACTION_PROFILE_CAM_3, Actions::ACTION_PROFILE_CAM_4,
+    Actions::ACTION_PROFILE_CAM_5, Actions::ACTION_PROFILE_CAM_6, Actions::ACTION_PROFILE_CAM_7, Actions::ACTION_PROFILE_CAM_8
+};
+#endif
+
 static void LoadLightingProfile(Engine::EngineState* state, const char* name)
 {
     Engine::Profiles::LightingProfileBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
@@ -51,6 +58,22 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 #endif
         LoadSceneSlot(ctx, state, i);
     }
+
+#ifdef WDEBUG
+    int32_t& profileSlot = state->debug.profileCameraSlot;
+    if (state->input.GetActionState(Actions::ACTION_PROFILE_MODE).pressed) {
+        profileSlot = profileSlot < 0 ? 0 : -1;
+        LOG_INFO(Engine, "Profile mode {}", profileSlot < 0 ? "off" : "on");
+    }
+    if (profileSlot >= 0) {
+        for (int32_t i = 0; i < Engine::MAX_CAMERA_PRESETS; ++i) {
+            if (state->input.GetActionState(PROFILE_CAM_ACTIONS[i]).pressed) {
+                profileSlot = i;
+                LOG_INFO(Engine, "Profile cam {}{}", i + 1, state->projectConfig.cameraPresets[i].bSet ? "" : " is empty");
+            }
+        }
+    }
+#endif
 }
 
 void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)

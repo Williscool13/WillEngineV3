@@ -136,6 +136,22 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
 
+#ifdef WDEBUG
+    const int32_t profileSlot = state->debug.profileCameraSlot;
+#if WILL_EDITOR
+    const bool bGameView = state->inputContext == Engine::InputContext::Gameplay;
+#else
+    const bool bGameView = true;
+#endif
+    if (bGameView && profileSlot >= 0 && state->projectConfig.cameraPresets[profileSlot].bSet) {
+        const CameraPreset& preset = state->projectConfig.cameraPresets[profileSlot];
+        const float aspect = state->projectConfig.ResolvedGameAspect(static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight));
+        mainViewFamily.mainView.currentViewData = BuildPerspectiveView(preset.translation, preset.rotation * WORLD_FORWARD, WORLD_UP, aspect,
+                                                                       glm::radians(state->projectConfig.gameCameraFovDegrees), state->projectConfig.gameCameraNearPlane);
+        mainViewFamily.mainView.previousViewData = mainViewFamily.mainView.currentViewData;
+    }
+#endif
+
     ProbeBakeOverrideView(state, mainViewFamily);
 }
 

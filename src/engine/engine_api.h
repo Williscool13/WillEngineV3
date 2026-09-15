@@ -159,6 +159,8 @@ struct DebugState
     Core::InlineString<> resourceName{};
     DebugTransformationType transformationType{};
     Core::DebugViewAspect viewAspect{};
+
+    int32_t profileCameraSlot{-1};
 };
 
 struct DDGIConvergeBoost
