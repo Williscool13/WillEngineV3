@@ -85,7 +85,7 @@ void ComputeReSTIRDISun(uniform ReSTIRDISunPushConstant pc, uint3 threadID : SV_
     float3 candDirV = normalize(mul(float3x3(scene.view), candDirW));
 
     RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
-    bool bAlphaTest = pc.bAlphaTest != 0u;
+    bool bAlphaTest = pc.bAlphaTest != 0u && abs(viewSpaceDepth) < pc.alphaTestMaxDistance;
     bool bTraced = dot(N, candDirV) > 0.0;
     float blockerT = -1.0;
     if (bTraced) {

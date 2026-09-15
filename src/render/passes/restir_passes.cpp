@@ -466,7 +466,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(prevTlas); }
         sunPass.WriteStorageImage("restir_sun_vis"_sid);
         if (bSunFlip) { sunPass.WriteStorageImage("restir_sun_flip"_sid); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = activeCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = activeCheckerboardField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, alphaTestMaxDistance = restirParams.sunAlphaTestMaxDistance, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_sun"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
@@ -491,6 +491,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .activeCheckerboardField = field,
                 .bAlphaTest = bAlphaTest ? 1u : 0u,
                 .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
+                .alphaTestMaxDistance = alphaTestMaxDistance,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 

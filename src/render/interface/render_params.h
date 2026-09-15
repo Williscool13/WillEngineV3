@@ -402,6 +402,7 @@ struct ReSTIRParams
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
     bool bSunLight{true};
+    float sunAlphaTestMaxDistance{25.0f};
     float regirWClamp{0.0f};
     float restirWClamp{0.0003052f};
     bool bResetReGIR{false};

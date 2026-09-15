@@ -1580,6 +1580,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (Widgets::Checkbox("Sun Alpha Test Cutout", &state->lighting.sigmaParams.bAlphaTest, "Sun visibility rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid.")) {
                     changed = true;
                 }
+                if (state->lighting.sigmaParams.bAlphaTest) {
+                    if (Widgets::SliderFloat("Sun Alpha Test Max Distance", &restir.sunAlphaTestMaxDistance, 0.0f, 200.0f,
+                                             {.format = "%.1f m", .tooltip = "Shading points beyond this view depth treat cutout surfaces as solid for the sun ray."})) {
+                        changed = true;
+                    }
+                }
             }
 
             Widgets::SubHeader("Spatial Reuse");

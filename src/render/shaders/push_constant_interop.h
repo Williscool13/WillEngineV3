@@ -590,6 +590,7 @@ SHADER_PUBLIC struct ReSTIRDISunPushConstant
     SHADER_PUBLIC uint32_t activeCheckerboardField;
     SHADER_PUBLIC uint32_t bAlphaTest;
     SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
+    SHADER_PUBLIC float alphaTestMaxDistance;
 };
 
 SHADER_PUBLIC struct ReSTIRBoilingFilterPushConstant
