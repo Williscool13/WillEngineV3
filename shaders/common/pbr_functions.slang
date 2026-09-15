@@ -26,8 +26,8 @@ public float LightDistanceFalloff(float dist, float range)
 {
     if (LIGHT_INVERSE_SQUARE) {
         float distSq = dist * dist;
-        float rangeInvSq = 1.0 / max(range * range, 1e-8);
-        float falloff = saturate(1.0 - distSq * rangeInvSq);
+        float ratioSq = distSq / max(range * range, 1e-8);
+        float falloff = saturate(1.0 - ratioSq * ratioSq);
         return (1.0 / (distSq + 1.0)) * falloff * falloff;
     }
 
@@ -40,8 +40,8 @@ public float LightRangeCull(float dist, float range)
 {
     if (LIGHT_INVERSE_SQUARE) {
         float distSq = dist * dist;
-        float rangeInvSq = 1.0 / max(range * range, 1e-8);
-        float falloff = saturate(1.0 - distSq * rangeInvSq);
+        float ratioSq = distSq / max(range * range, 1e-8);
+        float falloff = saturate(1.0 - ratioSq * ratioSq);
         return falloff * falloff;
     }
 
