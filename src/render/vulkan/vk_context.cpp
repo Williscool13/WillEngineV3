@@ -137,6 +137,10 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 #ifdef ENABLE_VULKAN_VALIDATION
         bUseValidation = true;
 #endif
+        bool bDebugUtils = bUseValidation;
+#ifdef WDEBUG
+        bDebugUtils = true;
+#endif
 
         uint32_t sdlExtCount = 0;
         const char* const* sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
@@ -145,7 +149,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         for (uint32_t i = 0; i < sdlExtCount; i++) {
             instanceExtensions.PushBack(sdlExtensions[i]);
         }
-        if (bUseValidation) {
+        if (bDebugUtils) {
             instanceExtensions.PushBack(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 

@@ -1330,6 +1330,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
+        renderGraph->SetForceGraphicsQueue(frameBuffer.debug.bDisableAsyncCompute);
 #ifdef ENABLE_VULKAN_VALIDATION
         if (frameBuffer.bLogRDG) {
             pipelineManager->DumpExecutableStats(Platform::GetAssetPath() / "visualizations" / "pipeline_executable_stats.txt");

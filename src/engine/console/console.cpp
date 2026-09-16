@@ -234,6 +234,13 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, scale > 0.0f ? Core::InlineString<64>::Format("  framerate_scale %.2f", scale).c_str() : "  framerate_scale auto");
     });
 
+    Register(state, Origin::Engine, "asyncqueue", "`asyncqueue <0|1>` 0 runs every async pass on the graphics queue so profiler pass timings stop overlapping", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() > 1) {
+            state->debug.render.bDisableAsyncCompute = std::strtol(args[1], nullptr, 10) == 0;
+        }
+        Print(state, state->debug.render.bDisableAsyncCompute ? "  asyncqueue 0 (all passes on graphics)" : "  asyncqueue 1");
+    });
+
     Register(state, Origin::Engine, "fpsmax", "`fpsmax <n>` caps the frame rate (15-240); 0 = uncapped", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         Engine::ProjectConfig& config = state->projectConfig;
         if (args.Size() > 1) {

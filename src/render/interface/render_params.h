@@ -581,6 +581,7 @@ struct DebugRenderParams
     bool bFreezeGatherRay{false};
     // 0 = auto
     float framerateScaleOverride{0.0f};
+    bool bDisableAsyncCompute{false};
     float ddgiProbeDebugExposure{1.0f};
     int32_t ddgiProbeDebugCascade{-1};
     bool bDDGIHideInactiveProbes{false};

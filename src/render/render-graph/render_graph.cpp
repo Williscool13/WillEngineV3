@@ -393,6 +393,12 @@ void RenderGraph::PropagateAsyncPasses()
         for (const uint32_t texIndex : pass->sampledImageReads) { markTexture(texIndex); }
         for (const uint32_t texIndex : pass->imageReadWrite) { markTexture(texIndex); }
     }
+
+    if (bForceGraphicsQueue) {
+        for (const auto& pass : passes) {
+            pass->bAsyncCompute = false;
+        }
+    }
 }
 
 void RenderGraph::TopologicalSortPasses()
@@ -1012,7 +1018,7 @@ void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
                 b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             }
             const bool bAsyncWave = waveIdx < asyncWaveCount;
-            const bool bGraphicsAfterCompute = !bAsyncWave && physRes.bAsyncEvent;
+            const bool bGraphicsAfterCompute = asyncWaveCount > 0 && !bAsyncWave && physRes.bAsyncEvent;
             const bool bComputeAfterGraphics = bAsyncWave && !physRes.bAsyncEvent;
             if (bGraphicsAfterCompute) {
                 // Timeline wait is enough, GENERAL->GENERAL so nothing else needed
@@ -1049,7 +1055,7 @@ void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
 
         auto addBufferBarrier = [&](const PhysicalResource& physRes, const VkBufferMemoryBarrier2& b) {
             const bool bAsyncWave = waveIdx < asyncWaveCount;
-            const bool bGraphicsAfterCompute = !bAsyncWave && physRes.bAsyncEvent;
+            const bool bGraphicsAfterCompute = asyncWaveCount > 0 && !bAsyncWave && physRes.bAsyncEvent;
             const bool bComputeAfterGraphics = bAsyncWave && !physRes.bAsyncEvent;
             if (bGraphicsAfterCompute) {
                 // Timeline wait is enough

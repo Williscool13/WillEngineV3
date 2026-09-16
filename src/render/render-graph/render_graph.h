@@ -90,6 +90,8 @@ public: // Frame setup
         }
     }
 
+    void SetForceGraphicsQueue(bool enable) { bForceGraphicsQueue = enable; }
+
     /**
      * Destroys all viewport-scaled physical resources so they are recreated at the new size next frame
      */
@@ -407,6 +409,7 @@ private:
     bool bDropAllRings{false};
 
     bool bDebugLogging = false;
+    bool bForceGraphicsQueue{false};
     uint32_t debugCaptureFramesLeft{0};
     uint32_t debugNameCounter{0};
 
