@@ -1184,7 +1184,6 @@ SHADER_PUBLIC struct SmaaTemporalResolvePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
 };
 
-SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_EXPOSURE = 1u << 0;
 SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_BLOOM = 1u << 1;
 SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_GRADING = 1u << 2;
 
@@ -1471,7 +1470,6 @@ SHADER_PUBLIC struct BloomThresholdPushConstant
     SHADER_PUBLIC float softThreshold;
     SHADER_PUBLIC float clampValue;
     SHADER_PUBLIC float targetLuminance;
-    SHADER_PUBLIC uint32_t bExposureEnabled;
     SHADER_PUBLIC float preExposure;
 };
 

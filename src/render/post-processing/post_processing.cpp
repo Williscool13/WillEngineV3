@@ -98,7 +98,6 @@ static void ReadbackAdaptedLuminance(RenderGraph& graph)
 
 StringID PPExposure(PostProcessContext& ctx, StringID input)
 {
-    if (!ctx.config.bExposureEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
     const uint32_t width = ctx.extent[0];
     const uint32_t height = ctx.extent[1];
@@ -637,7 +636,6 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     float bloomRadius = ctx.config.bloomRadius;
     float bloomClamp = ctx.config.bloomClamp;
     float targetLuminance = ctx.config.exposureTargetLuminance;
-    bool bExposureEnabled = ctx.config.bExposureEnabled;
 
     // Chain lives at half res; mip 0 is the fused threshold + first downsample
     const uint32_t halfWidth = std::max(1u, width / 2);
@@ -647,20 +645,19 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 
     RenderPass& thresholdPass = graph.AddPass("[Bloom] Threshold"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     thresholdPass.ReadSampledImage(input);
-    if (bExposureEnabled) { thresholdPass.ReadBuffer("luminance_buffer"_sid); }
+    thresholdPass.ReadBuffer("luminance_buffer"_sid);
     thresholdPass.ReadWriteImage("bloom_chain"_sid);
-    thresholdPass.Execute([width, height, halfWidth, halfHeight, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp, targetLuminance, bExposureEnabled, preExposure = ctx.preExposure](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    thresholdPass.Execute([width, height, halfWidth, halfHeight, input, pipelines, bloomThreshold, bloomSoftThreshold, bloomClamp, targetLuminance, preExposure = ctx.preExposure](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         BloomThresholdPushConstant pc{
             .outputExtent = {halfWidth, halfHeight},
             .inputExtent = {width, height},
             .inputColorIndex = graph.GetSampledImageViewDescriptorIndex(input),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex("bloom_chain"_sid, 0),
-            .luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress("luminance_buffer"_sid) : 0,
+            .luminanceBufferAddress = graph.GetBufferAddress("luminance_buffer"_sid),
             .threshold = bloomThreshold,
             .softThreshold = bloomSoftThreshold,
             .clampValue = bloomClamp,
             .targetLuminance = targetLuminance,
-            .bExposureEnabled = bExposureEnabled ? 1u : 0u,
             .preExposure = preExposure,
         };
 
@@ -740,7 +737,6 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
     const Core::PostProcessConfiguration& config = ctx.config;
 
     const bool bBloomEnabled = config.bBloomEnabled;
-    const bool bExposureEnabled = config.bExposureEnabled;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
 
     PostProcessFinalizePushConstant constants{};
@@ -791,22 +787,21 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
         constants.paniniVerticalFocalLength = 1.0f / std::tan(fov * 0.5f);
     }
 
-    constants.flags = (bExposureEnabled ? POST_PROCESS_FINALIZE_FLAG_EXPOSURE : 0u) |
-                      (bBloomEnabled ? POST_PROCESS_FINALIZE_FLAG_BLOOM : 0u) |
+    constants.flags = (bBloomEnabled ? POST_PROCESS_FINALIZE_FLAG_BLOOM : 0u) |
                       (bGradingActive ? POST_PROCESS_FINALIZE_FLAG_GRADING : 0u);
 
     graph.CreateTexture("tonemap_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, width, height, 1}, std::nullopt, true);
     RenderPass& finalizePass = graph.AddPass("[Finalize] Tonemap + Grade + Lens"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::PostProcessing);
     finalizePass.ReadSampledImage(input);
     if (bBloomEnabled) { finalizePass.ReadSampledImage("bloom_chain"_sid); }
-    if (bExposureEnabled) { finalizePass.ReadBuffer("luminance_buffer"_sid); }
+    finalizePass.ReadBuffer("luminance_buffer"_sid);
     finalizePass.WriteStorageImage("tonemap_output"_sid);
-    finalizePass.Execute([constants, input, pipelines, bBloomEnabled, bExposureEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    finalizePass.Execute([constants, input, pipelines, bBloomEnabled](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         PostProcessFinalizePushConstant pc = constants;
         pc.srcImageIndex = graph.GetSampledImageViewDescriptorIndex(input);
         pc.dstImageIndex = graph.GetStorageImageViewDescriptorIndex("tonemap_output"_sid);
         pc.bloomImageIndex = bBloomEnabled ? graph.GetSampledImageViewDescriptorIndex("bloom_chain"_sid) : 0u;
-        pc.luminanceBufferAddress = bExposureEnabled ? graph.GetBufferAddress("luminance_buffer"_sid) : 0;
+        pc.luminanceBufferAddress = graph.GetBufferAddress("luminance_buffer"_sid);
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("post_process_finalize"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
