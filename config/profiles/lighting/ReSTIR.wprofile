@@ -11,6 +11,7 @@ spatialNeighbors|1
 spatialMCap|2000
 bEnableTemporal|1
 temporalMCap|5
+bFusedSpatioTemporal|1
 bCheckerboard|1
 bCheckerboardFullRateResolve|1
 boilingFilterStrength|0x3e4ccccd

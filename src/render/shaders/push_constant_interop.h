@@ -568,6 +568,41 @@ SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
     SHADER_PUBLIC uint32_t bCenterVisible;
 };
 
+SHADER_PUBLIC struct ReSTIRDISpatioTemporalPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
+    SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gbufferTwoIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t prevGbufferOneIndex;
+    SHADER_PUBLIC uint32_t prevDepthIndex;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t mCap;
+    SHADER_PUBLIC uint32_t spatialMCap;
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t prevTlasIndex;
+    SHADER_PUBLIC uint32_t prevShadowVisIndex;
+    SHADER_PUBLIC uint32_t shadowVisIndex;
+    SHADER_PUBLIC uint32_t signalIndex;
+    SHADER_PUBLIC uint32_t spatialRadius;
+    SHADER_PUBLIC uint32_t spatialNeighbors;
+    SHADER_PUBLIC uint32_t bPermutationSampling;
+    SHADER_PUBLIC uint32_t bTemporalSearch;
+    SHADER_PUBLIC uint32_t bInitialVisibility;
+    SHADER_PUBLIC float antilagStrength;
+    SHADER_PUBLIC uint32_t activeCheckerboardField;
+    SHADER_PUBLIC float wClamp;
+    SHADER_PUBLIC float lightSpecularFromReflectionsMax;
+};
+
 SHADER_PUBLIC struct ReSTIRDISunPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

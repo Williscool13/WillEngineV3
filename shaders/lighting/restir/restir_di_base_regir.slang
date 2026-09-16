@@ -59,7 +59,6 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
-    float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0);
     float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
 
@@ -76,7 +75,6 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
     h ^= h >> 17u; h *= 0xbf324c81u; h ^= h >> 13u;
 
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-    float3 shadowWorldPos = reflWorldPos + rdgTexturesFloat4[pc.shadowOriginOffsetIndex].Load(int3(fullPixel, 0)).xyz;
     float3 cameraPos = scene.cameraWorldPos.xyz;
     float camDist = distance(worldPos, cameraPos);
 
@@ -282,6 +280,8 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
         if (pc.bInitialVisibility != 0u && r_gen.W > 0.0) {
             float3 worldN = normalize(mul(float3x3(scene.invView), N));
             float3 worldyStar = mul(scene.invView, float4(yStar, 1.0)).xyz;
+            float3 shadowWorldPos = reflWorldPos + rdgTexturesFloat4[pc.shadowOriginOffsetIndex].Load(int3(fullPixel, 0)).xyz;
+            float worldTexelSize = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0);
             if (!RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize)) { r_gen.W = 0.0; }
         }
 #endif

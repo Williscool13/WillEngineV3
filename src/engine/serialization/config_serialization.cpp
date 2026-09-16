@@ -188,6 +188,7 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
     w.Key("spatialMCap", p.spatialMCap);
     w.Key("bEnableTemporal", p.bEnableTemporal);
     w.Key("temporalMCap", p.temporalMCap);
+    w.Key("bFusedSpatioTemporal", p.bFusedSpatioTemporal);
     w.Key("bCheckerboard", p.bCheckerboard);
     w.Key("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
     w.Key("boilingFilterStrength", p.boilingFilterStrength);
@@ -242,6 +243,7 @@ void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
     p.spatialMCap = r.UInt("spatialMCap", p.spatialMCap);
     p.bEnableTemporal = r.Bool("bEnableTemporal", p.bEnableTemporal);
     p.temporalMCap = r.UInt("temporalMCap", p.temporalMCap);
+    p.bFusedSpatioTemporal = r.Bool("bFusedSpatioTemporal", p.bFusedSpatioTemporal);
     p.bCheckerboard = r.Bool("bCheckerboard", p.bCheckerboard);
     p.bCheckerboardFullRateResolve = r.Bool("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
     p.boilingFilterStrength = r.Float("boilingFilterStrength", p.boilingFilterStrength);
