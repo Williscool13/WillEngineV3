@@ -837,6 +837,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(uint2) touchKeys;
     SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
     SHADER_PUBLIC uint32_t rayMetaIndex;
+    SHADER_PUBLIC uint32_t varGuideHistoryIndex;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant

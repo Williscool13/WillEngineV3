@@ -258,9 +258,17 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
             shB = float4(radiance.b, 0.0, 0.0, 0.0);
             data = float2(0.0, float(tier));
         } else {
-            float2 rayMeta = rdgTexturesFloat2[pc.rayMetaIndex].Load(int3(gatherPixel, 0));
-            maxRadiance = rayMeta.x;
-            uint rayCount = max(uint(rayMeta.y), 1u);
+            if (pc.bCascadesValid != 0) {
+                float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
+                float edgeFade;
+                float priorRelDev;
+                float4 expected = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade, priorRelDev);
+                if (expected.w > 0.5) {
+                    maxRadiance = clamp(GI_GATHER_FIREFLY_EXPECTATION_K * Luma(expected.rgb * expected.w), GI_GATHER_MAX_RADIANCE_MIN, GI_GATHER_MAX_RADIANCE);
+                    varGuide = saturate(priorRelDev / GI_GATHER_VARIANCE_GUIDE_SCALE);
+                }
+            }
+            uint rayCount = max(uint(rdgTexturesFloat[pc.rayMetaIndex].Load(int3(gatherPixel, 0)).r), 1u);
             uint hitBase = (gatherPixel.y * pc.gatherExtent.x + gatherPixel.x) * max(pc.rayCount, 1u);
             float4 sumR = float4(0.0);
             float4 sumG = float4(0.0);
@@ -416,4 +424,5 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
     rdgStorageFloat2[pc.dataIndex][gatherPixel] = data;
     rdgStorageUInt2[pc.guideOutIndex][gatherPixel] = guide;
     rdgStorageFloat[pc.skyVisIndex][gatherPixel] = skyVis;
+    rdgStorageFloat[pc.varGuideOutIndex][gatherPixel] = varGuide;
 }

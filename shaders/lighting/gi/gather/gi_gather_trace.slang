@@ -1,7 +1,5 @@
 import common_interop;
 import push_constant_interop;
-import ddgi_interop;
-import ddgi_common;
 import instance_mask_interop;
 import bindless_declarations;
 import constants_interop;
@@ -10,9 +8,6 @@ import packing_functions;
 import random_common;
 import gi_gather_common;
 
-static const float GI_GATHER_MAX_RADIANCE = 1310720.0;
-static const float GI_GATHER_MAX_RADIANCE_MIN = 3276.8;
-static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
 static const float GI_GATHER_RAY_MIN_OFFSET = 0.02;
 
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
@@ -36,8 +31,6 @@ void ComputeGIGatherTrace(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
 
     uint2 pixel = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent, pc.gatherScale);
 
-    float maxRadiance = GI_GATHER_MAX_RADIANCE;
-    float varGuide = 0.0;
     uint rayCount = 0u;
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
@@ -52,15 +45,9 @@ void ComputeGIGatherTrace(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
-        if (pc.bCascadesValid != 0) {
-            float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
-            float edgeFade;
-            float priorRelDev;
-            float4 expected = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade, priorRelDev);
-            if (expected.w > 0.5) {
-                maxRadiance = clamp(GI_GATHER_FIREFLY_EXPECTATION_K * Luma(expected.rgb * expected.w), GI_GATHER_MAX_RADIANCE_MIN, GI_GATHER_MAX_RADIANCE);
-                varGuide = saturate(priorRelDev / GI_GATHER_VARIANCE_GUIDE_SCALE);
-            }
+        float varGuide = 0.0;
+        if (pc.varGuideHistoryIndex != ~0x0u) {
+            varGuide = rdgTexturesFloat[pc.varGuideHistoryIndex].Load(int3(gatherPixel, 0)).r;
         }
 
         float relDevMax = WaveActiveMax(varGuide) * GI_GATHER_VARIANCE_GUIDE_SCALE;
@@ -102,6 +89,5 @@ void ComputeGIGatherTrace(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         }
     }
 
-    rdgStorageFloat[pc.varGuideOutIndex][gatherPixel] = varGuide;
-    rdgStorageFloat2[pc.rayMetaIndex][gatherPixel] = float2(maxRadiance, float(rayCount));
+    rdgStorageFloat[pc.rayMetaIndex][gatherPixel] = float(rayCount);
 }

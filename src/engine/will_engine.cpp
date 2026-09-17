@@ -671,6 +671,8 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         SPDLOG_WARN("Game dll path not found.");
     }
 #endif
+#endif
+#ifdef WDEBUG
     auto shaderDirectory = Platform::GetShaderPath();
     if (Platform::FileExists(shaderDirectory)) {
         shaderWatcher.Start(shaderDirectory.c_str(), [&]() {
