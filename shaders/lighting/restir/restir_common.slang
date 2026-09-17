@@ -688,17 +688,6 @@ public float EvalReservoirPHatLight(LightView vs, uint sampleOffsetPacked, float
     return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity, lightSpecularFromReflectionsMax);
 }
 
-public float EvalReservoirPHatVisibilityLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
-                                              float3 albedo, float3 F0, float metallic, float roughness, float4x4 invView,
-                                              RaytracingAccelerationStructure tlas, float3 worldPos, float3 worldN, float worldTexelSize, float lightSpecularFromReflectionsMax)
-{
-    float3 yStar = DecodeSamplePos(sampleOffsetPacked, vs);
-    float3 worldyStar = mul(invView, float4(yStar, 1.0)).xyz;
-    if (!RestirShadowVisible(tlas, worldPos, worldN, worldyStar, worldTexelSize)) { return 0.0; }
-    LightSample s = EvalLightSample(vs, yStar, viewPos, N, vs.range);
-    return EvalPHat(s, V, N, albedo, F0, metallic, roughness, UnpackUnorm4x8(vs.packedColor).rgb, vs.intensity, lightSpecularFromReflectionsMax);
-}
-
 static void GGXTangentFrame(float3 N, out float3 T, out float3 B)
 {
     float3 up = abs(N.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);

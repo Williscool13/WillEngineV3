@@ -73,6 +73,7 @@ public:
      * Render thread only.
      */
     void SubmitAsyncCompute(const VkSubmitInfo2& submitInfo);
+    void WaitAsyncComputeIdle();
 
     void Shutdown();
 

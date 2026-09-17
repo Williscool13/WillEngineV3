@@ -62,7 +62,6 @@ intensity|0x3f800000
 settleFrames|0x43700000
 ;
 restir
-adaptiveSpatialBoost|0x40400000
 antilagStrength|0x3f666666
 atrous
 iterations|4
@@ -70,7 +69,6 @@ sigmaDepth|0x3c23d70a
 sigmaLuminance|0x40000000
 sigmaNormal|0x43000000
 ;
-bAdaptiveSpatial|1
 bCheckerboard|0
 bEmissiveTriangleLights|1
 bEnableAntilag|0
@@ -200,7 +198,6 @@ remodulateOutput|0
 restirWClamp|0x00000000
 spatialMCap|100
 spatialNeighbors|3
-spatialPasses|2
 spatialRadius|30
 svgf
 alphaMin|0x3dcccccd

@@ -92,6 +92,15 @@ void GPUDispatcher::SubmitAsyncCompute(const VkSubmitInfo2& submitInfo)
     VK_CHECK(vkQueueSubmit2(computeWorker.queue, 1, &submitInfo, VK_NULL_HANDLE));
 }
 
+void GPUDispatcher::WaitAsyncComputeIdle()
+{
+    if (computeWorker.queue == VK_NULL_HANDLE) {
+        return;
+    }
+    std::lock_guard lock(computeWorker.queueMutex);
+    vkQueueWaitIdle(computeWorker.queue);
+}
+
 void GPUDispatcher::WorkerThreadMain(WorkerChannel& channel, const char* threadName)
 {
     ZoneScoped;

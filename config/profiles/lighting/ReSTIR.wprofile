@@ -1,9 +1,6 @@
 lightingMode|1
 restir
-spatialPasses|1
 bPermutationSampling|0
-bAdaptiveSpatial|0
-adaptiveSpatialBoost|0x40400000
 bEnableAntilag|1
 antilagStrength|0x3f65a99d
 spatialRadius|20
@@ -11,7 +8,6 @@ spatialNeighbors|1
 spatialMCap|2000
 bEnableTemporal|1
 temporalMCap|5
-bFusedSpatioTemporal|1
 bCheckerboard|1
 bCheckerboardFullRateResolve|1
 boilingFilterStrength|0x3e4ccccd

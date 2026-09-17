@@ -178,6 +178,7 @@ void RenderThread::ThreadMain()
                 if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
                     ZoneScopedN("SwapchainRecreate");
                     vkQueueWaitIdle(context->graphicsQueue);
+                    gpuDispatcher->WaitAsyncComputeIdle();
                     LOG_INFO(Renderer, "Swapchain Recreated");
 
                     swapchain->Recreate(frameBuffer.swapchainRecreateCommand.windowWidth, frameBuffer.swapchainRecreateCommand.windowHeight);
@@ -191,6 +192,7 @@ void RenderThread::ThreadMain()
 
                 if (frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
                     vkQueueWaitIdle(context->graphicsQueue);
+                    gpuDispatcher->WaitAsyncComputeIdle();
                     LOG_INFO(Renderer, "Viewport remade");
 
                     renderExtents->ApplyViewportResize(frameBuffer.viewportResizeCommand.offsetX, frameBuffer.viewportResizeCommand.offsetY, frameBuffer.viewportResizeCommand.sizeX,
@@ -201,6 +203,7 @@ void RenderThread::ThreadMain()
 
                 if (frameBuffer.mainViewFamily.resolutionScale != lastResolutionScale) {
                     vkQueueWaitIdle(context->graphicsQueue);
+                    gpuDispatcher->WaitAsyncComputeIdle();
                     renderExtents->UpdateScale(frameBuffer.mainViewFamily.resolutionScale);
                     lastResolutionScale = frameBuffer.mainViewFamily.resolutionScale;
                     renderGraph->InvalidateAllViewportAssociated();
@@ -426,6 +429,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
     if (frameBuffer.cacheReset != Core::RenderCacheReset::None) {
         vkQueueWaitIdle(context->graphicsQueue);
+        gpuDispatcher->WaitAsyncComputeIdle();
         nrdDenoiser->RequestHistoryClear();
     }
     if (frameBuffer.cacheReset == Core::RenderCacheReset::ScreenHistory) {
@@ -1330,6 +1334,11 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     {
         ZoneScopedN("RenderGraphCompile");
         renderGraph->SetDebugLogging(frameBuffer.bLogRDG);
+        if (renderGraph->IsForceGraphicsQueue() && !frameBuffer.debug.bDisableAsyncCompute) {
+            vkQueueWaitIdle(context->graphicsQueue);
+            gpuDispatcher->WaitAsyncComputeIdle();
+            renderGraph->ClearGraphicsFrameStamps();
+        }
         renderGraph->SetForceGraphicsQueue(frameBuffer.debug.bDisableAsyncCompute);
 #ifdef ENABLE_VULKAN_VALIDATION
         if (frameBuffer.bLogRDG) {

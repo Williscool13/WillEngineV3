@@ -384,10 +384,7 @@ struct ReBLURParams
 
 struct ReSTIRParams
 {
-    uint32_t spatialPasses{1};
     bool bPermutationSampling{true};
-    bool bAdaptiveSpatial{true};
-    float adaptiveSpatialBoost{1.0f};
     bool bEnableAntilag{false};
     float antilagStrength{0.5f};
     uint32_t spatialRadius{30};
@@ -396,7 +393,6 @@ struct ReSTIRParams
     bool bEnableTemporal{true};
     uint32_t temporalMCap{20u};
     bool bTemporalSearch{true};
-    bool bFusedSpatioTemporal{false};
     bool bCheckerboard{false};
     // With bCheckerboard: local-light reservoirs stay half-rate, sun visibility and the lighting resolve run full-rate so the denoisers see no checkerboard.
     bool bCheckerboardFullRateResolve{true};

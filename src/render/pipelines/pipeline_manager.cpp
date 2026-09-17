@@ -477,15 +477,11 @@ void PipelineManager::RegisterPipelines()
                             sizeof(GIGatherPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gi_gather_shade"_sid, src / "gi_gather_shade.spv", "ComputeGIGatherShade",
                             sizeof(GIGatherPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("restir_di_spatial"_sid, src / "restir_di_spatial.spv", "ComputeReSTIRDISpatial",
-                            sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("restir_di_spatiotemporal"_sid, src / "restir_di_spatiotemporal.spv", "ComputeReSTIRDISpatioTemporal",
                             sizeof(ReSTIRDISpatioTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("restir_di_base_regir"_sid, src / "restir_di_base_regir.spv", "ComputeReSTIRDIBaseReGIR",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("restir_di_base_bin"_sid, src / "restir_di_base_regir.spv", "ComputeReSTIRDIBaseBin",
-                            sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("restir_di_temporal"_sid, src / "restir_di_temporal.spv", "ComputeReSTIRDITemporal",
                             sizeof(ReSTIRDICombinedTemporalPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("restir_di_sun"_sid, src / "restir_di_sun.spv", "ComputeReSTIRDISun",
                             sizeof(ReSTIRDISunPushConstant), PipelineCategory::Critical);

@@ -401,6 +401,14 @@ void RenderGraph::PropagateAsyncPasses()
     }
 }
 
+void RenderGraph::ClearGraphicsFrameStamps()
+{
+    for (auto& phys : physicalResources) {
+        phys.lastGraphicsFrame = RDG_FRAME_NEVER;
+        phys.lastGraphicsWriteFrame = RDG_FRAME_NEVER;
+    }
+}
+
 void RenderGraph::TopologicalSortPasses()
 {
     Core::InlineQueue<uint32_t, RDG_MAX_PASSES> asyncZeroDegreeQueue;

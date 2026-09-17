@@ -1589,37 +1589,23 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             Widgets::SubHeader("Spatial Reuse");
-            int spatialPasses = static_cast<int>(restir.spatialPasses);
-            if (Widgets::SliderInt("Spatial Passes (0=off)", &spatialPasses, 0, 8)) {
-                restir.spatialPasses = static_cast<uint32_t>(spatialPasses);
+            int spatialRadius = static_cast<int>(restir.spatialRadius);
+            if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
+                restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
                 changed = true;
             }
-            if (restir.spatialPasses > 0u) {
-                int spatialRadius = static_cast<int>(restir.spatialRadius);
-                if (Widgets::SliderInt("Spatial Radius", &spatialRadius, 1, 100)) {
-                    restir.spatialRadius = static_cast<uint32_t>(spatialRadius);
-                    changed = true;
-                }
-                int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
-                if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
-                    restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
-                    changed = true;
-                }
-                int spatialMCap = static_cast<int>(restir.spatialMCap);
-                if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
-                    restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
-                    changed = true;
-                }
-                if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
-                    changed = true;
-                }
-                ImGui::BeginDisabled(!RESTIR_ENABLE_SPATIAL_DILATE);
-                featureSection("Spatial Dilate", &restir.bAdaptiveSpatial, [&] {
-                    if (Widgets::SliderFloat("Dilate Boost##restir", &restir.adaptiveSpatialBoost, 0.0f, 3.0f)) {
-                        changed = true;
-                    }
-                });
-                ImGui::EndDisabled();
+            int spatialNeighbors = static_cast<int>(restir.spatialNeighbors);
+            if (Widgets::SliderInt("Spatial Neighbors", &spatialNeighbors, 1, 16)) {
+                restir.spatialNeighbors = static_cast<uint32_t>(spatialNeighbors);
+                changed = true;
+            }
+            int spatialMCap = static_cast<int>(restir.spatialMCap);
+            if (Widgets::SliderInt("Spatial M Cap", &spatialMCap, 1, 2000)) {
+                restir.spatialMCap = static_cast<uint32_t>(spatialMCap);
+                changed = true;
+            }
+            if (Widgets::SliderFloat("ReSTIR W Clamp (0=off)", &restir.restirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
+                changed = true;
             }
             Widgets::EndSection();
         }

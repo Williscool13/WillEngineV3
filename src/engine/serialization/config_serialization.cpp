@@ -177,10 +177,7 @@ static void DeserializeReblur(const TextReader& r, Core::ReBLURParams& p)
 
 void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
 {
-    w.Key("spatialPasses", p.spatialPasses);
     w.Key("bPermutationSampling", p.bPermutationSampling);
-    w.Key("bAdaptiveSpatial", p.bAdaptiveSpatial);
-    w.Key("adaptiveSpatialBoost", p.adaptiveSpatialBoost);
     w.Key("bEnableAntilag", p.bEnableAntilag);
     w.Key("antilagStrength", p.antilagStrength);
     w.Key("spatialRadius", p.spatialRadius);
@@ -188,7 +185,6 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
     w.Key("spatialMCap", p.spatialMCap);
     w.Key("bEnableTemporal", p.bEnableTemporal);
     w.Key("temporalMCap", p.temporalMCap);
-    w.Key("bFusedSpatioTemporal", p.bFusedSpatioTemporal);
     w.Key("bCheckerboard", p.bCheckerboard);
     w.Key("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
     w.Key("boilingFilterStrength", p.boilingFilterStrength);
@@ -232,10 +228,7 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
 
 void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
 {
-    p.spatialPasses = r.UInt("spatialPasses", p.spatialPasses);
     p.bPermutationSampling = r.Bool("bPermutationSampling", p.bPermutationSampling);
-    p.bAdaptiveSpatial = r.Bool("bAdaptiveSpatial", p.bAdaptiveSpatial);
-    p.adaptiveSpatialBoost = r.Float("adaptiveSpatialBoost", p.adaptiveSpatialBoost);
     p.bEnableAntilag = r.Bool("bEnableAntilag", p.bEnableAntilag);
     p.antilagStrength = r.Float("antilagStrength", p.antilagStrength);
     p.spatialRadius = r.UInt("spatialRadius", p.spatialRadius);
@@ -243,7 +236,6 @@ void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
     p.spatialMCap = r.UInt("spatialMCap", p.spatialMCap);
     p.bEnableTemporal = r.Bool("bEnableTemporal", p.bEnableTemporal);
     p.temporalMCap = r.UInt("temporalMCap", p.temporalMCap);
-    p.bFusedSpatioTemporal = r.Bool("bFusedSpatioTemporal", p.bFusedSpatioTemporal);
     p.bCheckerboard = r.Bool("bCheckerboard", p.bCheckerboard);
     p.bCheckerboardFullRateResolve = r.Bool("bCheckerboardFullRateResolve", p.bCheckerboardFullRateResolve);
     p.boilingFilterStrength = r.Float("boilingFilterStrength", p.boilingFilterStrength);

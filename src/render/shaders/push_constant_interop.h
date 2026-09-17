@@ -539,35 +539,6 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC float mirrorRoughnessMax;
 };
 
-SHADER_PUBLIC struct ReSTIRDISpatialPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
-    SHADER_PUBLIC SHADER_PTR(Reservoir) inputBuffer;
-    SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
-    SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t gbufferTwoIndex;
-    SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t spatialRadius;
-    SHADER_PUBLIC uint32_t spatialNeighbors;
-    SHADER_PUBLIC uint32_t mCap;
-    SHADER_PUBLIC uint32_t tlasIndex;
-    SHADER_PUBLIC uint32_t passIndex;
-    SHADER_PUBLIC uint32_t bAdaptiveSpatial;
-    SHADER_PUBLIC float adaptiveSpatialBoost;
-    SHADER_PUBLIC uint32_t adaptiveMReference;
-    SHADER_PUBLIC uint32_t bValidateVisibility;
-    SHADER_PUBLIC float wClamp;
-    SHADER_PUBLIC uint32_t activeCheckerboardField;
-    SHADER_PUBLIC float lightSpecularFromReflectionsMax;
-    SHADER_PUBLIC uint32_t bCenterVisible;
-};
-
 SHADER_PUBLIC struct ReSTIRDISpatioTemporalPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;

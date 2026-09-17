@@ -33,7 +33,6 @@ thinOccluderCompensation|0x00000000
 iblIntensity|0x3f800000
 lightingMode|2
 restir
-adaptiveSpatialBoost|0x40400000
 antilagStrength|0x3f666666
 atrous
 iterations|4
@@ -41,7 +40,6 @@ sigmaDepth|0x3c23d70a
 sigmaLuminance|0x40000000
 sigmaNormal|0x43000000
 ;
-bAdaptiveSpatial|1
 bCheckerboard|1
 bEnableAntilag|1
 bEnableConfidence|0
@@ -133,7 +131,6 @@ remodulateOutput|0
 restirWClamp|0x00000000
 spatialMCap|304
 spatialNeighbors|3
-spatialPasses|1
 spatialRadius|30
 svgf
 alphaMin|0x3dcccccd

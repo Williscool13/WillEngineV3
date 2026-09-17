@@ -91,6 +91,8 @@ public: // Frame setup
     }
 
     void SetForceGraphicsQueue(bool enable) { bForceGraphicsQueue = enable; }
+    bool IsForceGraphicsQueue() const { return bForceGraphicsQueue; }
+    void ClearGraphicsFrameStamps();
 
     /**
      * Destroys all viewport-scaled physical resources so they are recreated at the new size next frame

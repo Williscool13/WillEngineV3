@@ -45,7 +45,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bTemporalReuse = restirParams.bEnableTemporal;
-    const bool bFusedSpatioTemporal = bTemporalReuse && restirParams.bFusedSpatioTemporal;
     const bool bConfidence = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
     const bool bSunFlip = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
     const bool bAntilag = bTemporalReuse && RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
@@ -369,7 +368,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 
-        if (bFusedSpatioTemporal) {
+        if (bTemporalReuse) {
             RenderPass& fusedPass = graph.AddPass("[ReSTIR DI] SpatioTemporal"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
             fusedPass.ReadBuffer(SCENE_DATA_BUFFER);
             fusedPass.ReadBuffer("light_data"_sid);
@@ -425,76 +424,6 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .antilagStrength = restirParams.antilagStrength,
                     .activeCheckerboardField = field,
                     .wClamp = restirParams.restirWClamp,
-                    .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
-                };
-                vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-
-                const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
-                const uint32_t groupsX = (strideX + 15) / 16;
-                const uint32_t groupsY = (renderExtent[1] + 15) / 16;
-                vkCmdDispatch(cmd, groupsX, groupsY, 1);
-            });
-        }
-        else if (bTemporalReuse) {
-            // Temporal reuse
-            RenderPass& temporalPass = graph.AddPass("[ReSTIR DI] Temporal"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
-            temporalPass.ReadBuffer(SCENE_DATA_BUFFER);
-            temporalPass.ReadBuffer("light_data"_sid);
-            temporalPass.ReadBuffer("restir_lights_vs"_sid);
-            temporalPass.ReadBuffer("restir_reservoir_base"_sid);
-            if (bHasHistory) { temporalPass.ReadBuffer(reservoirHistory); }
-            temporalPass.ReadSampledImage(targets.gbufferOne);
-            temporalPass.ReadSampledImage(targets.gbufferTwo);
-            temporalPass.ReadSampledImage(targets.shadowOriginOffset);
-            temporalPass.ReadSampledImage(targets.depthCopy);
-            if (bHasHistory) { temporalPass.ReadSampledImage(gbufferOneHistory); }
-            if (bHasHistory) { temporalPass.ReadSampledImage(depthHistory); }
-            if (bHasPrevVis) { temporalPass.ReadSampledImage(prevShadowVis); }
-            if (bHasTLAS) { temporalPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
-            if (bHasPrevTlas) { temporalPass.ReadTLASBuffer(prevTlas); }
-            temporalPass.WriteBuffer("restir_reservoir_temporal"_sid);
-            if (bShadowVis) { temporalPass.WriteStorageImage("restir_shadow_vis"_sid); }
-            if (bConfidence) { temporalPass.WriteStorageImage("restir_signal"_sid); }
-            temporalPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasPrevTlas, prevTlas, bHasHistory, bConfidence, bShadowVis, bHasPrevVis, prevShadowVis, reservoirHistory, gbufferOneHistory, depthHistory, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_temporal"_sid);
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
-                const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
-                const uint32_t prevTlasIndex = bHasPrevTlas ? graph.GetAccelerationStructureDescriptorIndex(prevTlas) : ~0u;
-
-                ReSTIRDICombinedTemporalPushConstant pc{
-                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .lightData = graph.GetBufferAddress("light_data"_sid),
-                    .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
-                    .instanceBuffer = 0,
-                    .hashEntries = 0,
-                    .reservoirs = 0,
-                    .cellData = 0,
-                    .historyBuffer = bHasHistory ? graph.GetBufferAddress(reservoirHistory) : 0,
-                    .genBuffer = graph.GetBufferAddress("restir_reservoir_base"_sid),
-                    .outputBuffer = graph.GetBufferAddress("restir_reservoir_temporal"_sid),
-                    .reflectionDescriptors = 0,
-                    .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
-                    .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                    .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                    .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                    .prevGbufferOneIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
-                    .prevDepthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0u,
-                    .renderExtent = {renderExtent[0], renderExtent[1]},
-                    .sceneDataIndex = sceneIndex,
-                    .frameIndex = static_cast<uint32_t>(frameNumber),
-                    .mCap = restirParams.temporalMCap,
-                    .tlasIndex = tlasIndex,
-                    .prevTlasIndex = prevTlasIndex,
-                    .prevShadowVisIndex = bHasPrevVis ? graph.GetSampledImageViewDescriptorIndex(prevShadowVis) : ~0u,
-                    .shadowVisIndex = bShadowVis ? graph.GetStorageImageViewDescriptorIndex("restir_shadow_vis"_sid) : ~0u,
-                    .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex("restir_signal"_sid) : ~0u,
-                    .bPermutationSampling = restirParams.bPermutationSampling ? 1u : 0u,
-                    .antilagStrength = restirParams.antilagStrength,
-                    .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
-                    .bTemporalSearch = restirParams.bTemporalSearch ? 1u : 0u,
-                    .activeCheckerboardField = field,
-                    .finalWClamp = (restirParams.spatialPasses == 0u) ? restirParams.restirWClamp : 0.0f,
                     .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -657,78 +586,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     if (bTemporalReuse) { graph.EmplaceVersion("restir_reservoir_history"_sid, reuseBuffer); }
 
-    // Spatial reuse chain: N passes ping-ponging two scratch buffers, each reading the previous output. Pass 0 reads the temporal reuseBuffer.
-    const uint32_t spatialPasses = bFusedSpatioTemporal ? 0u : restirParams.spatialPasses;
-    if (spatialPasses == 0u) {
-        graph.AliasBuffer("restir_reservoir_final"_sid, reuseBuffer);
-        return;
-    }
-    const StringID spatialScratch[2] = {"restir_reservoir_spatial"_sid, "restir_reservoir_spatial2"_sid};
-    graph.CreateBuffer(spatialScratch[0], reservoirBufferSize, true);
-    if (spatialPasses > 1u) {
-        graph.CreateBuffer(spatialScratch[1], reservoirBufferSize, true);
-    }
-
-    for (uint32_t i = 0; i < spatialPasses; i++) {
-        const StringID inputName = i == 0u ? reuseBuffer : spatialScratch[i - 1u & 1u];
-        const StringID outputName = spatialScratch[i & 1u];
-
-        const Core::InlineString<32> passName = Core::InlineString<32>::Format("[ReSTIR DI] Spatial %u", i);
-
-        RenderPass& spatialPass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
-        spatialPass.ReadBuffer(SCENE_DATA_BUFFER);
-        spatialPass.ReadBuffer("light_data"_sid);
-        spatialPass.ReadBuffer("restir_lights_vs"_sid);
-        spatialPass.ReadBuffer(inputName);
-        spatialPass.ReadSampledImage(targets.gbufferOne);
-        spatialPass.ReadSampledImage(targets.gbufferTwo);
-        spatialPass.ReadSampledImage(targets.shadowOriginOffset);
-        spatialPass.ReadSampledImage(targets.depthCopy);
-        if (bHasTLAS) { spatialPass.ReadTLASBuffer(RT_TLAS_BUFFER); }
-        spatialPass.WriteBuffer(outputName);
-        spatialPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, inputName, outputName, passIndex = i, bLastPass = (i == spatialPasses - 1u), bCenterVisible = (i == 0u && bTemporalReuse && bHasTLAS), field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_spatial"_sid);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
-            const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
-
-            ReSTIRDISpatialPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .lightData = graph.GetBufferAddress("light_data"_sid),
-                .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
-                .inputBuffer = graph.GetBufferAddress(inputName),
-                .outputBuffer = graph.GetBufferAddress(outputName),
-                .shadowOriginOffsetIndex = graph.GetSampledImageViewDescriptorIndex(shadowOriginOffset),
-                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
-                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
-                .sceneDataIndex = sceneIndex,
-                .frameIndex = static_cast<uint32_t>(frameNumber),
-                .spatialRadius = restirParams.spatialRadius,
-                .spatialNeighbors = restirParams.spatialNeighbors,
-                .mCap = restirParams.spatialMCap,
-                .tlasIndex = tlasIndex,
-                .passIndex = passIndex,
-                .bAdaptiveSpatial = restirParams.bAdaptiveSpatial ? 1u : 0u,
-                .adaptiveSpatialBoost = restirParams.adaptiveSpatialBoost,
-                .adaptiveMReference = restirParams.temporalMCap,
-                .bValidateVisibility = bLastPass ? 1u : 0u,
-                .wClamp = restirParams.restirWClamp,
-                .activeCheckerboardField = field,
-                .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
-                .bCenterVisible = bCenterVisible ? 1u : 0u,
-            };
-            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-
-            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
-            const uint32_t groupsX = (strideX + 15) / 16;
-            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
-            vkCmdDispatch(cmd, groupsX, groupsY, 1);
-        });
-    }
-
-    graph.AliasBuffer("restir_reservoir_final"_sid, spatialScratch[spatialPasses - 1u & 1u]);
+    graph.AliasBuffer("restir_reservoir_final"_sid, reuseBuffer);
 }
 
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,

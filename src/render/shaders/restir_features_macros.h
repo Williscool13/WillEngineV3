@@ -20,7 +20,4 @@
 // [temporal] RELAX moving-shadow confidence chain.
 #define RESTIR_ENABLE_CONFIDENCE 1
 
-// [spatial] Adaptive spatial dilation.
-#define RESTIR_ENABLE_SPATIAL_DILATE 1
-
 #endif // WILL_ENGINE_RESTIR_FEATURES

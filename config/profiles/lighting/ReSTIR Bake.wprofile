@@ -62,7 +62,6 @@ bakedDiffuseClampK|0x40800000
 intensity|0x3f800000
 ;
 restir
-adaptiveSpatialBoost|0x40400000
 antilagStrength|0x3f65a99d
 atrous
 iterations|4
@@ -70,7 +69,6 @@ sigmaDepth|0x3c23d70a
 sigmaLuminance|0x40000000
 sigmaNormal|0x43000000
 ;
-bAdaptiveSpatial|1
 bCheckerboard|1
 bEmissiveTriangleLights|0
 bEnableAntilag|1
@@ -200,7 +198,6 @@ remodulateOutput|0
 restirWClamp|0x00000000
 spatialMCap|2000
 spatialNeighbors|1
-spatialPasses|1
 spatialRadius|30
 specularDeferRoughnessMax|0x3f800000
 svgf
