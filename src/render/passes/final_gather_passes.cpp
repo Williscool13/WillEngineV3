@@ -46,7 +46,7 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
     });
 }
 
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath)
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath, bool bSplitGather)
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
@@ -85,7 +85,52 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     const bool bScreenSpace = !bDebugView && !bDisableScreenTier && graph.ResourceHasVersion("lit_color_preoverlay"_sid, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const bool bDemodulate = bScreenSpace && graph.ResourceHasVersion(GI_GATHER_RESOLVED, 1);
 
-    RenderPass& pass = graph.AddPass("GI Diffuse Gather"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
+    const uint32_t gatherRayCount = glm::clamp(raysPerPixel, 1u, GI_GATHER_MAX_RAYS_PER_PIXEL);
+    if (bSplitGather) {
+        graph.CreateBuffer("gi_gather_hits"_sid, static_cast<VkDeviceSize>(gatherExtent[0]) * gatherExtent[1] * gatherRayCount * sizeof(GIGatherHit), true);
+        graph.CreateTexture("gi_gather_ray_meta"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
+
+        RenderPass& tracePass = graph.AddPass("GI Diffuse Gather Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
+        tracePass.ReadTLASBuffer(RT_TLAS_BUFFER);
+        tracePass.ReadBuffer(SCENE_DATA_BUFFER);
+        tracePass.ReadSampledImage(targets.gbufferOne);
+        tracePass.ReadSampledImage(targets.depthCopy);
+        const bool bTraceCascades = AddDDGISampleDependencies(graph, tracePass);
+        tracePass.WriteBuffer("gi_gather_hits"_sid);
+        tracePass.WriteStorageImage("gi_gather_ray_meta"_sid);
+        tracePass.WriteStorageImage(GI_GATHER_VARIANCE_GUIDE);
+        tracePass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bTraceCascades, bSkipRay, gatherRayCount,
+                gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_gather_trace"_sid);
+            if (!pipelineEntry) {
+                return;
+            }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+            GIGatherPushConstant pc{
+                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .ddgiCascades = bTraceCascades ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
+                .gatherExtent = {gatherExtent[0], gatherExtent[1]},
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .sceneDataIndex = sceneIndex,
+                .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .frameIndex = static_cast<uint32_t>(frameNumber),
+                .bCascadesValid = bTraceCascades ? 1u : 0u,
+                .bSkipRay = bSkipRay ? 1u : 0u,
+                .rayCount = gatherRayCount,
+                .varGuideOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
+                .gatherScale = gatherScale,
+                .hitBuffer = graph.GetBufferAddress("gi_gather_hits"_sid),
+                .rayMetaIndex = graph.GetStorageImageViewDescriptorIndex("gi_gather_ray_meta"_sid),
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (gatherExtent[0] + 7) / 8, (gatherExtent[1] + 7) / 8, 1);
+        });
+    }
+
+    RenderPass& pass = graph.AddPass(bSplitGather ? "GI Diffuse Gather Shade"_sid : "GI Diffuse Gather"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
     pass.ReadTLASBuffer(RT_TLAS_BUFFER);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     pass.ReadBuffer(RADIANCE_CACHE_ENTRIES);
@@ -121,16 +166,22 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.WriteStorageImage(gatherShG);
     pass.WriteStorageImage(gatherShB);
     pass.WriteStorageImage(gatherSkyVis);
-    pass.WriteStorageImage(GI_GATHER_VARIANCE_GUIDE);
+    if (bSplitGather) {
+        pass.ReadBuffer("gi_gather_hits"_sid);
+        pass.ReadSampledImage("gi_gather_ray_meta"_sid);
+    }
+    else {
+        pass.WriteStorageImage(GI_GATHER_VARIANCE_GUIDE);
+    }
     pass.WriteStorageImage(GI_GATHER_DATA);
     pass.WriteStorageImage(GI_GATHER_GUIDE);
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, touchKeys, gatherHistory, litHistory, depthHistory, gbufferOneHistory,
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, touchKeys, gatherHistory, litHistory, depthHistory, gbufferOneHistory, bSplitGather,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_gather"_sid);
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bSplitGather ? "gi_gather_shade"_sid : "gi_gather"_sid);
         if (!pipelineEntry) {
             return;
         }
@@ -174,10 +225,12 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
             .rayCount = glm::clamp(raysPerPixel, 1u, GI_GATHER_MAX_RAYS_PER_PIXEL),
             .giHistoryIndex = bDemodulate ? graph.GetSampledImageViewDescriptorIndex(gatherHistory) : ~0x0u,
-            .varGuideOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
+            .varGuideOutIndex = bSplitGather ? ~0x0u : graph.GetStorageImageViewDescriptorIndex(GI_GATHER_VARIANCE_GUIDE),
             .gatherScale = gatherScale,
             .touchEntries = bTouch ? graph.GetBufferAddress(touchEntries) : 0,
             .touchKeys = bTouch ? graph.GetBufferAddress(touchKeys) : 0,
+            .hitBuffer = bSplitGather ? graph.GetBufferAddress("gi_gather_hits"_sid) : 0,
+            .rayMetaIndex = bSplitGather ? graph.GetSampledImageViewDescriptorIndex("gi_gather_ray_meta"_sid) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);

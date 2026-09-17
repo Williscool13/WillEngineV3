@@ -92,60 +92,89 @@ public float GIGatherDisocclusionThreshold(SceneData scene, float centerViewZ)
     return GI_GATHER_DISOCCLUSION_SENSITIVITY * abs(scene.ndcToViewMul.y) * abs(centerViewZ);
 }
 
-/** MV-reprojected 2x2 bilinear history fetch with per-tap depth/backface validity and weight renormalization. quality is the surviving bilinear weight; 0 means no usable history. */
-public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+public struct GIGatherHistoryTaps
 {
-    GIGatherHistory result = { float3(0.0), 0.0, 0.0 };
+    public int2 origin;
+    public float2 prevPos;
+    public float4 weights;
+    public float weightSum;
+};
+
+/** Reprojection and per-tap validity for a full-res history fetch, resolved once so several histories at the same pixel share the depth/normal gate. */
+public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+{
+    GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0 };
 
     float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
     if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
-        return result;
+        return taps;
     }
 
     float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
     float disocclusionThreshold = GIGatherDisocclusionThreshold(scene, centerViewZ);
 
-    float2 prevPos = historyUv * float2(renderExtent) - 0.5;
-    int2 origin = int2(floor(prevPos));
-    float2 f = prevPos - float2(origin);
+    taps.prevPos = historyUv * float2(renderExtent) - 0.5;
+    taps.origin = int2(floor(taps.prevPos));
+    float2 f = taps.prevPos - float2(taps.origin);
     float4 bilinearW = float4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
     const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
 
-    float3 colorSum = float3(0.0);
-    float3 colorMin = float3(1e5);
-    float3 colorMax = float3(-1e5);
-    float countSum = 0.0;
-    float weightSum = 0.0;
     [unroll]
     for (uint i = 0; i < 4; i++) {
         if (bilinearW[i] <= 1e-4) {
             continue;
         }
-        int2 tap = origin + tapOffsets[i];
+        int2 tap = taps.origin + tapOffsets[i];
         if (any(tap < int2(0)) || any(tap >= int2(renderExtent))) {
             continue;
         }
         if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN)) {
             continue;
         }
-        float4 history = rdgTexturesFloat4[historyIndex].Load(int3(tap, 0));
-        colorSum += history.rgb * bilinearW[i];
+        taps.weights[i] = bilinearW[i];
+        taps.weightSum += bilinearW[i];
+    }
+    return taps;
+}
+
+/** 2x2 bilinear history fetch over pre-resolved taps with weight renormalization. quality is the surviving bilinear weight; 0 means no usable history. */
+public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint historyIndex, uint2 renderExtent)
+{
+    GIGatherHistory result = { float3(0.0), 0.0, 0.0 };
+    const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
+
+    float3 colorSum = float3(0.0);
+    float3 colorMin = float3(1e5);
+    float3 colorMax = float3(-1e5);
+    float countSum = 0.0;
+    [unroll]
+    for (uint i = 0; i < 4; i++) {
+        if (taps.weights[i] <= 0.0) {
+            continue;
+        }
+        float4 history = rdgTexturesFloat4[historyIndex].Load(int3(taps.origin + tapOffsets[i], 0));
+        colorSum += history.rgb * taps.weights[i];
         colorMin = min(colorMin, history.rgb);
         colorMax = max(colorMax, history.rgb);
-        countSum += history.a * bilinearW[i];
-        weightSum += bilinearW[i];
+        countSum += history.a * taps.weights[i];
     }
 
-    if (weightSum > 0.01) {
-        float invW = 1.0 / weightSum;
+    if (taps.weightSum > 0.01) {
+        float invW = 1.0 / taps.weightSum;
         result.color = colorSum * invW;
         result.count = countSum * invW;
-        result.quality = saturate(weightSum);
-        if (weightSum > 0.999) {
-            result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);
+        result.quality = saturate(taps.weightSum);
+        if (taps.weightSum > 0.999) {
+            result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, taps.prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);
         }
     }
     return result;
+}
+
+/** MV-reprojected 2x2 bilinear history fetch with per-tap depth/backface validity and weight renormalization. */
+public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+{
+    return GIGatherFetchHistory(GIGatherResolveHistoryTaps(scene, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex, renderExtent);
 }
 
 public struct GIGatherScalarHistory
@@ -155,49 +184,32 @@ public struct GIGatherScalarHistory
     public float quality;
 };
 
-/** GIGatherFetchHistory for a float2 (value, count) history such as the AO accumulator; same reprojection and tap gates, bilinear only. count is returned as stored. */
-public GIGatherScalarHistory GIGatherFetchScalarHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+/** GIGatherFetchHistory for a float2 (value, count) history such as the AO accumulator; bilinear only. count is returned as stored. */
+public GIGatherScalarHistory GIGatherFetchScalarHistory(GIGatherHistoryTaps taps, uint historyIndex)
 {
     GIGatherScalarHistory result = { 0.0, 0.0, 0.0 };
-
-    float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
-    if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
-        return result;
-    }
-
-    float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
-    float disocclusionThreshold = GIGatherDisocclusionThreshold(scene, centerViewZ);
-
-    float2 prevPos = historyUv * float2(renderExtent) - 0.5;
-    int2 origin = int2(floor(prevPos));
-    float2 f = prevPos - float2(origin);
-    float4 bilinearW = float4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
     const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
 
     float2 sum = float2(0.0);
-    float weightSum = 0.0;
     [unroll]
     for (uint i = 0; i < 4; i++) {
-        if (bilinearW[i] <= 1e-4) {
+        if (taps.weights[i] <= 0.0) {
             continue;
         }
-        int2 tap = origin + tapOffsets[i];
-        if (any(tap < int2(0)) || any(tap >= int2(renderExtent))) {
-            continue;
-        }
-        if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN)) {
-            continue;
-        }
-        sum += rdgTexturesFloat2[historyIndex].Load(int3(tap, 0)).rg * bilinearW[i];
-        weightSum += bilinearW[i];
+        sum += rdgTexturesFloat2[historyIndex].Load(int3(taps.origin + tapOffsets[i], 0)).rg * taps.weights[i];
     }
 
-    if (weightSum > 0.01) {
-        result.value = sum.x / weightSum;
-        result.count = sum.y / weightSum;
-        result.quality = saturate(weightSum);
+    if (taps.weightSum > 0.01) {
+        result.value = sum.x / taps.weightSum;
+        result.count = sum.y / taps.weightSum;
+        result.quality = saturate(taps.weightSum);
     }
     return result;
+}
+
+public GIGatherScalarHistory GIGatherFetchScalarHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+{
+    return GIGatherFetchScalarHistory(GIGatherResolveHistoryTaps(scene, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex);
 }
 
 /** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count, 6 = first-ray escape (yellow sky miss, magenta backface, front-face hitT green-to-red over 2-10m). */

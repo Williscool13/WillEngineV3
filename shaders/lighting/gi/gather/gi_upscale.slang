@@ -205,10 +205,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
     GIGatherHistory fastHistory = { float3(0.0), 0.0, 0.0 };
     float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
+    GIGatherHistoryTaps historyTaps = { int2(0), float2(0.0), float4(0.0), 0.0 };
+    if (pc.bHistoryValid != 0u || pc.skyVisAccumHistoryIndex != ~0x0u) {
+        historyTaps = GIGatherResolveHistoryTaps(scene, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+    }
     if (pc.bHistoryValid != 0u) {
-        history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        history = GIGatherFetchHistory(historyTaps, pc.historyIndex, pc.renderExtent);
         if (pc.fastHistoryIndex != ~0x0u) {
-            fastHistory = GIGatherFetchHistory(scene, pc.fastHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+            fastHistory = GIGatherFetchHistory(historyTaps, pc.fastHistoryIndex, pc.renderExtent);
         }
         history.color *= historyRatio;
         fastHistory.color *= historyRatio;
@@ -286,7 +290,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float skyVis = skyVisCurrent;
     float skyVisCount = bSkyCurrent && !bFallbackCurrent ? 1.0 : 0.0;
     if (pc.skyVisAccumHistoryIndex != ~0x0u) {
-        GIGatherScalarHistory skyHistory = GIGatherFetchScalarHistory(scene, pc.skyVisAccumHistoryIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        GIGatherScalarHistory skyHistory = GIGatherFetchScalarHistory(historyTaps, pc.skyVisAccumHistoryIndex);
         if (skyHistory.quality > 0.0) {
             float nSky = min(skyHistory.count, (GI_UPSCALE_SKY_VIS_MAX_ACCUM - 1.0) * scene.framerateScale);
             if (neighborhoodMotionPixels > GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {

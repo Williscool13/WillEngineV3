@@ -63,6 +63,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     int32_t& profileSlot = state->debug.profileCameraSlot;
     if (state->input.GetActionState(Actions::ACTION_PROFILE_MODE).pressed) {
         profileSlot = profileSlot < 0 ? 0 : -1;
+        state->debug.render.bDisableAsyncCompute = profileSlot >= 0;
         LOG_INFO(Engine, "Profile mode {}", profileSlot < 0 ? "off" : "on");
     }
     if (profileSlot >= 0) {

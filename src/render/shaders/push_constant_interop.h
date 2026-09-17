@@ -809,6 +809,18 @@ SHADER_PUBLIC struct RadianceCacheShadePushConstant
     SHADER_PUBLIC uint32_t pad0;
 };
 
+SHADER_PUBLIC struct GIGatherHit
+{
+    SHADER_PUBLIC float3 direction;
+    SHADER_PUBLIC float hitT;
+    SHADER_PUBLIC float2 bary;
+    SHADER_PUBLIC uint32_t instanceID;
+    SHADER_PUBLIC uint32_t primIndex;
+};
+
+SHADER_PUBLIC SHADER_CONST float GI_GATHER_HIT_SKY = -1.0f;
+SHADER_PUBLIC SHADER_CONST uint32_t GI_GATHER_HIT_FRONT_FACE_BIT = 0x80000000u;
+
 SHADER_PUBLIC struct GIGatherPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -852,6 +864,8 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) touchKeys;
+    SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
+    SHADER_PUBLIC uint32_t rayMetaIndex;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant

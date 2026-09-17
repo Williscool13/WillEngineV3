@@ -473,6 +473,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReGIRPresampleTilesPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("regir_fill"_sid, src / "regir_fill.spv", "ComputeReGIRFill",
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("gi_gather_trace"_sid, src / "gi_gather_trace.spv", "ComputeGIGatherTrace",
+                            sizeof(GIGatherPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("gi_gather_shade"_sid, src / "gi_gather_shade.spv", "ComputeGIGatherShade",
+                            sizeof(GIGatherPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("restir_di_spatial"_sid, src / "restir_di_spatial.spv", "ComputeReSTIRDISpatial",
                             sizeof(ReSTIRDISpatialPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("restir_di_spatiotemporal"_sid, src / "restir_di_spatiotemporal.spv", "ComputeReSTIRDISpatioTemporal",

@@ -311,6 +311,7 @@ void Serialize(const Core::DDGIParams& p, TextWriter& w)
     w.Key("bApplyToLighting", p.bApplyToLighting);
     w.Key("bFinalGather", p.bFinalGather);
     w.Key("bFinalGatherQuarterRes", p.bFinalGatherQuarterRes);
+    w.Key("bSplitGather", p.bSplitGather);
     w.Key("bFinalGatherDenoise", p.bFinalGatherDenoise);
     w.Key("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
     w.Key("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
@@ -356,6 +357,7 @@ void Deserialize(const TextReader& r, Core::DDGIParams& p)
     p.bApplyToLighting = r.Bool("bApplyToLighting", p.bApplyToLighting);
     p.bFinalGather = r.Bool("bFinalGather", p.bFinalGather);
     p.bFinalGatherQuarterRes = r.Bool("bFinalGatherQuarterRes", p.bFinalGatherQuarterRes);
+    p.bSplitGather = r.Bool("bSplitGather", p.bSplitGather);
     p.bFinalGatherDenoise = r.Bool("bFinalGatherDenoise", p.bFinalGatherDenoise);
     p.bFinalGatherChromaDenoise = r.Bool("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
     p.gatherChromaDenoisePasses = r.UInt("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
