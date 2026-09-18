@@ -33,6 +33,13 @@ static void StbiFree(void* ptr)
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
+#define STBIW_MALLOC(sz) StbiAlloc(sz)
+#define STBIW_REALLOC(p, newsz) StbiRealloc(p, newsz)
+#define STBIW_FREE(p) StbiFree(p)
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb/stb_image_write.h>
+
 namespace Editor
 {
 void SetStbImageAllocator(Core::TlsfAllocator* allocator)

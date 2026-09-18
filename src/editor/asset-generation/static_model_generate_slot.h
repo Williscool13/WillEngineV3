@@ -83,7 +83,8 @@ private:
 
     static VkSamplerAddressMode ExtractAddressMode(cgltf_wrap_mode wrap);
 
-    static MaterialProperties ExtractMaterial(const cgltf_data& gltf, const cgltf_material& gltfMaterial);
+    /** @param specGlossImageIndex raw image index of the metal-rough map converted from this material's spec-gloss map, or -1 */
+    static MaterialProperties ExtractMaterial(const cgltf_data& gltf, const cgltf_material& gltfMaterial, int32_t specGlossImageIndex);
 
     static void LoadTextureIndicesAndUV(const cgltf_texture_view& textureView, const cgltf_data& gltf, int& imageIndex, int& samplerIndex, glm::vec4& uvTransform);
 

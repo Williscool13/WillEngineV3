@@ -9,6 +9,7 @@
 #include <cgltf/cgltf.h>
 #include <spdlog/spdlog.h>
 #include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
 #include <meshoptimizer/src/meshoptimizer.h>
 
 #include "asset_generator.h"
@@ -33,6 +34,67 @@ namespace Editor
 static constexpr uint32_t BLAS_SPLIT_TRIANGLE_TARGET = 16384;
 // glTF emissive strength is unitless; strength 1 imports as 65536 nits
 static constexpr float GLTF_EMISSIVE_STRENGTH_TO_NITS = 65536.0f;
+static constexpr float SPEC_GLOSS_ROUGHNESS_FLOOR = 0.3f;
+static constexpr uint32_t SPEC_GLOSS_CONVERT_WORKERS = 4;
+
+static void ConvertSpecGlossToMetalRough(const uint8_t* src, int32_t w, int32_t h, float glossFactor, float specFactor, uint8_t* dst)
+{
+    constexpr float DIELECTRIC_SPECULAR = 0.04f;
+    const size_t pixelCount = static_cast<size_t>(w) * h;
+    for (size_t i = 0; i < pixelCount; ++i) {
+        const uint8_t* s = src + i * 4;
+        const float specular = static_cast<float>(std::max(std::max(s[0], s[1]), s[2])) / 255.0f * specFactor;
+        const float roughness = 1.0f - static_cast<float>(s[3]) / 255.0f * glossFactor;
+        const float metallic = glm::clamp((specular - DIELECTRIC_SPECULAR) / (1.0f - DIELECTRIC_SPECULAR), 0.0f, 1.0f);
+        uint8_t* d = dst + i * 4;
+        d[0] = 0;
+        d[1] = static_cast<uint8_t>(roughness * 255.0f + 0.5f);
+        d[2] = static_cast<uint8_t>(metallic * 255.0f + 0.5f);
+        d[3] = 255;
+    }
+}
+
+static void AppendPng(void* context, void* data, int size)
+{
+    Core::Vector<uint8_t>& out = *static_cast<Core::Vector<uint8_t>*>(context);
+    const uint8_t* bytes = static_cast<const uint8_t*>(data);
+    out.Append(bytes, bytes + size);
+}
+
+/** Loads one spec-gloss image, converts it to metal-rough and writes it as a PNG at parentPath/relName. */
+static bool ConvertSpecGlossImage(Core::TlsfAllocator* scratch, const Core::Path& parentPath, const RawImage& source, float glossFactor, float specFactor, const char* relName)
+{
+    int32_t w = source.w;
+    int32_t h = source.h;
+    int32_t channels = 0;
+    unsigned char* stbiData = nullptr;
+    const uint8_t* pixels = source.data.IsAllocated() ? source.data.Data() : nullptr;
+    if (pixels == nullptr) {
+        stbiData = stbi_load((parentPath / source.sourcePath.c_str()).c_str(), &w, &h, &channels, 4);
+        pixels = stbiData;
+    }
+    if (pixels == nullptr) {
+        SPDLOG_ERROR("Failed to load spec-gloss image {}", source.sourcePath.c_str());
+        return false;
+    }
+
+    Core::HeapArray<uint8_t> converted(scratch, Core::AllocTag::AssetGenerator, static_cast<size_t>(w) * h * 4);
+    ConvertSpecGlossToMetalRough(pixels, w, h, glossFactor, specFactor, converted.Data());
+    if (stbiData) {
+        stbi_image_free(stbiData);
+    }
+
+    Core::Vector<uint8_t> png(scratch, Core::AllocTag::AssetGenerator, 0);
+    if (stbi_write_png_to_func(AppendPng, &png, w, h, 4, converted.Data(), w * 4) == 0) {
+        SPDLOG_ERROR("Failed to encode converted spec-gloss image {}", source.sourcePath.c_str());
+        return false;
+    }
+    if (!Platform::WriteFile(parentPath / relName, png.Data(), png.Size())) {
+        SPDLOG_ERROR("Failed to write {}", relName);
+        return false;
+    }
+    return true;
+}
 
 static uint32_t ComputeBlasSplitCount(uint32_t triangleCount, uint32_t remainingPrimitiveSlots)
 {
@@ -213,8 +275,44 @@ bool StaticModelGenerateSlot::LoadGltf()
     progress->value.store(_progress, std::memory_order_release);
 
 
+    struct SpecGlossConvert
+    {
+        int32_t sourceImage;
+        float glossFactor;
+        float specFactor;
+    };
+    Core::Vector<SpecGlossConvert> specGlossConverts(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, 0);
+    Core::HeapArray<int32_t> specGlossImageIndex;
+    if (gltf.materials_count > 0) {
+        specGlossImageIndex = Core::HeapArray<int32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.materials_count);
+    }
+    for (size_t i = 0; i < gltf.materials_count; ++i) {
+        specGlossImageIndex[i] = -1;
+        const cgltf_material& gltfMaterial = gltf.materials[i];
+        if (!gltfMaterial.has_pbr_specular_glossiness || gltfMaterial.pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr) { continue; }
+        const cgltf_pbr_specular_glossiness& sg = gltfMaterial.pbr_specular_glossiness;
+        if (sg.specular_glossiness_texture.texture == nullptr || sg.specular_glossiness_texture.texture->image == nullptr) { continue; }
+        const SpecGlossConvert convert{
+            static_cast<int32_t>(sg.specular_glossiness_texture.texture->image - gltf.images),
+            sg.glossiness_factor,
+            glm::max(glm::max(sg.specular_factor[0], sg.specular_factor[1]), sg.specular_factor[2])};
+        int32_t found = -1;
+        for (size_t c = 0; c < specGlossConverts.Size(); ++c) {
+            const SpecGlossConvert& existing = specGlossConverts[c];
+            if (existing.sourceImage == convert.sourceImage && existing.glossFactor == convert.glossFactor && existing.specFactor == convert.specFactor) {
+                found = static_cast<int32_t>(c);
+                break;
+            }
+        }
+        if (found < 0) {
+            found = static_cast<int32_t>(specGlossConverts.Size());
+            specGlossConverts.PushBack(convert);
+        }
+        specGlossImageIndex[i] = static_cast<int32_t>(gltf.images_count) + found;
+    }
+
     if (gltf.images_count > 0) {
-        rawModel.images = Core::HeapArray<RawImage>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.images_count);
+        rawModel.images = Core::HeapArray<RawImage>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.images_count + specGlossConverts.Size());
 
         // MEM: stbi does allocs with malloc/free. I cba to use its custom macro overrides
         unsigned char* stbiData = nullptr;
@@ -352,6 +450,56 @@ bool StaticModelGenerateSlot::LoadGltf()
             SPDLOG_ERROR("Mismatch of loaded images and expected images in the gltf");
             return false;
         }
+
+        if (!specGlossConverts.IsEmpty()) {
+            struct ConvertTask : enki::ITaskSet
+            {
+                Core::TlsfAllocator* scratch{nullptr};
+                const Core::Path* parentPath{nullptr};
+                std::string_view stem;
+                const SpecGlossConvert* converts{nullptr};
+                RawImage* images{nullptr};
+                size_t firstOutput{0};
+                std::atomic<bool> bFailed{false};
+
+                void ExecuteRange(enki::TaskSetPartition range, uint32_t) override
+                {
+                    for (uint32_t c = range.start; c < range.end; ++c) {
+                        const SpecGlossConvert& convert = converts[c];
+                        char indexBuf[16];
+                        *std::to_chars(indexBuf, indexBuf + sizeof(indexBuf), c).ptr = '\0';
+                        Core::InlineString<300> relName(".extracted/");
+                        relName.Append(stem);
+                        relName.Append("_specgloss_");
+                        relName.Append(indexBuf);
+                        relName.Append(".png");
+                        if (!ConvertSpecGlossImage(scratch, *parentPath, images[convert.sourceImage], convert.glossFactor, convert.specFactor, relName.c_str())) {
+                            bFailed.store(true, std::memory_order_relaxed);
+                            continue;
+                        }
+                        images[firstOutput + c].sourcePath = Core::InlinePath<256>{relName.View()};
+                    }
+                }
+            };
+
+            stbi_write_png_compression_level = 1;
+            ConvertTask task{};
+            task.scratch = &memoryManager->AssetsScratch();
+            task.parentPath = &parentPath;
+            task.stem = gltfPath.Stem();
+            task.converts = specGlossConverts.Data();
+            task.images = rawModel.images.Data();
+            task.firstOutput = gltf.images_count;
+            task.m_SetSize = static_cast<uint32_t>(specGlossConverts.Size());
+            // Bounds partitions, and so images in flight, to SPEC_GLOSS_CONVERT_WORKERS
+            task.m_MinRange = (task.m_SetSize + SPEC_GLOSS_CONVERT_WORKERS - 1) / SPEC_GLOSS_CONVERT_WORKERS;
+            scheduler->AddTaskSetToPipe(&task);
+            scheduler->WaitforTask(&task);
+            if (task.bFailed.load(std::memory_order_relaxed)) {
+                rawModel.images = {};
+                return false;
+            }
+        }
     }
 
     _progress += stepDiff;
@@ -373,7 +521,7 @@ bool StaticModelGenerateSlot::LoadGltf()
             // mat.sourcePath     not relevant for model-based materials
             // mat.pipelineID = ; not yet used, but will likely just point to the ID of the "generic lit shader"
             rawModel.materials[i].bSynthesized = true;
-            rawModel.materials[i].props = ExtractMaterial(gltf, gltf.materials[i]);
+            rawModel.materials[i].props = ExtractMaterial(gltf, gltf.materials[i], specGlossImageIndex[i]);
         }
     }
 
@@ -1300,7 +1448,7 @@ VkSamplerMipmapMode StaticModelGenerateSlot::ExtractMipmapMode(cgltf_filter_type
     }
 }
 
-MaterialProperties StaticModelGenerateSlot::ExtractMaterial(const cgltf_data& gltf, const cgltf_material& gltfMaterial)
+MaterialProperties StaticModelGenerateSlot::ExtractMaterial(const cgltf_data& gltf, const cgltf_material& gltfMaterial, int32_t specGlossImageIndex)
 {
     MaterialProperties material{};
     material.colorFactor = glm::vec4(1.0f);
@@ -1330,8 +1478,14 @@ MaterialProperties StaticModelGenerateSlot::ExtractMaterial(const cgltf_data& gl
     if (gltfMaterial.has_pbr_specular_glossiness) {
         const cgltf_pbr_specular_glossiness& sg = gltfMaterial.pbr_specular_glossiness;
         material.colorFactor = glm::vec4(sg.diffuse_factor[0], sg.diffuse_factor[1], sg.diffuse_factor[2], sg.diffuse_factor[3]);
-        material.metalRoughFactors.x = glm::max(glm::max(sg.specular_factor[0], sg.specular_factor[1]), sg.specular_factor[2]);
-        material.metalRoughFactors.y = 1.0f - sg.glossiness_factor;
+        if (specGlossImageIndex >= 0) {
+            material.metalRoughFactors.x = 1.0f;
+            material.metalRoughFactors.y = 1.0f;
+        }
+        else {
+            material.metalRoughFactors.x = glm::max(glm::max(sg.specular_factor[0], sg.specular_factor[1]), sg.specular_factor[2]);
+            material.metalRoughFactors.y = glm::max(1.0f - sg.glossiness_factor, SPEC_GLOSS_ROUGHNESS_FLOOR);
+        }
     }
 
     material.alphaProperties.x = gltfMaterial.alpha_cutoff;
@@ -1382,6 +1536,11 @@ MaterialProperties StaticModelGenerateSlot::ExtractMaterial(const cgltf_data& gl
 
     if (gltfMaterial.pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr) {
         LoadTextureIndicesAndUV(gltfMaterial.pbr_metallic_roughness.metallic_roughness_texture, gltf, material.textureImageIndices.y, material.textureSamplerIndices.y, material.metalRoughUvTransform);
+        fixTextureIndices(material.textureImageIndices.y, material.textureSamplerIndices.y);
+    }
+    else if (specGlossImageIndex >= 0) {
+        LoadTextureIndicesAndUV(gltfMaterial.pbr_specular_glossiness.specular_glossiness_texture, gltf, material.textureImageIndices.y, material.textureSamplerIndices.y, material.metalRoughUvTransform);
+        material.textureImageIndices.y = specGlossImageIndex;
         fixTextureIndices(material.textureImageIndices.y, material.textureSamplerIndices.y);
     }
 
