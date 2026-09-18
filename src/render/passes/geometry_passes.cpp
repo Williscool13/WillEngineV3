@@ -673,7 +673,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     const uint32_t tilesY = (renderExtent[1] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
     const uint32_t tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]);
     const uint32_t lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size());
-    graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialWatermark) * tileCapacity * sizeof(uint32_t));
+    graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialCount) * tileCapacity * sizeof(uint32_t));
     graph.CreateBuffer(LIGHTING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(lightingCount) * tileCapacity * sizeof(uint32_t));
 
     const bool bShadeDebug = bucketDebugMode == Core::BucketDebugMode::ShadeBuckets || bucketDebugMode == Core::BucketDebugMode::ShadeHeat;
@@ -725,7 +725,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
     dispatchCountPass.ReadWriteBuffer("readback_buffer"_sid);
     dispatchCountPass.Execute([&, pipelineManager,
-            materialCount = viewFamily.materialWatermark,
+            materialCount = viewFamily.materialCount,
             lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
@@ -761,7 +761,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
     const auto materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size());
     auto* sortedMaterials = arena.AllocArray<MaterialEntry>(materialCount);
     for (uint32_t i = 0; i < materialCount; ++i) {
-        sortedMaterials[i] = {viewFamily.activeMaterials[i].stableIndex, viewFamily.activeMaterials[i].material.fragmentShader};
+        sortedMaterials[i] = {viewFamily.activeMaterials[i].materialSlot, viewFamily.activeMaterials[i].material.fragmentShader};
     }
     std::sort(sortedMaterials, sortedMaterials + materialCount, [](const MaterialEntry& a, const MaterialEntry& b) {
         return a.fragmentShader < b.fragmentShader;

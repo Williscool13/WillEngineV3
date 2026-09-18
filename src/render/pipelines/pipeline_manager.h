@@ -105,6 +105,8 @@ public:
     /** Bucket index of a lighting shader. Unregistered ids report 0, matching GetLightingShaderType. */
     uint32_t GetLightingShaderIndex(StringID pipelineId) const;
 
+    StringID ResolveLightingShaderForMode(StringID pipelineId, Core::LightingMode mode) const;
+
     /**
      * Lighting pipelines whose output contract matches the mode, in registration order. Anything outside this set is
      * rewritten to the mode's default by SanitizeViewFamily, so editor pickers should offer only these.

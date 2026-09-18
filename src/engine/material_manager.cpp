@@ -55,6 +55,9 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
       nameToTextMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS)
 
 {
+    uploadDirty.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, Core::FRAME_BUFFER_COUNT, &memoryManager.Persistent(), Core::AllocTag::AssetManager);
+    changedDirty.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, 1, &memoryManager.Persistent(), Core::AllocTag::AssetManager);
+
     Material defaultMat{};
     defaultMat.props = {
         .colorFactor = {1.0f, 1.0f, 1.0f, 1.0f}, // white
@@ -123,6 +126,7 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
         entry->handle = handle;
     }
 
+    bool bChanged = entry->refCounter == 0;
     entry->refCounter++;
 
     auto it = materials.Find(materialID);
@@ -160,7 +164,10 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
         mat.bIsRuntimeLoaded = true;
         pendingMaterialLoadLogCount++;
         materialLoadLastActivity = std::chrono::steady_clock::now();
+        bChanged = true;
     }
+
+    if (bChanged) { MarkDirtyIndex(entry->handle.index); }
 }
 
 void MaterialManager::ReleaseMaterial(MaterialID materialID)
@@ -210,6 +217,7 @@ void MaterialManager::ProcessRetirements()
                 assert(mat.bIsRuntimeLoaded && "Material released but it was never runtime loaded to begin with");
                 mat.bIsRuntimeLoaded = false;
 
+                MarkDirtyIndex(entry.handle.index);
                 activeMaterialAllocator.Remove(entry.handle);
                 idToEntryMap.Remove(entry.id);
                 entry = {};
@@ -316,6 +324,7 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
         }
     }
 
+    MarkDirty(id);
     if (bSerialize) { serialize(); }
 }
 
@@ -343,6 +352,7 @@ void MaterialManager::ResolveMissingTextures()
             if (tex) {
                 texIdxRef(i) = static_cast<int32_t>(tex->bindlessHandle.index);
                 resolvedCount++;
+                MarkDirty(mat.id);
             }
         }
     }
@@ -363,8 +373,34 @@ void MaterialManager::RebindTexture(TextureID textureId, int32_t bindlessIndex)
             else {
                 mat.props.textureImageIndices2[i - 4] = bindlessIndex;
             }
+            MarkDirty(mat.id);
         }
     }
+}
+
+void MaterialManager::MarkDirty(MaterialID id)
+{
+    const uint32_t* index = idToEntryMap.Find(id);
+    if (index) { MarkDirtyIndex(*index); }
+}
+
+void MaterialManager::MarkDirtyIndex(uint32_t index)
+{
+    uploadDirty.Mark(index);
+    changedDirty.Mark(index);
+}
+
+void MaterialManager::MarkAllDirty()
+{
+    uploadDirty.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
+    changedDirty.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
+}
+
+void MaterialManager::SetLightingMode(Core::LightingMode mode)
+{
+    if (mode == uploadedLightingMode) { return; }
+    uploadedLightingMode = mode;
+    uploadDirty.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const

@@ -152,7 +152,7 @@ float ComputeCheckerboardResolveAccumSpeed(Core::AntiAliasingMode aaMode, uint64
 
 void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineManager, Core::Arena* arena)
 {
-    // Verify that shading and lighting shaders exist. If not use the default error unlit
+    // Verify that shading shaders exist. If not use the default error unlit.
     Core::ArenaFixedMap<StringID, bool> pipelineExists{arena, 1024};
     auto checkExists = [&](StringID id) -> bool {
         if (const bool* cached = pipelineExists.Find(id)) { return *cached; }
@@ -161,24 +161,14 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
         return exists;
     };
 
-    const LightingShaderType requiredType = RequiredLightingShaderType(viewFamily.lightingMode);
-    const StringID lightingFallback = requiredType == LightingShaderType::ReSTIR ? "default_pbr_restir"_sid : "default_pbr"_sid;
-    auto matchesMode = [&](StringID id) { return pipelineManager->GetLightingShaderType(id) == requiredType; };
-
     for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-        bool fragOk = checkExists(active.material.fragmentShader);
-        bool lightOk = checkExists(active.material.lightingShader);
-        if (!fragOk || !lightOk) {
+        if (!checkExists(active.material.fragmentShader)) {
             active.material.fragmentShader = "error_unlit"_sid;
-            active.material.lightingShader = "default_unlit"_sid;
-        }
-        if (!matchesMode(active.material.lightingShader)) {
-            active.material.lightingShader = lightingFallback;
         }
     }
 
-    if (viewFamily.lightingShaderOverride && !matchesMode(viewFamily.lightingShaderOverride)) {
-        viewFamily.lightingShaderOverride = lightingFallback;
+    if (viewFamily.lightingShaderOverride) {
+        viewFamily.lightingShaderOverride = pipelineManager->ResolveLightingShaderForMode(viewFamily.lightingShaderOverride, viewFamily.lightingMode);
     }
 }
 

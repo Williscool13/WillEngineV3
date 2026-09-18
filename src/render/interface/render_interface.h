@@ -150,7 +150,7 @@ struct PrimitiveInstanceData
 
 struct ActiveMaterial
 {
-    uint32_t stableIndex{};
+    uint32_t materialSlot{};
     Engine::RenderMaterial material{};
 };
 
@@ -391,6 +391,8 @@ struct ViewFamilyWatermarks
     size_t modelRuns{64};
     size_t lightPayload{256};
     size_t lightRuns{64};
+    size_t materialPayload{64};
+    size_t materialRuns{16};
     size_t activeMaterials{256};
     size_t activeTextMaterials{32};
     size_t textMaterials{256};
@@ -462,8 +464,11 @@ struct ViewFamily
     ArenaVector<Model> modelPayload{};
     ArenaVector<DirtyRun> modelRuns{};
 
+    uint32_t materialCount{0};
+    ArenaVector<MaterialProperties> materialPayload{};
+    ArenaVector<DirtyRun> materialRuns{};
+
     ArenaVector<ActiveMaterial> activeMaterials{};
-    uint32_t materialWatermark{0};
 
     ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
     ArenaVector<TextInstanceDataFull> textInstances{};

@@ -647,6 +647,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 
                 StringID shaderToUse = viewFamily.lightingShaderOverride ? viewFamily.lightingShaderOverride : entry.id;
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
+                if (!pipelineEntry) { pipelineEntry = pipelineManager->GetPipelineEntry("default_unlit"_sid); }
                 if (!pipelineEntry) { continue; }
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 

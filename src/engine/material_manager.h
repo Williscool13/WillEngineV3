@@ -13,11 +13,13 @@
 #include "core/string_id.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"
+#include "core/memory/dirty_bits.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
 #include "engine/core/material_id.h"
 #include "engine/core/text_material_id.h"
 #include "render/render_config.h"
+#include "render/interface/render_params.h"
 #include "render/shaders/model_interop.h"
 #include "render/shaders/text_interop.h"
 
@@ -121,6 +123,29 @@ public:
         return UINT32_MAX;
     }
 
+    /**
+     * Active slots whose GPU payload changed, one set per host buffer slot
+     * Fn: emit(offset, count)
+     */
+    template<typename Fn>
+    void DrainUploadDirty(uint32_t setIndex, uint32_t limit, Fn&& emit) { uploadDirty.Drain(setIndex, limit, std::forward<Fn>(emit)); }
+
+    /**
+     * Active slots whose payload changed since the last drain, independent of upload
+     * Fn: emit(offset, count).
+     */
+    template<typename Fn>
+    void DrainChangedDirty(uint32_t limit, Fn&& emit) { changedDirty.Drain(0, limit, std::forward<Fn>(emit)); }
+
+    void MarkAllDirty();
+
+    void SetLightingMode(Core::LightingMode mode);
+
+private:
+    void MarkDirty(MaterialID id);
+
+    void MarkDirtyIndex(uint32_t index);
+
 private:
     EngineContext* ctx;
     Core::MemoryManager* memoryManager;
@@ -132,6 +157,9 @@ private:
     Core::HandleAllocator<MaterialProperties, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialAllocator;
 
     Core::FixedMap<MaterialID, uint32_t> idToEntryMap;
+    Core::DirtyBits uploadDirty;
+    Core::DirtyBits changedDirty;
+    Core::LightingMode uploadedLightingMode{Core::LightingMode::Default};
 
     /**
      * Contains:

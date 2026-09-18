@@ -1848,29 +1848,21 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         }
     }
 
-    if (!viewFamily.activeMaterials.IsEmpty()) {
-        Core::Array<uint16_t, Render::BINDLESS_MATERIAL_BUFFER_COUNT> materialByStable{};
-        memset(materialByStable.Data(), 0xFF, sizeof(materialByStable));
-        uint16_t activeSlot = 0;
-        for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
-            active.material.props.shadingBucketIndex = active.stableIndex;
-            active.material.props.lightingBucketIndex = pipelineManager->GetLightingShaderIndex(active.material.lightingShader);
-            materialByStable[active.stableIndex] = activeSlot++;
-        }
-
+    if (viewFamily.materialCount > 0) {
         {
             ZoneScopedN("Materials");
-            auto* dst = static_cast<MaterialProperties*>(renderGraph->OpenHostBuffer(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize));
-            constexpr MaterialProperties EMPTY_MATERIAL{};
-            for (uint32_t i = 0; i < viewFamily.materialWatermark; ++i) {
-                const uint16_t slot = materialByStable[i];
-                dst[i] = slot == 0xFFFFu ? EMPTY_MATERIAL : viewFamily.activeMaterials[slot].material.props;
+            const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize);
+            const MaterialProperties* payload = viewFamily.materialPayload.Data();
+            size_t cursor = 0;
+            for (const Core::DirtyRun& run : viewFamily.materialRuns) {
+                dst.Write(run.offset * sizeof(MaterialProperties), payload + cursor, run.count * sizeof(MaterialProperties));
+                cursor += run.count;
             }
         }
 
         ZoneScopedN("Dispatch Resets");
         auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
-        for (uint32_t i = 0; i < viewFamily.materialWatermark; ++i) {
+        for (uint32_t i = 0; i < viewFamily.materialCount; ++i) {
             shadeDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = i};
         }
 

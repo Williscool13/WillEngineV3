@@ -32,6 +32,8 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     textDrawCalls = ArenaVector<TextDrawCall>(&arena, wm.textDrawCalls);
 
     activeMaterials = ArenaVector<ActiveMaterial>(&arena, wm.activeMaterials);
+    materialPayload = ArenaVector<MaterialProperties>(&arena, wm.materialPayload);
+    materialRuns = ArenaVector<DirtyRun>(&arena, wm.materialRuns);
     activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
     textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);
 
@@ -68,6 +70,8 @@ static ViewFamilyWatermarks ObservedWatermarks(const ViewFamily& vf)
     w.modelRuns = NextPowerOfTwo(vf.modelRuns.Size());
     w.lightPayload = NextPowerOfTwo(vf.lightPayload.Size());
     w.lightRuns = NextPowerOfTwo(vf.lightRuns.Size());
+    w.materialPayload = NextPowerOfTwo(vf.materialPayload.Size());
+    w.materialRuns = NextPowerOfTwo(vf.materialRuns.Size());
     w.activeMaterials = vf.activeMaterials.Size();
     w.activeTextMaterials = vf.activeTextMaterials.Size();
     w.textMaterials = vf.textMaterials.Size();
@@ -97,6 +101,8 @@ static ViewFamilyWatermarks MaxWatermarks(const ViewFamilyWatermarks& a, const V
     w.modelRuns = std::max(a.modelRuns, b.modelRuns);
     w.lightPayload = std::max(a.lightPayload, b.lightPayload);
     w.lightRuns = std::max(a.lightRuns, b.lightRuns);
+    w.materialPayload = std::max(a.materialPayload, b.materialPayload);
+    w.materialRuns = std::max(a.materialRuns, b.materialRuns);
     w.activeMaterials = std::max(a.activeMaterials, b.activeMaterials);
     w.activeTextMaterials = std::max(a.activeTextMaterials, b.activeTextMaterials);
     w.textMaterials = std::max(a.textMaterials, b.textMaterials);

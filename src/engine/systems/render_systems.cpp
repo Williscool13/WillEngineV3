@@ -344,9 +344,32 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             const Engine::MaterialEntry& entry = entries[i];
             if (!entry.handle.IsValid() || entry.refCounter <= 0) { continue; }
             watermark = i + 1u;
-            frameBuffer->mainViewFamily.activeMaterials.PushBack({i, materialManager->GetRenderMaterial(entry.id)});
+            vf.activeMaterials.PushBack({i, materialManager->GetRenderMaterial(entry.id)});
         }
-        frameBuffer->mainViewFamily.materialWatermark = watermark;
+        vf.materialCount = watermark;
+        vf.materialPayload.Clear();
+        vf.materialRuns.Clear();
+        const Core::LightingMode lightingMode = state->lighting.lightingMode;
+        Render::PipelineManager* pipelineManager = ctx->pipelineManager;
+        materialManager->SetLightingMode(lightingMode);
+        materialManager->DrainUploadDirty(static_cast<uint32_t>(ctx->currentRenderFrame), watermark, [&](uint32_t offset, uint32_t count) {
+            const size_t base = vf.materialPayload.Size();
+            vf.materialPayload.ResizeUninitialized(base + count);
+            for (uint32_t i = 0; i < count; ++i) {
+                const uint32_t slot = offset + i;
+                const Engine::MaterialEntry& entry = entries[slot];
+                MaterialProperties& props = vf.materialPayload[base + i];
+                if (!entry.handle.IsValid() || entry.refCounter <= 0) {
+                    props = MaterialProperties{};
+                    continue;
+                }
+                const Engine::RenderMaterial material = materialManager->GetRenderMaterial(entry.id);
+                props = material.props;
+                props.shadingBucketIndex = slot;
+                props.lightingBucketIndex = pipelineManager->GetLightingShaderIndex(pipelineManager->ResolveLightingShaderForMode(material.lightingShader, lightingMode));
+            }
+            vf.materialRuns.PushBack(Core::DirtyRun{offset, count});
+        });
     }
 
     //

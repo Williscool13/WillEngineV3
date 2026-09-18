@@ -258,6 +258,13 @@ uint32_t PipelineManager::GetLightingShaderIndex(StringID pipelineId) const
     return 0;
 }
 
+StringID PipelineManager::ResolveLightingShaderForMode(StringID pipelineId, Core::LightingMode mode) const
+{
+    const LightingShaderType requiredType = RequiredLightingShaderType(mode);
+    if (GetLightingShaderType(pipelineId) == requiredType) { return pipelineId; }
+    return requiredType == LightingShaderType::ReSTIR ? "default_pbr_restir"_sid : "default_pbr"_sid;
+}
+
 void PipelineManager::RegisterLightingPipeline(StringID pipelineId, LightingShaderType type)
 {
     assert(lightingPipelines.Size() < MAX_LIGHTING_BUCKETS && "Bucketing bounds dedup bitset is sized by MAX_LIGHTING_BUCKETS");
