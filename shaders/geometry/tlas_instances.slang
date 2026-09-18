@@ -35,7 +35,10 @@ void ComputeTLASInstances(uniform TLASInstancePushConstant pc, uint3 dtid : SV_D
         if (!bLightProxy && (inst.flags & INSTANCE_FLAG_DDGI_VISIBLE) != 0) { mask |= INSTANCE_MASK_DDGI; }
 
         MaterialProperties material = pc.materialBuffer[inst.materialIndex];
-        bool bCutout = (inst.flags & INSTANCE_FLAG_ALPHA_CUTOUT) != 0 && uint(material.alphaProperties.y) == MATERIAL_ALPHA_CUTOUT;
+        uint alphaMode = uint(material.alphaProperties.y);
+        // todo: transparency
+        if (alphaMode == MATERIAL_ALPHA_BLEND) { mask = 0u; }
+        bool bCutout = (inst.flags & INSTANCE_FLAG_ALPHA_CUTOUT) != 0 && alphaMode == MATERIAL_ALPHA_CUTOUT;
         uint flags = GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE | (bCutout ? GEOMETRY_INSTANCE_FORCE_NO_OPAQUE : 0u);
 
         entry.instanceCustomIndexAndMask = (slot & 0x00FFFFFFu) | ((mask & 0xFFu) << 24);

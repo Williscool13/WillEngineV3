@@ -6,56 +6,76 @@
 
 #include "engine/logging/engine_log.h"
 #include "engine/resources/model/static_model.h"
+#include "render/interface/render_interface.h"
 
 namespace Engine
 {
+static_assert(TriLightStore::REUSE_DELAY_FRAMES >= Core::FRAME_BUFFER_COUNT, "A dead write must reach every host slot before the reservation is reused");
+
 void TriLightStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::AllocTag tag)
 {
     ranges_.Init(capacity, alloc, tag, "TriLightStore");
+    groupSlots_.Init(MAX_EMISSIVE_GROUPS, alloc, tag, "TriLightGroups");
+    reservations_ = Core::HeapArray<Reservation>(alloc, tag, MAX_EMISSIVE_GROUPS);
+    dirty_.Init(MAX_EMISSIVE_GROUPS, Core::FRAME_BUFFER_COUNT, alloc, tag);
     pendingFrees_ = Core::Vector<PendingFree>(alloc, tag);
 }
 
-TriLightStore::Range TriLightStore::Reserve(uint32_t instanceSlot, uint32_t triangleCount, const char* ownerName)
+uint32_t TriLightStore::Reserve(uint32_t instanceSlot, uint32_t triangleCount, const char* ownerName)
 {
-    if (triangleCount == 0) { return {}; }
+    if (triangleCount == 0) { return INVALID_GROUP; }
 
-    if (reservations_.IsFull()) {
+    const Range groupSlot = groupSlots_.Allocate(1);
+    if (!groupSlot.IsValid()) {
         if (!bWarnedCapReached_) {
             bWarnedCapReached_ = true;
             LOG_WARN(Engine, "Emissive instance cap ({}) reached; further emissive primitives will not light, starting with model ({})", MAX_EMISSIVE_GROUPS, ownerName);
         }
-        return {};
+        return INVALID_GROUP;
     }
 
     const Range range = ranges_.Allocate(triangleCount);
     if (!range.IsValid()) {
+        groupSlots_.Free(groupSlot);
         if (!bWarnedFull_) {
             bWarnedFull_ = true;
             LOG_WARN(Engine, "Tri light store full; further emissive primitives get no triangle lights");
         }
-        return {};
+        return INVALID_GROUP;
     }
 
-    reservations_.PushBack({instanceSlot, range});
-    return range;
+    reservations_[groupSlot.offset] = {instanceSlot, range, true};
+    reservationCount_++;
+    dirty_.Mark(groupSlot.offset);
+    return groupSlot.offset;
 }
 
-void TriLightStore::Release(uint32_t instanceSlot)
+void TriLightStore::Release(uint32_t groupSlot)
 {
-    for (size_t i = 0; i < reservations_.Size(); ++i) {
-        if (reservations_[i].instanceSlot != instanceSlot) { continue; }
-        pendingFrees_.PushBack({reservations_[i].range, frame_});
-        reservations_.SwapRemove(i);
-        bWarnedCapReached_ = false;
-        return;
-    }
+    Reservation& reservation = reservations_[groupSlot];
+    if (!reservation.bLive) { return; }
+    reservation.bLive = false;
+    reservationCount_--;
+    dirty_.Mark(groupSlot);
+    pendingFrees_.PushBack({groupSlot, frame_});
+    bWarnedCapReached_ = false;
+}
+
+void TriLightStore::SetEnabled(bool bEnabled)
+{
+    if (bEnabled == bEnabled_) { return; }
+    bEnabled_ = bEnabled;
+    if (bEnabled) { MarkAllDirty(); }
 }
 
 void TriLightStore::Tick(uint64_t frame)
 {
     frame_ = frame;
     while (!pendingFrees_.IsEmpty() && frame_ - pendingFrees_[0].frame >= REUSE_DELAY_FRAMES) {
-        ranges_.Free(pendingFrees_[0].range);
+        const uint32_t groupSlot = pendingFrees_[0].groupSlot;
+        ranges_.Free(reservations_[groupSlot].range);
+        groupSlots_.Free({groupSlot, 1});
+        reservations_[groupSlot] = {};
         pendingFrees_.RemoveAt(0);
         bWarnedFull_ = false;
     }

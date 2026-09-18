@@ -487,6 +487,8 @@ struct ViewFamily
     ArenaVector<LightInfo> lightPayload{};
     ArenaVector<DirtyRun> lightRuns{};
     uint32_t triLightCount{0};
+
+    uint32_t emissiveGroupCount{0};
     ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
 
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};

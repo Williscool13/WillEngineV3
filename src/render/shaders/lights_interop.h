@@ -46,7 +46,7 @@ using float4x4 = glm::mat4;
 #define SHADER_ATOMIC(T) T
 #endif // __SLANG__
 
-SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 81920;
+SHADER_PUBLIC SHADER_CONST int MAX_LIGHTS = 147456;
 SHADER_PUBLIC SHADER_CONST int MAX_ANALYTIC_LIGHTS = 16384;
 
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_AREA = 0u;
@@ -115,14 +115,18 @@ SHADER_PUBLIC struct EmissiveGroup
 };
 
 /**
- * One emissive primitive instance handed to the tri-light build. Bounded by MAX_EMISSIVE_GROUPS because each item produces exactly one EmissiveGroup.
+ * One dirty emissive primitive instance to rebuild into this frame's LightData: its triangle run plus EmissiveGroup[groupSlot]. Dead = zero lights and an inverted AABB.
  */
 SHADER_PUBLIC struct EmissiveTriLightWork
 {
     SHADER_PUBLIC uint instanceSlot;
     SHADER_PUBLIC uint firstLight; // absolute index into LightData::lights
     SHADER_PUBLIC uint triangleCount;
+    SHADER_PUBLIC uint groupSlot;
+    SHADER_PUBLIC uint bDead;
     SHADER_PUBLIC uint _pad0;
+    SHADER_PUBLIC uint _pad1;
+    SHADER_PUBLIC uint _pad2;
 };
 
 SHADER_PUBLIC struct LightData

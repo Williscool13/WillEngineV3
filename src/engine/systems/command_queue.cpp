@@ -60,7 +60,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
                 const MeshReleasePayload& release = command.payload.meshRelease;
                 Core::RangeAllocator::Range range{release.rangeOffset, release.rangeCount};
                 Core::RangeAllocator::Range modelRange{release.modelRangeOffset, release.modelRangeCount};
-                state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, range);
+                state->instanceStore.ReleaseAndFree(ctx->materialManager, range);
                 if (modelRange.IsValid()) {
                     state->modelStore.Free(modelRange);
                 }

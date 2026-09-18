@@ -2250,13 +2250,6 @@ SHADER_PUBLIC struct HiZDebugPushConstant
     SHADER_PUBLIC uint32_t mip;
 };
 
-SHADER_PUBLIC struct EmissiveTriLightClearPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC uint firstLight;
-    SHADER_PUBLIC uint lightCount;
-};
-
 SHADER_PUBLIC struct EmissiveTriLightPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(EmissiveTriLightWork) workBuffer;

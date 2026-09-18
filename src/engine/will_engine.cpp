@@ -1476,6 +1476,10 @@ void WillEngine::Run()
         if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
             StringID reloadedPipeline{};
             while (pipelineManager->TryDequeueReloadedPipeline(reloadedPipeline)) {
+                if (reloadedPipeline == "emissive_tri_lights"_sid) {
+                    engineState->triLightStore.MarkAllDirty();
+                    continue;
+                }
                 const Engine::TextureID reloadedTextureId{reloadedPipeline.id};
                 if (!assetManager->IsTextureLoaded(reloadedTextureId) || engineState->assetLoad.pendingHotReloadTextureIds.IsFull()) { continue; }
                 engineState->assetLoad.pendingHotReloadTextureIds.PushBack(reloadedTextureId);

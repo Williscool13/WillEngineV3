@@ -1785,7 +1785,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     const uint32_t analyticLightCount = viewFamily.analyticLightCount;
     const uint32_t triLightCount = viewFamily.triLightCount;
     const uint32_t totalLightLimit = triLightCount > 0 ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightCount : analyticLightCount;
-    const size_t emissiveGroupCount = glm::min(viewFamily.emissiveTriWork.Size(), static_cast<size_t>(MAX_EMISSIVE_GROUPS));
+    const size_t emissiveWorkCount = viewFamily.emissiveTriWork.Size();
 
     const HostBufferWrite lightDst = renderGraph->OpenHostBufferMirrored(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE);
     {
@@ -1797,7 +1797,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         directional.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
         lightDst.Write(offsetof(LightData, directionalLight), &directional, sizeof(directional));
 
-        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.analyticLightCount), static_cast<int32_t>(emissiveGroupCount), 0};
+        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.analyticLightCount), static_cast<int32_t>(viewFamily.emissiveGroupCount), 0};
         lightDst.Write(offsetof(LightData, lightCount), counts, sizeof(counts));
 
         const LightInfo* payload = viewFamily.lightPayload.Data();
@@ -1808,9 +1808,9 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         }
     }
 
-    if (emissiveGroupCount > 0) {
-        auto* work = static_cast<EmissiveTriLightWork*>(renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveGroupCount * sizeof(EmissiveTriLightWork)));
-        memcpy(work, viewFamily.emissiveTriWork.Data(), emissiveGroupCount * sizeof(EmissiveTriLightWork));
+    if (emissiveWorkCount > 0) {
+        auto* work = static_cast<EmissiveTriLightWork*>(renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveWorkCount * sizeof(EmissiveTriLightWork)));
+        memcpy(work, viewFamily.emissiveTriWork.Data(), emissiveWorkCount * sizeof(EmissiveTriLightWork));
     }
 
     // Reflection probes

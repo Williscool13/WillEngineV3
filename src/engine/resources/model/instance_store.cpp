@@ -15,12 +15,13 @@
 
 namespace Engine
 {
-void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag)
+void InstanceStore::Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, TriLightStore* triLightStore, Core::AllocTag tag)
 {
     instances_ = Core::VirtualArray<InstanceSource>(vm, tag, capacity, "InstanceStore");
     gpuInstances_ = Core::VirtualArray<Instance>(vm, tag, capacity, "InstanceStoreGPU");
     ranges_.Init(capacity, alloc, tag, "InstanceStore");
     dirty_.Init(capacity, Core::FRAME_BUFFER_COUNT, alloc, tag);
+    triLightStore_ = triLightStore;
 }
 
 InstanceStore::Range InstanceStore::Allocate(uint32_t count)
@@ -50,7 +51,7 @@ void InstanceStore::Free(Range range)
     gpuInstances_.Trim(ranges_.GetWatermark());
 }
 
-InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight)
+InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight)
 {
     if (model->modelData.meshes.IsEmpty()) { return {}; }
     MeshInformation& mesh = model->modelData.meshes[0];
@@ -65,7 +66,7 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
 
     uint32_t writeIndex = range.offset;
     for (uint32_t j = 0; j < count; ++j) {
-        FillEntry(writeIndex, materialManager, triLightStore, model, mesh.primitiveProperties[j], {
+        FillEntry(writeIndex, materialManager, model, mesh.primitiveProperties[j], {
             .material = material,
             .modelSlot = modelSlot,
             .modelPrimitiveOrdinal = j,
@@ -76,22 +77,22 @@ InstanceStore::Range InstanceStore::AllocateSingleMeshRange(MaterialManager* mat
     return range;
 }
 
-void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range)
+void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, Range& range)
 {
     if (!range.IsValid()) { return; }
     for (uint32_t i = 0; i < range.count; ++i) {
         InstanceSource& instance = instances_[range.offset + i];
         materialManager->ReleaseMaterial(instance.materialID);
-        if (instance.triLightRange.IsValid()) {
-            triLightStore->Release(range.offset + i);
-            instance.triLightRange = {};
+        if (instance.groupSlot != TriLightStore::INVALID_GROUP) {
+            triLightStore_->Release(instance.groupSlot);
+            instance.groupSlot = TriLightStore::INVALID_GROUP;
         }
     }
     Free(range);
     range = {};
 }
 
-void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill)
+void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill)
 {
     materialManager->AcquireMaterial(fill.material);
     const Material* material = materialManager->GetMaterial(fill.material);
@@ -102,9 +103,9 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
     const bool bMayEmitLater = !material->bSynthesized && !material->immutable;
     const uint32_t materialIndex = materialManager->GetMaterialIndex(fill.material);
 
-    TriLightStore::Range triLightRange{};
-    if (fill.bEmissiveLight && (bIsMaterialEmissive || bMayEmitLater) && triLightStore) {
-        triLightRange = triLightStore->Reserve(slot, primitive.triangleCount, model->name.c_str());
+    uint32_t groupSlot = TriLightStore::INVALID_GROUP;
+    if (fill.bEmissiveLight && (bIsMaterialEmissive || bMayEmitLater) && triLightStore_) {
+        groupSlot = triLightStore_->Reserve(slot, primitive.triangleCount, model->name.c_str());
     }
 
     instances_[slot] = {
@@ -117,7 +118,7 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, T
         .materialID = fill.material,
         .blasDeviceAddress = primitive.blasDeviceAddress,
         .modelSpaceTransform = fill.modelSpaceTransform,
-        .triLightRange = triLightRange,
+        .groupSlot = groupSlot,
     };
     WriteRecord(slot);
 }
@@ -133,7 +134,7 @@ Instance InstanceStore::MakeRecord(uint32_t slot) const
         .flags = src.flags,
         .stableId = src.stableId,
         .lightIndex = src.lightIndex,
-        .emissiveTriLightBase = src.triLightRange.IsValid() ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + src.triLightRange.offset : ~0u,
+        .emissiveTriLightBase = src.groupSlot != TriLightStore::INVALID_GROUP ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightStore_->Get(src.groupSlot).range.offset : ~0u,
         .blasDeviceAddress = src.blasDeviceAddress,
     };
 }
@@ -142,6 +143,7 @@ void InstanceStore::WriteRecord(uint32_t slot)
 {
     dirty_.Mark(slot);
     gpuInstances_[slot] = MakeRecord(slot);
+    if (instances_[slot].groupSlot != TriLightStore::INVALID_GROUP) { triLightStore_->MarkDirty(instances_[slot].groupSlot); }
 }
 
 uint32_t InstanceStore::VerifyRecords() const

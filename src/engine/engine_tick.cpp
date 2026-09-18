@@ -209,12 +209,12 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherRenderables", &GatherRenderables, {
         .bExclusive = false,
         .reads = {TypeSID<Component::SkyboxComponent>(), "assetManager"_sid, "materialManager"_sid, "engineConfig"_sid},
-        .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, "viewFamily.renderables"_sid},
+        .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, "materialManager.uploadDirty"_sid, "viewFamily.renderables"_sid},
     });
     graph.Add("GatherLights", &GatherLights, {
         .bExclusive = false,
         .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenTag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::TransformComponent>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
-        .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid},
+        .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid},
     });
     graph.Add("GatherTextRenderables", &GatherTextRenderables, {
         .bExclusive = false,

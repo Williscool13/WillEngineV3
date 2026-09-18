@@ -576,10 +576,9 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
 static const char* EmissiveDispatchStateName(Engine::EmissiveDispatchState dispatchState)
 {
     switch (dispatchState) {
-        case Engine::EmissiveDispatchState::Dispatched: return "dispatched";
+        case Engine::EmissiveDispatchState::Live: return "live";
         case Engine::EmissiveDispatchState::EntityHidden: return "hidden";
         case Engine::EmissiveDispatchState::ProbeBakeHidden: return "probe-hidden";
-        case Engine::EmissiveDispatchState::WorkListFull: return "list full";
     }
     return "?";
 }
@@ -594,9 +593,10 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
     }
     ImGui::Text("Reserved instances    %u / %d groups", emissive.reservedInstances, MAX_EMISSIVE_GROUPS);
     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("TriLightStore reservations held at fill time. Refused past the group cap."); }
-    ImGui::Text("Dispatched groups     %u", emissive.dispatchedGroups);
-    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Work items handed to the build pass, one workgroup each. Visible instances only, so a gap against reserved is visibility or the cap, not the store."); }
-    ImGui::Text("Dispatched triangles  %u", emissive.dispatchedTriangles);
+    ImGui::Text("Live groups           %u", emissive.liveGroups);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reservations that are live and visible, so lit on the GPU. A gap against reserved is visibility, not the store."); }
+    ImGui::Text("Rebuilt this frame    %u groups, %u triangles", emissive.rebuiltGroups, emissive.rebuiltTriangles);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Work items handed to the build pass, one workgroup each: only groups dirty for this host slot. A quiet scene rebuilds nothing."); }
     ImGui::Text("TriLightStore         %u / %u (%.1f%%)", emissive.triLightWatermark, triLightCapacity,
                 triLightCapacity > 0u ? 100.0f * static_cast<float>(emissive.triLightWatermark) / static_cast<float>(triLightCapacity) : 0.0f);
     ImGui::Text("Analytic lights       %u / %d", emissive.analyticLightCount, MAX_ANALYTIC_LIGHTS);
@@ -604,16 +604,16 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
     ImGui::Text("LightData.lightCount  %u / %d", lightCountFed, MAX_LIGHTS);
     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("What the GPU is told. Triangles live at [MAX_ANALYTIC_LIGHTS, lightCount); the gap below holds nothing."); }
 
-    if (emissive.reservedInstances > emissive.dispatchedGroups) {
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%u reserved instance(s) not dispatched", emissive.reservedInstances - emissive.dispatchedGroups);
+    if (emissive.reservedInstances > emissive.liveGroups) {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%u reserved instance(s) not lit", emissive.reservedInstances - emissive.liveGroups);
     }
 
     ImGui::Checkbox("Capture Per-Instance List", &emissive.bCapture);
-    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Every instance holding a reservation, dispatched or not, with the values the build pass reads."); }
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Every instance holding a reservation, lit or not, with the values the build pass reads."); }
     if (!emissive.bCapture) { return; }
 
     static bool bOnlyProblems = false;
-    ImGui::Checkbox("Only Non-Dispatched", &bOnlyProblems);
+    ImGui::Checkbox("Only Non-Live", &bOnlyProblems);
     if (emissive.bEntriesTruncated) {
         ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "list truncated at %u entries", Engine::EmissiveDebugState::MAX_ENTRIES);
     }
@@ -631,8 +631,8 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
         ImGui::TableHeadersRow();
 
         for (const Engine::EmissiveDebugEntry& entry : emissive.entries) {
-            const bool bDispatched = entry.dispatchState == Engine::EmissiveDispatchState::Dispatched;
-            if (bOnlyProblems && bDispatched) { continue; }
+            const bool bLive = entry.dispatchState == Engine::EmissiveDispatchState::Live;
+            if (bOnlyProblems && bLive) { continue; }
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -657,7 +657,7 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
                 ImGui::Text("%.2f %.2f %.2f x%.1f = %.2f", entry.emissiveFactor.x, entry.emissiveFactor.y, entry.emissiveFactor.z, entry.emissiveFactor.w, intensity);
             }
             ImGui::TableNextColumn();
-            if (bDispatched) { ImGui::TextUnformatted("dispatched"); }
+            if (bLive) { ImGui::TextUnformatted("live"); }
             else { ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", EmissiveDispatchStateName(entry.dispatchState)); }
         }
         ImGui::EndTable();

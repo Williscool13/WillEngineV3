@@ -183,11 +183,13 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     {
         Engine::InstanceStore& store = state->instanceStore;
         Engine::ModelStore& modelStore = state->modelStore;
+        Engine::TriLightStore& triLightStore = state->triLightStore;
         for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
                 const Engine::InstanceSource& inst = store[runtime.range.offset + i];
+                if (inst.groupSlot != Engine::TriLightStore::INVALID_GROUP) { triLightStore.MarkDirty(inst.groupSlot); }
                 if (inst.modelSlot == lastSlot) { continue; }
                 lastSlot = inst.modelSlot;
                 modelStore.SetModel(inst.modelSlot, {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform});
@@ -647,12 +649,14 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
     });
 
+    Engine::TriLightStore& triLightStore = state->triLightStore;
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;
     emissiveDebug.entries.Clear();
     emissiveDebug.bEntriesTruncated = false;
-    emissiveDebug.dispatchedTriangles = 0;
-    emissiveDebug.reservedInstances = state->triLightStore.GetReservationCount();
-    emissiveDebug.triLightWatermark = state->triLightStore.GetWatermark();
+    emissiveDebug.rebuiltTriangles = 0;
+    emissiveDebug.liveGroups = 0;
+    emissiveDebug.reservedInstances = triLightStore.GetReservationCount();
+    emissiveDebug.triLightWatermark = triLightStore.GetWatermark();
     emissiveDebug.analyticLightCount = vf.analyticLightCount;
     const bool bEmissiveCapture = emissiveDebug.bCapture;
 
@@ -662,11 +666,12 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             return;
         }
         const Engine::Material* material = ctx->materialManager->GetMaterial(inst.materialID);
+        const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(inst.groupSlot);
         emissiveDebug.entries.PushBack(Engine::EmissiveDebugEntry{
             .entity = entity,
             .instanceSlot = slot,
-            .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + inst.triLightRange.offset,
-            .triangleCount = inst.triLightRange.count,
+            .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + reservation.range.offset,
+            .triangleCount = reservation.range.count,
             .materialIndex = inst.materialIndex,
             .modelSlot = inst.modelSlot,
             .emissiveFactor = material ? material->props.emissiveFactor : glm::vec4(0.0f),
@@ -675,19 +680,39 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         });
     };
 
-    vf.triLightCount = state->triLightStore.GetWatermark();
+    triLightStore.SetEnabled(state->debug.restir.bEmissiveTriangleLights);
+    vf.triLightCount = triLightStore.GetWatermark();
+    vf.emissiveGroupCount = triLightStore.GetGroupWatermark();
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
         Engine::InstanceStore& store = state->instanceStore;
 
-        for (const Engine::TriLightStore::Reservation& reservation : state->triLightStore.Reservations()) {
-            if (!store[reservation.instanceSlot].bVisible) { continue; }
+        const uint32_t groupWatermark = triLightStore.GetGroupWatermark();
+        ctx->materialManager->DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
+            for (uint32_t g = 0; g < groupWatermark; ++g) {
+                const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
+                if (!reservation.bLive) { continue; }
+                const uint32_t materialIndex = store[reservation.instanceSlot].materialIndex;
+                if (materialIndex >= offset && materialIndex < offset + count) { triLightStore.MarkDirty(g); }
+            }
+        });
+
+        triLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t groupSlot) {
+            const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(groupSlot);
+            const bool bLive = reservation.bLive && store[reservation.instanceSlot].bVisible;
             vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
                 .instanceSlot = reservation.instanceSlot,
                 .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + reservation.range.offset,
                 .triangleCount = reservation.range.count,
+                .groupSlot = groupSlot,
+                .bDead = bLive ? 0u : 1u,
             });
-            emissiveDebug.dispatchedTriangles += reservation.range.count;
+            emissiveDebug.rebuiltTriangles += reservation.range.count;
+        });
+
+        for (uint32_t g = 0; g < groupWatermark; ++g) {
+            const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
+            if (reservation.bLive && store[reservation.instanceSlot].bVisible) { emissiveDebug.liveGroups++; }
         }
 
         if (bEmissiveCapture) {
@@ -697,17 +722,11 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                 for (uint32_t i = 0; i < runtime.range.count; ++i) {
                     const uint32_t slot = runtime.range.offset + i;
                     const Engine::InstanceSource& inst = store[slot];
-                    if (!inst.triLightRange.IsValid()) { continue; }
+                    if (inst.groupSlot == Engine::TriLightStore::INVALID_GROUP) { continue; }
                     Engine::EmissiveDispatchState dispatchState;
                     if (bBakeHidden) { dispatchState = Engine::EmissiveDispatchState::ProbeBakeHidden; }
                     else if (!inst.bVisible) { dispatchState = Engine::EmissiveDispatchState::EntityHidden; }
-                    else {
-                        bool bDispatched = false;
-                        for (size_t w = 0; w < vf.emissiveTriWork.Size() && !bDispatched; ++w) {
-                            bDispatched = vf.emissiveTriWork[w].instanceSlot == slot;
-                        }
-                        dispatchState = bDispatched ? Engine::EmissiveDispatchState::Dispatched : Engine::EmissiveDispatchState::WorkListFull;
-                    }
+                    else { dispatchState = Engine::EmissiveDispatchState::Live; }
                     recordEmissive(entity, slot, inst, dispatchState);
                 }
             }
@@ -715,8 +734,9 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     }
     else {
         vf.triLightCount = 0;
+        vf.emissiveGroupCount = 0;
     }
-    emissiveDebug.dispatchedGroups = static_cast<uint32_t>(vf.emissiveTriWork.Size());
+    emissiveDebug.rebuiltGroups = static_cast<uint32_t>(vf.emissiveTriWork.Size());
     emissiveDebug.triLightCountFed = vf.triLightCount;
 
     //

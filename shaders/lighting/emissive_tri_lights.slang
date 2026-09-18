@@ -5,7 +5,7 @@ import push_constant_interop;
 import shader_functions;
 
 // =============== Shader Summary ============
-// One workgroup per emissive primitive instance, writing a LightInfo per triangle in BLAS index order so base + PrimitiveIndex() resolves a hit to its own light, plus one EmissiveGroup. An instance that emits nothing writes an inverted AABB, which the grid rejects.
+// One workgroup per dirty emissive primitive instance, writing a LightInfo per triangle in BLAS index order so base + PrimitiveIndex() resolves a hit to its own light, plus EmissiveGroup[groupSlot]. Untouched groups keep what an earlier frame wrote into this LightData slot. A dead item writes zero lights and an inverted AABB, which the grid rejects.
 
 static const uint TRI_LIGHT_GROUP_SIZE = 64;
 
@@ -19,13 +19,8 @@ static uint PackColorRGB8(float3 c)
     return q.x | (q.y << 8) | (q.z << 16) | (255u << 24);
 }
 
-// A hidden instance leaves the work list, so without this its slots keep last frame's emission and carried reservoirs still resolve them.
-[shader("compute")]
-[numthreads(64, 1, 1)]
-void ComputeEmissiveTriLightsClear(uniform EmissiveTriLightClearPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+static void WriteDeadGroup(EmissiveTriLightPushConstant pc, EmissiveTriLightWork work, uint lane)
 {
-    if (dtid.x >= pc.lightCount) { return; }
-
     LightInfo light;
     light.position = float4(0.0);
     light.normal = float4(0.0);
@@ -35,7 +30,19 @@ void ComputeEmissiveTriLightsClear(uniform EmissiveTriLightClearPushConstant pc,
     light.intensity = 0.0;
     light.range = 0.0;
     light.type = 0u;
-    pc.lightData->lights[pc.firstLight + dtid.x] = light;
+    for (uint t = lane; t < work.triangleCount; t += TRI_LIGHT_GROUP_SIZE) {
+        pc.lightData->lights[work.firstLight + t] = light;
+    }
+
+    if (lane != 0) { return; }
+    // Zero count so a released range that gets reused does not also resolve to this stale group
+    EmissiveGroup group;
+    group.firstLight = work.firstLight;
+    group.lightCount = 0u;
+    group.power = 0.0;
+    group.aabbMin = float3(1e30);
+    group.aabbMax = float3(-1e30);
+    pc.lightData->emissiveGroups[work.groupSlot] = group;
 }
 
 [shader("compute")]
@@ -46,6 +53,11 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
     if (gid.x >= pc.workCount) { return; }
 
     EmissiveTriLightWork work = pc.workBuffer[gid.x];
+    if (work.bDead != 0u) {
+        WriteDeadGroup(pc, work, lane);
+        return;
+    }
+
     Instance inst = pc.instanceBuffer[work.instanceSlot];
     Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
     float4x4 m = pc.modelBuffer[inst.modelIndex].modelMatrix;
@@ -129,5 +141,5 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
         group.aabbMin = float3(1e30);
         group.aabbMax = float3(-1e30);
     }
-    pc.lightData->emissiveGroups[gid.x] = group;
+    pc.lightData->emissiveGroups[work.groupSlot] = group;
 }

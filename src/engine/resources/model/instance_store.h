@@ -41,10 +41,8 @@ struct InstanceSource
     uint32_t flags{INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR};
     bool bVisible{true};
 
-    /**
-     * TriLightStore range covering this primitive's full emissive triangle set.
-     */
-    Core::RangeAllocator::Range triLightRange{};
+    /** TriLightStore group slot covering this primitive's full emissive triangle set */
+    uint32_t groupSlot{~0u};
 };
 
 /**
@@ -63,8 +61,9 @@ struct InstanceFill
 
 
 /**
- * The stable instance slot space: one slot per flattened mesh primitive (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity; the slot index IS the GPU instance index. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs. Callers own GPU uploads. Not thread-safe.
+ * The stable instance slot space: one slot per flattened mesh primitive (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity; the slot index IS the GPU instance index. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs and tri-light reservations. Callers own GPU uploads. Not thread-safe.
  * InstanceSource is the authority; the GPU Instance array is a projection of it rewritten on every mutation, dead while the slot is not visible. Nothing hands out a mutable InstanceSource.
+ * Every record write also dirties the slot's tri-light group.
  */
 class InstanceStore
 {
@@ -72,16 +71,16 @@ public:
     using Range = Core::RangeAllocator::Range;
     static constexpr Instance DEAD_INSTANCE{.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
 
-    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
+    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, TriLightStore* triLightStore, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
     Range Allocate(uint32_t count);
 
-    Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
+    Range AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
 
-    void ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range);
+    void ReleaseAndFree(MaterialManager* materialManager, Range& range);
 
     // Writes
-    void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
+    void FillEntry(uint32_t slot, MaterialManager* materialManager, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
 
     void SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material);
 
@@ -116,6 +115,7 @@ private:
     Core::VirtualArray<Instance> gpuInstances_{};
     Core::RangeAllocator ranges_{};
     Core::DirtyBits dirty_{};
+    TriLightStore* triLightStore_{nullptr};
 };
 } // Engine
 

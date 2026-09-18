@@ -24,7 +24,7 @@ void SetupFrustumBinningPass(RenderGraph& graph,
                              float clusterZFar);
 
 /**
- * Writes a LightInfo per triangle for every emissive primitive instance, plus one EmissiveGroup each, straight from the geometry buffers. Must run before anything that reads LightData's triangle region or its groups.
+ * Rebuilds the LightInfo run and EmissiveGroup of each dirty emissive primitive instance in this frame's LightData slot, straight from the geometry buffers. Must run before anything that reads LightData's triangle region or its groups.
  */
 void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, float emissiveTriRangeMultiplier);
 

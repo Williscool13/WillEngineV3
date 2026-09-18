@@ -96,13 +96,12 @@ struct LightingState
     int32_t skyboxLOD{0};
 };
 
-/** Why an emissive instance did or did not reach the GPU work list. */
+/** Whether an emissive instance's triangle lights are lit on the GPU, and if not, why. */
 enum class EmissiveDispatchState : uint8_t
 {
-    Dispatched,
+    Live,
     EntityHidden,
     ProbeBakeHidden,
-    WorkListFull,
 };
 
 /** Mirrors the fields the tri-light build reads, so a wrong value here is a wrong value on the GPU. */
@@ -116,7 +115,7 @@ struct EmissiveDebugEntry
     uint32_t modelSlot{0};
     glm::vec4 emissiveFactor{0.0f};
     MaterialID materialID{};
-    EmissiveDispatchState dispatchState{EmissiveDispatchState::Dispatched};
+    EmissiveDispatchState dispatchState{EmissiveDispatchState::Live};
 };
 
 /** Refreshed by GatherLights. Counts are always current; entries only fill while bCapture is set. */
@@ -125,10 +124,11 @@ struct EmissiveDebugState
     static constexpr uint32_t MAX_ENTRIES = 4096;
 
     bool bCapture{false};
-    /** Instances holding a TriLightStore reservation, dispatched or not. */
+    /** Instances holding a TriLightStore reservation, lit or not. */
     uint32_t reservedInstances{0};
-    uint32_t dispatchedGroups{0};
-    uint32_t dispatchedTriangles{0};
+    uint32_t liveGroups{0};
+    uint32_t rebuiltGroups{0};
+    uint32_t rebuiltTriangles{0};
     uint32_t triLightWatermark{0};
     /** ViewFamily::triLightCount as handed to the render thread; zero when the feature is off. */
     uint32_t triLightCountFed{0};

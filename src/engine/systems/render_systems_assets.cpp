@@ -515,7 +515,7 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             resolved.PushBack(entity);
             continue;
         }
-        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, nullptr, model, materialID, modelRange.offset, false);
+        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, model, materialID, modelRange.offset, false);
         if (!range.IsValid()) {
             state->modelStore.Free(modelRange);
             resolved.PushBack(entity);
@@ -552,7 +552,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         Engine::InstanceStore& store = state->instanceStore;
 
         auto releaseExisting = [&] {
-            store.ReleaseAndFree(materialManager, &state->triLightStore, runtime->range);
+            store.ReleaseAndFree(materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
         };
 
@@ -674,7 +674,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                     }
                 }
 
-                store.FillEntry(writeIndex, materialManager, &state->triLightStore, model, primitive, {
+                store.FillEntry(writeIndex, materialManager,model, primitive, {
                                     .material = matID,
                                     .modelSlot = nodeModelSlot,
                                     .materialSlot = primitive.materialIndex,
@@ -744,7 +744,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         Engine::MaterialManager* materialManager = ctx->materialManager;
 
         auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(materialManager, &state->triLightStore, runtime->range);
+            state->instanceStore.ReleaseAndFree(materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
         };
 
@@ -823,7 +823,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             continue;
         }
 
-        store.FillEntry(range.offset, materialManager, &state->triLightStore, model, *targetPrim, {
+        store.FillEntry(range.offset, materialManager,model, *targetPrim, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
                             .materialSlot = targetPrim->materialIndex,
@@ -881,7 +881,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
         };
 
@@ -909,7 +909,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
             state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
@@ -933,7 +933,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
 
 static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState* state, Component::MeshRuntime* runtime, Engine::StaticModel* model, const Component::ModuleMeshComponent& meshComponent, bool bEmissiveLight)
 {
-    state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+    state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
     state->modelStore.Free(runtime->modelRange);
 
     if (model->modelData.meshes.IsEmpty()) { return; }
@@ -963,7 +963,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
                 matID = slotMat;
             }
         }
-        store.FillEntry(writeIndex, ctx->materialManager, &state->triLightStore, model, primitive, {
+        store.FillEntry(writeIndex, ctx->materialManager,model, primitive, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
                             .materialSlot = primitive.materialIndex,
@@ -1012,7 +1012,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
         };
 
@@ -1078,7 +1078,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
         };
 
@@ -1105,7 +1105,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
             state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
@@ -1163,7 +1163,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (!runtime) continue;
 
         if (!runtime->modelHandle.IsValid()) {
-            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
             resolved.PushBack(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
             continue;
@@ -1175,7 +1175,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
         if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+            state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
             resolved.PushBack(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
             continue;
@@ -1188,11 +1188,11 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (textComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(textComponent.material)) {
             matID = textComponent.material;
         }
-        state->instanceStore.ReleaseAndFree(ctx->materialManager, &state->triLightStore, runtime->range);
+        state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
         state->modelStore.Free(runtime->modelRange);
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager, &state->triLightStore, model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
             state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }

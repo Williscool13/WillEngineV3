@@ -65,6 +65,7 @@ void VerifyGeometryStores(Engine::EngineState* state)
 
     state->instanceStore.MarkAllDirty();
     state->modelStore.MarkAllDirty();
+    state->triLightStore.MarkAllDirty();
 }
 } // Engine
 

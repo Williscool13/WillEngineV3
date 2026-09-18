@@ -575,8 +575,6 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline("tlas_instances"_sid, src / "tlas_instances.spv", "ComputeTLASInstances",
                             sizeof(TLASInstancePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("emissive_tri_lights_clear"_sid, src / "emissive_tri_lights.spv", "ComputeEmissiveTriLightsClear",
-                            sizeof(EmissiveTriLightClearPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("emissive_tri_lights"_sid, src / "emissive_tri_lights.spv", "ComputeEmissiveTriLights",
                             sizeof(EmissiveTriLightPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("rt_shadow_test"_sid, src / "rt_shadow_test.spv", "ComputeRTShadowTest",

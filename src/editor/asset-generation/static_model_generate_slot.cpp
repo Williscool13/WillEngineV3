@@ -1351,6 +1351,10 @@ MaterialProperties StaticModelGenerateSlot::ExtractMaterial(const cgltf_data& gl
         default:
             break;
     }
+    // todo: transparency
+    if (gltfMaterial.has_transmission && gltfMaterial.transmission.transmission_factor > 0.0f) {
+        material.alphaProperties.y = static_cast<float>(Engine::MaterialType::BLEND);
+    }
 
     material.emissiveFactor = glm::vec4(
         gltfMaterial.emissive_factor[0],
