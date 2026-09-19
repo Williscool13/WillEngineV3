@@ -164,6 +164,7 @@ struct EngineFrameStatus
 {
     bool bScreenshotInFlight{false};
     bool bAssetGenerationPending{false};
+    bool bEmissiveLightsPipelineReady{false};
 };
 
 struct FrameEvents

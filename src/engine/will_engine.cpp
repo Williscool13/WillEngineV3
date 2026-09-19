@@ -1570,6 +1570,9 @@ void WillEngine::Run()
             .fontsUnloaded = unloadCounts.fontUnloadedCount,
         };
         engineContext->frameStatus.bScreenshotInFlight = renderThread->IsScreenshotInFlight();
+        if (!engineContext->frameStatus.bEmissiveLightsPipelineReady) {
+            engineContext->frameStatus.bEmissiveLightsPipelineReady = renderThread->GetPipelineManager()->IsCategoryReady(Render::PipelineCategory::EmissiveLights);
+        }
         engineContext->publishedTimeFrame.Publish(timeManager->GetTime());
 #if WILL_EDITOR
         engineContext->frameStatus.bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;

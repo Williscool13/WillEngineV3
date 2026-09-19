@@ -423,10 +423,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 {
     ZoneScoped;
 
-    if (bRenderRequestsRecreate) {
-        return RENDER_REQUESTED_RECREATE;
-    }
-
     if (frameBuffer.cacheReset != Core::RenderCacheReset::None) {
         vkQueueWaitIdle(context->graphicsQueue);
         gpuDispatcher->WaitAsyncComputeIdle();
@@ -506,6 +502,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
     RenderFamilyProperties renderFamilyProperties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
+    if (bRenderRequestsRecreate) { renderFamilyProperties.bCanRender = false; }
     renderFamilyProperties.bWireframe = frameBuffer.debug.bWireframe;
     renderFamilyProperties.bOcclusionCulling = frameBuffer.debug.bOcclusionCulling;
     renderFamilyProperties.bOcclusionFreeze = frameBuffer.debug.bOcclusionFreeze;
@@ -634,6 +631,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
 
+    SetupEmissiveTriLightPass(*renderGraph, pipelineManager, viewFamily, frameBuffer.restir.emissiveTriRangeMultiplier);
+
     if (renderFamilyProperties.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
 
@@ -661,9 +660,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                                          || viewFamily.reflectionProbes.Size() > 0u;
 
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, viewFamily.localDDGIVolumes.Data(), static_cast<uint32_t>(viewFamily.localDDGIVolumes.Size()), ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
-
-            // ReSTIR reads the triangle region whether or not the grid is built
-            SetupEmissiveTriLightPass(*renderGraph, pipelineManager, viewFamily, frameBuffer.restir.emissiveTriRangeMultiplier);
 
             if (bNeedsWorldGrid) {
                 SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0, renderArena.Get(), ddgiCascades);
@@ -1359,7 +1355,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 #if WILL_EDITOR
     resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState("debug_readback_buffer"_sid));
 #endif
-    return SUCCESS;
+    return bRenderRequestsRecreate ? RENDER_REQUESTED_RECREATE : SUCCESS;
 }
 
 void RenderThread::RecordPresent(VkCommandBuffer cmd, uint32_t swapchainImageIndex, const Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)

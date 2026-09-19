@@ -690,29 +690,31 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         Engine::InstanceStore& store = state->instanceStore;
 
         const uint32_t meshWatermark = triLightStore.GetMeshWatermark();
-        ctx->materialManager->DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
-            for (uint32_t g = 0; g < meshWatermark; ++g) {
-                const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
-                if (!reservation.bLive) { continue; }
-                const uint32_t materialIndex = store[reservation.instanceSlot].materialIndex;
-                if (materialIndex >= offset && materialIndex < offset + count) { triLightStore.MarkDirty(g); }
-            }
-        });
-
-        triLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t meshSlot) {
-            const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(meshSlot);
-            const bool bLive = reservation.bLive && store[reservation.instanceSlot].bVisible;
-            vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
-                .instanceSlot = reservation.instanceSlot,
-                .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + reservation.range.offset,
-                .triangleCount = reservation.range.count,
-                .meshSlot = meshSlot,
-                .firstMeshlet = reservation.meshlets.offset,
-                .meshletCount = reservation.meshlets.count,
-                .bDead = bLive ? 0u : 1u,
+        if (ctx->frameStatus.bEmissiveLightsPipelineReady) {
+            ctx->materialManager->DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
+                for (uint32_t g = 0; g < meshWatermark; ++g) {
+                    const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
+                    if (!reservation.bLive) { continue; }
+                    const uint32_t materialIndex = store[reservation.instanceSlot].materialIndex;
+                    if (materialIndex >= offset && materialIndex < offset + count) { triLightStore.MarkDirty(g); }
+                }
             });
-            emissiveDebug.rebuiltTriangles += reservation.range.count;
-        });
+
+            triLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t meshSlot) {
+                const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(meshSlot);
+                const bool bLive = reservation.bLive && store[reservation.instanceSlot].bVisible;
+                vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
+                    .instanceSlot = reservation.instanceSlot,
+                    .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + reservation.range.offset,
+                    .triangleCount = reservation.range.count,
+                    .meshSlot = meshSlot,
+                    .firstMeshlet = reservation.meshlets.offset,
+                    .meshletCount = reservation.meshlets.count,
+                    .bDead = bLive ? 0u : 1u,
+                });
+                emissiveDebug.rebuiltTriangles += reservation.range.count;
+            });
+        }
 
         for (uint32_t g = 0; g < meshWatermark; ++g) {
             const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);

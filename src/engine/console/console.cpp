@@ -286,6 +286,11 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, config.bLimitFps ? Core::InlineString<64>::Format("  fpsmax %d", config.frameLimitTarget).c_str() : "  fpsmax uncapped");
     });
 
+    Register(state, Origin::Engine, "quit", "Shut the engine down", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+        state->requests.bRequestedQuit = true;
+        Print(state, "  quitting");
+    });
+
     Register(state, Origin::Engine, "view", "`view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() <= 1) {
             static constexpr const char* COMMON_VIEWS[] = {

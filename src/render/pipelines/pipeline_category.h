@@ -14,6 +14,7 @@ enum class PipelineCategory : uint32_t
     Critical             = 1 << 0,
     Legacy               = 1 << 1,
     AssetGeneration      = 1 << 2,
+    EmissiveLights       = 1 << 3,
     All = ~0U,
 };
 
