@@ -54,9 +54,9 @@ public float3 ReGIRCellCenterFromKey(ReGIRHashKey key)
     return (float3(key.cellPos) + 0.5) * cs;
 }
 
-public uint ReGIRCellReservoirBase(uint cellSlot)
+public uint ReGIRCellEntryBase(uint cellSlot)
 {
-    return cellSlot * REGIR_RESERVOIRS_PER_CELL;
+    return cellSlot * REGIR_ENTRIES_PER_CELL;
 }
 
 // activeCells packs (level, slot) into the .w lane so fill recovers both without an inverse hash.

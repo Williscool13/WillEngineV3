@@ -496,10 +496,11 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     statisticsManager.scratch.radianceCache.cellsShaded = readbackData->wcShaded;
     statisticsManager.scratch.regir.activeCells = readbackData->regirActiveCells;
     statisticsManager.scratch.regir.insertsFailed = readbackData->regirInsertsFailed;
-    static_assert(sizeof(ReGIRCursorProbe) == offsetof(ReadbackStruct, regirCursorOccupancy) + sizeof(float) - offsetof(ReadbackStruct, regirCursorValid));
-    std::memcpy(&statisticsManager.scratch.regir.cursor, &readbackData->regirCursorValid, sizeof(ReGIRCursorProbe));
-    static_assert(sizeof(ReGIRCdfStats) == offsetof(ReadbackStruct, cdfMaxIdx) + sizeof(uint32_t) - offsetof(ReadbackStruct, cdfTotalPower));
-    std::memcpy(&statisticsManager.scratch.regir.cdf, &readbackData->cdfTotalPower, sizeof(ReGIRCdfStats));
+    statisticsManager.scratch.regir.gatherOverflow = readbackData->regirGatherOverflow;
+    static_assert(sizeof(ReGIRCursorCell) == offsetof(ReadbackStruct, regirCursorTopPos) + sizeof(float) * 24 - offsetof(ReadbackStruct, regirCursorValid));
+    std::memcpy(&statisticsManager.scratch.regir.cursor, &readbackData->regirCursorValid, sizeof(ReGIRCursorCell));
+    static_assert(sizeof(WorldGridCursorCell) == offsetof(ReadbackStruct, wgCursorTopMeshletCenter) + sizeof(float) * 24 - offsetof(ReadbackStruct, wgCursorValid));
+    std::memcpy(&statisticsManager.scratch.worldGrid.cursor, &readbackData->wgCursorValid, sizeof(WorldGridCursorCell));
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
@@ -1034,6 +1035,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1]) {
             debugCursorReadback.pixel[0] = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * renderExtent[0] / static_cast<float>(outputExtent[0]))));
             debugCursorReadback.pixel[1] = std::min(renderExtent[1] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * renderExtent[1] / static_cast<float>(outputExtent[1]))));
+            if (GPU_STATS_ENABLED) {
+                SetupDebugWorldGridCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
+            }
         } else {
             debugCursorReadback.litTexture = StringID{};
         }
@@ -1090,7 +1094,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     LIGHT_DATA_BUFFER,
                     "regir_hash_entries"_sid,
                     "regir_cell_data"_sid,
-                    "regir_hash_reservoirs"_sid,
+                    "regir_entries"_sid,
                     "restir_lights_vs"_sid,
                 };
                 for (const StringID bufferId : debugVisBuffers) {
@@ -1182,7 +1186,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                         .lightData = renderGraph->TryGetBufferAddress(LIGHT_DATA_BUFFER),
                         .regirHashEntries = renderGraph->TryGetBufferAddress("regir_hash_entries"_sid),
                         .regirCellData = renderGraph->TryGetBufferAddress("regir_cell_data"_sid),
-                        .regirReservoirs = renderGraph->TryGetBufferAddress("regir_hash_reservoirs"_sid),
+                        .regirEntries = renderGraph->TryGetBufferAddress("regir_entries"_sid),
                         .restirLightVS = renderGraph->TryGetBufferAddress("restir_lights_vs"_sid),
                         .readback = GPU_STATS_ENABLED ? renderGraph->TryGetBufferAddress("readback_buffer"_sid) : 0,
                         .cursorPixel = {
@@ -1797,7 +1801,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         directional.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
         lightDst.Write(offsetof(LightData, directionalLight), &directional, sizeof(directional));
 
-        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.analyticLightCount), static_cast<int32_t>(viewFamily.emissiveGroupCount), 0};
+        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.analyticLightCount), static_cast<int32_t>(viewFamily.emissiveMeshletCount), static_cast<int32_t>(viewFamily.emissiveMeshCount)};
         lightDst.Write(offsetof(LightData, lightCount), counts, sizeof(counts));
 
         const LightInfo* payload = viewFamily.lightPayload.Data();

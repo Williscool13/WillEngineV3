@@ -779,14 +779,6 @@ bool StaticModelGenerateSlot::LoadGltf()
                         allPositions.PushBack(v.position);
                     }
 
-                    // todo: prepare LODs for this too? Determine when using for raytracing.
-                    // There are concerns this won't line up with meshlet geometry
-                    primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.Size());
-                    rawModel.indices.Reserve(rawModel.indices.Size() + primitiveIndices.Size());
-                    for (uint32_t idx : primitiveIndices) {
-                        rawModel.indices.PushBack(idx + vertexOffset);
-                    }
-
                     Core::Array<Core::HeapArray<uint32_t>, LOD_COUNT> lodIndices{};
                     Core::Array<Core::HeapArray<meshopt_Meshlet>, LOD_COUNT> lodMeshlets{};
                     Core::Array<Core::HeapArray<uint32_t>, LOD_COUNT> lodMeshletVertices{};
@@ -897,6 +889,13 @@ bool StaticModelGenerateSlot::LoadGltf()
                             lodInformation[lod].meshletVertexCount = last.vertex_offset + last.vertex_count;
                             lodInformation[lod].meshletTriangleCount = last.triangle_offset + last.triangle_count * 3;
                         }
+                    }
+
+                    AssetLoad::ReorderIndicesByMeshlets(Core::Span<uint32_t>(lodIndices[0].Data(), lodInformation[0].indexCount), lodMeshlets[0].Data(), lodInformation[0].meshletCount, lodMeshletVertices[0].Data(), lodMeshletTriangles[0].Data());
+                    primitiveData.indexOffset = static_cast<uint32_t>(rawModel.indices.Size());
+                    rawModel.indices.Reserve(rawModel.indices.Size() + lodInformation[0].indexCount);
+                    for (int32_t i = 0; i < lodInformation[0].indexCount; ++i) {
+                        rawModel.indices.PushBack(lodIndices[0][i] + vertexOffset);
                     }
 
                     for (size_t lod = 0; lod < LOD_COUNT; ++lod) {

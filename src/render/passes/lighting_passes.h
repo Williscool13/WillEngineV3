@@ -24,7 +24,7 @@ void SetupFrustumBinningPass(RenderGraph& graph,
                              float clusterZFar);
 
 /**
- * Rebuilds the LightInfo run and EmissiveGroup of each dirty emissive primitive instance in this frame's LightData slot, straight from the geometry buffers. Must run before anything that reads LightData's triangle region or its groups.
+ * Rebuilds the LightInfo run and EmissiveMeshlet of each dirty emissive primitive instance in this frame's LightData slot, straight from the geometry buffers. Must run before anything that reads LightData's triangle region or its meshlets.
  */
 void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, float emissiveTriRangeMultiplier);
 
@@ -39,6 +39,16 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
                                uint32_t sceneIndex,
                                Core::Arena& arena,
                                const DDGICascades& ddgiCascades);
+
+/**
+ * Editor cursor cell: writes the world-grid bin under cursorPixel (render-extent coordinates) into the readback buffer. No-ops without the grid or the readback buffer.
+ */
+void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
+                                       PipelineManager* pipelineManager,
+                                       uint32_t sceneIndex,
+                                       StringID depthTexture,
+                                       Core::Array<uint32_t, 2> renderExtent,
+                                       Core::Array<uint32_t, 2> cursorPixel);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,

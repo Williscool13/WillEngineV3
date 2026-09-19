@@ -8,6 +8,7 @@
 #include "engine/resources/model/static_model.h"
 
 namespace Core { class MemoryManager; }
+struct meshopt_Meshlet;
 
 namespace AssetLoad {
 struct UnpackedStaticModel;
@@ -16,6 +17,12 @@ Mat3 JacobiEigen3x3(const Mat3& symMat);
 
 Engine::MeshBounds CalculateMeshBounds(Core::Span<Engine::FullVertex> vertices);
 Engine::ModelBounds ComputeBounds(Core::Span<Vec3> positions);
+
+/**
+ * Rewrites a primitive's index stream in meshlet order, so meshlet m is the contiguous triangle run after the earlier meshlets' triangles.
+ * @param indices the stream the meshlets were built from; overwritten, same length
+ */
+void ReorderIndicesByMeshlets(Core::Span<uint32_t> indices, const meshopt_Meshlet* meshlets, size_t meshletCount, const uint32_t* meshletVertices, const uint8_t* meshletTriangles);
 
 /** Decodes a compressed vertex's unorm16 quantized position back to model space (bit-exact match of the historical inline expansions). */
 inline Vec3 DequantizeVertexPosition(const Engine::Vertex& v, const Vec3& boundsMin, const Vec3& boundsExtents)

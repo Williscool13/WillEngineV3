@@ -4,13 +4,30 @@
 
 #include "asset_load_utils.h"
 
+#include <cassert>
+
 #include "asset-load/asset_load_types.h"
 #include "core/containers/heap_array.h"
 #include "core/memory/memory_manager.h"
 #include "engine/logging/engine_log.h"
+#include "meshoptimizer/src/meshoptimizer.h"
 
 namespace AssetLoad
 {
+void ReorderIndicesByMeshlets(Core::Span<uint32_t> indices, const meshopt_Meshlet* meshlets, size_t meshletCount, const uint32_t* meshletVertices, const uint8_t* meshletTriangles)
+{
+    size_t write = 0;
+    for (size_t m = 0; m < meshletCount; ++m) {
+        const meshopt_Meshlet& meshlet = meshlets[m];
+        const uint32_t* verts = meshletVertices + meshlet.vertex_offset;
+        const uint8_t* tris = meshletTriangles + meshlet.triangle_offset;
+        for (uint32_t t = 0; t < meshlet.triangle_count * 3; ++t) {
+            indices[write++] = verts[tris[t]];
+        }
+    }
+    assert(write == indices.Size());
+}
+
 Mat3 JacobiEigen3x3(const Mat3& symMat)
 {
     float a[3][3];

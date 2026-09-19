@@ -41,8 +41,8 @@ struct InstanceSource
     uint32_t flags{INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR};
     bool bVisible{true};
 
-    /** TriLightStore group slot covering this primitive's full emissive triangle set */
-    uint32_t groupSlot{~0u};
+    /** TriLightStore mesh slot covering this primitive's full emissive triangle set */
+    uint32_t emissiveMeshSlot{~0u};
 };
 
 /**
@@ -63,7 +63,7 @@ struct InstanceFill
 /**
  * The stable instance slot space: one slot per flattened mesh primitive (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity; the slot index IS the GPU instance index. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs and tri-light reservations. Callers own GPU uploads. Not thread-safe.
  * InstanceSource is the authority; the GPU Instance array is a projection of it rewritten on every mutation, dead while the slot is not visible. Nothing hands out a mutable InstanceSource.
- * Every record write also dirties the slot's tri-light group.
+ * Every record write also dirties the slot's tri-light mesh.
  */
 class InstanceStore
 {

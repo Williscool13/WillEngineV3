@@ -97,36 +97,53 @@ SHADER_PUBLIC struct LightVSData
     SHADER_PUBLIC uint packedCone; // f16 pair: cos inner (low), cos outer (high); area only, 0 = hemisphere
 };
 
-SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_GROUPS = 1024;
+SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_MESHES = 1024;
+SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_MESHLETS = 4096;
 
 /**
- * One emissive mesh primitive instance: a contiguous run of LIGHT_TYPE_TRIANGLE entries in LightData::lights.
+ * One LOD0 meshlet of an emissive primitive instance: a contiguous run of LIGHT_TYPE_TRIANGLE entries in LightData::lights.
+ * The AABB is the geometry padded by the whole emitter's range (rangePad); shrink by rangePad for the geometric bounds.
  */
-SHADER_PUBLIC struct EmissiveGroup
+SHADER_PUBLIC struct EmissiveMeshlet
 {
     SHADER_PUBLIC float3 aabbMin;
     SHADER_PUBLIC uint firstLight;
     SHADER_PUBLIC float3 aabbMax;
     SHADER_PUBLIC uint lightCount;
     SHADER_PUBLIC float power;
-    float _pad0;
+    SHADER_PUBLIC float rangePad;
     float _pad1;
     float _pad2;
 };
 
 /**
- * One dirty emissive primitive instance to rebuild into this frame's LightData: its triangle run plus EmissiveGroup[groupSlot]. Dead = zero lights and an inverted AABB.
+ * One emissive primitive instance: the union of its EmissiveMeshlet run and of their triangle runs. Gathers reject a whole emitter on this box before walking its meshlets.
+ */
+SHADER_PUBLIC struct EmissiveMesh
+{
+    SHADER_PUBLIC float3 aabbMin;
+    SHADER_PUBLIC uint firstMeshlet;
+    SHADER_PUBLIC float3 aabbMax;
+    SHADER_PUBLIC uint meshletCount;
+    SHADER_PUBLIC uint firstLight;
+    SHADER_PUBLIC uint lightCount;
+    SHADER_PUBLIC float power;
+    SHADER_PUBLIC float rangePad;
+};
+
+/**
+ * One dirty emissive primitive instance to rebuild into this frame's LightData: its triangle run, its meshlets and EmissiveMesh[meshSlot]. Dead = zero lights and inverted AABBs.
  */
 SHADER_PUBLIC struct EmissiveTriLightWork
 {
     SHADER_PUBLIC uint instanceSlot;
     SHADER_PUBLIC uint firstLight; // absolute index into LightData::lights
     SHADER_PUBLIC uint triangleCount;
-    SHADER_PUBLIC uint groupSlot;
+    SHADER_PUBLIC uint meshSlot;
+    SHADER_PUBLIC uint firstMeshlet;
+    SHADER_PUBLIC uint meshletCount;
     SHADER_PUBLIC uint bDead;
     SHADER_PUBLIC uint _pad0;
-    SHADER_PUBLIC uint _pad1;
-    SHADER_PUBLIC uint _pad2;
 };
 
 SHADER_PUBLIC struct LightData
@@ -136,11 +153,14 @@ SHADER_PUBLIC struct LightData
     //   analyticLightCount = analytic store watermark <= MAX_ANALYTIC_LIGHTS.
     //   Emissive triangles start at MAX_ANALYTIC_LIGHTS, so index >= analyticLightCount still means triangle-or-dead.
     SHADER_PUBLIC int analyticLightCount;
-    SHADER_PUBLIC int emissiveGroupCount;
-    float _pad1;
+    SHADER_PUBLIC int emissiveMeshletCount;
+    SHADER_PUBLIC int emissiveMeshCount;
     SHADER_PUBLIC DirectionalLightData directionalLight;
     SHADER_PUBLIC LightInfo lights[MAX_LIGHTS];
-    SHADER_PUBLIC EmissiveGroup emissiveGroups[MAX_EMISSIVE_GROUPS];
+    SHADER_PUBLIC EmissiveMeshlet emissiveMeshlets[MAX_EMISSIVE_MESHLETS];
+    SHADER_PUBLIC EmissiveMesh emissiveMeshes[MAX_EMISSIVE_MESHES];
+    // Emissive triangle -> its EmissiveMeshlet, indexed by (lightIndex - MAX_ANALYTIC_LIGHTS); ~0u = none
+    SHADER_PUBLIC uint meshletOf[MAX_LIGHTS - MAX_ANALYTIC_LIGHTS];
 };
 
 

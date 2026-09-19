@@ -11,10 +11,9 @@ temporalMCap|5
 bCheckerboard|1
 bCheckerboardFullRateResolve|1
 boilingFilterStrength|0x3e4ccccd
-bInitialVisibility|0
+bInitialVisibility|1
 bSunLight|1
 sunAlphaTestMaxDistance|0x40800000
-regirWClamp|0x00000000
 restirWClamp|0x00000000
 lightProposal|1
 bEmissiveTriangleLights|1

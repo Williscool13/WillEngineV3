@@ -89,7 +89,8 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     GTAOTemporalCount = 47,
     GTAOResolved = 48,
     ReGIRCell = 49,
-    ReGIRCellLight = 50,
+    ReGIRCellMass = 50,
+    ReGIRCursorCell = 51,
 };
 
 SHADER_PUBLIC struct Frustum
@@ -167,28 +168,42 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC float adaptedLuminance;
     SHADER_PUBLIC uint32_t regirActiveCells;
     SHADER_PUBLIC uint32_t regirInsertsFailed;
-    // ReGIR cursor probe
+    // Fill candidates dropped past REGIR_GATHER_SCRATCH, summed over the frame's cells
+    SHADER_PUBLIC uint32_t regirGatherOverflow;
+    // ReGIR cursor cell: the entry table of the cell under the mouse, top 8 entries by mass share
     SHADER_PUBLIC uint32_t regirCursorValid;
     SHADER_PUBLIC uint32_t regirCursorLevel;
     SHADER_PUBLIC int32_t regirCursorCell[3];
     SHADER_PUBLIC uint32_t regirCursorSlot;
-    SHADER_PUBLIC uint32_t regirCursorEmpty;
-    SHADER_PUBLIC uint32_t regirCursorOther;
-    SHADER_PUBLIC uint32_t regirCursorTopIdx[4];
-    SHADER_PUBLIC uint32_t regirCursorTopCount[4];
-    SHADER_PUBLIC float regirCursorTopTarget[4];
-    SHADER_PUBLIC float regirCursorTopPos[12];
-    SHADER_PUBLIC float regirCursorOccupancy;
-    // Light power CDF
-    SHADER_PUBLIC float cdfTotalPower;
-    SHADER_PUBLIC uint32_t cdfLiveCount;
-    SHADER_PUBLIC uint32_t cdfBelowTile;
-    SHADER_PUBLIC uint32_t cdfBelowCell;
-    SHADER_PUBLIC float cdfRareShare;
-    SHADER_PUBLIC float cdfMinShare;
-    SHADER_PUBLIC float cdfMaxShare;
-    SHADER_PUBLIC uint32_t cdfMaxIdx;
+    SHADER_PUBLIC uint32_t regirCursorEntryCount;
+    SHADER_PUBLIC float regirCursorTotalMass;
+    SHADER_PUBLIC uint32_t regirCursorTopKey[8];
+    SHADER_PUBLIC float regirCursorTopShare[8];
+    SHADER_PUBLIC uint32_t regirCursorTopLightCount[8];
+    SHADER_PUBLIC float regirCursorTopPos[24];
     SHADER_PUBLIC uint32_t _pad1;
+    // World grid cursor cell: the bin under the mouse. Kept = what binning listed, inRange = everything passing its membership test
+    SHADER_PUBLIC uint32_t wgCursorValid;
+    SHADER_PUBLIC uint32_t wgCursorLevel;
+    SHADER_PUBLIC uint32_t wgCursorCell[3];
+    SHADER_PUBLIC uint32_t wgCursorFlatIndex;
+    SHADER_PUBLIC float wgCursorAabbMin[3];
+    SHADER_PUBLIC float wgCursorAabbMax[3];
+    SHADER_PUBLIC uint32_t wgCursorAnalyticKept;
+    SHADER_PUBLIC uint32_t wgCursorAnalyticInRange;
+    SHADER_PUBLIC float wgCursorAnalyticPower;
+    SHADER_PUBLIC uint32_t wgCursorMeshletKept;
+    SHADER_PUBLIC uint32_t wgCursorMeshletInRange;
+    SHADER_PUBLIC float wgCursorMeshletPower;
+    SHADER_PUBLIC uint32_t wgCursorTopLightIdx[8];
+    SHADER_PUBLIC uint32_t wgCursorTopLightType[8];
+    SHADER_PUBLIC float wgCursorTopLightPower[8];
+    SHADER_PUBLIC float wgCursorTopLightRange[8];
+    SHADER_PUBLIC float wgCursorTopLightPos[24];
+    SHADER_PUBLIC uint32_t wgCursorTopMeshletIdx[8];
+    SHADER_PUBLIC uint32_t wgCursorTopMeshletLightCount[8];
+    SHADER_PUBLIC float wgCursorTopMeshletPower[8];
+    SHADER_PUBLIC float wgCursorTopMeshletCenter[24];
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

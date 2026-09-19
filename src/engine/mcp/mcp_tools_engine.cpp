@@ -16,6 +16,7 @@
 #include "engine/components/camera_components.h"
 #include "engine/components/core_components.h"
 #include "render/shaders/restir_interop.h"
+#include "render/shaders/world_grid_interop.h"
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_logger.h"
 #include "engine/logging/log_category.h"
@@ -105,41 +106,30 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
     call.SetInt("hashCapacity", REGIR_HASH_CAPACITY);
     call.SetInt("insertsFailed", s.regir.insertsFailed);
     {
-        const Render::ReGIRCdfStats& cdf = s.regir.cdf;
-        call.BeginObject("powerCdf");
-        call.SetInt("liveCount", cdf.liveCount);
-        call.SetFloat("totalPower", cdf.totalPower);
-        call.SetInt("tileSize", REGIR_TILE_SIZE);
-        call.SetInt("candidatesPerCell", REGIR_RESERVOIRS_PER_CELL * REGIR_FILL_CANDIDATES);
-        call.SetInt("lightsBelowTileShare", cdf.belowTile);
-        call.SetFloat("powerShareBelowTile", cdf.rareShare);
-        call.SetInt("lightsBelowCellShare", cdf.belowCell);
-        call.SetFloat("minShare", cdf.minShare);
-        call.SetFloat("maxShare", cdf.maxShare);
-        call.SetInt("maxShareLightIdx", cdf.maxIdx);
-        call.End();
-    }
-    {
-        const Render::ReGIRCursorProbe& probe = s.regir.cursor;
+        const Render::ReGIRCursorCell& cursor = s.regir.cursor;
         call.BeginObject("cursorCell");
-        call.SetBool("valid", probe.valid != 0u);
-        call.SetInt("level", probe.level);
+        call.SetBool("valid", cursor.valid != 0u);
+        call.SetInt("level", cursor.level);
         call.BeginArray("cell");
-        for (int32_t c : probe.cell) { call.PushInt(c); }
+        for (int32_t c : cursor.cell) { call.PushInt(c); }
         call.End();
-        call.SetInt("slot", probe.slot);
-        call.SetInt("empty", probe.empty);
-        call.SetInt("other", probe.other);
-        call.SetFloat("occupancy", probe.occupancy);
+        call.SetInt("slot", cursor.slot);
+        call.SetInt("entryCount", cursor.entryCount);
+        call.SetInt("entriesPerCell", REGIR_ENTRIES_PER_CELL);
+        call.SetFloat("totalMass", cursor.totalMass);
+        call.SetInt("gatherOverflow", s.regir.gatherOverflow);
         call.BeginArray("top");
-        for (uint32_t k = 0; k < 4; k++) {
-            if (probe.topCount[k] == 0u) { continue; }
+        for (uint32_t k = 0; k < 8; k++) {
+            if (cursor.topKey[k] == ~0u) { continue; }
+            const bool bMeshlet = (cursor.topKey[k] & REGIR_KEY_MESHLET) != 0u;
             call.PushObject();
-            call.SetInt("lightIdx", probe.topIdx[k]);
-            call.SetInt("count", probe.topCount[k]);
-            call.SetFloat("targetAtCentre", probe.topTarget[k]);
+            call.SetInt("key", cursor.topKey[k]);
+            call.SetString("kind", bMeshlet ? "meshlet" : "analytic");
+            call.SetInt("index", bMeshlet ? (cursor.topKey[k] & ~REGIR_KEY_MESHLET) : cursor.topKey[k]);
+            call.SetFloat("share", cursor.topShare[k]);
+            call.SetInt("lightCount", cursor.topLightCount[k]);
             call.BeginArray("pos");
-            for (uint32_t c = 0; c < 3; c++) { call.PushFloat(probe.topPos[k * 3 + c]); }
+            for (uint32_t c = 0; c < 3; c++) { call.PushFloat(cursor.topPos[k * 3 + c]); }
             call.End();
             call.End();
         }
@@ -147,6 +137,63 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
         call.End();
     }
     call.End();
+
+    {
+        const Render::WorldGridCursorCell& cursor = s.worldGrid.cursor;
+        call.BeginObject("worldGridCursorCell");
+        call.SetBool("valid", cursor.valid != 0u);
+        call.SetInt("level", cursor.level);
+        call.BeginArray("cell");
+        for (uint32_t c : cursor.cell) { call.PushInt(c); }
+        call.End();
+        call.SetInt("flatIndex", cursor.flatIndex);
+        call.BeginArray("aabbMin");
+        for (float v : cursor.aabbMin) { call.PushFloat(v); }
+        call.End();
+        call.BeginArray("aabbMax");
+        for (float v : cursor.aabbMax) { call.PushFloat(v); }
+        call.End();
+        call.BeginObject("analytic");
+        call.SetInt("kept", cursor.analyticKept);
+        call.SetInt("inRange", cursor.analyticInRange);
+        call.SetInt("cap", MAX_LIGHTS_PER_WORLD_GRID_CELL);
+        call.SetFloat("keptPower", cursor.analyticPower);
+        call.BeginArray("top");
+        for (uint32_t k = 0; k < 8; k++) {
+            if (cursor.topLightIdx[k] == ~0u) { continue; }
+            call.PushObject();
+            call.SetInt("lightIdx", cursor.topLightIdx[k]);
+            call.SetInt("type", cursor.topLightType[k]);
+            call.SetFloat("power", cursor.topLightPower[k]);
+            call.SetFloat("range", cursor.topLightRange[k]);
+            call.BeginArray("pos");
+            for (uint32_t c = 0; c < 3; c++) { call.PushFloat(cursor.topLightPos[k * 3 + c]); }
+            call.End();
+            call.End();
+        }
+        call.End();
+        call.End();
+        call.BeginObject("emissiveMeshlets");
+        call.SetInt("kept", cursor.meshletKept);
+        call.SetInt("inRange", cursor.meshletInRange);
+        call.SetInt("cap", MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL);
+        call.SetFloat("keptPower", cursor.meshletPower);
+        call.BeginArray("top");
+        for (uint32_t k = 0; k < 8; k++) {
+            if (cursor.topMeshletIdx[k] == ~0u) { continue; }
+            call.PushObject();
+            call.SetInt("meshletIdx", cursor.topMeshletIdx[k]);
+            call.SetInt("lightCount", cursor.topMeshletLightCount[k]);
+            call.SetFloat("power", cursor.topMeshletPower[k]);
+            call.BeginArray("center");
+            for (uint32_t c = 0; c < 3; c++) { call.PushFloat(cursor.topMeshletCenter[k * 3 + c]); }
+            call.End();
+            call.End();
+        }
+        call.End();
+        call.End();
+        call.End();
+    }
 
     call.BeginObject("culling");
     call.SetInt("visibleMeshlets", s.visibleMeshletCount);

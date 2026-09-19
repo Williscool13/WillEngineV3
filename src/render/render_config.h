@@ -109,9 +109,6 @@ inline constexpr int32_t SCENE_DATA_BUFFER_SIZE = sizeof(SceneData) * VIEW_COUNT
 inline constexpr int32_t LIGHT_DATA_BUFFER_SIZE = sizeof(LightData) * VIEW_COUNT;
 inline constexpr int32_t REFLECTION_PROBE_BUFFER_SIZE = sizeof(ReflectionProbeGPU) * MAX_REFLECTION_PROBES;
 
-// Pre-sampled lights
-inline constexpr int32_t REGIR_TILE_BUFFER_SIZE = REGIR_TILE_COUNT * REGIR_TILE_SIZE * sizeof(ReGIRTileSlot);
-
 inline constexpr int32_t MEGA_MESHLET_VERTEX_BUFFER_SIZE = 1 << 27; // 64MB indices
 inline constexpr int32_t MEGA_MESHLET_TRIANGLE_BUFFER_SIZE = 1 << 27; // 64MB triangles
 inline constexpr int32_t MEGA_MESHLET_BUFFER_SIZE = 1 << 24; // 2MB meshlets

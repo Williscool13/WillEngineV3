@@ -87,39 +87,53 @@ struct RadianceCacheStatsSnapshot
     uint32_t cellsShaded{};
 };
 
-struct ReGIRCursorProbe
+/** ReGIR cell under the mouse; layout mirrors Render::ReGIRCursorCell (memcpy'd). */
+struct ReGIRCursorCell
 {
     uint32_t valid{};
     uint32_t level{};
     int32_t cell[3]{};
     uint32_t slot{};
-    uint32_t empty{};
-    uint32_t other{};
-    uint32_t topIdx[4]{};
-    uint32_t topCount[4]{};
-    float topTarget[4]{};
-    float topPos[12]{};
-    float occupancy{};
-};
-
-struct ReGIRCdfStats
-{
-    float totalPower{};
-    uint32_t liveCount{};
-    uint32_t belowTile{};
-    uint32_t belowCell{};
-    float rareShare{};
-    float minShare{};
-    float maxShare{};
-    uint32_t maxIdx{};
+    uint32_t entryCount{};
+    float totalMass{};
+    uint32_t topKey[8]{};
+    float topShare[8]{};
+    uint32_t topLightCount[8]{};
+    float topPos[24]{};
 };
 
 struct ReGIRStatsSnapshot
 {
     uint32_t activeCells{};
     uint32_t insertsFailed{};
-    ReGIRCursorProbe cursor{};
-    ReGIRCdfStats cdf{};
+    uint32_t gatherOverflow{};
+    ReGIRCursorCell cursor{};
+};
+
+/** World-grid bin under the mouse; layout mirrors Render::WorldGridCursorCell (memcpy'd). */
+struct WorldGridCursorCell
+{
+    uint32_t valid{};
+    uint32_t level{};
+    uint32_t cell[3]{};
+    uint32_t flatIndex{};
+    float aabbMin[3]{};
+    float aabbMax[3]{};
+    uint32_t analyticKept{};
+    uint32_t analyticInRange{};
+    float analyticPower{};
+    uint32_t meshletKept{};
+    uint32_t meshletInRange{};
+    float meshletPower{};
+    uint32_t topLightIdx[8]{};
+    uint32_t topLightType[8]{};
+    float topLightPower[8]{};
+    float topLightRange[8]{};
+    float topLightPos[24]{};
+    uint32_t topMeshletIdx[8]{};
+    uint32_t topMeshletLightCount[8]{};
+    float topMeshletPower[8]{};
+    float topMeshletCenter[24]{};
 };
 
 /** Game-side landing zone for a captured probe face; pixels are S x S RGBA16F half-floats (4 per texel). */
@@ -244,6 +258,7 @@ struct EngineContext
 
     RadianceCacheStatsSnapshot radianceCacheStats{};
     ReGIRStatsSnapshot regirStats{};
+    WorldGridCursorCell worldGridCursor{};
 
     ProbeCaptureStaging probeCapture{};
 

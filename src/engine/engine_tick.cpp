@@ -145,7 +145,6 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->ddgi = state->lighting.ddgi;
     frameBuffer->reflection = state->lighting.reflection;
     frameBuffer->reflectionProbe = state->lighting.reflectionProbe;
-    state->debug.restir.bResetReGIR = false;
     frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
     frameBuffer->mainViewFamily.groundTruthMode = state->lighting.groundTruthMode;
     frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;

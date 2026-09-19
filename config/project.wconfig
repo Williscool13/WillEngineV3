@@ -85,9 +85,9 @@ t|0xc005233d|0xbfe21bca|0xc098d9d4
 r|0x3ea08510|0xbcebe171|0x3f71f689|0x3db1cb09
 ;
 p
-set|0
-t|0x00000000|0x00000000|0x00000000
-r|0x3f800000|0x00000000|0x00000000|0x00000000
+set|1
+t|0x411ad26a|0xc0e1f7b7|0xbfb18afb
+r|0x3e886aa4|0xbd974ba6|0x3f6d1314|0x3e837a78
 ;
 p
 set|1
@@ -96,8 +96,8 @@ r|0xbf58efb7|0x3c8b1a4e|0x3f07d317|0x3c2e24ed
 ;
 p
 set|1
-t|0xc13dc64d|0xc095c292|0x41821255
-r|0x3f575e3f|0xbe98175c|0xbeda0f74|0xbe19fd61
+t|0xc1610961|0xbf764e28|0x40d00542
+r|0xbf7176f1|0xbb5a35bf|0xbeaa0f27|0x3a996ba8
 ;
 sceneSlots|9
 s
@@ -117,12 +117,12 @@ id|13079833564594591779
 name|level0
 ;
 s
-id|0
-name|
+id|5658940871145954959
+name|Sponza Light Swarm
 ;
 s
-id|0
-name|
+id|1374373954907711623
+name|Lighting Test
 ;
 s
 id|3657157123610817139

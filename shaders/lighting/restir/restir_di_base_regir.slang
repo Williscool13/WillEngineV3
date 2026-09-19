@@ -247,7 +247,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 #endif
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                    // Backend-specific marginal light-selection pdf for the BRDF-hit light (ReGIR: cell-average model; Bin: exact top-K membership).
+                    // Backend-specific marginal light-selection pdf for the BRDF-hit light, exact in both backends
                     float pSelect = prop.Marginal(hitLightIdx, vs, liveCount);
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
@@ -295,8 +295,9 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 void ComputeReSTIRDIBaseReGIR(uniform ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID : SV_DispatchThreadID) {
     ReGIRProposal prop;
     prop.hashEntries = pc.hashEntries;
-    prop.reservoirs = pc.reservoirs;
+    prop.entries = pc.entries;
     prop.cellData = pc.cellData;
+    prop.lightData = pc.lightData;
     prop.analyticCount = pc.lightData->analyticLightCount;
     prop.realLightCount = pc.lightData->lightCount;
     ReSTIRDIBase(prop, pc, threadID);

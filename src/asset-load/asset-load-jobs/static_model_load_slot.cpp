@@ -388,6 +388,7 @@ void StaticModelLoadSlot::PrepareUploadData()
             const Primitive& prim = rawData.primitives[localPi];
             const size_t indexEnd = localPi + 1 < rawData.primitives.Size() ? rawData.primitives[localPi + 1].indexOffset : rawData.indices.Size();
             primitiveIndex.triangleCount = static_cast<uint32_t>((indexEnd - prim.indexOffset) / 3);
+            primitiveIndex.meshletCount = static_cast<uint32_t>(prim.meshletCount.x);
             primitiveIndex.boundingBoxMin = prim.boundingBoxMin;
             primitiveIndex.boundingBoxMax = prim.boundingBoxMax;
             primitiveIndex.boundingSphere = prim.boundingSphere;

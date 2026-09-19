@@ -83,9 +83,9 @@ void InstanceStore::ReleaseAndFree(MaterialManager* materialManager, Range& rang
     for (uint32_t i = 0; i < range.count; ++i) {
         InstanceSource& instance = instances_[range.offset + i];
         materialManager->ReleaseMaterial(instance.materialID);
-        if (instance.groupSlot != TriLightStore::INVALID_GROUP) {
-            triLightStore_->Release(instance.groupSlot);
-            instance.groupSlot = TriLightStore::INVALID_GROUP;
+        if (instance.emissiveMeshSlot != TriLightStore::INVALID_MESH_SLOT) {
+            triLightStore_->Release(instance.emissiveMeshSlot);
+            instance.emissiveMeshSlot = TriLightStore::INVALID_MESH_SLOT;
         }
     }
     Free(range);
@@ -103,9 +103,9 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, S
     const bool bMayEmitLater = !material->bSynthesized && !material->immutable;
     const uint32_t materialIndex = materialManager->GetMaterialIndex(fill.material);
 
-    uint32_t groupSlot = TriLightStore::INVALID_GROUP;
+    uint32_t emissiveMeshSlot = TriLightStore::INVALID_MESH_SLOT;
     if (fill.bEmissiveLight && (bIsMaterialEmissive || bMayEmitLater) && triLightStore_) {
-        groupSlot = triLightStore_->Reserve(slot, primitive.triangleCount, model->name.c_str());
+        emissiveMeshSlot = triLightStore_->Reserve(slot, primitive.triangleCount, primitive.meshletCount, model->name.c_str());
     }
 
     instances_[slot] = {
@@ -118,7 +118,7 @@ void InstanceStore::FillEntry(uint32_t slot, MaterialManager* materialManager, S
         .materialID = fill.material,
         .blasDeviceAddress = primitive.blasDeviceAddress,
         .modelSpaceTransform = fill.modelSpaceTransform,
-        .groupSlot = groupSlot,
+        .emissiveMeshSlot = emissiveMeshSlot,
     };
     WriteRecord(slot);
 }
@@ -134,7 +134,7 @@ Instance InstanceStore::MakeRecord(uint32_t slot) const
         .flags = src.flags,
         .stableId = src.stableId,
         .lightIndex = src.lightIndex,
-        .emissiveTriLightBase = src.groupSlot != TriLightStore::INVALID_GROUP ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightStore_->Get(src.groupSlot).range.offset : ~0u,
+        .emissiveTriLightBase = src.emissiveMeshSlot != TriLightStore::INVALID_MESH_SLOT ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightStore_->Get(src.emissiveMeshSlot).range.offset : ~0u,
         .blasDeviceAddress = src.blasDeviceAddress,
     };
 }
@@ -143,7 +143,7 @@ void InstanceStore::WriteRecord(uint32_t slot)
 {
     dirty_.Mark(slot);
     gpuInstances_[slot] = MakeRecord(slot);
-    if (instances_[slot].groupSlot != TriLightStore::INVALID_GROUP) { triLightStore_->MarkDirty(instances_[slot].groupSlot); }
+    if (instances_[slot].emissiveMeshSlot != TriLightStore::INVALID_MESH_SLOT) { triLightStore_->MarkDirty(instances_[slot].emissiveMeshSlot); }
 }
 
 uint32_t InstanceStore::VerifyRecords() const

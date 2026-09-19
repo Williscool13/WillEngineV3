@@ -102,11 +102,27 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(uint) regirHashEntries;
-    SHADER_PUBLIC SHADER_PTR(float) regirCellData;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) regirReservoirs;
+    SHADER_PUBLIC SHADER_PTR(uint2) regirCellData;
+    SHADER_PUBLIC SHADER_PTR(ReGIREntry) regirEntries;
     SHADER_PUBLIC SHADER_PTR(LightVSData) restirLightVS;
     SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback; // Null when GPU stats are off
     SHADER_PUBLIC uint2 cursorPixel;
+};
+
+SHADER_PUBLIC struct DebugWorldGridCursorCellPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridEmissiveGrid;
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridEmissiveIndexList;
+    SHADER_PUBLIC SHADER_PTR(float2) worldGridCellPower;
+    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback;
+    SHADER_PUBLIC uint2 cursorPixel;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint sceneDataIndex;
+    SHADER_PUBLIC uint depthTextureIndex;
 };
 
 SHADER_PUBLIC struct InstanceLODPushConstant
@@ -465,33 +481,10 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(int4) activeCells;
     SHADER_PUBLIC SHADER_PTR(uint) activeCount;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
-    SHADER_PUBLIC SHADER_PTR(float) cellData;
-    SHADER_PUBLIC SHADER_PTR(uint) hashEntriesPrev;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirsPrev;
-    SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles;
+    SHADER_PUBLIC SHADER_PTR(ReGIREntry) entries;
+    SHADER_PUBLIC SHADER_PTR(uint2) cellData;
+    SHADER_PUBLIC SHADER_PTR(uint) gatherOverflow; // Null when GPU stats are off
     SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t bHasPrev;
-    SHADER_PUBLIC float wClamp;
-};
-
-SHADER_PUBLIC struct LightPowerCDFPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC SHADER_PTR(float) cdf;
-    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback; // Null when GPU stats are off
-    SHADER_PUBLIC uint32_t liveCount;
-    SHADER_PUBLIC int32_t analyticCount;
-};
-
-SHADER_PUBLIC struct ReGIRPresampleTilesPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(float) cdf;
-    SHADER_PUBLIC SHADER_PTR(ReGIRTileSlot) tiles;
-    SHADER_PUBLIC uint32_t liveCount;
-    SHADER_PUBLIC int32_t analyticCount;
-    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
@@ -501,8 +494,8 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) hashEntries;
-    SHADER_PUBLIC SHADER_PTR(ReGIRReservoir) reservoirs;
-    SHADER_PUBLIC SHADER_PTR(float) cellData;
+    SHADER_PUBLIC SHADER_PTR(ReGIREntry) entries;
+    SHADER_PUBLIC SHADER_PTR(uint2) cellData;
     SHADER_PUBLIC SHADER_PTR(Reservoir) historyBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) genBuffer;
     SHADER_PUBLIC SHADER_PTR(Reservoir) outputBuffer;
@@ -2260,6 +2253,7 @@ SHADER_PUBLIC struct EmissiveTriLightPushConstant
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
     SHADER_PUBLIC SHADER_PTR(uint) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
     SHADER_PUBLIC uint workCount;
     SHADER_PUBLIC float rangeMultiplier;
     SHADER_PUBLIC uint _pad0;

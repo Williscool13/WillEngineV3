@@ -20,19 +20,7 @@ static float3 HueToRgb(float hue)
     return saturate(abs(k * 6.0 - 3.0) - 1.0);
 }
 
-// Analytic lights get a hue each. Emissive triangles share their group's hue so a mesh reads as one light, with a brightness step per triangle so its faces stay separable.
-/** Emissive triangle -> its group's first light so triangles of one mesh vote together; analytic and invalid pass through. */
-static uint CollapseLightIdxToGroup(uint lightIdx)
-{
-    if (lightIdx == ~0u || lightIdx < uint(MAX_ANALYTIC_LIGHTS) || pc.lightData == nullptr) { return lightIdx; }
-    int groupCount = pc.lightData->emissiveGroupCount;
-    for (int g = 0; g < groupCount; g++) {
-        EmissiveGroup group = pc.lightData->emissiveGroups[g];
-        if (lightIdx >= group.firstLight && lightIdx < group.firstLight + group.lightCount) { return group.firstLight; }
-    }
-    return lightIdx;
-}
-
+/** A hue per analytic light; emissive triangles share their mesh's hue, stepped in brightness per triangle. */
 static float3 LightIdxColor(uint lightIdx)
 {
     if (lightIdx == ~0u) { return float3(0.0); }
@@ -40,12 +28,12 @@ static float3 LightIdxColor(uint lightIdx)
     if (lightIdx < uint(MAX_ANALYTIC_LIGHTS) || pc.lightData == nullptr) {
         return HueToRgb(frac(float(lightIdx) * GOLDEN));
     }
-    int groupCount = pc.lightData->emissiveGroupCount;
-    for (int g = 0; g < groupCount; g++) {
-        EmissiveGroup group = pc.lightData->emissiveGroups[g];
-        if (lightIdx >= group.firstLight && lightIdx < group.firstLight + group.lightCount) {
-            float3 hueColor = HueToRgb(frac(0.35 + float(g) * GOLDEN));
-            float triStep = 0.45 + 0.55 * frac(float(lightIdx - group.firstLight) * GOLDEN);
+    int meshCount = pc.lightData->emissiveMeshCount;
+    for (int p = 0; p < meshCount; p++) {
+        EmissiveMesh mesh = pc.lightData->emissiveMeshes[p];
+        if (lightIdx >= mesh.firstLight && lightIdx < mesh.firstLight + mesh.lightCount) {
+            float3 hueColor = HueToRgb(frac(0.35 + float(p) * GOLDEN));
+            float triStep = 0.45 + 0.55 * frac(float(lightIdx - mesh.firstLight) * GOLDEN);
             return hueColor * triStep;
         }
     }
@@ -351,7 +339,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             }
             break;
         }
-        case 49: { // ReGIRCell: hue = hash of the pixel's ReGIR cell key, brightness = fill occupancy (cellData.y). Magenta = cell absent from the hash, black = sky.
+        case 49: { // ReGIRCell: hue = cell key hash, brightness = entry count / REGIR_ENTRIES_PER_CELL. Magenta = cell absent, black = sky.
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0 || pc.regirHashEntries == nullptr) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
@@ -362,38 +350,38 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             if (cellSlot == REGIR_HASH_INVALID) {
                 srcPixel.xyz = float3(1.0, 0.0, 1.0);
             } else {
-                float occupancy = pc.regirCellData[cellSlot];
+                float fill = float(pc.regirCellData[cellSlot].x) / float(REGIR_ENTRIES_PER_CELL);
                 uint h = ReGIRChecksum(key) * 2654435761u;
                 float3 hue = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
-                srcPixel.xyz = hue * max(occupancy, 0.05);
+                srcPixel.xyz = hue * max(fill, 0.05);
             }
             break;
         }
-        case 50: { // ReGIRCellLight: colour of the light held by the most reservoirs in the pixel's ReGIR cell (emissive triangles counted per group), brightness = that share of the cell's reservoirs. Magenta = cell absent, black = sky.
+        case 50: { // ReGIRCellMass: greyscale log2(1 + total mass) / 24. Magenta = cell absent, black = sky.
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
-            if (depth <= 0.0 || pc.regirHashEntries == nullptr || pc.regirReservoirs == nullptr) { srcPixel.xyz = float3(0.0); break; }
+            if (depth <= 0.0 || pc.regirHashEntries == nullptr || pc.regirCellData == nullptr) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
             float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
             float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
             ReGIRHashKey key = ReGIRComputeKey(worldPos, pc.sceneData->cameraWorldPos.xyz);
             uint cellSlot = ReGIRHashFind(pc.regirHashEntries, key);
             if (cellSlot == REGIR_HASH_INVALID) { srcPixel.xyz = float3(1.0, 0.0, 1.0); break; }
-            uint base = ReGIRCellReservoirBase(cellSlot);
-            // Boyer-Moore majority over group-collapsed ids, then a second pass counts the winner
-            uint candidate = ~0u;
-            int votes = 0;
-            for (uint r = 0u; r < REGIR_RESERVOIRS_PER_CELL; r++) {
-                uint id = CollapseLightIdxToGroup(pc.regirReservoirs[base + r].lightIdx);
-                if (id == ~0u) { continue; }
-                if (votes == 0) { candidate = id; votes = 1; }
-                else if (id == candidate) { votes++; }
-                else { votes--; }
-            }
-            uint count = 0u;
-            for (uint r = 0u; r < REGIR_RESERVOIRS_PER_CELL; r++) {
-                if (CollapseLightIdxToGroup(pc.regirReservoirs[base + r].lightIdx) == candidate) { count++; }
-            }
-            srcPixel.xyz = LightIdxColor(candidate) * max(float(count) / float(REGIR_RESERVOIRS_PER_CELL), 0.05);
+            uint2 cellInfo = pc.regirCellData[cellSlot];
+            float total = cellInfo.x > 0u ? asfloat(cellInfo.y) : 0.0;
+            srcPixel.xyz = float3(saturate(log2(1.0 + max(total, 0.0)) / 24.0));
+            break;
+        }
+        case 51: { // ReGIRCursorCell: cell hue; the entry table of the cell under the mouse goes to the readback below. Magenta = cell absent, black = sky.
+            float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
+            if (depth <= 0.0 || pc.regirHashEntries == nullptr) { srcPixel.xyz = float3(0.0); break; }
+            float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
+            float3 viewPos = CheapReconstructViewSpacePosition(pc.sceneData->ndcToViewMul, pc.sceneData->ndcToViewAdd, uv, viewSpaceDepth);
+            float3 worldPos = mul(pc.sceneData->invView, float4(viewPos, 1.0)).xyz;
+            ReGIRHashKey key = ReGIRComputeKey(worldPos, pc.sceneData->cameraWorldPos.xyz);
+            uint cellSlot = ReGIRHashFind(pc.regirHashEntries, key);
+            if (cellSlot == REGIR_HASH_INVALID) { srcPixel.xyz = float3(1.0, 0.0, 1.0); break; }
+            uint h = ReGIRChecksum(key) * 2654435761u;
+            srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
         case 42: { // DofCoc: signed circle of confusion in dof_color_coc.a. Red = near field, blue = far, black = sharp; sqrt ramp over a 64px reference (the radius slider cap) so typical radii do not read black.
@@ -435,7 +423,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
     }
 
 #if WILL_EDITOR
-    if (pc.readback != nullptr && pc.regirHashEntries != nullptr && pc.regirReservoirs != nullptr && all(threadID.xy == pc.cursorPixel)
+    if (pc.readback != nullptr && pc.regirHashEntries != nullptr && pc.regirEntries != nullptr && pc.regirCellData != nullptr && all(threadID.xy == pc.cursorPixel)
         && pc.valueTransformationType >= 49u && pc.valueTransformationType <= 51u) {
         pc.readback->regirCursorValid = 0u;
         float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
@@ -451,41 +439,63 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             pc.readback->regirCursorCell[2] = key.cellPos.z;
             pc.readback->regirCursorSlot = cellSlot;
             if (cellSlot != REGIR_HASH_INVALID) {
-                uint base = ReGIRCellReservoirBase(cellSlot);
-                uint topIdx[4] = { ~0u, ~0u, ~0u, ~0u };
-                uint topCount[4] = { 0u, 0u, 0u, 0u };
-                uint empty = 0u;
-                uint other = 0u;
-                for (uint r = 0u; r < REGIR_RESERVOIRS_PER_CELL; r++) {
-                    uint id = CollapseLightIdxToGroup(pc.regirReservoirs[base + r].lightIdx);
-                    if (id == ~0u) { empty++; continue; }
-                    bool placed = false;
-                    for (uint k = 0u; k < 4u && !placed; k++) {
-                        if (topIdx[k] == id) { topCount[k]++; placed = true; }
-                        else if (topIdx[k] == ~0u) { topIdx[k] = id; topCount[k] = 1u; placed = true; }
+                uint base = ReGIRCellEntryBase(cellSlot);
+                uint2 cellInfo = pc.regirCellData[cellSlot];
+                uint count = min(cellInfo.x, REGIR_ENTRIES_PER_CELL);
+                float total = count > 0u ? asfloat(cellInfo.y) : 0.0;
+
+                uint topKey[8];
+                float topMass[8];
+                for (uint k = 0u; k < 8u; k++) { topKey[k] = ~0u; topMass[k] = 0.0; }
+
+                float prevCum = 0.0;
+                for (uint e = 0u; e < count; e++) {
+                    ReGIREntry entry = pc.regirEntries[base + e];
+                    float mass = entry.cumMass - prevCum;
+                    prevCum = entry.cumMass;
+                    uint carryKey = entry.key;
+                    float carryMass = mass;
+                    for (uint k = 0u; k < 8u; k++) {
+                        if (carryMass > topMass[k]) {
+                            uint sk = topKey[k];
+                            float sm = topMass[k];
+                            topKey[k] = carryKey;
+                            topMass[k] = carryMass;
+                            carryKey = sk;
+                            carryMass = sm;
+                        }
                     }
-                    if (!placed) { other++; }
                 }
-                float3 centerVS = mul(pc.sceneData->view, float4(ReGIRCellCenterFromKey(key), 1.0)).xyz;
-                float minDist2 = ReGIRTargetMinDist2(key.level);
-                for (uint k = 0u; k < 4u; k++) {
-                    pc.readback->regirCursorTopIdx[k] = topIdx[k];
-                    pc.readback->regirCursorTopCount[k] = topCount[k];
-                    float target = 0.0;
+
+                for (uint k = 0u; k < 8u; k++) {
+                    uint lightCount = 0u;
                     float3 pos = float3(0.0);
-                    if (topIdx[k] != ~0u && pc.restirLightVS != nullptr) {
-                        LightView vs = UnpackLightVS(pc.restirLightVS[topIdx[k]]);
-                        target = EvalCellLightTarget(vs, centerVS, centerVS, ReGIRCellHalfDiag(key.level), UnpackUnorm4x8(vs.packedColor).rgb, minDist2);
-                        pos = mul(pc.sceneData->invView, float4(vs.center, 1.0)).xyz;
+                    if (topKey[k] != ~0u) {
+                        if ((topKey[k] & REGIR_KEY_MESHLET) != 0u) {
+                            lightCount = 1u;
+                            if (pc.lightData != nullptr) {
+                                EmissiveMeshlet meshlet = pc.lightData->emissiveMeshlets[topKey[k] & ~REGIR_KEY_MESHLET];
+                                lightCount = meshlet.lightCount;
+                                pos = (meshlet.aabbMin + meshlet.aabbMax) * 0.5;
+                            }
+                        }
+                        else {
+                            lightCount = 1u;
+                            if (pc.restirLightVS != nullptr) {
+                                LightView vs = UnpackLightVS(pc.restirLightVS[topKey[k]]);
+                                pos = mul(pc.sceneData->invView, float4(vs.center, 1.0)).xyz;
+                            }
+                        }
                     }
-                    pc.readback->regirCursorTopTarget[k] = target;
+                    pc.readback->regirCursorTopKey[k] = topKey[k];
+                    pc.readback->regirCursorTopShare[k] = total > 0.0 ? topMass[k] / total : 0.0;
+                    pc.readback->regirCursorTopLightCount[k] = lightCount;
                     pc.readback->regirCursorTopPos[k * 3u + 0u] = pos.x;
                     pc.readback->regirCursorTopPos[k * 3u + 1u] = pos.y;
                     pc.readback->regirCursorTopPos[k * 3u + 2u] = pos.z;
                 }
-                pc.readback->regirCursorEmpty = empty;
-                pc.readback->regirCursorOther = other;
-                pc.readback->regirCursorOccupancy = pc.regirCellData[cellSlot];
+                pc.readback->regirCursorEntryCount = count;
+                pc.readback->regirCursorTotalMass = total;
                 pc.readback->regirCursorValid = 1u;
             }
         }

@@ -191,7 +191,6 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
     w.Key("bInitialVisibility", p.bInitialVisibility);
     w.Key("bSunLight", p.bSunLight);
     w.Key("sunAlphaTestMaxDistance", p.sunAlphaTestMaxDistance);
-    w.Key("regirWClamp", p.regirWClamp);
     w.Key("restirWClamp", p.restirWClamp);
     w.Key("lightProposal", static_cast<uint32_t>(p.lightProposal));
     w.Key("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
@@ -242,7 +241,6 @@ void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
     p.bInitialVisibility = r.Bool("bInitialVisibility", p.bInitialVisibility);
     p.bSunLight = r.Bool("bSunLight", p.bSunLight);
     p.sunAlphaTestMaxDistance = r.Float("sunAlphaTestMaxDistance", p.sunAlphaTestMaxDistance);
-    p.regirWClamp = r.Float("regirWClamp", p.regirWClamp);
     p.restirWClamp = r.Float("restirWClamp", p.restirWClamp);
     p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(r.UInt("lightProposal", static_cast<uint32_t>(p.lightProposal)));
     p.bEmissiveTriangleLights = r.Bool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);

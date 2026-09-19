@@ -36,6 +36,7 @@
 #include "render/shaders/ddgi_interop.h"
 #include "render/shaders/radiance_cache_interop.h"
 #include "render/shaders/restir_interop.h"
+#include "render/shaders/world_grid_interop.h"
 
 namespace Engine
 {
@@ -96,7 +97,6 @@ static void CopyDirectLightingSection(const LightingBundle& from, LightingBundle
     Core::ReSTIRParams restir = from.restir;
     CopyReSTIRDenoiserFields(to.restir, restir);
     restir.remodulateOutput = to.restir.remodulateOutput;
-    restir.bResetReGIR = to.restir.bResetReGIR;
     restir.bTemporalSearch = to.restir.bTemporalSearch;
     to.restir = restir;
 }
@@ -591,12 +591,14 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
     if (!state->debug.restir.bEmissiveTriangleLights) {
         ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Emissive Triangle Lights is OFF (Lighting > Direct Lighting (ReSTIR))");
     }
-    ImGui::Text("Reserved instances    %u / %d groups", emissive.reservedInstances, MAX_EMISSIVE_GROUPS);
-    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("TriLightStore reservations held at fill time. Refused past the group cap."); }
-    ImGui::Text("Live groups           %u", emissive.liveGroups);
+    ImGui::Text("Reserved instances    %u / %d meshes", emissive.reservedInstances, MAX_EMISSIVE_MESHES);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("TriLightStore reservations held at fill time. Refused past the mesh cap."); }
+    ImGui::Text("Meshlets              %u / %d", emissive.meshletWatermark, MAX_EMISSIVE_MESHLETS);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Emissive meshlet slot watermark: one EmissiveMeshlet per LOD0 meshlet of every reserved instance. Past the cap an instance falls back to a single meshlet."); }
+    ImGui::Text("Live meshes           %u", emissive.liveMeshes);
     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Reservations that are live and visible, so lit on the GPU. A gap against reserved is visibility, not the store."); }
-    ImGui::Text("Rebuilt this frame    %u groups, %u triangles", emissive.rebuiltGroups, emissive.rebuiltTriangles);
-    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Work items handed to the build pass, one workgroup each: only groups dirty for this host slot. A quiet scene rebuilds nothing."); }
+    ImGui::Text("Rebuilt this frame    %u meshes, %u triangles", emissive.rebuiltMeshes, emissive.rebuiltTriangles);
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Work items handed to the build pass, one workgroup each: only meshes dirty for this host slot. A quiet scene rebuilds nothing."); }
     ImGui::Text("TriLightStore         %u / %u (%.1f%%)", emissive.triLightWatermark, triLightCapacity,
                 triLightCapacity > 0u ? 100.0f * static_cast<float>(emissive.triLightWatermark) / static_cast<float>(triLightCapacity) : 0.0f);
     ImGui::Text("Analytic lights       %u / %d", emissive.analyticLightCount, MAX_ANALYTIC_LIGHTS);
@@ -604,8 +606,8 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
     ImGui::Text("LightData.lightCount  %u / %d", lightCountFed, MAX_LIGHTS);
     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("What the GPU is told. Triangles live at [MAX_ANALYTIC_LIGHTS, lightCount); the gap below holds nothing."); }
 
-    if (emissive.reservedInstances > emissive.liveGroups) {
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%u reserved instance(s) not lit", emissive.reservedInstances - emissive.liveGroups);
+    if (emissive.reservedInstances > emissive.liveMeshes) {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%u reserved instance(s) not lit", emissive.reservedInstances - emissive.liveMeshes);
     }
 
     ImGui::Checkbox("Capture Per-Instance List", &emissive.bCapture);
@@ -899,8 +901,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
                 Widgets::SubHeader("ReGIR");
-                depthView("ReGIR Cell (hue) / Occupancy (brightness)", DebugTransformationType::ReGIRCell);
-                depthView("ReGIR Cell Majority Light", DebugTransformationType::ReGIRCellLight);
+                depthView("ReGIR Cell (hue) / Entry Count (brightness)", DebugTransformationType::ReGIRCell);
+                depthView("ReGIR Cell Total Mass (log)", DebugTransformationType::ReGIRCellMass);
+                depthView("ReGIR Cursor Cell", DebugTransformationType::ReGIRCursorCell);
             }
 
             Widgets::SubHeader("Confidence");
@@ -1516,14 +1519,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             const char* proposalModes[] = {"World Grid Bin", "ReGIR"};
             int proposalIdx = static_cast<int>(restir.lightProposal);
             if (Widgets::Combo("Light Proposal", &proposalIdx, proposalModes, IM_ARRAYSIZE(proposalModes),
-                               "Candidate source for ReSTIR DI. World Grid Bin: cascaded strongest-K analytic bin (sparse analytic scenes). ReGIR: reservoir hash grid (dense/emissive-triangle scenes).")) {
+                               "Candidate source for ReSTIR DI. World Grid Bin: cascaded strongest-K analytic bin (sparse analytic scenes). ReGIR: per-cell deterministic entry table over a world hash grid (dense/emissive-triangle scenes).")) {
                 restir.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(proposalIdx);
                 changed = true;
-            }
-            if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
-                if (Widgets::SliderFloat("ReGIR W Clamp (0=off)", &restir.regirWClamp, 0.0f, 0.01f, {.format = "%.6f"})) {
-                    changed = true;
-                }
             }
             ImGui::BeginDisabled(!RESTIR_ENABLE_INITIAL_VISIBILITY);
             if (Widgets::Checkbox("Initial Candidate Visibility", &restir.bInitialVisibility)) {
@@ -2061,25 +2059,44 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
                     Widgets::SubHeader("ReGIR");
                     if (Widgets::IsShowingAll()) {
-                        ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u", ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed);
-                        {
-                            const Engine::ReGIRCdfStats& cdf = ctx->regirStats.cdf;
-                            ImGui::Text("Power CDF: %u lights, total %.3g. Below 1/tile (1/%u): %u lights carrying %.2f%% of power, below 1/cell (1/%u): %u. Share min %.2e, max %.3f (light %u)",
-                                        cdf.liveCount, cdf.totalPower, REGIR_TILE_SIZE, cdf.belowTile, cdf.rareShare * 100.0f, REGIR_RESERVOIRS_PER_CELL * REGIR_FILL_CANDIDATES, cdf.belowCell, cdf.minShare, cdf.maxShare, cdf.maxIdx);
-                        }
+                        ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u, gather overflow/frame: %u",
+                                    ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed, ctx->regirStats.gatherOverflow);
                         {
                             // Cell under the mouse while a ReGIR debug view
-                            const Engine::ReGIRCursorProbe& probe = ctx->regirStats.cursor;
-                            if (probe.valid != 0u) {
-                                ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u reservoirs, empty %u, other %u, occupancy %.2f", probe.level, probe.cell[0], probe.cell[1], probe.cell[2], probe.slot, REGIR_RESERVOIRS_PER_CELL, probe.empty, probe.other, probe.occupancy);
-                                for (uint32_t k = 0; k < 4; k++) {
-                                    if (probe.topCount[k] == 0u) { continue; }
-                                    ImGui::Text("  light %u x%u, target at centre %.3g, at (%.1f, %.1f, %.1f)", probe.topIdx[k], probe.topCount[k], probe.topTarget[k], probe.topPos[k * 3], probe.topPos[k * 3 + 1], probe.topPos[k * 3 + 2]);
+                            const Engine::ReGIRCursorCell& cursor = ctx->regirStats.cursor;
+                            if (cursor.valid != 0u) {
+                                ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u / %u entries, total mass %.3g",
+                                            cursor.level, cursor.cell[0], cursor.cell[1], cursor.cell[2], cursor.slot, cursor.entryCount, REGIR_ENTRIES_PER_CELL, cursor.totalMass);
+                                for (uint32_t k = 0; k < 8; k++) {
+                                    if (cursor.topKey[k] == ~0u) { continue; }
+                                    const bool bMeshlet = (cursor.topKey[k] & REGIR_KEY_MESHLET) != 0u;
+                                    ImGui::Text("  %s %u, share %.2f%%, %u lights, at (%.1f, %.1f, %.1f)",
+                                                bMeshlet ? "meshlet" : "light", bMeshlet ? (cursor.topKey[k] & ~REGIR_KEY_MESHLET) : cursor.topKey[k],
+                                                cursor.topShare[k] * 100.0f, cursor.topLightCount[k], cursor.topPos[k * 3], cursor.topPos[k * 3 + 1], cursor.topPos[k * 3 + 2]);
                                 }
                             }
                         }
                     }
-                    if (Widgets::Button("Reset ReGIR Grid")) { restir.bResetReGIR = true; }
+                }
+                else if (restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin && Widgets::IsShowingAll()) {
+                    const Engine::WorldGridCursorCell& cursor = ctx->worldGridCursor;
+                    if (cursor.valid != 0u) {
+                        Widgets::SubHeader("World Grid");
+                        ImGui::Text("Cursor cell L%u (%u, %u, %u) #%u, box (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f)", cursor.level, cursor.cell[0], cursor.cell[1], cursor.cell[2], cursor.flatIndex,
+                                    cursor.aabbMin[0], cursor.aabbMin[1], cursor.aabbMin[2], cursor.aabbMax[0], cursor.aabbMax[1], cursor.aabbMax[2]);
+                        ImGui::Text("Analytic: kept %u of %u in range (cap %u), kept power %.3g", cursor.analyticKept, cursor.analyticInRange, MAX_LIGHTS_PER_WORLD_GRID_CELL, cursor.analyticPower);
+                        for (uint32_t k = 0; k < 8; k++) {
+                            if (cursor.topLightIdx[k] == ~0u) { continue; }
+                            ImGui::Text("  light %u type %u, power %.3g, range %.1f, at (%.1f, %.1f, %.1f)", cursor.topLightIdx[k], cursor.topLightType[k], cursor.topLightPower[k], cursor.topLightRange[k],
+                                        cursor.topLightPos[k * 3], cursor.topLightPos[k * 3 + 1], cursor.topLightPos[k * 3 + 2]);
+                        }
+                        ImGui::Text("Emissive meshlets: kept %u of %u in range (cap %u), kept power %.3g", cursor.meshletKept, cursor.meshletInRange, MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL, cursor.meshletPower);
+                        for (uint32_t k = 0; k < 8; k++) {
+                            if (cursor.topMeshletIdx[k] == ~0u) { continue; }
+                            ImGui::Text("  meshlet %u x%u tris, power %.3g, centre (%.1f, %.1f, %.1f)", cursor.topMeshletIdx[k], cursor.topMeshletLightCount[k], cursor.topMeshletPower[k],
+                                        cursor.topMeshletCenter[k * 3], cursor.topMeshletCenter[k * 3 + 1], cursor.topMeshletCenter[k * 3 + 2]);
+                        }
+                    }
                 }
             }
             Widgets::EndSection();

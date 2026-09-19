@@ -474,10 +474,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ReGIRTouchPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("regir_build_indirect"_sid, src / "regir_build_indirect.spv", "ComputeReGIRBuildIndirect",
                             sizeof(ReGIRBuildIndirectPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("light_power_cdf"_sid, src / "light_power_cdf.spv", "ComputeLightPowerCDF",
-                            sizeof(LightPowerCDFPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("regir_presample_tiles"_sid, src / "regir_presample_tiles.spv", "ComputeReGIRPresampleTiles",
-                            sizeof(ReGIRPresampleTilesPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("regir_fill"_sid, src / "regir_fill.spv", "ComputeReGIRFill",
                             sizeof(ReGIRFillPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gi_gather_trace"_sid, src / "gi_gather_trace.spv", "ComputeGIGatherTrace",
@@ -744,6 +740,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(SelectionOutlinePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("debug_visualize"_sid, src / "debug_visualize.spv", "ComputeDebugVisualize",
                             sizeof(DebugVisualizePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("debug_world_grid_cursor_cell"_sid, src / "debug_world_grid_cursor_cell.spv", "ComputeDebugWorldGridCursorCell",
+                            sizeof(DebugWorldGridCursorCellPushConstant), PipelineCategory::Critical);
 
     VkDescriptorSetLayout proceduralTexLayout = resourceManager->proceduralTextureGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture.spv", "ComputeYellowTexture",

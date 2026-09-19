@@ -427,34 +427,6 @@ public Reservoir ReservoirEmpty()
     return r;
 }
 
-public ReGIRReservoir ReGIRReservoirEmpty()
-{
-    ReGIRReservoir r;
-    r.lightIdx = ~0u;
-    r.W = 0.0;
-    r.sharedW = 0.0;
-    return r;
-}
-
-public void FinalizeReservoirReGIR(inout ReGIRReservoir r, ReservoirAccum accum, float targetPdf, float M_total)
-{
-    if (targetPdf <= 0.0 || M_total <= 0.0) {
-        r.W = 0.0;
-    } else {
-        r.W = accum.wSum / (M_total * targetPdf);
-    }
-}
-
-public float ReGIRReservoirW(ReGIRReservoir r)
-{
-    return r.W;
-}
-
-public void ReGIRClampW(inout ReGIRReservoir r, float wClamp)
-{
-    if (wClamp > 0.0) { r.W = min(r.W, wClamp); }
-}
-
 // 32-bit sample-point packing: sphere = oct16 local direction, triangle = 2x16 unorm barycentrics, quad = 2x snorm16 uv
 public uint EncodeSampleOffset(float3 samplePos, LightView vs)
 {

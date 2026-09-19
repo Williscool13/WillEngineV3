@@ -53,33 +53,25 @@ SHADER_PUBLIC struct Reservoir
 };
 
 /**
- * Grid reservoir for ReGIR (RTG2 Ch.23). A cell's reservoirs are stored sorted by lightIdx with empties (~0u) last.
- *   W       = this reservoir's own RIS weight wSum / (M * targetPdf); feeds next frame's temporal merge
- *   sharedW = mean W over every reservoir in the cell holding the same light; the shading-side tap weight
- * Drawing a reservoir uniformly from the occupied prefix and weighting by sharedW * occupied / REGIR_RESERVOIRS_PER_CELL averages
- * the per-reservoir RIS estimators exactly, so it stays unbiased while the per-light W noise averages out.
+ * One entry of a ReGIR cell's importance table, rebuilt every frame by the fill pass.
+ * key = an analytic light index, or REGIR_KEY_MESHLET | EmissiveMeshlet index.
+ * Entries are sorted by key ascending and cumMass is the inclusive mass prefix in that order, so an entry's selection pdf is (cumMass[e] - cumMass[e-1]) / total.
  */
-SHADER_PUBLIC struct ReGIRReservoir
+SHADER_PUBLIC struct ReGIREntry
 {
-    SHADER_PUBLIC uint lightIdx;
-    SHADER_PUBLIC float W;
-    SHADER_PUBLIC float sharedW;
+    SHADER_PUBLIC uint key;
+    SHADER_PUBLIC float cumMass;
 };
-
-/**
- * One presampled-tile slot
- */
-SHADER_PUBLIC struct ReGIRTileSlot
-{
-    SHADER_PUBLIC uint lightIdx;
-    SHADER_PUBLIC float sourcePdf;
-};
-
-SHADER_PUBLIC SHADER_CONST uint REGIR_RESERVOIRS_PER_CELL = 512u;
 
 // ReGIR Hash Grid
 // A cell is a hash-table slot in [0, REGIR_HASH_CAPACITY).
-// Each owns REGIR_RESERVOIRS_PER_CELL reservoirs at base cellSlot * REGIR_RESERVOIRS_PER_CELL.
+// Each owns REGIR_ENTRIES_PER_CELL entries at base cellSlot * REGIR_ENTRIES_PER_CELL, plus a uint2 {entryCount, asuint(totalMass)}.
+SHADER_PUBLIC SHADER_CONST uint REGIR_ENTRIES_PER_CELL = 1024u;
+// Per-cell gather scratch; candidates past it are dropped and counted into the readback's regirGatherOverflow.
+SHADER_PUBLIC SHADER_CONST uint REGIR_GATHER_SCRATCH = 2048u;
+SHADER_PUBLIC SHADER_CONST uint REGIR_KEY_MESHLET = 0x80000000u;
+// Mass exponent applied after the top-K rank; below 1 it flattens the table so fresh pixels do not concentrate on the brightest light.
+SHADER_PUBLIC SHADER_CONST float REGIR_SELECT_TEMPER = 0.5;
 SHADER_PUBLIC SHADER_CONST uint REGIR_HASH_CAPACITY = 16384u;
 SHADER_PUBLIC SHADER_CONST uint REGIR_HASH_PROBE = 32u;
 SHADER_PUBLIC SHADER_CONST uint REGIR_HASH_EMPTY = 0u;
@@ -87,7 +79,6 @@ SHADER_PUBLIC SHADER_CONST uint REGIR_HASH_INVALID = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float REGIR_LOD_BASE_DIST = 32.0;
 SHADER_PUBLIC SHADER_CONST uint REGIR_MAX_LEVEL = 8u;
 SHADER_PUBLIC SHADER_CONST float REGIR_MAX_DIST = 1024.0;
-SHADER_PUBLIC SHADER_CONST uint REGIR_FILL_CANDIDATES = 8u;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_X = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Y = 2.0;
 SHADER_PUBLIC SHADER_CONST float REGIR_CELL_SIZE_Z = 2.0;
@@ -96,10 +87,6 @@ SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_CONE_FLOOR = 0.05;
 SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_RANGE_FLOOR = 0.05;
 SHADER_PUBLIC SHADER_CONST float REGIR_TARGET_FACING_FLOOR = 0.1;
 SHADER_PUBLIC SHADER_CONST float REGIR_KEY_CAMERA_OFFSET_SCALE = 0.005;
-
-// Presampled light tiles
-SHADER_PUBLIC SHADER_CONST uint REGIR_TILE_COUNT = 128u;
-SHADER_PUBLIC SHADER_CONST uint REGIR_TILE_SIZE = 1024u;
 
 // Initial-candidate counts for ReSTIR DI Talbot MIS: light (uniform) samples and BRDF-guided samples.
 SHADER_PUBLIC SHADER_CONST int RESTIR_M_LIGHT = 4;

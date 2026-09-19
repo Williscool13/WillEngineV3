@@ -189,7 +189,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
                 const Engine::InstanceSource& inst = store[runtime.range.offset + i];
-                if (inst.groupSlot != Engine::TriLightStore::INVALID_GROUP) { triLightStore.MarkDirty(inst.groupSlot); }
+                if (inst.emissiveMeshSlot != Engine::TriLightStore::INVALID_MESH_SLOT) { triLightStore.MarkDirty(inst.emissiveMeshSlot); }
                 if (inst.modelSlot == lastSlot) { continue; }
                 lastSlot = inst.modelSlot;
                 modelStore.SetModel(inst.modelSlot, {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform});
@@ -654,8 +654,9 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     emissiveDebug.entries.Clear();
     emissiveDebug.bEntriesTruncated = false;
     emissiveDebug.rebuiltTriangles = 0;
-    emissiveDebug.liveGroups = 0;
+    emissiveDebug.liveMeshes = 0;
     emissiveDebug.reservedInstances = triLightStore.GetReservationCount();
+    emissiveDebug.meshletWatermark = triLightStore.GetMeshletWatermark();
     emissiveDebug.triLightWatermark = triLightStore.GetWatermark();
     emissiveDebug.analyticLightCount = vf.analyticLightCount;
     const bool bEmissiveCapture = emissiveDebug.bCapture;
@@ -666,7 +667,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             return;
         }
         const Engine::Material* material = ctx->materialManager->GetMaterial(inst.materialID);
-        const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(inst.groupSlot);
+        const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(inst.emissiveMeshSlot);
         emissiveDebug.entries.PushBack(Engine::EmissiveDebugEntry{
             .entity = entity,
             .instanceSlot = slot,
@@ -682,14 +683,15 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
     triLightStore.SetEnabled(state->debug.restir.bEmissiveTriangleLights);
     vf.triLightCount = triLightStore.GetWatermark();
-    vf.emissiveGroupCount = triLightStore.GetGroupWatermark();
+    vf.emissiveMeshletCount = triLightStore.GetMeshletWatermark();
+    vf.emissiveMeshCount = triLightStore.GetMeshWatermark();
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
         Engine::InstanceStore& store = state->instanceStore;
 
-        const uint32_t groupWatermark = triLightStore.GetGroupWatermark();
+        const uint32_t meshWatermark = triLightStore.GetMeshWatermark();
         ctx->materialManager->DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
-            for (uint32_t g = 0; g < groupWatermark; ++g) {
+            for (uint32_t g = 0; g < meshWatermark; ++g) {
                 const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
                 if (!reservation.bLive) { continue; }
                 const uint32_t materialIndex = store[reservation.instanceSlot].materialIndex;
@@ -697,22 +699,24 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             }
         });
 
-        triLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t groupSlot) {
-            const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(groupSlot);
+        triLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t meshSlot) {
+            const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(meshSlot);
             const bool bLive = reservation.bLive && store[reservation.instanceSlot].bVisible;
             vf.emissiveTriWork.PushBack(EmissiveTriLightWork{
                 .instanceSlot = reservation.instanceSlot,
                 .firstLight = static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + reservation.range.offset,
                 .triangleCount = reservation.range.count,
-                .groupSlot = groupSlot,
+                .meshSlot = meshSlot,
+                .firstMeshlet = reservation.meshlets.offset,
+                .meshletCount = reservation.meshlets.count,
                 .bDead = bLive ? 0u : 1u,
             });
             emissiveDebug.rebuiltTriangles += reservation.range.count;
         });
 
-        for (uint32_t g = 0; g < groupWatermark; ++g) {
+        for (uint32_t g = 0; g < meshWatermark; ++g) {
             const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
-            if (reservation.bLive && store[reservation.instanceSlot].bVisible) { emissiveDebug.liveGroups++; }
+            if (reservation.bLive && store[reservation.instanceSlot].bVisible) { emissiveDebug.liveMeshes++; }
         }
 
         if (bEmissiveCapture) {
@@ -722,7 +726,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                 for (uint32_t i = 0; i < runtime.range.count; ++i) {
                     const uint32_t slot = runtime.range.offset + i;
                     const Engine::InstanceSource& inst = store[slot];
-                    if (inst.groupSlot == Engine::TriLightStore::INVALID_GROUP) { continue; }
+                    if (inst.emissiveMeshSlot == Engine::TriLightStore::INVALID_MESH_SLOT) { continue; }
                     Engine::EmissiveDispatchState dispatchState;
                     if (bBakeHidden) { dispatchState = Engine::EmissiveDispatchState::ProbeBakeHidden; }
                     else if (!inst.bVisible) { dispatchState = Engine::EmissiveDispatchState::EntityHidden; }
@@ -734,9 +738,10 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     }
     else {
         vf.triLightCount = 0;
-        vf.emissiveGroupCount = 0;
+        vf.emissiveMeshletCount = 0;
+        vf.emissiveMeshCount = 0;
     }
-    emissiveDebug.rebuiltGroups = static_cast<uint32_t>(vf.emissiveTriWork.Size());
+    emissiveDebug.rebuiltMeshes = static_cast<uint32_t>(vf.emissiveTriWork.Size());
     emissiveDebug.triLightCountFed = vf.triLightCount;
 
     //

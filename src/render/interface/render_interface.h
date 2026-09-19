@@ -488,7 +488,9 @@ struct ViewFamily
     ArenaVector<DirtyRun> lightRuns{};
     uint32_t triLightCount{0};
 
-    uint32_t emissiveGroupCount{0};
+    /** Meshlet and mesh watermarks of the TriLightStore; LightData reads meshlets/meshes below them. */
+    uint32_t emissiveMeshletCount{0};
+    uint32_t emissiveMeshCount{0};
     ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
 
     ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};

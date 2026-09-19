@@ -11,7 +11,7 @@ import packing_functions;
 
 /**
  * Candidate light proposal for ReSTIR DI initial sampling. Two backends conform:
- * ReGIRProposal (world-space reservoir hash grid) and WorldGridProposal (cascaded strongest-K light bin).
+ * ReGIRProposal (world-space hash grid of per-cell entry tables) and WorldGridProposal (cascaded strongest-K light bin).
  * The generic base kernel ReSTIRDIBase is specialized per backend; only these three ops differ, everything downstream is shared.
  */
 public interface ILightProposal
@@ -26,27 +26,28 @@ public interface ILightProposal
     float Marginal(int lightIdx, LightView vs, int liveCount);
 }
 
-/** ReGIR: per-cell RIS reservoirs from the hash grid, sorted by light with empties last. A tap draws uniformly from the occupied
- *  prefix and uses the light's cell-shared mean W, so pSelect = 1 / (occupancy * sharedW) is one value per light per cell. */
+/** ReGIR: the cell's entry table (see ReGIREntry). Draw binary-searches cumMass for a stratified u, then picks a triangle uniformly inside a meshlet;
+ *  Marginal binary-searches the key, so the selection pdf is exact both ways and Talbot MIS stays unbiased. */
 public struct ReGIRProposal : ILightProposal
 {
     public uint* hashEntries;
-    public ReGIRReservoir* reservoirs;
-    public float* cellData;
+    public ReGIREntry* entries;
+    public uint2* cellData;
+    public LightData* lightData;
     public int analyticCount;
     public int realLightCount;
 
     bool useGrid;
-    uint gridBase;
-    uint cellOccupied;
-    float cellOccupancy;
+    uint entryBase;
+    uint entryCount;
+    float totalMass;
 
     [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
     {
         useGrid = false;
-        gridBase = 0u;
-        cellOccupied = 0u;
-        cellOccupancy = 0.0;
+        entryBase = 0u;
+        entryCount = 0u;
+        totalMass = 0.0;
         if (camDist <= REGIR_MAX_DIST) {
             float regirJitter = ReGIRCellSizeAtLevel(ReGIRLevelFromDistance(camDist));
             float3 jitter = (float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5) * regirJitter;
@@ -58,11 +59,12 @@ public struct ReGIRProposal : ILightProposal
                 ReGIRHashKey key = ReGIRComputeKey(queryPos, cameraPos);
                 uint cellSlot = ReGIRHashFind(hashEntries, key);
                 if (cellSlot != REGIR_HASH_INVALID) {
-                    float occupancy = cellData[cellSlot];
-                    if (occupancy > 0.0) {
-                        gridBase = ReGIRCellReservoirBase(cellSlot);
-                        cellOccupancy = occupancy;
-                        cellOccupied = uint(occupancy * float(REGIR_RESERVOIRS_PER_CELL) + 0.5);
+                    uint2 cd = cellData[cellSlot];
+                    float total = asfloat(cd.y);
+                    if (cd.x > 0u && total > 0.0) {
+                        entryBase = ReGIRCellEntryBase(cellSlot);
+                        entryCount = cd.x;
+                        totalMass = total;
                         useGrid = true;
                     }
                 }
@@ -75,40 +77,71 @@ public struct ReGIRProposal : ILightProposal
         lightIdx = -1;
         pSelect = 0.0;
         if (!useGrid) { return false; }
-        // Stratified over the occupied prefix: the sorted layout spreads the taps across the cell's lights in proportion to their runs
-        float uStrat = (float(i) + HashStep(h)) / float(m);
-        uint slotInCell = min(uint(uStrat * float(cellOccupied)), cellOccupied - 1u);
-        ReGIRReservoir gr = reservoirs[gridBase + slotInCell];
-        if (gr.lightIdx != ~0u && IsLiveLight(gr.lightIdx, realLightCount, analyticCount) && gr.sharedW > 0.0) {
-            lightIdx = int(gr.lightIdx);
-            pSelect = 1.0 / (cellOccupancy * gr.sharedW);
-            return true;
+        float u = (float(i) + HashStep(h)) / float(m);
+        float target = u * totalMass;
+        uint lo = 0u;
+        uint hi = entryCount - 1u;
+        while (lo < hi) {
+            uint mid = (lo + hi) >> 1u;
+            if (entries[entryBase + mid].cumMass > target) { hi = mid; } else { lo = mid + 1u; }
         }
-        return false;
+        float lower = lo > 0u ? entries[entryBase + lo - 1u].cumMass : 0.0;
+        ReGIREntry entry = entries[entryBase + lo];
+        float mass = entry.cumMass - lower;
+        if (!(mass > 0.0)) { return false; }
+
+        float p = mass / totalMass;
+        uint idx;
+        if ((entry.key & REGIR_KEY_MESHLET) != 0u) {
+            EmissiveMeshlet meshlet = lightData->emissiveMeshlets[entry.key & ~REGIR_KEY_MESHLET];
+            if (meshlet.lightCount == 0u) { return false; }
+            uint t = min(uint(HashStep(h) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
+            idx = meshlet.firstLight + t;
+            p /= float(meshlet.lightCount);
+        }
+        else {
+            idx = entry.key;
+        }
+        if (!IsLiveLight(idx, realLightCount, analyticCount)) { return false; }
+        lightIdx = int(idx);
+        pSelect = p;
+        return true;
     }
 
     public float Marginal(int lightIdx, LightView vs, int liveCount)
     {
         if (!useGrid) { return 1.0 / float(liveCount); }
-        // Binary search the sorted occupied prefix: a light the cell does not hold cannot come from the grid, so its light-strategy pdf is 0
-        uint target = uint(lightIdx);
+        uint target;
+        uint runCount = 1u;
+        if (lightIdx < analyticCount) {
+            target = uint(lightIdx);
+        }
+        else {
+            uint meshlet = lightData->meshletOf[uint(lightIdx) - uint(MAX_ANALYTIC_LIGHTS)];
+            if (meshlet == ~0u) { return 0.0; }
+            runCount = lightData->emissiveMeshlets[meshlet].lightCount;
+            if (runCount == 0u) { return 0.0; }
+            target = REGIR_KEY_MESHLET | meshlet;
+        }
+
+        // A light the cell does not hold cannot come from the grid, so its light-strategy pdf is 0
         uint lo = 0u;
-        uint hi = cellOccupied;
+        uint hi = entryCount;
         while (lo < hi) {
             uint mid = (lo + hi) >> 1u;
-            if (reservoirs[gridBase + mid].lightIdx < target) { lo = mid + 1u; } else { hi = mid; }
+            if (entries[entryBase + mid].key < target) { lo = mid + 1u; } else { hi = mid; }
         }
-        if (lo < cellOccupied) {
-            ReGIRReservoir gr = reservoirs[gridBase + lo];
-            if (gr.lightIdx == target && gr.sharedW > 0.0) { return 1.0 / (cellOccupancy * gr.sharedW); }
-        }
-        return 0.0;
+        if (lo >= entryCount || entries[entryBase + lo].key != target) { return 0.0; }
+        float lower = lo > 0u ? entries[entryBase + lo - 1u].cumMass : 0.0;
+        float mass = entries[entryBase + lo].cumMass - lower;
+        if (!(mass > 0.0)) { return 0.0; }
+        return (mass / totalMass) / float(runCount);
     }
 }
 
-/** WorldGridBin: cascaded strongest-K light list. The cell holds analytic lights and emissive groups (whole mesh instances) in two
- *  parallel top-K lists. A draw splits between the two lists proportional to their kept-set power sums (so low-power emissive groups
- *  cannot starve the analytic candidate budget), then picks uniformly among analytics, or a group by its power share and a triangle
+/** WorldGridBin: cascaded strongest-K light list. The cell holds analytic lights and emissive meshlets in two
+ *  parallel top-K lists. A draw splits between the two lists proportional to their kept-set power sums (so low-power emissive meshlets
+ *  cannot starve the analytic candidate budget), then picks uniformly among analytics, or a meshlet by its power share and a triangle
  *  uniformly within it. All terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
 public struct WorldGridProposal : ILightProposal
 {
@@ -122,57 +155,57 @@ public struct WorldGridProposal : ILightProposal
 
     uint cellOffset;
     uint cellCount;
-    uint groupOffset;
-    uint groupCount;
+    uint meshletOffset;
+    uint meshletCount;
     float analyticPow;
-    float groupPow;
+    float meshletPow;
 
     [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
     {
         cellOffset = 0u;
         cellCount = 0u;
-        groupOffset = 0u;
-        groupCount = 0u;
+        meshletOffset = 0u;
+        meshletCount = 0u;
         analyticPow = 0.0;
-        groupPow = 0.0;
+        meshletPow = 0.0;
         WorldGridKey key = WorldGridResolveCell(worldPos, cameraPos);
         uint2 cell = grid[key.cellIndex];
         cellOffset = cell.x;
         cellCount = cell.y;
         if (emissiveGrid != nullptr) {
             uint2 g = emissiveGrid[key.cellIndex];
-            groupOffset = g.x;
-            groupCount = g.y;
+            meshletOffset = g.x;
+            meshletCount = g.y;
         }
         if (cellPower != nullptr) {
             float2 p = cellPower[key.cellIndex];
             analyticPow = p.x;
-            groupPow = p.y;
+            meshletPow = p.y;
         }
     }
 
     bool UsePowerSplit()
     {
         if (cellCount > 0u && analyticPow <= 0.0) { return false; }
-        if (groupCount > 0u && groupPow <= 0.0) { return false; }
-        return analyticPow + groupPow > 0.0;
+        if (meshletCount > 0u && meshletPow <= 0.0) { return false; }
+        return analyticPow + meshletPow > 0.0;
     }
 
     public bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect)
     {
         lightIdx = -1;
         pSelect = 0.0;
-        uint total = cellCount + groupCount;
+        uint total = cellCount + meshletCount;
         // Empty cell: let the caller's uniform-over-all-lights fallback handle it (already covers emissives).
         if (total == 0u) { return false; }
 
         float u = (float(i) + HashStep(h)) / float(m);
 
         if (UsePowerSplit()) {
-            float T = analyticPow + groupPow;
+            float T = analyticPow + meshletPow;
             float pA = analyticPow / T;
-            // Branch on counts, never on float compares alone: pA==1.0 is not guaranteed exact, and the group path with groupCount==0 underflows the index
-            if (groupCount == 0u || (cellCount > 0u && u < pA)) {
+            // Branch on counts, never on float compares alone: pA==1.0 is not guaranteed exact, and the meshlet path with meshletCount==0 underflows the index
+            if (meshletCount == 0u || (cellCount > 0u && u < pA)) {
                 uint j = min(uint((u / max(pA, 1e-8)) * float(cellCount)), cellCount - 1u);
                 uint idx = indexList[cellOffset + j];
                 if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
@@ -180,20 +213,20 @@ public struct WorldGridProposal : ILightProposal
                 pSelect = pA / float(cellCount);
                 return true;
             }
-            float target = (u - pA) / max(1.0 - pA, 1e-8) * groupPow;
+            float target = (u - pA) / max(1.0 - pA, 1e-8) * meshletPow;
             float accum = 0.0;
-            uint pick = groupCount - 1u;
-            for (uint k = 0u; k < groupCount; k++) {
-                accum += lightData->emissiveGroups[emissiveIndexList[groupOffset + k]].power;
+            uint pick = meshletCount - 1u;
+            for (uint k = 0u; k < meshletCount; k++) {
+                accum += lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + k]].power;
                 if (target < accum) { pick = k; break; }
             }
-            EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + pick]];
-            if (group.lightCount == 0u) { return false; }
-            uint t = min(uint(HashStep(h) * float(group.lightCount)), group.lightCount - 1u);
-            uint idx = group.firstLight + t;
+            EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + pick]];
+            if (meshlet.lightCount == 0u) { return false; }
+            uint t = min(uint(HashStep(h) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
+            uint idx = meshlet.firstLight + t;
             if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
             lightIdx = int(idx);
-            pSelect = (group.power / T) / float(group.lightCount);
+            pSelect = (meshlet.power / T) / float(meshlet.lightCount);
             return true;
         }
 
@@ -206,25 +239,25 @@ public struct WorldGridProposal : ILightProposal
             return true;
         }
 
-        // Group path draws one extra step; with no emissive groups present it is never taken
-        EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + (j - cellCount)]];
-        if (group.lightCount == 0u) { return false; }
-        uint t = min(uint(HashStep(h) * float(group.lightCount)), group.lightCount - 1u);
-        uint idx = group.firstLight + t;
+        // Meshlet path draws one extra step; with no emissive meshlets present it is never taken
+        EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + (j - cellCount)]];
+        if (meshlet.lightCount == 0u) { return false; }
+        uint t = min(uint(HashStep(h) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
+        uint idx = meshlet.firstLight + t;
         if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
         lightIdx = int(idx);
-        pSelect = 1.0 / (float(total) * float(group.lightCount));
+        pSelect = 1.0 / (float(total) * float(meshlet.lightCount));
         return true;
     }
 
     public float Marginal(int lightIdx, LightView vs, int liveCount)
     {
         // Exact: a light is a candidate iff it survived its cell list, at the same pdf the draw used
-        uint total = cellCount + groupCount;
+        uint total = cellCount + meshletCount;
         if (total == 0u) { return 1.0 / float(liveCount); }
 
         bool bPowerSplit = UsePowerSplit();
-        float T = analyticPow + groupPow;
+        float T = analyticPow + meshletPow;
 
         if (lightIdx < analyticCount) {
             for (uint k = 0u; k < cellCount; k++) {
@@ -235,11 +268,11 @@ public struct WorldGridProposal : ILightProposal
             return 0.0;
         }
 
-        // Group runs are disjoint, so an emissive triangle matches at most one binned group.
-        for (uint k = 0u; k < groupCount; k++) {
-            EmissiveGroup group = lightData->emissiveGroups[emissiveIndexList[groupOffset + k]];
-            if (uint(lightIdx) >= group.firstLight && uint(lightIdx) < group.firstLight + group.lightCount) {
-                return bPowerSplit ? (group.power / T) / float(group.lightCount) : 1.0 / (float(total) * float(group.lightCount));
+        // Meshlet runs are disjoint, so an emissive triangle matches at most one binned meshlet.
+        for (uint k = 0u; k < meshletCount; k++) {
+            EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + k]];
+            if (uint(lightIdx) >= meshlet.firstLight && uint(lightIdx) < meshlet.firstLight + meshlet.lightCount) {
+                return bPowerSplit ? (meshlet.power / T) / float(meshlet.lightCount) : 1.0 / (float(total) * float(meshlet.lightCount));
             }
         }
         return 0.0;

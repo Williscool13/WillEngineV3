@@ -37,6 +37,7 @@ struct PrimitiveProperty
     uint32_t index;
     int32_t materialIndex;
     uint32_t triangleCount{0};
+    uint32_t meshletCount{0}; // LOD0
 
     Vec3 boundingBoxMin{};
     Vec3 boundingBoxMax{};

@@ -126,8 +126,10 @@ struct EmissiveDebugState
     bool bCapture{false};
     /** Instances holding a TriLightStore reservation, lit or not. */
     uint32_t reservedInstances{0};
-    uint32_t liveGroups{0};
-    uint32_t rebuiltGroups{0};
+    /** Emissive meshlet slots in use (one per LOD0 meshlet of a reserved instance). */
+    uint32_t meshletWatermark{0};
+    uint32_t liveMeshes{0};
+    uint32_t rebuiltMeshes{0};
     uint32_t rebuiltTriangles{0};
     uint32_t triLightWatermark{0};
     /** ViewFamily::triLightCount as handed to the render thread; zero when the feature is off. */

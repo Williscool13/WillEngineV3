@@ -133,41 +133,48 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         analyticPowerSum += WorldGridLightPower(pc.lightData->lights[pc.worldGridIndexList[indexOffset + k]]);
     }
 
-    uint groupOffset = flatIndex * MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL;
-    uint groupCount = 0u;
-    float minGroupPower = 1e30;
-    uint minGroupSlot = 0u;
-    int emissiveGroupCount = pc.lightData->emissiveGroupCount;
-    for (int g = 0; g < emissiveGroupCount; g++)
-    {
-        EmissiveGroup group = pc.lightData->emissiveGroups[g];
-        if (any(group.aabbMin > aabbMax) || any(group.aabbMax < aabbMin)) { continue; }
+    uint meshletOffset = flatIndex * MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL;
+    uint meshletCount = 0u;
+    float minMeshletPower = 1e30;
+    uint minMeshletSlot = 0u;
+    int emissiveMeshCount = pc.lightData->emissiveMeshCount;
 
-        if (groupCount < MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL)
+    for (int p = 0; p < emissiveMeshCount; p++)
+    {
+        EmissiveMesh mesh = pc.lightData->emissiveMeshes[p];
+        if (any(mesh.aabbMin > aabbMax) || any(mesh.aabbMax < aabbMin)) { continue; }
+
+        for (uint g = mesh.firstMeshlet; g < mesh.firstMeshlet + mesh.meshletCount; g++)
         {
-            pc.worldGridEmissiveIndexList[groupOffset + groupCount] = uint(g);
-            if (group.power < minGroupPower) { minGroupPower = group.power; minGroupSlot = groupCount; }
-            groupCount++;
-        }
-        else if (group.power > minGroupPower)
-        {
-            pc.worldGridEmissiveIndexList[groupOffset + minGroupSlot] = uint(g);
-            minGroupPower = 1e30;
-            for (uint k = 0u; k < MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL; k++)
+            EmissiveMeshlet meshlet = pc.lightData->emissiveMeshlets[g];
+            if (any(meshlet.aabbMin > aabbMax) || any(meshlet.aabbMax < aabbMin)) { continue; }
+
+            if (meshletCount < MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL)
             {
-                float hp = pc.lightData->emissiveGroups[pc.worldGridEmissiveIndexList[groupOffset + k]].power;
-                if (hp < minGroupPower) { minGroupPower = hp; minGroupSlot = k; }
+                pc.worldGridEmissiveIndexList[meshletOffset + meshletCount] = g;
+                if (meshlet.power < minMeshletPower) { minMeshletPower = meshlet.power; minMeshletSlot = meshletCount; }
+                meshletCount++;
+            }
+            else if (meshlet.power > minMeshletPower)
+            {
+                pc.worldGridEmissiveIndexList[meshletOffset + minMeshletSlot] = g;
+                minMeshletPower = 1e30;
+                for (uint k = 0u; k < MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL; k++)
+                {
+                    float hp = pc.lightData->emissiveMeshlets[pc.worldGridEmissiveIndexList[meshletOffset + k]].power;
+                    if (hp < minMeshletPower) { minMeshletPower = hp; minMeshletSlot = k; }
+                }
             }
         }
     }
-    pc.worldGridEmissiveGrid[flatIndex] = uint2(groupOffset, groupCount);
+    pc.worldGridEmissiveGrid[flatIndex] = uint2(meshletOffset, meshletCount);
 
-    float groupPowerSum = 0.0;
-    for (uint k = 0u; k < groupCount; k++)
+    float meshletPowerSum = 0.0;
+    for (uint k = 0u; k < meshletCount; k++)
     {
-        groupPowerSum += pc.lightData->emissiveGroups[pc.worldGridEmissiveIndexList[groupOffset + k]].power;
+        meshletPowerSum += pc.lightData->emissiveMeshlets[pc.worldGridEmissiveIndexList[meshletOffset + k]].power;
     }
-    pc.worldGridCellPower[flatIndex] = float2(analyticPowerSum, groupPowerSum);
+    pc.worldGridCellPower[flatIndex] = float2(analyticPowerSum, meshletPowerSum);
 
     // Two smallest-volume probes intersecting this cell, packed 16 bits each; ascending-index strict-less tie-break. Written unconditionally (aliased RDG buffers are not zeroed).
     uint bestProbe = WORLD_GRID_PROBE_SLOT_SENTINEL;

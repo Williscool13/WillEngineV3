@@ -347,6 +347,7 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
     for (size_t i = 0; i < meshletCount; ++i) {
         meshopt_optimizeMeshlet(&meshletVertices[meshlets[i].vertex_offset], &meshletTriangles[meshlets[i].triangle_offset], meshlets[i].triangle_count, meshlets[i].vertex_count);
     }
+    ReorderIndicesByMeshlets(Core::Span<uint32_t>(remappedIndices.Data(), remappedIndices.Size()), meshlets.Data(), meshletCount, meshletVertices.Data(), meshletTriangles.Data());
 
     // Compute bounds for position quantization and rendering
     Engine::MeshBounds bounds = CalculateMeshBounds(remappedVertices);
@@ -483,6 +484,7 @@ bool ProceduralModelLoadSlot::FinalizeGeometryGroups(Core::Span<const Engine::Fu
         for (size_t i = 0; i < gb.meshletCount; ++i) {
             meshopt_optimizeMeshlet(&gb.meshletVertices[gb.meshlets[i].vertex_offset], &gb.meshletTriangles[gb.meshlets[i].triangle_offset], gb.meshlets[i].triangle_count, gb.meshlets[i].vertex_count);
         }
+        ReorderIndicesByMeshlets(Core::Span<uint32_t>(gb.indices.Data(), gb.indices.Size()), gb.meshlets.Data(), gb.meshletCount, gb.meshletVertices.Data(), gb.meshletTriangles.Data());
 
         gb.bounds = CalculateMeshBounds(gb.verts);
         if (gb.bounds.aabbExtents.x < 1e-6f) { gb.bounds.aabbExtents.x = 1.0f; }
@@ -3057,6 +3059,7 @@ void ProceduralModelLoadSlot::PrepareUploadData()
             const uint32_t localPi = primitiveIndex.index;
             const size_t indexEnd = localPi + 1 < rawData.primitives.Size() ? rawData.primitives[localPi + 1].indexOffset : rawData.indices.Size();
             primitiveIndex.triangleCount = static_cast<uint32_t>((indexEnd - rawData.primitives[localPi].indexOffset) / 3);
+            primitiveIndex.meshletCount = static_cast<uint32_t>(rawData.primitives[localPi].meshletCount.x);
         }
     }
 

@@ -1660,10 +1660,12 @@ void WillEngine::Run()
                 const Render::ReGIRStatistics regirStats = renderThread->GetRendererStatistics().regir;
                 engineContext->regirStats.activeCells = regirStats.activeCells;
                 engineContext->regirStats.insertsFailed = regirStats.insertsFailed;
-                static_assert(sizeof(Engine::ReGIRCursorProbe) == sizeof(Render::ReGIRCursorProbe));
-                std::memcpy(&engineContext->regirStats.cursor, &regirStats.cursor, sizeof(Engine::ReGIRCursorProbe));
-                static_assert(sizeof(Engine::ReGIRCdfStats) == sizeof(Render::ReGIRCdfStats));
-                std::memcpy(&engineContext->regirStats.cdf, &regirStats.cdf, sizeof(Engine::ReGIRCdfStats));
+                engineContext->regirStats.gatherOverflow = regirStats.gatherOverflow;
+                static_assert(sizeof(Engine::ReGIRCursorCell) == sizeof(Render::ReGIRCursorCell));
+                std::memcpy(&engineContext->regirStats.cursor, &regirStats.cursor, sizeof(Engine::ReGIRCursorCell));
+                const Render::WorldGridCursorCell worldGridCursor = renderThread->GetRendererStatistics().worldGrid.cursor;
+                static_assert(sizeof(Engine::WorldGridCursorCell) == sizeof(Render::WorldGridCursorCell));
+                std::memcpy(&engineContext->worldGridCursor, &worldGridCursor, sizeof(Engine::WorldGridCursorCell));
 
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();

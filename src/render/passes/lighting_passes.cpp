@@ -77,6 +77,7 @@ void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineMana
     pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
+    pass.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
     pass.WriteBuffer(LIGHT_DATA_BUFFER);
     pass.Execute([pipelineManager, workCount, emissiveTriRangeMultiplier](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("emissive_tri_lights"_sid);
@@ -91,6 +92,7 @@ void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineMana
             .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
             .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
             .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
+            .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
             .workCount = workCount,
             .rangeMultiplier = emissiveTriRangeMultiplier,
         };
@@ -111,7 +113,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
 
     const VkDeviceSize gridBytes = static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * 2u * sizeof(uint32_t);
     const VkDeviceSize indexBytes = static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * MAX_LIGHTS_PER_WORLD_GRID_CELL * sizeof(uint32_t);
-    const VkDeviceSize emissiveIndexBytes = static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * MAX_EMISSIVE_GROUPS_PER_WORLD_GRID_CELL * sizeof(uint32_t);
+    const VkDeviceSize emissiveIndexBytes = static_cast<VkDeviceSize>(WORLD_GRID_CELL_COUNT) * MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL * sizeof(uint32_t);
     graph.CreateBuffer("world_grid_light_grid"_sid, gridBytes, false);
     graph.CreateBuffer("world_grid_index_list"_sid, indexBytes, false);
     graph.CreateBuffer("world_grid_emissive_grid"_sid, gridBytes, false);
@@ -183,6 +185,50 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         const uint32_t groups = (WORLD_GRID_CELL_COUNT + 63u) / 64u;
         vkCmdDispatch(cmd, groups, 1, 1);
+    });
+}
+
+void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
+                                       PipelineManager* pipelineManager,
+                                       uint32_t sceneIndex,
+                                       StringID depthTexture,
+                                       Core::Array<uint32_t, 2> renderExtent,
+                                       Core::Array<uint32_t, 2> cursorPixel)
+{
+    ZoneScoped;
+    if (!graph.HasBuffer("readback_buffer"_sid) || !graph.HasBuffer("world_grid_light_grid"_sid) || !graph.HasBuffer(LIGHT_DATA_BUFFER) || !graph.HasTexture(depthTexture)) { return; }
+
+    RenderPass& pass = graph.AddPass("World Grid Cursor Cell"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(LIGHT_DATA_BUFFER);
+    pass.ReadBuffer("world_grid_light_grid"_sid);
+    pass.ReadBuffer("world_grid_index_list"_sid);
+    pass.ReadBuffer("world_grid_emissive_grid"_sid);
+    pass.ReadBuffer("world_grid_emissive_index_list"_sid);
+    pass.ReadBuffer("world_grid_cell_power"_sid);
+    pass.ReadSampledImage(depthTexture);
+    pass.ReadWriteBuffer("readback_buffer"_sid);
+    pass.Execute([pipelineManager, sceneIndex, depthTexture, renderExtent, cursorPixel](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_world_grid_cursor_cell"_sid);
+        if (!pipelineEntry) { return; }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        DebugWorldGridCursorCellPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .worldGridBuffer = graph.GetBufferAddress("world_grid_light_grid"_sid),
+            .worldGridIndexList = graph.GetBufferAddress("world_grid_index_list"_sid),
+            .worldGridEmissiveGrid = graph.GetBufferAddress("world_grid_emissive_grid"_sid),
+            .worldGridEmissiveIndexList = graph.GetBufferAddress("world_grid_emissive_index_list"_sid),
+            .worldGridCellPower = graph.GetBufferAddress("world_grid_cell_power"_sid),
+            .readback = graph.GetBufferAddress("readback_buffer"_sid),
+            .cursorPixel = {cursorPixel[0], cursorPixel[1]},
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .depthTextureIndex = graph.GetSampledImageViewDescriptorIndex(depthTexture),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, 1, 1, 1);
     });
 }
 
