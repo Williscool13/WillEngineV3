@@ -26,7 +26,47 @@ public interface ILightProposal
     float Marginal(int lightIdx, LightView vs, int liveCount);
 }
 
-/** ReGIR: the cell's entry table (see ReGIREntry). Draw binary-searches cumMass for a stratified u, then picks a triangle uniformly inside a meshlet;
+struct MeshletTriCdf
+{
+    float cumBase;
+    float total;
+}
+
+MeshletTriCdf MeshletTriCdfOf(LightData* lightData, EmissiveMeshlet meshlet)
+{
+    MeshletTriCdf cdf;
+    float cumLast = lightData->lights[meshlet.firstLight + meshlet.lightCount - 1u].up.w;
+    cdf.cumBase = cumLast - meshlet.power;
+    cdf.total = cumLast - cdf.cumBase;
+    return cdf;
+}
+
+uint MeshletDrawTri(LightData* lightData, EmissiveMeshlet meshlet, MeshletTriCdf cdf, float u)
+{
+    if (RESTIR_MESHLET_TRI_CDF == 0u) {
+        return meshlet.firstLight + min(uint(u * float(meshlet.lightCount)), meshlet.lightCount - 1u);
+    }
+    float target = cdf.cumBase + u * cdf.total;
+    uint lo = meshlet.firstLight;
+    uint hi = meshlet.firstLight + meshlet.lightCount - 1u;
+    while (lo < hi) {
+        uint mid = (lo + hi) >> 1u;
+        if (lightData->lights[mid].up.w > target) { hi = mid; } else { lo = mid + 1u; }
+    }
+    return lo;
+}
+
+float MeshletTriPdf(LightData* lightData, EmissiveMeshlet meshlet, MeshletTriCdf cdf, uint idx)
+{
+    if (RESTIR_MESHLET_TRI_CDF == 0u) {
+        return 1.0 / float(meshlet.lightCount);
+    }
+    float lower = idx > meshlet.firstLight ? lightData->lights[idx - 1u].up.w : cdf.cumBase;
+    float width = lightData->lights[idx].up.w - lower;
+    return (width > 0.0 && cdf.total > 0.0) ? width / cdf.total : 0.0;
+}
+
+/** ReGIR: the cell's entry table (see ReGIREntry). Draw binary-searches cumMass for a stratified u, then picks a triangle inside a meshlet by power;
  *  Marginal binary-searches the key, so the selection pdf is exact both ways and Talbot MIS stays unbiased. */
 public struct ReGIRProposal : ILightProposal
 {
@@ -95,9 +135,9 @@ public struct ReGIRProposal : ILightProposal
         if ((entry.key & REGIR_KEY_MESHLET) != 0u) {
             EmissiveMeshlet meshlet = lightData->emissiveMeshlets[entry.key & ~REGIR_KEY_MESHLET];
             if (meshlet.lightCount == 0u) { return false; }
-            uint t = min(uint(HashStep(h) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
-            idx = meshlet.firstLight + t;
-            p /= float(meshlet.lightCount);
+            MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
+            idx = MeshletDrawTri(lightData, meshlet, cdf, HashStep(h));
+            p *= MeshletTriPdf(lightData, meshlet, cdf, idx);
         }
         else {
             idx = entry.key;
@@ -112,16 +152,14 @@ public struct ReGIRProposal : ILightProposal
     {
         if (!useGrid) { return 1.0 / float(liveCount); }
         uint target;
-        uint runCount = 1u;
+        uint meshletIdx = ~0u;
         if (lightIdx < analyticCount) {
             target = uint(lightIdx);
         }
         else {
-            uint meshlet = lightData->meshletOf[uint(lightIdx) - uint(MAX_ANALYTIC_LIGHTS)];
-            if (meshlet == ~0u) { return 0.0; }
-            runCount = lightData->emissiveMeshlets[meshlet].lightCount;
-            if (runCount == 0u) { return 0.0; }
-            target = REGIR_KEY_MESHLET | meshlet;
+            meshletIdx = lightData->meshletOf[uint(lightIdx) - uint(MAX_ANALYTIC_LIGHTS)];
+            if (meshletIdx == ~0u) { return 0.0; }
+            target = REGIR_KEY_MESHLET | meshletIdx;
         }
 
         // A light the cell does not hold cannot come from the grid, so its light-strategy pdf is 0
@@ -135,14 +173,20 @@ public struct ReGIRProposal : ILightProposal
         float lower = lo > 0u ? entries[entryBase + lo - 1u].cumMass : 0.0;
         float mass = entries[entryBase + lo].cumMass - lower;
         if (!(mass > 0.0)) { return 0.0; }
-        return (mass / totalMass) / float(runCount);
+        float p = mass / totalMass;
+        if (meshletIdx != ~0u) {
+            EmissiveMeshlet meshlet = lightData->emissiveMeshlets[meshletIdx];
+            if (meshlet.lightCount == 0u) { return 0.0; }
+            p *= MeshletTriPdf(lightData, meshlet, MeshletTriCdfOf(lightData, meshlet), uint(lightIdx));
+        }
+        return p;
     }
 }
 
 /** WorldGridBin: cascaded strongest-K light list. The cell holds analytic lights and emissive meshlets in two
  *  parallel top-K lists. A draw splits between the two lists proportional to their kept-set power sums (so low-power emissive meshlets
  *  cannot starve the analytic candidate budget), then picks uniformly among analytics, or a meshlet by its power share and a triangle
- *  uniformly within it. All terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
+ *  by power within it. All terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
 public struct WorldGridProposal : ILightProposal
 {
     public uint2* grid;
@@ -222,11 +266,11 @@ public struct WorldGridProposal : ILightProposal
             }
             EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + pick]];
             if (meshlet.lightCount == 0u) { return false; }
-            uint t = min(uint(HashStep(h) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
-            uint idx = meshlet.firstLight + t;
+            MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
+            uint idx = MeshletDrawTri(lightData, meshlet, cdf, HashStep(h));
             if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
             lightIdx = int(idx);
-            pSelect = (meshlet.power / T) / float(meshlet.lightCount);
+            pSelect = (meshlet.power / T) * MeshletTriPdf(lightData, meshlet, cdf, idx);
             return true;
         }
 
@@ -242,11 +286,11 @@ public struct WorldGridProposal : ILightProposal
         // Meshlet path draws one extra step; with no emissive meshlets present it is never taken
         EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + (j - cellCount)]];
         if (meshlet.lightCount == 0u) { return false; }
-        uint t = min(uint(HashStep(h) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
-        uint idx = meshlet.firstLight + t;
+        MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
+        uint idx = MeshletDrawTri(lightData, meshlet, cdf, HashStep(h));
         if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
         lightIdx = int(idx);
-        pSelect = 1.0 / (float(total) * float(meshlet.lightCount));
+        pSelect = MeshletTriPdf(lightData, meshlet, cdf, idx) / float(total);
         return true;
     }
 
@@ -272,7 +316,8 @@ public struct WorldGridProposal : ILightProposal
         for (uint k = 0u; k < meshletCount; k++) {
             EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + k]];
             if (uint(lightIdx) >= meshlet.firstLight && uint(lightIdx) < meshlet.firstLight + meshlet.lightCount) {
-                return bPowerSplit ? (meshlet.power / T) / float(meshlet.lightCount) : 1.0 / (float(total) * float(meshlet.lightCount));
+                float triPdf = MeshletTriPdf(lightData, meshlet, MeshletTriCdfOf(lightData, meshlet), uint(lightIdx));
+                return bPowerSplit ? (meshlet.power / T) * triPdf : triPdf / float(total);
             }
         }
         return 0.0;

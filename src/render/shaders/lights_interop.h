@@ -77,7 +77,7 @@ SHADER_PUBLIC struct LightInfo
     SHADER_PUBLIC float4 position; // xyz world-space center (area/sphere) / v0 (triangle), w cos outer cone angle (area, 0 = hemisphere)
     SHADER_PUBLIC float4 normal; // xyz world-space normal (area/triangle), w cos inner cone angle (area, 0 = hemisphere)
     SHADER_PUBLIC float4 right; // xyz right axis (area) / edge e1 (triangle), w half-width (area) / radius (sphere)
-    SHADER_PUBLIC float4 up; // xyz up axis (area) / edge e2 (triangle), w half-height (area)
+    SHADER_PUBLIC float4 up; // xyz up axis (area) / edge e2 (triangle), w half-height (area) / inclusive power prefix across the owning mesh (triangle)
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC float range; // smoothstep attenuation cutoff distance

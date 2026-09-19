@@ -222,18 +222,21 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
 
         uint2 tapRPos = PixelPosToReservoirPos(tapPixel, field);
         Reservoir neighbor = pc.historyBuffer[tapRPos.y * stride + tapRPos.x];
-        if (isnan(neighbor.W) || isinf(neighbor.W)) { continue; }
-        if (neighbor.lightIdx == ~0u || !IsLiveLight(neighbor.lightIdx, lightCount, analyticCount) || neighbor.M == 0u) {
-            continue;
-        }
+        if (isnan(neighbor.W) || isinf(neighbor.W) || neighbor.M == 0u) { continue; }
+        // An empty reservoir is an estimate of zero and still counts; skipping it averages only the neighbours that found light
+        bool bNeighborEmpty = neighbor.lightIdx == ~0u || !IsLiveLight(neighbor.lightIdx, lightCount, analyticCount);
 
         float3 prevF0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, prev.metallic);
         uint cappedM = min(neighbor.M, max(uint(round(float(pc.mCap) * scene.framerateScale)), 1u));
         float Mi = validGen ? min(float(cappedM), 20.0 * max(Mc, 1.0)) : float(cappedM);
 
-        LightView neighborVS = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
-        float p_hat_n_atN = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, prev.viewPosition, prev.N, prev.V, li.albedo.xyz, prevF0, prev.metallic, prev.roughness, pc.lightSpecularFromReflectionsMax);
-        float p_hat_n_atCenter = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
+        float p_hat_n_atN = 0.0;
+        float p_hat_n_atCenter = 0.0;
+        if (!bNeighborEmpty) {
+            LightView neighborVS = UnpackLightVS(pc.lightVS[neighbor.lightIdx]);
+            p_hat_n_atN = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, prev.viewPosition, prev.N, prev.V, li.albedo.xyz, prevF0, prev.metallic, prev.roughness, pc.lightSpecularFromReflectionsMax);
+            p_hat_n_atCenter = EvalReservoirPHatLight(neighborVS, neighbor.sampleOffsetPacked, viewPosition, N, V, li.albedo.xyz, F0, li.metallic, roughness, pc.lightSpecularFromReflectionsMax);
+        }
 
         float denomNeighbor = Mi * p_hat_n_atN + Mc * p_hat_n_atCenter;
         float misNeighbor = (denomNeighbor > 0.0) ? (Mi * p_hat_n_atN) / denomNeighbor : 0.0;

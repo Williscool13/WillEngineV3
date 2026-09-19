@@ -33,6 +33,70 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
     return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
 }
 
+struct GTSurface
+{
+    float3 worldPos;
+    float3 shadowOrigin;
+    float3 N;
+    float3 V;
+    float nDotV;
+    float3 albedo;
+    float3 F0;
+    float roughness;
+    float metallic;
+}
+
+static float3 EvalLightPoint(RTGroundTruthDIPushConstant pc, GTSurface sf, LightInfo al, float3 lightSamplePos)
+{
+    float3 toLight = lightSamplePos - sf.worldPos;
+    float lightDist = max(length(toLight), 1e-5);
+    float3 L = toLight / lightDist;
+
+    float cosShade = max(dot(sf.N, L), 0.0);
+    float cosLight = (al.type == LIGHT_TYPE_SPHERE)
+        ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
+        : max(dot(-al.normal.xyz, L), 0.0);
+    float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w);
+    if (cosShade <= 0.0 || cosLight <= 0.0 || atten <= 0.0) {
+        return float3(0.0);
+    }
+
+    float3 toLightShadow = lightSamplePos - sf.shadowOrigin;
+    float shadowDist = length(toLightShadow);
+    RayDesc shadowRay;
+    shadowRay.Origin = sf.shadowOrigin;
+    shadowRay.Direction = toLightShadow / shadowDist;
+    shadowRay.TMin = 0.0;
+    shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
+
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_OCCLUDER, shadowRay);
+    RTProceedAlphaTested(q, GTAlphaBuffers(pc));
+    if (q.CommittedStatus() != COMMITTED_NOTHING) {
+        return float3(0.0);
+    }
+
+    float3 H = normalize(sf.V + L);
+    float NDF = D_GGX(sf.N, H, sf.roughness);
+    float G = G_SMITH_HEIGHT_CORRELATED(sf.N, sf.V, L, sf.roughness);
+    float3 F = F_SCHLICK(sf.V, H, sf.F0);
+    float3 spec = (NDF * G * F) / max(4.0 * sf.nDotV * cosShade, 0.001);
+
+    float3 kD = (1.0 - F) * (1.0 - sf.metallic);
+    float3 diff = kD * sf.albedo * Diffuse_OrenNayar(cosShade, sf.nDotV, L, sf.V, sf.roughness);
+
+    return (diff + spec) * cosShade * LightGeometryTerm(cosLight, lightDist) * al.intensity * UnpackUnorm4x8(al.packedColor).rgb * atten;
+}
+
+static float EmissiveMeshletWeight(EmissiveMeshlet meshlet, float3 p)
+{
+    if (meshlet.lightCount == 0u || any(p < meshlet.aabbMin) || any(p > meshlet.aabbMax)) {
+        return 0.0;
+    }
+    float3 d = max(max(meshlet.aabbMin + meshlet.rangePad - p, p - (meshlet.aabbMax - meshlet.rangePad)), 0.0);
+    return meshlet.power / max(dot(d, d), LIGHT_GEOM_MIN_DIST2);
+}
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTruthDIPushConstant pc)
@@ -106,27 +170,29 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
     float3 directLight = float3(0.0);
 
-    int analyticCount = int(pc.lightData->analyticLightCount);
-    int liveCount = int(LiveLightCount(lightCount, analyticCount));
+    GTSurface sf;
+    sf.worldPos = worldPos;
+    sf.shadowOrigin = shadowOrigin;
+    sf.N = N;
+    sf.V = V;
+    sf.nDotV = nDotV;
+    sf.albedo = albedo.xyz;
+    sf.F0 = F0;
+    sf.roughness = roughness;
+    sf.metallic = metallic;
 
-    if (liveCount > 0) {
+    int analyticCount = min(int(pc.lightData->analyticLightCount), lightCount);
+
+    if (analyticCount > 0) {
         // Range-culled uniform NEE
         int inRange = 0;
         int lightIdx = -1;
         for (int pass = 0; pass < 2 && lightIdx < 0; pass++) {
             int target = (pass == 1 && inRange > 0) ? clamp(int(rng0 * float(inRange)), 0, inRange - 1) : 0;
             int seen = 0;
-            for (int i = 0; i < liveCount; i++) {
-                int li = int(LiveLightIndex(uint(i), analyticCount));
+            for (int li = 0; li < analyticCount; li++) {
                 LightInfo cand = pc.lightData->lights[li];
-                float extent;
-                if (cand.type == LIGHT_TYPE_SPHERE) {
-                    extent = cand.right.w;
-                } else if (cand.type == LIGHT_TYPE_TRIANGLE) {
-                    extent = max(length(cand.right.xyz), length(cand.up.xyz));
-                } else {
-                    extent = cand.right.w + cand.up.w;
-                }
+                float extent = (cand.type == LIGHT_TYPE_SPHERE) ? cand.right.w : cand.right.w + cand.up.w;
                 if (distance(worldPos, cand.position.xyz) - extent >= cand.range) { continue; }
                 if (pass == 0) {
                     inRange++;
@@ -151,12 +217,6 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 float3 dir = float3(rr * cos(phi), rr * sin(phi), z);
                 lightSamplePos = al.position.xyz + radius * dir;
                 lightArea = 4.0 * PI * radius * radius;
-            } else if (al.type == LIGHT_TYPE_TRIANGLE) {
-                float su = sqrt(xi.x);
-                float b1 = 1.0 - su;
-                float b2 = xi.y * su;
-                lightSamplePos = al.position.xyz + b1 * al.right.xyz + b2 * al.up.xyz;
-                lightArea = 0.5 * length(cross(al.right.xyz, al.up.xyz));
             } else if (al.type == LIGHT_TYPE_DISK) {
                 float2 d = ConcentricSampleDisk(xi.x, xi.y) * al.right.w;
                 lightSamplePos = al.position.xyz + al.right.xyz * d.x + al.up.xyz * d.y;
@@ -168,51 +228,51 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 lightArea = 4.0 * al.right.w * al.up.w;
             }
 
-            float3 toLight = lightSamplePos - worldPos;
-            float lightDist = max(length(toLight), 1e-5);
-            float3 L = toLight / lightDist;
+            directLight = EvalLightPoint(pc, sf, al, lightSamplePos) * float(inRange) * lightArea;
+        }
+    }
 
-            float cosShade = max(dot(N, L), 0.0);
-            float cosLight = (al.type == LIGHT_TYPE_SPHERE)
-                ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
-                : max(dot(-al.normal.xyz, L), 0.0);
-            float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w);
-
-            if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
-                RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
-
-                // Distance/TMax measured from the offset origin so the origin's advance toward the light
-                // (cosShade * offset) does not eat the far-end margin and false-hit the light's own mesh.
-                float3 toLightShadow = lightSamplePos - shadowOrigin;
-                float shadowDist = length(toLightShadow);
-                RayDesc shadowRay;
-                shadowRay.Origin = shadowOrigin;
-                shadowRay.Direction = toLightShadow / shadowDist;
-                shadowRay.TMin = 0.0;
-                shadowRay.TMax = shadowDist - max(0.002, shadowDist * 0.005);
-
-                RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
-                q.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
-                RTProceedAlphaTested(q, GTAlphaBuffers(pc));
-
-                bool visible = (q.CommittedStatus() == COMMITTED_NOTHING);
-                if (visible) {
-                    float3 H = normalize(V + L);
-                    float NDF = D_GGX(N, H, roughness);
-                    float G = G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness);
-                    float3 F = F_SCHLICK(V, H, F0);
-                    float3 spec = (NDF * G * F) / max(4.0 * nDotV * max(dot(N, L), 0.0), 0.001);
-
-                    float3 kS = F;
-                    float3 kD = (1.0 - kS) * (1.0 - metallic);
-                    float orenNayar = Diffuse_OrenNayar(cosShade, nDotV, L, V, roughness);
-                    float3 diff = kD * albedo.xyz * orenNayar;
-
-                    float geomTerm = LightGeometryTerm(cosLight, lightDist);
-                    float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                    directLight = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(inRange) * lightArea;
+    // Emissive NEE: meshlet by power / dist^2, then a uniform triangle (not the up.w prefix, so this stays independent of ReSTIR's sampling)
+    {
+        uint emRng = SeedRng(pixel, pc.frameIndex, 0x3E51A7u);
+        uint meshCount = uint(pc.lightData->emissiveMeshCount);
+        float totalWeight = 0.0;
+        float pickedWeight = 0.0;
+        uint pickedMeshlet = ~0u;
+        float target = 0.0;
+        for (int pass = 0; pass < 2 && pickedMeshlet == ~0u; pass++) {
+            float running = 0.0;
+            for (uint m = 0u; m < meshCount && pickedMeshlet == ~0u; m++) {
+                EmissiveMesh mesh = pc.lightData->emissiveMeshes[m];
+                if (mesh.meshletCount == 0u || any(worldPos < mesh.aabbMin) || any(worldPos > mesh.aabbMax)) { continue; }
+                for (uint c = 0u; c < mesh.meshletCount; c++) {
+                    float w = EmissiveMeshletWeight(pc.lightData->emissiveMeshlets[mesh.firstMeshlet + c], worldPos);
+                    if (w <= 0.0) { continue; }
+                    running += w;
+                    if (pass == 1 && (running > target || running >= totalWeight)) {
+                        pickedMeshlet = mesh.firstMeshlet + c;
+                        pickedWeight = w;
+                        break;
+                    }
                 }
             }
+            if (pass == 0) {
+                totalWeight = running;
+                if (totalWeight <= 0.0) { break; }
+                target = HashStep(emRng) * totalWeight;
+            }
+        }
+
+        if (pickedMeshlet != ~0u) {
+            EmissiveMeshlet meshlet = pc.lightData->emissiveMeshlets[pickedMeshlet];
+            uint tri = min(uint(HashStep(emRng) * float(meshlet.lightCount)), meshlet.lightCount - 1u);
+            LightInfo al = pc.lightData->lights[meshlet.firstLight + tri];
+            float su = sqrt(HashStep(emRng));
+            float b2 = HashStep(emRng) * su;
+            float3 lightSamplePos = al.position.xyz + (1.0 - su) * al.right.xyz + b2 * al.up.xyz;
+            float lightArea = 0.5 * length(cross(al.right.xyz, al.up.xyz));
+            float invPdf = (totalWeight / pickedWeight) * float(meshlet.lightCount) * lightArea;
+            directLight += EvalLightPoint(pc, sf, al, lightSamplePos) * invPdf;
         }
     }
 

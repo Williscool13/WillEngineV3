@@ -6,7 +6,8 @@ import shader_functions;
 
 // =============== Shader Summary ============
 // One workgroup per dirty emissive primitive instance. Writes a LightInfo per triangle in BLAS index order (base + PrimitiveIndex() resolves a hit to its light), an EmissiveMeshlet per LOD0 meshlet
-// (the index buffer is baked in meshlet order, so each is a contiguous run), the owning EmissiveMesh, and meshletOf per triangle. A dead item writes zero lights and inverted AABBs.
+// (the index buffer is baked in meshlet order, so each is a contiguous run), the owning EmissiveMesh, meshletOf per triangle, and a mesh-wide power prefix in LightInfo.up.w.
+// A dead item writes zero lights and inverted AABBs.
 
 static const uint TRI_LIGHT_GROUP_SIZE = 64;
 
@@ -191,6 +192,23 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
     }
 
     if (lane == 0) { gsMeshPower = meshPower; }
+    AllMemoryBarrierWithGroupSync();
+
+    if (lane == 0) {
+        float cum = 0.0;
+        for (uint c = 0u; c < work.meshletCount; c++) {
+            uint first = pc.lightData->emissiveMeshlets[work.firstMeshlet + c].firstLight;
+            uint count = pc.lightData->emissiveMeshlets[work.firstMeshlet + c].lightCount;
+            float cumBase = cum;
+            for (uint t = 0u; t < count; t++) {
+                float3 e1 = pc.lightData->lights[first + t].right.xyz;
+                float3 e2 = pc.lightData->lights[first + t].up.xyz;
+                cum += pc.lightData->lights[first + t].intensity * 0.5 * length(cross(e1, e2));
+                pc.lightData->lights[first + t].up.w = cum;
+            }
+            pc.lightData->emissiveMeshlets[work.firstMeshlet + c].power = cum - cumBase;
+        }
+    }
     AllMemoryBarrierWithGroupSync();
 
     // Range is a property of the whole emitter, not of its tessellation: per-triangle sqrt(intensity * area) shrinks by sqrt(N) as a mesh is subdivided.
