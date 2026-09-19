@@ -103,10 +103,6 @@ SHADER_PUBLIC struct DebugVisualizePushConstant
     SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC SHADER_PTR(uint) regirHashEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) regirCellData;
-    SHADER_PUBLIC SHADER_PTR(ReGIREntry) regirEntries;
-    SHADER_PUBLIC SHADER_PTR(LightVSData) restirLightVS;
-    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback; // Null when GPU stats are off
-    SHADER_PUBLIC uint2 cursorPixel;
 };
 
 SHADER_PUBLIC struct DebugWorldGridCursorCellPushConstant
@@ -118,6 +114,21 @@ SHADER_PUBLIC struct DebugWorldGridCursorCellPushConstant
     SHADER_PUBLIC SHADER_PTR(uint2) worldGridEmissiveGrid;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridEmissiveIndexList;
     SHADER_PUBLIC SHADER_PTR(float2) worldGridCellPower;
+    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback;
+    SHADER_PUBLIC uint2 cursorPixel;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint sceneDataIndex;
+    SHADER_PUBLIC uint depthTextureIndex;
+};
+
+SHADER_PUBLIC struct DebugReGIRCursorCellPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(LightVSData) lightVS;
+    SHADER_PUBLIC SHADER_PTR(uint) regirHashEntries;
+    SHADER_PUBLIC SHADER_PTR(ReGIREntry) regirEntries;
+    SHADER_PUBLIC SHADER_PTR(uint2) regirCellData;
     SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback;
     SHADER_PUBLIC uint2 cursorPixel;
     SHADER_PUBLIC uint2 renderExtent;

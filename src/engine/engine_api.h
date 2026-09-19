@@ -139,6 +139,16 @@ struct EmissiveDebugState
     Core::Vector<EmissiveDebugEntry> entries{};
 };
 
+struct DiagnosticsState
+{
+    bool bRadianceCache{false};
+    bool bReGIR{false};
+    bool bReGIRCursor{false};
+    bool bWorldGridCursor{false};
+    bool bEmissive{false};
+    bool bStores{false};
+};
+
 struct DebugState
 {
     Core::DebugRenderParams render{};
@@ -155,6 +165,7 @@ struct DebugState
     bool bVerifyStoresOnce{false};
 
     Core::ReSTIRParams restir{};
+    DiagnosticsState diagnostics{};
     EmissiveDebugState emissive{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

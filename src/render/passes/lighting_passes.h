@@ -50,6 +50,16 @@ void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
                                        Core::Array<uint32_t, 2> renderExtent,
                                        Core::Array<uint32_t, 2> cursorPixel);
 
+/**
+ * Editor cursor cell: writes the ReGIR cell under cursorPixel (render-extent coordinates) into the readback buffer. No-ops without the ReGIR buffers or the readback buffer.
+ */
+void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
+                                   PipelineManager* pipelineManager,
+                                   uint32_t sceneIndex,
+                                   StringID depthTexture,
+                                   Core::Array<uint32_t, 2> renderExtent,
+                                   Core::Array<uint32_t, 2> cursorPixel);
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,

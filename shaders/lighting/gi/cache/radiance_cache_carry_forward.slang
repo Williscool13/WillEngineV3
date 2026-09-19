@@ -14,10 +14,12 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
     uint checksum = pc.prevEntries[i];
     if (checksum == RADIANCE_CACHE_HASH_EMPTY) { return; }
 
+#if WILL_EDITOR
     uint prevStat;
     if (pc.stats != nullptr) {
         InterlockedAdd(pc.stats->occupiedSlots, 1u, prevStat);
     }
+#endif
 
     RadianceCacheCell cell = pc.prevCells[i];
     RadianceCacheKey key = RadianceCacheUnpackKey(pc.prevKeys[i]);
@@ -29,18 +31,22 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
     } else {
         uint age = pc.frameIndex - cell.lastTouched;
         if (age >= RADIANCE_CACHE_LRU_THRESHOLD) {
+#if WILL_EDITOR
             if (pc.stats != nullptr) {
                 InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
             }
+#endif
             return;
         }
 
         // LOD revalidation
         uint impliedLevel = RadianceCacheLevelFromDistance(distance(RadianceCacheCellCenterFromKey(key), pc.cameraPos.xyz));
         if (uint(abs(int(key.level) - int(impliedLevel))) >= RADIANCE_CACHE_LOD_REVALIDATE_MARGIN) {
+#if WILL_EDITOR
             if (pc.stats != nullptr) {
                 InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
             }
+#endif
             return;
         }
     }
@@ -48,13 +54,17 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
     bool isNew;
     uint slot = RadianceCacheHashInsert(pc.nextEntries, pc.nextKeys, pc.stats, key, isNew);
     if (slot == RADIANCE_CACHE_HASH_INVALID) {
+#if WILL_EDITOR
         if (pc.stats != nullptr) {
             InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
         }
+#endif
         return;
     }
     pc.nextCells[slot] = cell;
+#if WILL_EDITOR
     if (pc.stats != nullptr) {
         InterlockedAdd(pc.stats->cellsCarried, 1u, prevStat);
     }
+#endif
 }

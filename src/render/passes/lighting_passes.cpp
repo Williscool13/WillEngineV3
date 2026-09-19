@@ -232,6 +232,49 @@ void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
     });
 }
 
+void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
+                                   PipelineManager* pipelineManager,
+                                   uint32_t sceneIndex,
+                                   StringID depthTexture,
+                                   Core::Array<uint32_t, 2> renderExtent,
+                                   Core::Array<uint32_t, 2> cursorPixel)
+{
+    ZoneScoped;
+    if (!graph.HasBuffer("readback_buffer"_sid) || !graph.HasBuffer("regir_hash_entries"_sid) || !graph.HasBuffer("regir_entries"_sid) || !graph.HasBuffer("regir_cell_data"_sid)) { return; }
+    if (!graph.HasBuffer(LIGHT_DATA_BUFFER) || !graph.HasBuffer("restir_lights_vs"_sid) || !graph.HasTexture(depthTexture)) { return; }
+
+    RenderPass& pass = graph.AddPass("ReGIR Cursor Cell"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(LIGHT_DATA_BUFFER);
+    pass.ReadBuffer("restir_lights_vs"_sid);
+    pass.ReadBuffer("regir_hash_entries"_sid);
+    pass.ReadBuffer("regir_entries"_sid);
+    pass.ReadBuffer("regir_cell_data"_sid);
+    pass.ReadSampledImage(depthTexture);
+    pass.ReadWriteBuffer("readback_buffer"_sid);
+    pass.Execute([pipelineManager, sceneIndex, depthTexture, renderExtent, cursorPixel](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_regir_cursor_cell"_sid);
+        if (!pipelineEntry) { return; }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        DebugReGIRCursorCellPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
+            .lightVS = graph.GetBufferAddress("restir_lights_vs"_sid),
+            .regirHashEntries = graph.GetBufferAddress("regir_hash_entries"_sid),
+            .regirEntries = graph.GetBufferAddress("regir_entries"_sid),
+            .regirCellData = graph.GetBufferAddress("regir_cell_data"_sid),
+            .readback = graph.GetBufferAddress("readback_buffer"_sid),
+            .cursorPixel = {cursorPixel[0], cursorPixel[1]},
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .depthTextureIndex = graph.GetSampledImageViewDescriptorIndex(depthTexture),
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, 1, 1, 1);
+    });
+}
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,

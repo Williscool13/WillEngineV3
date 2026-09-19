@@ -1037,7 +1037,12 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             debugCursorReadback.pixel[0] = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * renderExtent[0] / static_cast<float>(outputExtent[0]))));
             debugCursorReadback.pixel[1] = std::min(renderExtent[1] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * renderExtent[1] / static_cast<float>(outputExtent[1]))));
             if (GPU_STATS_ENABLED) {
-                SetupDebugWorldGridCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
+                if (frameBuffer.debug.bWorldGridCursorCell && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin) {
+                    SetupDebugWorldGridCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
+                }
+                if (frameBuffer.debug.bReGIRCursorCell && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
+                    SetupDebugReGIRCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
+                }
             }
         } else {
             debugCursorReadback.litTexture = StringID{};
@@ -1095,8 +1100,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     LIGHT_DATA_BUFFER,
                     "regir_hash_entries"_sid,
                     "regir_cell_data"_sid,
-                    "regir_entries"_sid,
-                    "restir_lights_vs"_sid,
                 };
                 for (const StringID bufferId : debugVisBuffers) {
                     if (renderGraph->HasBuffer(bufferId)) {
@@ -1104,7 +1107,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     }
                 }
                 debugVisPass.WriteStorageImage(targets.colorOutput);
-                if (GPU_STATS_ENABLED) { debugVisPass.ReadWriteBuffer("readback_buffer"_sid); }
                 debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
                     VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
@@ -1187,13 +1189,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                         .lightData = renderGraph->TryGetBufferAddress(LIGHT_DATA_BUFFER),
                         .regirHashEntries = renderGraph->TryGetBufferAddress("regir_hash_entries"_sid),
                         .regirCellData = renderGraph->TryGetBufferAddress("regir_cell_data"_sid),
-                        .regirEntries = renderGraph->TryGetBufferAddress("regir_entries"_sid),
-                        .restirLightVS = renderGraph->TryGetBufferAddress("restir_lights_vs"_sid),
-                        .readback = GPU_STATS_ENABLED ? renderGraph->TryGetBufferAddress("readback_buffer"_sid) : 0,
-                        .cursorPixel = {
-                            debugCursorReadback.litTexture != StringID{} ? static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * postAaExtent[0] / static_cast<float>(outputExtent[0]))) : ~0u,
-                            debugCursorReadback.litTexture != StringID{} ? static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * postAaExtent[1] / static_cast<float>(outputExtent[1]))) : ~0u,
-                        },
                     };
                     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize"_sid);
                     vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

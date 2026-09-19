@@ -50,10 +50,12 @@ void ComputeRadianceCacheShade(uint3 dtid: SV_DispatchThreadID, uniform Radiance
         float lumaDelta = dot(channelDelta, float3(0.2126, 0.7152, 0.0722));
         float maxAbsDelta = max(abs(channelDelta.r), max(abs(channelDelta.g), abs(channelDelta.b)));
         bool bLargeDelta = maxAbsDelta > RADIANCE_CACHE_CHANGE_THRESHOLD * max(previousLuma, 655.36);
+#if WILL_EDITOR
         if (previousLuma < 655.36 && pc.stats != nullptr) {
             uint prevDark;
             InterlockedAdd(pc.stats->cellsDark, 1u, prevDark);
         }
+#endif
         uint state = pc.cells[slot].changeStreak;
         uint previousStreak = state & 0xFFu;
         uint previousDirection = (state >> 8u) & 1u;
@@ -64,10 +66,12 @@ void ComputeRadianceCacheShade(uint3 dtid: SV_DispatchThreadID, uniform Radiance
         if (streak >= RADIANCE_CACHE_CHANGE_STREAK) {
             streak = 0u;
             count = min(count, RADIANCE_CACHE_DUMP_KEEP_COUNT);
+#if WILL_EDITOR
             if (pc.stats != nullptr) {
                 uint prevDumped;
                 InterlockedAdd(pc.stats->cellsDumped, 1u, prevDumped);
             }
+#endif
         }
         blended = lerp(radiance, previous, float(count) / float(count + 1u));
         blendedEmissive = lerp(emissive, UnpackEmissiveRGBE(pc.cells[slot].packedEmissive), float(count) / float(count + 1u));

@@ -197,6 +197,39 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
     });
 
+    Register(state, Origin::Engine, "diag", "`diag <zone> 0|1` shows a Diagnostics window readout (radiance_cache, regir, regir_cursor, world_grid_cursor, emissive, stores); no args lists every zone",
+             [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+                 struct DiagZone
+                 {
+                     const char* name;
+                     bool* flag;
+                 };
+                 Engine::DiagnosticsState& diagnostics = state->debug.diagnostics;
+                 const DiagZone zones[] = {
+                     {"radiance_cache", &diagnostics.bRadianceCache},
+                     {"regir", &diagnostics.bReGIR},
+                     {"regir_cursor", &diagnostics.bReGIRCursor},
+                     {"world_grid_cursor", &diagnostics.bWorldGridCursor},
+                     {"emissive", &diagnostics.bEmissive},
+                     {"stores", &diagnostics.bStores},
+                 };
+                 if (args.Size() <= 1) {
+                     for (const DiagZone& zone : zones) {
+                         Print(state, Core::InlineString<64>::Format("  %s %s", zone.name, *zone.flag ? "on" : "off").c_str());
+                     }
+                     return;
+                 }
+                 for (const DiagZone& zone : zones) {
+                     if (strcmp(args[1], zone.name) != 0) { continue; }
+                     if (args.Size() > 2) {
+                         *zone.flag = args[2][0] != '0';
+                     }
+                     Print(state, Core::InlineString<64>::Format("  %s %s", zone.name, *zone.flag ? "on" : "off").c_str());
+                     return;
+                 }
+                 Print(state, "  usage: diag <radiance_cache|regir|regir_cursor|world_grid_cursor|emissive|stores> 0|1");
+             });
+
     Register(state, Origin::Engine, "cam", "`cam <1-8>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
         if (slot < 0 || slot >= Engine::MAX_CAMERA_PRESETS) {

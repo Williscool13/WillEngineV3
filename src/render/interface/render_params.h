@@ -568,6 +568,8 @@ struct DebugRenderParams
     bool bClusterGridDebug{false};
     bool bWorldGridDebug{false};
     int32_t worldGridDebugLevel{0};
+    bool bReGIRCursorCell{false};
+    bool bWorldGridCursorCell{false};
     bool bRadianceCacheDebug{false};
     float radianceCacheDebugExposure{1.0f};
     int32_t radianceCacheDebugBucket{-1};

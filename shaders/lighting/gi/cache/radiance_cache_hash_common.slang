@@ -199,10 +199,12 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
         }
         if (prev == cs) { return s; }
     }
+#if WILL_EDITOR
     if (stats != nullptr) {
         uint prevFail;
         InterlockedAdd(stats->insertsFailed, 1u, prevFail);
     }
+#endif
     return RADIANCE_CACHE_HASH_INVALID;
 }
 

@@ -1139,21 +1139,6 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::EndSection();
         }
 
-        if (Widgets::BeginSection("Stats")) {
-            Widgets::SubHeader("Emissive Triangle Lights");
-            if (Widgets::IsShowingAll()) {
-                DrawEmissiveTriLightSection(state);
-            }
-#ifdef WDEBUG
-            Widgets::SubHeader("Stores");
-            if (Widgets::Button("Verify Dirty Stores",
-                                "Runs for one frame: reports lights and instances that drifted from their store, and re-sends every live model and instance. Geometry twitching means a mutation skipped its dirty mark.")) {
-                state->debug.bVerifyStoresOnce = true;
-            }
-#endif
-            Widgets::EndSection();
-        }
-
         if (Widgets::BeginSection("Hotkeys")) {
             if (Widgets::IsShowingAll()) {
                 const char* keyNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
@@ -1165,6 +1150,162 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         Widgets::EndFilter();
+    }
+    ImGui::End();
+}
+
+// Fixed height: a zone must never reflow the window while the mouse is over the viewport
+static bool BeginDiagnosticZone(const char* label, bool* bEnabled, bool bAvailable, const char* unavailableReason, float rows)
+{
+    ImGui::PushID(label);
+    ImGui::BeginDisabled(!bAvailable);
+    ImGui::Checkbox(label, bEnabled);
+    ImGui::EndDisabled();
+    if (!bAvailable && unavailableReason != nullptr) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", unavailableReason);
+    }
+    if (!bAvailable || !*bEnabled) {
+        ImGui::PopID();
+        return false;
+    }
+
+    const float height = rows * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+    const bool bVisible = ImGui::BeginChild("##zone", ImVec2(0.0f, height), ImGuiChildFlags_Borders);
+    if (!bVisible) {
+        ImGui::EndChild();
+        ImGui::PopID();
+        return false;
+    }
+    return true;
+}
+
+static void EndDiagnosticZone()
+{
+    ImGui::EndChild();
+    ImGui::PopID();
+}
+
+static void DrawLatchedMarker(bool bLatched)
+{
+    if (!bLatched) { return; }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(latched)");
+}
+
+void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    static Engine::ReGIRCursorCell latchedReGIRCursor{};
+    static Engine::WorldGridCursorCell latchedWorldGridCursor{};
+
+    if (ImGui::Begin("Diagnostics")) {
+        Engine::DiagnosticsState& diagnostics = state->debug.diagnostics;
+        const Core::ReSTIRParams& restir = state->debug.restir;
+        const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
+        const bool bReGIR = bReSTIRMode && restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR;
+        const bool bWorldGridBin = bReSTIRMode && restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin;
+
+        if (BeginDiagnosticZone("Radiance Cache Occupancy", &diagnostics.bRadianceCache, state->lighting.ddgi.bEnabled, "needs DDGI enabled", 6.0f)) {
+            // Read-only; multi-frame readback latency, so values trail the live cache by 2-3 frames.
+            const Engine::RadianceCacheStatsSnapshot& wc = ctx->radianceCacheStats;
+            const float occupancyPct = 100.0f * static_cast<float>(wc.occupiedSlots) / static_cast<float>(RADIANCE_CACHE_HASH_CAPACITY);
+            ImGui::Text("Occupancy: %.1f%% (%u / %u)", occupancyPct, wc.occupiedSlots, RADIANCE_CACHE_HASH_CAPACITY);
+            ImGui::Text("Shades/frame: %u", wc.cellsShaded);
+            ImGui::Text("Evictions/frame: %u", wc.cellsEvicted);
+            ImGui::Text("Inserts failed/frame: %u", wc.insertsFailed);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Full-probe hash insert failures (trace + carry-forward combined). Non-zero means the cache is over capacity and cells are being dropped.");
+            }
+            const float shadeDenom = static_cast<float>(glm::max(wc.cellsShaded, 1u));
+            ImGui::Text("Streak dumps/frame: %u (%.1f%%)", wc.cellsDumped, 100.0f * static_cast<float>(wc.cellsDumped) / shadeDenom);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Shade events where the change-streak detector fired and cut accumulated history. A high percentage means the detector is reading representative variance as real change and the cache is not accumulating.");
+            }
+            ImGui::Text("Dark cells/frame: %u (%.1f%%)", wc.cellsDark, 100.0f * static_cast<float>(wc.cellsDark) / shadeDenom);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Shade events whose previous luma sat below 0.01, where the relative change threshold degenerates into a fixed absolute of 0.0035 and trips on ordinary noise.");
+            }
+            EndDiagnosticZone();
+        }
+
+        if (BeginDiagnosticZone("ReGIR Counters", &diagnostics.bReGIR, bReGIR, "needs ReSTIR + Light Proposal = ReGIR", 2.0f)) {
+            ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u, gather overflow/frame: %u",
+                        ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed, ctx->regirStats.gatherOverflow);
+            ImGui::Text("Cone rejected/frame: %u", ctx->regirStats.coneRejected);
+            EndDiagnosticZone();
+        }
+
+        if (!diagnostics.bReGIRCursor) { latchedReGIRCursor = Engine::ReGIRCursorCell{}; }
+        if (BeginDiagnosticZone("ReGIR Cursor Cell", &diagnostics.bReGIRCursor, bReGIR, "needs ReSTIR + Light Proposal = ReGIR", 9.0f)) {
+            const Engine::ReGIRCursorCell& live = ctx->regirStats.cursor;
+            if (live.valid != 0u) { latchedReGIRCursor = live; }
+            const Engine::ReGIRCursorCell& cursor = latchedReGIRCursor;
+            if (cursor.valid == 0u) {
+                ImGui::TextDisabled("move the cursor over the viewport");
+            }
+            else {
+                ImGui::Text("Cell L%u (%d, %d, %d) slot %u: %u / %u entries, total mass %.3g",
+                            cursor.level, cursor.cell[0], cursor.cell[1], cursor.cell[2], cursor.slot, cursor.entryCount, REGIR_ENTRIES_PER_CELL, cursor.totalMass);
+                DrawLatchedMarker(live.valid == 0u);
+                for (uint32_t k = 0; k < 8; k++) {
+                    if (cursor.topKey[k] == ~0u) { continue; }
+                    const bool bMeshlet = (cursor.topKey[k] & REGIR_KEY_MESHLET) != 0u;
+                    ImGui::Text("  %s %u, share %.2f%%, %u lights, at (%.1f, %.1f, %.1f)",
+                                bMeshlet ? "meshlet" : "light", bMeshlet ? (cursor.topKey[k] & ~REGIR_KEY_MESHLET) : cursor.topKey[k],
+                                cursor.topShare[k] * 100.0f, cursor.topLightCount[k], cursor.topPos[k * 3], cursor.topPos[k * 3 + 1], cursor.topPos[k * 3 + 2]);
+                }
+            }
+            EndDiagnosticZone();
+        }
+
+        if (!diagnostics.bWorldGridCursor) { latchedWorldGridCursor = Engine::WorldGridCursorCell{}; }
+        if (BeginDiagnosticZone("World Grid Cursor Cell", &diagnostics.bWorldGridCursor, bWorldGridBin, "needs ReSTIR + Light Proposal = WorldGridBin", 12.0f)) {
+            const Engine::WorldGridCursorCell& live = ctx->worldGridCursor;
+            if (live.valid != 0u) { latchedWorldGridCursor = live; }
+            const Engine::WorldGridCursorCell& cursor = latchedWorldGridCursor;
+            if (cursor.valid == 0u) {
+                ImGui::TextDisabled("move the cursor over the viewport");
+            }
+            else {
+                ImGui::Text("Cell L%u (%u, %u, %u) #%u, box (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f)", cursor.level, cursor.cell[0], cursor.cell[1], cursor.cell[2], cursor.flatIndex,
+                            cursor.aabbMin[0], cursor.aabbMin[1], cursor.aabbMin[2], cursor.aabbMax[0], cursor.aabbMax[1], cursor.aabbMax[2]);
+                DrawLatchedMarker(live.valid == 0u);
+                ImGui::Text("Analytic: kept %u of %u in range (cap %u), kept power %.3g", cursor.analyticKept, cursor.analyticInRange, MAX_LIGHTS_PER_WORLD_GRID_CELL, cursor.analyticPower);
+                for (uint32_t k = 0; k < 8; k++) {
+                    if (cursor.topLightIdx[k] == ~0u) { continue; }
+                    ImGui::Text("  light %u type %u, power %.3g, range %.1f, at (%.1f, %.1f, %.1f)", cursor.topLightIdx[k], cursor.topLightType[k], cursor.topLightPower[k], cursor.topLightRange[k],
+                                cursor.topLightPos[k * 3], cursor.topLightPos[k * 3 + 1], cursor.topLightPos[k * 3 + 2]);
+                }
+                ImGui::Text("Emissive meshlets: kept %u of %u in range (cap %u), kept power %.3g", cursor.meshletKept, cursor.meshletInRange, MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL, cursor.meshletPower);
+                for (uint32_t k = 0; k < 8; k++) {
+                    if (cursor.topMeshletIdx[k] == ~0u) { continue; }
+                    ImGui::Text("  meshlet %u x%u tris, power %.3g, centre (%.1f, %.1f, %.1f)", cursor.topMeshletIdx[k], cursor.topMeshletLightCount[k], cursor.topMeshletPower[k],
+                                cursor.topMeshletCenter[k * 3], cursor.topMeshletCenter[k * 3 + 1], cursor.topMeshletCenter[k * 3 + 2]);
+                }
+            }
+            EndDiagnosticZone();
+        }
+
+        const bool bEmissiveAvailable = bReSTIRMode && restir.bEmissiveTriangleLights;
+        const float emissiveRows = state->debug.emissive.bCapture ? 30.0f : 10.0f;
+        if (BeginDiagnosticZone("Emissive Triangle Lights", &diagnostics.bEmissive, bEmissiveAvailable, "needs ReSTIR + Emissive Triangle Lights", emissiveRows)) {
+            DrawEmissiveTriLightSection(state);
+            EndDiagnosticZone();
+        }
+
+        if (BeginDiagnosticZone("Stores", &diagnostics.bStores, true, nullptr, 2.0f)) {
+#ifdef WDEBUG
+            if (ImGui::Button("Verify Dirty Stores")) {
+                state->debug.bVerifyStoresOnce = true;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Runs for one frame: reports lights and instances that drifted from their store, and re-sends every live model and instance. Geometry twitching means a mutation skipped its dirty mark.");
+            }
+#else
+            ImGui::TextDisabled("debug builds only");
+#endif
+            EndDiagnosticZone();
+        }
     }
     ImGui::End();
 }
@@ -2022,29 +2163,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (Widgets::Checkbox("DDGI World Volume Grid Cull##ddgi", &state->lighting.ddgi.bWorldVolumeGridCull,
                                   "Off = the sampler walks every resident world volume instead of the world grid's per-cell overlap list. Same result, slower; a difference means the bin is dropping volumes.")) { changed = true; }
 
-            Widgets::SubHeader("Radiance Cache Occupancy");
-            if (Widgets::IsShowingAll()) {
-                // Read-only; multi-frame readback latency, so values trail the live cache by 2-3 frames.
-                const Engine::RadianceCacheStatsSnapshot& wc = ctx->radianceCacheStats;
-                const float occupancyPct = 100.0f * static_cast<float>(wc.occupiedSlots) / static_cast<float>(RADIANCE_CACHE_HASH_CAPACITY);
-                ImGui::Text("Occupancy: %.1f%% (%u / %u)", occupancyPct, wc.occupiedSlots, RADIANCE_CACHE_HASH_CAPACITY);
-                ImGui::Text("Shades/frame: %u", wc.cellsShaded);
-                ImGui::Text("Evictions/frame: %u", wc.cellsEvicted);
-                ImGui::Text("Inserts failed/frame: %u", wc.insertsFailed);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Full-probe hash insert failures (trace + carry-forward combined). Non-zero means the cache is over capacity and cells are being dropped.");
-                }
-                const float shadeDenom = static_cast<float>(glm::max(wc.cellsShaded, 1u));
-                ImGui::Text("Streak dumps/frame: %u (%.1f%%)", wc.cellsDumped, 100.0f * static_cast<float>(wc.cellsDumped) / shadeDenom);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Shade events where the change-streak detector fired and cut accumulated history. A high percentage means the detector is reading representative variance as real change and the cache is not accumulating.");
-                }
-                ImGui::Text("Dark cells/frame: %u (%.1f%%)", wc.cellsDark, 100.0f * static_cast<float>(wc.cellsDark) / shadeDenom);
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Shade events whose previous luma sat below 0.01, where the relative change threshold degenerates into a fixed absolute of 0.0035 and trips on ordinary noise.");
-                }
-            }
-
             if (bReSTIRMode) {
                 Core::ReSTIRParams& restir = state->debug.restir;
 
@@ -2054,50 +2172,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (Widgets::Combo("Remodulate Output##restir", &currentRemodulateOutput, remodulateOutputModes, IM_ARRAYSIZE(remodulateOutputModes))) {
                     restir.remodulateOutput = static_cast<Core::ReSTIRParams::RemodulateOutput>(currentRemodulateOutput);
                     changed = true;
-                }
-
-                if (restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
-                    Widgets::SubHeader("ReGIR");
-                    if (Widgets::IsShowingAll()) {
-                        ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u, gather overflow/frame: %u",
-                                    ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed, ctx->regirStats.gatherOverflow);
-                        ImGui::Text("Cone rejected/frame: %u", ctx->regirStats.coneRejected);
-                        {
-                            // Cell under the mouse while a ReGIR debug view
-                            const Engine::ReGIRCursorCell& cursor = ctx->regirStats.cursor;
-                            if (cursor.valid != 0u) {
-                                ImGui::Text("Cursor cell L%u (%d, %d, %d) slot %u: %u / %u entries, total mass %.3g",
-                                            cursor.level, cursor.cell[0], cursor.cell[1], cursor.cell[2], cursor.slot, cursor.entryCount, REGIR_ENTRIES_PER_CELL, cursor.totalMass);
-                                for (uint32_t k = 0; k < 8; k++) {
-                                    if (cursor.topKey[k] == ~0u) { continue; }
-                                    const bool bMeshlet = (cursor.topKey[k] & REGIR_KEY_MESHLET) != 0u;
-                                    ImGui::Text("  %s %u, share %.2f%%, %u lights, at (%.1f, %.1f, %.1f)",
-                                                bMeshlet ? "meshlet" : "light", bMeshlet ? (cursor.topKey[k] & ~REGIR_KEY_MESHLET) : cursor.topKey[k],
-                                                cursor.topShare[k] * 100.0f, cursor.topLightCount[k], cursor.topPos[k * 3], cursor.topPos[k * 3 + 1], cursor.topPos[k * 3 + 2]);
-                                }
-                            }
-                        }
-                    }
-                }
-                else if (restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin && Widgets::IsShowingAll()) {
-                    const Engine::WorldGridCursorCell& cursor = ctx->worldGridCursor;
-                    if (cursor.valid != 0u) {
-                        Widgets::SubHeader("World Grid");
-                        ImGui::Text("Cursor cell L%u (%u, %u, %u) #%u, box (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f)", cursor.level, cursor.cell[0], cursor.cell[1], cursor.cell[2], cursor.flatIndex,
-                                    cursor.aabbMin[0], cursor.aabbMin[1], cursor.aabbMin[2], cursor.aabbMax[0], cursor.aabbMax[1], cursor.aabbMax[2]);
-                        ImGui::Text("Analytic: kept %u of %u in range (cap %u), kept power %.3g", cursor.analyticKept, cursor.analyticInRange, MAX_LIGHTS_PER_WORLD_GRID_CELL, cursor.analyticPower);
-                        for (uint32_t k = 0; k < 8; k++) {
-                            if (cursor.topLightIdx[k] == ~0u) { continue; }
-                            ImGui::Text("  light %u type %u, power %.3g, range %.1f, at (%.1f, %.1f, %.1f)", cursor.topLightIdx[k], cursor.topLightType[k], cursor.topLightPower[k], cursor.topLightRange[k],
-                                        cursor.topLightPos[k * 3], cursor.topLightPos[k * 3 + 1], cursor.topLightPos[k * 3 + 2]);
-                        }
-                        ImGui::Text("Emissive meshlets: kept %u of %u in range (cap %u), kept power %.3g", cursor.meshletKept, cursor.meshletInRange, MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL, cursor.meshletPower);
-                        for (uint32_t k = 0; k < 8; k++) {
-                            if (cursor.topMeshletIdx[k] == ~0u) { continue; }
-                            ImGui::Text("  meshlet %u x%u tris, power %.3g, centre (%.1f, %.1f, %.1f)", cursor.topMeshletIdx[k], cursor.topMeshletLightCount[k], cursor.topMeshletPower[k],
-                                        cursor.topMeshletCenter[k * 3], cursor.topMeshletCenter[k * 3 + 1], cursor.topMeshletCenter[k * 3 + 2]);
-                        }
-                    }
                 }
             }
             Widgets::EndSection();

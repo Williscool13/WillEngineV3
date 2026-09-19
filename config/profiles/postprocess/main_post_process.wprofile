@@ -30,7 +30,7 @@ agxMinEV|0xc1479538
 agxMaxEV|0x4080d58f
 khronosStartCompression|0x3f428f5c
 khronosDesaturation|0x3e19999a
-bDepthOfFieldEnabled|1
+bDepthOfFieldEnabled|0
 dofFocusDistance|0x40000000
 dofFocusRange|0x40000000
 dofNearTransition|0x40000000

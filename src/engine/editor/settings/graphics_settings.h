@@ -19,9 +19,14 @@ struct PostProcessConfiguration;
 namespace Engine
 {
 /**
- * Draws the "Debug View" window: overlays, debug-view target buttons grouped by pipeline stage (only for paths that are running), culling toggles, stats, and the hotkey reference.
+ * Draws the "Debug View" window: overlays, debug-view target buttons grouped by pipeline stage (only for paths that are running), culling toggles, and the hotkey reference.
  */
 void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/**
+ * Draws the "Diagnostics" window: a checkbox and a fixed-height readout per zone.
+ */
+void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Draws the "Project Config" window: frame limit, render resolution, anti-aliasing with the active mode's settings, and cameras - the global, non-profile settings persisted directly in project.wconfig.
