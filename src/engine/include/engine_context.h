@@ -107,6 +107,7 @@ struct ReGIRStatsSnapshot
     uint32_t activeCells{};
     uint32_t insertsFailed{};
     uint32_t gatherOverflow{};
+    uint32_t coneRejected{};
     ReGIRCursorCell cursor{};
 };
 

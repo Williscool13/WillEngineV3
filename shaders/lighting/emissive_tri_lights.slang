@@ -28,6 +28,8 @@ static EmissiveMeshlet DeadMeshlet(uint firstLight)
     meshlet.lightCount = 0u;
     meshlet.power = 0.0;
     meshlet.rangePad = 0.0;
+    meshlet.packedConeAxis = 0u;
+    meshlet.coneCutoff = 1.0;
     meshlet.aabbMin = float3(1e30);
     meshlet.aabbMax = float3(-1e30);
     return meshlet;
@@ -96,6 +98,14 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
     // The store falls back to one EmissiveMeshlet for the whole run when its pool is exhausted
     bool bPerMeshlet = work.meshletCount == uint(prim.meshletCount.x);
 
+    // Non-uniform scale reshapes the normal cone and mirroring flips the cross(e1, e2) light normals against it
+    float3 axisX = mul(m3, float3(1.0, 0.0, 0.0));
+    float3 axisY = mul(m3, float3(0.0, 1.0, 0.0));
+    float3 axisZ = mul(m3, float3(0.0, 0.0, 1.0));
+    float scaleMin = min(length(axisX), min(length(axisY), length(axisZ)));
+    float scaleMax = max(length(axisX), max(length(axisY), length(axisZ)));
+    bool bConeValid = bPerMeshlet && scaleMin > 1e-6 && scaleMax <= scaleMin * 1.01 && determinant(m3) > 0.0;
+
     float3 meshMin = float3(1e30);
     float3 meshMax = float3(-1e30);
     float meshPower = 0.0;
@@ -162,6 +172,13 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
             meshlet.lightCount = triCount;
             meshlet.power = gsPower[0];
             meshlet.rangePad = 0.0;
+            meshlet.packedConeAxis = 0u;
+            meshlet.coneCutoff = 1.0;
+            if (bConeValid) {
+                Meshlet mlet = pc.meshletBuffer[uint(prim.meshletOffset.x) + c];
+                meshlet.packedConeAxis = PackNormalOct16(normalize(mul(m3, mlet.coneAxis)));
+                meshlet.coneCutoff = mlet.coneCutoff;
+            }
             meshlet.aabbMin = gsMin[0];
             meshlet.aabbMax = gsMax[0];
             pc.lightData->emissiveMeshlets[work.firstMeshlet + c] = meshlet;

@@ -497,6 +497,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     statisticsManager.scratch.regir.activeCells = readbackData->regirActiveCells;
     statisticsManager.scratch.regir.insertsFailed = readbackData->regirInsertsFailed;
     statisticsManager.scratch.regir.gatherOverflow = readbackData->regirGatherOverflow;
+    statisticsManager.scratch.regir.coneRejected = readbackData->regirConeRejected;
     static_assert(sizeof(ReGIRCursorCell) == offsetof(ReadbackStruct, regirCursorTopPos) + sizeof(float) * 24 - offsetof(ReadbackStruct, regirCursorValid));
     std::memcpy(&statisticsManager.scratch.regir.cursor, &readbackData->regirCursorValid, sizeof(ReGIRCursorCell));
     static_assert(sizeof(WorldGridCursorCell) == offsetof(ReadbackStruct, wgCursorTopMeshletCenter) + sizeof(float) * 24 - offsetof(ReadbackStruct, wgCursorValid));

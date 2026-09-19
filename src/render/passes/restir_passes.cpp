@@ -104,6 +104,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             if (GPU_STATS_ENABLED) {
                 vkCmdFillBuffer(cmd, graph.GetBufferHandle("readback_buffer"_sid), offsetof(ReadbackStruct, regirInsertsFailed), sizeof(uint32_t), 0);
                 vkCmdFillBuffer(cmd, graph.GetBufferHandle("readback_buffer"_sid), offsetof(ReadbackStruct, regirGatherOverflow), sizeof(uint32_t), 0);
+                vkCmdFillBuffer(cmd, graph.GetBufferHandle("readback_buffer"_sid), offsetof(ReadbackStruct, regirConeRejected), sizeof(uint32_t), 0);
             }
         });
 
@@ -172,6 +173,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .entries = graph.GetBufferAddress("regir_entries"_sid),
                 .cellData = graph.GetBufferAddress("regir_cell_data"_sid),
                 .gatherOverflow = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, regirGatherOverflow) : 0,
+                .coneRejected = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, regirConeRejected) : 0,
                 .sceneDataIndex = sceneIndex,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

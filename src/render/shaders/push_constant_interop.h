@@ -484,6 +484,7 @@ SHADER_PUBLIC struct ReGIRFillPushConstant
     SHADER_PUBLIC SHADER_PTR(ReGIREntry) entries;
     SHADER_PUBLIC SHADER_PTR(uint2) cellData;
     SHADER_PUBLIC SHADER_PTR(uint) gatherOverflow; // Null when GPU stats are off
+    SHADER_PUBLIC SHADER_PTR(uint) coneRejected; // Null when GPU stats are off
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 

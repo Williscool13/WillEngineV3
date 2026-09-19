@@ -1661,6 +1661,7 @@ void WillEngine::Run()
                 engineContext->regirStats.activeCells = regirStats.activeCells;
                 engineContext->regirStats.insertsFailed = regirStats.insertsFailed;
                 engineContext->regirStats.gatherOverflow = regirStats.gatherOverflow;
+                engineContext->regirStats.coneRejected = regirStats.coneRejected;
                 static_assert(sizeof(Engine::ReGIRCursorCell) == sizeof(Render::ReGIRCursorCell));
                 std::memcpy(&engineContext->regirStats.cursor, &regirStats.cursor, sizeof(Engine::ReGIRCursorCell));
                 const Render::WorldGridCursorCell worldGridCursor = renderThread->GetRendererStatistics().worldGrid.cursor;

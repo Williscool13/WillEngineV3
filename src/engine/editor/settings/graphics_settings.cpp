@@ -2061,6 +2061,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     if (Widgets::IsShowingAll()) {
                         ImGui::Text("Active cells: %u / %u, inserts failed/frame: %u, gather overflow/frame: %u",
                                     ctx->regirStats.activeCells, REGIR_HASH_CAPACITY, ctx->regirStats.insertsFailed, ctx->regirStats.gatherOverflow);
+                        ImGui::Text("Cone rejected/frame: %u", ctx->regirStats.coneRejected);
                         {
                             // Cell under the mouse while a ReGIR debug view
                             const Engine::ReGIRCursorCell& cursor = ctx->regirStats.cursor;

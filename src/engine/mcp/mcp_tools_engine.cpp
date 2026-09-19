@@ -105,6 +105,8 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
     call.SetInt("activeCells", s.regir.activeCells);
     call.SetInt("hashCapacity", REGIR_HASH_CAPACITY);
     call.SetInt("insertsFailed", s.regir.insertsFailed);
+    call.SetInt("gatherOverflow", s.regir.gatherOverflow);
+    call.SetInt("coneRejected", s.regir.coneRejected);
     {
         const Render::ReGIRCursorCell& cursor = s.regir.cursor;
         call.BeginObject("cursorCell");
@@ -117,7 +119,6 @@ static ToolResult GetFrameTimings(EngineContext* ctx, EngineState*, Call& call)
         call.SetInt("entryCount", cursor.entryCount);
         call.SetInt("entriesPerCell", REGIR_ENTRIES_PER_CELL);
         call.SetFloat("totalMass", cursor.totalMass);
-        call.SetInt("gatherOverflow", s.regir.gatherOverflow);
         call.BeginArray("top");
         for (uint32_t k = 0; k < 8; k++) {
             if (cursor.topKey[k] == ~0u) { continue; }

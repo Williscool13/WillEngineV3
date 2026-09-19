@@ -103,6 +103,7 @@ SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_MESHLETS = 4096;
 /**
  * One LOD0 meshlet of an emissive primitive instance: a contiguous run of LIGHT_TYPE_TRIANGLE entries in LightData::lights.
  * The AABB is the geometry padded by the whole emitter's range (rangePad); shrink by rangePad for the geometric bounds.
+ * packedConeAxis/coneCutoff are the world-space normal cone, cutoff = sin(half angle), >= 1 means never rejected.
  */
 SHADER_PUBLIC struct EmissiveMeshlet
 {
@@ -112,8 +113,8 @@ SHADER_PUBLIC struct EmissiveMeshlet
     SHADER_PUBLIC uint lightCount;
     SHADER_PUBLIC float power;
     SHADER_PUBLIC float rangePad;
-    float _pad1;
-    float _pad2;
+    SHADER_PUBLIC uint packedConeAxis;
+    SHADER_PUBLIC float coneCutoff;
 };
 
 /**

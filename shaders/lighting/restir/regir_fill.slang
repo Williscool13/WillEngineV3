@@ -4,6 +4,7 @@ import lights_interop;
 import restir_interop;
 
 import packing_functions;
+import shader_functions;
 import pbr_functions;
 import binning_common;
 import restir_common;
@@ -137,6 +138,7 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
         if (mass > 0.0) { PushCandidate(i, mass); }
     }
 
+    uint laneConeRejects = 0u;
     uint meshCount = uint(pc.lightData->emissiveMeshCount);
     for (uint p = localID.x; p < meshCount; p += FILL_GROUP) {
         EmissiveMesh mesh = pc.lightData->emissiveMeshes[p];
@@ -153,9 +155,28 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
             float3 colour = UnpackUnorm4x8(pc.lightData->lights[meshlet.firstLight].packedColor).rgb;
             float colourMax = max(colour.r, max(colour.g, colour.b));
             float mass = meshlet.power * colourMax / max(dist2, distFloor);
+
+            if (meshlet.coneCutoff < 1.0) {
+                float3 geomCenter = 0.5 * (geomMin + geomMax);
+                float geomRadius = 0.5 * length(geomMax - geomMin);
+                float3 toMeshlet = geomCenter - cellCenterWS;
+                float dist = length(toMeshlet);
+                float backFacingMin = (meshlet.coneCutoff + REGIR_CONE_SLACK) * dist + geomRadius + cellHalfDiag;
+                if (dot(toMeshlet, UnpackNormalOct16(meshlet.packedConeAxis)) >= backFacingMin) {
+                    laneConeRejects++;
+                    continue;
+                }
+            }
+
             if (mass > 0.0) { PushCandidate(REGIR_KEY_MESHLET | g, mass); }
         }
     }
+#if WILL_EDITOR
+    if (pc.coneRejected != nullptr && laneConeRejects > 0u) {
+        uint coneAdded;
+        InterlockedAdd(pc.coneRejected[0], laneConeRejects, coneAdded);
+    }
+#endif
     GroupMemoryBarrierWithGroupSync();
 
     uint gathered = gCount;

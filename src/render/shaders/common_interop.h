@@ -170,6 +170,7 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t regirInsertsFailed;
     // Fill candidates dropped past REGIR_GATHER_SCRATCH, summed over the frame's cells
     SHADER_PUBLIC uint32_t regirGatherOverflow;
+    SHADER_PUBLIC uint32_t regirConeRejected;
     // ReGIR cursor cell: the entry table of the cell under the mouse, top 8 entries by mass share
     SHADER_PUBLIC uint32_t regirCursorValid;
     SHADER_PUBLIC uint32_t regirCursorLevel;
