@@ -91,6 +91,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReGIRCell = 49,
     ReGIRCellMass = 50,
     ReGIRCursorCell = 51,
+    Tonemap = 52,
 };
 
 SHADER_PUBLIC struct Frustum

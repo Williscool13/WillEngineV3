@@ -66,30 +66,33 @@ void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineMana
 
     const auto workCount = static_cast<uint32_t>(viewFamily.emissiveTriWork.Size());
     if (workCount == 0 || !graph.HasBuffer(EMISSIVE_TRI_WORK_BUFFER)) { return; }
-    if (!graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_PRIMITIVE_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return; }
+
+    const bool bHasInstances = graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) && graph.HasBuffer(GEOMETRY_MODEL_BUFFER) && graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER);
 
     RenderPass& pass = graph.AddPass("Emissive Tri Lights"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::ReSTIRDI);
     pass.AsyncCompute();
     pass.ReadBuffer(EMISSIVE_TRI_WORK_BUFFER);
-    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+    if (bHasInstances) {
+        pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+        pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
+        pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+    }
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
     pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
     pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
     pass.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
     pass.WriteBuffer(LIGHT_DATA_BUFFER);
-    pass.Execute([pipelineManager, workCount, emissiveTriRangeMultiplier](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, workCount, emissiveTriRangeMultiplier, bHasInstances](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("emissive_tri_lights"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
         EmissiveTriLightPushConstant pc{
             .workBuffer = graph.GetBufferAddress(EMISSIVE_TRI_WORK_BUFFER),
             .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
-            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
+            .instanceBuffer = bHasInstances ? graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER) : 0,
+            .modelBuffer = bHasInstances ? graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER) : 0,
             .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+            .materialBuffer = bHasInstances ? graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER) : 0,
             .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
             .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
             .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),

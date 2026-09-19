@@ -230,6 +230,28 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
                  Print(state, "  usage: diag <radiance_cache|regir|regir_cursor|world_grid_cursor|emissive|stores> 0|1");
              });
 
+    Register(state, Origin::Engine, "groundtruth", "`groundtruth off|di|gi|full [spp]` switches the path-traced reference and restarts its accumulation", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+        static constexpr const char* MODE_NAMES[] = {"off", "di", "gi", "full"};
+        Engine::LightingState& lighting = state->lighting;
+        if (args.Size() > 1) {
+            bool bMatched = false;
+            for (uint32_t i = 0; i < 4; ++i) {
+                if (strcmp(args[1], MODE_NAMES[i]) != 0) { continue; }
+                lighting.groundTruthMode = static_cast<Core::GroundTruthMode>(i);
+                bMatched = true;
+            }
+            if (!bMatched) {
+                Print(state, "  usage: groundtruth off|di|gi|full [spp]");
+                return;
+            }
+            if (args.Size() > 2) {
+                lighting.groundTruthSpp = std::clamp(static_cast<int32_t>(std::strtol(args[2], nullptr, 10)), 1, 32);
+            }
+            lighting.bResetGroundTruth = true;
+        }
+        Print(state, Core::InlineString<64>::Format("  groundtruth %s, %d spp", MODE_NAMES[static_cast<uint32_t>(lighting.groundTruthMode)], lighting.groundTruthSpp).c_str());
+    });
+
     Register(state, Origin::Engine, "cam", "`cam <1-8>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
         if (slot < 0 || slot >= Engine::MAX_CAMERA_PRESETS) {
@@ -294,8 +316,8 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
     Register(state, Origin::Engine, "view", "`view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() <= 1) {
             static constexpr const char* COMMON_VIEWS[] = {
-                "  intermediate_one - demodulated diffuse (denoised)",
-                "  intermediate_two - demodulated specular (denoised)",
+                "  intermediate_one 52 - demodulated diffuse (denoised); 52 = tonemap, HDR lighting targets clip to white without it",
+                "  intermediate_two 52 - demodulated specular (denoised)",
                 "  relax_spec_prepass / relax_diff_prepass - RELAX prepass input",
                 "  relax_spec_illum / relax_diff_illum - RELAX temporal accumulation",
                 "  relax_spec_hist / relax_diff_hist - RELAX history",

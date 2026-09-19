@@ -384,6 +384,10 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
+        case 52: { // Tonemap: x / (1 + x) for HDR targets that clip to white unscaled (demodulated lighting, RELAX illumination)
+            srcPixel.xyz = max(srcPixel.xyz, 0.0) / (1.0 + max(srcPixel.xyz, 0.0));
+            break;
+        }
         case 42: { // DofCoc: signed circle of confusion in dof_color_coc.a. Red = near field, blue = far, black = sharp; sqrt ramp over a 64px reference (the radius slider cap) so typical radii do not read black.
             float coc = srcPixel.a;
             srcPixel.xyz = float3(sqrt(saturate(-coc / 64.0)), 0.0, sqrt(saturate(coc / 64.0)));
