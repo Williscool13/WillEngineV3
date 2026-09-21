@@ -8,6 +8,7 @@ import shader_functions;
 public static const float GI_GATHER_MAX_ACCUM = 64.0;
 public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
 public static const float GI_GATHER_BACKFACE_GUARD_DISTANCE = 0.1;
+public static const float GI_GATHER_REVEAL_FACING_SCALE = 2.0;
 // R8 encode range for the variance guide (relative deviation of incident ray luma, from the DDGI atlas alpha): stored as relDev / SCALE, saturating at SCALE. It drives thresholds, so saturation only means "maximally noisy here".
 public static const float GI_GATHER_VARIANCE_GUIDE_SCALE = 4.0;
 // Adaptive ray count ignores relDev below this: the sky-vs-ground baseline sits at ~0.3-0.8 even on lit surfaces, and paying extra rays there buys nothing visible. Only the ray mapping; the upscale prior keeps the full guide.
@@ -119,12 +120,13 @@ public struct GIGatherHistoryTaps
     public float2 prevPos;
     public float4 weights;
     public float weightSum;
+    public float countScale;
 };
 
 /** Reprojection and per-tap validity for a full-res history fetch, resolved once so several histories at the same pixel share the depth/normal gate. */
 public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
-    GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0 };
+    GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0 };
 
     float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
     if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
@@ -133,6 +135,16 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
 
     float expectedPrevViewZ = centerViewZ + UnpackViewZDelta(gt1.w);
     float disocclusionThreshold = GIGatherDisocclusionThreshold(scene, centerViewZ);
+
+    float reveal = 1.0;
+    float curFacing = dot(mul((float3x3)scene.view, worldN), -normalize(CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ)));
+    if (curFacing > 0.0) {
+        float prevFacing = dot(mul((float3x3)scene.prevView, worldN), -normalize(CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, historyUv, expectedPrevViewZ)));
+        reveal = saturate(GI_GATHER_REVEAL_FACING_SCALE * prevFacing / curFacing);
+        if (reveal <= 0.0) {
+            return taps;
+        }
+    }
 
     taps.prevPos = historyUv * float2(renderExtent) - 0.5;
     taps.origin = int2(floor(taps.prevPos));
@@ -168,6 +180,7 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
         taps.weights[i] = bilinearW[i];
         taps.weightSum += bilinearW[i];
     }
+    taps.countScale = reveal;
     return taps;
 }
 
@@ -196,7 +209,7 @@ public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint histo
     if (taps.weightSum > 0.01) {
         float invW = 1.0 / taps.weightSum;
         result.color = colorSum * invW;
-        result.count = countSum * invW;
+        result.count = countSum * invW * taps.countScale;
         result.quality = saturate(taps.weightSum);
         if (taps.weightSum > 0.999) {
             result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, taps.prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);
@@ -235,7 +248,7 @@ public GIGatherScalarHistory GIGatherFetchScalarHistory(GIGatherHistoryTaps taps
 
     if (taps.weightSum > 0.01) {
         result.value = sum.x / taps.weightSum;
-        result.count = sum.y / taps.weightSum;
+        result.count = sum.y / taps.weightSum * taps.countScale;
         result.quality = saturate(taps.weightSum);
     }
     return result;
