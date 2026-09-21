@@ -151,8 +151,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->scene.currentSceneName.c_str());
         }
 
-        ImGui::SeparatorText("Runs");
-        {
+        ImGui::SeparatorText("Runs"); {
             ImGui::Checkbox("Skip captures", &state->playtest.bSkipCaptures);
             ImGui::SameLine();
             if (ImGui::Button("Refresh")) {
@@ -418,54 +417,57 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             uint16_t depth; // (0 = root)
         };
 
-        constexpr size_t MAX_BROWSER_ENTRIES = 4096;
+        constexpr size_t MAX_BROWSER_ENTRIES = 16384;
 
+        auto view2 = state->registry.view<Component::SceneComponent>();
         Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), MAX_BROWSER_ENTRIES + 1};
 
         size_t totalInScene = 0;
         bool bEntriesTruncated = false;
-        auto view2 = state->registry.view<Component::SceneComponent>();
-        for (auto entity : view2) {
-            auto& scene = view2.get<Component::SceneComponent>(entity);
-            if (scene.sceneId != state->scene.currentSceneId) continue;
-            if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
-            ++totalInScene;
+        for (int pass = 0; pass < 2; ++pass) {
+            for (auto entity : view2) {
+                auto& scene = view2.get<Component::SceneComponent>(entity);
+                if (scene.sceneId != state->scene.currentSceneId) continue;
+                if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
+                if (pass == 0) { ++totalInScene; }
 
-            if (componentFilter && !componentFilter->has(state->registry, entity)) continue;
+                if (componentFilter && !componentFilter->has(state->registry, entity)) continue;
 
-            const char* label = "Unnamed";
-            const auto* nameComp = state->registry.try_get<Component::NameComponent>(entity);
-            if (nameComp) { label = nameComp->name.c_str(); }
+                const char* label = "Unnamed";
+                const auto* nameComp = state->registry.try_get<Component::NameComponent>(entity);
+                if (nameComp) { label = nameComp->name.c_str(); }
 
-            if (search[0]) {
-                const bool nameMatches = nameComp
-                                             ? nameComp->name.Contains(search, Core::CaseSensitivity::Insensitive)
-                                             : Core::InlineString<16>("Unnamed").Contains(search, Core::CaseSensitivity::Insensitive);
-                if (!nameMatches) { continue; }
-            }
-
-            auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
-            uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
-            uint64_t sortOrder = stable ? stable->sortOrder : 0;
-
-            StringID folderId;
-            if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
-                folderId = fc->folderId;
-            }
-            entt::entity parentEntity = entt::null;
-            uint16_t depth = 0;
-            if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
-                const auto* ps = state->registry.try_get<Component::SceneComponent>(h->parent);
-                if (ps && ps->sceneId == state->scene.currentSceneId) {
-                    parentEntity = h->parent;
-                    depth = h->depth;
+                if (search[0]) {
+                    const bool nameMatches = nameComp
+                                                 ? nameComp->name.Contains(search, Core::CaseSensitivity::Insensitive)
+                                                 : Core::InlineString<16>("Unnamed").Contains(search, Core::CaseSensitivity::Insensitive);
+                    if (!nameMatches) { continue; }
                 }
+
+                auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
+                uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
+                uint64_t sortOrder = stable ? stable->sortOrder : 0;
+
+                StringID folderId;
+                if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
+                    folderId = fc->folderId;
+                }
+                entt::entity parentEntity = entt::null;
+                uint16_t depth = 0;
+                if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
+                    const auto* ps = state->registry.try_get<Component::SceneComponent>(h->parent);
+                    if (ps && ps->sceneId == state->scene.currentSceneId) {
+                        parentEntity = h->parent;
+                        depth = h->depth;
+                    }
+                }
+                if ((parentEntity == entt::null) != (pass == 0)) { continue; }
+                if (entries.Size() >= MAX_BROWSER_ENTRIES) {
+                    bEntriesTruncated = true;
+                    continue;
+                }
+                entries.PushBack({entity, label, stableId, sortOrder, folderId, parentEntity, depth});
             }
-            if (entries.Size() >= MAX_BROWSER_ENTRIES) {
-                bEntriesTruncated = true;
-                continue;
-            }
-            entries.PushBack({entity, label, stableId, sortOrder, folderId, parentEntity, depth});
         }
         std::ranges::sort(entries, [](const EntityEntry& a, const EntityEntry& b) { return a.sortOrder < b.sortOrder; });
 

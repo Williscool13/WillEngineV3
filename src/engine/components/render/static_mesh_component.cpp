@@ -280,6 +280,11 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             }
         }
 
+        if (primCount > 0 && ImGui::SmallButton("Split All")) {
+            SplitAllMeshPrimitives(ctx, state, entity);
+            return {.bRequestRemoval = true, .bModified = true};
+        }
+
         uint32_t pendingSplitOrdinal = ~0u;
         glm::mat4 pendingSplitTransform{1.0f};
         if (primCount > 0 && ImGui::TreeNode("Primitives")) {
@@ -336,7 +341,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::PushID(slot.origIdx);
 
                     Engine::MaterialID current = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(slot.origIdx)) : Engine::MaterialID::INVALID;
-                    const char* currentLabel = "(original)";
+                    const char* currentLabel = "__synthesized__";
                     if (current.IsValid()) {
                         if (const Engine::Material* m = ctx->materialManager->GetMaterial(current)) {
                             currentLabel = m->name.c_str();
@@ -347,7 +352,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::SameLine();
 
                     if (ImGui::BeginCombo("##override", currentLabel, ImGuiComboFlags_HeightLarge)) {
-                        if (ImGui::Selectable("(original)", !current.IsValid())) {
+                        if (ImGui::Selectable("__synthesized__", !current.IsValid())) {
                             if (current.IsValid()) {
                                 pendingChangeIdx = slot.origIdx;
                                 pendingChangeMat = Engine::MaterialID::INVALID;

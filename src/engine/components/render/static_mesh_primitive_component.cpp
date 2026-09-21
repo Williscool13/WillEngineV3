@@ -182,7 +182,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             ImGui::Text("Primitive Ordinal: %u", component.primitiveOrdinal);
         }
 
-        const char* currentLabel = "(original)";
+        const char* currentLabel = "__synthesized__";
         if (component.materialOverride.IsValid()) {
             if (const Engine::Material* m = ctx->materialManager->GetMaterial(component.materialOverride)) { currentLabel = m->name.c_str(); }
         }
@@ -190,7 +190,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         bool changed = false;
         bool clear = false;
         if (ImGui::BeginCombo("Material", currentLabel, ImGuiComboFlags_HeightLarge)) {
-            if (ImGui::Selectable("(original)", !component.materialOverride.IsValid())) {
+            if (ImGui::Selectable("__synthesized__", !component.materialOverride.IsValid())) {
                 if (component.materialOverride.IsValid()) { clear = true; }
             }
             const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.materialOverride);

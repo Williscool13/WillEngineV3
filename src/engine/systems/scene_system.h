@@ -89,6 +89,11 @@ Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::E
  */
 entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity parent, uint32_t primitiveOrdinal, const glm::mat4& nodeModelSpace);
 
+/**
+ * Rebuilds the model's node tree under a whole-model static-mesh entity, one primitive per entity; only primitives whose material emits keep EMISSIVE_LIGHT. Returns the primitive count; the caller removes the parent's mesh.
+ */
+uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity parent);
+
 
 /**
  * Resolves every HierarchyComponent's runtime parent handle from its serialized parentStableId. Call after loading entities.

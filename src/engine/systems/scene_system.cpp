@@ -13,6 +13,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include "core/containers/arena_array.h"
+#include "core/containers/arena_fixed_vector.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
@@ -525,6 +526,98 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
 
     state->bHierarchyOrderDirty = true;
     return child;
+}
+
+uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity parent)
+{
+    auto& registry = state->registry;
+    const auto* runtime = registry.try_get<Component::MeshRuntime>(parent);
+    if (!runtime || runtime->range.count == 0) {
+        return 0;
+    }
+    const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime->modelHandle);
+    if (!model) {
+        return 0;
+    }
+    const auto& nodes = model->modelData.nodes;
+    const auto& meshes = model->modelData.meshes;
+    const Engine::ModelID modelId = registry.get<Component::StaticMeshComponent>(parent).modelId;
+    const uint32_t parentFlags = registry.get_or_emplace<Component::RenderFlagsComponent>(parent).flags;
+    const Engine::InstanceStore::Range range = runtime->range;
+
+    auto nodeEntities = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), std::max(nodes.Size(), size_t{1}));
+    for (size_t n = 0; n < nodes.Size(); ++n) {
+        nodeEntities.EmplaceBack(entt::entity{entt::null});
+    }
+
+    auto attach = [&](entt::entity child, entt::entity newParent) {
+        auto& hierarchy = registry.emplace<Component::HierarchyComponent>(child);
+        hierarchy.parent = newParent;
+        hierarchy.parentStableId = registry.get<Component::StableIdComponent>(newParent).id;
+    };
+
+    auto ensureNodeEntity = [&](uint32_t nodeIndex) -> entt::entity {
+        Core::InlineVector<uint32_t, 64> chain;
+        uint32_t walk = nodeIndex;
+        while (walk != ~0u && walk < nodes.Size() && nodeEntities[walk] == entt::null && chain.Size() < 64) {
+            chain.PushBack(walk);
+            walk = nodes[walk].parent;
+        }
+        entt::entity above = (walk != ~0u && walk < nodes.Size() && nodeEntities[walk] != entt::null) ? nodeEntities[walk] : parent;
+        while (chain.Size() > 0) {
+            const uint32_t n = chain.Back();
+            chain.PopBack();
+            entt::entity nodeEntity = CreateSceneEntity(state);
+            registry.get<Component::NameComponent>(nodeEntity).name = nodes[n].name.Size() > 0 ? Core::InlineString<128>::Format("%s", nodes[n].name.c_str()) : Core::InlineString<128>::Format("Node %u", n);
+            auto& nodeTransform = registry.get<Component::TransformComponent>(nodeEntity);
+            nodeTransform.translation = nodes[n].localTranslation;
+            nodeTransform.rotation = nodes[n].localRotation;
+            nodeTransform.scale = nodes[n].localScale;
+            attach(nodeEntity, above);
+            nodeEntities[n] = nodeEntity;
+            above = nodeEntity;
+        }
+        return above;
+    };
+
+    for (uint32_t i = 0; i < range.count; ++i) {
+        const Engine::InstanceSource source = state->instanceStore[range.offset + i];
+        if (source.sourceNodeIndex >= nodes.Size()) {
+            continue;
+        }
+        const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
+        const bool bEmissive = material && material->props.emissiveFactor.w * glm::max(material->props.emissiveFactor.x, glm::max(material->props.emissiveFactor.y, material->props.emissiveFactor.z)) > 0.0f;
+
+        const entt::entity nodeEntity = ensureNodeEntity(source.sourceNodeIndex);
+        const uint32_t meshIndex = nodes[source.sourceNodeIndex].meshIndex;
+        const bool bSinglePrimitive = meshIndex < meshes.Size() && meshes[meshIndex].primitiveProperties.Size() == 1;
+
+        entt::entity child = nodeEntity;
+        if (!bSinglePrimitive) {
+            child = CreateSceneEntity(state);
+            registry.get<Component::NameComponent>(child).name = Core::InlineString<128>::Format(bEmissive ? "Primitive %u Emissive" : "Primitive %u", source.modelPrimitiveOrdinal);
+            attach(child, nodeEntity);
+        }
+        else if (bEmissive) {
+            auto& name = registry.get<Component::NameComponent>(child).name;
+            name = Core::InlineString<128>::Format("%s Emissive", name.c_str());
+        }
+
+        Component::StaticMeshPrimitiveComponent childMesh{};
+        childMesh.modelId = modelId;
+        childMesh.primitiveOrdinal = source.modelPrimitiveOrdinal;
+        if (material && !material->bSynthesized) {
+            childMesh.materialOverride = source.materialID;
+        }
+        registry.emplace<Component::StaticMeshPrimitiveComponent>(child, childMesh);
+
+        Component::RenderFlagsComponent childFlags{};
+        childFlags.flags = bEmissive ? (parentFlags | Component::RenderFlagsComponent::EMISSIVE_LIGHT) : (parentFlags & ~Component::RenderFlagsComponent::EMISSIVE_LIGHT);
+        registry.emplace_or_replace<Component::RenderFlagsComponent>(child, childFlags);
+    }
+
+    state->bHierarchyOrderDirty = true;
+    return range.count;
 }
 
 uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId)
