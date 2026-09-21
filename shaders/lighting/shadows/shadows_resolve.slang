@@ -36,7 +36,7 @@ void ComputeShadowsResolve(uniform ShadowsResolvePushConstant pc, uint3 threadID
             float centerViewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
             float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
             float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
-            GIGatherScalarHistory history = GIGatherFetchScalarHistory(scene, pc.historyIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent);
+            GIGatherScalarHistory history = GIGatherFetchScalarHistory(scene, pc.historyIndex, pc.depthIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent);
             if (history.quality > 0.0) {
                 float motionPixels = length(UnpackMotionVectors(gt1.g) * 0.5 * scene.mainRenderTargetSize);
                 float maxAccum = min(pc.temporalMaxAccum * scene.framerateScale, GTAO_TEMPORAL_COUNT_SCALE);

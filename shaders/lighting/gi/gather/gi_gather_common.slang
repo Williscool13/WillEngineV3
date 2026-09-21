@@ -70,9 +70,29 @@ static float3 GIGatherSampleHistoryCatmullRom(uint historyIndex, float2 samplePo
     return color / sum;
 }
 
-/** Per-tap reprojection gate shared by every full-res history fetch: plane-distance disocclusion (the compared |dz|*NoV already projects out slant, so the tolerance is flat) plus a normal test. */
-public bool GIGatherHistoryTapValid(SceneData scene, uint depthHistoryIndex, uint gbufferOneHistoryIndex, int2 tap, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN)
+/** View-space geometric normal from a depth texture; each axis takes its shallower step so a silhouette neighbour never enters. */
+public float3 GIGatherDepthNormal(SceneData scene, uint depthIndex, int2 px, uint2 renderExtent)
 {
+    float2 cornerUv = float2(px) / float2(renderExtent);
+    float4 ul = rdgTexturesFloat[depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], cornerUv);
+    float4 br = rdgTexturesFloat[depthIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], cornerUv, int2(1, 1));
+    const float rawDepths[5] = { ul.y, ul.x, br.z, ul.z, br.x };
+    const int2 offsets[5] = { int2(0, 0), int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
+    float3 pos[5];
+    [unroll]
+    for (uint i = 0; i < 5; i++) {
+        float viewZ = ScreenToViewSpaceDepth(rawDepths[i], scene.depthLinearizeMult, scene.depthLinearizeAdd);
+        pos[i] = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, (float2(px + offsets[i]) + 0.5) / float2(renderExtent), viewZ);
+    }
+    float3 dx = abs(pos[0].z - pos[1].z) < abs(pos[2].z - pos[0].z) ? pos[0] - pos[1] : pos[2] - pos[0];
+    float3 dy = abs(pos[0].z - pos[3].z) < abs(pos[4].z - pos[0].z) ? pos[0] - pos[3] : pos[4] - pos[0];
+    return normalize(cross(dx, dy));
+}
+
+/** Per-tap reprojection gate shared by every full-res history fetch: plane-distance disocclusion (the compared |dz|*NoV already projects out slant, so the tolerance is flat) plus a normal test. bShadingNormalAgrees false = caller settles it on geometric normals. */
+public bool GIGatherHistoryTapValid(SceneData scene, uint depthHistoryIndex, uint gbufferOneHistoryIndex, int2 tap, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN, out bool bShadingNormalAgrees)
+{
+    bShadingNormalAgrees = false;
     float prevRawDepth = rdgTexturesFloat[depthHistoryIndex].Load(int3(tap, 0)).r;
     if (prevRawDepth <= 0.0) {
         return false;
@@ -83,7 +103,8 @@ public bool GIGatherHistoryTapValid(SceneData scene, uint depthHistoryIndex, uin
     }
     float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[gbufferOneHistoryIndex].Load(int3(tap, 0)).r)));
     // 60 degrees, matching the tier-0 screen gate: the plane test is blind to old surfaces CROSSING the current plane (buried pillar faces at ground level), and those arrive with perpendicular normals (dot ~ 0).
-    return dot(worldN, prevWorldN) >= 0.5;
+    bShadingNormalAgrees = dot(worldN, prevWorldN) >= 0.5;
+    return true;
 }
 
 /** Flat plane-distance tolerance for GIGatherHistoryTapValid. The NRD-style 1/lerp(0.05,1,NoV) expansion inflated the accepted raw mismatch to ~2x viewZ at grazing (ground history never rejected); do not reintroduce it. */
@@ -101,7 +122,7 @@ public struct GIGatherHistoryTaps
 };
 
 /** Reprojection and per-tap validity for a full-res history fetch, resolved once so several histories at the same pixel share the depth/normal gate. */
-public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
     GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0 };
 
@@ -118,6 +139,8 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
     float2 f = taps.prevPos - float2(taps.origin);
     float4 bilinearW = float4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
     const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
+    bool bGeoNormal = false;
+    float3 geoWorldN = float3(0.0);
 
     [unroll]
     for (uint i = 0; i < 4; i++) {
@@ -128,8 +151,19 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
         if (any(tap < int2(0)) || any(tap >= int2(renderExtent))) {
             continue;
         }
-        if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN)) {
+        bool bShadingNormalAgrees;
+        if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN, bShadingNormalAgrees)) {
             continue;
+        }
+        if (!bShadingNormalAgrees) {
+            if (!bGeoNormal) {
+                geoWorldN = mul((float3x3)scene.invView, GIGatherDepthNormal(scene, depthIndex, int2(uv * float2(renderExtent)), renderExtent));
+                bGeoNormal = true;
+            }
+            float3 prevGeoWorldN = mul(transpose(float3x3(scene.prevView)), GIGatherDepthNormal(scene, depthHistoryIndex, tap, renderExtent));
+            if (dot(geoWorldN, prevGeoWorldN) < 0.5) {
+                continue;
+            }
         }
         taps.weights[i] = bilinearW[i];
         taps.weightSum += bilinearW[i];
@@ -172,9 +206,9 @@ public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint histo
 }
 
 /** MV-reprojected 2x2 bilinear history fetch with per-tap depth/backface validity and weight renormalization. */
-public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
-    return GIGatherFetchHistory(GIGatherResolveHistoryTaps(scene, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex, renderExtent);
+    return GIGatherFetchHistory(GIGatherResolveHistoryTaps(scene, depthIndex, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex, renderExtent);
 }
 
 public struct GIGatherScalarHistory
@@ -207,9 +241,9 @@ public GIGatherScalarHistory GIGatherFetchScalarHistory(GIGatherHistoryTaps taps
     return result;
 }
 
-public GIGatherScalarHistory GIGatherFetchScalarHistory(SceneData scene, uint historyIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
+public GIGatherScalarHistory GIGatherFetchScalarHistory(SceneData scene, uint historyIndex, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
-    return GIGatherFetchScalarHistory(GIGatherResolveHistoryTaps(scene, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex);
+    return GIGatherFetchScalarHistory(GIGatherResolveHistoryTaps(scene, depthIndex, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex);
 }
 
 /** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count, 6 = first-ray escape (yellow sky miss, magenta backface, front-face hitT green-to-red over 2-10m). */
