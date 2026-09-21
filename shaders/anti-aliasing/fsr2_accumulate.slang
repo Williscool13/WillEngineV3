@@ -90,6 +90,17 @@ float2 LoadDilatedMotionVector(int2 pos)
     return rdgTexturesFloat2[pc.dilatedMotionIndex].Load(int3(pos, 0)).xy;
 }
 
+float2 LoadHistoryMotionVector(int2 pos)
+{
+    if (pc.virtualMotionIndex != FSR2_INVALID_INDEX) {
+        const float2 virtualMotion = rdgTexturesFloat2[pc.virtualMotionIndex].Load(int3(pos, 0)).xy;
+        if (abs(virtualMotion.x) < REFLECTION_VIRTUAL_MOTION_INVALID * 0.5) {
+            return virtualMotion;
+        }
+    }
+    return LoadDilatedMotionVector(pos);
+}
+
 float3 LoadPreparedInputColor(int2 pos)
 {
     return rdgTexturesFloat4[pc.preparedColorIndex].Load(int3(pos, 0)).xyz;
@@ -446,7 +457,7 @@ AccumulationParams InitParams(int2 pxHrPos)
     const float2 lrUvJittered = hrUv + pc.c.jitter / pc.c.renderSize;
     params.lrUvHwSampler = Fsr2ClampUv(lrUvJittered, renderSize, renderSize);
 
-    params.motionVector = LoadDilatedMotionVector(Fsr2ClampCoord(int2(hrUv * pc.c.renderSize), renderSize));
+    params.motionVector = LoadHistoryMotionVector(Fsr2ClampCoord(int2(hrUv * pc.c.renderSize), renderSize));
     params.hrVelocity = GetPxHrVelocity(params.motionVector);
 
     params.reprojectedHrUv = params.hrUv + params.motionVector;

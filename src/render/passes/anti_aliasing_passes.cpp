@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "reflection_passes.h"
 #include "render/render_utils.h"
 #include "render/render-view/render_view_helpers.h"
 #include "render/pipelines/pipeline_data.h"
@@ -456,6 +457,7 @@ StringID SetupFsr2(RenderGraph& graph,
 
     const bool bSharpen = config.bSharpen;
     const bool bReactive = config.bReactiveMask && bHasPreOverlayColor;
+    const bool bVirtualMotion = graph.HasTexture(REFLECTION_VIRTUAL_MOTION_TARGET);
 
     graph.CreateVersionedTexture("fsr2_history_color"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     graph.CreateVersionedTexture("fsr2_lock_status"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -575,9 +577,15 @@ StringID SetupFsr2(RenderGraph& graph,
         depthClipPass.ReadSampledImage(prevDilatedMotionId);
     }
     depthClipPass.ReadSampledImage("fsr2_reconstructed_depth"_sid);
+    if (bVirtualMotion) {
+        depthClipPass.WriteStorageImage(REFLECTION_VIRTUAL_MOTION_TARGET);
+        if (bHasPreOverlayColor) {
+            depthClipPass.ReadSampledImage("lit_color_preoverlay"_sid);
+        }
+    }
     depthClipPass.WriteStorageImage("fsr2_prepared_color"_sid);
     depthClipPass.WriteStorageImage("fsr2_dilated_reactive"_sid);
-    depthClipPass.Execute([pipelineManager, constants, bReactive, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+    depthClipPass.Execute([pipelineManager, constants, bReactive, bVirtualMotion, bHasPreOverlayColor, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
             reflectionReactive = config.reflectionReactive, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax, tracedRoughnessMax = reflectionConfig.tracedRoughnessMax,
             renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2DepthClipPushConstant pushData{
@@ -596,6 +604,8 @@ StringID SetupFsr2(RenderGraph& graph,
                 .reflectionReactive = reflectionReactive,
                 .mirrorRoughnessMax = mirrorRoughnessMax,
                 .tracedRoughnessMax = tracedRoughnessMax,
+                .virtualMotionIndex = bVirtualMotion ? graph.GetStorageImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : INVALID_INDEX,
+                .preOverlayColorIndex = bVirtualMotion && bHasPreOverlayColor ? graph.GetSampledImageViewDescriptorIndex("lit_color_preoverlay"_sid) : INVALID_INDEX,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_depth_clip"_sid, &pushData, sizeof(pushData), renderGroupsX, renderGroupsY);
         });
@@ -617,6 +627,9 @@ StringID SetupFsr2(RenderGraph& graph,
     accumulatePass.ReadSampledImage("fsr2_dilated_motion"_sid);
     accumulatePass.ReadSampledImage("fsr2_prepared_color"_sid);
     accumulatePass.ReadSampledImage("fsr2_luma_mip4"_sid);
+    if (bVirtualMotion) {
+        accumulatePass.ReadSampledImage(REFLECTION_VIRTUAL_MOTION_TARGET);
+    }
     if (bHasHistory) {
         accumulatePass.ReadSampledImage(prevHistoryColorId);
         accumulatePass.ReadSampledImage(prevLockStatusId);
@@ -629,7 +642,7 @@ StringID SetupFsr2(RenderGraph& graph,
     if (!bSharpen) {
         accumulatePass.WriteStorageImage("fsr2_output"_sid);
     }
-    accumulatePass.Execute([pipelineManager, constants, bSharpen, prevHistoryColorId, prevLockStatusId, prevLumaHistoryId,
+    accumulatePass.Execute([pipelineManager, constants, bSharpen, bVirtualMotion, prevHistoryColorId, prevLockStatusId, prevLumaHistoryId,
             displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2AccumulatePushConstant pushData{
                 .c = constants,
@@ -645,6 +658,7 @@ StringID SetupFsr2(RenderGraph& graph,
                 .lockStatusOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_lock_status"_sid),
                 .lumaHistoryOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_luma_history"_sid),
                 .outputIndex = bSharpen ? INVALID_INDEX : graph.GetStorageImageViewDescriptorIndex("fsr2_output"_sid),
+                .virtualMotionIndex = bVirtualMotion ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : INVALID_INDEX,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_accumulate"_sid, &pushData, sizeof(pushData), displayGroupsX, displayGroupsY);
         });

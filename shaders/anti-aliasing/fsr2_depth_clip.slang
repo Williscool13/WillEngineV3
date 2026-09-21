@@ -180,10 +180,28 @@ float ComputeTemporalMotionDivergence(int2 pos)
     return pxDistance > 1.0 ? lerp(0.0, 1.0 - saturate(length(prevMotionVector) / length(motionVector)), saturate(pow(pxDistance / 20.0, 3.0))) : 0.0;
 }
 
-// Mirror-like surfaces carry reflected content whose motion the surface MV does not describe; drop their history while the camera moves
+bool ResolveVirtualMotion(int2 pos, float metallic)
+{
+    if (pc.virtualMotionIndex == FSR2_INVALID_INDEX) {
+        return false;
+    }
+    if (abs(rdgStorageFloat2[pc.virtualMotionIndex][pos].x) >= REFLECTION_VIRTUAL_MOTION_INVALID * 0.5) {
+        return false;
+    }
+    bool bSpecularDominant = metallic > 0.5;
+    if (pc.preOverlayColorIndex != FSR2_INVALID_INDEX) {
+        bSpecularDominant = rdgTexturesFloat4[pc.preOverlayColorIndex].Load(int3(pos, 0)).a < 0.5;
+    }
+    if (!bSpecularDominant) {
+        rdgStorageFloat2[pc.virtualMotionIndex][pos] = float2(REFLECTION_VIRTUAL_MOTION_INVALID);
+    }
+    return bSpecularDominant;
+}
+
+// Mirror-like surfaces carry reflected content whose motion the surface MV does not describe; without a virtual MV, drop their history while the camera moves
 float ComputeReflectionReactive(int2 pos)
 {
-    if (pc.reflectionReactive <= 0.0 || Fsr2LoadInputDepth(pc.depthIndex, pos) <= 0.0) {
+    if (Fsr2LoadInputDepth(pc.depthIndex, pos) <= 0.0) {
         return 0.0;
     }
     const uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pos, 0));
@@ -193,6 +211,9 @@ float ComputeReflectionReactive(int2 pos)
     float roughness;
     float metallic;
     UnpackPBR(gt1.b, roughness, metallic);
+    if (ResolveVirtualMotion(pos, metallic) || pc.reflectionReactive <= 0.0) {
+        return 0.0;
+    }
     const float mirror = 1.0 - smoothstep(pc.mirrorRoughnessMax, pc.tracedRoughnessMax, roughness);
     const float2 motionVector = UnpackMotionVectors(gt1.g) * 0.5;
     const float moving = saturate(length(motionVector * pc.c.displaySize) * 0.5);

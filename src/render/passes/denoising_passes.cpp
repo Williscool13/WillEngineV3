@@ -278,6 +278,11 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     graph.CreateTexture("relax_diff_fast"_sid, colorInfo, {std::nullopt}, true);
     graph.CreateTexture("relax_spec_reproj_confidence"_sid, reprConfInfo, {std::nullopt}, true);
 
+    const bool bVirtualMotion = (viewFamily.postProcessConfig.bMotionBlurEnabled || viewFamily.aaConfig.mode == Core::AntiAliasingMode::FSR2) && reflectionConfig.bEnabled;
+    if (bVirtualMotion) {
+        graph.CreateTexture(REFLECTION_VIRTUAL_MOTION_TARGET, TextureInfo{VK_FORMAT_R16G16_SFLOAT, width, height, 1}, {std::nullopt}, true);
+    }
+
 
     // Pass 3: Temporal Accumulation
     {
@@ -315,6 +320,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         pass.WriteStorageImage("relax_spec_hit_dist"_sid);
         pass.WriteStorageImage("relax_spec_reproj_confidence"_sid);
         pass.WriteStorageImage("relax_prev_nr"_sid);
+        if (bVirtualMotion) { pass.WriteStorageImage(REFLECTION_VIRTUAL_MOTION_TARGET); }
 
         const bool hasHistory = graph.ResourceHasVersion("relax_spec_hist"_sid, 1);
         const StringID fallbackSpec = hasHistory ? graph.ResourceVersionID("relax_spec_hist"_sid, 1) : specIn;
@@ -329,7 +335,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const StringID hitDeltaHistory = hasHitDeltaHistory ? graph.ResourceVersionID(REFLECTION_HIT_DELTA_TARGET, 1) : StringID{};
 
         pass.Execute([pipelineManager, specIn, diffIn, width, height, fallbackSpec, fallbackDiff, fallbackSpecFast, fallbackDiffFast, fallbackHistLen, fallbackSpecHitD, fallbackPrevNR, fallbackViewZ, hasHitDeltaHistory, hitDeltaHistory,
-                gbufferOne](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                gbufferOne, bVirtualMotion, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             RelaxTemporalAccumulationPushConstant pc{
                 .constants = graph.GetBufferAddress("relax_constants"_sid),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex("relax_tiles"_sid),
@@ -356,6 +362,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .confidenceIndex = graph.HasTexture("restir_confidence"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_confidence"_sid) : ~0u,
                 .hitDeltaIndex = graph.HasTexture(REFLECTION_HIT_DELTA_TARGET) ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_HIT_DELTA_TARGET) : ~0u,
                 .hitDeltaHistoryIndex = hasHitDeltaHistory ? graph.GetSampledImageViewDescriptorIndex(hitDeltaHistory) : ~0u,
+                .virtualMotionOutIndex = bVirtualMotion ? graph.GetStorageImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : ~0u,
+                .mirrorRoughnessMax = mirrorRoughnessMax,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("relax_temporal_accumulation"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

@@ -42,7 +42,7 @@ reflectionReactive|0x3f19999a
 mipBias|0xbf800000
 ;
 ;
-resolutionScale|0x3f400000
+resolutionScale|0x3f800000
 reflectionProbeLineWidth|0x3dcccccd
 gameCameraFovDegrees|0x428cbb51
 gameCameraNearPlane|0x3dcccccd

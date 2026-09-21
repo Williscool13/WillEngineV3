@@ -13,6 +13,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/render-graph/render_pass.h"
 #include "render/passes/final_gather_passes.h"
+#include "render/passes/reflection_passes.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/push_constant_interop.h"
@@ -485,9 +486,13 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
     velocityExtractPass.ReadSampledImage(OBJECT_MOTION);
     velocityExtractPass.ReadSampledImage(velocity);
     velocityExtractPass.ReadSampledImage(depthStencil);
+    const bool bVirtualMotion = graph.HasTexture(REFLECTION_VIRTUAL_MOTION_TARGET);
+    if (bVirtualMotion) {
+        velocityExtractPass.ReadSampledImage(REFLECTION_VIRTUAL_MOTION_TARGET);
+    }
     velocityExtractPass.WriteStorageImage("motion_blur_velocity"_sid);
     velocityExtractPass.Execute([width, height, renderWidth, renderHeight, pipelines, velocity, depthStencil, velocityScale, objectScale, cameraRotationScale, cameraTranslationScale,
-                                 cameraDeadZonePx, cameraMaxRadiusPx](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                                 cameraDeadZonePx, cameraMaxRadiusPx, bVirtualMotion](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         MotionBlurVelocityExtractPushConstant pc{
             .sceneData = graph.GetBufferAddress("scene_data"_sid),
             .extent = {width, height},
@@ -502,6 +507,7 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
             .cameraDeadZonePx = cameraDeadZonePx,
             .cameraMaxRadiusPx = cameraMaxRadiusPx,
             .velocityScale = velocityScale,
+            .virtualMotionIndex = bVirtualMotion ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : ~0u,
         };
 
         const PipelineEntry* pipelineEntry = pipelines->GetPipelineEntry("motion_blur_velocity_extract"_sid);

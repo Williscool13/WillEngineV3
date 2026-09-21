@@ -1152,6 +1152,8 @@ SHADER_PUBLIC struct Fsr2DepthClipPushConstant
     SHADER_PUBLIC float reflectionReactive; // 0 = off
     SHADER_PUBLIC float mirrorRoughnessMax;
     SHADER_PUBLIC float tracedRoughnessMax;
+    SHADER_PUBLIC uint32_t virtualMotionIndex;
+    SHADER_PUBLIC uint32_t preOverlayColorIndex;
 };
 
 SHADER_PUBLIC struct Fsr2LockPushConstant
@@ -1176,6 +1178,7 @@ SHADER_PUBLIC struct Fsr2AccumulatePushConstant
     SHADER_PUBLIC uint32_t lockStatusOutIndex;
     SHADER_PUBLIC uint32_t lumaHistoryOutIndex;
     SHADER_PUBLIC uint32_t outputIndex; // FSR2_INVALID_INDEX when RCAS writes the output
+    SHADER_PUBLIC uint32_t virtualMotionIndex;
 };
 
 SHADER_PUBLIC struct Fsr2RcasPushConstant
@@ -1364,6 +1367,8 @@ SHADER_PUBLIC struct ObjectMotionExtractPushConstant
     SHADER_PUBLIC uint32_t outputIndex;
 };
 
+SHADER_PUBLIC SHADER_CONST float REFLECTION_VIRTUAL_MOTION_INVALID = 4.0f;
+
 SHADER_PUBLIC struct MotionBlurVelocityExtractPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -1379,6 +1384,7 @@ SHADER_PUBLIC struct MotionBlurVelocityExtractPushConstant
     SHADER_PUBLIC float cameraDeadZonePx;
     SHADER_PUBLIC float cameraMaxRadiusPx;
     SHADER_PUBLIC float velocityScale;
+    SHADER_PUBLIC uint32_t virtualMotionIndex;
 };
 
 SHADER_PUBLIC struct MotionBlurTileVelocityPushConstant
@@ -2041,6 +2047,8 @@ SHADER_PUBLIC struct RelaxTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t confidenceIndex;
     SHADER_PUBLIC uint32_t hitDeltaIndex;
     SHADER_PUBLIC uint32_t hitDeltaHistoryIndex;
+    SHADER_PUBLIC uint32_t virtualMotionOutIndex;
+    SHADER_PUBLIC float mirrorRoughnessMax;
 };
 
 SHADER_PUBLIC struct RelaxHistoryFixPushConstant

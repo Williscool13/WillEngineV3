@@ -221,6 +221,9 @@ void TAWriteEmpty(RelaxTemporalAccumulationPushConstant pc, int2 pixelPos)
     rdgStorageFloat[pc.outSpecHitDistIndex][pixelPos] = 0.0;
     rdgStorageFloat[pc.outSpecReprojConfidenceIndex][pixelPos] = 0.0;
     rdgStorageFloat4[pc.outPrevNRIndex][pixelPos] = RelaxPackPrevNormalRoughness(float4(0.0, 0.0, 1.0, 0.0));
+    if (pc.virtualMotionOutIndex != ~0u) {
+        rdgStorageFloat2[pc.virtualMotionOutIndex][pixelPos] = float2(REFLECTION_VIRTUAL_MOTION_INVALID);
+    }
 }
 
 [shader("compute")]
@@ -626,4 +629,8 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     rdgStorageFloat[pc.outSpecHitDistIndex][pixelPos] = accReflectionHitT;
     rdgStorageFloat[pc.outSpecReprojConfidenceIndex][pixelPos] = specularHistoryConfidence;
     rdgStorageFloat4[pc.outPrevNRIndex][pixelPos] = RelaxPackPrevNormalRoughness(float4(currentNormal, currentRoughness));
+    if (pc.virtualMotionOutIndex != ~0u) {
+        bool bTrusted = hitDist > 0.0 && VMBReprojectionFound > 0.0 && virtualHistoryAmount > 0.5 && currentRoughness <= pc.mirrorRoughnessMax;
+        rdgStorageFloat2[pc.virtualMotionOutIndex][pixelPos] = bTrusted ? prevUVVMB - pixelUv : float2(REFLECTION_VIRTUAL_MOTION_INVALID);
+    }
 }

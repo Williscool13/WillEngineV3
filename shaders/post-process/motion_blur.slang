@@ -66,7 +66,14 @@ void ComputeMotionBlurVelocityExtract(uniform MotionBlurVelocityExtractPushConst
         viewZ = om.z;
         objectMask = om.w;
         objectUv = om.xy * objectMask;
-        translationUv = (UnpackMotionVectors(gt1.g) * 0.5 - om.xy) - rotationUv;
+        float2 motionUv = UnpackMotionVectors(gt1.g) * 0.5;
+        if (pc.virtualMotionIndex != ~0u) {
+            float2 virtualMotion = rdgTexturesFloat2[pc.virtualMotionIndex].Load(int3(srcCoord, 0)).xy;
+            if (abs(virtualMotion.x) < REFLECTION_VIRTUAL_MOTION_INVALID * 0.5) {
+                motionUv = virtualMotion;
+            }
+        }
+        translationUv = (motionUv - om.xy) - rotationUv;
         cameraMask = (gt1.w & GBUFFER1_NO_CAMERA_MOTION_BLUR_BIT) != 0u ? 0.0 : 1.0;
     }
 
