@@ -149,6 +149,23 @@ struct DiagnosticsState
     bool bStores{false};
 };
 
+struct PickPixelState
+{
+    float u{0.0f};
+    float v{0.0f};
+    uint32_t requestId{0};
+    bool bPending{false};
+    bool bPrintToConsole{false};
+
+    uint32_t resolvedRequestId{0};
+    bool bHit{false};
+    uint32_t instanceIndex{~0u};
+    uint32_t meshletIndex{~0u};
+    uint32_t triangleIndex{~0u};
+    float viewDepth{0.0f};
+    glm::vec3 worldPos{0.0f};
+};
+
 struct DebugState
 {
     Core::DebugRenderParams render{};
@@ -166,6 +183,7 @@ struct DebugState
 
     Core::ReSTIRParams restir{};
     DiagnosticsState diagnostics{};
+    PickPixelState pick{};
     EmissiveDebugState emissive{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};

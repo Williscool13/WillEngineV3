@@ -278,6 +278,43 @@ void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
     });
 }
 
+void SetupDebugPickPixelPass(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             uint32_t sceneIndex,
+                             StringID visibilityTexture,
+                             StringID depthTexture,
+                             Core::Array<uint32_t, 2> renderExtent,
+                             Core::Array<uint32_t, 2> pickPixel,
+                             uint32_t requestId)
+{
+    ZoneScoped;
+    if (!graph.HasBuffer("readback_buffer"_sid) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasTexture(visibilityTexture) || !graph.HasTexture(depthTexture)) { return; }
+
+    RenderPass& pass = graph.AddPass("Pick Pixel"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
+    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadSampledImage(visibilityTexture);
+    pass.ReadSampledImage(depthTexture);
+    pass.ReadWriteBuffer("readback_buffer"_sid);
+    pass.Execute([pipelineManager, sceneIndex, visibilityTexture, depthTexture, renderExtent, pickPixel, requestId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_pick_pixel"_sid);
+        if (!pipelineEntry) { return; }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        DebugPickPixelPushConstant pc{
+            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+            .readback = graph.GetBufferAddress("readback_buffer"_sid),
+            .pickPixel = {pickPixel[0], pickPixel[1]},
+            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .sceneDataIndex = sceneIndex,
+            .visibilityTextureIndex = graph.GetSampledImageViewDescriptorIndex(visibilityTexture),
+            .depthTextureIndex = graph.GetSampledImageViewDescriptorIndex(depthTexture),
+            .requestId = requestId,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, 1, 1, 1);
+    });
+}
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,

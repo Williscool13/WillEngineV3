@@ -14,7 +14,9 @@
 #include "core/time/frame_stamp.h"
 #include "engine/engine_api.h"
 #include "engine/components/camera_components.h"
+#include "engine/components/common_components.h"
 #include "engine/components/core_components.h"
+#include "engine/components/render_components.h"
 #include "render/shaders/restir_interop.h"
 #include "render/shaders/world_grid_interop.h"
 #include "engine/include/engine_context.h"
@@ -479,6 +481,91 @@ static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
     return ToolResult::Complete;
 }
 
+static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
+{
+    PickPixelState& pick = state->debug.pick;
+
+    if (call.HasArg("u") || call.HasArg("v")) {
+        const double u = call.GetFloat("u", -1.0);
+        const double v = call.GetFloat("v", -1.0);
+        if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) {
+            call.SetError("u and v must both be given and lie in 0..1, measured from the top-left of the viewport image");
+            return ToolResult::Error;
+        }
+        pick.u = static_cast<float>(u);
+        pick.v = static_cast<float>(v);
+        ++pick.requestId;
+        pick.bPending = true;
+        call.SetInt("requestId", pick.requestId);
+        call.SetBool("pending", true);
+        return ToolResult::Complete;
+    }
+
+    call.SetInt("requestId", pick.requestId);
+    const bool bResolved = pick.requestId != 0u && !pick.bPending;
+    call.SetBool("resolved", bResolved);
+    if (!bResolved || !pick.bHit) {
+        call.SetBool("hit", false);
+        return ToolResult::Complete;
+    }
+
+    const InstanceStore& store = state->instanceStore;
+    if (pick.instanceIndex >= store.GetWatermark()) {
+        call.SetBool("hit", false);
+        call.SetBool("stale", true);
+        call.SetInt("instanceIndex", pick.instanceIndex);
+        call.SetInt("instanceWatermark", store.GetWatermark());
+        return ToolResult::Complete;
+    }
+    const InstanceSource& source = store[pick.instanceIndex];
+
+    call.SetBool("hit", true);
+    call.SetInt("instanceIndex", pick.instanceIndex);
+    call.SetInt("meshletIndex", pick.meshletIndex);
+    call.SetInt("triangleId", pick.triangleIndex);
+    call.SetFloat("viewDepth", pick.viewDepth);
+    call.BeginArray("worldPos");
+    for (int32_t i = 0; i < 3; ++i) { call.PushFloat(pick.worldPos[i]); }
+    call.End();
+
+    call.SetString("stableId", HexId(source.stableId).c_str());
+    const entt::entity* found = state->stableIdToEntityMap.Find(StringID(source.stableId));
+    const entt::entity entity = found && state->registry.valid(*found) ? *found : entt::null;
+    if (entity != entt::null) {
+        const auto* name = state->registry.try_get<Component::NameComponent>(entity);
+        call.SetString("name", name ? name->name.c_str() : "");
+        const auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        const StaticModel* model = runtime ? ctx->assetManager->GetModel(runtime->modelHandle) : nullptr;
+        if (model) { call.SetString("modelName", model->name.c_str()); } else { call.SetNull("modelName"); }
+    }
+    else {
+        call.SetNull("name");
+        call.SetNull("modelName");
+    }
+
+    call.SetInt("modelPrimitiveOrdinal", source.modelPrimitiveOrdinal);
+    call.SetInt("primitiveIndex", source.primitiveIndex);
+    call.SetInt("sourceNodeIndex", source.sourceNodeIndex);
+    call.SetInt("modelSlot", source.modelSlot);
+    call.SetString("materialId", HexId(source.materialID.id).c_str());
+    call.SetInt("materialIndex", source.materialIndex);
+    const Material* material = ctx->materialManager ? ctx->materialManager->GetMaterial(source.materialID) : nullptr;
+    if (material) {
+        call.SetString("materialName", material->name.c_str());
+        call.BeginArray("emissiveFactor");
+        for (int32_t i = 0; i < 4; ++i) { call.PushFloat(material->props.emissiveFactor[i]); }
+        call.End();
+    }
+    else {
+        call.SetNull("materialName");
+        call.SetNull("emissiveFactor");
+    }
+    call.SetBool("emissiveLight", source.emissiveMeshSlot != ~0u);
+    call.SetInt("emissiveMeshSlot", source.emissiveMeshSlot);
+    call.SetInt("lightIndex", source.lightIndex);
+    return ToolResult::Complete;
+}
+
 static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
 {
     const char* name = call.GetString("name", "");
@@ -582,6 +669,18 @@ void RegisterEngineTools(EngineState* state)
             "limit":{"type":"integer","default":100,"minimum":1,"maximum":1000},
             "offset":{"type":"integer","default":0,"minimum":0}}})",
         .invoke = &QueryScene,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
+    RegisterTool(state, {
+        .id = "pick_pixel"_sid,
+        .name = "pick_pixel",
+        .description = "What is under a viewport pixel. With u and v (0..1, origin top-left of the image capture_screenshot saves) it arms a pick and returns {requestId, pending} immediately; the GPU answers a few frames later. Call it again with no arguments for the latest result: resolved, hit, and on a hit the instance slot, stable id, entity and model name, primitive, material and whether the instance is an emissive light.",
+        .inputSchemaJson = R"({"type":"object","properties":{
+            "u":{"type":"number","minimum":0,"maximum":1,"description":"Horizontal position across the viewport image, 0 = left"},
+            "v":{"type":"number","minimum":0,"maximum":1,"description":"Vertical position down the viewport image, 0 = top"}}})",
+        .invoke = &PickPixel,
         .origin = Origin::Engine,
         .bNeedsDrain = true,
     });

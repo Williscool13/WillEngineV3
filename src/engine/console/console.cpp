@@ -14,7 +14,9 @@
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
 #include "engine/components/camera_components.h"
+#include "engine/components/common_components.h"
 #include "engine/components/core_components.h"
+#include "engine/material_manager.h"
 #include "engine/input/engine_actions.h"
 #include "engine/systems/system_graph.h"
 #include "engine/ui/ui_zindex.h"
@@ -308,6 +310,21 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, config.bLimitFps ? Core::InlineString<64>::Format("  fpsmax %d", config.frameLimitTarget).c_str() : "  fpsmax uncapped");
     });
 
+    Register(state, Origin::Engine, "pick", "Print the entity, primitive and material under the mouse cursor", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+        const float u = (state->input.mousePositionAbsolute.x - static_cast<float>(ctx->windowContext.viewportOffsetX)) / static_cast<float>(ctx->windowContext.viewportWidth);
+        const float v = (state->input.mousePositionAbsolute.y - static_cast<float>(ctx->windowContext.viewportOffsetY)) / static_cast<float>(ctx->windowContext.viewportHeight);
+        if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {
+            Print(state, "  cursor is outside the viewport");
+            return;
+        }
+        Engine::PickPixelState& pick = state->debug.pick;
+        pick.u = u;
+        pick.v = v;
+        ++pick.requestId;
+        pick.bPending = true;
+        pick.bPrintToConsole = true;
+    });
+
     Register(state, Origin::Engine, "quit", "Shut the engine down", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
         state->requests.bRequestedQuit = true;
         Print(state, "  quitting");
@@ -563,9 +580,33 @@ static void SnapEditorCameraToGameCamera(Engine::EngineState* state)
     editorT.rotation = gameT.rotation;
 }
 
+static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    const Engine::PickPixelState& pick = state->debug.pick;
+    if (!pick.bHit || pick.instanceIndex >= state->instanceStore.GetWatermark()) {
+        Print(state, "  pick: nothing");
+        return;
+    }
+    const Engine::InstanceSource& source = state->instanceStore[pick.instanceIndex];
+    const entt::entity* found = state->stableIdToEntityMap.Find(StringID(source.stableId));
+    const auto* name = found && state->registry.valid(*found) ? state->registry.try_get<Engine::Component::NameComponent>(*found) : nullptr;
+    const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
+    Print(state, Core::InlineString<256>::Format("  pick: %s, primitive ordinal %u (index %u, node %u), instance %u", name ? name->name.c_str() : "(no entity)", source.modelPrimitiveOrdinal, source.primitiveIndex, source.sourceNodeIndex, pick.instanceIndex).c_str());
+    if (material) {
+        const auto& e = material->props.emissiveFactor;
+        Print(state, Core::InlineString<256>::Format("  material %s (%016llx), emissive (%.3f, %.3f, %.3f) x %.0f", material->name.c_str(), static_cast<unsigned long long>(source.materialID.id), e[0], e[1], e[2], e[3]).c_str());
+    }
+    Print(state, Core::InlineString<256>::Format("  emissive light: %s, world (%.3f, %.3f, %.3f)", source.emissiveMeshSlot != ~0u ? "yes" : "no", pick.worldPos.x, pick.worldPos.y, pick.worldPos.z).c_str());
+}
+
 void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ConsoleState& c = state->console;
+
+    if (state->debug.pick.bPrintToConsole && !state->debug.pick.bPending) {
+        state->debug.pick.bPrintToConsole = false;
+        PrintPickResult(ctx, state);
+    }
 
     if (c.bOwnsContext && state->inputContext != Engine::InputContext::Console) {
         c.bOpen = false;

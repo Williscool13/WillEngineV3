@@ -498,6 +498,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     std::memcpy(&statisticsManager.scratch.regir.cursor, &readbackData->regirCursorValid, sizeof(ReGIRCursorCell));
     static_assert(sizeof(WorldGridCursorCell) == offsetof(ReadbackStruct, wgCursorTopMeshletCenter) + sizeof(float) * 24 - offsetof(ReadbackStruct, wgCursorValid));
     std::memcpy(&statisticsManager.scratch.worldGrid.cursor, &readbackData->wgCursorValid, sizeof(WorldGridCursorCell));
+    static_assert(sizeof(PickPixelResult) == offsetof(ReadbackStruct, pickWorldPos) + sizeof(float) * 3 - offsetof(ReadbackStruct, pickValid));
+    std::memcpy(&statisticsManager.scratch.pick, &readbackData->pickValid, sizeof(PickPixelResult));
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
@@ -1042,6 +1044,12 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             }
         } else {
             debugCursorReadback.litTexture = StringID{};
+        }
+
+        if (frameBuffer.debug.pickRequestId != 0u) {
+            const uint32_t pickX = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::clamp(frameBuffer.debug.pickU, 0.0f, 1.0f) * static_cast<float>(renderExtent[0])));
+            const uint32_t pickY = std::min(renderExtent[1] - 1, static_cast<uint32_t>((1.0f - std::clamp(frameBuffer.debug.pickV, 0.0f, 1.0f)) * static_cast<float>(renderExtent[1])));
+            SetupDebugPickPixelPass(*renderGraph, pipelineManager, 0, targets.visibility, targets.depthCopy, renderExtent, {pickX, pickY}, frameBuffer.debug.pickRequestId);
         }
         resourceManager->debugReadback.ScheduleCopies(*renderGraph, "debug_readback_buffer"_sid);
 

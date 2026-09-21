@@ -60,6 +60,15 @@ void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
                                    Core::Array<uint32_t, 2> renderExtent,
                                    Core::Array<uint32_t, 2> cursorPixel);
 
+void SetupDebugPickPixelPass(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             uint32_t sceneIndex,
+                             StringID visibilityTexture,
+                             StringID depthTexture,
+                             Core::Array<uint32_t, 2> renderExtent,
+                             Core::Array<uint32_t, 2> pickPixel,
+                             uint32_t requestId);
+
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,

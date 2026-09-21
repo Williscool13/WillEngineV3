@@ -206,6 +206,13 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t wgCursorTopMeshletLightCount[8];
     SHADER_PUBLIC float wgCursorTopMeshletPower[8];
     SHADER_PUBLIC float wgCursorTopMeshletCenter[24];
+    SHADER_PUBLIC uint32_t pickValid;
+    SHADER_PUBLIC uint32_t pickRequestId;
+    SHADER_PUBLIC uint32_t pickInstanceIndex;
+    SHADER_PUBLIC uint32_t pickMeshletIndex;
+    SHADER_PUBLIC uint32_t pickTriangleIndex;
+    SHADER_PUBLIC float pickViewDepth;
+    SHADER_PUBLIC float pickWorldPos[3];
 };
 
 SHADER_PUBLIC struct DrawMeshTasksIndirectCommand

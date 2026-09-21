@@ -138,6 +138,9 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->debug = state->debug.render;
     frameBuffer->debug.bReGIRCursorCell = state->debug.diagnostics.bReGIRCursor;
     frameBuffer->debug.bWorldGridCursorCell = state->debug.diagnostics.bWorldGridCursor;
+    frameBuffer->debug.pickRequestId = state->debug.pick.bPending ? state->debug.pick.requestId : 0u;
+    frameBuffer->debug.pickU = state->debug.pick.u;
+    frameBuffer->debug.pickV = state->debug.pick.v;
     if (!state->debug.bGIFreeze) {
         frameBuffer->debug.bFreezeGIField = false;
         frameBuffer->debug.bFreezeScreenFeedback = false;

@@ -136,6 +136,18 @@ SHADER_PUBLIC struct DebugReGIRCursorCellPushConstant
     SHADER_PUBLIC uint depthTextureIndex;
 };
 
+SHADER_PUBLIC struct DebugPickPixelPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(ReadbackStruct) readback;
+    SHADER_PUBLIC uint2 pickPixel;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint sceneDataIndex;
+    SHADER_PUBLIC uint visibilityTextureIndex;
+    SHADER_PUBLIC uint depthTextureIndex;
+    SHADER_PUBLIC uint requestId;
+};
+
 SHADER_PUBLIC struct InstanceLODPushConstant
 {
     // Read-Only

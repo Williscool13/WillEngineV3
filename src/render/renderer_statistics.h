@@ -78,6 +78,17 @@ struct WorldGridStatistics
     WorldGridCursorCell cursor{};
 };
 
+struct PickPixelResult
+{
+    uint32_t valid{};
+    uint32_t requestId{};
+    uint32_t instanceIndex{};
+    uint32_t meshletIndex{};
+    uint32_t triangleIndex{};
+    float viewDepth{};
+    float worldPos[3]{};
+};
+
 struct RendererStatistics
 {
     // Geometry pass
@@ -100,6 +111,7 @@ struct RendererStatistics
     RadianceCacheStatistics radianceCache{};
     ReGIRStatistics regir{};
     WorldGridStatistics worldGrid{};
+    PickPixelResult pick{};
 
     // Pipeline statistics (whole-frame query)
     uint64_t meshInvocations{};

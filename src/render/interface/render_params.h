@@ -570,6 +570,9 @@ struct DebugRenderParams
     int32_t worldGridDebugLevel{0};
     bool bReGIRCursorCell{false};
     bool bWorldGridCursorCell{false};
+    uint32_t pickRequestId{0};
+    float pickU{0.0f};
+    float pickV{0.0f};
     bool bRadianceCacheDebug{false};
     float radianceCacheDebugExposure{1.0f};
     int32_t radianceCacheDebugBucket{-1};

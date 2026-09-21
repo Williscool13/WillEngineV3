@@ -1671,6 +1671,21 @@ void WillEngine::Run()
                 static_assert(sizeof(Engine::WorldGridCursorCell) == sizeof(Render::WorldGridCursorCell));
                 std::memcpy(&engineContext->worldGridCursor, &worldGridCursor, sizeof(Engine::WorldGridCursorCell));
 
+                Engine::PickPixelState& pick = engineState->debug.pick;
+                if (pick.bPending) {
+                    const Render::PickPixelResult pickResult = renderThread->GetRendererStatistics().pick;
+                    if (pickResult.requestId == pick.requestId) {
+                        pick.resolvedRequestId = pickResult.requestId;
+                        pick.bHit = pickResult.valid != 0u;
+                        pick.instanceIndex = pickResult.instanceIndex;
+                        pick.meshletIndex = pickResult.meshletIndex;
+                        pick.triangleIndex = pickResult.triangleIndex;
+                        pick.viewDepth = pickResult.viewDepth;
+                        pick.worldPos = glm::vec3(pickResult.worldPos[0], pickResult.worldPos[1], pickResult.worldPos[2]);
+                        pick.bPending = false;
+                    }
+                }
+
                 Core::FrameBuffer* currentFrameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
                 ImDrawDataSnapshot* currentImguiSnapshot = engineRenderSynchronization->GetCurrentImguiSnapshot();
                 currentFrameBuffer->currentFrameBuffer = engineRenderSynchronization->currentRenderFrame;

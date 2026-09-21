@@ -744,6 +744,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(DebugWorldGridCursorCellPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("debug_regir_cursor_cell"_sid, src / "debug_regir_cursor_cell.spv", "ComputeDebugReGIRCursorCell",
                             sizeof(DebugReGIRCursorCellPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("debug_pick_pixel"_sid, src / "debug_pick_pixel.spv", "ComputeDebugPickPixel",
+                            sizeof(DebugPickPixelPushConstant), PipelineCategory::Critical);
 
     VkDescriptorSetLayout proceduralTexLayout = resourceManager->proceduralTextureGenerateResources.descriptorSetLayout.handle;
     RegisterComputePipelineCustomLayout("yellow_texture"_sid, src / "yellow_texture.spv", "ComputeYellowTexture",
