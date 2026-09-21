@@ -98,18 +98,20 @@ float3 SampleHistoryCatmullRom(float2 uv)
 // feature and background depth even though a neighboring texel almost always holds the matching surface.
 float ComputeDepthDisocclusion(float2 historyUv, float expectedPrevViewZ)
 {
-    int2 renderMax = int2(pc.sceneData.mainRenderTargetSize) - 1;
     int2 historyCoord = int2(historyUv * float2(pc.sceneData.mainRenderTargetSize));
     float tolerance = max(pc.disocclusionThreshold * abs(expectedPrevViewZ), 1e-6);
 
+    float2 quadUv = float2(historyCoord) / float2(pc.sceneData.mainRenderTargetSize);
+    float4 q0 = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+    float4 q1 = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 0));
+    float4 q2 = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(0, 1));
+    float4 q3 = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 1));
+    const float rawDepths[9] = { q0.x, q0.y, q0.z, q0.w, q1.y, q1.z, q2.x, q2.y, q3.y };
+
     float bestDelta = 1e30;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            int2 tapCoord = clamp(historyCoord + int2(x, y), int2(0), renderMax);
-            float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(tapCoord, 0)).r;
-            float prevViewZ = min(ScreenToViewSpaceDepth(prevRawDepth, pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
-            bestDelta = min(bestDelta, abs(prevViewZ - expectedPrevViewZ));
-        }
+    for (uint i = 0; i < 9; ++i) {
+        float prevViewZ = min(ScreenToViewSpaceDepth(rawDepths[i], pc.sceneData.depthLinearizeMult, pc.sceneData.depthLinearizeAdd), VIEWZ_CLAMP);
+        bestDelta = min(bestDelta, abs(prevViewZ - expectedPrevViewZ));
     }
 
     return saturate(bestDelta / tolerance - 1.0);

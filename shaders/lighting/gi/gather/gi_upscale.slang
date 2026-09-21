@@ -128,12 +128,20 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     int2 footprintBase = int2(floor(gatherCoord - 0.5));
     float2 footprintFrac = gatherCoord - 0.5 - float2(footprintBase);
     bool bAnyBackfaceTap = false;
+    float2 footprintUv = float2(footprintBase + 1) / float2(pc.gatherExtent);
+    uint4 footprintNormals = rdgTexturesUInt2[pc.guideIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
+    uint4 footprintViewZBits = rdgTexturesUInt2[pc.guideIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
+    float4 footprintTiers = rdgTexturesFloat2[pc.dataIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
+    float4 footprintSkyVis = float4(0.0);
+    if (pc.skyVisIndex != ~0x0u) {
+        footprintSkyVis = rdgTexturesFloat[pc.skyVisIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
+    }
     [unroll]
     for (uint i = 0; i < 4; i++) {
         int2 tap = clamp(footprintBase + int2(int(i & 1u), int(i >> 1u)), int2(0), int2(pc.gatherExtent) - 1);
         uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
-        uint2 tapGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(tap, 0)).xy;
-        float tapTier = rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y;
+        uint2 tapGuide = uint2(footprintNormals[i], footprintViewZBits[i]);
+        float tapTier = footprintTiers[i];
         if (asfloat(tapGuide.y) == 0.0) { continue; }
         if (uint(tapTier + 0.5) == GI_GATHER_TIER_BACKFACE) { bAnyBackfaceTap = true; continue; }
 
@@ -152,7 +160,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
-        float tapV = pc.skyVisIndex != ~0x0u ? rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r : 0.0;
+        float tapV = footprintSkyVis[i];
         float3 tapIrr = max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0));
         irrM1 += tapIrr;
         irrM2 += tapIrr * tapIrr;
@@ -205,7 +213,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
     GIGatherHistory fastHistory = { float3(0.0), 0.0, 0.0 };
     float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
-    GIGatherHistoryTaps historyTaps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0 };
+    GIGatherHistoryTaps historyTaps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0, float2(0.0) };
     if (pc.bHistoryValid != 0u || pc.skyVisAccumHistoryIndex != ~0x0u) {
         historyTaps = GIGatherResolveHistoryTaps(scene, pc.depthIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
     }

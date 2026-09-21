@@ -1,5 +1,6 @@
 import push_constant_interop;
 import bindless_declarations;
+import constants_interop;
 
 groupshared float gHiZTile[16][16];
 
@@ -13,10 +14,32 @@ void ComputeHiZBuild(uint3 dtid : SV_DispatchThreadID, uint3 gtid : SV_GroupThre
     if (all(pixel < pc.dstExtent)) {
         uint2 sBegin = pixel * pc.srcExtent / pc.dstExtent;
         uint2 sEnd = (pixel + 1u) * pc.srcExtent / pc.dstExtent;
-        for (uint sy = sBegin.y; sy < sEnd.y; sy++) {
-            for (uint sx = sBegin.x; sx < sEnd.x; sx++) {
-                float d = pc.bSampledSrc != 0u ? rdgTexturesFloat[pc.srcIndex].Load(int3(sx, sy, 0)) : rdgStorageFloat[pc.srcIndex][uint2(sx, sy)];
-                depth = min(depth, d);
+        uint2 span = sEnd - sBegin;
+        if (pc.bSampledSrc != 0u && all(span <= uint2(4u, 4u))) {
+            float2 quadUv = float2(sBegin + 1u) / float2(pc.srcExtent);
+            float4 quads[4];
+            quads[0] = rdgTexturesFloat[pc.srcIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+            quads[1] = rdgTexturesFloat[pc.srcIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(2, 0));
+            quads[2] = rdgTexturesFloat[pc.srcIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(0, 2));
+            quads[3] = rdgTexturesFloat[pc.srcIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(2, 2));
+            const uint2 quadBases[4] = { uint2(0, 0), uint2(2, 0), uint2(0, 2), uint2(2, 2) };
+            const uint2 componentOffsets[4] = { uint2(0, 1), uint2(1, 1), uint2(1, 0), uint2(0, 0) };
+            [unroll]
+            for (uint q = 0; q < 4; q++) {
+                [unroll]
+                for (uint c = 0; c < 4; c++) {
+                    // Texels past the block belong to the next destination pixel and would push this one farther than it is.
+                    if (all(quadBases[q] + componentOffsets[c] < span)) {
+                        depth = min(depth, quads[q][c]);
+                    }
+                }
+            }
+        } else {
+            for (uint sy = sBegin.y; sy < sEnd.y; sy++) {
+                for (uint sx = sBegin.x; sx < sEnd.x; sx++) {
+                    float d = pc.bSampledSrc != 0u ? rdgTexturesFloat[pc.srcIndex].Load(int3(sx, sy, 0)) : rdgStorageFloat[pc.srcIndex][uint2(sx, sy)];
+                    depth = min(depth, d);
+                }
             }
         }
         rdgStorageFloat[pc.dstIndex[0]][pixel] = depth;

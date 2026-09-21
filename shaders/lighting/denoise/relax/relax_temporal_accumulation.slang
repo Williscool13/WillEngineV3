@@ -21,14 +21,21 @@ static const int TA_BUFFER_Y = TA_GROUP_Y + TA_BORDER * 2;
 
 groupshared float4 sharedNormalSpecHitT[TA_BUFFER_Y][TA_BUFFER_X];
 
-void TAPreload(uint2 sharedPos, int2 globalPos, int2 rectSize, uint guideIndex, uint specInputIndex)
+static const uint TA_QUADS_X = TA_BUFFER_X / 2;
+static const uint TA_QUAD_COUNT = TA_QUADS_X * (TA_BUFFER_Y / 2);
+
+/** One thread fills one 2x2 quad of the shared buffer from two gathers; the clamp-to-edge point sampler stands in for the per-texel clamp. */
+void TAPreloadQuad(uint2 sharedBase, int2 globalBase, float2 rectSizeInv, uint guideIndex, uint specInputIndex)
 {
-    globalPos = clamp(globalPos, int2(0, 0), rectSize - 1);
-    uint packedNR = rdgTexturesUInt2[guideIndex].Load(int3(globalPos, 0)).x;
-    float4 normalSpecHitT = float4(RelaxUnpackGuideNormalRoughness(packedNR).xyz, 0);
-    float4 specIllum = rdgTexturesFloat4[specInputIndex].Load(int3(globalPos, 0));
-    normalSpecHitT.a = specIllum.a;
-    sharedNormalSpecHitT[sharedPos.y][sharedPos.x] = normalSpecHitT;
+    float2 quadUv = float2(globalBase + 1) * rectSizeInv;
+    uint4 packedNR = rdgTexturesUInt2[guideIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+    float4 specHitT = rdgTexturesFloat4[specInputIndex].GatherAlpha(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+    const uint2 quadOffsets[4] = { uint2(0, 1), uint2(1, 1), uint2(1, 0), uint2(0, 0) };
+    [unroll]
+    for (uint c = 0; c < 4; c++) {
+        uint2 sharedPos = sharedBase + quadOffsets[c];
+        sharedNormalSpecHitT[sharedPos.y][sharedPos.x] = float4(RelaxUnpackGuideNormalRoughness(packedNR[c]).xyz, specHitT[c]);
+    }
 }
 
 float IsReprojectionTapValid(float3 currentWorldPos, float3 previousWorldPos, float3 currentNormal, float disocclusionThreshold)
@@ -227,15 +234,10 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     if (isSky == 0.0)
     {
         int2 groupBase = pixelPos - threadPos - TA_BORDER;
-        uint stageNum = (TA_BUFFER_X * TA_BUFFER_Y + TA_GROUP_X * TA_GROUP_Y - 1) / (TA_GROUP_X * TA_GROUP_Y);
-        for (uint stage = 0; stage < stageNum; stage++)
+        if (threadIndex < TA_QUAD_COUNT)
         {
-            uint virtualIndex = threadIndex + stage * TA_GROUP_X * TA_GROUP_Y;
-            uint2 newId = uint2(virtualIndex % TA_BUFFER_X, virtualIndex / TA_BUFFER_X);
-            if (stage == 0 || virtualIndex < TA_BUFFER_X * TA_BUFFER_Y)
-            {
-                TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.guideIndex, pc.specInputIndex);
-            }
+            uint2 sharedBase = uint2(threadIndex % TA_QUADS_X, threadIndex / TA_QUADS_X) * 2u;
+            TAPreloadQuad(sharedBase, groupBase + int2(sharedBase), rc.gRectSizeInv, pc.guideIndex, pc.specInputIndex);
         }
     }
     GroupMemoryBarrierWithGroupSync();

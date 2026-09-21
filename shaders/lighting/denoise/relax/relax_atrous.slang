@@ -138,6 +138,12 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
         float4 specMoments = float4(0.0);
         float4 diffMoments = float4(0.0);
         float momentWSum = 0.0;
+        float2 quadUv = float2(pixelPos) * rc.gRectSizeInv;
+        uint4 q0 = rdgTexturesUInt2[pc.guideIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+        uint4 q1 = rdgTexturesUInt2[pc.guideIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 0));
+        uint4 q2 = rdgTexturesUInt2[pc.guideIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(0, 1));
+        uint4 q3 = rdgTexturesUInt2[pc.guideIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 1));
+        const uint tapViewZBits[3][3] = { { q0.w, q0.z, q1.z }, { q0.x, q0.y, q1.y }, { q2.x, q2.y, q3.y } };
         [unroll]
         for (int dy = -1; dy <= 1; dy++)
         {
@@ -145,7 +151,7 @@ void RelaxAtrousMain(uniform RelaxAtrousPushConstant pc, int2 pixelPos : SV_Disp
             for (int dx = -1; dx <= 1; dx++)
             {
                 int2 p = clamp(pixelPos + int2(dx, dy), int2(0, 0), rc.gRectSize - int2(1, 1));
-                if (!RelaxIsInDenoisingRange(RelaxLoadGuideViewZ(pc.guideIndex, p), rc.gDenoisingRange)) { continue; }
+                if (!RelaxIsInDenoisingRange(asfloat(tapViewZBits[dy + 1][dx + 1]), rc.gDenoisingRange)) { continue; }
                 float k = gaussKernel[abs(dx)][abs(dy)];
                 specMoments += rdgTexturesFloat4[pc.specIndex].Load(int3(p, 0)) * k;
                 diffMoments += rdgTexturesFloat4[pc.diffIndex].Load(int3(p, 0)) * k;

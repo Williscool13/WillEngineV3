@@ -91,10 +91,9 @@ public float3 GIGatherDepthNormal(SceneData scene, uint depthIndex, int2 px, uin
 }
 
 /** Per-tap reprojection gate shared by every full-res history fetch: plane-distance disocclusion (the compared |dz|*NoV already projects out slant, so the tolerance is flat) plus a normal test. bShadingNormalAgrees false = caller settles it on geometric normals. */
-public bool GIGatherHistoryTapValid(SceneData scene, uint depthHistoryIndex, uint gbufferOneHistoryIndex, int2 tap, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN, out bool bShadingNormalAgrees)
+public bool GIGatherHistoryTapValid(SceneData scene, float prevRawDepth, uint prevPackedNormal, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN, out bool bShadingNormalAgrees)
 {
     bShadingNormalAgrees = false;
-    float prevRawDepth = rdgTexturesFloat[depthHistoryIndex].Load(int3(tap, 0)).r;
     if (prevRawDepth <= 0.0) {
         return false;
     }
@@ -102,7 +101,7 @@ public bool GIGatherHistoryTapValid(SceneData scene, uint depthHistoryIndex, uin
     if (abs(prevViewZ - expectedPrevViewZ) * NoV > disocclusionThreshold) {
         return false;
     }
-    float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[gbufferOneHistoryIndex].Load(int3(tap, 0)).r)));
+    float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(prevPackedNormal)));
     // 60 degrees, matching the tier-0 screen gate: the plane test is blind to old surfaces CROSSING the current plane (buried pillar faces at ground level), and those arrive with perpendicular normals (dot ~ 0).
     bShadingNormalAgrees = dot(worldN, prevWorldN) >= 0.5;
     return true;
@@ -121,12 +120,13 @@ public struct GIGatherHistoryTaps
     public float4 weights;
     public float weightSum;
     public float countScale;
+    public float2 quadUv;
 };
 
 /** Reprojection and per-tap validity for a full-res history fetch, resolved once so several histories at the same pixel share the depth/normal gate. */
 public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
-    GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0 };
+    GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0, float2(0.0) };
 
     float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
     if (any(historyUv < float2(0.0)) || any(historyUv > float2(1.0))) {
@@ -153,6 +153,9 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
     const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
     bool bGeoNormal = false;
     float3 geoWorldN = float3(0.0);
+    taps.quadUv = float2(taps.origin + 1) / float2(renderExtent);
+    float4 prevRawDepths = rdgTexturesFloat[depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], taps.quadUv).wzxy;
+    uint4 prevPackedNormals = rdgTexturesUInt4[gbufferOneHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], taps.quadUv).wzxy;
 
     [unroll]
     for (uint i = 0; i < 4; i++) {
@@ -164,7 +167,7 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
             continue;
         }
         bool bShadingNormalAgrees;
-        if (!GIGatherHistoryTapValid(scene, depthHistoryIndex, gbufferOneHistoryIndex, tap, expectedPrevViewZ, NoV, disocclusionThreshold, worldN, bShadingNormalAgrees)) {
+        if (!GIGatherHistoryTapValid(scene, prevRawDepths[i], prevPackedNormals[i], expectedPrevViewZ, NoV, disocclusionThreshold, worldN, bShadingNormalAgrees)) {
             continue;
         }
         if (!bShadingNormalAgrees) {
@@ -235,15 +238,18 @@ public struct GIGatherScalarHistory
 public GIGatherScalarHistory GIGatherFetchScalarHistory(GIGatherHistoryTaps taps, uint historyIndex)
 {
     GIGatherScalarHistory result = { 0.0, 0.0, 0.0 };
-    const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
 
     float2 sum = float2(0.0);
-    [unroll]
-    for (uint i = 0; i < 4; i++) {
-        if (taps.weights[i] <= 0.0) {
-            continue;
+    if (taps.weightSum > 0.01) {
+        float4 values = rdgTexturesFloat2[historyIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], taps.quadUv).wzxy;
+        float4 counts = rdgTexturesFloat2[historyIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], taps.quadUv).wzxy;
+        [unroll]
+        for (uint i = 0; i < 4; i++) {
+            if (taps.weights[i] <= 0.0) {
+                continue;
+            }
+            sum += float2(values[i], counts[i]) * taps.weights[i];
         }
-        sum += rdgTexturesFloat2[historyIndex].Load(int3(taps.origin + tapOffsets[i], 0)).rg * taps.weights[i];
     }
 
     if (taps.weightSum > 0.01) {

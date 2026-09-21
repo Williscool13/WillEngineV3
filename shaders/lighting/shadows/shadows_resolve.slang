@@ -1,6 +1,7 @@
 import common_interop;
 import push_constant_interop;
 import bindless_declarations;
+import constants_interop;
 import shader_functions;
 import gi_gather_common;
 
@@ -49,16 +50,15 @@ void ComputeShadowsResolve(uniform ShadowsResolvePushConstant pc, uint3 threadID
                 if (pc.temporalClampScale > 0.0) {
                     float aoMin = gtao;
                     float aoMax = gtao;
-                    [unroll]
-                    for (int dy = -1; dy <= 1; dy++) {
-                        [unroll]
-                        for (int dx = -1; dx <= 1; dx++) {
-                            int2 tap = clamp(int2(pixel) + int2(dx, dy), int2(0), int2(renderExtent) - 1);
-                            float v = rdgTexturesFloat[pc.gtaoFilteredIndex].Load(int3(tap, 0)).x;
-                            aoMin = min(aoMin, v);
-                            aoMax = max(aoMax, v);
-                        }
-                    }
+                    float2 quadUv = float2(pixel) / scene.mainRenderTargetSize;
+                    float4 q0 = rdgTexturesFloat[pc.gtaoFilteredIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+                    float4 q1 = rdgTexturesFloat[pc.gtaoFilteredIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 0));
+                    float4 q2 = rdgTexturesFloat[pc.gtaoFilteredIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(0, 1));
+                    float4 q3 = rdgTexturesFloat[pc.gtaoFilteredIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 1));
+                    float4 quadMin = min(min(q0, q1), min(q2, q3));
+                    float4 quadMax = max(max(q0, q1), max(q2, q3));
+                    aoMin = min(min(quadMin.x, quadMin.y), min(quadMin.z, quadMin.w));
+                    aoMax = max(max(quadMax.x, quadMax.y), max(quadMax.z, quadMax.w));
                     // Reprojection blur under motion reads as change; widen the box with velocity (Jimenez) so it cuts trails, not moving-but-valid history.
                     float center = 0.5 * (aoMin + aoMax);
                     float halfWidth = (0.5 * (aoMax - aoMin) + GTAO_TEMPORAL_CLAMP_EPS) * pc.temporalClampScale * (1.0 + 0.5 * min(motionPixels, 2.0));

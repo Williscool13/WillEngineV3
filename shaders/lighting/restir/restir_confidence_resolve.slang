@@ -1,5 +1,6 @@
 import push_constant_interop;
 import bindless_declarations;
+import constants_interop;
 import restir_common;
 import shader_functions;
 
@@ -34,14 +35,13 @@ void ComputeReSTIRConfidenceResolve(uniform ReSTIRConfidenceResolvePushConstant 
     }
 
     if (pc.sunFlipIndex != ~0u) {
-        float flip = 0.0;
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                int2 q = clamp(int2(pixel) + int2(dx, dy), int2(0, 0), int2(pc.renderExtent) - int2(1, 1));
-                flip = max(flip, rdgTexturesFloat[pc.sunFlipIndex].Load(int3(q, 0)).r);
-            }
-        }
-        dip += flip;
+        float2 quadUv = float2(pixel) / float2(pc.renderExtent);
+        float4 q0 = rdgTexturesFloat[pc.sunFlipIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+        float4 q1 = rdgTexturesFloat[pc.sunFlipIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 0));
+        float4 q2 = rdgTexturesFloat[pc.sunFlipIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(0, 1));
+        float4 q3 = rdgTexturesFloat[pc.sunFlipIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(1, 1));
+        float4 quadMax = max(max(q0, q1), max(q2, q3));
+        dip += max(max(max(quadMax.x, quadMax.y), max(quadMax.z, quadMax.w)), 0.0);
     }
 
     if (pc.prevConfidenceIndex != ~0u && pc.blendFactor < 1.0 && pc.confidenceStrength > 0.0) {

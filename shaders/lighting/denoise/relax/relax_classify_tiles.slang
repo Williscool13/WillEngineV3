@@ -30,13 +30,17 @@ void RelaxClassifyTilesMain(uniform RelaxClassifyTilesPushConstant pc,
     uint2 pixelPos = gid * 16 + gtid * uint2(2, 4);
     uint isSky = 0;
 
-    for (uint i = 0; i < 2; i++) {
-        for (uint j = 0; j < 4; j++) {
-            uint2 pos = pixelPos + uint2(i, j);
+    float2 quadUv = float2(pixelPos + 1u) * rc.gRectSizeInv;
+    float4 viewZQuads[2];
+    viewZQuads[0] = rdgTexturesFloat[pc.viewZIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv);
+    viewZQuads[1] = rdgTexturesFloat[pc.viewZIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], quadUv, int2(0, 2));
+    const uint2 quadOffsets[4] = { uint2(0, 1), uint2(1, 1), uint2(1, 0), uint2(0, 0) };
+    for (uint q = 0; q < 2; q++) {
+        for (uint c = 0; c < 4; c++) {
+            uint2 pos = pixelPos + quadOffsets[c] + uint2(0, q * 2u);
             // Out-of-rect texels vote sky (was implicit via the raw-depth OOB load linearizing to far).
             bool bInRect = pos.x < uint(rc.gRectSize.x) && pos.y < uint(rc.gRectSize.y);
-            float viewZ = rdgTexturesFloat[pc.viewZIndex].Load(int3(pos, 0)).r;
-            isSky += (!bInRect || !RelaxIsInDenoisingRange(viewZ, rc.gDenoisingRange)) ? 1 : 0;
+            isSky += (!bInRect || !RelaxIsInDenoisingRange(viewZQuads[q][c], rc.gDenoisingRange)) ? 1 : 0;
         }
     }
 

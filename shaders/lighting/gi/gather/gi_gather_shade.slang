@@ -312,6 +312,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                                 float3 giPrevSum = float3(0.0);
                                 float sumW = 0.0;
                                 float receiverAgreement = saturate(dot(normalize(mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz - hitWorldPos), -direction));
+                                float4 prevRawDepths = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], float2(base + 1) / float2(pc.renderExtent)).wzxy;
                                 [unroll]
                                 for (uint c = 0; c < 4; c++) {
                                     int2 offset = int2(int(c & 1u), int((c >> 1u) & 1u));
@@ -320,7 +321,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                                         continue;
                                     }
                                     int2 corner = clamp(base + offset, int2(0), int2(pc.renderExtent) - int2(1));
-                                    float prevRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(corner, 0)).r;
+                                    float prevRawDepth = prevRawDepths[c];
                                     if (prevRawDepth <= 0.0) {
                                         continue;
                                     }
