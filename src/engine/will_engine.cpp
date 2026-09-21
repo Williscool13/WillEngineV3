@@ -1158,7 +1158,7 @@ void WillEngine::EditorImgui()
             sourceCatalog->Scan(memoryManager);
         }
 
-        static bool bSkipModelTextures = false;
+        static bool bSkipModelTextures = true;
 
         auto requestGenerate = [this](const Editor::AssetSourceEntry& entry) {
             const Core::Path output = Editor::AssetSourceCatalog::OutputPathFor(entry);
@@ -1231,6 +1231,15 @@ void WillEngine::EditorImgui()
             if (!ImGui::TreeNodeEx(header.c_str(), flags)) {
                 return;
             }
+            ImGui::BeginDisabled(count == 0);
+            if (ImGui::SmallButton("Generate All")) {
+                for (const Editor::AssetSourceEntry& entry : sourceCatalog->entries) {
+                    if (entry.kind == kind) {
+                        requestGenerate(entry);
+                    }
+                }
+            }
+            ImGui::EndDisabled();
             for (const Editor::AssetSourceEntry& entry : sourceCatalog->entries) {
                 if (entry.kind != kind) {
                     continue;

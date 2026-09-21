@@ -36,6 +36,10 @@ static constexpr uint32_t BLAS_SPLIT_TRIANGLE_TARGET = 16384;
 static constexpr float GLTF_EMISSIVE_STRENGTH_TO_NITS = 65536.0f;
 static constexpr float SPEC_GLOSS_ROUGHNESS_FLOOR = 0.3f;
 static constexpr uint32_t SPEC_GLOSS_CONVERT_WORKERS = 4;
+static constexpr int32_t EMISSIVE_MASK_MAX_DIMENSION = 1024;
+static constexpr uint8_t EMISSIVE_LIT_TEXEL_THRESHOLD = 16;
+static constexpr float EMISSIVE_LIT_TRIANGLE_COVERAGE = 0.5f;
+static constexpr uint32_t EMISSIVE_MAX_TRIANGLE_SUBDIVISIONS = 32;
 
 static void ConvertSpecGlossToMetalRough(const uint8_t* src, int32_t w, int32_t h, float glossFactor, float specFactor, uint8_t* dst)
 {
@@ -100,6 +104,111 @@ static uint32_t ComputeBlasSplitCount(uint32_t triangleCount, uint32_t remaining
 {
     const uint32_t desired = (triangleCount + BLAS_SPLIT_TRIANGLE_TARGET - 1) / BLAS_SPLIT_TRIANGLE_TARGET;
     return std::clamp(desired, 1u, std::max(remainingPrimitiveSlots, 1u));
+}
+
+struct EmissiveMask
+{
+    Core::HeapArray<uint8_t> texels;
+    int32_t w{0};
+    int32_t h{0};
+};
+
+struct EmissiveSplit
+{
+    Core::HeapArray<uint8_t> triangleLit;
+    uint32_t litTriangleCount{0};
+    bool bAllUnlit{false};
+};
+
+/** Max-pools max(r, g, b) down to EMISSIVE_MASK_MAX_DIMENSION, so a lit texel is never averaged away. */
+static bool BuildEmissiveMask(Core::TlsfAllocator* scratch, const Core::Path& parentPath, const RawImage& source, EmissiveMask& mask)
+{
+    int32_t w = source.w;
+    int32_t h = source.h;
+    int32_t channels = 0;
+    unsigned char* stbiData = nullptr;
+    const uint8_t* pixels = source.data.IsAllocated() ? source.data.Data() : nullptr;
+    if (pixels == nullptr) {
+        stbiData = stbi_load((parentPath / source.sourcePath.c_str()).c_str(), &w, &h, &channels, 4);
+        pixels = stbiData;
+    }
+    if (pixels == nullptr) {
+        SPDLOG_ERROR("Failed to load emissive image {}", source.sourcePath.c_str());
+        return false;
+    }
+
+    const int32_t pool = (std::max(w, h) + EMISSIVE_MASK_MAX_DIMENSION - 1) / EMISSIVE_MASK_MAX_DIMENSION;
+    mask.w = (w + pool - 1) / pool;
+    mask.h = (h + pool - 1) / pool;
+    mask.texels = Core::HeapArray<uint8_t>(scratch, Core::AllocTag::AssetGenerator, static_cast<size_t>(mask.w) * mask.h);
+    for (int32_t y = 0; y < h; ++y) {
+        for (int32_t x = 0; x < w; ++x) {
+            const uint8_t* s = pixels + (static_cast<size_t>(y) * w + x) * 4;
+            uint8_t& d = mask.texels[static_cast<size_t>(y / pool) * mask.w + x / pool];
+            d = std::max(d, std::max(std::max(s[0], s[1]), s[2]));
+        }
+    }
+    if (stbiData) {
+        stbi_image_free(stbiData);
+    }
+    return true;
+}
+
+static float WrapUv(float u, VkSamplerAddressMode mode)
+{
+    if (mode == VK_SAMPLER_ADDRESS_MODE_REPEAT) {
+        return u - std::floor(u);
+    }
+    if (mode == VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT) {
+        const float t = u - 2.0f * std::floor(u * 0.5f);
+        return t > 1.0f ? 2.0f - t : t;
+    }
+    return std::clamp(u, 0.0f, 1.0f);
+}
+
+static bool IsEmissiveTexelLit(const EmissiveMask& mask, const Engine::SamplerDesc& sampler, glm::vec2 uv)
+{
+    const int32_t x = std::min(static_cast<int32_t>(WrapUv(uv.x, sampler.addressModeU) * static_cast<float>(mask.w)), mask.w - 1);
+    const int32_t y = std::min(static_cast<int32_t>(WrapUv(uv.y, sampler.addressModeV) * static_cast<float>(mask.h)), mask.h - 1);
+    return mask.texels[static_cast<size_t>(y) * mask.w + x] >= EMISSIVE_LIT_TEXEL_THRESHOLD;
+}
+
+/** Marks each triangle lit when at least EMISSIVE_LIT_TRIANGLE_COVERAGE of its area samples lit emissive texels. Returns the lit triangle count. */
+static uint32_t ClassifyEmissiveTriangles(const EmissiveMask& mask, const Engine::SamplerDesc& sampler, const glm::vec4& uvTransform, const uint32_t* indices, uint32_t triangleCount, const float* uvs, uint8_t* triangleLit)
+{
+    const glm::vec2 texelScale{static_cast<float>(mask.w), static_cast<float>(mask.h)};
+    uint32_t litTriangleCount = 0;
+    for (uint32_t t = 0; t < triangleCount; ++t) {
+        glm::vec2 uv[3];
+        for (uint32_t c = 0; c < 3; ++c) {
+            const uint32_t v = indices[t * 3 + c];
+            uv[c] = glm::vec2(uvs[v * 2 + 0], uvs[v * 2 + 1]) * glm::vec2(uvTransform.x, uvTransform.y) + glm::vec2(uvTransform.z, uvTransform.w);
+        }
+        const glm::vec2 edge01 = uv[1] - uv[0];
+        const glm::vec2 edge02 = uv[2] - uv[0];
+        const float longestEdge = std::max(std::max(glm::length(edge01 * texelScale), glm::length(edge02 * texelScale)), glm::length((uv[2] - uv[1]) * texelScale));
+        const uint32_t n = std::clamp(static_cast<uint32_t>(std::ceil(longestEdge)), 1u, EMISSIVE_MAX_TRIANGLE_SUBDIVISIONS);
+        const float step = 1.0f / static_cast<float>(n);
+
+        uint32_t litSamples = 0;
+        for (uint32_t i = 0; i < n; ++i) {
+            for (uint32_t j = 0; j < n - i; ++j) {
+                const float a = static_cast<float>(i);
+                const float b = static_cast<float>(j);
+                if (IsEmissiveTexelLit(mask, sampler, uv[0] + edge01 * ((a + 1.0f / 3.0f) * step) + edge02 * ((b + 1.0f / 3.0f) * step))) {
+                    ++litSamples;
+                }
+                if (i + j + 1 < n && IsEmissiveTexelLit(mask, sampler, uv[0] + edge01 * ((a + 2.0f / 3.0f) * step) + edge02 * ((b + 2.0f / 3.0f) * step))) {
+                    ++litSamples;
+                }
+            }
+        }
+
+        const bool bLit = static_cast<float>(litSamples) >= EMISSIVE_LIT_TRIANGLE_COVERAGE * static_cast<float>(n * n);
+        triangleLit[t] = bLit ? 1 : 0;
+        litTriangleCount += bLit ? 1u : 0u;
+    }
+    return litTriangleCount;
 }
 
 struct GltfParseArena
@@ -533,21 +642,125 @@ bool StaticModelGenerateSlot::LoadGltf()
     if (gltf.meshes_count > 0) {
         rawModel.allMeshes = Core::HeapArray<Engine::MeshInformation>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.meshes_count);
 
+        size_t gltfPrimitiveCount = 0;
+        for (size_t m = 0; m < gltf.meshes_count; ++m) {
+            gltfPrimitiveCount += gltf.meshes[m].primitives_count;
+        }
+        Core::HeapArray<EmissiveSplit> emissiveSplits;
+        if (gltfPrimitiveCount > 0) {
+            emissiveSplits = Core::HeapArray<EmissiveSplit>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltfPrimitiveCount);
+        }
+        Core::HeapArray<EmissiveMask> emissiveMasks;
+        if (gltf.images_count > 0) {
+            emissiveMasks = Core::HeapArray<EmissiveMask>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.images_count);
+        }
+        Core::HeapArray<int32_t> nonEmissiveMaterialIndex;
+        if (gltf.materials_count > 0) {
+            nonEmissiveMaterialIndex = Core::HeapArray<int32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.materials_count);
+            for (int32_t& index : nonEmissiveMaterialIndex) {
+                index = -1;
+            }
+        }
+        uint32_t nonEmissiveMaterialCount = 0;
+        uint32_t emissiveSplitCount = 0;
+        const Core::Path emissiveParentPath = gltfPath.Parent();
+
         size_t totalPrimitives = 0;
+        size_t gltfPrimitiveOrdinal = 0;
         for (size_t m = 0; m < gltf.meshes_count; ++m) {
             const cgltf_mesh& mesh = gltf.meshes[m];
             uint32_t meshPrimitives = 0;
             for (size_t primIndex = 0; primIndex < mesh.primitives_count; ++primIndex) {
-                const uint32_t triangleCount = static_cast<uint32_t>(mesh.primitives[primIndex].indices->count / 3);
-                const uint32_t remaining = meshPrimitives < Engine::MAX_PRIMITIVES_PER_MESH ? Engine::MAX_PRIMITIVES_PER_MESH - meshPrimitives : 0;
-                const uint32_t splitCount = ComputeBlasSplitCount(triangleCount, remaining);
-                meshPrimitives += splitCount;
-                totalPrimitives += splitCount;
+                const cgltf_primitive& p = mesh.primitives[primIndex];
+                EmissiveSplit& emissiveSplit = emissiveSplits[gltfPrimitiveOrdinal++];
+                const uint32_t triangleCount = static_cast<uint32_t>(p.indices->count / 3);
+
+                const cgltf_accessor* uvAccessor = nullptr;
+                for (size_t a = 0; a < p.attributes_count; ++a) {
+                    if (p.attributes[a].type == cgltf_attribute_type_texcoord && p.attributes[a].index == 0) {
+                        uvAccessor = p.attributes[a].data;
+                    }
+                }
+
+                const int32_t materialIndex = p.material != nullptr ? static_cast<int32_t>(p.material - gltf.materials) : -1;
+                bool bEmissiveTextured = false;
+                if (materialIndex >= 0 && uvAccessor != nullptr && triangleCount > 0) {
+                    const MaterialProperties& props = rawModel.materials[materialIndex].props;
+                    const float emissiveIntensity = props.emissiveFactor.w * std::max(std::max(props.emissiveFactor.x, props.emissiveFactor.y), props.emissiveFactor.z);
+                    bEmissiveTextured = emissiveIntensity > 0.0f && props.textureImageIndices.w >= 0;
+                }
+
+                if (bEmissiveTextured) {
+                    const MaterialProperties& props = rawModel.materials[materialIndex].props;
+                    EmissiveMask& mask = emissiveMasks[props.textureImageIndices.w];
+                    if (!mask.texels.IsAllocated() && !BuildEmissiveMask(&memoryManager->AssetsScratch(), emissiveParentPath, rawModel.images[props.textureImageIndices.w], mask)) {
+                        return false;
+                    }
+                    const int32_t samplerIndex = props.textureSamplerIndices.w;
+                    const Engine::SamplerDesc sampler = samplerIndex >= 0 && samplerIndex < static_cast<int32_t>(rawModel.samplerInfos.Size()) ? rawModel.samplerInfos[samplerIndex] : Engine::SamplerDesc{};
+
+                    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, p.indices->count);
+                    cgltf_accessor_unpack_indices(p.indices, indices.Data(), sizeof(uint32_t), p.indices->count);
+                    Core::HeapArray<float> uvs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, uvAccessor->count * 2);
+                    cgltf_accessor_unpack_floats(uvAccessor, uvs.Data(), uvAccessor->count * 2);
+                    Core::HeapArray<uint8_t> triangleLit(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, triangleCount);
+                    const uint32_t litTriangleCount = ClassifyEmissiveTriangles(mask, sampler, props.emissiveUvTransform, indices.Data(), triangleCount, uvs.Data(), triangleLit.Data());
+
+                    const bool bMixed = litTriangleCount > 0 && litTriangleCount < triangleCount;
+                    if (bMixed && meshPrimitives + 2 > Engine::MAX_PRIMITIVES_PER_MESH) {
+                        LOG_WARN(Asset, "Emissive split skipped, mesh '{}' is out of primitive slots: primitive {} stays a whole light ({} of {} triangles lit)", mesh.name != nullptr ? mesh.name : "", primIndex, litTriangleCount, triangleCount);
+                    }
+                    else if (litTriangleCount < triangleCount) {
+                        if (nonEmissiveMaterialIndex[materialIndex] < 0) {
+                            nonEmissiveMaterialIndex[materialIndex] = static_cast<int32_t>(gltf.materials_count + nonEmissiveMaterialCount);
+                            ++nonEmissiveMaterialCount;
+                        }
+                        ++emissiveSplitCount;
+                        if (bMixed) {
+                            emissiveSplit.triangleLit = std::move(triangleLit);
+                            emissiveSplit.litTriangleCount = litTriangleCount;
+                        }
+                        else {
+                            emissiveSplit.bAllUnlit = true;
+                        }
+                        LOG_WARN(Asset, "Emissive split: mesh '{}' primitive {} material {}: {} of {} triangles emit", mesh.name != nullptr ? mesh.name : "", primIndex, materialIndex, litTriangleCount, triangleCount);
+                    }
+                }
+
+                const bool bSplit = emissiveSplit.triangleLit.IsAllocated();
+                const uint32_t partTriangles[2] = {bSplit ? emissiveSplit.litTriangleCount : triangleCount, bSplit ? triangleCount - emissiveSplit.litTriangleCount : 0u};
+                for (uint32_t part = 0; part < (bSplit ? 2u : 1u); ++part) {
+                    const uint32_t remaining = meshPrimitives < Engine::MAX_PRIMITIVES_PER_MESH ? Engine::MAX_PRIMITIVES_PER_MESH - meshPrimitives : 0;
+                    const uint32_t splitCount = ComputeBlasSplitCount(partTriangles[part], remaining);
+                    meshPrimitives += splitCount;
+                    totalPrimitives += splitCount;
+                }
             }
         }
 
+        if (nonEmissiveMaterialCount > 0) {
+            Core::HeapArray<Engine::Material> materials(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, gltf.materials_count + nonEmissiveMaterialCount);
+            for (size_t i = 0; i < gltf.materials_count; ++i) {
+                materials[i] = std::move(rawModel.materials[i]);
+            }
+            for (size_t i = 0; i < gltf.materials_count; ++i) {
+                if (nonEmissiveMaterialIndex[i] < 0) { continue; }
+                Engine::Material& nonEmissive = materials[nonEmissiveMaterialIndex[i]];
+                nonEmissive = materials[i];
+                nonEmissive.name.Append("_nonemissive");
+                nonEmissive.props.emissiveFactor = glm::vec4(0.0f, 0.0f, 0.0f, nonEmissive.props.emissiveFactor.w);
+                nonEmissive.props.emissiveUvTransform = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
+                nonEmissive.props.textureImageIndices.w = -1;
+                nonEmissive.props.textureSamplerIndices.w = -1;
+            }
+            rawModel.materials = std::move(materials);
+            LOG_WARN(Asset, "{}: {} primitives declared emissive by material but masked by texture; {} non-emissive material copies added", gltfPath.Filename(), emissiveSplitCount, nonEmissiveMaterialCount);
+        }
+        emissiveMasks = {};
+
         rawModel.primitives = Core::HeapArray<Primitive>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, totalPrimitives);
         int32_t currentPrimitiveIndex = -1;
+        gltfPrimitiveOrdinal = 0;
         for (size_t meshIndex = 0; meshIndex < gltf.meshes_count; ++meshIndex) {
             const cgltf_mesh& mesh = gltf.meshes[meshIndex];
 
@@ -651,6 +864,32 @@ bool StaticModelGenerateSlot::LoadGltf()
 
                 assert(sourceIndices.IsAllocated());
                 assert(sourceVertices.IsAllocated());
+
+                const EmissiveSplit& emissiveSplit = emissiveSplits[gltfPrimitiveOrdinal++];
+                const int32_t emissiveMaterialIndex = materialIndex;
+                if (emissiveSplit.bAllUnlit) {
+                    materialIndex = nonEmissiveMaterialIndex[emissiveMaterialIndex];
+                }
+                const uint32_t partCount = emissiveSplit.triangleLit.IsAllocated() ? 2u : 1u;
+                Core::HeapArray<uint32_t> unsplitIndices;
+                if (partCount == 2) {
+                    unsplitIndices = std::move(sourceIndices);
+                }
+
+                for (uint32_t part = 0; part < partCount; ++part) {
+                if (partCount == 2) {
+                    const bool bLitPart = part == 0;
+                    const size_t unsplitTriangleCount = unsplitIndices.Size() / 3;
+                    const size_t partTriangleCount = bLitPart ? emissiveSplit.litTriangleCount : unsplitTriangleCount - emissiveSplit.litTriangleCount;
+                    sourceIndices = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, partTriangleCount * 3);
+                    size_t written = 0;
+                    for (size_t t = 0; t < unsplitTriangleCount; ++t) {
+                        if ((emissiveSplit.triangleLit[t] != 0) != bLitPart) { continue; }
+                        memcpy(sourceIndices.Data() + written, unsplitIndices.Data() + t * 3, 3 * sizeof(uint32_t));
+                        written += 3;
+                    }
+                    materialIndex = bLitPart ? emissiveMaterialIndex : nonEmissiveMaterialIndex[emissiveMaterialIndex];
+                }
 
                 const uint32_t sourceTriangleCount = static_cast<uint32_t>(sourceIndices.Size() / 3);
                 const size_t usedPrimitiveSlots = meshOutput.primitiveProperties.Size();
@@ -950,6 +1189,7 @@ bool StaticModelGenerateSlot::LoadGltf()
                     }
 
                     meshOutput.primitiveProperties.PushBack({static_cast<uint32_t>(currentPrimitiveIndex), materialIndex});
+                }
                 }
             }
         }
