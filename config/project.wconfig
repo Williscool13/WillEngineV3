@@ -58,7 +58,7 @@ bAutoFreeze|1
 bGroundTruth|1
 groundTruthSpp|2
 ;
-cameraPresets|8
+cameraPresets|9
 p
 set|1
 t|0xc0fe1ce0|0xc0520ccc|0x416dc7e3
@@ -96,8 +96,13 @@ r|0x3f05604f|0xba699d22|0xbf5a828c|0xbabee132
 ;
 p
 set|1
-t|0xc0c7c6a6|0xc03701e7|0x417d3baa
-r|0xbe6162f9|0x3c85eb20|0xbf790042|0xbd93f466
+t|0xc1b101ea|0xbf5af5fd|0xc1102635
+r|0xbf181b4e|0x3dccb28e|0xbf497b9b|0xbe079e61
+;
+p
+set|0
+t|0x00000000|0x00000000|0x00000000
+r|0x3f800000|0x00000000|0x00000000|0x00000000
 ;
 sceneSlots|9
 s
@@ -121,8 +126,8 @@ id|5658940871145954959
 name|Sponza Light Swarm
 ;
 s
-id|1374373954907711623
-name|Lighting Test
+id|3101244777285753949
+name|New Scene
 ;
 s
 id|3657157123610817139

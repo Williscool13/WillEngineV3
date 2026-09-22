@@ -254,10 +254,10 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<64>::Format("  groundtruth %s, %d spp", MODE_NAMES[static_cast<uint32_t>(lighting.groundTruthMode)], lighting.groundTruthSpp).c_str());
     });
 
-    Register(state, Origin::Engine, "cam", "`cam <1-8>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "cam", "`cam <1-9>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
         if (slot < 0 || slot >= Engine::MAX_CAMERA_PRESETS) {
-            Print(state, "  usage: cam <1-8>");
+            Print(state, "  usage: cam <1-9>");
             return;
         }
         const Engine::CameraPreset& preset = state->projectConfig.cameraPresets[slot];
@@ -280,6 +280,24 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
     Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->rescan.bResources = true;
         Print(state, "  rescan queued");
+    });
+
+    Register(state, Origin::Engine, "record", "`record <name>` records the editor camera into scenes/<name>.wplay until `record stop`", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() < 2) {
+            Print(state, state->cameraRecorder.bActive ? Core::InlineString<192>::Format("  recording '%s', %d frames", state->cameraRecorder.name.c_str(), static_cast<int32_t>(state->cameraRecorder.samples.Size())).c_str() : "  usage: record <name> | record stop");
+            return;
+        }
+        if (strcmp(args[1], "stop") == 0) {
+            const Core::InlineString<512> path = state->cameraRecorder.Stop(ctx, state);
+            Print(state, path.IsEmpty() ? "  nothing recorded" : Core::InlineString<512>::Format("  wrote %s", path.c_str()).c_str());
+            return;
+        }
+        if (state->cameraRecorder.Start(ctx, state, args[1])) {
+            Print(state, Core::InlineString<192>::Format("  recording '%s'", args[1]).c_str());
+        }
+        else {
+            Print(state, "  already recording or a run is active");
+        }
     });
 
     Register(state, Origin::Engine, "framerate_scale", "`framerate_scale <x>|auto` overrides the fps / 60 history scale (0.25-4)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {

@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 
 namespace Engine
 {
@@ -30,6 +31,8 @@ struct WPlayHeader
     uint32_t eventCount{0};
     uint64_t dataOffset{0};
 };
+
+bool WriteWPlayHeader(Core::Vector<std::byte>& out, const WPlayHeader& header);
 
 std::optional<WPlayHeader> ReadWPlayHeader(const void* data, uint64_t size);
 

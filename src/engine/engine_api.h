@@ -301,6 +301,7 @@ struct EngineState
     DDGIConvergeBoost ddgiConvergeBoost;
     ProbeBakeSystem probeBake{};
     PlaytestSystem playtest{};
+    CameraRecorder cameraRecorder{};
     Console::ConsoleState console{};
     ProjectConfig projectConfig{};
     AutomationConfig automation{};

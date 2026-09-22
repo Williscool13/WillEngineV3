@@ -65,6 +65,7 @@ inline const Engine::ActionHandle ACTION_PROFILE_CAM_5{"ProfileCam_5"_sid.id};
 inline const Engine::ActionHandle ACTION_PROFILE_CAM_6{"ProfileCam_6"_sid.id};
 inline const Engine::ActionHandle ACTION_PROFILE_CAM_7{"ProfileCam_7"_sid.id};
 inline const Engine::ActionHandle ACTION_PROFILE_CAM_8{"ProfileCam_8"_sid.id};
+inline const Engine::ActionHandle ACTION_PROFILE_CAM_9{"ProfileCam_9"_sid.id};
 
 inline const Engine::ActionHandle ACTION_UI_POINTER_DOWN{"UI_PointerDown"_sid.id};
 inline const Engine::ActionHandle ACTION_UI_SCROLL{"UI_Scroll"_sid.id};

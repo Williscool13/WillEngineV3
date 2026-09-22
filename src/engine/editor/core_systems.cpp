@@ -22,7 +22,7 @@ static const Engine::ActionHandle SCENE_SLOT_ACTIONS[Engine::MAX_SCENE_SLOTS] = 
 #ifdef WDEBUG
 static const Engine::ActionHandle PROFILE_CAM_ACTIONS[Engine::MAX_CAMERA_PRESETS] = {
     Actions::ACTION_PROFILE_CAM_1, Actions::ACTION_PROFILE_CAM_2, Actions::ACTION_PROFILE_CAM_3, Actions::ACTION_PROFILE_CAM_4,
-    Actions::ACTION_PROFILE_CAM_5, Actions::ACTION_PROFILE_CAM_6, Actions::ACTION_PROFILE_CAM_7, Actions::ACTION_PROFILE_CAM_8
+    Actions::ACTION_PROFILE_CAM_5, Actions::ACTION_PROFILE_CAM_6, Actions::ACTION_PROFILE_CAM_7, Actions::ACTION_PROFILE_CAM_8, Actions::ACTION_PROFILE_CAM_9
 };
 #endif
 
@@ -40,6 +40,9 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (state->input.GetActionState(Actions::ACTION_SCREENSHOT).pressed) {
         state->requests.bWantsScreenshot |= true;
+    }
+    if (state->cameraRecorder.bActive && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
+        state->cameraRecorder.Stop(ctx, state);
     }
     if (state->input.GetActionState(Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR).pressed) {
         LoadLightingProfile(state, "ReSTIR");

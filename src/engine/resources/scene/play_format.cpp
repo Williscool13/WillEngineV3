@@ -19,6 +19,18 @@ static void CopyHeaderString(char* dst, const char* src)
     dst[copyLen] = '\0';
 }
 
+bool WriteWPlayHeader(Core::Vector<std::byte>& out, const WPlayHeader& header)
+{
+    AppendText(out, "wplay\n");
+    AppendTextF(out, "version %u %u\n", header.major, header.minor);
+    AppendTextF(out, "name %s\n", header.name);
+    AppendTextF(out, "scene %s\n", header.scene);
+    AppendTextF(out, "content_version %llu\n", static_cast<unsigned long long>(header.contentVersion));
+    AppendTextF(out, "event_count %u\n", header.eventCount);
+    AppendText(out, "end_header\n");
+    return true;
+}
+
 std::optional<WPlayHeader> ReadWPlayHeader(const void* data, uint64_t size)
 {
     constexpr size_t LINE_BUF = 256;

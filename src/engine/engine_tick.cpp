@@ -198,6 +198,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
     });
     graph.Add("PlaytestTick", &PlaytestTick);
+    graph.Add("CameraRecordTick", &CameraRecordTick);
 
     graph.Add("FunctionKeyRenderUpdate", &FunctionKeyRenderUpdate);
 

@@ -4,7 +4,9 @@
 
 #include "playtest_system.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 
 #include "ddgi_converge_boost.h"
@@ -16,6 +18,7 @@
 #include "engine/logging/engine_log.h"
 #include "engine/resources/scene/play_format.h"
 #include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "engine/components/core_components.h"
@@ -63,7 +66,7 @@ size_t CountLoadingEntities(Engine::EngineState* state)
            state->registry.view<Component::TextFontPendingTag>().size();
 }
 
-static bool LoadPlayFile(const char* path, Core::InlineVector<PlaytestSystem::Event, PlaytestSystem::MAX_EVENTS>& outEvents, Core::InlineString<128>& outName)
+static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& outEvents, Core::InlineString<128>& outName)
 {
     Platform::ScopedFileMapping map{Core::Path(path)};
     if (!map.data) {
@@ -79,7 +82,7 @@ static bool LoadPlayFile(const char* path, Core::InlineVector<PlaytestSystem::Ev
 
     const Engine::TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
     r.ForEachRecord("events", [&](const Engine::TextReader& e) {
-        if (outEvents.IsFull()) {
+        if (outEvents.Size() >= PlaytestSystem::MAX_EVENTS) {
             LOG_WARN(Engine, "Run: '{}' truncated to {} events", path, outEvents.Size());
             return;
         }
@@ -206,6 +209,9 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
             return;
         }
 
+        if (events.IsEmpty()) {
+            events = Core::Vector<Event>(&ctx->memoryManager->General());
+        }
         events.Clear();
         const Core::InlineString<512> path = pendingPath;
         pendingPath.Clear();
@@ -483,6 +489,90 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
 void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     state->playtest.Tick(ctx, state, frameBuffer);
+}
+
+bool CameraRecorder::Start(Engine::EngineContext* ctx, Engine::EngineState* state, const char* recordingName)
+{
+    if (bActive || state->playtest.bActive || recordingName == nullptr || recordingName[0] == '\0') {
+        return false;
+    }
+    samples = Core::Vector<Sample>(&ctx->memoryManager->General());
+    name = Core::InlineString<128>(std::string_view(recordingName));
+    startTime = std::chrono::steady_clock::now();
+    bActive = true;
+    return true;
+}
+
+void CameraRecorder::Tick(Engine::EngineState* state)
+{
+    if (!bActive) {
+        return;
+    }
+    auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+    const entt::entity camEntity = camView.front();
+    if (camEntity == entt::null) {
+        return;
+    }
+    const auto& transform = camView.get<Component::TransformComponent>(camEntity);
+    samples.PushBack(Sample{.translation = transform.translation, .rotation = transform.rotation});
+}
+
+Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (!bActive) {
+        return {};
+    }
+    bActive = false;
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count();
+    if (samples.IsEmpty() || seconds <= 0.0) {
+        return {};
+    }
+    const int32_t fps = glm::max(1, static_cast<int32_t>(glm::round(static_cast<double>(samples.Size()) / seconds)));
+    const Core::Path path = Platform::GetScenePath() / Core::InlineString<160>::Format("%s.wplay", name.c_str()).c_str();
+
+    WPlayHeader header{};
+    memcpy(header.name, name.c_str(), std::min(name.Size(), WPLAY_NAME_LENGTH - 1));
+    memcpy(header.scene, state->scene.currentSceneName.c_str(), std::min(state->scene.currentSceneName.Size(), WPLAY_NAME_LENGTH - 1));
+    header.contentVersion = 1;
+    if (Platform::FileExists(path)) {
+        if (const auto existing = ReadWPlayHeader(path)) {
+            header.contentVersion = existing->contentVersion + 1;
+        }
+    }
+    header.eventCount = 1u + 2u * static_cast<uint32_t>(samples.Size());
+
+    Core::Vector<std::byte> out(&ctx->memoryManager->AssetsScratch());
+    WriteWPlayHeader(out, header);
+    Engine::TextWriter w(out);
+    w.Count("events", header.eventCount);
+    w.BeginBlock("e");
+    w.Key("fps", fps);
+    w.EndBlock();
+    for (size_t i = 0; i < samples.Size(); ++i) {
+        w.BeginBlock("e");
+        w.KeyStr("cam", "held");
+        w.Key("translation", samples[i].translation);
+        w.Key("rotation", samples[i].rotation);
+        if (i != 0) {
+            w.Key("cut", 0);
+        }
+        w.EndBlock();
+        w.BeginBlock("e");
+        w.Key("wait", 1);
+        w.EndBlock();
+    }
+    if (!Platform::WriteFile(path, out.Data(), out.Size())) {
+        LOG_ERROR(Engine, "Record: failed to write '{}'", path.c_str());
+        return {};
+    }
+    ctx->rescan.bResources = true;
+    LOG_INFO(Engine, "Record '{}': {} frames at {} fps -> {}", name.c_str(), static_cast<int32_t>(samples.Size()), fps, path.c_str());
+    return Core::InlineString<512>(std::string_view(path.c_str()));
+}
+
+void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Core::FrameBuffer*)
+{
+    state->cameraRecorder.Tick(state);
 }
 
 void PlaytestScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)

@@ -650,14 +650,91 @@ static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::En
     }
 }
 
+static constexpr int MAX_RECORD_SLOTS = 9;
+
+static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* state, const ImVec4& occupiedColor, const ImVec2& buttonSize);
+
+static Core::InlineString<16> RecordSlotName(int slot)
+{
+    return Core::InlineString<16>::Format("rec_%d", slot + 1);
+}
+
+static const Engine::AssetManager::CachedPlayMetadata* FindRecording(Engine::EngineContext* ctx, Engine::EngineState* state, int slot)
+{
+    const Core::InlineString<16> name = RecordSlotName(slot);
+    for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
+        if (meta.name == name.c_str() && meta.sceneName == state->scene.currentSceneName) {
+            return &meta;
+        }
+    }
+    return nullptr;
+}
+
+static void DrawRecordSlots(Engine::EngineContext* ctx, Engine::EngineState* state, const ImVec4& occupiedColor, const ImVec2& buttonSize)
+{
+    const ImVec4 recordingColor(0.75f, 0.15f, 0.15f, 1.0f);
+    Engine::CameraRecorder& recorder = state->cameraRecorder;
+    const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty();
+    for (int i = 0; i < MAX_RECORD_SLOTS; ++i) {
+        const Core::InlineString<16> name = RecordSlotName(i);
+        const Engine::AssetManager::CachedPlayMetadata* meta = FindRecording(ctx, state, i);
+        const bool bRecordingThis = recorder.bActive && recorder.name == name.c_str();
+        ImGui::SameLine();
+        ImGui::PushID(2000 + i);
+        if (bRecordingThis) {
+            ImGui::PushStyleColor(ImGuiCol_Button, recordingColor);
+        }
+        else if (meta != nullptr) {
+            ImGui::PushStyleColor(ImGuiCol_Button, occupiedColor);
+        }
+        if (ImGui::Button(Core::InlineString<8>::Format("%d", i + 1).c_str(), buttonSize)) {
+            if (bRecordingThis) {
+                recorder.Stop(ctx, state);
+            }
+            else if (ImGui::GetIO().KeyShift) {
+                recorder.Start(ctx, state, name.c_str());
+            }
+            else if (meta != nullptr && !bRunBusy && !recorder.bActive) {
+                state->playtest.Arm(meta->source.c_str());
+            }
+        }
+        if (bRecordingThis || meta != nullptr) {
+            ImGui::PopStyleColor();
+        }
+        if (ImGui::IsItemHovered()) {
+            if (bRecordingThis) {
+                ImGui::SetTooltip("Recording %s, %d frames\nClick or Escape to stop", name.c_str(), static_cast<int32_t>(recorder.samples.Size()));
+            }
+            else if (meta != nullptr) {
+                ImGui::SetTooltip("%s.wplay, %u events\nClick to replay, shift-click to re-record", name.c_str(), meta->eventCount);
+            }
+            else {
+                ImGui::SetTooltip("Slot %d: empty\nShift-click to record the camera, Escape to stop", i + 1);
+            }
+        }
+        ImGui::PopID();
+    }
+}
+
 static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     const ImVec4 occupiedColor(0.20f, 0.45f, 0.25f, 1.0f);
     const ImVec2 buttonSize(22.0f, 0.0f);
 
+    static const char* const MODE_LABELS[] = {"Cam", "Scene", "Rec"};
+    ImGui::SetNextItemWidth(64.0f);
+    ImGui::Combo("##bookmark_mode", &state->editor.bookmarkMode, MODE_LABELS, static_cast<int>(std::size(MODE_LABELS)));
+    if (state->editor.bookmarkMode == 2) {
+        DrawRecordSlots(ctx, state, occupiedColor, buttonSize);
+        return;
+    }
+    if (state->editor.bookmarkMode == 1) {
+        DrawSceneSlots(ctx, state, occupiedColor, buttonSize);
+        return;
+    }
+
     auto editorCamView = state->registry.view<Component::TransformComponent, Component::EditorCameraTag>();
     const entt::entity editorCam = editorCamView.front();
-    ImGui::TextUnformatted("Cam");
     for (int i = 0; i < Engine::MAX_CAMERA_PRESETS; ++i) {
         Engine::CameraPreset& preset = state->projectConfig.cameraPresets[i];
         ImGui::SameLine();
@@ -687,9 +764,10 @@ static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state
         }
         ImGui::PopID();
     }
+}
 
-    ImGui::SameLine();
-    ImGui::TextUnformatted("Scene");
+static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* state, const ImVec4& occupiedColor, const ImVec2& buttonSize)
+{
     for (int i = 0; i < Engine::MAX_SCENE_SLOTS; ++i) {
         Engine::SceneSlot& slot = state->projectConfig.sceneSlots[i];
         ImGui::SameLine();

@@ -17,7 +17,7 @@ class TlsfAllocator;
 
 namespace Engine
 {
-static constexpr int MAX_CAMERA_PRESETS = 8;
+static constexpr int MAX_CAMERA_PRESETS = 9;
 static constexpr int MAX_SCENE_SLOTS = 9;
 
 struct CameraPreset

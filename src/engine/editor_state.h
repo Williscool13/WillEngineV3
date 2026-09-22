@@ -77,6 +77,9 @@ struct EditorState
     bool bExclusiveGizmoActivePrev{false};
     int32_t activeDotHandleId{-1};
 
+    /** Bookmark bar row: 0 cam presets, 1 scene slots, 2 recordings. */
+    int32_t bookmarkMode{0};
+
     PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
     LightDebugDrawMode lightDebugDrawMode{LightDebugDrawMode::Selected};
     bool bShowLightSprites{true};

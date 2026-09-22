@@ -8,8 +8,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <chrono>
+
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
+#include "core/containers/vector.h"
 #include "engine/core/action_handle.h"
 #include "engine/profiles/profile_library.h"
 #include "render/interface/render_interface.h"
@@ -90,7 +93,7 @@ struct PlaytestSystem
         Core::InlineString<64> name{};
     };
 
-    static constexpr uint32_t MAX_EVENTS = 256;
+    static constexpr uint32_t MAX_EVENTS = 65536;
 
     Phase phase{Phase::Idle};
     bool bActive{false};
@@ -108,7 +111,7 @@ struct PlaytestSystem
 
     Core::InlineString<512> pendingPath{};
     Core::InlineString<128> runName{};
-    Core::InlineVector<Event, MAX_EVENTS> events{};
+    Core::Vector<Event> events{};
     int32_t cursor{0};
     int32_t captureCount{0};
     int32_t fpsCap{0};
@@ -129,7 +132,29 @@ struct PlaytestSystem
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 };
 
+/** Editor camera recorder: one held cam + wait|1 per render frame, fps = measured recording rate. `record <name>` / `record stop` writes scenes/<name>.wplay. */
+struct CameraRecorder
+{
+    struct Sample
+    {
+        glm::vec3 translation{0.0f};
+        glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    };
+
+    bool bActive{false};
+    Core::InlineString<128> name{};
+    Core::Vector<Sample> samples{};
+    std::chrono::steady_clock::time_point startTime{};
+
+    bool Start(Engine::EngineContext* ctx, Engine::EngineState* state, const char* recordingName);
+    void Tick(Engine::EngineState* state);
+    /** Written path, empty on failure. */
+    Core::InlineString<512> Stop(Engine::EngineContext* ctx, Engine::EngineState* state);
+};
+
 size_t CountLoadingEntities(Engine::EngineState* state);
+
+void CameraRecordTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
 void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 

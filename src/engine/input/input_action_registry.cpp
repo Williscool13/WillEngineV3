@@ -190,6 +190,7 @@ void RegisterEngineInputActions(InputState& input)
     AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_6, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_6));
     AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_7, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_7));
     AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_8, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_8));
+    AddDefault(input, ORIGIN, Actions::ACTION_PROFILE_CAM_9, InputContext::Gameplay, BindingSource::FromKey(Key::NUM_9));
 #endif
 
     FinalizeActionRegistration(input);
