@@ -23,6 +23,7 @@ void ComputeShadingDefaultLit(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThrea
         pixel, pc.extents,
         pc.visibilityBufferIndex,
         pc.materialIndex,
+        pc.materialBuffer[pc.materialIndex].alphaProperties.z != 0.0,
         pc.instanceBuffer, pc.primitiveBuffer, pc.modelBuffer,
         pc.meshletBuffer, pc.meshletVerticesBuffer, pc.meshletTrianglesBuffer,
         pc.vertexPosBuffer, pc.vertexAttrBuffer,

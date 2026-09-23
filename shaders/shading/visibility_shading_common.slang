@@ -85,6 +85,7 @@ public ReconstructedShadingData ReconstructShadingInputs(
     uint2 extents,
     uint32_t visibilityBufferIndex,
     uint32_t materialIndex,
+    bool bTwoSided,
     Instance* instanceBuffer,
     Primitive* primitiveBuffer,
     Model* modelBuffer,
@@ -154,6 +155,18 @@ public ReconstructedShadingData ReconstructShadingInputs(
     result.shadingInputs.objPos = bary.x * objPos0 + bary.y * objPos1 + bary.z * objPos2;
     result.shadingInputs.posVS = mul(result.shadingInputs.mv, float4(result.shadingInputs.objPos, 1.0)).xyz;
     result.shadingInputs.interp = InterpolateVertex(bary, vertexAttribute0, vertexAttribute1, vertexAttribute2, result.shadingInputs.mv);
+
+    float normalSign = 1.0;
+    if (bTwoSided) {
+        float3x3 mv3 = (float3x3)result.shadingInputs.mv;
+        float3 faceN = cross(mul(mv3, objPos1 - objPos0), mul(mv3, objPos2 - objPos0));
+        if (dot(faceN, result.shadingInputs.interp.normalVS) * dot(faceN, result.shadingInputs.posVS) > 0.0) {
+            normalSign = -1.0;
+            result.shadingInputs.interp.normalVS = -result.shadingInputs.interp.normalVS;
+            result.shadingInputs.interp.tangentVS = -result.shadingInputs.interp.tangentVS;
+            result.shadingInputs.interp.tangentSign = -result.shadingInputs.interp.tangentSign;
+        }
+    }
     result.shadingInputs.uvDdx = (baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2) * sceneData->uvDerivativeScale;
     result.shadingInputs.uvDdy = (baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2) * sceneData->uvDerivativeScale;
 
@@ -170,9 +183,9 @@ public ReconstructedShadingData ReconstructShadingInputs(
     float3x3 model3 = (float3x3)result.model.modelMatrix;
     float3x3 normalMatrix = Adjugate(model3);
     float3 posWS = mul(model3, result.shadingInputs.objPos);
-    float3 n0 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute0)));
-    float3 n1 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute1)));
-    float3 n2 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute2)));
+    float3 n0 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute0))) * normalSign;
+    float3 n1 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute1))) * normalSign;
+    float3 n2 = normalize(mul(normalMatrix, DecodeNormal(vertexAttribute2))) * normalSign;
     float3 d0 = min(0.0, dot(posWS - mul(model3, objPos0), n0)) * n0;
     float3 d1 = min(0.0, dot(posWS - mul(model3, objPos1), n1)) * n1;
     float3 d2 = min(0.0, dot(posWS - mul(model3, objPos2), n2)) * n2;
