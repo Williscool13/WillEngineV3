@@ -9,6 +9,7 @@ import constants_interop;
 import shader_functions;
 import packing_functions;
 import pbr_functions;
+import shader_constants;
 import random_common;
 import hit_shading_common;
 import radiance_cache_hash_common;
@@ -57,6 +58,7 @@ static float3 GIGatherViewPosAt(GIGatherPushConstant pc, SceneData scene, int2 p
 struct GatherHitSurface {
     float3 normal;
     float3 diffuseColor;
+    float roughness;
     bool bEmissive;
 };
 
@@ -85,8 +87,23 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     float mrRoughness;
     SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
     s.diffuseColor = albedo.rgb * (1.0 - metallic);
+    s.roughness = max(mrRoughness, MIN_ROUGHNESS);
     s.bEmissive = any(material.emissiveFactor.rgb * material.emissiveFactor.w > float3(0.0));
     return s;
+}
+
+/** The lit history holds Oren-Nayar at the camera's view while the cache shades at V = N; rescales screen-tier direct light to that baseline so the tiers agree wherever the camera was. */
+static float3 GIGatherNormalizeScreenDirect(SceneData scene, float3 direct, float3 prevCameraPos, float3 hitWorldPos, GatherHitSurface hit)
+{
+    float3 sunL = -normalize(scene.sunDirection.xyz);
+    float NoL = dot(hit.normal, sunL);
+    if (scene.sunDirection.w <= 0.0 || NoL <= 0.0) {
+        return direct;
+    }
+    float3 prevV = normalize(prevCameraPos - hitWorldPos);
+    float onCamera = Diffuse_OrenNayar(NoL, max(dot(hit.normal, prevV), 1e-4), sunL, prevV, hit.roughness);
+    float onBaseline = Diffuse_OrenNayar(NoL, 1.0, sunL, hit.normal, hit.roughness);
+    return direct * (onBaseline / max(onCamera, 1e-6));
 }
 
 static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, ReflectionProbeBlend probeBlend)
@@ -311,7 +328,8 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                                 float3 sum = float3(0.0);
                                 float3 giPrevSum = float3(0.0);
                                 float sumW = 0.0;
-                                float receiverAgreement = saturate(dot(normalize(mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz - hitWorldPos), -direction));
+                                float3 prevCameraPos = mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz;
+                                float receiverAgreement = saturate(dot(normalize(prevCameraPos - hitWorldPos), -direction));
                                 float4 prevRawDepths = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], float2(base + 1) / float2(pc.renderExtent)).wzxy;
                                 [unroll]
                                 for (uint c = 0; c < 4; c++) {
@@ -361,7 +379,8 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                                             demodProbeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
                                         }
                                         float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeBlend);
-                                        radiance = max(radiance - hit.diffuseColor * (giPrevSum / (sumW * scene.prevPreExposure)), float3(0.0)) + hit.diffuseColor * worldIndirect;
+                                        float3 direct = max(radiance - hit.diffuseColor * (giPrevSum / (sumW * scene.prevPreExposure)), float3(0.0));
+                                        radiance = GIGatherNormalizeScreenDirect(scene, direct, prevCameraPos, hitWorldPos, hit) + hit.diffuseColor * worldIndirect * pc.bounceIntensity;
                                     }
                                     tier = GI_GATHER_TIER_SCREEN;
                                     bResolved = true;

@@ -34,7 +34,6 @@ inline const StringID GI_GATHER_RAW_SKY_VIS = "gi_gather_raw_sky_vis"_sid;
 inline const StringID GI_GATHER_TMP_SKY_VIS = "gi_gather_tmp_sky_vis"_sid;
 inline const StringID GI_GATHER_RESOLVED = "gi_gather_resolved"_sid;
 inline const StringID GI_GATHER_MOMENTS = "gi_gather_moments"_sid;
-inline const StringID GI_GATHER_FAST = "gi_gather_fast"_sid;
 inline const StringID GI_GATHER_SKY_VIS_ACCUM = "gi_gather_sky_vis_accum"_sid;
 inline const StringID GI_MOTION_TILED_MAX = "gi_motion_tiled_max"_sid;
 inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = "gi_motion_tiled_neighbor_max"_sid;
@@ -76,9 +75,10 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
  * @param bDisableScreenTier Disable the lit-history screen tier so ray hits resolve only against world-space sources; set while the GI field is frozen (lit history is view-dependent and keeps evolving, which face-seams probe bakes).
  * @param bQuarterRes Gather at quarter render resolution instead of half: 1/4 the rays and denoise work; the upscale footprint spans 4x4 full-res pixels per gather texel, so sub-footprint detail leans harder on the guides and history.
  * @param bDebugUpscalePath Write gi_upscale_path_debug: per-pixel tint of which source built the upscale's current (footprint/fallback/world tier), brightness = current's weight in the temporal blend.
+ * @param bounceIntensity The radiance cache's DDGI bounce scale; the screen tier re-adds its indirect with the same scale so both tiers agree at a hit.
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath, bool bSplitGather);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath, bool bSplitGather, float bounceIntensity);
 
 /**
  * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.

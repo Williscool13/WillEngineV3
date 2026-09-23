@@ -137,7 +137,7 @@ raysPerProbe|80
 outerRaysPerProbe|40
 bClassification|1
 bInfiniteBounce|1
-bounceIntensity|0x3f400000
+bounceIntensity|0x3f800000
 maxRayRadiance|0x49a00000
 radianceCacheShadeInterval|8
 radianceCacheAccumCap|16

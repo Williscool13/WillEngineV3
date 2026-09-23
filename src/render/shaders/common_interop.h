@@ -141,6 +141,9 @@ SHADER_PUBLIC struct SceneData
     SHADER_PUBLIC float framerateScale;
     SHADER_PUBLIC float _pad1;
     SHADER_PUBLIC float _pad2;
+
+    /** xyz = world-space sun travel direction, w = intensity (0 when the sun is off). */
+    SHADER_PUBLIC float4 sunDirection;
 };
 
 SHADER_PUBLIC struct ReadbackStruct

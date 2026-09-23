@@ -27,13 +27,7 @@ static const float GI_UPSCALE_CHANGE_SENSITIVITY = 0.05;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 static const float GI_UPSCALE_SUPPORT_FULL = 2.0;
-static const bool GI_UPSCALE_FAST_CLAMP = true;
-static const float GI_UPSCALE_FAST_MAX_ACCUM = 5.0;
-static const float GI_UPSCALE_FAST_CLAMP_SIGMA = 3.0;
 static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 128.0;
-static const bool GI_UPSCALE_YOUNG_PRIOR = false;
-static const float GI_UPSCALE_YOUNG_FRAMES = 16.0;
-static const float GI_UPSCALE_YOUNG_RADIUS = 32.0;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -75,7 +69,6 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
         // The bilinear moments fetch touches these texels at geometry/sky boundaries, and aliased RDG memory is never zeroed.
         rdgStorageFloat2[pc.momentsIndex][pixel] = float2(0.0);
-        rdgStorageFloat4[pc.fastIndex][pixel] = float4(0.0);
         rdgStorageFloat2[pc.skyVisAccumIndex][pixel] = float2(0.0);
         if (pc.debugPathIndex != ~0x0u) {
             rdgStorageFloat4[pc.debugPathIndex][pixel] = float4(0.0);
@@ -211,7 +204,6 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
-    GIGatherHistory fastHistory = { float3(0.0), 0.0, 0.0 };
     float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
     GIGatherHistoryTaps historyTaps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0, float2(0.0) };
     if (pc.bHistoryValid != 0u || pc.skyVisAccumHistoryIndex != ~0x0u) {
@@ -219,11 +211,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
     if (pc.bHistoryValid != 0u) {
         history = GIGatherFetchHistory(historyTaps, pc.historyIndex, pc.renderExtent);
-        if (pc.fastHistoryIndex != ~0x0u) {
-            fastHistory = GIGatherFetchHistory(historyTaps, pc.fastHistoryIndex, pc.renderExtent);
-        }
         history.color *= historyRatio;
-        fastHistory.color *= historyRatio;
     }
 
     float2 tileMotion = rdgTexturesFloat2[pc.motionTileIndex].Load(int3(pixel / uint(GI_MOTION_TILE_SIZE), 0)).rg;
@@ -357,26 +345,11 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
-    float nFast = min(n, GI_UPSCALE_FAST_MAX_ACCUM * scene.framerateScale) * fastHistory.quality;
-    float3 fast = current;
-    if (fastHistory.quality > 0.0) {
-        fast = bHasCurrent ? (nFast * fastHistory.color + current) / (nFast + 1.0) : fastHistory.color;
-    }
-
     float3 result = current;
     float accum = bFallbackCurrent ? 0.0 : 1.0;
     if (history.quality > 0.0) {
         if (bHasCurrent) {
-            if (GI_UPSCALE_FAST_CLAMP) {
-                // Luma-only, hue kept from the slow history; the window is the fast estimate's own noise (per-frame temporal dev over sqrt of its sample count).
-                if (bMoments && fastHistory.quality > 0.0 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
-                    float window = max(GI_UPSCALE_FAST_CLAMP_SIGMA * temporalDev / sqrt(nFast + 1.0), GI_UPSCALE_CLAMP_EPS);
-                    float histLuma = Luma(history.color);
-                    float fastLuma = Luma(fast);
-                    float clampedLuma = clamp(histLuma, fastLuma - window, fastLuma + window);
-                    history.color = histLuma > 1e-4 ? history.color * (clampedLuma / histLuma) : fast * (clampedLuma / max(fastLuma, 1e-4));
-                }
-            } else if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
+            if (clampTaps > 1.5 && history.count > GI_UPSCALE_CLAMP_MIN_HISTORY) {
                 // A short history cannot ghost, and min() keeps the relative floor from collapsing on 1-spp noise while still shrinking to the smaller side on a real step change.
                 float3 mean = irrM1 / clampTaps;
                 float3 dev = sqrt(max(irrM2 / clampTaps - mean * mean, float3(0.0)));
@@ -399,54 +372,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
-    float age = min(history.count, maxHistory) * history.quality;
-    if (GI_UPSCALE_YOUNG_PRIOR && pc.bHistoryValid != 0u && bHasCurrent && age < GI_UPSCALE_YOUNG_FRAMES && neighborhoodMotionPixels <= GI_UPSCALE_NEIGHBORHOOD_MOTION_PIXELS) {
-        float youth = 1.0 - age / GI_UPSCALE_YOUNG_FRAMES;
-        float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
-        float3 prevXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, historyUv, centerViewZ + UnpackViewZDelta(gt1.w));
-        float3 prevN = normalize(mul((float3x3)scene.prevView, worldN));
-        int2 prevPixel = int2(floor(historyUv * float2(pc.renderExtent)));
-        float3 priorSum = float3(0.0);
-        float priorW = 0.0;
-        [unroll]
-        for (uint ring = 0u; ring < 2u; ring++) {
-            float radius = ring == 0u ? GI_UPSCALE_YOUNG_RADIUS * 0.4 : GI_UPSCALE_YOUNG_RADIUS;
-            [unroll]
-            for (uint d = 0u; d < 8u; d++) {
-                float angle = (float(d) + 0.5 * float(ring)) * 0.785398;
-                int2 offset = int2(round(float2(cos(angle), sin(angle)) * radius));
-                int2 tap = prevPixel + offset;
-                if (any(tap < int2(0)) || any(tap >= int2(pc.renderExtent))) {
-                    continue;
-                }
-                float tapRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(tap, 0)).r;
-                if (tapRawDepth <= 0.0) {
-                    continue;
-                }
-                float4 tapHistory = rdgTexturesFloat4[pc.historyIndex].Load(int3(tap, 0));
-                float w = saturate((tapHistory.a - age) / GI_UPSCALE_YOUNG_FRAMES);
-                if (w <= 0.0) {
-                    continue;
-                }
-                float tapViewZ = ScreenToViewSpaceDepth(tapRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, (float2(tap) + 0.5) / float2(pc.renderExtent), tapViewZ);
-                w *= exp(-abs(dot(prevN, tapXv - prevXv)) * invPlaneSigma);
-                w *= pow(saturate(dot(prevN, UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(tap, 0)).r))), GI_UPSCALE_NORMAL_POWER);
-                if (pc.aoIndex != ~0x0u) {
-                    int2 aoTap = clamp(int2(pixel) + offset, int2(0), int2(pc.renderExtent) - 1);
-                    w *= exp2(-20.0 * abs(rdgTexturesFloat2[pc.aoIndex].Load(int3(aoTap, 0)).y - centerAO));
-                }
-                priorSum += tapHistory.rgb * w;
-                priorW += w;
-            }
-        }
-        if (priorW > 1e-3) {
-            result = lerp(result, priorSum / priorW * historyRatio, youth * saturate(priorW));
-        }
-    }
-
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(result, accum);
-    rdgStorageFloat4[pc.fastIndex][pixel] = float4(fast, 0.0);
 
     if (pc.debugPathIndex != ~0x0u) {
         float3 tint = debugPath == 1u ? (sumW < 0.1 ? float3(1.0, 0.1, 0.1) : float3(0.1, 0.6, 0.1)) : debugPath == 2u ? float3(1.0, 0.1, 1.0) : debugPath == 3u ? float3(0.1, 0.8, 1.0) : float3(1.0, 0.9, 0.1);

@@ -855,6 +855,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
     SHADER_PUBLIC uint32_t rayMetaIndex;
     SHADER_PUBLIC uint32_t varGuideHistoryIndex;
+    SHADER_PUBLIC float bounceIntensity;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -916,8 +917,6 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t varGuideIndex;
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC uint32_t debugPathIndex;
-    SHADER_PUBLIC uint32_t fastIndex;
-    SHADER_PUBLIC uint32_t fastHistoryIndex;
     SHADER_PUBLIC uint32_t skyVisAccumIndex;
     SHADER_PUBLIC uint32_t skyVisAccumHistoryIndex;
 };

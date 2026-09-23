@@ -775,7 +775,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 uint32_t giGatherMode = 0u;
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.debug.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
-                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherChromaDenoise ? frameBuffer.ddgi.gatherChromaDenoisePasses : 0u, frameBuffer.ddgi.gatherChromaLumaPower, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.debug.bFreezeGatherRay, frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback, frameBuffer.ddgi.bFinalGatherQuarterRes, giGatherDebug == 7u, frameBuffer.ddgi.bSplitGather);
+                    const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherChromaDenoise ? frameBuffer.ddgi.gatherChromaDenoisePasses : 0u, frameBuffer.ddgi.gatherChromaLumaPower, frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.bGatherSkipRay || frameBuffer.debug.bFreezeGatherRay, frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback, frameBuffer.ddgi.bFinalGatherQuarterRes, giGatherDebug == 7u, frameBuffer.ddgi.bSplitGather, frameBuffer.ddgi.bounceIntensity);
                     if (giGather.bValid) {
                         giGatherMode = (frameBuffer.ddgi.bFinalGather && bDDGIApply) ? 1u : 0u;
                         SetupGIGatherDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.giGatherDebugMode, frameBuffer.ddgi.bFinalGatherQuarterRes);
@@ -1775,6 +1775,8 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     sceneData[0].preExposure = preExposure;
     sceneData[0].prevPreExposure = prevPreExposure;
     sceneData[0].framerateScale = framerateScale;
+    const glm::vec4 sunDirection{viewFamily.directionalLight.direction, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
+    sceneData[0].sunDirection = sunDirection;
     // Portal Scene Data
     if (!viewFamily.portalViews.IsEmpty()) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
@@ -1783,6 +1785,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         portalSceneData.preExposure = preExposure;
         portalSceneData.prevPreExposure = prevPreExposure;
         portalSceneData.framerateScale = framerateScale;
+        portalSceneData.sunDirection = sunDirection;
         sceneData[1] = portalSceneData;
     }
 
