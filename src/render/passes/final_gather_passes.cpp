@@ -405,7 +405,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         upscale.WriteStorageImage(GI_UPSCALE_PATH_DEBUG);
     }
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bSkyVisAccum, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, bDebugUpscalePath, gatherHistory, gatherMomentsHistory, gatherSkyVisAccumHistory, depthHistory, gbufferOneHistory,
+    upscale.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bTemporal, bMoments, bSkyVisAccum, bAO, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, bDebugUpscalePath, gatherHistory, gatherMomentsHistory, gatherSkyVisAccumHistory, depthHistory, gbufferOneHistory,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_upscale"_sid);
@@ -450,6 +450,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .debugPathIndex = bDebugUpscalePath ? graph.GetStorageImageViewDescriptorIndex(GI_UPSCALE_PATH_DEBUG) : ~0x0u,
             .skyVisAccumIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_SKY_VIS_ACCUM),
             .skyVisAccumHistoryIndex = bSkyVisAccum ? graph.GetSampledImageViewDescriptorIndex(gatherSkyVisAccumHistory) : ~0x0u,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

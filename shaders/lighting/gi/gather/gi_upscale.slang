@@ -5,6 +5,7 @@ import constants_interop;
 import shader_functions;
 import packing_functions;
 import pbr_functions;
+import random_common;
 import gi_gather_common;
 import ddgi_common;
 import reflection_probe_interop;
@@ -28,6 +29,19 @@ static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 static const float GI_UPSCALE_SUPPORT_FULL = 2.0;
 static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 128.0;
+
+/**
+ * Randomised rounding onto the exact half-float grid the store will land on.
+ * Deterministic rounding is a bias the counter average compounds: a truncating store loses half a step every frame and settles (n + 1) half-steps under its input, and once an increment is smaller than half a step the history stops moving at all.
+ */
+static float GIUpscaleQuantizeHalf(float x, inout uint rng)
+{
+    if (!(x > 6.104e-5)) {
+        return x;
+    }
+    float quantum = exp2(floor(log2(x)) - 10.0);
+    return floor(x / quantum + HashStep(rng)) * quantum;
+}
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -303,7 +317,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
             }
         }
     }
-    rdgStorageFloat2[pc.skyVisAccumIndex][pixel] = float2(skyVis, skyVisCount);
+    uint quantRng = SeedRng(pixel, pc.frameIndex, 0x51ED2701u);
+    rdgStorageFloat2[pc.skyVisAccumIndex][pixel] = float2(GIUpscaleQuantizeHalf(skyVis, quantRng), skyVisCount);
 
     if (bSkyCurrent) {
         float3 skyIrr = skyVis * skyTerm;
@@ -372,7 +387,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
-    rdgStorageFloat4[pc.outputIndex][pixel] = float4(result, accum);
+    rdgStorageFloat4[pc.outputIndex][pixel] = float4(GIUpscaleQuantizeHalf(result.r, quantRng), GIUpscaleQuantizeHalf(result.g, quantRng), GIUpscaleQuantizeHalf(result.b, quantRng), accum);
 
     if (pc.debugPathIndex != ~0x0u) {
         float3 tint = debugPath == 1u ? (sumW < 0.1 ? float3(1.0, 0.1, 0.1) : float3(0.1, 0.6, 0.1)) : debugPath == 2u ? float3(1.0, 0.1, 1.0) : debugPath == 3u ? float3(0.1, 0.8, 1.0) : float3(1.0, 0.9, 0.1);
