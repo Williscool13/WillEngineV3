@@ -149,6 +149,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
             }
         } else {
             Instance inst = pc.instanceBuffer[hit.instanceID];
+            bool bMirror = IsTwoSidedBackHit(pc, inst, hit.primIndex, hit.bary, hit.rayDir);
             uint rng = SeedRng(pixel, pc.frameIndex, 0xA17Fu);
 
             WorldGridPunctualLights worldGridLights = (WorldGridPunctualLights)0;
@@ -193,7 +194,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                         if (prevRawDepth > 0.0) {
                             float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
                             if (abs(prevViewDepth - prevClip.w) <= 0.03 * prevClip.w + 0.05) {
-                                float3 hitN = DecodeHitNormal(pc, inst, hit.primIndex, hit.bary);
+                                float3 hitN = DecodeHitNormal(pc, inst, hit.primIndex, hit.bary, bMirror);
                                 float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(prevPixel, 0)).r)));
                                 if (dot(hitN, prevWorldN) > 0.5) {
                                     radiance = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(prevPixel, 0)).rgb / scene.prevPreExposure;
@@ -205,7 +206,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                 }
             }
             if (!bShaded) {
-                radiance = ShadeReflectionRayHit(pc, inst, hit.primIndex, hit.bary, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT, scene.cameraWorldPos.xyz);
+                radiance = ShadeReflectionRayHit(pc, inst, hit.primIndex, hit.bary, bMirror, hitWorldPos, hit.rayDir, rng, worldGridLights, 0.75 * hit.hitT, scene.cameraWorldPos.xyz);
             }
             hitTOut = hit.hitT;
         }

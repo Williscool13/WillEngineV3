@@ -379,14 +379,18 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             }
             break;
         }
-        if (!q.CommittedTriangleFrontFace()) {
+        Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
+        bool bMirror = !q.CommittedTriangleFrontFace();
+        if (bMirror && pc.materialBuffer[instance.materialIndex].alphaProperties.z == 0.0) {
             break;
         }
 
         float hitT = q.CommittedRayT();
         float3 hitPosition = origin + direction * hitT;
-        Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
         GTSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+        if (bMirror) {
+            surface.normal = -surface.normal;
+        }
 
         float3 vNext = -direction;
         indirect += throughput * surface.emissive;

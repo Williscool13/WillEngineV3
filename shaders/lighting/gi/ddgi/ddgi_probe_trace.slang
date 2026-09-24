@@ -64,18 +64,19 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
         float hitT = q.CommittedRayT();
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
+        bool bMirror = IsTwoSidedBackHit(pc.materialBuffer, instance, q.CommittedTriangleFrontFace());
         if (instance.lightIndex != 0xFFFFFFFF) {
             float3 radiance = float3(0.0);
             // Negative x tags a light-proxy hit so relocation/classification skip it; x carries -(emission.r + 1) for the irradiance blend to decode.
             result = float4(-(radiance.r + 1.0), radiance.g, radiance.b, hitT);
-        } else if (q.CommittedTriangleFrontFace()) {
+        } else if (q.CommittedTriangleFrontFace() || bMirror) {
             float3 hitWorldPos = ray.Origin + direction * hitT;
             float3 radiance = float3(0.0);
             bool bCacheRead = false;
             SceneData scene = pc.sceneData[0];
 
             if (pc.radianceCache != nullptr) {
-                float3 hitNormal = DecodeHitNormal(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+                float3 hitNormal = DecodeHitNormal(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), bMirror);
                 RadianceCacheKey wcKey = RadianceCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
                 bool isNew;
                 uint wcSlot = RadianceCacheHashInsert(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->stats, wcKey, isNew);
@@ -111,7 +112,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                                 wcHit.instanceID = q.CommittedInstanceID();
                                 wcHit.primitiveIndex = q.CommittedPrimitiveIndex();
                                 wcHit.packedBary = PackUnorm2x16(q.CommittedTriangleBarycentrics());
-                                wcHit.pad = 0u;
+                                wcHit.bMirror = bMirror ? 1u : 0u;
                                 pc.radianceCache->descriptors[wcSlot] = wcHit;
                             }
                         }
@@ -121,7 +122,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
             if (!bCacheRead) {
                 uint neeSeed = SeedRng(uint2(probeIndex, rayIndex), pc.frameIndex, 0x1E5CACEu);
-                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, direction, neeSeed, 0.75 * hitT);
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), bMirror, hitWorldPos, direction, neeSeed, 0.75 * hitT);
             }
 
             // Firefly clamp

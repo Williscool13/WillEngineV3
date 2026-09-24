@@ -25,7 +25,7 @@ import rt_alpha_test_common;
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
 /** Geometry-only normal decode, no material/lighting work. Used to key the radiance cache before deciding whether a full shade is even needed. */
-static float3 DecodeHitNormalImpl(Primitive* primitiveBuffer, uint32_t* indexBuffer, VertexAttribute* vertexAttrBuffer, Model* modelBuffer, Instance instance, uint triangleIndex, float2 barycentrics)
+static float3 DecodeHitNormalImpl(Primitive* primitiveBuffer, uint32_t* indexBuffer, VertexAttribute* vertexAttrBuffer, Model* modelBuffer, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror)
 {
     Primitive primitive = primitiveBuffer[instance.primitiveIndex];
     uint firstIndex = primitive.indexOffset + triangleIndex * 3;
@@ -35,17 +35,41 @@ static float3 DecodeHitNormalImpl(Primitive* primitiveBuffer, uint32_t* indexBuf
     float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
     float3 normalOS = normalize(bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2));
     Model model = modelBuffer[instance.modelIndex];
-    return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+    return normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS)) * (bMirror ? -1.0 : 1.0);
 }
 
-public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+public float3 DecodeHitNormal(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror)
 {
-    return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics);
+    return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, bMirror);
 }
 
-public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror)
 {
-    return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics);
+    return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, bMirror);
+}
+
+/** A ray reaching the back of a two-sided material sees a surface facing it: shade the mirror of the front instead of treating it as the inside of solid geometry. */
+public bool IsTwoSidedBackHit(MaterialProperties* materialBuffer, Instance instance, bool bFrontFace)
+{
+    return !bFrontFace && materialBuffer[instance.materialIndex].alphaProperties.z != 0.0;
+}
+
+/** For hits that kept no front-face bit: faces the triangle itself, oriented to its vertex normal so winding never matters. */
+public bool IsTwoSidedBackHit(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 rayDirection)
+{
+    if (pc.materialBuffer[instance.materialIndex].alphaProperties.z == 0.0) {
+        return false;
+    }
+    Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
+    uint firstIndex = primitive.indexOffset + triangleIndex * 3;
+    float3 extent = primitive.boundingBoxMax - primitive.boundingBoxMin;
+    float3 p0 = DecodePosition(pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 0]], primitive.boundingBoxMin, extent);
+    float3 p1 = DecodePosition(pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 1]], primitive.boundingBoxMin, extent);
+    float3 p2 = DecodePosition(pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 2]], primitive.boundingBoxMin, extent);
+    Model model = pc.modelBuffer[instance.modelIndex];
+    float3 faceN = mul(Adjugate((float3x3)model.modelMatrix), cross(p1 - p0, p2 - p0));
+    float3 vertexN = DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, false);
+    return dot(faceN, vertexN) * dot(faceN, rayDirection) > 0.0;
 }
 
 /**
@@ -145,7 +169,7 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
 }
 
 /** Fallback for DDGI probe rays when the radiance cache has no slot for the hit: sun (shadow-ray tested) + emissive + one-sample RIS over the cell's analytic lights + IBL/DDGI feedback. Kept matched to ShadeRadianceCacheCell so cache-miss fallbacks agree with the cell values they stand in for. */
-public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, float maxBias)
+public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, float3 worldPosition, float3 rayDirection, uint rngSeed, float maxBias)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -160,7 +184,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
 
     Model model = pc.modelBuffer[instance.modelIndex];
-    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS)) * (bMirror ? -1.0 : 1.0);
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
     float4 albedo = material.colorFactor * vertexColor;
@@ -273,7 +297,7 @@ struct HitShadowCandidates
     }
 };
 
-public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias, float3 cameraWorldPos)
+public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, float3 worldPosition, float3 rayDirection, uint rngSeed, WorldGridPunctualLights worldGridLights, float maxBias, float3 cameraWorldPos)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -288,7 +312,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
 
     Model model = pc.modelBuffer[instance.modelIndex];
-    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS)) * (bMirror ? -1.0 : 1.0);
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
     float4 albedo = material.colorFactor * vertexColor;
@@ -424,7 +448,7 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
 
 // V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
 // Returns the non-emissive radiosity; own emission goes out separately so the cell EMA/streak never sees bary-jitter on/off emissive texels.
-public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, uint rngSeed, out float3 outEmissive)
+public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, uint rngSeed, out float3 outEmissive)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -439,7 +463,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
     float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
 
     Model model = pc.modelBuffer[instance.modelIndex];
-    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS));
+    float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS)) * (bMirror ? -1.0 : 1.0);
 
     VertexPosition p0 = pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 0]];
     VertexPosition p1 = pc.vertexPosBuffer[pc.indexBuffer[firstIndex + 1]];

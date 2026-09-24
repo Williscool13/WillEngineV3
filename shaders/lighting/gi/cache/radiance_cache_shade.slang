@@ -23,7 +23,7 @@ void ComputeRadianceCacheShade(uint3 dtid: SV_DispatchThreadID, uniform Radiance
     // lastShaded holds this shade event's queue frame; salting with it decorrelates events even if the hit bary repeats.
     uint rngSeed = SeedRng(uint2(slot, hit.packedBary), pc.cells[slot].lastShaded, 0x5CACEu);
     float3 emissive;
-    float3 radiance = ShadeRadianceCacheCell(pc, instance, hit.primitiveIndex, bary, rngSeed, emissive);
+    float3 radiance = ShadeRadianceCacheCell(pc, instance, hit.primitiveIndex, bary, hit.bMirror != 0u, rngSeed, emissive);
 
     float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
     if (pc.maxRadiance > 0.0 && maxChannel > pc.maxRadiance) {
