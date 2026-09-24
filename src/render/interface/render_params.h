@@ -484,7 +484,7 @@ struct DDGIParams
     float bounceIntensity{0.75f};
     float maxRayRadiance{1310720.0f};
     uint32_t radianceCacheShadeInterval{8};
-    uint32_t radianceCacheAccumCap{16};
+    uint32_t radianceCacheAccumCap{4};
 
     float hysteresis{0.97f};
     float visibilityHysteresis{0.97f};
@@ -496,13 +496,8 @@ struct DDGIParams
     bool bApplyToLighting{true};
     bool bFinalGather{false};
     bool bFinalGatherQuarterRes{false};
-    bool bSplitGather{false};
     bool bFinalGatherDenoise{true};
-    bool bFinalGatherChromaDenoise{true};
-    uint32_t gatherChromaDenoisePasses{2};
-    float gatherChromaLumaPower{2.f};
     bool bFinalGatherTemporal{true};
-    bool bGatherSkipRay{false};
     uint32_t gatherRaysPerPixel{1};
     float normalBias{0.1f};
     float viewBias{0.3f};
@@ -542,7 +537,6 @@ struct ReflectionProbeConfiguration
     bool bEnabled{true};
     float intensity{1.0f};
     bool bDebugDraw{false};
-    float bakedDiffuseClampK{4.0f};
     bool bBruteForcePick{false};
 
     bool operator==(const ReflectionProbeConfiguration&) const = default;
@@ -579,7 +573,6 @@ struct DebugRenderParams
     bool bDDGIBounceOnly{false};
     bool bFreezeGIField{true};
     bool bFreezeScreenFeedback{true};
-    bool bFreezeGatherRay{false};
     // 0 = auto
     float framerateScaleOverride{0.0f};
     bool bDisableAsyncCompute{false};

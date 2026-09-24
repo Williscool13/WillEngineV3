@@ -688,8 +688,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
-    /** Per-pixel ratio from camera-view diffuse to the radiance cache's V = N diffuse, or ~0u. */
-    SHADER_PUBLIC uint32_t diffuseRatioIndex;
+    SHADER_PUBLIC uint32_t pad2;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunVisIndex;
     SHADER_PUBLIC uint32_t tileCapacity;
@@ -840,24 +839,18 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t litHistoryIndex;
     SHADER_PUBLIC uint32_t depthHistoryIndex;
     SHADER_PUBLIC uint32_t gbufferOneHistoryIndex;
-    SHADER_PUBLIC uint32_t bSkipRay;
     SHADER_PUBLIC uint32_t guideOutIndex;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
-    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
-    SHADER_PUBLIC float bakedDiffuseClampK;
     SHADER_PUBLIC uint32_t skyVisIndex;
+    SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t rayCount;
-    SHADER_PUBLIC uint32_t giHistoryIndex;
-    SHADER_PUBLIC uint32_t varGuideOutIndex;
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
     SHADER_PUBLIC SHADER_PTR(uint2) touchKeys;
     SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
-    SHADER_PUBLIC uint32_t rayMetaIndex;
-    SHADER_PUBLIC uint32_t varGuideHistoryIndex;
     SHADER_PUBLIC float bounceIntensity;
-    SHADER_PUBLIC uint32_t diffuseRatioHistoryIndex;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -876,12 +869,9 @@ SHADER_PUBLIC struct GIDenoisePushConstant
     SHADER_PUBLIC uint32_t dstShBIndex;
     SHADER_PUBLIC uint32_t direction;
     SHADER_PUBLIC uint32_t stepSize;
-    SHADER_PUBLIC uint32_t aoIndex;
-    SHADER_PUBLIC float chromaLumaPower;
     SHADER_PUBLIC uint32_t srcSkyVisIndex;
     SHADER_PUBLIC uint32_t dstSkyVisIndex;
     SHADER_PUBLIC uint32_t gatherScale;
-    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GIUpscalePushConstant
@@ -907,28 +897,11 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC uint32_t bCascadesValid;
-    SHADER_PUBLIC uint32_t aoIndex;
     SHADER_PUBLIC uint32_t bentNormalIndex;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
+    SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
-    SHADER_PUBLIC uint32_t momentsIndex;
-    SHADER_PUBLIC uint32_t momentsHistoryIndex;
-    SHADER_PUBLIC uint32_t bMomentsValid;
-    SHADER_PUBLIC uint32_t motionTileIndex;
-    SHADER_PUBLIC uint32_t varGuideIndex;
-    SHADER_PUBLIC uint32_t gatherScale;
-    SHADER_PUBLIC uint32_t debugPathIndex;
-    SHADER_PUBLIC uint32_t skyVisAccumIndex;
-    SHADER_PUBLIC uint32_t skyVisAccumHistoryIndex;
-    SHADER_PUBLIC uint32_t frameIndex;
-};
-
-SHADER_PUBLIC struct GIMotionTileMaxPushConstant
-{
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t objectMotionIndex;
-    SHADER_PUBLIC uint32_t tileMaxIndex;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -1703,9 +1676,7 @@ SHADER_PUBLIC struct GIGatherDebugPushConstant
     SHADER_PUBLIC uint32_t dataIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t mode;
-    SHADER_PUBLIC uint32_t varGuideIndex;
     SHADER_PUBLIC uint32_t gatherScale;
-    SHADER_PUBLIC uint32_t pathIndex;
 };
 
 SHADER_PUBLIC struct ClusterGridDebugPushConstant

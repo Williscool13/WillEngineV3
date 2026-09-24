@@ -1026,7 +1026,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (Widgets::BeginSection("Diffuse GI")) {
             if (Widgets::PassFilter("Gather View")) {
-                const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape", "Variance Guide", "Upscale Path"};
+                const char* giGatherDebugLabels[] = {"Off", "Irradiance", "Tiers", "Hit Distance", "Accumulation", "Escape"};
                 ImGui::SetNextItemWidth(160.0f);
                 if (Widgets::Combo("Gather View##GIGatherDebug", &render.giGatherDebugMode, giGatherDebugLabels, static_cast<int>(std::size(giGatherDebugLabels)),
                                    "Final-gather view in the debug visualizer; runs the gather even when it is not applied, and lighting/lit history stay live so the screen tier behaves as in normal play. Irradiance = upscaled gather evaluated at the pixel normal. Tiers = where the first ray resolved: cyan screen, green cache, blue probe, yellow sky, red backface, magenta baked probe. Hit Distance = hitT grayscale. Accumulation = temporal counter (white = full history). Escape = first-ray classification: yellow sky miss, magenta backface, front-face hit distance green to red over 2-10m; red/yellow/magenta at interior texels means the ray left the room.")) {
@@ -1535,11 +1535,6 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Disables the gather screen tier and reflection screen-space hit lighting. Lit history is view-dependent and keeps evolving, which breaks frozen determinism and face-seams probe bakes.");
     }
-    ImGui::SameLine();
-    ImGui::Checkbox("Gather Ray##freeze", &state->debug.render.bFreezeGatherRay);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Forces the gather onto its skip-ray path (radiance cache at the pixel surface, probes as fallback) while frozen, removing the 1spp cosine ray entirely.");
-    }
 }
 
 void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -1892,13 +1887,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             Widgets::SubHeader("Gather");
             if (Widgets::Checkbox("GI Diffuse Gather##ddgi", &ddgi.bFinalGather,
-                                  "TDA-style resolve: one cosine ray per half-res pixel reads last frame's screen at its hit, then the radiance cache (probes as fallback, skybox on miss) instead of sampling probes at the pixel. Debug views live in the Debug View window.")) { changed = true; }
+                                  "TDA-style resolve: one cosine ray per half-res pixel takes last frame's lit screen at its hit as-is, else the radiance cache, else albedo * probe irradiance (skybox on miss), projected into 2-band SH, a-trous denoised, bilaterally upscaled and accumulated with a plain frame counter. Debug views live in the Debug View window.")) { changed = true; }
             if (ddgi.bFinalGather) {
                 if (Widgets::Checkbox("Denoise##gigather", &ddgi.bFinalGatherDenoise, "Separable bilateral blur on the gather SH before compositing (normal/depth/hit-distance edge stopping). Off = raw 1spp signal, for A/B.")) { changed = true; }
                 Widgets::SameLine();
-                if (Widgets::Checkbox("Chroma##gigather", &ddgi.bFinalGatherChromaDenoise, "Extra denoise iterations on chroma (CoCg chromaticity) only, luminance carried. Targets the low-frequency red/blue patching without softening luminance detail. Requires Denoise.")) { changed = true; }
-                Widgets::SameLine();
-                if (Widgets::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal, "Counter accumulation of the resolved gather across frames (up to 32). Off = this frame's result only; with Denoise also off the composite shows the raw gather.")) { changed = true; }
+                if (Widgets::Checkbox("Temporal##gigather", &ddgi.bFinalGatherTemporal, "Counter accumulation of the resolved gather across frames (up to 24). Off = this frame's result only; with Denoise also off the composite shows the raw gather.")) { changed = true; }
                 Widgets::SameLine();
                 if (Widgets::Checkbox("Quarter Res##gigather", &ddgi.bFinalGatherQuarterRes,
                                       "Gather at quarter render resolution instead of half: 1/4 the rays and denoise cost. Each gather texel covers 4x4 full-res pixels, so contact detail leans harder on the bilateral guides and history.")) { changed = true; }
@@ -1910,19 +1903,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     ddgi.gatherRaysPerPixel = static_cast<uint32_t>(gatherRaysPerPixel);
                     changed = true;
                 }
-                int gatherChromaPasses = static_cast<int>(ddgi.gatherChromaDenoisePasses);
-                if (Widgets::SliderInt("Chroma Passes##gigather", &gatherChromaPasses, 1, 4, {.tooltip = "Chroma-only denoise pass count; strides 8/16/32/64, each added pass doubles the hue-smoothing reach. Default 2.", .reset = true, .resetTo = 2.0})) {
-                    ddgi.gatherChromaDenoisePasses = static_cast<uint32_t>(gatherChromaPasses);
-                    changed = true;
-                }
-                if (Widgets::SliderFloat("Chroma Luma Ratio Power##gigather", &ddgi.gatherChromaLumaPower, 0.0f, 6.0f, {
-                                             .tooltip = "Falloff on the tap/center luminance ratio. Chroma taps carry no luminance and every other weight in these passes is geometric, so without this a cast shadow (same plane, same normal, same AO) takes the lit side's hue as a colored halo. 0 = off (pre-2026-07-30 behaviour). Integer values compile to a multiply chain. Default 2.", .reset = true,
-                                             .resetTo = 2.0
-                                         })) {
-                    changed = true;
-                }
-                if (Widgets::Checkbox("Skip Ray (Cache + Probes Only)##gigather", &ddgi.bGatherSkipRay,
-                                      "Skips the per-pixel cosine ray entirely: samples the radiance cache at the pixel's own surface point (probes as fallback, skybox on miss) instead of tracing. No ray noise, but resolution is capped by the cache's cell size (blockier); still runs through the same denoise/upscale/temporal pipeline. Best for clean/simply-textured scenes where the ray's 1spp noise isn't worth it.")) { changed = true; }
             }
 
             Widgets::SubHeader("Volume");
@@ -1997,7 +1977,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             int cacheAccumCap = static_cast<int>(ddgi.radianceCacheAccumCap);
             if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {
-                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance; the change-streak dump already cuts history on sustained changes. Shade events at 60 fps, scaled with frame rate. Default 16.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
+                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance. Shade events at 60 fps, scaled with frame rate. Default 4.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
                                    })) {
                 ddgi.radianceCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
                 changed = true;
@@ -2084,7 +2064,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (Widgets::Checkbox("Enable Reflection Probes", &reflectionProbe.bEnabled)) { changed = true; }
             if (Widgets::SliderFloat("Probe Intensity##reflectionprobe", &reflectionProbe.intensity, 0.0f, 2.0f, {.format = "%.2f", .reset = true, .resetTo = 1.0})) { changed = true; }
-            if (Widgets::SliderFloat("Baked Diffuse Clamp K##reflectionprobe", &reflectionProbe.bakedDiffuseClampK, 1.0f, 16.0f, {.format = "%.1f", .tooltip = "Luminance-ratio ceiling for the radiance-cache diffuse tier inside a probe volume: cache is scaled down when it exceeds K times the baked probe irradiance. Default 4.0.", .reset = true, .resetTo = 4.0})) { changed = true; }
 
             ImGui::Spacing();
             if (Widgets::Button("Reset Reflection Probes")) {

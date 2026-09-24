@@ -18,7 +18,6 @@ static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
 static const float GI_DENOISE_FIREFLY_SCALE = 4.0;
 static const float GI_DENOISE_HITT_FAR_METERS = 8.0;
-static const float GI_DENOISE_SKY_VIS_WORLD_RADIUS = 0.25;
 
 groupshared uint2 sShR[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint2 sShG[GI_DENOISE_TILE * GI_DENOISE_GROUP];
@@ -26,7 +25,6 @@ groupshared uint2 sShB[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint sNormal[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sViewZ[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sHitT[GI_DENOISE_TILE * GI_DENOISE_GROUP];
-groupshared float sAO[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sSkyVis[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 
 [shader("compute")]
@@ -45,7 +43,6 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         bool inside = all(pos >= int2(0)) && all(pos < int2(pc.gatherExtent));
         int2 p = clamp(pos, int2(0), int2(pc.gatherExtent) - 1);
 
-        uint2 fullPixel = GIGatherRepresentativePixel(uint2(p), pc.renderExtent, pc.gatherScale);
         uint2 g = rdgTexturesUInt2[pc.guideIndex].Load(int3(p, 0)).xy;
         float2 data = rdgTexturesFloat2[pc.dataIndex].Load(int3(p, 0)).xy;
         // Backface samples carry no radiance; excluding them here removes them as taps and reduces the center to a passthrough.
@@ -60,7 +57,6 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         // Far surface hits take the same opt-out. Past a few metres the exact distance carries no geometric correlation, but the edge-stop still reads the gap as a hard boundary and walls a far-bright outlier off from the near-dark neighbours that should average it down.
         bool bFarField = uint(data.y + 0.5) == GI_GATHER_TIER_SKY || data.x >= GI_DENOISE_HITT_FAR_METERS;
         sHitT[t] = bFarField ? -1.0 : data.x;
-        sAO[t] = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(fullPixel, 0)).y : 1.0;
         sSkyVis[t] = rdgTexturesFloat[pc.srcSkyVisIndex].Load(int3(p, 0)).r;
     }
     GroupMemoryBarrierWithGroupSync();
@@ -139,15 +135,11 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float w = exp(-0.66 * r * r);
             w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
-            // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT or AO steering.
-            // World radius: a screen-space footprint grows with distance, and the long sky-vis history carries the far estimate into the near view.
-            float3 tapDelta = tapXv - centerXv;
-            float wV = w * exp(-dot(tapDelta, tapDelta) / (GI_DENOISE_SKY_VIS_WORLD_RADIUS * GI_DENOISE_SKY_VIS_WORLD_RADIUS));
+            // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT steering.
+            float wV = w;
             if (centerHitT >= 0.0 && tapHitT >= 0.0) {
                 w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
             }
-            // GTAO steering: receiver-occlusion disparity marks corner/contact texels the plane/normal/hitT guides can't separate.
-            w *= exp2(-20.0 * abs(sAO[idx] - sAO[centerIdx]));
 
             sumR += UnpackHalf2x16Pair(sShR[idx]) * w;
             sumG += UnpackHalf2x16Pair(sShG[idx]) * w;
@@ -167,101 +159,4 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
     rdgStorageFloat4[pc.dstShGIndex][gatherPixel] = sumG;
     rdgStorageFloat4[pc.dstShBIndex][gatherPixel] = sumB;
     rdgStorageFloat[pc.dstSkyVisIndex][gatherPixel] = skyVis;
-}
-
-// Chroma-only widening: YCoCg commutes with SH and the kernel, so CoCg gets extra wide iterations while Y keeps the base chain's resolution. Direct loads; an LDS tile at these strides would be oversized.
-[shader("compute")]
-[numthreads(16, 16, 1)]
-void ComputeGIDenoiseChroma(uniform GIDenoisePushConstant pc, uint3 dtid : SV_DispatchThreadID)
-{
-    uint2 gatherPixel = dtid.xy;
-    if (any(gatherPixel >= pc.gatherExtent)) {
-        return;
-    }
-
-    float4 shR = rdgTexturesFloat4[pc.srcShRIndex].Load(int3(gatherPixel, 0));
-    float4 shG = rdgTexturesFloat4[pc.srcShGIndex].Load(int3(gatherPixel, 0));
-    float4 shB = rdgTexturesFloat4[pc.srcShBIndex].Load(int3(gatherPixel, 0));
-
-    uint2 centerGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(gatherPixel, 0)).xy;
-    float2 centerData = rdgTexturesFloat2[pc.dataIndex].Load(int3(gatherPixel, 0)).xy;
-    float centerViewZ = asfloat(centerGuide.y);
-    if (centerViewZ != 0.0 && uint(centerData.y + 0.5) != GI_GATHER_TIER_BACKFACE) {
-        SceneData scene = pc.sceneData[pc.sceneDataIndex];
-        float4 shY = 0.25 * shR + 0.5 * shG + 0.25 * shB;
-        // Filter chromaticity (CoCg/Y L0), not absolute CoCg: chroma magnitude scales with intensity, so absolute filtering across a steep luminance gradient dumps the bright side's chroma onto dim pixels (desaturated bright blotches near lights).
-        float centerY = max(shY.x, 1e-6);
-        float invCenterY = 1.0 / centerY;
-        float4 sumCo = 0.5 * (shR - shB) * invCenterY;
-        float4 sumCg = 0.25 * (2.0 * shG - shR - shB) * invCenterY;
-        float sumW = 1.0;
-
-        float3 centerNormal = UnpackNormalOct16(centerGuide.x);
-        bool bCenterFar = uint(centerData.y + 0.5) == GI_GATHER_TIER_SKY || centerData.x >= GI_DENOISE_HITT_FAR_METERS;
-        float centerHitT = bCenterFar ? -1.0 : centerData.x;
-        uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent, pc.gatherScale);
-        float centerAO = pc.aoIndex != ~0x0u ? rdgTexturesFloat2[pc.aoIndex].Load(int3(centerFull, 0)).y : 1.0;
-        float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
-        float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, centerUv, centerViewZ);
-        float invPlaneSigma = 1.0 / (GI_DENOISE_PLANE_DIST_SIGMA * abs(centerViewZ));
-
-        const int2 dir = pc.direction == 0u ? int2(1, 0) : int2(0, 1);
-        int step = int(pc.stepSize);
-        [unroll]
-        for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
-            if (d == 0) { continue; }
-            int2 tap = clamp(int2(gatherPixel) + dir * (d * step), int2(0), int2(pc.gatherExtent) - 1);
-            uint2 tapGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(tap, 0)).xy;
-            float2 tapData = rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).xy;
-            float tapViewZ = asfloat(tapGuide.y);
-            if (tapViewZ == 0.0 || uint(tapData.y + 0.5) == GI_GATHER_TIER_BACKFACE) { continue; }
-
-            uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
-            float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
-            float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
-            bool bTapFar = uint(tapData.y + 0.5) == GI_GATHER_TIER_SKY || tapData.x >= GI_DENOISE_HITT_FAR_METERS;
-            float tapHitT = bTapFar ? -1.0 : tapData.x;
-
-            float r = float(d) / float(GI_DENOISE_RADIUS);
-            float w = exp(-0.66 * r * r);
-            w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-            w *= pow(saturate(dot(centerNormal, UnpackNormalOct16(tapGuide.x))), GI_DENOISE_NORMAL_POWER);
-            if (centerHitT >= 0.0 && tapHitT >= 0.0) {
-                w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
-            }
-            if (pc.aoIndex != ~0x0u) {
-                w *= exp2(-20.0 * abs(rdgTexturesFloat2[pc.aoIndex].Load(int3(tapFull, 0)).y - centerAO));
-            }
-            if (w <= 1e-4) { continue; }
-
-            float4 tapShR = rdgTexturesFloat4[pc.srcShRIndex].Load(int3(tap, 0));
-            float4 tapShG = rdgTexturesFloat4[pc.srcShGIndex].Load(int3(tap, 0));
-            float4 tapShB = rdgTexturesFloat4[pc.srcShBIndex].Load(int3(tap, 0));
-            float tapY = max(0.25 * tapShR.x + 0.5 * tapShG.x + 0.25 * tapShB.x, 1e-6);
-            w *= pow(min(centerY, tapY) / max(centerY, tapY), pc.chromaLumaPower);
-            if (w <= 1e-4) { continue; }
-
-            float tapNorm = w / tapY;
-            sumCo += 0.5 * (tapShR - tapShB) * tapNorm;
-            sumCg += 0.25 * (2.0 * tapShG - tapShR - tapShB) * tapNorm;
-            sumW += w;
-        }
-
-        float scale = shY.x / sumW;
-        float4 co = sumCo * scale;
-        float4 cg = sumCg * scale;
-        // Scale chroma back rather than per-channel clamping, so widened chroma can neither push RGB negative nor hue-shift via clipping.
-        float3 delta = float3(co.x - cg.x, cg.x, -co.x - cg.x);
-        float minDelta = min(delta.r, min(delta.g, delta.b));
-        float chromaScale = minDelta < 0.0 ? saturate(shY.x / max(-minDelta, 1e-6)) : 1.0;
-        co *= chromaScale;
-        cg *= chromaScale;
-        shR = shY + co - cg;
-        shG = shY + cg;
-        shB = shY - co - cg;
-    }
-
-    rdgStorageFloat4[pc.dstShRIndex][gatherPixel] = shR;
-    rdgStorageFloat4[pc.dstShGIndex][gatherPixel] = shG;
-    rdgStorageFloat4[pc.dstShBIndex][gatherPixel] = shB;
 }

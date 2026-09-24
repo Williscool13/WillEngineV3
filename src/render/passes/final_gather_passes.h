@@ -17,7 +17,6 @@ namespace Render
 {
 class PipelineManager;
 
-inline const StringID RESTIR_DIFFUSE_RATIO = "restir_diffuse_ratio"_sid;
 inline const StringID GI_GATHER_SH_R = "gi_gather_sh_r"_sid;
 inline const StringID GI_GATHER_SH_G = "gi_gather_sh_g"_sid;
 inline const StringID GI_GATHER_SH_B = "gi_gather_sh_b"_sid;
@@ -30,18 +29,12 @@ inline const StringID GI_GATHER_TMP_SH_R = "gi_gather_tmp_sh_r"_sid;
 inline const StringID GI_GATHER_TMP_SH_G = "gi_gather_tmp_sh_g"_sid;
 inline const StringID GI_GATHER_TMP_SH_B = "gi_gather_tmp_sh_b"_sid;
 inline const StringID GI_GATHER_SKY_VIS = "gi_gather_sky_vis"_sid;
-inline const StringID GI_GATHER_VARIANCE_GUIDE = "gi_gather_variance_guide"_sid;
 inline const StringID GI_GATHER_RAW_SKY_VIS = "gi_gather_raw_sky_vis"_sid;
 inline const StringID GI_GATHER_TMP_SKY_VIS = "gi_gather_tmp_sky_vis"_sid;
 inline const StringID GI_GATHER_RESOLVED = "gi_gather_resolved"_sid;
-inline const StringID GI_GATHER_MOMENTS = "gi_gather_moments"_sid;
-inline const StringID GI_GATHER_SKY_VIS_ACCUM = "gi_gather_sky_vis_accum"_sid;
-inline const StringID GI_MOTION_TILED_MAX = "gi_motion_tiled_max"_sid;
-inline const StringID GI_MOTION_TILED_NEIGHBOR_MAX = "gi_motion_tiled_neighbor_max"_sid;
 inline const StringID OBJECT_MOTION = "object_motion"_sid;
 inline const StringID GI_DECONSTRUCT_TARGET = "gi_deconstruct_target"_sid;
 inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;
-inline const StringID GI_UPSCALE_PATH_DEBUG = "gi_upscale_path_debug"_sid;
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;
 
@@ -53,12 +46,12 @@ struct FinalGatherFrame
 
 /**
  * Shared per-pixel object motion at render extent, RGBA16F (motionUv.xy = gbuffer MV minus camera-static reprojection, linear viewZ, motion blur mask).
- * Idempotent; the GI motion tile max and object-only motion blur both call it and the first caller adds the pass.
+ * Idempotent; the first caller adds the pass.
  */
 void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex);
 
 /**
- * TDA-style final gather: one cosine-weighted ray per half-res pixel, radiance cache read at the hit (probes as fallback, skybox on miss), projected into per-channel 2-band SH targets.
+ * TDA-style final gather: one cosine-weighted ray per half-res pixel, resolved against last frame's lit screen, then the radiance cache, then probes (skybox on miss), projected into per-channel 2-band SH targets.
  * @param graph
  * @param pipelineManager
  * @param viewFamily
@@ -67,19 +60,16 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
  * @param sceneIndex
  * @param frameNumber
  * @param bDenoise
- * @param chromaDenoisePasses Extra denoise iterations on CoCg chromaticity only, Y carried (strides doubling from 8, clamped to [0, 4]; 0 = off); targets low-frequency lighting-chroma noise the shared-radius chain cannot reach. Requires bDenoise.
- * @param chromaLumaPower Falloff exponent on the tap/center luminance ratio in the chroma passes; the only guard stopping a lit region's hue from bleeding across a cast shadow, whose other edge-stops are all geometric. 0 disables it.
  * @param bTemporalFilter Counter accumulation of the resolved output against carried history; off = this frame's resolve only (raw-signal inspection).
- * @param bSkipRay Skip the cosine ray entirely; sample the radiance cache at the pixel's own surface point (probes as fallback) instead.
  * @param raysPerPixel Gather rays per half-res pixel, clamped to [1, GI_GATHER_MAX_RAYS_PER_PIXEL]. Uniform across the frame, so cost is flat and rays stay coherent; relative noise falls as 1/sqrt(n), which is the only lever on dark bright-to-dark gradients where a single ray finds a bright aperture too rarely.
  * @param bDebugView A GI-gather debug view is active; disable the screen tier so the debug color written into the composite is not fed back as radiance.
  * @param bDisableScreenTier Disable the lit-history screen tier so ray hits resolve only against world-space sources; set while the GI field is frozen (lit history is view-dependent and keeps evolving, which face-seams probe bakes).
  * @param bQuarterRes Gather at quarter render resolution instead of half: 1/4 the rays and denoise work; the upscale footprint spans 4x4 full-res pixels per gather texel, so sub-footprint detail leans harder on the guides and history.
- * @param bDebugUpscalePath Write gi_upscale_path_debug: per-pixel tint of which source built the upscale's current (footprint/fallback/world tier), brightness = current's weight in the temporal blend.
- * @param bounceIntensity The radiance cache's DDGI bounce scale; the screen tier re-adds its indirect with the same scale so both tiers agree at a hit.
+ * @param bounceIntensity The radiance cache's DDGI bounce scale; the probe tier uses the same scale so cache and probes agree at a hit.
  * @return
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber, bool bDenoise, uint32_t chromaDenoisePasses, float chromaLumaPower, bool bTemporalFilter, bool bSkipRay, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, bool bDebugUpscalePath, bool bSplitGather, float bounceIntensity);
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber,
+    bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity);
 
 /**
  * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.

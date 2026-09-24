@@ -776,7 +776,6 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     if (!config.bEnabled) { return; }
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-    vf.bakedDiffuseClampK = config.bakedDiffuseClampK;
     vf.bReflectionProbeBruteForce = config.bBruteForcePick;
 
     const entt::registry& registry = state->registry;

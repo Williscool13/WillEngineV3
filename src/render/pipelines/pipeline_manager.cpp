@@ -534,16 +534,10 @@ void PipelineManager::RegisterPipelines()
                             sizeof(RadianceCacheShadePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("radiance_cache_build_indirect"_sid, src / "radiance_cache_build_indirect.spv", "ComputeRadianceCacheBuildIndirect",
                             sizeof(RadianceCacheBuildIndirectPushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("gi_gather"_sid, src / "gi_gather.spv", "ComputeGIGather",
-                            sizeof(GIGatherPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gi_denoise"_sid, src / "gi_denoise.spv", "ComputeGIDenoise",
-                            sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("gi_denoise_chroma"_sid, src / "gi_denoise.spv", "ComputeGIDenoiseChroma",
                             sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gi_upscale"_sid, src / "gi_upscale.spv", "ComputeGIUpscale",
                             sizeof(GIUpscalePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("gi_motion_tile_max"_sid, src / "gi_upscale.spv", "ComputeGIMotionTileMax",
-                            sizeof(GIMotionTileMaxPushConstant), PipelineCategory::Critical);
 
     RegisterComputePipeline("gpu_debug_build_indirect"_sid, src / "gpu_debug_build_indirect.spv", "ComputeGPUDebugBuildIndirect",
                             sizeof(GPUDebugBuildIndirectPushConstant), PipelineCategory::Critical);

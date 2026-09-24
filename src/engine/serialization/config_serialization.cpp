@@ -301,13 +301,8 @@ void Serialize(const Core::DDGIParams& p, TextWriter& w)
     w.Key("bApplyToLighting", p.bApplyToLighting);
     w.Key("bFinalGather", p.bFinalGather);
     w.Key("bFinalGatherQuarterRes", p.bFinalGatherQuarterRes);
-    w.Key("bSplitGather", p.bSplitGather);
     w.Key("bFinalGatherDenoise", p.bFinalGatherDenoise);
-    w.Key("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
-    w.Key("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
-    w.Key("gatherChromaLumaPower", p.gatherChromaLumaPower);
     w.Key("bFinalGatherTemporal", p.bFinalGatherTemporal);
-    w.Key("bGatherSkipRay", p.bGatherSkipRay);
     w.Key("gatherRaysPerPixel", p.gatherRaysPerPixel);
     w.Key("normalBias", p.normalBias);
     w.Key("viewBias", p.viewBias);
@@ -347,14 +342,9 @@ void Deserialize(const TextReader& r, Core::DDGIParams& p)
     p.bApplyToLighting = r.Bool("bApplyToLighting", p.bApplyToLighting);
     p.bFinalGather = r.Bool("bFinalGather", p.bFinalGather);
     p.bFinalGatherQuarterRes = r.Bool("bFinalGatherQuarterRes", p.bFinalGatherQuarterRes);
-    p.bSplitGather = r.Bool("bSplitGather", p.bSplitGather);
     p.bFinalGatherDenoise = r.Bool("bFinalGatherDenoise", p.bFinalGatherDenoise);
-    p.bFinalGatherChromaDenoise = r.Bool("bFinalGatherChromaDenoise", p.bFinalGatherChromaDenoise);
-    p.gatherChromaDenoisePasses = r.UInt("gatherChromaDenoisePasses", p.gatherChromaDenoisePasses);
-    p.gatherChromaLumaPower = r.Float("gatherChromaLumaPower", p.gatherChromaLumaPower);
     p.bFinalGatherTemporal = r.Bool("bFinalGatherTemporal", p.bFinalGatherTemporal);
     p.gatherRaysPerPixel = r.UInt("gatherRaysPerPixel", p.gatherRaysPerPixel);
-    p.bGatherSkipRay = r.Bool("bGatherSkipRay", p.bGatherSkipRay);
     p.normalBias = r.Float("normalBias", p.normalBias);
     p.viewBias = r.Float("viewBias", p.viewBias);
     p.bRelocation = r.Bool("bRelocation", p.bRelocation);
@@ -406,7 +396,6 @@ void Serialize(const Core::ReflectionProbeConfiguration& p, TextWriter& w)
     w.Key("bEnabled", p.bEnabled);
     w.Key("intensity", p.intensity);
     w.Key("bDebugDraw", p.bDebugDraw);
-    w.Key("bakedDiffuseClampK", p.bakedDiffuseClampK);
     w.Key("bBruteForcePick", p.bBruteForcePick);
 }
 
@@ -415,7 +404,6 @@ void Deserialize(const TextReader& r, Core::ReflectionProbeConfiguration& p)
     p.bEnabled = r.Bool("bEnabled", p.bEnabled);
     p.intensity = r.Float("intensity", p.intensity);
     p.bDebugDraw = r.Bool("bDebugDraw", p.bDebugDraw);
-    p.bakedDiffuseClampK = r.Float("bakedDiffuseClampK", p.bakedDiffuseClampK);
     p.bBruteForcePick = r.Bool("bBruteForcePick", p.bBruteForcePick);
 }
 

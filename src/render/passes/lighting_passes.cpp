@@ -424,7 +424,6 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .lightSpecularFromReflectionsMax = lightSpecularFromReflectionsMax,
                     .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
-                    .diffuseRatioIndex = ~0x0u,
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };

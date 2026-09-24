@@ -59,9 +59,6 @@ SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_SHADE_BUDGET = 20480u;
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_SUN_SAMPLES = 4u; // independent cone-sampled sun visibility rays averaged per cell shade
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_WARMSTART_SEED_CAP = 8u; // count a re-keyed cell inherits from its warm-start source; ~half RADIANCE_CACHE_ACCUM_FRAMES so a coarser parent estimate can't fully dominate
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
-SHADER_PUBLIC SHADER_CONST float RADIANCE_CACHE_CHANGE_THRESHOLD = 0.35; // max-channel relative delta that counts toward a change streak
-SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_CHANGE_STREAK = 3u; // consecutive same-direction large deltas before accumulated history is cut
-SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_DUMP_KEEP_COUNT = 2u; // count a streak dump clamps to
 
 SHADER_PUBLIC struct RadianceCacheCell
 {

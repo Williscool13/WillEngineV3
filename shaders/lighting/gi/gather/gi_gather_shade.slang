@@ -18,39 +18,16 @@ import reflection_probe_interop;
 import reflection_probe_common;
 
 // =============== Shader Summary ============
-// One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
+// One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: last frame's lit screen, else cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
 // Sky misses do not feed the SH; the miss fraction goes to a scalar sky-visibility channel, filtered separately and multiplied by prefiltered sky irradiance at upscale.
 
 static const float GI_GATHER_MAX_RADIANCE = 1310720.0;
-static const float GI_GATHER_MAX_RADIANCE_MIN = 3276.8;
-static const float GI_GATHER_FIREFLY_EXPECTATION_K = 8.0;
-static const float GI_GATHER_SCREEN_MIN_ROUGHNESS = 0.3;
-static const float GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE = 1.0;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
 {
     float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
     return maxChannel > maxRadiance ? radiance * (maxRadiance / maxChannel) : radiance;
-}
-
-static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
-{
-    float r = sqrt(u1);
-    float phi = 6.28318530718 * u2;
-    float3 up = abs(n.z) < 0.999 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0);
-    float3 t = normalize(cross(up, n));
-    float3 b = cross(n, t);
-    return normalize(r * cos(phi) * t + r * sin(phi) * b + sqrt(max(1.0 - u1, 0.0)) * n);
-}
-
-static float3 GIGatherViewPosAt(GIGatherPushConstant pc, SceneData scene, int2 px)
-{
-    px = clamp(px, int2(0), int2(pc.renderExtent) - 1);
-    float d = rdgTexturesFloat[pc.depthIndex].Load(int3(px, 0)).r;
-    float vd = ScreenToViewSpaceDepth(d, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    float2 uv = (float2(px) + 0.5) / float2(pc.renderExtent);
-    return CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, vd);
 }
 
 struct GatherHitSurface {
@@ -88,6 +65,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     return s;
 }
 
+/** DDGI scaled by bounceIntensity to match what ShadeRadianceCacheCell feeds the cache. */
 static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, ReflectionProbeBlend probeBlend)
 {
     float3 indirectDiffuse = float3(0.0);
@@ -98,7 +76,7 @@ static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, 
     if (pc.bCascadesValid != 0) {
         float edgeFade;
         float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, normal, direction, pc.ddgiCascades, 0.75 * hitT, edgeFade);
-        indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
+        indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
         giW = gi.w;
     }
     if (probeBlend.indexA >= 0) {
@@ -120,32 +98,21 @@ static void GatherTouchCell(GIGatherPushConstant pc, uint slot)
 }
 
 /** Cache-then-probe resolution at a ray hit; shared by front-face hits whose screen tier failed and backface hits. */
-static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos, float3 hitWorldPos, GatherHitSurface hit, float3 direction, float hitT, uint2 originCellKey, out uint tier)
+static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos, float3 hitWorldPos, GatherHitSurface hit, float3 direction, float hitT, out uint tier)
 {
     float3 radiance;
     RadianceCacheKey key = RadianceCacheComputeKey(hitWorldPos, hit.normal, cameraWorldPos);
     uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos, hit.normal);
-    // A hit inside the shading point's own cell reads back the radiance this pixel just contributed, a self-feedback loop with bounceIntensity as its gain.
-    // Fall through to the probe tier instead of trusting the cell. Tested against the found slot's key, not the computed one, since the lookup is LOD-tolerant.
-    bool bSelfCell = slot != RADIANCE_CACHE_HASH_INVALID && all(pc.cacheKeys[slot] == originCellKey);
     uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
-    uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
-    ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
-    if (pc.reflectionProbeCount > 0u) {
-        probeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
-    }
-    if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u && !bSelfCell) {
+    if (RadianceCacheRadianceShaded(packedRadiance)) {
         radiance = RadianceCacheUnpackRadiance(packedRadiance);
         tier = GI_GATHER_TIER_CACHE;
-        if (probeBlend.indexA >= 0) {
-            float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, hit.normal);
-            float probeLuma = Luma(probeIrr);
-            if (probeLuma > 1e-4) {
-                radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeBlend.coverage);
-            }
-        }
         GatherTouchCell(pc, slot);
     } else {
+        ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
+        if (pc.reflectionProbeCount > 0u) {
+            probeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
+        }
         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
         radiance = hit.diffuseColor * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
         tier = GI_GATHER_TIER_PROBE;
@@ -173,7 +140,6 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
     float2 data = float2(0.0, float(GI_GATHER_TIER_INVALID));
     uint2 guide = uint2(0u, 0u);
     float skyVis = 0.0;
-    float varGuide = 0.0;
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
@@ -188,242 +154,135 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
-        float maxRadiance = GI_GATHER_MAX_RADIANCE;
+        uint rayCount = max(pc.rayCount, 1u);
+        uint hitBase = (gatherPixel.y * pc.gatherExtent.x + gatherPixel.x) * rayCount;
+        float4 sumR = float4(0.0);
+        float4 sumG = float4(0.0);
+        float4 sumB = float4(0.0);
+        uint validCount = 0u;
+        float skyVisSum = 0.0;
+        float firstHitT = 0.0;
+        uint firstTier = GI_GATHER_TIER_BACKFACE;
+        float lastHitT = 0.0;
+        uint lastTier = GI_GATHER_TIER_BACKFACE;
+        float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
+        float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, footprint);
+        for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {
+            GIGatherHit rec = pc.hitBuffer[hitBase + sampleIndex];
+            float3 direction = rec.direction;
 
-        if (pc.bSkipRay != 0u) {
             float3 radiance = float3(0.0);
+            float hitT = 10000.0;
             uint tier;
-            int2 basePx = int2(pixel);
-            float3 vR = GIGatherViewPosAt(pc, scene, basePx + int2(1, 0));
-            float3 vL = GIGatherViewPosAt(pc, scene, basePx - int2(1, 0));
-            float3 vD = GIGatherViewPosAt(pc, scene, basePx + int2(0, 1));
-            float3 vU = GIGatherViewPosAt(pc, scene, basePx - int2(0, 1));
-            float3 ddxV = abs(vR.z - viewPosition.z) < abs(vL.z - viewPosition.z) ? (vR - viewPosition) : (viewPosition - vL);
-            float3 ddyV = abs(vD.z - viewPosition.z) < abs(vU.z - viewPosition.z) ? (vD - viewPosition) : (viewPosition - vU);
-            float3 geoN = normalize(mul((float3x3)scene.invView, normalize(cross(ddxV, ddyV))));
-            if (dot(geoN, worldN) < 0.0) {
-                geoN = -geoN;
-            }
-            RadianceCacheKey key = RadianceCacheComputeKey(worldPosition, geoN, scene.cameraWorldPos.xyz);
-            uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, worldPosition, geoN);
-            uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
-            uint cellCount = slot != RADIANCE_CACHE_HASH_INVALID ? (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu : 0u;
-            ReflectionProbeBlend probeBlend = ReflectionProbeBlendNone();
-            if (pc.reflectionProbeCount > 0u) {
-                probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
-            }
-            // Count gate: a count-1 cell is one bary-jittered point; the probe tier is smoother while cells stream in.
-            if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
-                radiance = RadianceCacheUnpackRadiance(packedRadiance);
-                tier = GI_GATHER_TIER_CACHE;
-                if (probeBlend.indexA >= 0) {
-                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
-                    float probeLuma = Luma(probeIrr);
-                    if (probeLuma > 1e-4) {
-                        radiance *= lerp(1.0, min(1.0, pc.bakedDiffuseClampK * probeLuma / max(Luma(radiance), 1e-4)), probeBlend.coverage);
-                    }
+            if (rec.hitT != GI_GATHER_HIT_SKY) {
+                hitT = rec.hitT;
+                Instance instance = pc.instanceBuffer[rec.instanceID];
+                float3 hitWorldPos = rayOrigin + direction * hitT;
+                GatherHitSurface hit = DecodeGatherHit(pc, instance, rec.primIndex & ~GI_GATHER_HIT_FRONT_FACE_BIT, rec.bary);
+                bool bFrontFace = (rec.primIndex & GI_GATHER_HIT_FRONT_FACE_BIT) != 0u;
+                if (IsTwoSidedBackHit(pc.materialBuffer, instance, bFrontFace)) {
+                    hit.normal = -hit.normal;
+                    bFrontFace = true;
                 }
-                // Reader keeps the cell resident: probe rays alone can let a gather-consumed sparse cell age past the LRU window.
-                GatherTouchCell(pc, slot);
-            } else {
-                float3 indirectDiffuse = float3(0.0);
-                float giW = 0.0;
-                if (pc.skyboxIndex >= 0) {
-                    indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-                }
-                if (pc.bCascadesValid != 0) {
-                    float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
-                    float edgeFade;
-                    float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
-                    indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
-                    giW = gi.w;
-                }
-                // No hit material to modulate by; the shading pixel's own albedo is applied once downstream (matches the non-gather DDGI path).
-                radiance = indirectDiffuse;
-                tier = GI_GATHER_TIER_PROBE;
-                if (probeBlend.indexA >= 0) {
-                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
-                    float probeWeight = probeBlend.coverage * (1.0 - giW);
-                    radiance = lerp(radiance, probeIrr, probeWeight);
-                    if (probeWeight > 0.5) {
-                        tier = GI_GATHER_TIER_BAKED;
-                    }
-                }
-            }
 
-            radiance = GIGatherClampRadiance(radiance, maxRadiance) * scene.preExposure;
-            shR = float4(radiance.r, 0.0, 0.0, 0.0);
-            shG = float4(radiance.g, 0.0, 0.0, 0.0);
-            shB = float4(radiance.b, 0.0, 0.0, 0.0);
-            data = float2(0.0, float(tier));
-        } else {
-            if (pc.bCascadesValid != 0) {
-                float3 cameraDirection = normalize(mul((float3x3)scene.invView, viewPosition));
-                float edgeFade;
-                float priorRelDev;
-                float4 expected = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade, priorRelDev);
-                if (expected.w > 0.5) {
-                    maxRadiance = clamp(GI_GATHER_FIREFLY_EXPECTATION_K * Luma(expected.rgb * expected.w), GI_GATHER_MAX_RADIANCE_MIN, GI_GATHER_MAX_RADIANCE);
-                    varGuide = saturate(priorRelDev / GI_GATHER_VARIANCE_GUIDE_SCALE);
-                }
-            }
-            uint rayCount = max(uint(rdgTexturesFloat[pc.rayMetaIndex].Load(int3(gatherPixel, 0)).r), 1u);
-            uint hitBase = (gatherPixel.y * pc.gatherExtent.x + gatherPixel.x) * max(pc.rayCount, 1u);
-            float4 sumR = float4(0.0);
-            float4 sumG = float4(0.0);
-            float4 sumB = float4(0.0);
-            uint validCount = 0u;
-            float skyVisSum = 0.0;
-            float firstHitT = 0.0;
-            uint firstTier = GI_GATHER_TIER_BACKFACE;
-            float lastHitT = 0.0;
-            uint lastTier = GI_GATHER_TIER_BACKFACE;
-            float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
-            float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, footprint);
-            uint2 originCellKey = RadianceCachePackKey(RadianceCacheComputeKey(worldPosition, worldN, scene.cameraWorldPos.xyz));
-            for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {
-                GIGatherHit rec = pc.hitBuffer[hitBase + sampleIndex];
-                float3 direction = rec.direction;
-
-                float3 radiance = float3(0.0);
-                float hitT = 10000.0;
-                uint tier;
-                if (rec.hitT != GI_GATHER_HIT_SKY) {
-                    hitT = rec.hitT;
-                    Instance instance = pc.instanceBuffer[rec.instanceID];
-                    float3 hitWorldPos = rayOrigin + direction * hitT;
-                    GatherHitSurface hit = DecodeGatherHit(pc, instance, rec.primIndex & ~GI_GATHER_HIT_FRONT_FACE_BIT, rec.bary);
-                    bool bFrontFace = (rec.primIndex & GI_GATHER_HIT_FRONT_FACE_BIT) != 0u;
-                    if (IsTwoSidedBackHit(pc.materialBuffer, instance, bFrontFace)) {
-                        hit.normal = -hit.normal;
-                        bFrontFace = true;
-                    }
-
-                    // Tier 0: last frame's on-screen lit color at the hit, when visible and geometry agrees (mirrors reflection_shade).
-                    // Emission never rides the gather (emissive DI belongs to ReSTIR tri-lights, absent otherwise by design; probes carry the bounce), and lit history at an emitter contains its glow.
-                    bool bResolved = false;
-                    if (bFrontFace && !hit.bEmissive && pc.litHistoryIndex != ~0x0u) {
-                        float4 prevClip = mul(scene.prevViewProj, float4(hitWorldPos, 1.0));
-                        if (prevClip.w > 0.0) {
-                            float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
-                            if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
-                                // Validity-weighted bilinear: every gate applies per corner, so a specular or disoccluded texel contributes nothing instead of bleeding its spike into the blend.
-                                float2 texelPos = prevUV * float2(pc.renderExtent) - 0.5;
-                                int2 base = int2(floor(texelPos));
-                                float2 f = texelPos - float2(base);
-                                float3 sum = float3(0.0);
-                                float3 giPrevSum = float3(0.0);
-                                float ratioSum = 0.0;
-                                float sumW = 0.0;
-                                float3 prevCameraPos = mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz;
-                                float receiverAgreement = saturate(dot(normalize(prevCameraPos - hitWorldPos), -direction));
-                                float4 prevRawDepths = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], float2(base + 1) / float2(pc.renderExtent)).wzxy;
-                                [unroll]
-                                for (uint c = 0; c < 4; c++) {
-                                    int2 offset = int2(int(c & 1u), int((c >> 1u) & 1u));
-                                    float w = (offset.x != 0 ? f.x : 1.0 - f.x) * (offset.y != 0 ? f.y : 1.0 - f.y);
-                                    if (w <= 0.0) {
-                                        continue;
-                                    }
-                                    int2 corner = clamp(base + offset, int2(0), int2(pc.renderExtent) - int2(1));
-                                    float prevRawDepth = prevRawDepths[c];
-                                    if (prevRawDepth <= 0.0) {
-                                        continue;
-                                    }
-                                    float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-                                    if (abs(prevViewDepth - prevClip.w) > GI_GATHER_DISOCCLUSION_SENSITIVITY * abs(scene.ndcToViewMul.y) * prevClip.w) {
-                                        continue;
-                                    }
-                                    uint4 prevGt1 = rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(corner, 0));
-                                    float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(prevGt1.r)));
-                                    float prevRoughness;
-                                    float prevMetallic;
-                                    UnpackPBR(prevGt1.b, prevRoughness, prevMetallic);
-                                    // Specular-dominant pixels carry view-dependent radiance (a mirror shows the light source itself); fall through to the diffuse-only tiers.
-                                    if (dot(hit.normal, prevWorldN) <= 0.5 || prevMetallic >= 0.5 || prevRoughness <= GI_GATHER_SCREEN_MIN_ROUGHNESS) {
-                                        continue;
-                                    }
-                                    // Emitter texel: rays through a light proxy hit the surface just behind it and reproject onto the emitter's own pixels, importing its glow.
-                                    if ((prevGt1.w & 2u) != 0u) {
-                                        continue;
-                                    }
-
-                                    float4 lit = rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0));
-                                    float lobeAlpha2 = max(prevRoughness * prevRoughness * prevRoughness * prevRoughness * GI_GATHER_SCREEN_SPECULAR_LOBE_SCALE, 1e-4);
-                                    float specularKeep = exp(-(1.0 - receiverAgreement) * 0.5 / lobeAlpha2);
-                                    sum += lit.rgb * (1.0 - (1.0 - lit.a) * (1.0 - specularKeep)) * w;
-                                    if (pc.giHistoryIndex != ~0x0u) {
-                                        giPrevSum += rdgTexturesFloat4[pc.giHistoryIndex].Load(int3(corner, 0)).rgb * w;
-                                    }
-                                    ratioSum += (pc.diffuseRatioHistoryIndex != ~0x0u ? rdgTexturesFloat[pc.diffuseRatioHistoryIndex].Load(int3(corner, 0)).r : 1.0) * w;
-                                    sumW += w;
+                // Tier 0: last frame's on-screen lit color at the hit, when visible and geometry agrees.
+                // Emission never rides the gather (emissive DI belongs to ReSTIR tri-lights, absent otherwise by design; probes carry the bounce), and lit history at an emitter contains its glow.
+                bool bResolved = false;
+                if (bFrontFace && !hit.bEmissive && pc.litHistoryIndex != ~0x0u) {
+                    float4 prevClip = mul(scene.prevViewProj, float4(hitWorldPos, 1.0));
+                    if (prevClip.w > 0.0) {
+                        float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+                        if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
+                            // Validity-weighted bilinear: every gate applies per corner, so a disoccluded texel contributes nothing instead of bleeding into the blend.
+                            float2 texelPos = prevUV * float2(pc.renderExtent) - 0.5;
+                            int2 base = int2(floor(texelPos));
+                            float2 f = texelPos - float2(base);
+                            float3 sum = float3(0.0);
+                            float sumW = 0.0;
+                            float4 prevRawDepths = rdgTexturesFloat[pc.depthHistoryIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], float2(base + 1) / float2(pc.renderExtent)).wzxy;
+                            [unroll]
+                            for (uint c = 0; c < 4; c++) {
+                                int2 offset = int2(int(c & 1u), int((c >> 1u) & 1u));
+                                float w = (offset.x != 0 ? f.x : 1.0 - f.x) * (offset.y != 0 ? f.y : 1.0 - f.y);
+                                if (w <= 0.0) {
+                                    continue;
                                 }
-                                if (sumW > 1e-3) {
-                                    radiance = sum / (sumW * scene.prevPreExposure);
-                                    // Demodulate the recirculated GI: lit history contains last frame's gather output (composite kD*albedo*gtao*gi), so the loop gain is ~albedo and screen-space artifacts self-sustain (frame-entry seam). Subtract it and re-source the indirect component from the world tiers; direct stays exact. diffuseColor stands in for the composite factor, so the subtraction over-reaches where AO is dark; the floor bounds it.
-                                    if (pc.giHistoryIndex != ~0x0u) {
-                                        ReflectionProbeBlend demodProbeBlend = ReflectionProbeBlendNone();
-                                        if (pc.reflectionProbeCount > 0u) {
-                                            demodProbeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
-                                        }
-                                        float3 worldIndirect = ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, demodProbeBlend);
-                                        float3 direct = max(radiance - hit.diffuseColor * (giPrevSum / (sumW * scene.prevPreExposure)), float3(0.0));
-                                        radiance = direct * (ratioSum / sumW) + hit.diffuseColor * worldIndirect * pc.bounceIntensity;
-                                    }
-                                    tier = GI_GATHER_TIER_SCREEN;
-                                    bResolved = true;
+                                int2 corner = clamp(base + offset, int2(0), int2(pc.renderExtent) - int2(1));
+                                float prevRawDepth = prevRawDepths[c];
+                                if (prevRawDepth <= 0.0) {
+                                    continue;
                                 }
+                                float prevViewDepth = ScreenToViewSpaceDepth(prevRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                                if (abs(prevViewDepth - prevClip.w) > GI_GATHER_DISOCCLUSION_SENSITIVITY * abs(scene.ndcToViewMul.y) * prevClip.w) {
+                                    continue;
+                                }
+                                uint4 prevGt1 = rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(corner, 0));
+                                float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(prevGt1.r)));
+                                if (dot(hit.normal, prevWorldN) <= 0.5) {
+                                    continue;
+                                }
+                                // Emitter texel: rays through a light proxy hit the surface just behind it and reproject onto the emitter's own pixels, importing its glow.
+                                if ((prevGt1.w & 2u) != 0u) {
+                                    continue;
+                                }
+                                sum += rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
+                                sumW += w;
+                            }
+                            if (sumW > 1e-3) {
+                                radiance = sum / (sumW * scene.prevPreExposure);
+                                tier = GI_GATHER_TIER_SCREEN;
+                                bResolved = true;
                             }
                         }
                     }
-
-                    if (!bFrontFace) {
-                        // Near backface = origin buried in geometry (leak guard).
-                        // Far backface = open space behind a single-sided surface: shade its back through the world tiers.
-                        if (hitT > GI_GATHER_BACKFACE_GUARD_DISTANCE) {
-                            hit.normal = -hit.normal;
-                            radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, tier);
-                        } else {
-                            tier = GI_GATHER_TIER_BACKFACE;
-                        }
-                    } else if (!bResolved) {
-                        radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, originCellKey, tier);
-                    }
-                } else {
-                    skyVisSum += 1.0;
-                    tier = GI_GATHER_TIER_SKY;
                 }
 
-                // Prescaled so eval at n is sh.x + dot(sh.yzw, n) = E/pi; the NoD clamp bounds the 1/pdf weight (eval amplification capped ~1.5x).
-                radiance = GIGatherClampRadiance(radiance, maxRadiance);
-                float NoD = max(dot(worldN, direction), 0.25);
-                float l0 = 0.25 / NoD;
-                float3 l1 = direction * (0.5 / NoD);
-                lastHitT = hitT;
-                lastTier = tier;
-                if (tier != GI_GATHER_TIER_BACKFACE) {
-                    if (validCount == 0u) {
-                        firstHitT = hitT;
-                        firstTier = tier;
+                if (!bFrontFace) {
+                    // Near backface = origin buried in geometry (leak guard).
+                    // Far backface = open space behind a single-sided surface: shade its back through the world tiers.
+                    if (hitT > GI_GATHER_BACKFACE_GUARD_DISTANCE) {
+                        hit.normal = -hit.normal;
+                        radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, tier);
+                    } else {
+                        tier = GI_GATHER_TIER_BACKFACE;
                     }
-                    sumR += float4(radiance.r * l0, radiance.r * l1);
-                    sumG += float4(radiance.g * l0, radiance.g * l1);
-                    sumB += float4(radiance.b * l0, radiance.b * l1);
-                    validCount += 1u;
+                } else if (!bResolved) {
+                    radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, tier);
                 }
-            }
-
-            if (validCount > 0u) {
-                float invCount = scene.preExposure / float(validCount);
-                shR = sumR * invCount;
-                shG = sumG * invCount;
-                shB = sumB * invCount;
-                data = float2(firstHitT, float(firstTier));
             } else {
-                data = float2(lastHitT, float(lastTier));
+                skyVisSum += 1.0;
+                tier = GI_GATHER_TIER_SKY;
             }
-            skyVis = skyVisSum / float(rayCount);
+
+            // Prescaled so eval at n is sh.x + dot(sh.yzw, n) = E/pi; the NoD clamp bounds the 1/pdf weight (eval amplification capped ~1.5x).
+            radiance = GIGatherClampRadiance(radiance, GI_GATHER_MAX_RADIANCE);
+            float NoD = max(dot(worldN, direction), 0.25);
+            float l0 = 0.25 / NoD;
+            float3 l1 = direction * (0.5 / NoD);
+            lastHitT = hitT;
+            lastTier = tier;
+            if (tier != GI_GATHER_TIER_BACKFACE) {
+                if (validCount == 0u) {
+                    firstHitT = hitT;
+                    firstTier = tier;
+                }
+                sumR += float4(radiance.r * l0, radiance.r * l1);
+                sumG += float4(radiance.g * l0, radiance.g * l1);
+                sumB += float4(radiance.b * l0, radiance.b * l1);
+                validCount += 1u;
+            }
         }
+
+        if (validCount > 0u) {
+            float invCount = scene.preExposure / float(validCount);
+            shR = sumR * invCount;
+            shG = sumG * invCount;
+            shB = sumB * invCount;
+            data = float2(firstHitT, float(firstTier));
+        } else {
+            data = float2(lastHitT, float(lastTier));
+        }
+        skyVis = skyVisSum / float(rayCount);
     }
 
     rdgStorageFloat4[pc.shRIndex][gatherPixel] = shR;
@@ -432,5 +291,4 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
     rdgStorageFloat2[pc.dataIndex][gatherPixel] = data;
     rdgStorageUInt2[pc.guideOutIndex][gatherPixel] = guide;
     rdgStorageFloat[pc.skyVisIndex][gatherPixel] = skyVis;
-    rdgStorageFloat[pc.varGuideOutIndex][gatherPixel] = varGuide;
 }

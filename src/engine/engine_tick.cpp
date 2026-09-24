@@ -144,7 +144,6 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     if (!state->debug.bGIFreeze) {
         frameBuffer->debug.bFreezeGIField = false;
         frameBuffer->debug.bFreezeScreenFeedback = false;
-        frameBuffer->debug.bFreezeGatherRay = false;
     }
     frameBuffer->restir = state->debug.restir;
     frameBuffer->ddgi = state->lighting.ddgi;

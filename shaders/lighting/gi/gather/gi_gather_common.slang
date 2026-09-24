@@ -5,22 +5,17 @@ import bindless_declarations;
 import constants_interop;
 import shader_functions;
 
-public static const float GI_GATHER_MAX_ACCUM = 64.0;
+public static const float GI_GATHER_MAX_ACCUM = 24.0;
 public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
 public static const float GI_GATHER_BACKFACE_GUARD_DISTANCE = 0.1;
 public static const float GI_GATHER_REVEAL_FACING_SCALE = 2.0;
 public static const float GI_GATHER_RAY_MIN_OFFSET = 0.02;
-public static const float GI_GATHER_RAY_MAX_OFFSET = 0.05;
 
-/** Trace and shade must agree (hitT is measured from here). Capped: a far grazing footprint lifted rays ~0.4 m and shifted their sky visibility. */
+/** Trace and shade must agree (hitT is measured from here). */
 public float3 GIGatherRayOrigin(float3 worldPosition, float3 worldN, float footprint)
 {
-    return worldPosition + worldN * clamp(footprint * 2.0, GI_GATHER_RAY_MIN_OFFSET, GI_GATHER_RAY_MAX_OFFSET);
+    return worldPosition + worldN * max(GI_GATHER_RAY_MIN_OFFSET, footprint * 2.0);
 }
-// R8 encode range for the variance guide (relative deviation of incident ray luma, from the DDGI atlas alpha): stored as relDev / SCALE, saturating at SCALE. It drives thresholds, so saturation only means "maximally noisy here".
-public static const float GI_GATHER_VARIANCE_GUIDE_SCALE = 4.0;
-// Adaptive ray count ignores relDev below this: the sky-vs-ground baseline sits at ~0.3-0.8 even on lit surfaces, and paying extra rays there buys nothing visible. Only the ray mapping; the upscale prior keeps the full guide.
-public static const float GI_GATHER_VARIANCE_RAY_DEADZONE = 1.0;
 
 public static const uint GI_GATHER_TIER_SCREEN = 0u;
 public static const uint GI_GATHER_TIER_CACHE = 1u;
@@ -51,33 +46,6 @@ public struct GIGatherHistory
     public float count;
     public float quality;
 };
-
-/** 5-tap Catmull-Rom (no corners, NRD form) over the RGBA16F history; rgb only, count stays with the validity-gated bilinear. */
-static float3 GIGatherSampleHistoryCatmullRom(uint historyIndex, float2 samplePos, float2 invSize)
-{
-    const float sharpness = 0.5;
-    float2 centerPos = floor(samplePos - 0.5) + 0.5;
-    float2 f = saturate(samplePos - centerPos);
-    float2 w0 = f * (f * (-sharpness * f + 2.0 * sharpness) - sharpness);
-    float2 w1 = f * (f * ((2.0 - sharpness) * f - (3.0 - sharpness))) + 1.0;
-    float2 w2 = f * (f * (-(2.0 - sharpness) * f + (3.0 - 2.0 * sharpness)) + sharpness);
-    float2 w3 = f * (f * (sharpness * f - sharpness));
-    float2 w12 = w1 + w2;
-    float2 tc = w2 / w12;
-    float4 w = float4(w12.x * w0.y, w0.x * w12.y, w12.x * w12.y, w3.x * w12.y);
-    float w4 = w12.x * w3.y;
-    float sum = dot(w, 1.0) + w4;
-    float4 uv01 = (centerPos.xyxy + float4(tc.x, -1.0, -1.0, tc.y)) * invSize.xyxy;
-    float4 uv23 = (centerPos.xyxy + float4(tc.x, tc.y, 2.0, tc.y)) * invSize.xyxy;
-    float2 uv4 = (centerPos + float2(tc.x, 2.0)) * invSize;
-    SamplerState lin = rdgSamplers[RDG_LINEAR_SAMPLER_INDEX];
-    float3 color = rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv01.xy, 0).rgb * w.x;
-    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv01.zw, 0).rgb * w.y;
-    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv23.xy, 0).rgb * w.z;
-    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv23.zw, 0).rgb * w.w;
-    color += rdgTexturesFloat4[historyIndex].SampleLevel(lin, uv4, 0).rgb * w4;
-    return color / sum;
-}
 
 /** View-space geometric normal from a depth texture; each axis takes its shallower step so a silhouette neighbour never enters. */
 public float3 GIGatherDepthNormal(SceneData scene, uint depthIndex, int2 px, uint2 renderExtent)
@@ -202,8 +170,6 @@ public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint histo
     const int2 tapOffsets[4] = { int2(0, 0), int2(1, 0), int2(0, 1), int2(1, 1) };
 
     float3 colorSum = float3(0.0);
-    float3 colorMin = float3(1e5);
-    float3 colorMax = float3(-1e5);
     float countSum = 0.0;
     [unroll]
     for (uint i = 0; i < 4; i++) {
@@ -212,8 +178,6 @@ public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint histo
         }
         float4 history = rdgTexturesFloat4[historyIndex].Load(int3(taps.origin + tapOffsets[i], 0));
         colorSum += history.rgb * taps.weights[i];
-        colorMin = min(colorMin, history.rgb);
-        colorMax = max(colorMax, history.rgb);
         countSum += history.a * taps.weights[i];
     }
 
@@ -222,9 +186,6 @@ public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint histo
         result.color = colorSum * invW;
         result.count = countSum * invW * taps.countScale;
         result.quality = saturate(taps.weightSum);
-        if (taps.weightSum > 0.999) {
-            result.color = clamp(GIGatherSampleHistoryCatmullRom(historyIndex, taps.prevPos + 0.5, 1.0 / float2(renderExtent)), colorMin, colorMax);
-        }
     }
     return result;
 }

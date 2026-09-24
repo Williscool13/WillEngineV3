@@ -563,11 +563,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     }
     lightingResolve.WriteStorageImage(targets.intermediateOne);
     lightingResolve.WriteStorageImage(targets.intermediateTwo);
-    const bool bDiffuseRatio = graph.HasTexture(RESTIR_DIFFUSE_RATIO);
-    if (bDiffuseRatio) {
-        lightingResolve.WriteStorageImage(RESTIR_DIFFUSE_RATIO);
-    }
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, bDiffuseRatio,
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
@@ -609,7 +605,6 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .reflectionIndex = bMergedReflections ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
                     .bFullRateResolve = fullRate,
                     .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
-                    .diffuseRatioIndex = bDiffuseRatio ? graph.GetStorageImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
                     .sunVisIndex = graph.HasTexture("restir_sun_vis"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_sun_vis"_sid) : ~0x0u,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };
