@@ -43,8 +43,8 @@ void ComputeGIGatherTrace(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
         uint rayCount = max(pc.rayCount, 1u);
-        float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
-        float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, footprint);
+        float3 toCamera = normalize(scene.cameraWorldPos.xyz - worldPosition);
+        float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, toCamera, RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0));
         uint hitBase = (gatherPixel.y * pc.gatherExtent.x + gatherPixel.x) * rayCount;
 
         for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {

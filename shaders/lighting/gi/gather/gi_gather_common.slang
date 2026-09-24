@@ -9,12 +9,11 @@ public static const float GI_GATHER_MAX_ACCUM = 24.0;
 public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
 public static const float GI_GATHER_BACKFACE_GUARD_DISTANCE = 0.1;
 public static const float GI_GATHER_REVEAL_FACING_SCALE = 2.0;
-public static const float GI_GATHER_RAY_MIN_OFFSET = 0.02;
 
-/** Trace and shade must agree (hitT is measured from here). */
-public float3 GIGatherRayOrigin(float3 worldPosition, float3 worldN, float footprint)
+/** Trace and shade must agree (hitT is measured from here). Lifted along the view ray, free space for any visible pixel, far enough to clear the surface by two pixels; a normal lift crossed into surfaces in contact (chair feet through the floor). */
+public float3 GIGatherRayOrigin(float3 worldPosition, float3 worldN, float3 toCamera, float pixelSize)
 {
-    return worldPosition + worldN * max(GI_GATHER_RAY_MIN_OFFSET, footprint * 2.0);
+    return worldPosition + toCamera * (2.0 * pixelSize / max(abs(dot(worldN, toCamera)), 0.1)) + worldN * max(0.002, length(worldPosition) * 1e-5);
 }
 
 public static const uint GI_GATHER_TIER_SCREEN = 0u;

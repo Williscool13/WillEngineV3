@@ -165,8 +165,8 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         uint firstTier = GI_GATHER_TIER_BACKFACE;
         float lastHitT = 0.0;
         uint lastTier = GI_GATHER_TIER_BACKFACE;
-        float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
-        float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, footprint);
+        float3 toCamera = normalize(scene.cameraWorldPos.xyz - worldPosition);
+        float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, toCamera, RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, 1.0));
         for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {
             GIGatherHit rec = pc.hitBuffer[hitBase + sampleIndex];
             float3 direction = rec.direction;
