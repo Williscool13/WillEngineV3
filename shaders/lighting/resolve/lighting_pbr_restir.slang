@@ -92,6 +92,8 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
 
     float3 diffuseRadiance = float3(0.0);
     float3 specularRadiance = float3(0.0);
+    float resolvedDiffuse = 0.0;
+    float baselineDiffuse = 0.0;
     float diffHitDistance = 0.0;
     float specHitDistance = 0.0;
     float bestDiffLum = -1.0;
@@ -130,6 +132,8 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
 
                 float3 diffContribution = diffuseAl * commonTerm;
                 diffuseRadiance += diffContribution;
+                resolvedDiffuse += Luma(kDal * orenNayarAl * commonTerm);
+                baselineDiffuse += (1.0 - li.metallic) * Diffuse_OrenNayar(s.cosShade, 1.0, Lal, N, roughness) * Luma(commonTerm);
 
                 float diffLum = dot(diffContribution, float3(0.2126, 0.7152, 0.0722));
                 if (diffLum > bestDiffLum)
@@ -172,6 +176,8 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
                 float3 commonSun = SunIlluminance(sun) * nDotLsun;
                 float3 diffContribution = kDsun * li.albedo.xyz * orenNayarSun * commonSun;
                 diffuseRadiance += diffContribution;
+                resolvedDiffuse += Luma(kDsun * orenNayarSun * commonSun);
+                baselineDiffuse += (1.0 - li.metallic) * Diffuse_OrenNayar(nDotLsun, 1.0, Lsun, N, roughness) * Luma(commonSun);
 
                 float diffLum = dot(diffContribution, float3(0.2126, 0.7152, 0.0722));
                 if (diffLum > bestDiffLum)
@@ -214,6 +220,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
     uint2 writeCoord = (field != 0u && !bFullRate && pc.bCheckerboardPacked != 0u) ? PixelPosToReservoirPos(pixel, field) : pixel;
     rdgStorageFloat4[pc.primaryOutputImageIndex][writeCoord] = diffPacked;
     rdgStorageFloat4[pc.secondaryOutputImageIndex][writeCoord] = specPacked;
+    WriteDiffuseRatio(pc.diffuseRatioIndex, pixel, pc.renderExtent, field, bFullRate, resolvedDiffuse, baselineDiffuse);
 
     if (field != 0u && !bFullRate && pc.bCheckerboardPacked == 0u) {
         int2 o = OppositeFieldPixel(pixel, field);

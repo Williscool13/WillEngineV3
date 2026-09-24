@@ -688,7 +688,8 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
-    SHADER_PUBLIC uint32_t pad2;
+    /** Per-pixel ratio from camera-view diffuse to the radiance cache's V = N diffuse, or ~0u. */
+    SHADER_PUBLIC uint32_t diffuseRatioIndex;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunVisIndex;
     SHADER_PUBLIC uint32_t tileCapacity;
@@ -856,6 +857,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t rayMetaIndex;
     SHADER_PUBLIC uint32_t varGuideHistoryIndex;
     SHADER_PUBLIC float bounceIntensity;
+    SHADER_PUBLIC uint32_t diffuseRatioHistoryIndex;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant

@@ -28,4 +28,7 @@ void ComputeLightingUnlit(uniform VisibilityLightingPushConstant pc, uint3 gid :
 
     float3 finalColor = li.albedo.xyz + li.emissiveRGB * pc.sceneData[pc.sceneDataIndex].preExposure;
     rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor, 1.0);
+    if (pc.diffuseRatioIndex != ~0x0u) {
+        rdgStorageFloat[pc.diffuseRatioIndex][pixel] = 1.0;
+    }
 }

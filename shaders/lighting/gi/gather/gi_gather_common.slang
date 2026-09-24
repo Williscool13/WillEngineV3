@@ -9,6 +9,14 @@ public static const float GI_GATHER_MAX_ACCUM = 64.0;
 public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
 public static const float GI_GATHER_BACKFACE_GUARD_DISTANCE = 0.1;
 public static const float GI_GATHER_REVEAL_FACING_SCALE = 2.0;
+public static const float GI_GATHER_RAY_MIN_OFFSET = 0.02;
+public static const float GI_GATHER_RAY_MAX_OFFSET = 0.05;
+
+/** Trace and shade must agree (hitT is measured from here). Capped: a far grazing footprint lifted rays ~0.4 m and shifted their sky visibility. */
+public float3 GIGatherRayOrigin(float3 worldPosition, float3 worldN, float footprint)
+{
+    return worldPosition + worldN * clamp(footprint * 2.0, GI_GATHER_RAY_MIN_OFFSET, GI_GATHER_RAY_MAX_OFFSET);
+}
 // R8 encode range for the variance guide (relative deviation of incident ray luma, from the DDGI atlas alpha): stored as relDev / SCALE, saturating at SCALE. It drives thresholds, so saturation only means "maximally noisy here".
 public static const float GI_GATHER_VARIANCE_GUIDE_SCALE = 4.0;
 // Adaptive ray count ignores relDev below this: the sky-vs-ground baseline sits at ~0.3-0.8 even on lit surfaces, and paying extra rays there buys nothing visible. Only the ray mapping; the upscale prior keeps the full guide.

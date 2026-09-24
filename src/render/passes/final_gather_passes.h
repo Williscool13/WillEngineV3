@@ -17,6 +17,7 @@ namespace Render
 {
 class PipelineManager;
 
+inline const StringID RESTIR_DIFFUSE_RATIO = "restir_diffuse_ratio"_sid;
 inline const StringID GI_GATHER_SH_R = "gi_gather_sh_r"_sid;
 inline const StringID GI_GATHER_SH_G = "gi_gather_sh_g"_sid;
 inline const StringID GI_GATHER_SH_B = "gi_gather_sh_b"_sid;

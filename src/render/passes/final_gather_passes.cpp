@@ -82,6 +82,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     const bool bScreenSpace = !bDebugView && !bDisableScreenTier && graph.ResourceHasVersion("lit_color_preoverlay"_sid, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const bool bDemodulate = bScreenSpace && graph.ResourceHasVersion(GI_GATHER_RESOLVED, 1);
+    const bool bDiffuseRatio = bScreenSpace && graph.ResourceHasVersion(RESTIR_DIFFUSE_RATIO, 1);
+    const StringID diffuseRatioHistory = graph.ResourceVersionID(RESTIR_DIFFUSE_RATIO, 1);
 
     const uint32_t gatherRayCount = glm::clamp(raysPerPixel, 1u, GI_GATHER_MAX_RAYS_PER_PIXEL);
     if (bSplitGather) {
@@ -157,6 +159,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         pass.ReadSampledImage(depthHistory);
         pass.ReadSampledImage(gbufferOneHistory);
     }
+    if (bDiffuseRatio) {
+        pass.ReadSampledImage(diffuseRatioHistory);
+    }
     if (bDemodulate) {
         pass.ReadSampledImage(gatherHistory);
     }
@@ -175,7 +180,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, touchKeys, gatherHistory, litHistory, depthHistory, gbufferOneHistory, bSplitGather,
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, bCascades, bScreenSpace, bDemodulate, bSkipRay, raysPerPixel, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, touchKeys, gatherHistory, litHistory, depthHistory, gbufferOneHistory, bSplitGather, bDiffuseRatio, diffuseRatioHistory,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, bakedDiffuseClampK = viewFamily.bakedDiffuseClampK,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bSplitGather ? "gi_gather_shade"_sid : "gi_gather"_sid);
@@ -230,6 +235,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .rayMetaIndex = bSplitGather ? graph.GetSampledImageViewDescriptorIndex("gi_gather_ray_meta"_sid) : ~0x0u,
             .varGuideHistoryIndex = ~0x0u,
             .bounceIntensity = bounceIntensity,
+            .diffuseRatioHistoryIndex = bDiffuseRatio ? graph.GetSampledImageViewDescriptorIndex(diffuseRatioHistory) : ~0x0u,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);

@@ -8,7 +8,6 @@ import packing_functions;
 import random_common;
 import gi_gather_common;
 
-static const float GI_GATHER_RAY_MIN_OFFSET = 0.02;
 
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
 {
@@ -55,7 +54,7 @@ void ComputeGIGatherTrace(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         rayCount = clamp(uint(round(lerp(1.0, float(pc.rayCount), rayLerp))), 1u, max(pc.rayCount, 1u));
 
         float footprint = RayOriginPixelFootprint(viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(normalize(viewNormal), normalize(-viewPosition))));
-        float3 rayOrigin = worldPosition + worldN * max(GI_GATHER_RAY_MIN_OFFSET, footprint * 2.0);
+        float3 rayOrigin = GIGatherRayOrigin(worldPosition, worldN, footprint);
         uint hitBase = (gatherPixel.y * pc.gatherExtent.x + gatherPixel.x) * max(pc.rayCount, 1u);
 
         for (uint sampleIndex = 0u; sampleIndex < rayCount; ++sampleIndex) {

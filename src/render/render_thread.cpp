@@ -626,6 +626,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && ((bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace)) || bFsr2Reactive);
     if (bSnapshotLitColor) {
         renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
+            renderGraph->CreateVersionedTexture(RESTIR_DIFFUSE_RATIO, TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        }
     }
 
     renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0,
@@ -1775,8 +1778,6 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     sceneData[0].preExposure = preExposure;
     sceneData[0].prevPreExposure = prevPreExposure;
     sceneData[0].framerateScale = framerateScale;
-    const glm::vec4 sunDirection{viewFamily.directionalLight.direction, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
-    sceneData[0].sunDirection = sunDirection;
     // Portal Scene Data
     if (!viewFamily.portalViews.IsEmpty()) {
         SceneData portalSceneData = GenerateSceneData(viewFamily.portalViews[0].view, viewFamily.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
@@ -1785,7 +1786,6 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         portalSceneData.preExposure = preExposure;
         portalSceneData.prevPreExposure = prevPreExposure;
         portalSceneData.framerateScale = framerateScale;
-        portalSceneData.sunDirection = sunDirection;
         sceneData[1] = portalSceneData;
     }
 

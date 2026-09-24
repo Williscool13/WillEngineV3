@@ -18,6 +18,7 @@ static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
 static const float GI_DENOISE_FIREFLY_SCALE = 4.0;
 static const float GI_DENOISE_HITT_FAR_METERS = 8.0;
+static const float GI_DENOISE_SKY_VIS_WORLD_RADIUS = 0.25;
 
 groupshared uint2 sShR[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint2 sShG[GI_DENOISE_TILE * GI_DENOISE_GROUP];
@@ -139,7 +140,9 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
             // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT or AO steering.
-            float wV = w;
+            // World radius: a screen-space footprint grows with distance, and the long sky-vis history carries the far estimate into the near view.
+            float3 tapDelta = tapXv - centerXv;
+            float wV = w * exp(-dot(tapDelta, tapDelta) / (GI_DENOISE_SKY_VIS_WORLD_RADIUS * GI_DENOISE_SKY_VIS_WORLD_RADIUS));
             if (centerHitT >= 0.0 && tapHitT >= 0.0) {
                 w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
             }

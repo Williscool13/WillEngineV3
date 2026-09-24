@@ -77,7 +77,7 @@ SHADER_PUBLIC struct RadianceCacheHitDescriptor
     SHADER_PUBLIC uint instanceID;
     SHADER_PUBLIC uint primitiveIndex;
     SHADER_PUBLIC uint packedBary;
-    SHADER_PUBLIC uint pad;
+    SHADER_PUBLIC uint bMirror;
 };
 
 // Per-frame occupancy/insert counters, atomically accumulated on the GPU and read back for the cache-capacity audit.
