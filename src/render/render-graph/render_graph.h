@@ -104,6 +104,11 @@ public: // Frame setup
      */
     void InvalidateAllVersioned() { bDropAllRings = true; }
 
+    /**
+     * Drops every versioned resource backed by a viewport-scaled physical; physicals are kept
+     */
+    void InvalidateViewportHistory() { bDropViewportRings = true; }
+
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
 public: // Resource registration
@@ -409,6 +414,7 @@ private:
     bool bRemoveSwapchainPhysicals{false};
     bool bDestroyViewportAssociated{false};
     bool bDropAllRings{false};
+    bool bDropViewportRings{false};
 
     bool bDebugLogging = false;
     bool bForceGraphicsQueue{false};

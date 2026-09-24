@@ -202,7 +202,9 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("FunctionKeyRenderUpdate", &FunctionKeyRenderUpdate);
 
     graph.Add("BuildViewFamily", [](EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer) {
-        BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
+        if (BuildViewFamily(ctx, state, frameBuffer->mainViewFamily) && frameBuffer->cacheReset == Core::RenderCacheReset::None) {
+            frameBuffer->cacheReset = Core::RenderCacheReset::ScreenHistory;
+        }
     });
     graph.Add("PublishFrameSettings", &PublishFrameSettings);
 

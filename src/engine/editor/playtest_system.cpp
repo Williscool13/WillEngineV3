@@ -165,7 +165,7 @@ static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState
     camera.currentViewData = BuildPerspectiveView(translation, rotation * WORLD_FORWARD, WORLD_UP, aspect,
                                                   glm::radians(state->projectConfig.editorCameraFovDegrees), state->projectConfig.editorCameraNearPlane);
     if (bCut) {
-        camera.previousViewData = camera.currentViewData;
+        camera.transition = Component::CameraTransition::Cut;
     }
 }
 

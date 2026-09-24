@@ -34,8 +34,8 @@ struct PrevSurface
     bool bValid;
 };
 
-static PrevSurface LoadPrevSurface(ReSTIRDISpatioTemporalPushConstant pc, SceneData scene, uint2 tapPixel, float3 currWorldN, float expectedPrevViewDepth,
-                                   float disocclusionThreshold, float NoV, out uint4 tapG1)
+static PrevSurface LoadPrevSurface(ReSTIRDISpatioTemporalPushConstant pc, SceneData scene, uint2 tapPixel, float3 currWorldN, float3 currWorldPos, float expectedPrevViewDepth,
+                                   float disocclusionThreshold, float NoV, bool bTemporal, out uint4 tapG1)
 {
     PrevSurface s;
     s.bValid = false;
@@ -53,11 +53,12 @@ static PrevSurface LoadPrevSurface(ReSTIRDISpatioTemporalPushConstant pc, SceneD
     float tapRawDepth = rdgTexturesFloat[pc.prevDepthIndex].Load(int3(tapPixel, 0)).r;
     if (tapRawDepth <= 0.0) { return s; }
     float tapViewDepth = ScreenToViewSpaceDepth(tapRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-    if (abs(tapViewDepth - expectedPrevViewDepth) * NoV > disocclusionThreshold) { return s; }
+    if (bTemporal && abs(tapViewDepth - expectedPrevViewDepth) * NoV > disocclusionThreshold) { return s; }
 
     float2 tapUV = (float2(tapPixel) + 0.5) / float2(pc.renderExtent);
     float3 tapPrevViewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUV, tapViewDepth);
     float3 tapWorldPos = mul(scene.invPrevView, float4(tapPrevViewPosition, 1.0)).xyz;
+    if (!bTemporal && abs(dot(tapWorldPos - currWorldPos, currWorldN)) > disocclusionThreshold) { return s; }
     float3 prevCameraWorldPos = mul(scene.invPrevView, float4(0.0, 0.0, 0.0, 1.0)).xyz;
 
     s.viewPosition = mul(scene.view, float4(tapWorldPos, 1.0)).xyz;
@@ -147,27 +148,24 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
 
     float2 velocityNDC = UnpackMotionVectors(g1.g);
     float2 historyUV = uv + velocityNDC * 0.5;
-    bool validHistory = pc.historyBuffer != nullptr && all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
+    bool bHistoryFound = pc.historyBuffer != nullptr;
+    bool bHistoryOnScreen = all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0));
+    float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
     float NoV = abs(dot(N, normalize(viewPosition)));
     float frustumSize = abs(scene.ndcToViewMul.y) * abs(viewSpaceDepth);
     float disocclusionThreshold = saturate(0.01 / lerp(0.05, 1.0, NoV)) * frustumSize;
     float expectedPrevViewDepth = viewSpaceDepth + UnpackViewZDelta(g1.w);
 
-    uint2 baseHistory = uint2(0, 0);
-    bool bHistoryFound = false;
-    if (validHistory) {
-        baseHistory = clamp(uint2(historyUV * float2(pc.renderExtent)), uint2(0, 0), pc.renderExtent - uint2(1, 1));
+    uint2 baseHistory = min(uint2(saturate(historyUV) * float2(pc.renderExtent)), pc.renderExtent - uint2(1, 1));
 #if RESTIR_ENABLE_PERMUTATION_SAMPLING
-        if (pc.bPermutationSampling != 0u) {
-            int2 permuted = ApplyPermutationSampling(int2(baseHistory), pc.frameIndex);
-            if (all(permuted >= int2(0, 0)) && all(permuted < int2(pc.renderExtent))) {
-                baseHistory = uint2(permuted);
-            }
+    if (bHistoryOnScreen && pc.bPermutationSampling != 0u) {
+        int2 permuted = ApplyPermutationSampling(int2(baseHistory), pc.frameIndex);
+        if (all(permuted >= int2(0, 0)) && all(permuted < int2(pc.renderExtent))) {
+            baseHistory = uint2(permuted);
         }
-#endif
-        bHistoryFound = true;
     }
+#endif
 
     ReservoirAccum accum = ReservoirAccumEmpty();
     Reservoir combined = ReservoirEmpty();
@@ -177,11 +175,13 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
     uint accumulatedM = r_gen.M;
 
     uint spatialNeighbors = clamp(pc.spatialNeighbors, 0u, 32u);
+    uint boostedNeighbors = min(spatialNeighbors * 2u, 32u);
+    if (!bHistoryOnScreen) { spatialNeighbors = boostedNeighbors; }
     float spatialRadius = float(pc.spatialRadius);
     float bnRot = BlueNoiseAngle(pixel, pc.frameIndex);
 
     uint tapCount = bHistoryFound ? (1u + spatialNeighbors) : 0u;
-    for (uint tap = 0u; tap < tapCount; tap++) {
+    for (uint tap = bHistoryOnScreen ? 0u : 1u; tap < tapCount; tap++) {
         uint2 tapPixel = baseHistory;
         if (tap > 0u) {
             float angle = (float(tap - 1u) + HashStep(h)) * (6.28318530718 / float(max(spatialNeighbors, 1u))) + bnRot;
@@ -198,7 +198,7 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
         }
 
         uint4 tapG1;
-        PrevSurface prev = LoadPrevSurface(pc, scene, tapPixel, worldN, expectedPrevViewDepth, disocclusionThreshold, NoV, tapG1);
+        PrevSurface prev = LoadPrevSurface(pc, scene, tapPixel, worldN, worldPos, expectedPrevViewDepth, disocclusionThreshold, NoV, tap == 0u, tapG1);
         if (!prev.bValid) {
 #if RESTIR_ENABLE_TEMPORAL_SEARCH
             if (tap == 0u && pc.bTemporalSearch != 0u) {
@@ -212,12 +212,18 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
                         if (any(snapped < int2(0, 0)) || any(snapped >= int2(pc.renderExtent))) { continue; }
                         retry = uint2(snapped);
                     }
-                    prev = LoadPrevSurface(pc, scene, retry, worldN, expectedPrevViewDepth, disocclusionThreshold, NoV, tapG1);
+                    prev = LoadPrevSurface(pc, scene, retry, worldN, worldPos, expectedPrevViewDepth, disocclusionThreshold, NoV, true, tapG1);
                     if (prev.bValid) { tapPixel = retry; break; }
                 }
             }
 #endif
-            if (!prev.bValid) { continue; }
+            if (!prev.bValid) {
+                if (tap == 0u) {
+                    spatialNeighbors = boostedNeighbors;
+                    tapCount = 1u + spatialNeighbors;
+                }
+                continue;
+            }
         }
 
         uint2 tapRPos = PixelPosToReservoirPos(tapPixel, field);
@@ -228,7 +234,7 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
 
         float3 prevF0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, prev.metallic);
         uint cappedM = min(neighbor.M, max(uint(round(float(pc.mCap) * scene.framerateScale)), 1u));
-        float Mi = validGen ? min(float(cappedM), 20.0 * max(Mc, 1.0)) : float(cappedM);
+        float Mi = min(float(cappedM), 20.0 * max(Mc, 1.0));
 
         float p_hat_n_atN = 0.0;
         float p_hat_n_atCenter = 0.0;
@@ -298,7 +304,6 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
             visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
         }
 #endif
-        // Occluded winners keep their W so reuse is not darkened; the sign carries visibility
         ReservoirFinalize(combined, accum, pHatUnshadowed, (neighborCount == 0u) ? 1.0 : float(neighborCount));
         winnerVisibility = (bWinnerVisible && pHatUnshadowed > 0.0) ? 1.0 : 0.0;
 #if RESTIR_ENABLE_CONFIDENCE
@@ -310,7 +315,7 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
 
 #if RESTIR_ENABLE_ANTILAG
     float flip = 0.0;
-    if (pc.prevShadowVisIndex != ~0u && bHistoryFound && neighborCount > 0u) {
+    if (pc.prevShadowVisIndex != ~0u && bHistoryFound && bHistoryOnScreen && neighborCount > 0u) {
         float prevVis = rdgTexturesFloat[pc.prevShadowVisIndex].Load(int3(baseHistory, 0)).r;
         flip = abs(winnerVisibility - prevVis);
     }

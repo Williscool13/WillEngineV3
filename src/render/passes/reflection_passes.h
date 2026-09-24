@@ -33,7 +33,6 @@ inline float ComputeReflectionRoughnessMax(const Core::ReflectionConfiguration& 
     return config.bEnabled ? config.tracedRoughnessMax : -1.0f;
 }
 
-/** Roughness at or below which light specular comes from reflections; -1 when reflections are off. */
 inline float ComputeLightSpecularFromReflectionsMax(const Core::ReflectionConfiguration& config)
 {
     if (!config.bEnabled) {

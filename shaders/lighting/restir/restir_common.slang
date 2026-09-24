@@ -524,6 +524,8 @@ public void ReservoirFinalize(inout Reservoir r, ReservoirAccum accum, float p_h
     }
 }
 
+public static const float RESTIR_PHAT_ALBEDO_FLOOR = 0.2;
+
 public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F0, float metallic, float roughness, float3 lightColor, float lightIntensity, float lightSpecularFromReflectionsMax)
 {
     if (s.cosShade <= 0.0 || s.cosLight <= 0.0 || s.attenuation <= 0.0) { return 0.0; }
@@ -538,7 +540,7 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
         float F = dot(F_SCHLICK(V, H, F0), lumWeights);
         spec = D * G * F / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
     }
-    float brdf = (1.0 - metallic) * dot(albedo, lumWeights) / PI + spec;
+    float brdf = (1.0 - metallic) * max(dot(albedo, lumWeights), RESTIR_PHAT_ALBEDO_FLOOR) / PI + spec;
     // Max-channel (not luminance): must match EvalCellLightTarget, avoids chromatic fireflies from saturated colors.
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;

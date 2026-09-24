@@ -289,6 +289,7 @@ struct EngineState
 
     // Engine Features
     InputState input;
+    entt::entity renderedCamera{entt::null};
 
     // Gameplay
     SceneState scene{};

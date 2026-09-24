@@ -424,14 +424,14 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     ZoneScoped;
 
     if (frameBuffer.cacheReset != Core::RenderCacheReset::None) {
-        vkQueueWaitIdle(context->graphicsQueue);
-        gpuDispatcher->WaitAsyncComputeIdle();
         nrdDenoiser->RequestHistoryClear();
     }
     if (frameBuffer.cacheReset == Core::RenderCacheReset::ScreenHistory) {
-        renderGraph->InvalidateAllViewportAssociated();
+        renderGraph->InvalidateViewportHistory();
     }
     else if (frameBuffer.cacheReset == Core::RenderCacheReset::All) {
+        vkQueueWaitIdle(context->graphicsQueue);
+        gpuDispatcher->WaitAsyncComputeIdle();
         renderGraph->InvalidateAllVersioned();
         rtGroundTruthDIAccumCount = 0;
         rtGroundTruthGIAccumCount = 0;

@@ -1018,12 +1018,13 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     state->inputContext = Engine::InputContext::Editor;
     ctx->setCursorHiddenFn(false); {
-        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
             auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
             transform.translation = state->editor.pieCameraTranslation;
             transform.rotation = state->editor.pieCameraRotation;
+            state->registry.get<Component::CameraComponent>(camEntity).transition = Component::CameraTransition::Cut;
         }
     }
 }

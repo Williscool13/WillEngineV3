@@ -163,7 +163,7 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
 
     if (pc.sunVisIndex != ~0x0u)
     {
-        uint sunVis = rdgTexturesUInt[pc.sunVisIndex].Load(int3(rcoord, 0)).r;
+        uint sunVis = rdgTexturesUInt[pc.sunVisIndex].Load(int3(bFullRate ? int2(pixel) : int2(rcoord), 0)).r;
         if (sunVis != SUN_VIS_EMPTY)
         {
             DirectionalLightData sun = pc.lightData->directionalLight;

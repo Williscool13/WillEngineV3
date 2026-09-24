@@ -113,7 +113,7 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
+bool BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
     entt::entity mainCamera;
@@ -130,8 +130,20 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
     mainCamera = cameraView.front();
 #endif
 
-    const auto& [cam, transform] = state->registry.get<Component::CameraComponent, Component::TransformComponent>(mainCamera);
+    auto& cam = state->registry.get<Component::CameraComponent>(mainCamera);
 
+    if (mainCamera != state->renderedCamera && state->registry.valid(state->renderedCamera)) {
+        if (const auto* renderedCam = state->registry.try_get<Component::CameraComponent>(state->renderedCamera)) {
+            cam.previousViewData = renderedCam->previousViewData;
+        }
+    }
+    state->renderedCamera = mainCamera;
+
+    const bool bCut = cam.transition == Component::CameraTransition::Cut;
+    if (bCut) {
+        cam.previousViewData = cam.currentViewData;
+        cam.transition = Component::CameraTransition::Continuous;
+    }
     mainViewFamily.mainView.currentViewData = cam.currentViewData;
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
@@ -153,6 +165,7 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
 #endif
 
     ProbeBakeOverrideView(state, mainViewFamily);
+    return bCut;
 }
 
 void BuildPortalViewFamily(Engine::EngineState* state, Core::ViewFamily& mainViewFamily)

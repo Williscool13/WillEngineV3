@@ -115,7 +115,11 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-8)) : 0.0;
-                    float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdfMis) * p_brdf_area;
+                    float mBrdfLight = float(mBrdfMis);
+#if RESTIR_ENABLE_BRDF_RAY
+                    if ((vs.packedColor >> 24u) == 0u) { mBrdfLight = 0.0; }
+#endif
+                    float denom = float(RESTIR_M_LIGHT) * p_light_area + mBrdfLight * p_brdf_area;
                     w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                     candLightIdx = uint(lightIdx);
                     candXi = Xi;
@@ -131,7 +135,6 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
         }
     }
 
-    // Also writes the reflection descriptors, so it runs with no local lights
     for (int i = 0; i < mBrdf; i++) {
             // The STBN sequence yields one well-placed pair per pixel per frame; extra rays stay white.
             float2 xiBrdf;

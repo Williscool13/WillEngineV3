@@ -1732,6 +1732,7 @@ void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint
     bDestroyViewportAssociated = false;
     bRemoveSwapchainPhysicals = false;
     bDropAllRings = false;
+    bDropViewportRings = false;
 }
 
 void RenderGraph::OnPhysicalRemoved(uint32_t physicalIndex)
@@ -1859,9 +1860,17 @@ void RenderGraph::BindRingLogicals(ResourceRing& ring)
 
 void RenderGraph::      CaptureRingVersions()
 {
+    auto bOnViewportPhysical = [&](const ResourceRing& ring) {
+        if (ring.bViewportScaled) { return true; }
+        for (uint32_t d = 0; d <= ring.depth; ++d) {
+            if (ring.versions[d].IsValid() && physicalResources[ring.versions[d].physicalIndex].bIsViewportScaled) { return true; }
+        }
+        return false;
+    };
+
     for (int32_t r = static_cast<int32_t>(rings.Size()) - 1; r >= 0; --r) {
         ResourceRing& ring = rings[r];
-        if (bDropAllRings || !ring.bDeclaredThisFrame || (bDestroyViewportAssociated && ring.bViewportScaled)) {
+        if (bDropAllRings || !ring.bDeclaredThisFrame || (bDestroyViewportAssociated && ring.bViewportScaled) || (bDropViewportRings && bOnViewportPhysical(ring))) {
             rings.SwapRemove(r);
             continue;
         }

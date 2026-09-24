@@ -19,7 +19,7 @@ public interface ILightProposal
     /** Resolve the shading point into this backend's cell; populates internal cell state. Advances h only if the backend jitters. */
     [mutating] void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h);
 
-    /** Draw candidate i of m. Returns false when the cell cannot supply one (caller does the shared uniform fallback). Advances h. */
+    /** Draw candidate i of m. Returns false only when there is no cell (caller falls back to uniform, as Marginal does); a failed draw inside a cell returns true with lightIdx = -1. Advances h. */
     bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect);
 
     /** Marginal light-selection pdf for an arbitrary (BRDF-hit) light; feeds the Talbot-MIS denominator. */
@@ -128,13 +128,13 @@ public struct ReGIRProposal : ILightProposal
         float lower = lo > 0u ? entries[entryBase + lo - 1u].cumMass : 0.0;
         ReGIREntry entry = entries[entryBase + lo];
         float mass = entry.cumMass - lower;
-        if (!(mass > 0.0)) { return false; }
+        if (!(mass > 0.0)) { return true; }
 
         float p = mass / totalMass;
         uint idx;
         if ((entry.key & REGIR_KEY_MESHLET) != 0u) {
             EmissiveMeshlet meshlet = lightData->emissiveMeshlets[entry.key & ~REGIR_KEY_MESHLET];
-            if (meshlet.lightCount == 0u) { return false; }
+            if (meshlet.lightCount == 0u) { return true; }
             MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
             idx = MeshletDrawTri(lightData, meshlet, cdf, HashStep(h));
             p *= MeshletTriPdf(lightData, meshlet, cdf, idx);
@@ -142,7 +142,7 @@ public struct ReGIRProposal : ILightProposal
         else {
             idx = entry.key;
         }
-        if (!IsLiveLight(idx, realLightCount, analyticCount)) { return false; }
+        if (!IsLiveLight(idx, realLightCount, analyticCount)) { return true; }
         lightIdx = int(idx);
         pSelect = p;
         return true;
@@ -252,7 +252,7 @@ public struct WorldGridProposal : ILightProposal
             if (meshletCount == 0u || (cellCount > 0u && u < pA)) {
                 uint j = min(uint((u / max(pA, 1e-8)) * float(cellCount)), cellCount - 1u);
                 uint idx = indexList[cellOffset + j];
-                if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
+                if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return true; }
                 lightIdx = int(idx);
                 pSelect = pA / float(cellCount);
                 return true;
@@ -265,10 +265,10 @@ public struct WorldGridProposal : ILightProposal
                 if (target < accum) { pick = k; break; }
             }
             EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + pick]];
-            if (meshlet.lightCount == 0u) { return false; }
+            if (meshlet.lightCount == 0u) { return true; }
             MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
             uint idx = MeshletDrawTri(lightData, meshlet, cdf, HashStep(h));
-            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
+            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return true; }
             lightIdx = int(idx);
             pSelect = (meshlet.power / T) * MeshletTriPdf(lightData, meshlet, cdf, idx);
             return true;
@@ -277,7 +277,7 @@ public struct WorldGridProposal : ILightProposal
         uint j = min(uint(u * float(total)), total - 1u);
         if (j < cellCount) {
             uint idx = indexList[cellOffset + j];
-            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
+            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return true; }
             lightIdx = int(idx);
             pSelect = 1.0 / float(total);
             return true;
@@ -285,10 +285,10 @@ public struct WorldGridProposal : ILightProposal
 
         // Meshlet path draws one extra step; with no emissive meshlets present it is never taken
         EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + (j - cellCount)]];
-        if (meshlet.lightCount == 0u) { return false; }
+        if (meshlet.lightCount == 0u) { return true; }
         MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
         uint idx = MeshletDrawTri(lightData, meshlet, cdf, HashStep(h));
-        if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return false; }
+        if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return true; }
         lightIdx = int(idx);
         pSelect = MeshletTriPdf(lightData, meshlet, cdf, idx) / float(total);
         return true;
