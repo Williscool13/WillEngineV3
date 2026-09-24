@@ -249,7 +249,7 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
             }
         }
 
-        float w_neighbor = misNeighbor * p_hat_n_atCenter * neighbor.W;
+        float w_neighbor = misNeighbor * p_hat_n_atCenter * abs(neighbor.W);
         if (ReservoirAddSample(accum, w_neighbor, HashStep(h))) {
             combined.lightIdx = neighbor.lightIdx;
             combined.sampleOffsetPacked = neighbor.sampleOffsetPacked;
@@ -292,15 +292,15 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
         LightSample s = EvalLightSample(winnerVS, yStar, viewPosition, N, winnerVS.range);
         pHatUnshadowed = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, UnpackUnorm4x8(winnerVS.packedColor).rgb, winnerVS.intensity, pc.lightSpecularFromReflectionsMax);
 
-        float p_hat_winner = bSkipWinnerTrace ? pHatUnshadowed
-            : (RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize) ? pHatUnshadowed : 0.0);
+        bool bWinnerVisible = bSkipWinnerTrace || RestirShadowVisible(rdgAccelerationStructures[pc.tlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize);
 #if RESTIR_ENABLE_CONFIDENCE
         if (pc.prevTlasIndex != ~0u) {
             visPrev = RestirShadowVisible(rdgAccelerationStructures[pc.prevTlasIndex], shadowWorldPos, worldN, worldyStar, worldTexelSize) ? 1.0 : 0.0;
         }
 #endif
-        ReservoirFinalize(combined, accum, p_hat_winner, (neighborCount == 0u) ? 1.0 : float(neighborCount));
-        winnerVisibility = (p_hat_winner > 0.0) ? 1.0 : 0.0;
+        // Occluded winners keep their W so reuse is not darkened; the sign carries visibility
+        ReservoirFinalize(combined, accum, pHatUnshadowed, (neighborCount == 0u) ? 1.0 : float(neighborCount));
+        winnerVisibility = (bWinnerVisible && pHatUnshadowed > 0.0) ? 1.0 : 0.0;
 #if RESTIR_ENABLE_CONFIDENCE
         if (pc.prevTlasIndex == ~0u) { visPrev = winnerVisibility; }
 #endif
@@ -321,6 +321,7 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
 
     if (pc.wClamp > 0.0) { combined.W = min(combined.W, pc.wClamp); }
     combined.M = min(combined.M, pc.spatialMCap);
+    if (winnerVisibility == 0.0) { combined.W = -combined.W; }
 
     pc.outputBuffer[pixelIdx] = combined;
 

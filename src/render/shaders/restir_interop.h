@@ -43,6 +43,7 @@ using float4x4 = glm::mat4;
  *   Packed as: lower 16 bits = u, upper 16 bits = v (both signed, scaled by 32767).
  * lightIdx == ~0u indicates an empty reservoir.
  * M is the candidate count; used by temporal/spatial reuse combination.
+ * Negative W = occluded winner.
  */
 SHADER_PUBLIC struct Reservoir
 {

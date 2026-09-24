@@ -16,7 +16,7 @@ void ComputeReSTIRBoilingFilter(uniform ReSTIRBoilingFilterPushConstant pc, uint
     Reservoir r = oob ? ReservoirEmpty() : pc.inputBuffer[pixelIdx];
 
     bool boilable = (r.lightIdx != ~0u);
-    float w = boilable ? r.W : 0.0;
+    float w = boilable ? abs(r.W) : 0.0;
 
     gBoiling[groupIndex] = float2(w, (w > 0.0) ? 1.0 : 0.0);
     GroupMemoryBarrierWithGroupSync();

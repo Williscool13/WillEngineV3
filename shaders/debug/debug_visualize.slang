@@ -197,6 +197,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         case 19: { // ReservoirTemporalW - visualize W * 65536 with range coloring: red [0,100), blue [100,500), green [500,inf)
             if (!bInReservoirBounds) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
             Reservoir r = pc.reservoirTemporalBuffer[reservoirPixelIdx];
+            r.W = abs(r.W);
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W * 65536.0 < 100.0) { float t = r.W * 65536.0 / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
             else if (r.W * 65536.0 < 500.0) { float t = (r.W * 65536.0 - 100.0) / 400.0; srcPixel.xyz = float3(0.0, 0.0, t); }
@@ -220,6 +221,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         case 22: { // ReservoirSpatialW - visualize W * 65536 with range coloring: red [0,100), blue [100,500), green [500,inf)
             if (!bInReservoirBounds) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
             Reservoir r = pc.reservoirSpatialBuffer[reservoirPixelIdx];
+            r.W = abs(r.W);
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W * 65536.0 < 100.0) { float t = r.W * 65536.0 / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
             else if (r.W * 65536.0 < 500.0) { float t = (r.W * 65536.0 - 100.0) / 400.0; srcPixel.xyz = float3(0.0, 0.0, t); }
@@ -234,6 +236,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
         case 24: { // ReservoirHistoryW - visualize W * 65536 with range coloring: red [0,100), blue [100,500), green [500,inf)
             if (!bHistoryReservoir) { srcPixel.xyz = float3(0.0, 0.0, 0.0); break; }
             Reservoir r = pc.reservoirHistoryBuffer[historyReservoirPixelIdx];
+            r.W = abs(r.W);
             if (r.lightIdx == ~0u) { srcPixel.xyz = float3(0.0, 0.0, 0.0); }
             else if (r.W * 65536.0 < 100.0) { float t = r.W * 65536.0 / 100.0; srcPixel.xyz = float3(t, 0.0, 0.0); }
             else if (r.W * 65536.0 < 500.0) { float t = (r.W * 65536.0 - 100.0) / 400.0; srcPixel.xyz = float3(0.0, 0.0, t); }

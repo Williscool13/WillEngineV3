@@ -114,8 +114,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity, pc.lightSpecularFromReflectionsMax);
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
-                    // Same d2 floor as LightGeometryTerm so the MIS denominator stays consistent with p_hat at contact distances.
-                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
+                    float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-8)) : 0.0;
                     float denom = float(RESTIR_M_LIGHT) * p_light_area + float(mBrdfMis) * p_brdf_area;
                     w_i = (denom > 0.0) ? (p_hat / denom) : 0.0;
                     candLightIdx = uint(lightIdx);
@@ -130,8 +129,10 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                 r_gen.sampleOffsetPacked = EncodeSampleOffset(candXi, candVS);
             }
         }
+    }
 
-        for (int i = 0; i < mBrdf; i++) {
+    // Also writes the reflection descriptors, so it runs with no local lights
+    for (int i = 0; i < mBrdf; i++) {
             // The STBN sequence yields one well-placed pair per pixel per frame; extra rays stay white.
             float2 xiBrdf;
             if (i == 0) {
@@ -250,7 +251,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     // Backend-specific marginal light-selection pdf for the BRDF-hit light, exact in both backends
                     float pSelect = prop.Marginal(hitLightIdx, vs, liveCount);
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
-                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, LIGHT_GEOM_MIN_DIST2)) : 0.0;
+                    p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-8)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;
                     p_hat_Xi = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, brdfLightColor, vs.intensity, pc.lightSpecularFromReflectionsMax);
                     bestLightIdx = hitLightIdx;
@@ -265,8 +266,6 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                 r_gen.sampleOffsetPacked = EncodeSampleOffset(Xi, bestVS);
             }
         }
-
-    }
 
     if (accum_gen.M > 0) { r_gen.M = 1u; }
 

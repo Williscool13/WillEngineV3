@@ -6,6 +6,7 @@ import binning_common;
 import reflection_probe_common;
 import reflection_probe_interop;
 import ddgi_interop;
+import pbr_functions;
 
 // Probe influence volume vs cell AABB. Sphere: point-AABB distance. Box: 15-axis OBB/AABB SAT (RTCD 4.4.1), OBB derived from worldToLocal (math row i = axis_i / extent_i; center solves Linear*c + t = 0).
 static bool ReflectionProbeIntersectsCellAABB(ReflectionProbeGPU probe, float3 aabbMin, float3 aabbMax)
@@ -71,6 +72,17 @@ static bool ReflectionProbeIntersectsCellAABB(ReflectionProbeGPU probe, float3 a
     return true;
 }
 
+static float WorldGridLightMass(LightInfo light, float3 aabbMin, float3 aabbMax)
+{
+    return WorldGridLightPower(light) / max(SqDistPointAABB(light.position.xyz, aabbMin, aabbMax), LIGHT_GEOM_MIN_DIST2);
+}
+
+static float WorldGridMeshletMass(EmissiveMeshlet meshlet, float3 aabbMin, float3 aabbMax)
+{
+    float3 gap = max(max(meshlet.aabbMin + meshlet.rangePad - aabbMax, aabbMin - (meshlet.aabbMax - meshlet.rangePad)), 0.0);
+    return meshlet.power / max(dot(gap, gap), LIGHT_GEOM_MIN_DIST2);
+}
+
 // One thread per cell; membership must match WorldGridResolveCell exactly (lighting_pbr.slang reads it back).
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -93,8 +105,8 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
 
     uint indexOffset = flatIndex * MAX_LIGHTS_PER_WORLD_GRID_CELL;
     uint count = 0u;
-    // Weakest currently-held light, so an overflowing cell keeps the strongest K by power rather than the first K encountered.
-    float minPower = 1e30;
+    // Weakest currently-held light, so an overflowing cell keeps the strongest K rather than the first K encountered.
+    float minMass = 1e30;
     uint minSlot = 0u;
 
     // Analytic (area/sphere) only, matching FrustumBinning; triangle lights excluded.
@@ -103,24 +115,25 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
     {
         LightInfo light = pc.lightData->lights[i];
         float radius = light.range;
-        if (SqDistPointAABB(light.position.xyz, aabbMin, aabbMax) > radius * radius) { continue; }
+        float d2 = SqDistPointAABB(light.position.xyz, aabbMin, aabbMax);
+        if (d2 > radius * radius) { continue; }
 
-        float power = WorldGridLightPower(light);
+        float mass = WorldGridLightPower(light) / max(d2, LIGHT_GEOM_MIN_DIST2);
         if (count < MAX_LIGHTS_PER_WORLD_GRID_CELL)
         {
             pc.worldGridIndexList[indexOffset + count] = uint(i);
-            if (power < minPower) { minPower = power; minSlot = count; }
+            if (mass < minMass) { minMass = mass; minSlot = count; }
             count++;
         }
-        else if (power > minPower)
+        else if (mass > minMass)
         {
             // Evict the weakest, then rescan the K slots to find the new weakest. Rescan cost is paid only on overflow (rare in bounded analytic scenes).
             pc.worldGridIndexList[indexOffset + minSlot] = uint(i);
-            minPower = 1e30;
+            minMass = 1e30;
             for (uint k = 0u; k < MAX_LIGHTS_PER_WORLD_GRID_CELL; k++)
             {
-                float hp = WorldGridLightPower(pc.lightData->lights[pc.worldGridIndexList[indexOffset + k]]);
-                if (hp < minPower) { minPower = hp; minSlot = k; }
+                float hm = WorldGridLightMass(pc.lightData->lights[pc.worldGridIndexList[indexOffset + k]], aabbMin, aabbMax);
+                if (hm < minMass) { minMass = hm; minSlot = k; }
             }
         }
     }
@@ -135,7 +148,7 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
 
     uint meshletOffset = flatIndex * MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL;
     uint meshletCount = 0u;
-    float minMeshletPower = 1e30;
+    float minMeshletMass = 1e30;
     uint minMeshletSlot = 0u;
     int emissiveMeshCount = pc.lightData->emissiveMeshCount;
 
@@ -149,20 +162,21 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
             EmissiveMeshlet meshlet = pc.lightData->emissiveMeshlets[g];
             if (any(meshlet.aabbMin > aabbMax) || any(meshlet.aabbMax < aabbMin)) { continue; }
 
+            float mass = WorldGridMeshletMass(meshlet, aabbMin, aabbMax);
             if (meshletCount < MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL)
             {
                 pc.worldGridEmissiveIndexList[meshletOffset + meshletCount] = g;
-                if (meshlet.power < minMeshletPower) { minMeshletPower = meshlet.power; minMeshletSlot = meshletCount; }
+                if (mass < minMeshletMass) { minMeshletMass = mass; minMeshletSlot = meshletCount; }
                 meshletCount++;
             }
-            else if (meshlet.power > minMeshletPower)
+            else if (mass > minMeshletMass)
             {
                 pc.worldGridEmissiveIndexList[meshletOffset + minMeshletSlot] = g;
-                minMeshletPower = 1e30;
+                minMeshletMass = 1e30;
                 for (uint k = 0u; k < MAX_EMISSIVE_MESHLETS_PER_WORLD_GRID_CELL; k++)
                 {
-                    float hp = pc.lightData->emissiveMeshlets[pc.worldGridEmissiveIndexList[meshletOffset + k]].power;
-                    if (hp < minMeshletPower) { minMeshletPower = hp; minMeshletSlot = k; }
+                    float hm = WorldGridMeshletMass(pc.lightData->emissiveMeshlets[pc.worldGridEmissiveIndexList[meshletOffset + k]], aabbMin, aabbMax);
+                    if (hm < minMeshletMass) { minMeshletMass = hm; minMeshletSlot = k; }
                 }
             }
         }

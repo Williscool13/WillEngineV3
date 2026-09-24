@@ -400,7 +400,7 @@ struct ReSTIRParams
     bool bInitialVisibility{true};
     bool bSunLight{true};
     float sunAlphaTestMaxDistance{25.0f};
-    float restirWClamp{0.0003052f};
+    float restirWClamp{0.0f};
     // WorldGridBin = cascaded strongest-K analytic bin (default, sparse analytic scenes)
     // ReGIR = deterministic per-cell entry table over a world hash grid (dense/emissive-triangle scenes). Only ReGIR schedules the touch/fill producer chain.
     enum class LightProposal : uint32_t { WorldGridBin = 0, ReGIR = 1 };

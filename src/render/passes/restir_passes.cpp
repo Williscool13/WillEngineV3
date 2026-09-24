@@ -286,7 +286,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .activeCheckerboardField = field,
                 .reflectionRoughnessMax = reflectionRoughnessMax,
                 .brdfRoughnessMax = reflectionConfig.tracedRoughnessMax,
-                .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
+                .lightSpecularFromReflectionsMax = ComputeLightSpecularFromReflectionsMax(reflectionConfig),
                 .mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -353,7 +353,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .antilagStrength = restirParams.antilagStrength,
                     .activeCheckerboardField = field,
                     .wClamp = restirParams.restirWClamp,
-                    .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
+                    .lightSpecularFromReflectionsMax = ComputeLightSpecularFromReflectionsMax(reflectionConfig),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -604,7 +604,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .bCheckerboardPacked = packed,
                     .reflectionIndex = bMergedReflections ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
                     .bFullRateResolve = fullRate,
-                    .lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax,
+                    .lightSpecularFromReflectionsMax = ComputeLightSpecularFromReflectionsMax(reflectionConfig),
                     .sunVisIndex = graph.HasTexture("restir_sun_vis"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_sun_vis"_sid) : ~0x0u,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };

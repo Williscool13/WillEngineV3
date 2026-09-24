@@ -342,6 +342,11 @@ public float3 SampleLightSurface(LightView vs, float3 shadingPos, float uU, floa
         float b2 = uV * su;
         return vs.center + b1 * vs.right + b2 * vs.up;
     }
+    if (vs.type == LIGHT_TYPE_DISK)
+    {
+        float2 d = ConcentricSampleDisk(uU, uV) * vs.halfWidth;
+        return vs.center + d.x * vs.right + d.y * vs.up;
+    }
     float3 ex = (2.0 * vs.halfWidth) * vs.right;
     float3 ey = (2.0 * vs.halfHeight) * vs.up;
     float3 corner = vs.center - vs.halfWidth * vs.right - vs.halfHeight * vs.up;

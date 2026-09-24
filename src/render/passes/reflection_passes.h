@@ -33,6 +33,15 @@ inline float ComputeReflectionRoughnessMax(const Core::ReflectionConfiguration& 
     return config.bEnabled ? config.tracedRoughnessMax : -1.0f;
 }
 
+/** Roughness at or below which light specular comes from reflections; -1 when reflections are off. */
+inline float ComputeLightSpecularFromReflectionsMax(const Core::ReflectionConfiguration& config)
+{
+    if (!config.bEnabled) {
+        return -1.0f;
+    }
+    return config.lightSpecularFromReflectionsMax < config.tracedRoughnessMax ? config.lightSpecularFromReflectionsMax : config.tracedRoughnessMax;
+}
+
 /**
  * Creates and fills the reflection descriptor buffer with a dedicated GGX ray per pixel, for lighting modes that have no ReSTIR BRDF ray to
  * piggyback. Every pixel is written, so no clear pass is required. No-op when reflections are disabled or no TLAS exists.

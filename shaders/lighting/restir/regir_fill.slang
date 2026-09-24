@@ -115,8 +115,10 @@ void ComputeReGIRFill(uniform ReGIRFillPushConstant pc, uint3 groupID : SV_Group
     float3 cellCenterWS = ReGIRCellCenterFromKey(key);
     float3 cellCenterVS = mul(scene.view, float4(cellCenterWS, 1.0)).xyz;
     float targetMinDist2 = ReGIRTargetMinDist2(key.level);
-    float cellHalfDiag = ReGIRCellHalfDiag(key.level);
-    float cellHalfSize = 0.5 * ReGIRCellSizeAtLevel(key.level);
+    // Cull against every point that can query this cell, including the jitter
+    float serveReach = (0.5 + REGIR_KEY_CAMERA_OFFSET_SCALE) * ReGIRCellSizeAtLevel(key.level);
+    float cellHalfDiag = ReGIRCellHalfDiag(key.level) + sqrt(3.0) * serveReach;
+    float cellHalfSize = 0.5 * ReGIRCellSizeAtLevel(key.level) + serveReach;
     float3 cellMin = cellCenterWS - cellHalfSize;
     float3 cellMax = cellCenterWS + cellHalfSize;
     float distFloor = max(targetMinDist2, LIGHT_GEOM_MIN_DIST2);

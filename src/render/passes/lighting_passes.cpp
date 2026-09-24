@@ -379,7 +379,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
-            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, lightSpecularFromReflectionsMax = reflectionConfig.lightSpecularFromReflectionsMax
+            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, lightSpecularFromReflectionsMax = bReflection ? ComputeLightSpecularFromReflectionsMax(reflectionConfig) : -1.0f
             ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress tileListAddress = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER);
 
