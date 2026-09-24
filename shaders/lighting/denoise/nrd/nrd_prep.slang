@@ -59,6 +59,17 @@ void NrdPrepGuidesMain(uniform NrdPrepGuidesPushConstant pc, uint3 dtid : SV_Dis
     rdgStorageFloat4[pc.outNormalRoughnessIndex][pixel] = float4(NrdEncodeNormalRoughness101010(worldNormal, roughness), 0.0);
 }
 
+float3 NrdScaleAndSanitizeRadiance(float3 radiance, float scale, float maxLuminance)
+{
+    radiance *= scale;
+    if (any(isnan(radiance)) || any(isinf(radiance))) {
+        return float3(0.0);
+    }
+    radiance = clamp(radiance, 0.0, 65504.0);
+    float luminance = dot(radiance, float3(0.2126, 0.7152, 0.0722));
+    return luminance > maxLuminance ? radiance * (maxLuminance / luminance) : radiance;
+}
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void NrdRadianceCopyMain(uniform NrdRadianceCopyPushConstant pc, uint3 dtid : SV_DispatchThreadID)
@@ -68,8 +79,10 @@ void NrdRadianceCopyMain(uniform NrdRadianceCopyPushConstant pc, uint3 dtid : SV
         return;
     }
 
-    rdgStorageFloat4[pc.outDiffIndex][pixel] = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixel, 0));
-    rdgStorageFloat4[pc.outSpecIndex][pixel] = rdgTexturesFloat4[pc.specIndex].Load(int3(pixel, 0));
+    float4 diff = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixel, 0));
+    float4 spec = rdgTexturesFloat4[pc.specIndex].Load(int3(pixel, 0));
+    rdgStorageFloat4[pc.outDiffIndex][pixel] = float4(NrdScaleAndSanitizeRadiance(diff.rgb, pc.radianceScale, pc.maxLuminance), diff.w);
+    rdgStorageFloat4[pc.outSpecIndex][pixel] = float4(NrdScaleAndSanitizeRadiance(spec.rgb, pc.radianceScale, pc.maxLuminance), spec.w);
 }
 
 // Mirrors NRD.hlsli _NRD_LinearToYCoCg / _NRD_YCoCgToLinear
@@ -105,7 +118,7 @@ float4 NrdReblurFrontEndPack(float4 radianceHitT, float viewZ, float3 hitDistPar
     float3 radiance = radianceHitT.rgb;
     radiance = (any(isnan(radiance)) || any(isinf(radiance))) ? float3(0.0) : clamp(radiance, 0.0, 65504.0);
     float norm = saturate(radianceHitT.w / NrdReblurHitDistNormalization(viewZ, hitDistParams, roughness));
-    norm = (isnan(norm) || isinf(norm)) ? 0.0 : max(norm, 1e-6);
+    norm = (isnan(norm) || isinf(norm) || norm <= 0.0) ? 0.0 : max(norm, 1e-6);
     return float4(NrdLinearToYCoCg(radiance), norm);
 }
 
@@ -126,6 +139,8 @@ void NrdReblurRadiancePackMain(uniform NrdReblurRadiancePackPushConstant pc, uin
 
     float4 diff = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixel, 0));
     float4 spec = rdgTexturesFloat4[pc.specIndex].Load(int3(pixel, 0));
+    diff.rgb *= pc.radianceScale;
+    spec.rgb *= pc.radianceScale;
     rdgStorageFloat4[pc.outDiffIndex][pixel] = NrdReblurFrontEndPack(diff, viewZ, pc.hitDistParams.xyz, 1.0);
     rdgStorageFloat4[pc.outSpecIndex][pixel] = NrdReblurFrontEndPack(spec, viewZ, pc.hitDistParams.xyz, roughness);
 }
@@ -142,6 +157,6 @@ void NrdReblurOutputCopyMain(uniform NrdRadianceCopyPushConstant pc, uint3 dtid 
 
     float4 diff = rdgTexturesFloat4[pc.diffIndex].Load(int3(pixel, 0));
     float4 spec = rdgTexturesFloat4[pc.specIndex].Load(int3(pixel, 0));
-    rdgStorageFloat4[pc.outDiffIndex][pixel] = float4(NrdYCoCgToLinear(diff.rgb), diff.w);
-    rdgStorageFloat4[pc.outSpecIndex][pixel] = float4(NrdYCoCgToLinear(spec.rgb), spec.w);
+    rdgStorageFloat4[pc.outDiffIndex][pixel] = float4(NrdScaleAndSanitizeRadiance(NrdYCoCgToLinear(diff.rgb), pc.radianceScale, pc.maxLuminance), diff.w);
+    rdgStorageFloat4[pc.outSpecIndex][pixel] = float4(NrdScaleAndSanitizeRadiance(NrdYCoCgToLinear(spec.rgb), pc.radianceScale, pc.maxLuminance), spec.w);
 }

@@ -204,7 +204,9 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
 
     // ---- Specular short-history reconstruction ----
     {
-        float hitDistFactor = RelaxGetHitDistFactor(ReblurDenormHitDist(spec.w, centerViewZ, rc.gHitDistParams, centerRoughness), frustumSize);
+        float specHitDistForTracking = rdgTexturesFloat[pc.specHitDistIndex].Load(int3(pixelPos, 0)).r;
+        float specHitDist = lerp(specHitDistForTracking, ReblurDenormHitDist(spec.w, centerViewZ, rc.gHitDistParams, centerRoughness), smc);
+        float hitDistFactor = RelaxGetHitDistFactor(specHitDist, frustumSize);
         float specStride = specBaseStride * lerp(0.25 + 0.75 * sqrt(saturate(hitDistFactor)), 1.0, specNonLinearAccumSpeed);
         specStride *= lerp(0.25, 1.0, smc);
         specStride = round(specStride);

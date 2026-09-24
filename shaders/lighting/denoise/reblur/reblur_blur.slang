@@ -63,10 +63,8 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
 
     float frustumSize = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, min(float(rc.gRectSize.x), float(rc.gRectSize.y)), centerViewZ);
 
-    float kernelAngle = MLBayer4x4(uint2(pixelPos), rc.gFrameIndex) * MLPi(2.0);
-    float4 rotator = MLCombineRotators(rc.gRotatorPre, MLGetRotator(kernelAngle));
-
     bool isPostBlur = pc.isPostBlur != 0u;
+    float4 rotator = isPostBlur ? rc.gRotatorPost : rc.gRotator;
     float radiusScale = isPostBlur ? REBLUR_POST_BLUR_RADIUS_SCALE : 1.0;
     float fractionScale = isPostBlur ? REBLUR_POST_BLUR_FRACTION_SCALE : REBLUR_BLUR_FRACTION_SCALE;
 

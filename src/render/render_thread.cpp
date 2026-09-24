@@ -837,9 +837,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                             const NrdBackend nrdBackend = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR ? NrdBackend::Reblur : NrdBackend::Relax;
                             // Declaration order defines the RDG read/write sequence: prep writes -> dispatch -> writeback
                             if (nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, nrdBackend, relax, reblur, frameNumber, frameIndex, renderFps)) {
-                                SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend, reblur);
+                                SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend, reblur, preExposure);
                                 nrdDenoiser->AddDispatchPass(*renderGraph, resourceManager, pipelineManager, frameIndex);
-                                SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend);
+                                SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend, preExposure);
                             }
                             SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
                         }

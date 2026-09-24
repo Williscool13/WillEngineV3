@@ -155,6 +155,8 @@ private:
     bool bInitialized{false};
     bool bInitFailed{false};
     bool bPendingHistoryClear{false};
+    bool bHasConfidence{false};
+    TrackedTexture confidenceTexture{};
     NrdBackend activeBackend{NrdBackend::Relax};
     NrdBackend lastBackend{NrdBackend::Relax};
 
@@ -164,10 +166,10 @@ private:
 };
 
 /** Fills IN_NORMAL_ROUGHNESS / IN_MV / IN_VIEWZ from gbuffer_one + depth, and IN_DIFF/IN_SPEC from the demodulated intermediates (ReBLUR backend: YCoCg + normalized hitT front-end packing). */
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams);
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure);
 
 /** Copies OUT_DIFF/OUT_SPEC back into the intermediates the engine remodulate pass consumes (ReBLUR backend: YCoCg back to linear). */
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend);
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure);
 } // Render
 
 #endif //WILL_ENGINE_NRD_DENOISER_H

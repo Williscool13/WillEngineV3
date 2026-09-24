@@ -34,13 +34,17 @@ static const int TA_BUFFER_Y = TA_GROUP_Y + TA_BORDER * 2;
 
 groupshared float4 sharedNormalSpecHitT[TA_BUFFER_Y][TA_BUFFER_X];
 
-void TAPreload(uint2 sharedPos, int2 globalPos, int2 rectSize, uint normalRoughnessIndex, uint specInputIndex, float3x3 viewToWorld)
+void TAPreload(uint2 sharedPos, int2 globalPos, int2 rectSize, uint normalRoughnessIndex, uint specInputIndex, uint specHitDistTrackingIndex, bool bUseTracking, float3x3 viewToWorld)
 {
     globalPos = clamp(globalPos, int2(0, 0), rectSize - 1);
     uint4 gt1 = rdgTexturesUInt4[normalRoughnessIndex].Load(int3(globalPos, 0));
     float4 normalSpecHitT = float4(RelaxUnpackNormalAndRoughness(gt1, viewToWorld).xyz, 0);
-    float4 specIllum = rdgTexturesFloat4[specInputIndex].Load(int3(globalPos, 0));
-    normalSpecHitT.a = specIllum.a;
+    if (bUseTracking) {
+        normalSpecHitT.a = rdgTexturesFloat[specHitDistTrackingIndex].Load(int3(globalPos, 0)).r;
+    }
+    else {
+        normalSpecHitT.a = rdgTexturesFloat4[specInputIndex].Load(int3(globalPos, 0)).a;
+    }
     sharedNormalSpecHitT[sharedPos.y][sharedPos.x] = normalSpecHitT;
 }
 
@@ -256,7 +260,7 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
             uint2 newId = uint2(virtualIndex % TA_BUFFER_X, virtualIndex / TA_BUFFER_X);
             if (stage == 0 || virtualIndex < TA_BUFFER_X * TA_BUFFER_Y)
             {
-                TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.normalRoughnessIndex, pc.specInputIndex, viewToWorld);
+                TAPreload(newId, groupBase + int2(newId), rc.gRectSize, pc.normalRoughnessIndex, pc.specInputIndex, pc.specHitDistTrackingIndex, rc.gSpecPrepassBlurRadius != 0.0, viewToWorld);
             }
         }
     }
@@ -420,7 +424,7 @@ void ReblurTemporalAccumulationMain(uniform ReblurTemporalAccumulationPushConsta
         float dither = MLBayer4x4(uint2(pixelPos), rc.gFrameIndex);
         float edgeFix = 1.0 - BRDFPow5(NoV);
         float deltaUvLenFixed = smbParallaxInPixelsMin;
-        deltaUvLenFixed *= 1.0 + edgeFix * (1.0 + rc.gFramerateScale * dither);
+        deltaUvLenFixed *= 1.0 + edgeFix * (1.0 + 2.0 * rc.gFramerateScale * dither);
         float2 motionUvHigh = pixelUv + deltaUvLenFixed * deltaUv * rc.gRectSizeInv;
         motionUvHigh = (floor(motionUvHigh * float2(rc.gRectSize)) + 0.5) * rc.gRectSizeInv;
 

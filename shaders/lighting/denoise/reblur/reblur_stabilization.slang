@@ -156,7 +156,7 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
 
     // History weight + color-box sigma scale.
     float diffW = smbFootprintQuality * (1.0 - ReblurGetAdvancedNonLinearAccumSpeed(data1.x, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz)) * diffAntilag;
-    float diffSigmaScale = 1.0 + 3.0 * rc.gFramerateScale * diffW;
+    float diffSigmaScale = 1.0 + 6.0 * rc.gFramerateScale * diffW;
 
     smbDiffLumaHistory = clamp(smbDiffLumaHistory, diffLumaM1 - diffLumaSigma * diffSigmaScale, diffLumaM1 + diffLumaSigma * diffSigmaScale);
     float diffLumaStabilized = lerp(diffLuma, smbDiffLumaHistory, min(diffW, stabilizationStrength));
@@ -202,7 +202,7 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     data1.y = lerp(specMinAccumSpeed, data1.y, specAntilag);
 
     float specW = specFootprintQuality * (1.0 - ReblurGetAdvancedNonLinearAccumSpeed(data1.y, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz)) * specAntilag;
-    float specSigmaScale = 1.0 + 3.0 * rc.gFramerateScale * specW;
+    float specSigmaScale = 1.0 + 6.0 * rc.gFramerateScale * specW;
 
     // Weaken spec stabilization on smooth surfaces so reflections stay responsive.
     float responsiveFactor = ReblurRemapRoughnessToResponsiveFactor(roughness, rc.gResponsiveAccumulationInvRoughnessThreshold);

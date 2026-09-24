@@ -771,7 +771,17 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     rc.gWorldPrevToWorld = glm::mat4(1.0f);
     rc.gViewToWorld = viewToWorld;
 
-    rc.gRotatorPre = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    {
+        constexpr float REBLUR_POST_BLUR_ROTATOR_OFFSET_DEGREES = 22.5f;
+        const uint32_t frameIndex = static_cast<uint32_t>(frameNumber);
+        const float weylStep = static_cast<float>(frameIndex * 10368889u) / 16777216.0f;
+        const float anglePre = glm::fract(1.0f / glm::sqrt(2.0f) + weylStep) * glm::radians(90.0f);
+        const float angle = glm::fract(1.0f / glm::sqrt(3.0f) + weylStep) * glm::radians(90.0f);
+        rc.gRotatorPre = glm::vec4(glm::cos(anglePre), glm::sin(anglePre), -glm::sin(anglePre), glm::cos(anglePre));
+        const float anglePost = angle + glm::radians(REBLUR_POST_BLUR_ROTATOR_OFFSET_DEGREES);
+        rc.gRotator = glm::vec4(glm::cos(angle), glm::sin(angle), -glm::sin(angle), glm::cos(angle));
+        rc.gRotatorPost = glm::vec4(glm::cos(anglePost), glm::sin(anglePost), -glm::sin(anglePost), glm::cos(anglePost));
+    }
     rc.gFrustumForward = glm::vec4(forward, 0.0f);
     rc.gFrustumRight = glm::vec4(right * tanHalfFovX, 0.0f);
     rc.gFrustumUp = glm::vec4(up * tanHalfFovY, 0.0f);
@@ -817,7 +827,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     // Checkerboard forces the prepass to run for hole resolve; "prepass disabled" is radius 0.
     rc.gDiffPrepassBlurRadius = params.enablePrepass ? params.diffusePrepassBlurRadius : 0.0f;
     rc.gSpecPrepassBlurRadius = params.enablePrepass ? params.specularPrepassBlurRadius : 0.0f;
-    rc.gLobeAngleFraction = params.lobeAngleFraction;
+    rc.gLobeAngleFraction = params.lobeAngleFraction * params.lobeAngleFraction;
     rc.gRoughnessFraction = params.roughnessFraction;
     rc.gHistoryFixFrameNum = params.historyFixFrameNum;
     rc.gHistoryFixBasePixelStride = params.historyFixBasePixelStride;
@@ -914,6 +924,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     if (bPrepass) {
         graph.CreateTexture("reblur_spec_prepass"_sid, colorInfo, {std::nullopt}, true);
         graph.CreateTexture("reblur_diff_prepass"_sid, colorInfo, {std::nullopt}, true);
+        graph.CreateTexture("reblur_spec_hit_dist_tracking"_sid, hitDistInfo, {std::nullopt}, true);
 
         auto& pass = graph.AddPass("[ReBLUR] Prepass"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer("reblur_constants"_sid);
@@ -924,6 +935,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage("reblur_diff_packed"_sid);
         pass.WriteStorageImage("reblur_spec_prepass"_sid);
         pass.WriteStorageImage("reblur_diff_prepass"_sid);
+        pass.WriteStorageImage("reblur_spec_hit_dist_tracking"_sid);
         pass.Execute([pipelineManager, depth, gbufferOne, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurPrepassPushConstant pc{
                 .constants = graph.GetBufferAddress("reblur_constants"_sid),
@@ -934,6 +946,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_packed"_sid),
                 .specOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_prepass"_sid),
                 .diffOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_prepass"_sid),
+                .specHitDistTrackingOutIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_hit_dist_tracking"_sid),
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("reblur_prepass"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -944,6 +957,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
     const StringID specIn = bPrepass ? "reblur_spec_prepass"_sid : "reblur_spec_packed"_sid;
     const StringID diffIn = bPrepass ? "reblur_diff_prepass"_sid : "reblur_diff_packed"_sid;
+    const StringID specHitDistTrackingIn = bPrepass ? "reblur_spec_hit_dist_tracking"_sid : specIn;
 
     graph.CreateTexture("reblur_spec_accum"_sid, colorInfo, {std::nullopt}, true);
     graph.CreateTexture("reblur_diff_accum"_sid, colorInfo, {std::nullopt}, true);
@@ -968,6 +982,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage(depth);
         pass.ReadSampledImage(specIn);
         pass.ReadSampledImage(diffIn);
+        if (bPrepass) { pass.ReadSampledImage(specHitDistTrackingIn); }
         if (graph.ResourceHasVersion("reblur_spec_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_spec_hist"_sid, 1)); }
         if (graph.ResourceHasVersion("reblur_diff_hist"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_diff_hist"_sid, 1)); }
         if (graph.ResourceHasVersion("reblur_spec_fast_fixed"_sid, 1)) { pass.ReadSampledImage(graph.ResourceVersionID("reblur_spec_fast_fixed"_sid, 1)); }
@@ -998,8 +1013,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const StringID fallbackPrevNR = graph.ResourceHasVersion("reblur_prev_nr"_sid, 1) ? graph.ResourceVersionID("reblur_prev_nr"_sid, 1) : "reblur_prev_nr"_sid;
         const StringID fallbackViewZ = graph.ResourceHasVersion("reblur_viewz"_sid, 1) ? graph.ResourceVersionID("reblur_viewz"_sid, 1) : "reblur_viewz"_sid;
 
-        pass.Execute([pipelineManager, gbufferOne, depth, specIn, diffIn, width, height, fallbackSpec, fallbackDiff, fallbackSpecFast, fallbackDiffFast, fallbackInternalData, fallbackSpecHitD, fallbackPrevNR,
-                fallbackViewZ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, gbufferOne, depth, specIn, specHitDistTrackingIn, diffIn, width, height, fallbackSpec, fallbackDiff, fallbackSpecFast, fallbackDiffFast, fallbackInternalData, fallbackSpecHitD,
+                fallbackPrevNR, fallbackViewZ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReblurTemporalAccumulationPushConstant pc{
                 .constants = graph.GetBufferAddress("reblur_constants"_sid),
                 .tilesIndex = graph.GetSampledImageViewDescriptorIndex("reblur_tiles"_sid),
@@ -1009,6 +1024,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .prevViewZIndex = graph.GetSampledImageViewDescriptorIndex(fallbackViewZ),
                 .prevInternalDataIndex = graph.GetSampledImageViewDescriptorIndex(fallbackInternalData),
                 .specInputIndex = graph.GetSampledImageViewDescriptorIndex(specIn),
+                .specHitDistTrackingIndex = graph.GetSampledImageViewDescriptorIndex(specHitDistTrackingIn),
                 .diffInputIndex = graph.GetSampledImageViewDescriptorIndex(diffIn),
                 .historySpecFastIndex = graph.GetSampledImageViewDescriptorIndex(fallbackSpecFast),
                 .historyDiffFastIndex = graph.GetSampledImageViewDescriptorIndex(fallbackDiffFast),
@@ -1044,6 +1060,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         pass.ReadSampledImage("reblur_diff_accum"_sid);
         pass.ReadSampledImage("reblur_spec_fast"_sid);
         pass.ReadSampledImage("reblur_diff_fast"_sid);
+        pass.ReadSampledImage("reblur_spec_hit_dist"_sid);
         pass.WriteStorageImage("reblur_spec_hfix"_sid);
         pass.WriteStorageImage("reblur_diff_hfix"_sid);
         pass.WriteStorageImage("reblur_spec_fast_fixed"_sid);
@@ -1059,6 +1076,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_accum"_sid),
                 .specFastIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_fast"_sid),
                 .diffFastIndex = graph.GetSampledImageViewDescriptorIndex("reblur_diff_fast"_sid),
+                .specHitDistIndex = graph.GetSampledImageViewDescriptorIndex("reblur_spec_hit_dist"_sid),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_hfix"_sid),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex("reblur_diff_hfix"_sid),
                 .outSpecFastIndex = graph.GetStorageImageViewDescriptorIndex("reblur_spec_fast_fixed"_sid),

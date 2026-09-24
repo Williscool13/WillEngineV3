@@ -1945,6 +1945,8 @@ SHADER_PUBLIC struct NrdRadianceCopyPushConstant
     SHADER_PUBLIC uint32_t specIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC float radianceScale;
+    SHADER_PUBLIC float maxLuminance;
 };
 
 SHADER_PUBLIC struct NrdReblurRadiancePackPushConstant
@@ -1957,6 +1959,7 @@ SHADER_PUBLIC struct NrdReblurRadiancePackPushConstant
     SHADER_PUBLIC uint32_t viewZIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
+    SHADER_PUBLIC float radianceScale;
 };
 
 // =====================================================================
@@ -2122,6 +2125,7 @@ SHADER_PUBLIC struct ReblurPrepassPushConstant
     SHADER_PUBLIC uint32_t diffInputIndex;
     SHADER_PUBLIC uint32_t specOutIndex;
     SHADER_PUBLIC uint32_t diffOutIndex;
+    SHADER_PUBLIC uint32_t specHitDistTrackingOutIndex;
 };
 
 SHADER_PUBLIC struct ReblurTemporalAccumulationPushConstant
@@ -2134,6 +2138,7 @@ SHADER_PUBLIC struct ReblurTemporalAccumulationPushConstant
     SHADER_PUBLIC uint32_t prevViewZIndex;
     SHADER_PUBLIC uint32_t prevInternalDataIndex;
     SHADER_PUBLIC uint32_t specInputIndex;
+    SHADER_PUBLIC uint32_t specHitDistTrackingIndex;
     SHADER_PUBLIC uint32_t diffInputIndex;
     SHADER_PUBLIC uint32_t historySpecFastIndex;
     SHADER_PUBLIC uint32_t historyDiffFastIndex;
@@ -2162,6 +2167,7 @@ SHADER_PUBLIC struct ReblurHistoryFixPushConstant
     SHADER_PUBLIC uint32_t diffIndex;
     SHADER_PUBLIC uint32_t specFastIndex;
     SHADER_PUBLIC uint32_t diffFastIndex;
+    SHADER_PUBLIC uint32_t specHitDistIndex;
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
     SHADER_PUBLIC uint32_t outSpecFastIndex;

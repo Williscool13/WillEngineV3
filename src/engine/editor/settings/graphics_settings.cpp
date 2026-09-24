@@ -1328,7 +1328,9 @@ static void DrawRELAXParamsUI(bool& changed, Core::RELAXParams& relax, const cha
     changed |= Widgets::Checkbox("Roughness Edge Stopping##relax", &relax.roughnessEdgeStoppingEnabled, "Roughness-aware specular edge stopping (roughness + oriented-normal weights). Off uses a simpler normal-only weight. Default on.");
 
     Widgets::SubHeader("General");
+    ImGui::BeginDisabled(bNrdMode);
     relaxF("Denoising Range", &relax.denoisingRange, relaxDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through untouched. Default 1000; set to roughly cover your scene depth.");
+    ImGui::EndDisabled();
     relaxF("Disocclusion Threshold", &relax.disocclusionThreshold, relaxDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Higher accepts more (less ghosting rejection); lower resets more on edges/motion. A jitter/1px depth bonus is added on top. Default 0.01.");
     relaxF("Depth Threshold", &relax.depthThreshold, relaxDefaults.depthThreshold, 0.0f, 0.05f, "%.4f", "Plane-distance tolerance for spatial edge stopping, as a fraction of depth. Lower preserves geometry edges; higher blurs across them. Default 0.003.");
 
@@ -1411,7 +1413,9 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     ImGui::EndDisabled();
 
     Widgets::SubHeader("General");
+    ImGui::BeginDisabled(bNrdMode);
     reblurF("Denoising Range", &reblur.denoisingRange, reblurDefaults.denoisingRange, 10.f, 5000.f, "%.1f", "Max view-space distance (world units) that gets denoised; farther surfaces pass through. Default 1000.");
+    ImGui::EndDisabled();
     reblurF("Disocclusion Threshold", &reblur.disocclusionThreshold, reblurDefaults.disocclusionThreshold, 0.001f, 0.05f, "%.4f", "Relative depth tolerance for accepting reprojected history. Default 0.01.");
     reblurF("Plane Distance Sensitivity", &reblur.planeDistanceSensitivity, reblurDefaults.planeDistanceSensitivity, 0.001f, 0.2f, "%.4f", "Max allowed deviation from the local tangent plane for spatial edge stopping. Default 0.02.");
     reblurF("Lobe Angle Fraction", &reblur.lobeAngleFraction, reblurDefaults.lobeAngleFraction, 0.f, 1.f, "%.3f", "Normal edge-stopping tolerance as a fraction of the BRDF lobe angle. Default 0.15.");
@@ -1789,7 +1793,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 changed = true;
             }
 
-            if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
+            const bool bConfidenceDenoiser = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR;
+            if (bConfidenceDenoiser) {
                 ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
                 featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
                     if (Widgets::SliderFloat("History Confidence##restir", &restir.confidenceStrength, 0.0f, 1.0f,
@@ -1816,7 +1821,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     }
                 });
                 ImGui::EndDisabled();
+            }
 
+            if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
                 DrawRELAXParamsUI(changed, restir.relax, "main_relax", true);
             }
 

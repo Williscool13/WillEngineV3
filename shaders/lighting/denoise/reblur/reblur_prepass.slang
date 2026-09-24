@@ -65,8 +65,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
     float centerRoughness = centerNR.w;
     float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
-    float angle = MLBayer4x4(uint2(pixelPos), rc.gFrameIndex) * MLPi(2.0);
-    float4 rotator = MLCombineRotators(rc.gRotatorPre, MLGetRotator(angle));
+    float4 rotator = rc.gRotatorPre;
 
     float frustumSize = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, min(float(rc.gRectSize.x), float(rc.gRectSize.y)), centerViewZ);
     float planeDistanceCenterZ = rc.gOrthoMode == 0 ? centerViewZ : 1.0;
@@ -201,11 +200,11 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
             float t = sWorld / (hitDist + d);
             w *= lerp(saturate(t), 1.0, MLLinearStep(0.5, 1.0, centerRoughness));
 
-            specSum.rgb += s.rgb * w;
+            specSum += s * w;
             weightSum += w;
         }
-        specSum.rgb /= weightSum;
-        specSum.a = minHitT >= NRD_INF ? 0.0 : minHitT;
+        specSum /= weightSum;
+        rdgStorageFloat[pc.specHitDistTrackingOutIndex][pixelPos] = minHitT >= NRD_INF ? 0.0 : minHitT;
     }
     rdgStorageFloat4[pc.specOutIndex][pixelPos] = specSum;
 }

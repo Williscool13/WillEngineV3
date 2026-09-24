@@ -36,8 +36,10 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC float4x4 gWorldPrevToWorld;
     SHADER_PUBLIC float4x4 gViewToWorld;
 
-    // Frustum vectors (144 bytes)
+    // Frustum vectors (176 bytes)
     SHADER_PUBLIC float4 gRotatorPre;
+    SHADER_PUBLIC float4 gRotator;
+    SHADER_PUBLIC float4 gRotatorPost;
     SHADER_PUBLIC float4 gFrustumRight;
     SHADER_PUBLIC float4 gFrustumUp;
     SHADER_PUBLIC float4 gFrustumForward;

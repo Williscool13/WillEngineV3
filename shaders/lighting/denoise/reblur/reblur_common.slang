@@ -161,7 +161,7 @@ public float4 ReblurMixHistoryAndCurrent(float4 history, float4 current, float f
 public float ReblurComputeAntilag(float h, float a, float sigma, float accumSpeed, float2 antilag, float framerateScale)
 {
     float s = sigma * antilag.x;
-    float magic = antilag.y * framerateScale * framerateScale;
+    float magic = antilag.y * (2.0 * framerateScale) * (2.0 * framerateScale);
 
     float hc = clamp(h, a - s, a + s);
     float d = abs(h - hc) / (max(h, hc) + NRD_EPS);

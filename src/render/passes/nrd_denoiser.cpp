@@ -35,6 +35,13 @@ const StringID NRD_IN_DIFF_SID = "nrd_in_diff_radiance_hitdist"_sid;
 const StringID NRD_IN_SPEC_SID = "nrd_in_spec_radiance_hitdist"_sid;
 const StringID NRD_OUT_DIFF_SID = "nrd_out_diff_radiance_hitdist"_sid;
 const StringID NRD_OUT_SPEC_SID = "nrd_out_spec_radiance_hitdist"_sid;
+const StringID RESTIR_CONFIDENCE_SID = "restir_confidence"_sid;
+
+constexpr float NRD_RADIANCE_UNIT_SCALE = 1.0f / 65536.0f;
+constexpr float NRD_FP16_MAX = 65504.0f;
+constexpr float NRD_RELAX_MAX_LUMINANCE = 255.0f;
+constexpr float NRD_SKY_VIEWZ_PER_NEAR_PLANE = 1.0e6f;
+constexpr float NRD_MAX_DENOISING_RANGE = 60000.0f;
 
 constexpr VkFormat NRD_IO_FORMATS[] = {
     VK_FORMAT_R16G16B16A16_SFLOAT, // IN_MV
@@ -499,10 +506,11 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
 
     // NRD's internal 16.66/timeDelta framerate scale then matches the engine's fps/60 clamp
     stagedCommon.timeDeltaBetweenFrames = renderFps > 0.0f ? 1000.0f / renderFps : 0.0f;
-    stagedCommon.denoisingRange = activeBackend == NrdBackend::Reblur ? reblurParams.denoisingRange : params.denoisingRange;
+    stagedCommon.denoisingRange = glm::min(viewFamily.mainView.currentViewData.nearPlane * NRD_SKY_VIEWZ_PER_NEAR_PLANE * 0.5f, NRD_MAX_DENOISING_RANGE);
     stagedCommon.disocclusionThreshold = activeBackend == NrdBackend::Reblur ? reblurParams.disocclusionThreshold : params.disocclusionThreshold;
     stagedCommon.frameIndex = static_cast<uint32_t>(frameNumber);
     stagedCommon.accumulationMode = bHistoryReset ? nrd::AccumulationMode::CLEAR_AND_RESTART : nrd::AccumulationMode::CONTINUE;
+    stagedCommon.isHistoryConfidenceAvailable = bHasConfidence;
 
     const auto scaledFrameNum = [](float framesAt60, float framerateScale, uint32_t maxFrameNum) {
         return glm::min(static_cast<uint32_t>(framesAt60 * framerateScale + 0.5f), maxFrameNum);
@@ -597,6 +605,7 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
     // Reset history after a gap (denoiser toggled off/on leaves stale pool content) or a backend switch (the inactive denoiser's history goes stale)
     const bool bHistoryReset = bPendingHistoryClear || backend != lastBackend || (lastRecordedFrame != UINT64_MAX && frameNumber != lastRecordedFrame + 1);
     lastBackend = backend;
+    bHasConfidence = graph.HasTexture(RESTIR_CONFIDENCE_SID);
     StageSettings(viewFamily, renderExtent, relaxParams, reblurParams, frameNumber, renderFps, bHistoryReset);
     bPendingHistoryClear = false;
 
@@ -639,7 +648,18 @@ void NrdDenoiser::AddDispatchPass(RenderGraph& graph, ResourceManager* resourceM
     pass.ReadSampledImage(NRD_IN_SPEC_SID);
     pass.WriteStorageImage(NRD_OUT_DIFF_SID);
     pass.WriteStorageImage(NRD_OUT_SPEC_SID);
-    pass.Execute([this, resourceManager, pipelineManager, frameInFlightIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph&) {
+    if (bHasConfidence) {
+        pass.ReadSampledImage(RESTIR_CONFIDENCE_SID);
+    }
+    pass.Execute([this, resourceManager, pipelineManager, frameInFlightIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        confidenceTexture = TrackedTexture{};
+        if (bHasConfidence) {
+            confidenceTexture.image = graph.GetImageHandle(RESTIR_CONFIDENCE_SID);
+            confidenceTexture.view = graph.GetImageViewHandle(RESTIR_CONFIDENCE_SID);
+            confidenceTexture.format = VK_FORMAT_R8_UNORM;
+            confidenceTexture.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            confidenceTexture.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+        }
         RecordDispatches(cmd, resourceManager, pipelineManager, frameInFlightIndex);
     });
 }
@@ -671,6 +691,11 @@ NrdDenoiser::TrackedTexture* NrdDenoiser::ResolveResource(const nrd::ResourceDes
         case nrd::ResourceType::IN_SPEC_RADIANCE_HITDIST: return &ioTextures[IO_IN_SPEC_RADIANCE_HITDIST];
         case nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST: return &ioTextures[IO_OUT_DIFF_RADIANCE_HITDIST];
         case nrd::ResourceType::OUT_SPEC_RADIANCE_HITDIST: return &ioTextures[IO_OUT_SPEC_RADIANCE_HITDIST];
+        case nrd::ResourceType::IN_DIFF_CONFIDENCE:
+        case nrd::ResourceType::IN_SPEC_CONFIDENCE:
+            if (confidenceTexture.image != VK_NULL_HANDLE) { return &confidenceTexture; }
+            LOG_ERROR(Renderer, "[NRD] Confidence input requested without restir_confidence");
+            return nullptr;
         default:
             LOG_ERROR(Renderer, "[NRD] Unexpected resource type {}", static_cast<uint32_t>(resource.type));
             return nullptr;
@@ -850,11 +875,12 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
     RebindEngineDescriptorBuffers(cmd, resourceManager, pipelineManager);
 }
 
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams)
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure)
 {
     ZoneScoped;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
+    const float radianceScale = NRD_RADIANCE_UNIT_SCALE / preExposure;
     const StringID gbufferOne = targets.gbufferOne;
     const StringID depth = targets.depthCopy;
     const StringID diffInput = targets.intermediateOne;
@@ -895,7 +921,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
         pass.ReadSampledImage(NRD_IN_VIEWZ_SID);
         pass.WriteStorageImage(NRD_IN_DIFF_SID);
         pass.WriteStorageImage(NRD_IN_SPEC_SID);
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, hitDistParams, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, hitDistParams, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             NrdReblurRadiancePackPushConstant pc{
                 .hitDistParams = hitDistParams,
                 .rectSize = {width, height},
@@ -905,6 +931,7 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
                 .viewZIndex = graph.GetSampledImageViewDescriptorIndex(NRD_IN_VIEWZ_SID),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
+                .radianceScale = radianceScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_reblur_radiance_pack"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -918,13 +945,15 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
         pass.ReadSampledImage(specInput);
         pass.WriteStorageImage(NRD_IN_DIFF_SID);
         pass.WriteStorageImage(NRD_IN_SPEC_SID);
-        pass.Execute([pipelineManager, diffInput, specInput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             NrdRadianceCopyPushConstant pc{
                 .rectSize = {width, height},
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
                 .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
                 .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
+                .radianceScale = radianceScale,
+                .maxLuminance = NRD_RELAX_MAX_LUMINANCE,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_radiance_copy"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -934,11 +963,12 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
     }
 }
 
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend)
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure)
 {
     ZoneScoped;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
+    const float radianceScale = preExposure / NRD_RADIANCE_UNIT_SCALE;
     const StringID diffOutput = targets.intermediateOne;
     const StringID specOutput = targets.intermediateTwo;
     const StringID srcDiff = NRD_OUT_DIFF_SID;
@@ -951,13 +981,15 @@ void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Co
     pass.ReadSampledImage(srcSpec);
     pass.WriteStorageImage(diffOutput);
     pass.WriteStorageImage(specOutput);
-    pass.Execute([pipelineManager, copyPipeline, srcDiff, srcSpec, diffOutput, specOutput, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, copyPipeline, srcDiff, srcSpec, diffOutput, specOutput, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         NrdRadianceCopyPushConstant pc{
             .rectSize = {width, height},
             .diffIndex = graph.GetSampledImageViewDescriptorIndex(srcDiff),
             .specIndex = graph.GetSampledImageViewDescriptorIndex(srcSpec),
             .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(diffOutput),
             .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(specOutput),
+            .radianceScale = radianceScale,
+            .maxLuminance = NRD_FP16_MAX,
         };
         const PipelineEntry* p = pipelineManager->GetPipelineEntry(copyPipeline);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

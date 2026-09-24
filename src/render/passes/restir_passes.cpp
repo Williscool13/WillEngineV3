@@ -45,8 +45,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bTemporalReuse = restirParams.bEnableTemporal;
-    const bool bConfidence = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
-    const bool bSunFlip = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX;
+    const bool bConfidenceDenoiser = restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR;
+    const bool bConfidence = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && bConfidenceDenoiser;
+    const bool bSunFlip = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && bConfidenceDenoiser;
     const bool bAntilag = bTemporalReuse && RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
     const bool bShadowVis = bAntilag;
 
