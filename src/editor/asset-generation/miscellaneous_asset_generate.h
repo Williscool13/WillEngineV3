@@ -42,7 +42,7 @@ void CreateSpriteTextures(Core::MemoryManager* memoryManager,
                           Core::Path outputPointLightPath,
                           Engine::TextureID pointLightTextureId);
 
-/** 128x128 RG8 spatial blue noise (void-and-cluster ranks, independent channels) for Cranley-Patterson ray-direction offsets. */
+/** Spatiotemporal blue noise: 64 slices of 128x128 RG8 (independent channels) packed into a 1024x1024 atlas, slice t at tile (t % 8, t / 8). Skipped when the file is already an atlas of that size. */
 void CreateBlueNoiseTexture(Core::MemoryManager* memoryManager,
                             Core::Path outputPath,
                             Engine::TextureID textureId);

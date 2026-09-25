@@ -254,50 +254,120 @@ void CreateBRDFLookupTable(
     vkDestroyCommandPool(context->device, graphicsCommandPool, context->HostAllocCallbacks());
 }
 
-static void GenerateBlueNoiseRanks(uint32_t size, uint32_t seed, Core::MemoryManager* memoryManager, uint8_t* out, uint32_t stride, uint32_t channel)
-{
-    const uint32_t count = size * size;
-    auto energy = Core::HeapArray<float>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
-    auto placed = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
-    memset(energy.Data(), 0, count * sizeof(float));
-    memset(placed.Data(), 0, count);
+static constexpr uint32_t STBN_SIZE = 128;
+static constexpr uint32_t STBN_SLICES = 64;
+static constexpr uint32_t STBN_ATLAS_TILES = 8;
+static constexpr uint32_t STBN_ATLAS_SIZE = STBN_SIZE * STBN_ATLAS_TILES;
 
-    constexpr float sigma = 1.9f;
-    constexpr int kernelRadius = 10;
-    float kernel[2 * kernelRadius + 1][2 * kernelRadius + 1];
-    for (int dy = -kernelRadius; dy <= kernelRadius; dy++) {
-        for (int dx = -kernelRadius; dx <= kernelRadius; dx++) {
-            kernel[dy + kernelRadius][dx + kernelRadius] = expf(-float(dx * dx + dy * dy) / (2.0f * sigma * sigma));
+static void STBNHeapSiftDown(float* keys, uint32_t* ids, uint32_t count, uint32_t i)
+{
+    while (true) {
+        const uint32_t l = 2u * i + 1u;
+        if (l >= count) {
+            return;
         }
+        const uint32_t r = l + 1u;
+        const uint32_t m = (r < count && keys[r] < keys[l]) ? r : l;
+        if (keys[i] <= keys[m]) {
+            return;
+        }
+        std::swap(keys[i], keys[m]);
+        std::swap(ids[i], ids[m]);
+        i = m;
+    }
+}
+
+/**
+ * Spatiotemporal void-and-cluster (Wolfe et al. 2022): points are placed one at a time at the lowest energy, where energy sums a spatial Gaussian over the same slice and a temporal Gaussian over the same pixel in other slices (toroidal in x, y and t).
+ * Each slice is then spatially blue and each pixel's sequence over slices temporally blue. Placement order becomes the value.
+ */
+static void GenerateSTBNRanks(uint32_t seed, Core::MemoryManager* memoryManager, uint8_t* atlas, uint32_t channel)
+{
+    constexpr uint32_t sliceTexels = STBN_SIZE * STBN_SIZE;
+    constexpr uint32_t count = sliceTexels * STBN_SLICES;
+    constexpr int spatialRadius = 10;
+    constexpr int temporalRadius = 10;
+    // exp(-1 / (2 * 1.9^2)): Gaussian weights as powers of this by repeated IEEE multiplication instead of expf, so every compiler and CRT produces the same texture.
+    constexpr float gaussianRatio = 0.870659649f;
+    constexpr int maxDistanceSq = 2 * spatialRadius * spatialRadius;
+    float gaussian[maxDistanceSq + 1];
+    gaussian[0] = 1.0f;
+    for (int i = 1; i <= maxDistanceSq; i++) {
+        gaussian[i] = gaussian[i - 1] * gaussianRatio;
     }
 
+    auto energyArray = Core::HeapArray<float>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
+    auto keyArray = Core::HeapArray<float>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
+    auto idArray = Core::HeapArray<uint32_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, count);
+    float* energy = energyArray.Data();
+    float* keys = keyArray.Data();
+    uint32_t* ids = idArray.Data();
+
+    float spatialKernel[2 * spatialRadius + 1][2 * spatialRadius + 1];
+    for (int dy = -spatialRadius; dy <= spatialRadius; dy++) {
+        for (int dx = -spatialRadius; dx <= spatialRadius; dx++) {
+            spatialKernel[dy + spatialRadius][dx + spatialRadius] = gaussian[dx * dx + dy * dy];
+        }
+    }
+    float temporalKernel[2 * temporalRadius + 1];
+    for (int dt = -temporalRadius; dt <= temporalRadius; dt++) {
+        temporalKernel[dt + temporalRadius] = gaussian[dt * dt];
+    }
+
+    // Sub-kernel jitter breaks the all-zero ties in random order instead of scan order.
     uint32_t rng = seed;
-    for (uint32_t rank = 0; rank < count; rank++) {
+    for (uint32_t i = 0; i < count; i++) {
         rng ^= rng << 13u;
         rng ^= rng >> 17u;
         rng ^= rng << 5u;
-        // Randomized scan start breaks energy ties without biasing early ranks toward the origin.
-        const uint32_t offset = rng & (count - 1u);
-        uint32_t best = 0;
-        float bestEnergy = 3.4e38f;
-        for (uint32_t i = 0; i < count; i++) {
-            const uint32_t p = (i + offset) & (count - 1u);
-            if (placed[p] == 0 && energy[p] < bestEnergy) {
-                bestEnergy = energy[p];
-                best = p;
+        energy[i] = float(rng >> 8) * (1e-6f / float(1u << 24));
+        keys[i] = energy[i];
+        ids[i] = i;
+    }
+    for (uint32_t i = count / 2u; i-- > 0u;) {
+        STBNHeapSiftDown(keys, ids, count, i);
+    }
+
+    // Energy only grows, so a heap key is never above its texel's energy; a key below it is stale and goes back in at the current value.
+    uint32_t heapCount = count;
+    uint32_t rank = 0;
+    while (heapCount > 0u) {
+        const uint32_t best = ids[0];
+        if (keys[0] < energy[best]) {
+            keys[0] = energy[best];
+            STBNHeapSiftDown(keys, ids, heapCount, 0);
+            continue;
+        }
+        heapCount--;
+        keys[0] = keys[heapCount];
+        ids[0] = ids[heapCount];
+        STBNHeapSiftDown(keys, ids, heapCount, 0);
+
+        const int bx = static_cast<int>(best % STBN_SIZE);
+        const int by = static_cast<int>((best / STBN_SIZE) % STBN_SIZE);
+        const int bt = static_cast<int>(best / sliceTexels);
+        const uint32_t ax = (static_cast<uint32_t>(bt) % STBN_ATLAS_TILES) * STBN_SIZE + static_cast<uint32_t>(bx);
+        const uint32_t ay = (static_cast<uint32_t>(bt) / STBN_ATLAS_TILES) * STBN_SIZE + static_cast<uint32_t>(by);
+        atlas[(ay * STBN_ATLAS_SIZE + ax) * 2u + channel] = static_cast<uint8_t>((static_cast<uint64_t>(rank) * 256u) / count);
+        rank++;
+
+        const int size = static_cast<int>(STBN_SIZE);
+        float* slice = energy + static_cast<size_t>(bt) * sliceTexels;
+        for (int dy = -spatialRadius; dy <= spatialRadius; dy++) {
+            const int y = (by + dy + size) % size;
+            for (int dx = -spatialRadius; dx <= spatialRadius; dx++) {
+                const int x = (bx + dx + size) % size;
+                slice[y * size + x] += spatialKernel[dy + spatialRadius][dx + spatialRadius];
             }
         }
-        placed[best] = 1;
-        out[best * stride + channel] = static_cast<uint8_t>((rank * 255u + (count - 1u) / 2u) / (count - 1u));
-
-        const int bx = static_cast<int>(best % size);
-        const int by = static_cast<int>(best / size);
-        for (int dy = -kernelRadius; dy <= kernelRadius; dy++) {
-            const uint32_t y = static_cast<uint32_t>((by + dy + static_cast<int>(size)) % static_cast<int>(size));
-            for (int dx = -kernelRadius; dx <= kernelRadius; dx++) {
-                const uint32_t x = static_cast<uint32_t>((bx + dx + static_cast<int>(size)) % static_cast<int>(size));
-                energy[y * size + x] += kernel[dy + kernelRadius][dx + kernelRadius];
+        const int slices = static_cast<int>(STBN_SLICES);
+        const size_t texel = static_cast<size_t>(by) * STBN_SIZE + static_cast<size_t>(bx);
+        for (int dt = -temporalRadius; dt <= temporalRadius; dt++) {
+            if (dt == 0) {
+                continue;
             }
+            const int t = (bt + dt + slices) % slices;
+            energy[static_cast<size_t>(t) * sliceTexels + texel] += temporalKernel[dt + temporalRadius];
         }
     }
 }
@@ -305,18 +375,20 @@ static void GenerateBlueNoiseRanks(uint32_t size, uint32_t seed, Core::MemoryMan
 void CreateBlueNoiseTexture(Core::MemoryManager* memoryManager, Core::Path outputPath, Engine::TextureID textureId)
 {
     if (BuiltinUpToDate(outputPath)) {
-        LOG_INFO(Asset, "Skipping blue noise generation, file already up to date: {}", outputPath.c_str());
-        return;
+        std::optional<Engine::WTextureHeader> header = Engine::ReadWTextureHeader(outputPath);
+        if (header && header->width == STBN_ATLAS_SIZE && header->height == STBN_ATLAS_SIZE) {
+            LOG_INFO(Asset, "Skipping blue noise generation, file already up to date: {}", outputPath.c_str());
+            return;
+        }
     }
 
-    constexpr uint32_t BLUE_NOISE_SIZE = 128;
-    auto pixels = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, BLUE_NOISE_SIZE * BLUE_NOISE_SIZE * 2);
-    GenerateBlueNoiseRanks(BLUE_NOISE_SIZE, 0x9E3779B9u, memoryManager, pixels.Data(), 2, 0);
-    GenerateBlueNoiseRanks(BLUE_NOISE_SIZE, 0x85EBCA6Bu, memoryManager, pixels.Data(), 2, 1);
+    auto pixels = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, STBN_ATLAS_SIZE * STBN_ATLAS_SIZE * 2);
+    GenerateSTBNRanks(0x9E3779B9u, memoryManager, pixels.Data(), 0);
+    GenerateSTBNRanks(0x85EBCA6Bu, memoryManager, pixels.Data(), 1);
 
     WriteRawBytesWTexture(memoryManager, outputPath.c_str(), textureId, "blue_noise",
-                          VK_FORMAT_R8G8_UNORM, BLUE_NOISE_SIZE, BLUE_NOISE_SIZE,
-                          pixels.Data(), BLUE_NOISE_SIZE * BLUE_NOISE_SIZE * 2);
+                          VK_FORMAT_R8G8_UNORM, STBN_ATLAS_SIZE, STBN_ATLAS_SIZE,
+                          pixels.Data(), STBN_ATLAS_SIZE * STBN_ATLAS_SIZE * 2);
 }
 
 void CreateSMAATextures(Core::MemoryManager* memoryManager,

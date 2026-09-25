@@ -18,6 +18,7 @@
 #include "engine/components/core_components.h"
 #include "engine/material_manager.h"
 #include "engine/input/engine_actions.h"
+#include "engine/systems/scene_system.h"
 #include "engine/systems/system_graph.h"
 #include "engine/ui/ui_zindex.h"
 
@@ -199,6 +200,14 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
     });
 
+    Register(state, Origin::Engine, "gi_deconstruct", "`gi_deconstruct <0-7>` GI deconstruct mode (1 cache cell id, 2 cache radiance, 3 ddgi cheb, 4 ddgi margin, 5 ddgi coverage, 6 ddgi irradiance, 7 volume coverage); pair with `view gi_deconstruct_target`",
+             [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+                 if (args.Size() > 1) {
+                     state->debug.render.giDeconstructMode = std::clamp(static_cast<int32_t>(std::strtol(args[1], nullptr, 10)), 0, 7);
+                 }
+                 Print(state, Core::InlineString<64>::Format("  gi_deconstruct %d", state->debug.render.giDeconstructMode).c_str());
+             });
+
     Register(state, Origin::Engine, "diag", "`diag <zone> 0|1` shows a Diagnostics window readout (radiance_cache, regir, regir_cursor, world_grid_cursor, emissive, stores); no args lists every zone",
              [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
                  struct DiagZone
@@ -276,6 +285,19 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         transform.rotation = preset.rotation;
         camView.get<Component::CameraComponent>(camEntity).transition = Component::CameraTransition::Cut;
         Print(state, Core::InlineString<64>::Format("  cam %d", slot + 1).c_str());
+    });
+
+    Register(state, Origin::Engine, "scene", "`scene <1-9>` unloads everything and loads a saved scene slot (shift-click a scene slot to bind)", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+        const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
+        if (slot < 0 || slot >= Engine::MAX_SCENE_SLOTS) {
+            Print(state, "  usage: scene <1-9>");
+            return;
+        }
+        if (!LoadSceneSlot(ctx, state, slot)) {
+            Print(state, Core::InlineString<64>::Format("  scene %d is empty or unregistered", slot + 1).c_str());
+            return;
+        }
+        Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->projectConfig.sceneSlots[slot].sceneName.c_str()).c_str());
     });
 
     Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {

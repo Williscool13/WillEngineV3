@@ -30,12 +30,11 @@ public float BlueNoiseAngle(uint2 pixel, uint frameIndex)
     return n * 6.28318530718;
 }
 
-/** Temporally-progressive 2D sample in [0, 1)^2: an R2 (plastic-constant) rank-1 lattice advances the pair across frames (low-discrepancy per pixel), Cranley-Patterson rotated by spatially-BLUE per-pixel offsets from the baked mask. White hash offsets let neighbouring texels clump directions within a frame (low-frequency flicker the spatial filters pass); IGN's diagonal isolines cross-hatch. Salt toroidally shifts the mask lookup so concurrent streams stay decorrelated without losing blueness. */
+/** 2D sample in (0, 1)^2 from the baked spatiotemporal blue noise: one 128x128 slice per frame (64-frame loop), blue within each frame and along each pixel's sequence of frames. Salt toroidally shifts the lookup so concurrent streams stay decorrelated without losing blueness. */
 public float2 SpatioTemporalBlueNoise2D(uint2 pixel, uint frameIndex, uint salt = 0u)
 {
-    const uint2 R2_FIXED = uint2(3242174889u, 2447445413u);
-    float2 seq = float2(R2_FIXED * frameIndex) * (1.0 / 4294967296.0);
-    uint2 lookup = pixel + uint2(salt * 53u, salt * 97u);
-    float2 offsets = assetTextures[BLUE_NOISE_BINDLESS_INDEX].Load(int3(int2(lookup & BLUE_NOISE_SIZE_MASK), 0)).rg;
-    return frac(seq + offsets);
+    uint slice = frameIndex & BLUE_NOISE_SLICE_MASK;
+    uint2 lookup = ((pixel + uint2(salt * 53u, salt * 97u)) & BLUE_NOISE_SIZE_MASK) + uint2(slice & 7u, slice >> 3u) * BLUE_NOISE_SIZE;
+    float2 ranks = assetTextures[BLUE_NOISE_BINDLESS_INDEX].Load(int3(int2(lookup), 0)).rg;
+    return (ranks * 255.0 + 0.5) / 256.0;
 }

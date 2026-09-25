@@ -517,6 +517,13 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         RegisterEngineComponents(engineState->componentRegistry);
         RegisterEngineInputActions(engineState->input);
         Console::RegisterBuiltinCommands(engineState);
+#if WILL_EDITOR
+        Console::Register(engineState, Origin::Engine, "generate_blue_noise", "Regenerates assets/textures/blue_noise.wtexture (spatiotemporal blue noise atlas) if it is out of date; restart to load it",
+                          [this](EngineContext*, EngineState* state, Core::Span<const char*>) {
+                              assetGenerator->GenerateBlueNoiseTexture(Platform::GetAssetPath() / "textures/blue_noise.wtexture");
+                              Console::Print(state, "  blue noise generated, restart to load it");
+                          });
+#endif
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem;
         engineContext->scheduler = scheduler;
