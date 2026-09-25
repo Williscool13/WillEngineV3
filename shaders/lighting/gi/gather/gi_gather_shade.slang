@@ -157,7 +157,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
 
         float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
         float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-        guide = uint2(gt1.r, asuint(viewSpaceDepth));
+        guide = uint2(PackNormalOct16(GIGatherGuideNormal(scene, pc.depthIndex, int2(pixel), pc.renderExtent, viewNormal)), asuint(viewSpaceDepth));
         float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 

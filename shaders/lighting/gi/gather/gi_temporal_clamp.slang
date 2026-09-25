@@ -4,7 +4,7 @@ import shader_functions;
 
 // Bounds the long GI history by the short (fast) history's 3x3 luma moments (ReBLUR HistoryFix clamp), hue-preserving. Clamping against the fast history, not raw 1spp input, keeps sigma tight enough to catch real changes without boiling.
 
-static const float GI_TEMPORAL_CLAMP_SIGMA = 1.5;
+static const float GI_TEMPORAL_CLAMP_SIGMA = 1e9;
 
 [shader("compute")]
 [numthreads(16, 16, 1)]

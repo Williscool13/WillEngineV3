@@ -909,6 +909,9 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     // (sky visibility, count) history, kept apart from the radiance so it can average longer; ~0u history = none yet.
     SHADER_PUBLIC uint32_t skyVisHistoryIndex;
     SHADER_PUBLIC uint32_t skyVisOutIndex;
+    // (relative noise variance, count); steers the history cap here and the post blur radius.
+    SHADER_PUBLIC uint32_t noiseHistoryIndex;
+    SHADER_PUBLIC uint32_t noiseOutIndex;
 };
 
 SHADER_PUBLIC struct GIPostBlurPushConstant
@@ -922,7 +925,7 @@ SHADER_PUBLIC struct GIPostBlurPushConstant
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC uint32_t frameIndex;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t noiseIndex;
 };
 
 SHADER_PUBLIC struct GITemporalClampPushConstant

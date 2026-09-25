@@ -38,6 +38,7 @@ inline const StringID GI_GATHER_HISTORY = "gi_gather_history"_sid;
 inline const StringID GI_GATHER_UPSCALED = "gi_gather_upscaled"_sid;
 inline const StringID GI_GATHER_FAST = "gi_gather_fast"_sid;
 inline const StringID GI_GATHER_SKY_VIS_HISTORY = "gi_gather_sky_vis_history"_sid;
+inline const StringID GI_GATHER_NOISE = "gi_gather_noise"_sid;
 inline const StringID OBJECT_MOTION = "object_motion"_sid;
 inline const StringID GI_DECONSTRUCT_TARGET = "gi_deconstruct_target"_sid;
 inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;

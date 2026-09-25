@@ -3,12 +3,14 @@ import push_constant_interop;
 import bindless_declarations;
 import shader_functions;
 import random_common;
+import gi_gather_common;
 
 // Post-temporal spatial blur with radius ~ 1/sqrt(1 + history count) (ReBLUR's history-driven radius): young pixels blur wide, converged ones keep detail.
 // The tap pattern rotates per pixel and frame; a fixed 8-tap pattern stamped offset copies of bright regions instead of blurring them.
 // Output only; the history keeps the unblurred result so the blur never compounds.
 
 static const float GI_POST_BLUR_RADIUS_GATHER_TEXELS = 14.0;
+static const float GI_POST_BLUR_NOISY_SCALE = 1.5;
 static const float GI_POST_BLUR_PLANE_DIST_SIGMA = 0.01;
 static const float GI_POST_BLUR_NORMAL_POWER = 32.0;
 static const uint GI_POST_BLUR_TAPS = 8u;
@@ -26,14 +28,16 @@ void ComputeGIPostBlur(uniform GIPostBlurPushConstant pc, uint3 dtid : SV_Dispat
     float4 center = rdgTexturesFloat4[pc.inputIndex].Load(int3(pixel, 0));
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
-    float radius = GI_POST_BLUR_RADIUS_GATHER_TEXELS * float(pc.gatherScale) / sqrt(1.0 + center.a);
+    // Noisy pixels keep the full radius instead of narrowing with history.
+    float noisy = GIGatherNoisiness(rdgTexturesFloat2[pc.noiseIndex].Load(int3(pixel, 0)).x);
+    float radius = GI_POST_BLUR_RADIUS_GATHER_TEXELS * float(pc.gatherScale) * lerp(1.0 / sqrt(1.0 + center.a), GI_POST_BLUR_NOISY_SCALE, noisy);
     if (depth <= 0.0 || (gt1.w & 1u) == 0u || radius < 1.0) {
         rdgStorageFloat4[pc.outputIndex][pixel] = center;
         return;
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    float3 centerNormal = UnpackNormalOct16(gt1.r);
+    float3 centerNormal = GIGatherGuideNormal(scene, pc.depthIndex, int2(pixel), pc.renderExtent, UnpackNormalOct16(gt1.r));
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float centerViewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
@@ -59,7 +63,7 @@ void ComputeGIPostBlur(uniform GIPostBlurPushConstant pc, uint3 dtid : SV_Dispat
         float2 tapUv = (float2(tap) + 0.5) / float2(pc.renderExtent);
         float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd));
         float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-        w *= pow(saturate(dot(centerNormal, UnpackNormalOct16(tapGt1.r))), GI_POST_BLUR_NORMAL_POWER);
+        w *= pow(saturate(dot(centerNormal, GIGatherGuideNormal(scene, pc.depthIndex, tap, pc.renderExtent, UnpackNormalOct16(tapGt1.r)))), GI_POST_BLUR_NORMAL_POWER);
         if (w <= 1e-4) {
             continue;
         }

@@ -77,6 +77,22 @@ public float3 GIGatherDepthNormal(SceneData scene, uint depthIndex, int2 px, uin
     return normalize(cross(dx, dy));
 }
 
+public static const float GI_GATHER_NOISE_LO = 0.15;
+public static const float GI_GATHER_NOISE_HI = 0.5;
+
+/** 0..1 from a relative noise variance (per-frame deviation from the fast history over its level): how much harder to average this pixel. */
+public float GIGatherNoisiness(float relativeVariance)
+{
+    return saturate((sqrt(max(relativeVariance, 0.0)) - GI_GATHER_NOISE_LO) / (GI_GATHER_NOISE_HI - GI_GATHER_NOISE_LO));
+}
+
+/** View-space filter-guide normal: the depth normal, oriented to the shading normal's side. Normal maps (carpet) make neighbouring shading normals disagree on a flat surface, which starves every plane/normal-weighted filter. */
+public float3 GIGatherGuideNormal(SceneData scene, uint depthIndex, int2 px, uint2 renderExtent, float3 viewShadingNormal)
+{
+    float3 n = GIGatherDepthNormal(scene, depthIndex, px, renderExtent);
+    return dot(n, viewShadingNormal) < 0.0 ? -n : n;
+}
+
 /** Per-tap reprojection gate shared by every full-res history fetch: plane-distance disocclusion (the compared |dz|*NoV already projects out slant, so the tolerance is flat) plus a normal test. bShadingNormalAgrees false = caller settles it on geometric normals. */
 public bool GIGatherHistoryTapValid(SceneData scene, float prevRawDepth, uint prevPackedNormal, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN, out bool bShadingNormalAgrees)
 {

@@ -22,8 +22,11 @@ static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 64.0;
 static const float GI_UPSCALE_SKY_VIS_FIX_FRAMES = 16.0;
 static const float GI_UPSCALE_SKY_VIS_FIX_STRIDE = 12.0;
 static const float GI_UPSCALE_PRIOR_FRAMES = 2.0;
-// Probes miss the local enclosure of a disocclusion (slits behind furniture) and read too bright there.
-static const float GI_UPSCALE_PRIOR_SCALE = 0.6;
+// Noisy pixels (dim rooms lit through small bright openings) ramp the history cap up to this.
+static const float GI_UPSCALE_NOISE_ACCUM = 8.0;
+static const float GI_UPSCALE_NOISY_MAX_ACCUM = 96.0;
+// Kept low on purpose: a reveal that fades up from dark reads better than one that settles down from too bright (probes miss the enclosure of slits behind furniture).
+static const float GI_UPSCALE_PRIOR_SCALE = 0.3;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -65,6 +68,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
         rdgStorageFloat2[pc.fastOutIndex][pixel] = float2(0.0);
         rdgStorageFloat2[pc.skyVisOutIndex][pixel] = float2(0.0);
+        rdgStorageFloat2[pc.noiseOutIndex][pixel] = float2(0.0);
         return;
     }
 
@@ -72,6 +76,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     const float historyRatio = scene.preExposure / scene.prevPreExposure;
     float3 centerNormal = UnpackNormalOct16(gt1.r);
     float3 worldN = normalize(mul((float3x3)scene.invView, centerNormal));
+    float3 guideNormal = GIGatherGuideNormal(scene, pc.depthIndex, int2(pixel), pc.renderExtent, centerNormal);
 
     float3 evalN = worldN;
     if (pc.bentNormalIndex != ~0x0u) {
@@ -124,8 +129,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
         float2 bw2 = lerp(1.0 - footprintFrac, footprintFrac, float2(float(i & 1u), float(i >> 1u)));
         float bw = bw2.x * bw2.y;
-        float w = bw * exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-        w *= pow(saturate(dot(centerNormal, tapNormal)), GI_UPSCALE_NORMAL_POWER);
+        float w = bw * exp(-abs(dot(guideNormal, tapXv - centerXv)) * invPlaneSigma);
+        w *= pow(saturate(dot(guideNormal, tapNormal)), GI_UPSCALE_NORMAL_POWER);
 
         float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
@@ -171,6 +176,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
     GIGatherScalarHistory fastHistory = { 0.0, 0.0, 0.0 };
     GIGatherScalarHistory skyVisHistory = { 0.0, 0.0, 0.0 };
+    GIGatherScalarHistory noiseHistory = { 0.0, 0.0, 0.0 };
     if (pc.bHistoryValid != 0u) {
         float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
         GIGatherHistoryTaps taps = GIGatherResolveHistoryTaps(scene, pc.depthIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
@@ -184,9 +190,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         if (pc.skyVisHistoryIndex != ~0x0u) {
             skyVisHistory = GIGatherFetchScalarHistory(taps, pc.skyVisHistoryIndex);
         }
+        if (pc.noiseHistoryIndex != ~0x0u) {
+            noiseHistory = GIGatherFetchScalarHistory(taps, pc.noiseHistoryIndex);
+        }
     }
 
-    float n = min(history.count, (GI_GATHER_MAX_ACCUM - 1.0) * scene.framerateScale);
+    // No noise history (new pixel) counts as noisy.
+    float noisy = noiseHistory.quality > 0.0 ? GIGatherNoisiness(noiseHistory.value) : 1.0;
+    float n = min(history.count, (lerp(GI_GATHER_MAX_ACCUM, GI_UPSCALE_NOISY_MAX_ACCUM, noisy) - 1.0) * scene.framerateScale);
     float nBlend = n * history.quality;
 
     // NRD HistoryFix: young pixels trade spatial resolution for variance.
@@ -210,8 +221,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
                     float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
                     float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, asfloat(tapGuide.y));
-                    float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-                    w *= pow(saturate(dot(centerNormal, UnpackNormalOct16(tapGuide.x))), GI_UPSCALE_NORMAL_POWER);
+                    float w = exp(-abs(dot(guideNormal, tapXv - centerXv)) * invPlaneSigma);
+                    w *= pow(saturate(dot(guideNormal, UnpackNormalOct16(tapGuide.x))), GI_UPSCALE_NORMAL_POWER);
                     if (w <= 1e-4) { continue; }
 
                     float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
@@ -253,8 +264,8 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
                     float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
                     float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, asfloat(tapGuide.y));
-                    float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-                    w *= pow(saturate(dot(centerNormal, UnpackNormalOct16(tapGuide.x))), GI_UPSCALE_NORMAL_POWER);
+                    float w = exp(-abs(dot(guideNormal, tapXv - centerXv)) * invPlaneSigma);
+                    w *= pow(saturate(dot(guideNormal, UnpackNormalOct16(tapGuide.x))), GI_UPSCALE_NORMAL_POWER);
                     if (w <= 1e-4) { continue; }
 
                     fixV += rdgTexturesFloat4[pc.skyVisIndex].Load(int3(tap, 0)).a * w;
@@ -300,4 +311,14 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         fastCount = nFast + 1.0;
     }
     rdgStorageFloat2[pc.fastOutIndex][pixel] = float2(fastLuma, fastCount);
+
+    float nNoise = min(noiseHistory.count, (GI_UPSCALE_NOISE_ACCUM - 1.0) * scene.framerateScale) * noiseHistory.quality;
+    float noiseVar = noiseHistory.quality > 0.0 ? noiseHistory.value : GI_GATHER_NOISE_HI * GI_GATHER_NOISE_HI;
+    float noiseCount = nNoise;
+    if (bHasCurrent && nFast >= 2.0) {
+        float deviation = (Luma(current) - fastHistory.value) / max(fastHistory.value, 1e-3);
+        noiseVar = (nNoise * noiseVar + min(deviation * deviation, 4.0)) / (nNoise + 1.0);
+        noiseCount = nNoise + 1.0;
+    }
+    rdgStorageFloat2[pc.noiseOutIndex][pixel] = float2(noiseVar, noiseCount);
 }

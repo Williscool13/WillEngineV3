@@ -76,6 +76,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     const StringID fastHistory = graph.ResourceVersionID(GI_GATHER_FAST, 1);
     graph.CreateVersionedTexture(GI_GATHER_SKY_VIS_HISTORY, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID skyVisHistory = graph.ResourceVersionID(GI_GATHER_SKY_VIS_HISTORY, 1);
+    graph.CreateVersionedTexture(GI_GATHER_NOISE, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    const StringID noiseHistory = graph.ResourceVersionID(GI_GATHER_NOISE, 1);
 
     const StringID litHistory = graph.ResourceVersionID("lit_color_preoverlay"_sid, 1);
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
@@ -313,6 +315,10 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     if (bSkyVisHistory) {
         upscale.ReadSampledImage(skyVisHistory);
     }
+    const bool bNoiseHistory = bTemporal && graph.ResourceHasVersion(GI_GATHER_NOISE, 1);
+    if (bNoiseHistory) {
+        upscale.ReadSampledImage(noiseHistory);
+    }
     const bool bBentNormals = graph.HasTexture("gtao_bent_normals"_sid);
     if (bBentNormals) {
         upscale.ReadSampledImage("gtao_bent_normals"_sid);
@@ -321,8 +327,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.WriteStorageImage(GI_GATHER_UPSCALED);
     upscale.WriteStorageImage(GI_GATHER_FAST);
     upscale.WriteStorageImage(GI_GATHER_SKY_VIS_HISTORY);
+    upscale.WriteStorageImage(GI_GATHER_NOISE);
 
-    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bFastHistory, bSkyVisHistory, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, gatherHistory, fastHistory, skyVisHistory, depthHistory, gbufferOneHistory,
+    upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bFastHistory, bSkyVisHistory, bNoiseHistory, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, gatherHistory, fastHistory, skyVisHistory, noiseHistory, depthHistory, gbufferOneHistory,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_upscale"_sid);
@@ -362,6 +369,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .fastOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_FAST),
             .skyVisHistoryIndex = bSkyVisHistory ? graph.GetSampledImageViewDescriptorIndex(skyVisHistory) : ~0x0u,
             .skyVisOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY),
+            .noiseHistoryIndex = bNoiseHistory ? graph.GetSampledImageViewDescriptorIndex(noiseHistory) : ~0x0u,
+            .noiseOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_NOISE),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
@@ -391,6 +400,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     RenderPass& postBlur = graph.AddPass("GI Diffuse Post Blur"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
     postBlur.ReadBuffer(SCENE_DATA_BUFFER);
     postBlur.ReadSampledImage(GI_GATHER_HISTORY);
+    postBlur.ReadSampledImage(GI_GATHER_NOISE);
     postBlur.ReadSampledImage(targets.gbufferOne);
     postBlur.ReadSampledImage(targets.depthCopy);
     postBlur.WriteStorageImage(GI_GATHER_RESOLVED);
@@ -411,6 +421,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .gatherScale = gatherScale,
             .frameIndex = static_cast<uint32_t>(frameNumber),
+            .noiseIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_NOISE),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
