@@ -26,7 +26,7 @@ static const float GI_UPSCALE_PRIOR_FRAMES = 2.0;
 static const float GI_UPSCALE_NOISE_ACCUM = 8.0;
 static const float GI_UPSCALE_NOISY_MAX_ACCUM = 96.0;
 // Kept low on purpose: a reveal that fades up from dark reads better than one that settles down from too bright (probes miss the enclosure of slits behind furniture).
-static const float GI_UPSCALE_PRIOR_SCALE = 0.3;
+static const float GI_UPSCALE_PRIOR_SCALE = 0.65;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)

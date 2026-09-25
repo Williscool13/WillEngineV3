@@ -229,9 +229,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         graph.CreateTexture(GI_GATHER_TMP_SKY_VIS, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
         graph.CreateTexture(GI_GATHER_SKY_VIS, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gatherExtent[0], gatherExtent[1], 1}, {std::nullopt}, true);
 
-        // Stride 1 only; wider spatial filtering happens post-temporal, scaled by history length (gi_post_blur).
-        constexpr uint32_t denoiseStrides[] = {1u};
-        for (uint32_t iteration = 0; iteration < 1u; iteration++) {
+        constexpr uint32_t denoiseStrides[] = {1u, 2u, 4u};
+        for (uint32_t iteration = 0; iteration < 3u; iteration++) {
             const uint32_t stepSize = denoiseStrides[iteration];
             for (uint32_t direction = 0; direction < 2; direction++) {
                 const StringID srcShR = direction != 0 ? GI_GATHER_TMP_SH_R : (iteration == 0 ? GI_GATHER_RAW_SH_R : GI_GATHER_SH_R);
