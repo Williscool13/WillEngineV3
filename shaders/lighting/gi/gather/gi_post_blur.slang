@@ -2,8 +2,10 @@ import common_interop;
 import push_constant_interop;
 import bindless_declarations;
 import shader_functions;
+import random_common;
 
 // Post-temporal spatial blur with radius ~ 1/sqrt(1 + history count) (ReBLUR's history-driven radius): young pixels blur wide, converged ones keep detail.
+// The tap pattern rotates per pixel and frame; a fixed 8-tap pattern stamped offset copies of bright regions instead of blurring them.
 // Output only; the history keeps the unblurred result so the blur never compounds.
 
 static const float GI_POST_BLUR_RADIUS_GATHER_TEXELS = 14.0;
@@ -24,7 +26,7 @@ void ComputeGIPostBlur(uniform GIPostBlurPushConstant pc, uint3 dtid : SV_Dispat
     float4 center = rdgTexturesFloat4[pc.inputIndex].Load(int3(pixel, 0));
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
-    float radius = GI_POST_BLUR_RADIUS_GATHER_TEXELS * float(pc.gatherScale);
+    float radius = GI_POST_BLUR_RADIUS_GATHER_TEXELS * float(pc.gatherScale) / sqrt(1.0 + center.a);
     if (depth <= 0.0 || (gt1.w & 1u) == 0u || radius < 1.0) {
         rdgStorageFloat4[pc.outputIndex][pixel] = center;
         return;
@@ -39,11 +41,12 @@ void ComputeGIPostBlur(uniform GIPostBlurPushConstant pc, uint3 dtid : SV_Dispat
 
     float3 sum = center.rgb;
     float sumW = 1.0;
+    float rotation = InterleavedGradientNoise(float2(pixel) + 5.588238 * float(pc.frameIndex & 63u)) * 6.28318530718;
     [unroll]
     for (uint i = 0u; i < GI_POST_BLUR_TAPS; i++) {
-        // Vogel disk: even area coverage with a fixed pattern.
+        // Vogel disk: even area coverage.
         float r = sqrt((float(i) + 0.5) / float(GI_POST_BLUR_TAPS)) * radius;
-        float phi = float(i) * GOLDEN_ANGLE;
+        float phi = float(i) * GOLDEN_ANGLE + rotation;
         int2 tap = int2(float2(pixel) + float2(cos(phi), sin(phi)) * r + 0.5);
         if (any(tap < int2(0)) || any(tap >= int2(pc.renderExtent))) {
             continue;

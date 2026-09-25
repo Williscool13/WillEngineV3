@@ -17,6 +17,8 @@ static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
 static const float GI_DENOISE_HITT_FAR_METERS = 8.0;
+// Sky visibility is geometry only (sky light is applied after), so it takes a wider kernel than the radiance.
+static const int GI_DENOISE_SKY_VIS_RADIUS = 6;
 
 groupshared uint2 sShR[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint2 sShG[GI_DENOISE_TILE * GI_DENOISE_GROUP];
@@ -105,10 +107,12 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         float sumW = 1.0;
         float sumV = skyVis;
         float sumWV = 1.0;
+        // Sky visibility runs its own wider loop at stride 1; radiance taps are the stride-scaled subset within it.
         [unroll]
-        for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
+        for (int d = -GI_DENOISE_SKY_VIS_RADIUS; d <= GI_DENOISE_SKY_VIS_RADIUS; d++) {
             if (d == 0) { continue; }
-            int tapOffset = d * step;
+            bool bRadianceTap = abs(d) <= GI_DENOISE_RADIUS;
+            int tapOffset = bRadianceTap ? d * step : d;
             uint idx = uint(int(centerIdx) + tapOffset);
             float tapViewZ = sViewZ[idx];
             if (tapViewZ == 0.0) { continue; }
@@ -117,26 +121,32 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
             float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
             float3 tapNormal = UnpackNormalOct16(sNormal[idx]);
-            float tapHitT = sHitT[idx];
+            float geometric = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma) * pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
+            float4 tapMeanV = UnpackHalf2x16Pair(sMeanV[idx]);
+
+            // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT steering.
+            if (step == 1 || bRadianceTap) {
+                float rV = float(tapOffset) / float(step == 1 ? GI_DENOISE_SKY_VIS_RADIUS : GI_DENOISE_RADIUS * step);
+                float wV = exp(-0.66 * rV * rV) * geometric;
+                sumV += tapMeanV.a * wV;
+                sumWV += wV;
+            }
+            if (!bRadianceTap) {
+                continue;
+            }
 
             float r = float(d) / float(GI_DENOISE_RADIUS);
-            float w = exp(-0.66 * r * r);
-            w *= exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-            w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
-            // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT steering.
-            float wV = w;
+            float w = exp(-0.66 * r * r) * geometric;
+            float tapHitT = sHitT[idx];
             if (bHitTWeight && tapHitT >= 0.0) {
                 w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
             }
 
-            float4 tapMeanV = UnpackHalf2x16Pair(sMeanV[idx]);
             sumR += UnpackHalf2x16Pair(sShR[idx]) * w;
             sumG += UnpackHalf2x16Pair(sShG[idx]) * w;
             sumB += UnpackHalf2x16Pair(sShB[idx]) * w;
             mean += tapMeanV.rgb * w;
             sumW += w;
-            sumV += tapMeanV.a * wV;
-            sumWV += wV;
         }
         float invW = 1.0 / sumW;
         sumR *= invW;

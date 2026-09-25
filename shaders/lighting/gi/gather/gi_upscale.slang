@@ -17,6 +17,13 @@ static const float GI_UPSCALE_NORMAL_POWER = 32.0;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 static const float GI_UPSCALE_FAST_ACCUM = 6.0;
+// Visibility does not change with lighting (sky light is applied after), so it can average far longer than the radiance without lagging light changes.
+static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 64.0;
+static const float GI_UPSCALE_SKY_VIS_FIX_FRAMES = 16.0;
+static const float GI_UPSCALE_SKY_VIS_FIX_STRIDE = 12.0;
+static const float GI_UPSCALE_PRIOR_FRAMES = 2.0;
+// Probes miss the local enclosure of a disocclusion (slits behind furniture) and read too bright there.
+static const float GI_UPSCALE_PRIOR_SCALE = 0.6;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -57,6 +64,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     if (depth <= 0.0 || (gt1.w & 1u) == 0u) {
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
         rdgStorageFloat2[pc.fastOutIndex][pixel] = float2(0.0);
+        rdgStorageFloat2[pc.skyVisOutIndex][pixel] = float2(0.0);
         return;
     }
 
@@ -162,6 +170,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
 
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
     GIGatherScalarHistory fastHistory = { 0.0, 0.0, 0.0 };
+    GIGatherScalarHistory skyVisHistory = { 0.0, 0.0, 0.0 };
     if (pc.bHistoryValid != 0u) {
         float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
         GIGatherHistoryTaps taps = GIGatherResolveHistoryTaps(scene, pc.depthIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
@@ -171,6 +180,9 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
             fastHistory = GIGatherFetchScalarHistory(taps, pc.fastHistoryIndex);
             fastHistory.value *= historyRatio;
             fastHistory.count *= taps.countScale;
+        }
+        if (pc.skyVisHistoryIndex != ~0x0u) {
+            skyVisHistory = GIGatherFetchScalarHistory(taps, pc.skyVisHistoryIndex);
         }
     }
 
@@ -219,13 +231,56 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
             }
         }
     }
-    if (bSkyCurrent) {
-        current += skyVisCurrent * skyTerm;
+    float nV = min(skyVisHistory.count, (GI_UPSCALE_SKY_VIS_MAX_ACCUM - 1.0) * scene.framerateScale) * skyVisHistory.quality;
+
+    // Young visibility against a 64-frame neighbourhood shows as a noisy trail (disocclusion, jittered edges); widen its own fix until the history catches up. Taps are pre-blurred +-6 texels, so stride 12 still tiles.
+    if (bSkyCurrent && nV < GI_UPSCALE_SKY_VIS_FIX_FRAMES) {
+        int stride = int(round(GI_UPSCALE_SKY_VIS_FIX_STRIDE / (1.0 + nV)));
+        if (stride >= 1) {
+            int2 gatherCenter = int2(pixel / pc.gatherScale);
+            float fixV = skyVisCurrent;
+            float fixW = 1.0;
+            [unroll]
+            for (int fy = -1; fy <= 1; fy++) {
+                [unroll]
+                for (int fx = -1; fx <= 1; fx++) {
+                    if (fx == 0 && fy == 0) { continue; }
+                    int2 tap = clamp(gatherCenter + int2(fx, fy) * stride, int2(0), int2(pc.gatherExtent) - 1);
+                    uint2 tapGuide = rdgTexturesUInt2[pc.guideIndex].Load(int3(tap, 0)).xy;
+                    if (asfloat(tapGuide.y) == 0.0) { continue; }
+                    if (uint(rdgTexturesFloat2[pc.dataIndex].Load(int3(tap, 0)).y + 0.5) == GI_GATHER_TIER_BACKFACE) { continue; }
+
+                    uint2 tapFull = GIGatherRepresentativePixel(uint2(tap), pc.renderExtent, pc.gatherScale);
+                    float2 tapUv = (float2(tapFull) + 0.5) / float2(pc.renderExtent);
+                    float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, asfloat(tapGuide.y));
+                    float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
+                    w *= pow(saturate(dot(centerNormal, UnpackNormalOct16(tapGuide.x))), GI_UPSCALE_NORMAL_POWER);
+                    if (w <= 1e-4) { continue; }
+
+                    fixV += rdgTexturesFloat4[pc.skyVisIndex].Load(int3(tap, 0)).a * w;
+                    fixW += w;
+                }
+            }
+            skyVisCurrent = fixV / fixW;
+        }
     }
+    float skyVisAccum = skyVisHistory.value;
+    float skyVisCount = max(nV, 1.0);
+    if (bSkyCurrent) {
+        skyVisAccum = (nV * skyVisHistory.value + skyVisCurrent) / (nV + 1.0);
+        skyVisCount = nV + 1.0;
+        current += skyVisAccum * skyTerm;
+    }
+    rdgStorageFloat2[pc.skyVisOutIndex][pixel] = float2(skyVisAccum, skyVisCount);
 
     float3 result = current;
     float accum = 1.0;
-    if (history.quality > 0.0) {
+    if (history.quality <= 0.0 && bSkyCurrent) {
+        // Disocclusion (chair slits) has no same-surface neighbours to filter with; seed from the probe field as a few frames of prior that the counter then averages out.
+        float3 prior = GIUpscaleWorldIrradiance(pc, scene, mul(scene.invView, float4(centerXv, 1.0)).xyz, evalN, centerXv) * GI_UPSCALE_PRIOR_SCALE;
+        result = (GI_UPSCALE_PRIOR_FRAMES * prior + current) / (GI_UPSCALE_PRIOR_FRAMES + 1.0);
+        accum = GI_UPSCALE_PRIOR_FRAMES + 1.0;
+    } else if (history.quality > 0.0) {
         if (bHasCurrent) {
             result = (nBlend * history.color + current) / (nBlend + 1.0);
             accum = n + 1.0;

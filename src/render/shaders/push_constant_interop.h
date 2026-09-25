@@ -906,6 +906,9 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     // Short (luma, count) history the temporal clamp bounds the long history against; ~0u history = none yet.
     SHADER_PUBLIC uint32_t fastHistoryIndex;
     SHADER_PUBLIC uint32_t fastOutIndex;
+    // (sky visibility, count) history, kept apart from the radiance so it can average longer; ~0u history = none yet.
+    SHADER_PUBLIC uint32_t skyVisHistoryIndex;
+    SHADER_PUBLIC uint32_t skyVisOutIndex;
 };
 
 SHADER_PUBLIC struct GIPostBlurPushConstant
@@ -918,6 +921,8 @@ SHADER_PUBLIC struct GIPostBlurPushConstant
     SHADER_PUBLIC uint32_t depthIndex;
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gatherScale;
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct GITemporalClampPushConstant
@@ -1355,7 +1360,7 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC float alphaDarken; // applied while adapted luminance increases
     SHADER_PUBLIC float lowPercentile;
     SHADER_PUBLIC float highPercentile;
-    SHADER_PUBLIC float minAdaptedLuminance; // EV100ToLuminance(exposureMinEV100)
+    SHADER_PUBLIC float minAdaptedLuminance; // EV100ToLuminance(exposureMidwnEV100)
     SHADER_PUBLIC float maxAdaptedLuminance; // EV100ToLuminance(exposureMaxEV100)
     SHADER_PUBLIC uint32_t totalPixels;
 };
