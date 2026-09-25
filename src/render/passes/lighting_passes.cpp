@@ -427,6 +427,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .diffuseRatioIndex = ~0x0u,
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
+                    .indirectIntensity = viewFamily.indirectIntensity,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), entry.index * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));

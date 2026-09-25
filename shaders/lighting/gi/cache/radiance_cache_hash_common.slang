@@ -17,6 +17,13 @@ public float3 RadianceCacheUnpackRadiance(uint2 packed)
     return UnpackHalf2x16Pair(packed).rgb * RADIANCE_CACHE_PACK_SCALE;
 }
 
+// The cell clear fill (0xFFFFFFFF) unpacks as RGBE ~1.3e8; a reader racing a new cell's init can observe it.
+public float3 RadianceCacheUnpackEmissive(uint packed)
+{
+    if (packed == RADIANCE_CACHE_RADIANCE_UNSHADED) { return float3(0.0); }
+    return UnpackEmissiveRGBE(packed);
+}
+
 public uint2 RadianceCachePackRadiance(float3 radiance)
 {
     return PackHalf2x16Pair(float4(min(radiance / RADIANCE_CACHE_PACK_SCALE, float3(65504.0)), 0.0));
@@ -143,30 +150,32 @@ static uint RadianceCacheChecksum(RadianceCacheKey key)
     return (c == RADIANCE_CACHE_HASH_EMPTY) ? 1u : c;
 }
 
-public uint RadianceCacheHashFind(uint* entries, RadianceCacheKey key)
+// keys may be nullptr (checksum only). With keys, a checksum alias is skipped; a slot inserted this dispatch whose key is not written yet reads as a miss.
+public uint RadianceCacheHashFind(uint* entries, uint2* keys, RadianceCacheKey key)
 {
     uint slot = RadianceCacheHashSlot(key);
     uint cs = RadianceCacheChecksum(key);
+    uint2 packedKey = RadianceCachePackKey(key);
     for (uint i = 0u; i < RADIANCE_CACHE_HASH_PROBE; i++) {
         uint s = (slot + i) & (RADIANCE_CACHE_HASH_CAPACITY - 1u);
         uint e = entries[s];
-        if (e == cs) { return s; }
+        if (e == cs && (keys == nullptr || all(keys[s] == packedKey))) { return s; }
         if (e == RADIANCE_CACHE_HASH_EMPTY) { return RADIANCE_CACHE_HASH_INVALID; }
     }
     return RADIANCE_CACHE_HASH_INVALID;
 }
 
 // Exact-level find with +/-1 LOD tolerance: a surface that just crossed a LOD ring reads the surviving neighbour-level cell (still smoothed) until its own-level cell converges, instead of the raw probe tier.
-public uint RadianceCacheHashFindLodTolerant(uint* entries, RadianceCacheKey key, float3 worldPos, float3 normal)
+public uint RadianceCacheHashFindLodTolerant(uint* entries, uint2* keys, RadianceCacheKey key, float3 worldPos, float3 normal)
 {
-    uint slot = RadianceCacheHashFind(entries, key);
+    uint slot = RadianceCacheHashFind(entries, keys, key);
     if (slot != RADIANCE_CACHE_HASH_INVALID) { return slot; }
 
     if (key.level > 0u) {
         RadianceCacheKey finer = key;
         finer.level = key.level - 1u;
         finer.cellPos = RadianceCacheQuantize(worldPos, normal, key.normalBucket, finer.level);
-        slot = RadianceCacheHashFind(entries, finer);
+        slot = RadianceCacheHashFind(entries, keys, finer);
         if (slot != RADIANCE_CACHE_HASH_INVALID) { return slot; }
     }
 
@@ -175,7 +184,7 @@ public uint RadianceCacheHashFindLodTolerant(uint* entries, RadianceCacheKey key
         coarser.level = key.level + 1u;
         // Requantized (not cellPos >> 1) so the biased coordinate matches a native coarse-level key.
         coarser.cellPos = RadianceCacheQuantize(worldPos, normal, key.normalBucket, coarser.level);
-        slot = RadianceCacheHashFind(entries, coarser);
+        slot = RadianceCacheHashFind(entries, keys, coarser);
     }
     return slot;
 }
@@ -210,7 +219,7 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
 
 // Seeds a newly-created cell from whichever adjacent LOD already has data, instead of starting black.
 // Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 4 (the bucket axis does not subdivide across levels), averaged if found.
-public uint2 RadianceCacheWarmStartRadiance(uint* entries, RadianceCacheCell* cells, RadianceCacheKey key, out uint seedCount, out uint seedEmissive)
+public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, RadianceCacheCell* cells, RadianceCacheKey key, out uint seedCount, out uint seedEmissive)
 {
     seedCount = 0u;
     seedEmissive = 0u;
@@ -226,12 +235,12 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, RadianceCacheCell* ce
         } else {
             parentKey.cellPos.z = key.cellPos.z;
         }
-        uint parentSlot = RadianceCacheHashFind(entries, parentKey);
+        uint parentSlot = RadianceCacheHashFind(entries, keys, parentKey);
         if (parentSlot != RADIANCE_CACHE_HASH_INVALID) {
             uint2 packed = cells[parentSlot].packedRadiance;
             if (RadianceCacheRadianceShaded(packed)) {
                 seedCount = min((cells[parentSlot].changeStreak >> 16u) & 0xFFu, RADIANCE_CACHE_WARMSTART_SEED_CAP);
-                seedEmissive = cells[parentSlot].packedEmissive;
+                seedEmissive = PackEmissiveRGBE(RadianceCacheUnpackEmissive(cells[parentSlot].packedEmissive));
                 return packed;
             }
         }
@@ -254,12 +263,12 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, RadianceCacheCell* ce
             } else {
                 childKey.cellPos = int3(key.cellPos.x * 2 + u, key.cellPos.y * 2 + v, key.cellPos.z);
             }
-            uint childSlot = RadianceCacheHashFind(entries, childKey);
+            uint childSlot = RadianceCacheHashFind(entries, keys, childKey);
             if (childSlot != RADIANCE_CACHE_HASH_INVALID) {
                 uint2 packed = cells[childSlot].packedRadiance;
                 if (RadianceCacheRadianceShaded(packed)) {
                     sum += RadianceCacheUnpackRadiance(packed);
-                    emissiveSum += UnpackEmissiveRGBE(cells[childSlot].packedEmissive);
+                    emissiveSum += RadianceCacheUnpackEmissive(cells[childSlot].packedEmissive);
                     minChildCount = min(minChildCount, (cells[childSlot].changeStreak >> 16u) & 0xFFu);
                     found++;
                 }

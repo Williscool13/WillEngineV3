@@ -558,7 +558,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
     float giW = 0.0;
     if (pc.bFeedbackValid != 0) {
         float edgeFade;
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, RADIANCE_CACHE_CELL_SIZE_BASE, edgeFade);
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, -RADIANCE_CACHE_CELL_SIZE_BASE, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
         giW = gi.w;
     }

@@ -692,6 +692,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunVisIndex;
     SHADER_PUBLIC uint32_t tileCapacity;
+    SHADER_PUBLIC float indirectIntensity;
 };
 
 // Unused: kept around alongside WorldGridBinningPushConstant.

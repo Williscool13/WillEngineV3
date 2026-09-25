@@ -80,12 +80,16 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                 RadianceCacheKey wcKey = RadianceCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
                 bool isNew;
                 uint wcSlot = RadianceCacheHashInsert(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->stats, wcKey, isNew);
+                // Checksum alias (or a same-dispatch insert whose key is not written yet): skip the cache for this ray.
+                if (wcSlot != RADIANCE_CACHE_HASH_INVALID && !isNew && any(pc.radianceCache->keys[wcSlot] != RadianceCachePackKey(wcKey))) {
+                    wcSlot = RADIANCE_CACHE_HASH_INVALID;
+                }
                 if (wcSlot != RADIANCE_CACHE_HASH_INVALID) {
                     uint2 packedRadiance = pc.radianceCache->cells[wcSlot].packedRadiance;
                     if (isNew) {
                         uint seedCount;
                         uint seedEmissive;
-                        packedRadiance = RadianceCacheWarmStartRadiance(pc.radianceCache->entries, pc.radianceCache->cells, wcKey, seedCount, seedEmissive);
+                        packedRadiance = RadianceCacheWarmStartRadiance(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->cells, wcKey, seedCount, seedEmissive);
                         pc.radianceCache->cells[wcSlot].packedRadiance = packedRadiance;
                         pc.radianceCache->cells[wcSlot].packedEmissive = seedEmissive;
                         // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
@@ -93,7 +97,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     }
 
                     if (RadianceCacheRadianceShaded(packedRadiance)) {
-                        radiance = RadianceCacheUnpackRadiance(packedRadiance) + UnpackEmissiveRGBE(pc.radianceCache->cells[wcSlot].packedEmissive);
+                        radiance = RadianceCacheUnpackRadiance(packedRadiance) + RadianceCacheUnpackEmissive(pc.radianceCache->cells[wcSlot].packedEmissive);
                         bCacheRead = true;
                     }
                     pc.radianceCache->cells[wcSlot].lastTouched = pc.frameIndex;
@@ -140,8 +144,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         if (pc.skyboxIndex >= 0 && (pc.previousBaseCellZFlags & (1u << 17u)) == 0u) {
             // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
             float3 skyDirection = float3(direction.x, -direction.y, direction.z);
-            // Mip 4 is the roughness-1.0 (blurriest) prefiltered level. Reduces flickering from high frequency variance.
-            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 4).rgb * pc.iblIntensity;
+            // Mip 1, not the roughness-1 level: that one is already cosine-convolved, and the probe's own irradiance integration would convolve the sky twice.
+            radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 1).rgb * pc.iblIntensity;
         }
         result = float4(radiance, 10000.0);
     }

@@ -42,7 +42,19 @@ void ComputeRadianceCacheShade(uint3 dtid: SV_DispatchThreadID, uniform Radiance
     if (RadianceCacheRadianceShaded(packedPreviousRadiance)) {
         count = min((pc.cells[slot].changeStreak >> 16u) & 0xFFu, pc.accumCap - 1u);
         blended = lerp(radiance, RadianceCacheUnpackRadiance(packedPreviousRadiance), float(count) / float(count + 1u));
-        blendedEmissive = lerp(emissive, UnpackEmissiveRGBE(pc.cells[slot].packedEmissive), float(count) / float(count + 1u));
+        blendedEmissive = lerp(emissive, RadianceCacheUnpackEmissive(pc.cells[slot].packedEmissive), float(count) / float(count + 1u));
+    }
+    float maxBlended = max(blended.r, max(blended.g, blended.b));
+    if (pc.maxRadiance > 0.0 && maxBlended > pc.maxRadiance) {
+        blended *= pc.maxRadiance / maxBlended;
+    }
+    float maxBlendedEmissive = max(blendedEmissive.r, max(blendedEmissive.g, blendedEmissive.b));
+    if (pc.maxRadiance > 0.0 && maxBlendedEmissive > pc.maxRadiance) {
+        blendedEmissive *= pc.maxRadiance / maxBlendedEmissive;
+    }
+    if (any(isnan(blended)) || any(isnan(blendedEmissive))) {
+        blended = radiance;
+        blendedEmissive = emissive;
     }
     pc.cells[slot].packedRadiance = RadianceCachePackRadiance(blended);
     pc.cells[slot].packedEmissive = PackEmissiveRGBE(blendedEmissive);

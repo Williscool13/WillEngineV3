@@ -98,14 +98,16 @@ public static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
  * probeOffsets (when bProbeOffsetsValid) holds per-slot relocation offsets in xyz and the backface fraction in w; relocated positions drive direction/distance/Chebyshev, trilinear stays on the lattice, dead probes are skipped.
  * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb); w in [0,1] combines the window edge fade with a weight-support confidence (dead-probe pockets report low w), so callers can blend to the next cascade or their fallback without a hard edge.
  * varianceGuide is the probe-weighted atlas alpha: predicted relative deviation of a 1spp gather near this point (see ddgi_blend_irradiance); linear in the probe weights, no gamma decode.
+ * maxBias caps the bias length; a negative value caps at max(-maxBias, half the probe spacing), for callers with no occluder distance.
  */
 public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias, out float varianceGuide)
 {
     varianceGuide = 0.0;
     float3 biasOffset = normal * volume.normalBias - cameraDirection * volume.viewBias;
     float biasLength = length(biasOffset);
-    if (biasLength > maxBias) {
-        biasOffset *= maxBias / biasLength;
+    float biasCap = maxBias < 0.0 ? max(-maxBias, 0.5 * volume.probeSpacing) : maxBias;
+    if (biasLength > biasCap) {
+        biasOffset *= biasCap / biasLength;
     }
     float3 biasedPosition = worldPosition + biasOffset;
     float3 gridCoord = (biasedPosition - volume.origin) / volume.probeSpacing;
@@ -201,7 +203,7 @@ public struct DDGILocalWalk
 
 /**
  * Local slots worth visiting at this point: the world-grid cell's overlap list, else every resident slot.
- * The list is exact for localFade too, since a volume whose fade band reaches the point necessarily overlaps its cell; a cell that overflowed K carries the sentinel count and falls back to the full walk.
+ * The list is exact for the local edge fade too, since a volume whose fade band reaches the point necessarily overlaps its cell; a cell that overflowed K carries the sentinel count and falls back to the full walk.
  */
 [ForceInline]
 public DDGILocalWalk DDGIResolveLocalWalk(float3 worldPosition, DDGICascadeSetGPU* cascadeSet, uint localCount)
@@ -235,7 +237,6 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     float3 color = float3(0.0);
     float guide = 0.0;
     float coverage = 0.0;
-    float localFade = 0.0;
     bool bSaturated = false;
     edgeFade = 0.0;
     varianceGuide = 0.0;
@@ -250,12 +251,8 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
         }
         DDGICascadeDescriptor desc = cascadeSet->cascades[c];
 
-        if (bLocal) {
-            // Locals take priority
-            float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
-            float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
-            localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
-        } else {
+        // Locals come first; their edge fade is already in gi.w, and front-to-back coverage hands the remainder to the cascades.
+        if (!bLocal) {
             float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
             float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
             edgeFade = max(edgeFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
@@ -269,7 +266,7 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
         }
         float cascadeGuide;
         float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, maxBias, cascadeGuide);
-        float w = bLocal ? gi.w : gi.w * (1.0 - localFade);
+        float w = gi.w;
         if (w <= 0.0) {
             continue;
         }
@@ -301,7 +298,6 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
 {
     float3 color = float3(0.0);
     float coverage = 0.0;
-    float localFade = 0.0;
     uint count = min(cascadeSet->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
     uint localCount = min(cascadeSet->localCount, DDGI_MAX_VOLUME_SLOTS - count);
     DDGILocalWalk walk = DDGIResolveLocalWalk(worldPosition, cascadeSet, localCount);
@@ -312,16 +308,11 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
             continue;
         }
         DDGICascadeDescriptor desc = cascadeSet->cascades[c];
-        if (bLocal) {
-            float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
-            float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
-            localFade = max(localFade, saturate(min(edgeDistance.x, min(edgeDistance.y, edgeDistance.z)) / max(desc.volume.edgeFadeCells, 1.0)));
-        }
         if (desc.bValid == 0) {
             continue;
         }
         float4 gi = DDGISampleIrradiance(worldPosition, normal, cameraDirection, desc.volume, desc.irradianceIndex, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, maxBias);
-        float w = bLocal ? gi.w : gi.w * (1.0 - localFade);
+        float w = gi.w;
         if (w <= 0.0) {
             continue;
         }

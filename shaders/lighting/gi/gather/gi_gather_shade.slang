@@ -107,7 +107,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
 {
     float3 radiance;
     RadianceCacheKey key = RadianceCacheComputeKey(hitWorldPos, hit.normal, cameraWorldPos);
-    uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, key, hitWorldPos, hit.normal);
+    uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, pc.cacheKeys, key, hitWorldPos, hit.normal);
     uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
     if (RadianceCacheRadianceShaded(packedRadiance)) {
         radiance = RadianceCacheUnpackRadiance(packedRadiance);

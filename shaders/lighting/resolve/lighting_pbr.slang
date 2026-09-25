@@ -136,7 +136,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
             }
             reflectionSpecular *= gtao;
         }
-        ibl = kD_ibl * indirectDiffuse * li.albedo.xyz * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + reflectionSpecular;
+        ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * li.albedo.xyz * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + reflectionSpecular;
     }
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;

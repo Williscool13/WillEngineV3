@@ -25,6 +25,6 @@ void ComputeGPUDebugRadianceCache(uint3 tid: SV_DispatchThreadID, uniform Radian
     float3 center = RadianceCacheCellCenterFromKey(key) + RadianceCacheBucketNormal(key.normalBucket) * halfExtent * 0.5;
 
     uint2 packed = pc.cells[slot].packedRadiance;
-    float3 radiance = RadianceCacheRadianceShaded(packed) ? (RadianceCacheUnpackRadiance(packed) + UnpackEmissiveRGBE(pc.cells[slot].packedEmissive)) * pc.exposure : float3(0.0);
+    float3 radiance = RadianceCacheRadianceShaded(packed) ? (RadianceCacheUnpackRadiance(packed) + RadianceCacheUnpackEmissive(pc.cells[slot].packedEmissive)) * pc.exposure : float3(0.0);
     GPUDebugAddCube(pc.cubeArgs, pc.cubeBuffer, center, halfExtent, float4(radiance, 1.0));
 }

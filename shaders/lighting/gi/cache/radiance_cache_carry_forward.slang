@@ -23,7 +23,7 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
 
     RadianceCacheCell cell = pc.prevCells[i];
     RadianceCacheKey key = RadianceCacheUnpackKey(pc.prevKeys[i]);
-    if (pc.touchEntries != nullptr && RadianceCacheHashFind(pc.touchEntries, key) != RADIANCE_CACHE_HASH_INVALID) {
+    if (pc.touchEntries != nullptr && RadianceCacheHashFind(pc.touchEntries, nullptr, key) != RADIANCE_CACHE_HASH_INVALID) {
         cell.lastTouched = max(cell.lastTouched, pc.touchFrame);
     }
     if (pc.bFreeze != 0u) {
@@ -53,7 +53,8 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
 
     bool isNew;
     uint slot = RadianceCacheHashInsert(pc.nextEntries, pc.nextKeys, pc.stats, key, isNew);
-    if (slot == RADIANCE_CACHE_HASH_INVALID) {
+    // !isNew = checksum alias of a survivor already carried; drop this one instead of overwriting that cell.
+    if (slot == RADIANCE_CACHE_HASH_INVALID || !isNew) {
 #if WILL_EDITOR
         if (pc.stats != nullptr) {
             InterlockedAdd(pc.stats->cellsEvicted, 1u, prevStat);
