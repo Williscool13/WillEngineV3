@@ -38,7 +38,7 @@ static constexpr float SPEC_GLOSS_ROUGHNESS_FLOOR = 0.3f;
 static constexpr uint32_t SPEC_GLOSS_CONVERT_WORKERS = 4;
 static constexpr int32_t EMISSIVE_MASK_MAX_DIMENSION = 1024;
 static constexpr uint8_t EMISSIVE_LIT_TEXEL_THRESHOLD = 16;
-static constexpr float EMISSIVE_LIT_TRIANGLE_COVERAGE = 0.5f;
+static constexpr float EMISSIVE_LIT_TRIANGLE_COVERAGE = 0.25f;
 static constexpr uint32_t EMISSIVE_MAX_TRIANGLE_SUBDIVISIONS = 32;
 
 static void ConvertSpecGlossToMetalRough(const uint8_t* src, int32_t w, int32_t h, float glossFactor, float specFactor, uint8_t* dst)
