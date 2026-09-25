@@ -487,8 +487,6 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     statisticsManager.scratch.radianceCache.cellsCarried = readbackData->wcCarried;
     statisticsManager.scratch.radianceCache.cellsEvicted = readbackData->wcEvicted;
     statisticsManager.scratch.radianceCache.insertsFailed = readbackData->wcInsertsFailed;
-    statisticsManager.scratch.radianceCache.cellsDumped = readbackData->wcDumped;
-    statisticsManager.scratch.radianceCache.cellsDark = readbackData->wcDark;
     statisticsManager.scratch.radianceCache.cellsShaded = readbackData->wcShaded;
     statisticsManager.scratch.regir.activeCells = readbackData->regirActiveCells;
     statisticsManager.scratch.regir.insertsFailed = readbackData->regirInsertsFailed;
@@ -783,7 +781,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 const auto giGatherDebug = static_cast<uint32_t>(frameBuffer.debug.giGatherDebugMode);
                 if (frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && bDDGIApply) || giGatherDebug != 0u)) {
                     const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise, frameBuffer.ddgi.bFinalGatherTemporal,
-                        frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback, frameBuffer.ddgi.bFinalGatherQuarterRes, frameBuffer.ddgi.bounceIntensity);
+                        frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback, frameBuffer.ddgi.bFinalGatherQuarterRes, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.maxRayRadiance);
                     if (giGather.bValid) {
                         giGatherMode = (frameBuffer.ddgi.bFinalGather && bDDGIApply) ? 1u : 0u;
                         SetupGIGatherDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.giGatherDebugMode, frameBuffer.ddgi.bFinalGatherQuarterRes);
@@ -863,7 +861,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 }
 
                 const bool bSunViaReSTIR = viewFamily.lightingMode == Core::LightingMode::ReSTIR && restir.bSunLight;
-                if (viewFamily.directionalLight.bEnabled && !bSunViaReSTIR && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
+                if (viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f && !bSunViaReSTIR && (viewFamily.lightingMode == Core::LightingMode::Default || viewFamily.lightingMode == Core::LightingMode::ReSTIR)) {
                     const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
                     const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
                     SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, targets, 0, frameNumber, sunShadowPixelScale);

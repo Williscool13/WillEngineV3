@@ -154,8 +154,6 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t wcCarried;
     SHADER_PUBLIC uint32_t wcEvicted;
     SHADER_PUBLIC uint32_t wcInsertsFailed;
-    SHADER_PUBLIC uint32_t wcDumped;
-    SHADER_PUBLIC uint32_t wcDark;
     SHADER_PUBLIC uint32_t wcShaded;
     SHADER_PUBLIC uint32_t culledInstanceFrustum;
     SHADER_PUBLIC uint32_t culledInstanceContribution;

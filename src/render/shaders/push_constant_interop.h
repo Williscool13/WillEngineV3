@@ -848,11 +848,11 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC uint32_t rayCount;
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
-    SHADER_PUBLIC SHADER_PTR(uint2) touchKeys;
     SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
     SHADER_PUBLIC float bounceIntensity;
     // Last frame's GI_SCREEN_DIFFUSE; ~0u falls back to lit history as-is (non-ReSTIR paths).
     SHADER_PUBLIC uint32_t screenDiffuseHistoryIndex;
+    SHADER_PUBLIC float maxRayRadiance;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -913,6 +913,7 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     // (relative noise variance, count); steers the history cap here and the post blur radius.
     SHADER_PUBLIC uint32_t noiseHistoryIndex;
     SHADER_PUBLIC uint32_t noiseOutIndex;
+    SHADER_PUBLIC uint32_t guideNormalOutIndex;
 };
 
 SHADER_PUBLIC struct GIPostBlurPushConstant
@@ -923,7 +924,7 @@ SHADER_PUBLIC struct GIPostBlurPushConstant
     SHADER_PUBLIC uint32_t inputIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t guideNormalIndex;
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t noiseIndex;

@@ -1675,7 +1675,7 @@ void WillEngine::Run()
                 }
 
                 const Render::RadianceCacheStatistics wcStats = renderThread->GetRendererStatistics().radianceCache;
-                engineContext->radianceCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsDumped, wcStats.cellsDark, wcStats.cellsShaded};
+                engineContext->radianceCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsShaded};
                 const Render::ReGIRStatistics regirStats = renderThread->GetRendererStatistics().regir;
                 engineContext->regirStats.activeCells = regirStats.activeCells;
                 engineContext->regirStats.insertsFailed = regirStats.insertsFailed;

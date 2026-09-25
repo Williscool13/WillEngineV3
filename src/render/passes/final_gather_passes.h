@@ -38,6 +38,7 @@ inline const StringID GI_GATHER_HISTORY = "gi_gather_history"_sid;
 inline const StringID GI_GATHER_FAST = "gi_gather_fast"_sid;
 inline const StringID GI_GATHER_SKY_VIS_HISTORY = "gi_gather_sky_vis_history"_sid;
 inline const StringID GI_GATHER_NOISE = "gi_gather_noise"_sid;
+inline const StringID GI_GATHER_GUIDE_NORMAL = "gi_gather_guide_normal"_sid;
 inline const StringID OBJECT_MOTION = "object_motion"_sid;
 inline const StringID GI_DECONSTRUCT_TARGET = "gi_deconstruct_target"_sid;
 inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;
@@ -72,10 +73,11 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
  * @param bDisableScreenTier Disable the lit-history screen tier so ray hits resolve only against world-space sources; set while the GI field is frozen (lit history is view-dependent and keeps evolving, which face-seams probe bakes).
  * @param bQuarterRes Gather at quarter render resolution instead of half: 1/4 the rays and denoise work; the upscale footprint spans 4x4 full-res pixels per gather texel, so sub-footprint detail leans harder on the guides and history.
  * @param bounceIntensity The radiance cache's DDGI bounce scale; the probe tier uses the same scale so cache and probes agree at a hit.
+ * @param maxRayRadiance DDGI ray firefly cap, shared by gather samples; 0 = off
  * @return
  */
 FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber,
-    bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity);
+    bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity, float maxRayRadiance);
 
 /**
  * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.

@@ -367,7 +367,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
         }
     }
 
-    if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && bHasTLAS) {
+    if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f && bHasTLAS) {
         const uint32_t sunField = restirParams.bCheckerboardFullRateResolve ? 0u : activeCheckerboardField;
         // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
         const uint32_t sunVisWidth = (sunField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];

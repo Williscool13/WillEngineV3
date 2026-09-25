@@ -22,13 +22,15 @@ import reflection_probe_common;
 // One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: last frame's lit screen, else cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
 // Sky misses do not feed the SH; the miss fraction goes to the sky-visibility texture's alpha (rgb = mean ray radiance), filtered separately and multiplied by prefiltered sky irradiance at upscale.
 
-static const float GI_GATHER_MAX_RADIANCE = 1310720.0;
 // Per-sample outlier cap relative to display white (Lumen's MaxRayIntensity idea); replaces the denoiser's neighbour-relative cap, which discarded real bounce from small bright sources.
 static const float GI_GATHER_MAX_EXPOSED_RADIANCE = 40.0;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
 {
+    if (any(isnan(radiance))) {
+        return float3(0.0);
+    }
     float maxChannel = max(radiance.r, max(radiance.g, radiance.b));
     return maxChannel > maxRadiance ? radiance * (maxRadiance / maxChannel) : radiance;
 }
@@ -99,7 +101,7 @@ static void GatherTouchCell(GIGatherPushConstant pc, uint slot)
         return;
     }
     bool isNew;
-    RadianceCacheHashInsert(pc.touchEntries, pc.touchKeys, nullptr, RadianceCacheUnpackKey(pc.cacheKeys[slot]), isNew);
+    RadianceCacheHashInsert(pc.touchEntries, nullptr, nullptr, RadianceCacheUnpackKey(pc.cacheKeys[slot]), isNew);
 }
 
 /** Cache-then-probe resolution at a ray hit; shared by front-face hits whose screen tier failed and backface hits. */
@@ -268,7 +270,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
             }
 
             // The SH carries only the directional tilt; the plain mean of the cosine-sampled radiance is the unbiased E/pi at worldN (GIGatherEvaluate).
-            radiance = GIGatherClampRadiance(radiance, min(GI_GATHER_MAX_RADIANCE, GI_GATHER_MAX_EXPOSED_RADIANCE / scene.preExposure));
+            radiance = GIGatherClampRadiance(radiance, min(pc.maxRayRadiance > 0.0 ? pc.maxRayRadiance : 1e30, GI_GATHER_MAX_EXPOSED_RADIANCE / scene.preExposure));
             float NoD = max(dot(worldN, direction), 0.25);
             float l0 = 0.25 / NoD;
             float3 l1 = direction * (0.5 / NoD);

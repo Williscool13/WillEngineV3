@@ -82,8 +82,6 @@ struct RadianceCacheStatsSnapshot
     uint32_t cellsCarried{};
     uint32_t cellsEvicted{};
     uint32_t insertsFailed{};
-    uint32_t cellsDumped{};
-    uint32_t cellsDark{};
     uint32_t cellsShaded{};
 };
 

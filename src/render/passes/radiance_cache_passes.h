@@ -24,7 +24,6 @@ inline const StringID RADIANCE_CACHE_DESCRIPTORS = "radiance_cache_descriptors"_
 inline const StringID RADIANCE_CACHE_BUFFERS_CURRENT = "radiance_cache_buffers_current"_sid;
 inline const StringID RADIANCE_CACHE_STATS = "radiance_cache_stats"_sid;
 inline const StringID RADIANCE_CACHE_TOUCH_ENTRIES = "radiance_cache_touch_entries"_sid;
-inline const StringID RADIANCE_CACHE_TOUCH_KEYS = "radiance_cache_touch_keys"_sid;
 
 inline constexpr VkDeviceSize RADIANCE_CACHE_ENTRIES_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint32_t);
 inline constexpr VkDeviceSize RADIANCE_CACHE_KEYS_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_HASH_CAPACITY) * sizeof(uint2);

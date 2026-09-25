@@ -17,13 +17,6 @@ public float3 RadianceCacheUnpackRadiance(uint2 packed)
     return UnpackHalf2x16Pair(packed).rgb * RADIANCE_CACHE_PACK_SCALE;
 }
 
-// The cell clear fill (0xFFFFFFFF) unpacks as RGBE ~1.3e8; a reader racing a new cell's init can observe it.
-public float3 RadianceCacheUnpackEmissive(uint packed)
-{
-    if (packed == RADIANCE_CACHE_RADIANCE_UNSHADED) { return float3(0.0); }
-    return UnpackEmissiveRGBE(packed);
-}
-
 public uint2 RadianceCachePackRadiance(float3 radiance)
 {
     return PackHalf2x16Pair(float4(min(radiance / RADIANCE_CACHE_PACK_SCALE, float3(65504.0)), 0.0));
@@ -202,7 +195,9 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
         uint prev;
         InterlockedCompareExchange(entries[s], RADIANCE_CACHE_HASH_EMPTY, cs, prev);
         if (prev == RADIANCE_CACHE_HASH_EMPTY) {
-            keys[s] = RadianceCachePackKey(key);
+            if (keys != nullptr) {
+                keys[s] = RadianceCachePackKey(key);
+            }
             isNew = true;
             return s;
         }
@@ -219,10 +214,9 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
 
 // Seeds a newly-created cell from whichever adjacent LOD already has data, instead of starting black.
 // Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 4 (the bucket axis does not subdivide across levels), averaged if found.
-public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, RadianceCacheCell* cells, RadianceCacheKey key, out uint seedCount, out uint seedEmissive)
+public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, RadianceCacheCell* cells, RadianceCacheKey key, out uint seedCount)
 {
     seedCount = 0u;
-    seedEmissive = 0u;
     uint axis = key.normalBucket >> 1u;
     if (key.level < RADIANCE_CACHE_MAX_LEVEL) {
         RadianceCacheKey parentKey = key;
@@ -240,7 +234,6 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, Radiance
             uint2 packed = cells[parentSlot].packedRadiance;
             if (RadianceCacheRadianceShaded(packed)) {
                 seedCount = min((cells[parentSlot].changeStreak >> 16u) & 0xFFu, RADIANCE_CACHE_WARMSTART_SEED_CAP);
-                seedEmissive = PackEmissiveRGBE(RadianceCacheUnpackEmissive(cells[parentSlot].packedEmissive));
                 return packed;
             }
         }
@@ -248,7 +241,6 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, Radiance
 
     if (key.level > 0u) {
         float3 sum = float3(0.0);
-        float3 emissiveSum = float3(0.0);
         uint found = 0u;
         uint minChildCount = RADIANCE_CACHE_ACCUM_FRAMES;
         RadianceCacheKey childKey = key;
@@ -268,7 +260,6 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, Radiance
                 uint2 packed = cells[childSlot].packedRadiance;
                 if (RadianceCacheRadianceShaded(packed)) {
                     sum += RadianceCacheUnpackRadiance(packed);
-                    emissiveSum += RadianceCacheUnpackEmissive(cells[childSlot].packedEmissive);
                     minChildCount = min(minChildCount, (cells[childSlot].changeStreak >> 16u) & 0xFFu);
                     found++;
                 }
@@ -276,7 +267,6 @@ public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, Radiance
         }
         if (found > 0u) {
             seedCount = min(minChildCount, RADIANCE_CACHE_WARMSTART_SEED_CAP);
-            seedEmissive = PackEmissiveRGBE(emissiveSum / float(found));
             return RadianceCachePackRadiance(sum / float(found));
         }
     }

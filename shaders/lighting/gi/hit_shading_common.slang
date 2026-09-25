@@ -48,8 +48,8 @@ public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance,
     return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, bMirror);
 }
 
-/** Remodulates the albedo-free radiance cache at a probe-ray hit. */
-public float3 DecodeHitDiffuseColor(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+/** Diffuse color and emissive at a probe-ray hit; the radiance cache stores neither. */
+public float3 DecodeHitDiffuseEmissive(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, out float3 emissive)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
     uint firstIndex = primitive.indexOffset + triangleIndex * 3;
@@ -65,6 +65,14 @@ public float3 DecodeHitDiffuseColor(DDGIProbeTracePushConstant pc, Instance inst
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
         albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
+    }
+    emissive = float3(0.0);
+    if (instance.lightIndex == 0xFFFFFFFF) {
+        emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
+        if (material.textureImageIndices.w >= 0) {
+            float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
+            emissive *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
+        }
     }
     float metallic;
     float mrRoughness;
@@ -486,7 +494,7 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
 
 // V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
 // Returns the non-emissive radiosity; own emission goes out separately so the cell EMA/streak never sees bary-jitter on/off emissive texels.
-public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, uint rngSeed, out float3 outEmissive)
+public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -514,23 +522,12 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
         albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
     }
-    float3 emissive = material.emissiveFactor.rgb * material.emissiveFactor.w;
-    if (material.textureImageIndices.w >= 0) {
-        float2 emissiveUV = uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        emissive *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, HIT_SHADING_TEXTURE_LOD).rgb;
-    }
     float metallic;
     float mrRoughness;
     SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
     float roughness = max(mrRoughness, MIN_ROUGHNESS);
     float3 V = N;
     float NoV = 1.0;
-    // A proxy's analytic light is sampled directly by NEE
-    if (instance.lightIndex != 0xFFFFFFFF) {
-        emissive = float3(0.0);
-    }
-
-    outEmissive = emissive;
     float3 radiance = float3(0.0);
     DirectionalLightData sun = pc.lightData->directionalLight;
     if (sun.directionIntensity.w > 0.0) {

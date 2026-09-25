@@ -71,6 +71,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         rdgStorageFloat2[pc.fastOutIndex][pixel] = float2(0.0);
         rdgStorageFloat2[pc.skyVisOutIndex][pixel] = float2(0.0);
         rdgStorageFloat2[pc.noiseOutIndex][pixel] = float2(0.0);
+        rdgStorageFloat4[pc.guideNormalOutIndex][pixel] = float4(0.0);
         return;
     }
 
@@ -79,6 +80,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 centerNormal = UnpackNormalOct16(gt1.r);
     float3 worldN = normalize(mul((float3x3)scene.invView, centerNormal));
     float3 guideNormal = GIGatherGuideNormal(scene, pc.depthIndex, int2(pixel), pc.renderExtent, centerNormal);
+    rdgStorageFloat4[pc.guideNormalOutIndex][pixel] = float4(guideNormal, 1.0);
 
     float3 evalN = worldN;
     if (pc.bentNormalIndex != ~0x0u) {

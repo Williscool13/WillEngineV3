@@ -63,7 +63,6 @@ SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
 SHADER_PUBLIC struct RadianceCacheCell
 {
     SHADER_PUBLIC uint2 packedRadiance; // fp16x3 non-emissive radiance / diffuseColor / RADIANCE_CACHE_PACK_SCALE (RGB9E5 EMA round-trips quantize chroma); .y high half 0xFFFF = unshaded, matching the 0xFFFFFFFF clear fill
-    SHADER_PUBLIC uint packedEmissive; // RGB9E5
     SHADER_PUBLIC uint lastTouched;
     SHADER_PUBLIC uint lastShaded;
     SHADER_PUBLIC uint changeStreak; // bits 0-7 consecutive large-delta touches, bit 8 last delta direction, bits 16-23 accumulated shade count
@@ -84,8 +83,6 @@ SHADER_PUBLIC struct RadianceCacheStats
     SHADER_PUBLIC uint cellsCarried; // survivors re-inserted into this frame's table
     SHADER_PUBLIC uint cellsEvicted; // survivors dropped (LRU age, LOD revalidation, or failed re-insert)
     SHADER_PUBLIC uint insertsFailed; // full-probe insert failures from both trace and carry-forward
-    SHADER_PUBLIC uint cellsDumped; // shade events where the change streak fired and clamped the accumulated count
-    SHADER_PUBLIC uint cellsDark; // shade events whose previous luma sat below the 0.01 clamp, where the relative change threshold degenerates to a fixed absolute
 };
 
 SHADER_PUBLIC struct RadianceCacheBuffers

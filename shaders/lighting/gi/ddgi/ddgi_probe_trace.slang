@@ -88,17 +88,16 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     uint2 packedRadiance = pc.radianceCache->cells[wcSlot].packedRadiance;
                     if (isNew) {
                         uint seedCount;
-                        uint seedEmissive;
-                        packedRadiance = RadianceCacheWarmStartRadiance(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->cells, wcKey, seedCount, seedEmissive);
+                        packedRadiance = RadianceCacheWarmStartRadiance(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->cells, wcKey, seedCount);
                         pc.radianceCache->cells[wcSlot].packedRadiance = packedRadiance;
-                        pc.radianceCache->cells[wcSlot].packedEmissive = seedEmissive;
                         // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
                         pc.radianceCache->cells[wcSlot].changeStreak = seedCount << 16u;
                     }
 
                     if (RadianceCacheRadianceShaded(packedRadiance)) {
-                        float3 hitDiffuseColor = DecodeHitDiffuseColor(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
-                        radiance = RadianceCacheUnpackRadiance(packedRadiance) * hitDiffuseColor + RadianceCacheUnpackEmissive(pc.radianceCache->cells[wcSlot].packedEmissive);
+                        float3 hitEmissive;
+                        float3 hitDiffuseColor = DecodeHitDiffuseEmissive(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitEmissive);
+                        radiance = RadianceCacheUnpackRadiance(packedRadiance) * hitDiffuseColor + hitEmissive;
                         bCacheRead = true;
                     }
                     pc.radianceCache->cells[wcSlot].lastTouched = pc.frameIndex;

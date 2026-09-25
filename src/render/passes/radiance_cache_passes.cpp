@@ -46,7 +46,6 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
     });
 
     graph.CreateVersionedBuffer(RADIANCE_CACHE_TOUCH_ENTRIES, RADIANCE_CACHE_ENTRIES_BYTES, Core::FRAME_BUFFER_COUNT, VersionSource::Fresh, 0, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    graph.CreateBuffer(RADIANCE_CACHE_TOUCH_KEYS, RADIANCE_CACHE_KEYS_BYTES, false);
     const bool bTouchValid = graph.ResourceHasVersion(RADIANCE_CACHE_TOUCH_ENTRIES, Core::FRAME_BUFFER_COUNT);
     const StringID touchEntries = graph.ResourceVersionID(RADIANCE_CACHE_TOUCH_ENTRIES, Core::FRAME_BUFFER_COUNT);
 

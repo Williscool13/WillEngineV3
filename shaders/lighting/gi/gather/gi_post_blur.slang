@@ -27,17 +27,17 @@ void ComputeGIPostBlur(uniform GIPostBlurPushConstant pc, uint3 dtid : SV_Dispat
 
     float4 center = rdgTexturesFloat4[pc.inputIndex].Load(int3(pixel, 0));
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
-    uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
+    float4 centerGuide = rdgTexturesFloat4[pc.guideNormalIndex].Load(int3(pixel, 0));
     // Noisy pixels keep the full radius instead of narrowing with history.
     float noisy = GIGatherNoisiness(rdgTexturesFloat2[pc.noiseIndex].Load(int3(pixel, 0)).x);
     float radius = GI_POST_BLUR_RADIUS_GATHER_TEXELS * float(pc.gatherScale) * lerp(1.0 / sqrt(1.0 + center.a), GI_POST_BLUR_NOISY_SCALE, noisy);
-    if (depth <= 0.0 || (gt1.w & 1u) == 0u || radius < 1.0) {
+    if (depth <= 0.0 || centerGuide.w < 0.5 || radius < 1.0) {
         rdgStorageFloat4[pc.outputIndex][pixel] = center;
         return;
     }
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
-    float3 centerNormal = GIGatherGuideNormal(scene, pc.depthIndex, int2(pixel), pc.renderExtent, UnpackNormalOct16(gt1.r));
+    float3 centerNormal = centerGuide.xyz;
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
     float centerViewZ = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
@@ -56,14 +56,14 @@ void ComputeGIPostBlur(uniform GIPostBlurPushConstant pc, uint3 dtid : SV_Dispat
             continue;
         }
         float tapDepth = rdgTexturesFloat[pc.depthIndex].Load(int3(tap, 0)).r;
-        uint4 tapGt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(tap, 0));
-        if (tapDepth <= 0.0 || (tapGt1.w & 1u) == 0u) {
+        float4 tapGuide = rdgTexturesFloat4[pc.guideNormalIndex].Load(int3(tap, 0));
+        if (tapDepth <= 0.0 || tapGuide.w < 0.5) {
             continue;
         }
         float2 tapUv = (float2(tap) + 0.5) / float2(pc.renderExtent);
         float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, ScreenToViewSpaceDepth(tapDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd));
         float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
-        w *= pow(saturate(dot(centerNormal, GIGatherGuideNormal(scene, pc.depthIndex, tap, pc.renderExtent, UnpackNormalOct16(tapGt1.r)))), GI_POST_BLUR_NORMAL_POWER);
+        w *= pow(saturate(dot(centerNormal, tapGuide.xyz)), GI_POST_BLUR_NORMAL_POWER);
         if (w <= 1e-4) {
             continue;
         }

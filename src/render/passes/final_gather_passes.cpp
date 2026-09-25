@@ -47,7 +47,7 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
 }
 
 FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber,
-    bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity)
+    bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity, float maxRayRadiance)
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(SCENE_DATA_BUFFER) || !graph.HasBuffer(RADIANCE_CACHE_ENTRIES) || !graph.HasBuffer(RADIANCE_CACHE_CELLS)
@@ -71,6 +71,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateVersionedTexture(GI_GATHER_HISTORY, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID gatherHistory = graph.ResourceVersionID(GI_GATHER_HISTORY, 1);
     graph.CreateTexture(GI_GATHER_RESOLVED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture(GI_GATHER_GUIDE_NORMAL, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateVersionedTexture(GI_GATHER_FAST, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID fastHistory = graph.ResourceVersionID(GI_GATHER_FAST, 1);
     graph.CreateVersionedTexture(GI_GATHER_SKY_VIS_HISTORY, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -127,11 +128,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.ReadBuffer(RADIANCE_CACHE_KEYS);
     pass.ReadBuffer(RADIANCE_CACHE_CELLS);
     const StringID touchEntries = RADIANCE_CACHE_TOUCH_ENTRIES;
-    const StringID touchKeys = RADIANCE_CACHE_TOUCH_KEYS;
-    const bool bTouch = graph.HasBuffer(touchEntries) && graph.HasBuffer(touchKeys);
+    const bool bTouch = graph.HasBuffer(touchEntries);
     if (bTouch) {
         pass.ReadWriteBuffer(touchEntries);
-        pass.WriteBuffer(touchKeys);
     }
     pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
     pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
@@ -162,9 +161,9 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, gatherRayCount, bCascades, bScreenSpace, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, touchKeys, litHistory, depthHistory, gbufferOneHistory, bScreenDiffuse, screenDiffuseHistory,
+    pass.Execute([pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, gatherRayCount, bCascades, bScreenSpace, gatherShR, gatherShG, gatherShB, gatherSkyVis, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, litHistory, depthHistory, gbufferOneHistory, bScreenDiffuse, screenDiffuseHistory,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
-            skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f), maxRayRadiance = glm::max(maxRayRadiance, 0.0f)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_gather_shade"_sid);
         if (!pipelineEntry) {
             return;
@@ -207,10 +206,10 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .rayCount = gatherRayCount,
             .gatherScale = gatherScale,
             .touchEntries = bTouch ? graph.GetBufferAddress(touchEntries) : 0,
-            .touchKeys = bTouch ? graph.GetBufferAddress(touchKeys) : 0,
             .hitBuffer = graph.GetBufferAddress("gi_gather_hits"_sid),
             .bounceIntensity = bounceIntensity,
             .screenDiffuseHistoryIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(screenDiffuseHistory) : ~0x0u,
+            .maxRayRadiance = maxRayRadiance,
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (gatherExtent[0] + 7u) / 8u, (gatherExtent[1] + 7u) / 8u, 1);
@@ -326,6 +325,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.WriteStorageImage(GI_GATHER_FAST);
     upscale.WriteStorageImage(GI_GATHER_SKY_VIS_HISTORY);
     upscale.WriteStorageImage(GI_GATHER_NOISE);
+    upscale.WriteStorageImage(GI_GATHER_GUIDE_NORMAL);
 
     upscale.Execute([pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bFastHistory, bSkyVisHistory, bNoiseHistory, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, gatherHistory, fastHistory, skyVisHistory, noiseHistory, depthHistory, gbufferOneHistory,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
@@ -369,6 +369,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .skyVisOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY),
             .noiseHistoryIndex = bNoiseHistory ? graph.GetSampledImageViewDescriptorIndex(noiseHistory) : ~0x0u,
             .noiseOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_NOISE),
+            .guideNormalOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_GUIDE_NORMAL),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
@@ -378,10 +379,10 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     postBlur.ReadBuffer(SCENE_DATA_BUFFER);
     postBlur.ReadSampledImage(GI_GATHER_HISTORY);
     postBlur.ReadSampledImage(GI_GATHER_NOISE);
-    postBlur.ReadSampledImage(targets.gbufferOne);
+    postBlur.ReadSampledImage(GI_GATHER_GUIDE_NORMAL);
     postBlur.ReadSampledImage(targets.depthCopy);
     postBlur.WriteStorageImage(GI_GATHER_RESOLVED);
-    postBlur.Execute([pipelineManager, sceneIndex, renderExtent, gatherScale, frameNumber, gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    postBlur.Execute([pipelineManager, sceneIndex, renderExtent, gatherScale, frameNumber, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_post_blur"_sid);
         if (!pipelineEntry) {
             return;
@@ -395,7 +396,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .inputIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_HISTORY),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_RESOLVED),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-            .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
+            .guideNormalIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_GUIDE_NORMAL),
             .gatherScale = gatherScale,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .noiseIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_NOISE),
