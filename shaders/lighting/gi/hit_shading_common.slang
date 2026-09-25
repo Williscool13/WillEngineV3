@@ -72,48 +72,8 @@ public bool IsTwoSidedBackHit(ReflectionShadePushConstant pc, Instance instance,
     return dot(faceN, vertexN) * dot(faceN, rayDirection) > 0.0;
 }
 
-/**
- * One-sample RIS over the analytic lights binned into this cell, diffuse only.
- * Selection walks the bin with weighted reservoir sampling on the unshadowed punctual luma (arithmetic only, no rays), then the winner alone is
- * area-sampled and shadow-tested, so cost is one ray regardless of bin size. Returns sum_i f_i in expectation, since E[F_j * W/w_j] = sum_j (w_j/W) * F_j * (W/w_j).
- * @param rngSeed salted per shade event; the caller's sun samples use a different stream.
- */
-static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, LightData* lightData, uint tlasIndex, float3 worldPosition, float3 N, float3 V, float NoV, float3 albedo, float3 diffuseColor, float metallic, float roughness, uint rngSeed)
+static float3 ShadeSelectedLocalLight(LightInfo light, uint tlasIndex, float3 worldPosition, float3 N, float3 V, float NoV, float3 diffuseColor, float roughness, inout uint rng)
 {
-    WorldGridKey key = WorldGridResolveCell(worldPosition, worldGridLights.camPos);
-    uint2 gridEntry = worldGridLights.grid[key.cellIndex];
-    if (gridEntry.y == 0u) {
-        return float3(0.0);
-    }
-
-    float4x4 view = worldGridLights.view;
-    float3 viewPos = mul(view, float4(worldPosition, 1.0)).xyz;
-    float3 viewN = normalize(mul((float3x3)view, N));
-    float3 viewV = normalize(mul((float3x3)view, V));
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
-
-    uint rng = rngSeed ^ 0xA511E9B3u;
-    float wSum = 0.0;
-    float selectedWeight = 0.0;
-    uint selectedLight = 0u;
-    for (uint j = 0; j < gridEntry.y; j++) {
-        uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
-        PunctualLight punctual = DegenerateLight(lightData->lights[lightIndex], view);
-        float weight = Luma(ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo, metallic, roughness, F0));
-        if (weight <= 0.0) {
-            continue;
-        }
-        wSum += weight;
-        if (HashStep(rng) * wSum < weight) {
-            selectedWeight = weight;
-            selectedLight = lightIndex;
-        }
-    }
-    if (selectedWeight <= 0.0) {
-        return float3(0.0);
-    }
-
-    LightInfo light = lightData->lights[selectedLight];
     float u1 = HashStep(rng);
     float u2 = HashStep(rng);
     float3 lightSamplePos;
@@ -163,9 +123,63 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
         return float3(0.0);
     }
 
-    float3 contribution = diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist)
+    return diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist)
         * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * lightArea;
-    return contribution * (wSum / selectedWeight);
+}
+
+/**
+ * RIS over the analytic lights binned into this cell, diffuse only, sampleCount independent one-sample estimates averaged.
+ * One bin walk runs sampleCount weighted reservoirs on the unshadowed punctual luma (arithmetic only), then each winner is area-sampled and
+ * shadow-tested, so cost is sampleCount rays regardless of bin size. Each estimate returns sum_i f_i in expectation, since E[F_j * W/w_j] = sum_j (w_j/W) * F_j * (W/w_j).
+ * @param rngSeed salted per shade event; the caller's sun samples use a different stream.
+ * @param sampleCount clamped to [1, RADIANCE_CACHE_NEE_SAMPLES].
+ */
+static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, LightData* lightData, uint tlasIndex, float3 worldPosition, float3 N, float3 V, float NoV, float3 albedo, float3 diffuseColor, float metallic, float roughness, uint rngSeed, uint sampleCount)
+{
+    WorldGridKey key = WorldGridResolveCell(worldPosition, worldGridLights.camPos);
+    uint2 gridEntry = worldGridLights.grid[key.cellIndex];
+    if (gridEntry.y == 0u) {
+        return float3(0.0);
+    }
+    sampleCount = clamp(sampleCount, 1u, RADIANCE_CACHE_NEE_SAMPLES);
+
+    float4x4 view = worldGridLights.view;
+    float3 viewPos = mul(view, float4(worldPosition, 1.0)).xyz;
+    float3 viewN = normalize(mul((float3x3)view, N));
+    float3 viewV = normalize(mul((float3x3)view, V));
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+
+    uint rng = rngSeed ^ 0xA511E9B3u;
+    float wSum = 0.0;
+    float selectedWeight[RADIANCE_CACHE_NEE_SAMPLES];
+    uint selectedLight[RADIANCE_CACHE_NEE_SAMPLES];
+    for (uint s = 0u; s < RADIANCE_CACHE_NEE_SAMPLES; s++) {
+        selectedWeight[s] = 0.0;
+        selectedLight[s] = 0u;
+    }
+    for (uint j = 0; j < gridEntry.y; j++) {
+        uint lightIndex = worldGridLights.indexList[gridEntry.x + j];
+        PunctualLight punctual = DegenerateLight(lightData->lights[lightIndex], view);
+        float weight = Luma(ShadePunctualDiffuse(punctual, viewN, viewV, viewPos, albedo, metallic, roughness, F0));
+        if (weight <= 0.0) {
+            continue;
+        }
+        wSum += weight;
+        for (uint s = 0u; s < sampleCount; s++) {
+            if (HashStep(rng) * wSum < weight) {
+                selectedWeight[s] = weight;
+                selectedLight[s] = lightIndex;
+            }
+        }
+    }
+
+    float3 sum = float3(0.0);
+    for (uint s = 0u; s < sampleCount; s++) {
+        if (selectedWeight[s] > 0.0) {
+            sum += ShadeSelectedLocalLight(lightData->lights[selectedLight[s]], tlasIndex, worldPosition, N, V, NoV, diffuseColor, roughness, rng) * (wSum / selectedWeight[s]);
+        }
+    }
+    return sum / float(sampleCount);
 }
 
 /** Fallback for DDGI probe rays when the radiance cache has no slot for the hit: sun (shadow-ray tested) + emissive + one-sample RIS over the cell's analytic lights + IBL/DDGI feedback. Kept matched to ShadeRadianceCacheCell so cache-miss fallbacks agree with the cell values they stand in for. */
@@ -236,7 +250,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
         worldGridLights.camPos = pc.sceneData[0].cameraWorldPos.xyz;
         worldGridLights.grid = pc.worldGridBuffer;
         worldGridLights.indexList = pc.worldGridIndexList;
-        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed);
+        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed, 1u);
     }
 
     float3 indirectDiffuse = float3(0.0);
@@ -257,7 +271,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
             indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
         }
     }
-    radiance += diffuseColor * indirectDiffuse;
+    radiance += diffuseColor * OrenNayarDirectionalAlbedo(NoV, roughness) * indirectDiffuse;
     return radiance;
 }
 
@@ -402,7 +416,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     float4 gi = float4(0.0);
     if (pc.bDDGIApply != 0u) {
         gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.ddgiCascades, maxBias);
-        radiance += diffuseColor * gi.rgb;
+        radiance += diffuseColor * OrenNayarDirectionalAlbedo(NoV, roughness) * gi.rgb;
     }
 
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo.rgb, metallic);
@@ -501,7 +515,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         float NoL = dot(N, L);
         if (NoL > 0.0) {
             // Zero angular radius makes every cone sample identical; one ray suffices.
-            uint sampleCount = sun.angularRadius > 0.0 ? RADIANCE_CACHE_SUN_SAMPLES : 1u;
+            uint sampleCount = sun.angularRadius > 0.0 ? RADIANCE_CACHE_NEE_SAMPLES : 1u;
             float sunVisibility = 0.0;
             for (uint s = 0u; s < sampleCount; s++) {
                 uint rng = rngSeed ^ (s * 0x9E3779B9u);
@@ -534,7 +548,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         worldGridLights.camPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
         worldGridLights.grid = pc.worldGridBuffer;
         worldGridLights.indexList = pc.worldGridIndexList;
-        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed);
+        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed, RADIANCE_CACHE_NEE_SAMPLES);
     }
 
     float3 indirectDiffuse = float3(0.0);
@@ -555,6 +569,6 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
             indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
         }
     }
-    radiance += diffuseColor * indirectDiffuse;
+    radiance += diffuseColor * OrenNayarDirectionalAlbedo(NoV, roughness) * indirectDiffuse;
     return radiance;
 }

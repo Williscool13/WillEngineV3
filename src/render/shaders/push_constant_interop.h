@@ -688,7 +688,7 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC uint32_t reflectionProbeCount;
-    SHADER_PUBLIC uint32_t pad2;
+    SHADER_PUBLIC uint32_t diffuseRatioIndex;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
     SHADER_PUBLIC uint32_t sunVisIndex;
     SHADER_PUBLIC uint32_t tileCapacity;
@@ -850,7 +850,8 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(uint2) touchKeys;
     SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
     SHADER_PUBLIC float bounceIntensity;
-    SHADER_PUBLIC uint32_t pad0;
+    // Last frame's GI_SCREEN_DIFFUSE; ~0u falls back to lit history as-is (non-ReSTIR paths).
+    SHADER_PUBLIC uint32_t screenDiffuseHistoryIndex;
 };
 
 SHADER_PUBLIC struct GIDenoisePushConstant
@@ -902,6 +903,30 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
+    // Short (luma, count) history the temporal clamp bounds the long history against; ~0u history = none yet.
+    SHADER_PUBLIC uint32_t fastHistoryIndex;
+    SHADER_PUBLIC uint32_t fastOutIndex;
+};
+
+SHADER_PUBLIC struct GIPostBlurPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t inputIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t gatherScale;
+};
+
+SHADER_PUBLIC struct GITemporalClampPushConstant
+{
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t upscaledIndex;
+    SHADER_PUBLIC uint32_t fastIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t pad0;
 };
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
@@ -935,6 +960,9 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     // Traced reflections were already summed into the denoised specular channel at the lighting resolve; suppress the
     // separate reflection composite (and its probe/sky replacement) inside the traced roughness range.
     SHADER_PUBLIC uint32_t bReflectionMerged;
+    SHADER_PUBLIC uint32_t diffuseRatioIndex;
+    // Gather screen-tier source: Lambert direct irradiance/pi + indirect E/pi, pre-exposed; ~0u when the gather has no screen tier.
+    SHADER_PUBLIC uint32_t screenDiffuseOutIndex;
     SHADER_PUBLIC uint32_t padR0;
 };
 

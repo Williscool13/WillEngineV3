@@ -16,7 +16,6 @@ static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_TILE_RADIUS
 static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_DENOISE_NORMAL_POWER = 32.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
-static const float GI_DENOISE_FIREFLY_SCALE = 4.0;
 static const float GI_DENOISE_HITT_FAR_METERS = 8.0;
 
 groupshared uint2 sShR[GI_DENOISE_TILE * GI_DENOISE_GROUP];
@@ -25,7 +24,8 @@ groupshared uint2 sShB[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared uint sNormal[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sViewZ[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 groupshared float sHitT[GI_DENOISE_TILE * GI_DENOISE_GROUP];
-groupshared float sSkyVis[GI_DENOISE_TILE * GI_DENOISE_GROUP];
+// rgb = mean ray radiance (filtered like the SH), a = sky visibility.
+groupshared uint2 sMeanV[GI_DENOISE_TILE * GI_DENOISE_GROUP];
 
 [shader("compute")]
 [numthreads(GI_DENOISE_GROUP, GI_DENOISE_GROUP, 1)]
@@ -57,7 +57,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         // Far surface hits take the same opt-out. Past a few metres the exact distance carries no geometric correlation, but the edge-stop still reads the gap as a hard boundary and walls a far-bright outlier off from the near-dark neighbours that should average it down.
         bool bFarField = uint(data.y + 0.5) == GI_GATHER_TIER_SKY || data.x >= GI_DENOISE_HITT_FAR_METERS;
         sHitT[t] = bFarField ? -1.0 : data.x;
-        sSkyVis[t] = rdgTexturesFloat[pc.srcSkyVisIndex].Load(int3(p, 0)).r;
+        sMeanV[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcSkyVisIndex].Load(int3(p, 0)));
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -73,39 +73,27 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
     float4 sumR = UnpackHalf2x16Pair(sShR[centerIdx]);
     float4 sumG = UnpackHalf2x16Pair(sShG[centerIdx]);
     float4 sumB = UnpackHalf2x16Pair(sShB[centerIdx]);
-    float skyVis = sSkyVis[centerIdx];
+    float4 centerMeanV = UnpackHalf2x16Pair(sMeanV[centerIdx]);
+    float3 mean = centerMeanV.rgb;
+    float skyVis = centerMeanV.a;
     float centerViewZ = sViewZ[centerIdx];
     if (centerViewZ != 0.0) {
         float3 centerNormal = UnpackNormalOct16(sNormal[centerIdx]);
         float centerHitT = sHitT[centerIdx];
-        if (pc.stepSize == 1u) {
-            // Stabilize the edge-stop reference against 1spp hitT variance. First iteration only, later iterations read already-filtered SH.
-            float hitL = sViewZ[centerIdx - 1] != 0.0 && sHitT[centerIdx - 1] >= 0.0 ? sHitT[centerIdx - 1] : centerHitT;
-            float hitR = sViewZ[centerIdx + 1] != 0.0 && sHitT[centerIdx + 1] >= 0.0 ? sHitT[centerIdx + 1] : centerHitT;
-            centerHitT = min(centerHitT, min(hitL, hitR));
-
-            // Anti-firefly: a 1spp ray that lands on a tiny ultra-bright patch (e.g. an area light's floor-contact strip, radiance clamped only at 20) is spatially isolated.
-            // Max-channel, not Rec.709 luma: a blue outlier weighs 0.0722 there and would need ~10x the magnitude of a green one to trip the same cap.
-            float3 centerL0 = float3(sumR.x, sumG.x, sumB.x);
-            float centerMag = max(centerL0.r, max(centerL0.g, centerL0.b));
-            float maxNeighborMag = -1.0;
+        // hitT steers stride 1 only, from an averaged reference: raw 1spp hitT follows the noise, and at wider strides it collapsed the footprint near walls.
+        bool bHitTWeight = pc.stepSize == 1u && centerHitT >= 0.0;
+        if (bHitTWeight) {
+            float hitSum = centerHitT;
+            float hitCount = 1.0;
             [unroll]
-            for (int d = -GI_DENOISE_RADIUS; d <= GI_DENOISE_RADIUS; d++) {
-                if (d == 0) { continue; }
+            for (int d = -1; d <= 1; d += 2) {
                 uint idx = uint(int(centerIdx) + d);
-                if (sViewZ[idx] == 0.0) { continue; }
-                if (sSkyVis[idx] >= 0.999) { continue; }
-                float3 tapL0 = float3(UnpackHalf2x16Pair(sShR[idx]).x, UnpackHalf2x16Pair(sShG[idx]).x, UnpackHalf2x16Pair(sShB[idx]).x);
-                maxNeighborMag = max(maxNeighborMag, max(tapL0.r, max(tapL0.g, tapL0.b)));
+                if (sViewZ[idx] != 0.0 && sHitT[idx] >= 0.0) {
+                    hitSum += sHitT[idx];
+                    hitCount += 1.0;
+                }
             }
-            float magEps = 1e-3;
-            float magCap = maxNeighborMag * GI_DENOISE_FIREFLY_SCALE + magEps;
-            if (maxNeighborMag >= 0.0 && centerMag > magCap) {
-                float fireflyScale = magCap / centerMag;
-                sumR *= fireflyScale;
-                sumG *= fireflyScale;
-                sumB *= fireflyScale;
-            }
+            centerHitT = hitSum / hitCount;
         }
         uint2 centerFull = GIGatherRepresentativePixel(gatherPixel, pc.renderExtent, pc.gatherScale);
         float2 centerUv = (float2(centerFull) + 0.5) / float2(pc.renderExtent);
@@ -137,26 +125,29 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
             w *= pow(saturate(dot(centerNormal, tapNormal)), GI_DENOISE_NORMAL_POWER);
             // Sky visibility averages across the hit/miss boundary by design: geometric stops only, no hitT steering.
             float wV = w;
-            if (centerHitT >= 0.0 && tapHitT >= 0.0) {
+            if (bHitTWeight && tapHitT >= 0.0) {
                 w *= exp(-GI_DENOISE_HITT_SENSITIVITY * abs(tapHitT - centerHitT) / (max(centerHitT, tapHitT) + 0.25));
             }
 
+            float4 tapMeanV = UnpackHalf2x16Pair(sMeanV[idx]);
             sumR += UnpackHalf2x16Pair(sShR[idx]) * w;
             sumG += UnpackHalf2x16Pair(sShG[idx]) * w;
             sumB += UnpackHalf2x16Pair(sShB[idx]) * w;
+            mean += tapMeanV.rgb * w;
             sumW += w;
-            sumV += sSkyVis[idx] * wV;
+            sumV += tapMeanV.a * wV;
             sumWV += wV;
         }
         float invW = 1.0 / sumW;
         sumR *= invW;
         sumG *= invW;
         sumB *= invW;
+        mean *= invW;
         skyVis = sumV / sumWV;
     }
 
     rdgStorageFloat4[pc.dstShRIndex][gatherPixel] = sumR;
     rdgStorageFloat4[pc.dstShGIndex][gatherPixel] = sumG;
     rdgStorageFloat4[pc.dstShBIndex][gatherPixel] = sumB;
-    rdgStorageFloat[pc.dstSkyVisIndex][gatherPixel] = skyVis;
+    rdgStorageFloat4[pc.dstSkyVisIndex][gatherPixel] = float4(mean, skyVis);
 }

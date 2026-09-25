@@ -232,7 +232,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
                            const RenderTargets& targets,
                            uint32_t sceneIndex,
                            bool bReset,
-                           uint32_t accumulationCount,
+                           uint32_t& accumulationCount,
                            uint64_t frameNumber)
 {
     ZoneScoped;
@@ -242,8 +242,10 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion("rt_gt_di_accum"_sid, 0)) { bReset = true; }
-    graph.CreateVersionedBuffer("rt_gt_di_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("rt_gt_di_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    const bool bHistory = graph.ResourceHasBufferVersion("rt_gt_di_accum"_sid, bufferSize);
+    if (!bHistory) { bReset = true; }
+    if (bReset) { accumulationCount = 0; }
+    graph.CreateVersionedBuffer("rt_gt_di_accum"_sid, bufferSize, 0, bHistory ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass("RT GT DI Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
@@ -311,7 +313,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
                           const RenderTargets& targets,
                           uint32_t sceneIndex,
                           bool bReset,
-                          uint32_t accumulationCount,
+                          uint32_t& accumulationCount,
                           uint64_t frameNumber)
 {
     ZoneScoped;
@@ -321,8 +323,10 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion("rt_gt_gi_accum"_sid, 0)) { bReset = true; }
-    graph.CreateVersionedBuffer("rt_gt_gi_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("rt_gt_gi_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    const bool bHistory = graph.ResourceHasBufferVersion("rt_gt_gi_accum"_sid, bufferSize);
+    if (!bHistory) { bReset = true; }
+    if (bReset) { accumulationCount = 0; }
+    graph.CreateVersionedBuffer("rt_gt_gi_accum"_sid, bufferSize, 0, bHistory ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass("RT GT GI Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);
@@ -393,7 +397,7 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
                             const RenderTargets& targets,
                             uint32_t sceneIndex,
                             bool bReset,
-                            uint32_t accumulationCount,
+                            uint32_t& accumulationCount,
                             uint64_t frameNumber,
                             uint32_t samplesPerFrame)
 {
@@ -404,8 +408,10 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion("rt_gt_full_accum"_sid, 0)) { bReset = true; }
-    graph.CreateVersionedBuffer("rt_gt_full_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("rt_gt_full_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    const bool bHistory = graph.ResourceHasBufferVersion("rt_gt_full_accum"_sid, bufferSize);
+    if (!bHistory) { bReset = true; }
+    if (bReset) { accumulationCount = 0; }
+    graph.CreateVersionedBuffer("rt_gt_full_accum"_sid, bufferSize, 0, bHistory ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass("RT GT Full Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GroundTruth);

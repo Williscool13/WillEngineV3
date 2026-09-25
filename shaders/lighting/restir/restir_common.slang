@@ -63,6 +63,26 @@ public int2 OppositeFieldPixel(uint2 pixel, uint field)
     return p;
 }
 
+/** Lambert irradiance/pi over the resolved (kD * Oren-Nayar at the camera V) diffuse; turns the denoised diffuse DI into the view-independent term the gather's screen tier needs. Fills the inactive checkerboard partner; clamped because kD reaches zero at grazing Fresnel. */
+public void WriteDiffuseRatio(uint index, uint2 pixel, uint2 renderExtent, uint field, bool bFullRate, float resolved, float baseline)
+{
+    if (index == ~0x0u) {
+        return;
+    }
+    float ratio = resolved > 1e-6 ? clamp(baseline / resolved, 0.25, 4.0) : 1.0;
+    rdgStorageFloat[index][pixel] = ratio;
+    if (field == 0u || bFullRate) {
+        return;
+    }
+    int2 o = OppositeFieldPixel(pixel, field);
+    if (o.x >= 0 && o.x < int(renderExtent.x)) {
+        rdgStorageFloat[index][uint2(o)] = ratio;
+    }
+    if ((renderExtent.x & 1u) != 0u && pixel.x == renderExtent.x - 2u && ((pixel.y + field) & 1u) == 1u) {
+        rdgStorageFloat[index][uint2(renderExtent.x - 1u, pixel.y)] = ratio;
+    }
+}
+
 public struct LightView
 {
     public float3 center;

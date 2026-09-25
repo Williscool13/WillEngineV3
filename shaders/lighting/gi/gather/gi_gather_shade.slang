@@ -9,6 +9,7 @@ import constants_interop;
 import shader_functions;
 import packing_functions;
 import pbr_functions;
+import shader_constants;
 import random_common;
 import hit_shading_common;
 import radiance_cache_hash_common;
@@ -19,9 +20,11 @@ import reflection_probe_common;
 
 // =============== Shader Summary ============
 // One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: last frame's lit screen, else cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
-// Sky misses do not feed the SH; the miss fraction goes to a scalar sky-visibility channel, filtered separately and multiplied by prefiltered sky irradiance at upscale.
+// Sky misses do not feed the SH; the miss fraction goes to the sky-visibility texture's alpha (rgb = mean ray radiance), filtered separately and multiplied by prefiltered sky irradiance at upscale.
 
 static const float GI_GATHER_MAX_RADIANCE = 1310720.0;
+// Per-sample outlier cap relative to display white (Lumen's MaxRayIntensity idea); replaces the denoiser's neighbour-relative cap, which discarded real bounce from small bright sources.
+static const float GI_GATHER_MAX_EXPOSED_RADIANCE = 40.0;
 
 /** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
@@ -33,6 +36,7 @@ static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
 struct GatherHitSurface {
     float3 normal;
     float3 diffuseColor;
+    float roughness;
     bool bEmissive;
 };
 
@@ -61,6 +65,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     float mrRoughness;
     SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
     s.diffuseColor = albedo.rgb * (1.0 - metallic);
+    s.roughness = max(mrRoughness, MIN_ROUGHNESS);
     s.bEmissive = any(material.emissiveFactor.rgb * material.emissiveFactor.w > float3(0.0));
     return s;
 }
@@ -114,7 +119,8 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
             probeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
         }
         // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
-        radiance = hit.diffuseColor * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
+        // V = N, as the cache cell it stands in for.
+        radiance = hit.diffuseColor * OrenNayarDirectionalAlbedo(1.0, hit.roughness) * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
         tier = GI_GATHER_TIER_PROBE;
         if (probeBlend.indexA >= 0 && probeBlend.coverage > 0.5) {
             tier = GI_GATHER_TIER_BAKED;
@@ -137,6 +143,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
     float4 shR = float4(0.0);
     float4 shG = float4(0.0);
     float4 shB = float4(0.0);
+    float3 mean = float3(0.0);
     float2 data = float2(0.0, float(GI_GATHER_TIER_INVALID));
     uint2 guide = uint2(0u, 0u);
     float skyVis = 0.0;
@@ -155,10 +162,12 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
         float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
 
         uint rayCount = max(pc.rayCount, 1u);
+        bool bScreenDiffuse = pc.screenDiffuseHistoryIndex != ~0x0u;
         uint hitBase = (gatherPixel.y * pc.gatherExtent.x + gatherPixel.x) * rayCount;
         float4 sumR = float4(0.0);
         float4 sumG = float4(0.0);
         float4 sumB = float4(0.0);
+        float3 sumMean = float3(0.0);
         uint validCount = 0u;
         float skyVisSum = 0.0;
         float firstHitT = 0.0;
@@ -185,7 +194,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                     bFrontFace = true;
                 }
 
-                // Tier 0: last frame's on-screen lit color at the hit, when visible and geometry agrees.
+                // Tier 0: last frame's on-screen diffuse at the hit (ReSTIR: view-independent screen diffuse; otherwise lit color as-is), when visible and geometry agrees.
                 // Emission never rides the gather (emissive DI belongs to ReSTIR tri-lights, absent otherwise by design; probes carry the bounce), and lit history at an emitter contains its glow.
                 bool bResolved = false;
                 if (bFrontFace && !hit.bEmissive && pc.litHistoryIndex != ~0x0u) {
@@ -225,11 +234,15 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                                 if ((prevGt1.w & 2u) != 0u) {
                                     continue;
                                 }
-                                sum += rdgTexturesFloat4[pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
+                                sum += rdgTexturesFloat4[bScreenDiffuse ? pc.screenDiffuseHistoryIndex : pc.litHistoryIndex].Load(int3(corner, 0)).rgb * w;
                                 sumW += w;
                             }
                             if (sumW > 1e-3) {
                                 radiance = sum / (sumW * scene.prevPreExposure);
+                                if (bScreenDiffuse) {
+                                    // Same quantity the cache stores: Oren-Nayar at V = N is A(r) * Lambert.
+                                    radiance *= hit.diffuseColor * OrenNayarDirectionalAlbedo(1.0, hit.roughness);
+                                }
                                 tier = GI_GATHER_TIER_SCREEN;
                                 bResolved = true;
                             }
@@ -254,8 +267,8 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                 tier = GI_GATHER_TIER_SKY;
             }
 
-            // Prescaled so eval at n is sh.x + dot(sh.yzw, n) = E/pi; the NoD clamp bounds the 1/pdf weight (eval amplification capped ~1.5x).
-            radiance = GIGatherClampRadiance(radiance, GI_GATHER_MAX_RADIANCE);
+            // The SH carries only the directional tilt; the plain mean of the cosine-sampled radiance is the unbiased E/pi at worldN (GIGatherEvaluate).
+            radiance = GIGatherClampRadiance(radiance, min(GI_GATHER_MAX_RADIANCE, GI_GATHER_MAX_EXPOSED_RADIANCE / scene.preExposure));
             float NoD = max(dot(worldN, direction), 0.25);
             float l0 = 0.25 / NoD;
             float3 l1 = direction * (0.5 / NoD);
@@ -269,6 +282,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                 sumR += float4(radiance.r * l0, radiance.r * l1);
                 sumG += float4(radiance.g * l0, radiance.g * l1);
                 sumB += float4(radiance.b * l0, radiance.b * l1);
+                sumMean += radiance;
                 validCount += 1u;
             }
         }
@@ -278,6 +292,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
             shR = sumR * invCount;
             shG = sumG * invCount;
             shB = sumB * invCount;
+            mean = sumMean * invCount;
             data = float2(firstHitT, float(firstTier));
         } else {
             data = float2(lastHitT, float(lastTier));
@@ -290,5 +305,5 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
     rdgStorageFloat4[pc.shBIndex][gatherPixel] = shB;
     rdgStorageFloat2[pc.dataIndex][gatherPixel] = data;
     rdgStorageUInt2[pc.guideOutIndex][gatherPixel] = guide;
-    rdgStorageFloat[pc.skyVisIndex][gatherPixel] = skyVis;
+    rdgStorageFloat4[pc.skyVisIndex][gatherPixel] = float4(mean, skyVis);
 }

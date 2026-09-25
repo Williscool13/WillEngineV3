@@ -606,7 +606,12 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 
         const StringID shadows = targets.shadows;
 
+        const bool bScreenDiffuse = graph.HasTexture(RESTIR_DIFFUSE_RATIO) && graph.HasTexture(GI_SCREEN_DIFFUSE);
         auto& pass = graph.AddPass("[ReLAX] Remodulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
+        if (bScreenDiffuse) {
+            pass.ReadSampledImage(RESTIR_DIFFUSE_RATIO);
+            pass.WriteStorageImage(GI_SCREEN_DIFFUSE);
+        }
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadBuffer(LIGHT_DATA_BUFFER);
         pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
@@ -634,7 +639,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
         const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
         const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute, bScreenDiffuse](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -663,6 +668,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
+                .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
+                .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(GI_SCREEN_DIFFUSE) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -1227,7 +1234,12 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 
         const StringID shadows = targets.shadows;
 
+        const bool bScreenDiffuse = graph.HasTexture(RESTIR_DIFFUSE_RATIO) && graph.HasTexture(GI_SCREEN_DIFFUSE);
         auto& pass = graph.AddPass("[ReBLUR] Remodulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
+        if (bScreenDiffuse) {
+            pass.ReadSampledImage(RESTIR_DIFFUSE_RATIO);
+            pass.WriteStorageImage(GI_SCREEN_DIFFUSE);
+        }
         pass.ReadBuffer(SCENE_DATA_BUFFER);
         pass.ReadBuffer(LIGHT_DATA_BUFFER);
         pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
@@ -1255,7 +1267,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const int32_t skyboxIndex = viewFamily.skyboxIndex;
         const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
         const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute, bScreenDiffuse](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
@@ -1284,6 +1296,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
+                .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
+                .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(GI_SCREEN_DIFFUSE) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

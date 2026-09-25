@@ -1959,7 +1959,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (Widgets::Checkbox("Infinite Bounce##ddgi", &ddgi.bInfiniteBounce,
                                   "Ray hits also sample last frame's probe atlas, so light keeps bouncing (one extra bounce lands per frame, damped by hysteresis). Also gives area/sphere lights indirect, since probes see their proxies directly.")) { changed = true; }
             ddgiF("Bounce Intensity##ddgi", &ddgi.bounceIntensity, ddgiDefaults.bounceIntensity, 0.0f, 1.0f, "%.2f",
-                  "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce (can run away in red/boxed geometry). Default 0.75.");
+                  "Scales the DDGI feedback term fed back into the radiance cache / probes. This is the cache<->DDGI feedback loop, so <1 bounds the loop gain: keeps enclosed high-albedo scenes from saturating and self-lighting. 1 = physically full multi-bounce. Default 1.");
             ddgiF("Max Ray Radiance##ddgi", &ddgi.maxRayRadiance, ddgiDefaults.maxRayRadiance, 0.0f, 6553600.0f, "%.0f", "Firefly clamp: hit radiance above this (max channel) is scaled down before blending, taming NEE light-selection spikes and rare bright emissive hits. Dims indirect from very bright small sources. 0 = off. Default 1310720.");
 
             Widgets::SubHeader("Blend");
@@ -1984,14 +1984,14 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             int cacheAccumCap = static_cast<int>(ddgi.radianceCacheAccumCap);
             if (Widgets::SliderInt("Cache Accum Frames##ddgi", &cacheAccumCap, 1, 64, {
-                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance. Shade events at 60 fps, scaled with frame rate. Default 4.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
+                                       .tooltip = "Running-mean window cap for cache cell radiance: each shade event blends 1/(count+1) up to this. Lower = faster response, more variance. Shade events at 60 fps, scaled up with frame rate, never below this. Default 8.", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.radianceCacheAccumCap)
                                    })) {
                 ddgi.radianceCacheAccumCap = static_cast<uint32_t>(cacheAccumCap);
                 changed = true;
             }
             ddgiF("Irradiance Gamma##ddgi", &ddgi.irradianceGamma, ddgiDefaults.irradianceGamma, 1.0f, 10.0f, "%.1f", "Perceptual encoding exponent: the atlas stores pow(E, 1/gamma) and blends in that space, so rare bright rays (sky through a small opening) cannot pulse the average. 1 = linear. Default 5.");
-            ddgiF("Irradiance Threshold##ddgi", &ddgi.irradianceThreshold, ddgiDefaults.irradianceThreshold, 0.0f, 10.0f, "%.2f", "Encoded-space darkening that counts as a real lighting change (lights turning off, the low-variance direction; RTXGI): hysteresis drops by 0.75 so the probe re-converges fast. Brightening spikes stay damped by hysteresis + the delta clamp. Default 2.30.");
-            ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 10.0f, "%.2f", "Encoded-space per-frame change clamp: deltas above this are scaled to 25% (firefly/pulse suppression). Default 0.92.");
+            ddgiF("Irradiance Threshold##ddgi", &ddgi.irradianceThreshold, ddgiDefaults.irradianceThreshold, 0.0f, 1.0f, "%.2f", "Darkening, as a fraction of the previous value, that counts as a real lighting change (lights turning off; RTXGI): hysteresis drops by 0.75 so the probe re-converges fast. Default 0.90.");
+            ddgiF("Brightness Threshold##ddgi", &ddgi.brightnessThreshold, ddgiDefaults.brightnessThreshold, 0.0f, 10.0f, "%.2f", "Per-update brightening, as a multiple of the previous value, above which the delta is scaled to 25% (firefly/pulse suppression). Default 2.00.");
             ddgiF("Distance Exponent##ddgi", &ddgi.distanceExponent, ddgiDefaults.distanceExponent, 1.0f, 100.0f, "%.0f", "Sharpness of the cosine lobe used when integrating ray distances into the visibility atlas; higher = tighter Chebyshev occlusion, more leak-proof but noisier. Default 50.");
 
             Widgets::SubHeader("Sampling");

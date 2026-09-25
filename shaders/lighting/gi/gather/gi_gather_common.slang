@@ -30,6 +30,18 @@ public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent, 
     return min(gatherPixel * gatherScale + (gatherScale >> 1u), renderExtent - 1u);
 }
 
+/**
+ * E/pi at evalN from filtered gather SH plus the filtered mean ray radiance: mean is the unbiased E/pi at the gather normal gatherN,
+ * the SH only supplies the tilt ratio SH(evalN)/SH(gatherN). The L1 kernel (1/4 + c/2) bounds that ratio to [0, 3].
+ */
+public float3 GIGatherEvaluate(float4 shR, float4 shG, float4 shB, float3 mean, float3 gatherN, float3 evalN)
+{
+    float3 atEval = float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN));
+    float3 atGather = float3(shR.x + dot(shR.yzw, gatherN), shG.x + dot(shG.yzw, gatherN), shB.x + dot(shB.yzw, gatherN));
+    float3 ratio = select(atGather > float3(1e-6), clamp(atEval / max(atGather, float3(1e-6)), float3(0.0), float3(3.0)), float3(1.0));
+    return max(mean, float3(0.0)) * ratio;
+}
+
 /** Bilinear-samples the half-res gather SH, evaluated at the pixel's world normal; returns indirectDiffuse (E/pi). */
 public float3 GIGatherIndirectDiffuse(uint shRIndex, uint shGIndex, uint shBIndex, float2 uv, float3 worldN)
 {

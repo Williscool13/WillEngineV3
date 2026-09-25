@@ -3,11 +3,11 @@ bApplyToLighting|1
 bEnabled|1
 bInfiniteBounce|1
 bRelocation|1
-brightnessThreshold|0x3f6b40e1
+brightnessThreshold|0x40000000
 distanceExponent|0x42480000
 hysteresis|0x3f7851ec
 irradianceGamma|0x40a00000
-irradianceThreshold|0x4013088c
+irradianceThreshold|0x3f666666
 minFrontfaceDistance|0x3e99999a
 normalBias|0x3dcccccd
 probeCountX|24

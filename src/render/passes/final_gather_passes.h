@@ -17,6 +17,8 @@ namespace Render
 {
 class PipelineManager;
 
+inline const StringID RESTIR_DIFFUSE_RATIO = "restir_diffuse_ratio"_sid;
+inline const StringID GI_SCREEN_DIFFUSE = "gi_screen_diffuse"_sid;
 inline const StringID GI_GATHER_SH_R = "gi_gather_sh_r"_sid;
 inline const StringID GI_GATHER_SH_G = "gi_gather_sh_g"_sid;
 inline const StringID GI_GATHER_SH_B = "gi_gather_sh_b"_sid;
@@ -32,6 +34,9 @@ inline const StringID GI_GATHER_SKY_VIS = "gi_gather_sky_vis"_sid;
 inline const StringID GI_GATHER_RAW_SKY_VIS = "gi_gather_raw_sky_vis"_sid;
 inline const StringID GI_GATHER_TMP_SKY_VIS = "gi_gather_tmp_sky_vis"_sid;
 inline const StringID GI_GATHER_RESOLVED = "gi_gather_resolved"_sid;
+inline const StringID GI_GATHER_HISTORY = "gi_gather_history"_sid;
+inline const StringID GI_GATHER_UPSCALED = "gi_gather_upscaled"_sid;
+inline const StringID GI_GATHER_FAST = "gi_gather_fast"_sid;
 inline const StringID OBJECT_MOTION = "object_motion"_sid;
 inline const StringID GI_DECONSTRUCT_TARGET = "gi_deconstruct_target"_sid;
 inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;

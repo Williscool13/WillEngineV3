@@ -9,14 +9,14 @@ bGatherSkipRay|0
 bInfiniteBounce|1
 bRelocation|1
 bScaleBiasPerCascade|1
-bounceIntensity|0x3f400000
-brightnessThreshold|0x3f6b40e1
+bounceIntensity|0x3f800000
+brightnessThreshold|0x40000000
 cascadeCount|6
 distanceExponent|0x42480000
 edgeBlendCells|0x407dd49c
 hysteresis|0x3f7851ec
 irradianceGamma|0x40a00000
-irradianceThreshold|0x4013088c
+irradianceThreshold|0x3f666666
 maxRayRadiance|0x49a00000
 minFrontfaceDistance|0x3e4ccccd
 normalBias|0x3e99999a

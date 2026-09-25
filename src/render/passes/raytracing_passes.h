@@ -59,6 +59,7 @@ void SetupRTSunShadow(RenderGraph& graph,
  * RT ground truth direct illumination via next-event estimation.
  * Casts one shadow ray per pixel per frame toward a randomly sampled area light, evaluates PBR BRDF if visible, and accumulates into a persistent buffer.
  * Returns whether the pass was scheduled; callers must only advance the accumulation count on true or skipped frames get averaged in as zeros.
+ * The GT passes zero accumulationCount whenever the accumulation buffer is reset or recreated.
  */
 bool SetupRTGroundTruthDI(RenderGraph& graph,
                            PipelineManager* pipelineManager,
@@ -67,7 +68,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
                            const RenderTargets& targets,
                            uint32_t sceneIndex,
                            bool bReset,
-                           uint32_t accumulationCount,
+                           uint32_t& accumulationCount,
                            uint64_t frameNumber);
 
 /**
@@ -82,7 +83,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
                           const RenderTargets& targets,
                           uint32_t sceneIndex,
                           bool bReset,
-                          uint32_t accumulationCount,
+                          uint32_t& accumulationCount,
                           uint64_t frameNumber);
 
 /**
@@ -98,7 +99,7 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
                             const RenderTargets& targets,
                             uint32_t sceneIndex,
                             bool bReset,
-                            uint32_t accumulationCount,
+                            uint32_t& accumulationCount,
                             uint64_t frameNumber,
                             uint32_t samplesPerFrame);
 

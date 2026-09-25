@@ -5,7 +5,7 @@ import bindless_declarations;
 import shader_functions;
 
 // =============== Shader Summary ============
-// DDGI blend irradiance: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in that perceptual space with RTXGI's change/brightness thresholds. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
+// DDGI blend irradiance: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in linear space with RTXGI's change/brightness thresholds taken relative to the previous value. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
 // Atlas alpha carries the variance guide: relative deviation of ray luma over the probe's ray set, EMA'd with the same hysteresis. It predicts how noisy a 1spp cosine gather is near this probe (spiky incident light -> high), and only steers denoiser thresholds, so it needs to be monotonic, not calibrated.
 
 static float DDGIMaxComponent(float3 v)
@@ -72,10 +72,8 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
             lumaSqSum += luma * luma;
             validRays += 1.0;
         }
-        // The EMA runs in perceptual space (pow 1/gamma): a rare bright ray moves the encoded value little, so small
-        // sky apertures stop pulsing. Thresholds and the delta clamp follow RTXGI's probe blending.
+        // pow(1/gamma) is storage only; blending in that space converges to (E[x^(1/gamma)])^gamma < E[x] and loses rare bright rays.
         float3 result = weightSum > 1e-4 ? radianceSum / weightSum : float3(0.0);
-        result = pow(result, 1.0 / pc.volume.irradianceGamma);
 
         float guide = 0.0;
         if (validRays > 1.0) {
@@ -87,33 +85,36 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         if (pc.bHistoryValid != 0) {
             if (bSameCellPrev) {
                 float4 previous = rdgStorageFloat4[pc.atlasInIndex][uint2(tileOrigin + texel)];
+                float3 previousLinear = pow(max(previous.rgb, float3(0.0)), pc.volume.irradianceGamma);
 
                 if (pc.bRestartValid != 0 && pc.probeRestart[probeIndex] != 0) {
                     // Relocation teleport or revival is a real change, not noise; skip the anti-flicker clamps.
-                    result = lerp(result, previous.rgb, max(pc.hysteresis - 0.75, 0.0));
+                    result = lerp(result, previousLinear, max(pc.hysteresis - 0.75, 0.0));
                     guide = lerp(guide, previous.a, max(pc.hysteresis - 0.75, 0.0));
                 } else {
+                    // Thresholds are fractions of the previous value, so they behave the same at any scene brightness.
+                    float previousMax = DDGIMaxComponent(previousLinear);
                     float hysteresis = pc.hysteresis;
-                    if (DDGIMaxComponent(previous.rgb - result) > pc.irradianceThreshold) {
+                    if (DDGIMaxComponent(previousLinear - result) > pc.irradianceThreshold * previousMax) {
                         // Never fully discard history here; a 1spp update is too noisy to trust alone.
                         hysteresis = max(hysteresis - 0.75, 0.1);
                     }
-                    float3 delta = result - previous.rgb;
-                    if (DDGIMaxComponent(delta) > pc.brightnessThreshold) {
+                    float3 delta = result - previousLinear;
+                    if (DDGIMaxComponent(delta) > pc.brightnessThreshold * previousMax) {
                         delta *= 0.25;
                     }
                     float3 lerpDelta = (1.0 - hysteresis) * delta;
-                    if (DDGIMaxComponent(result) < DDGIMaxComponent(previous.rgb)) {
-                        const float minDarkeningStep = 9.1896 / 1024.0;
+                    if (DDGIMaxComponent(result) < previousMax) {
+                        float minDarkeningStep = previousMax / 1024.0;
                         lerpDelta = min(max(float3(minDarkeningStep), abs(lerpDelta)), abs(delta)) * sign(lerpDelta);
                     }
-                    result = previous.rgb + lerpDelta;
+                    result = previousLinear + lerpDelta;
                     // Guide EMA keeps the base hysteresis even when the irradiance thresholds fire: a lighting step spikes the single-frame deviation estimate, and letting that spike through would loosen the gather clamps in the exact frames they must catch the change.
                     guide = lerp(guide, previous.a, pc.hysteresis);
                 }
             }
         }
-        gsTexels[threadIndex] = float4(result, guide);
+        gsTexels[threadIndex] = float4(pow(max(result, float3(0.0)), 1.0 / pc.volume.irradianceGamma), guide);
     }
     GroupMemoryBarrierWithGroupSync();
 

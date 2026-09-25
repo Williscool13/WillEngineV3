@@ -626,6 +626,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && ((bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace)) || bFsr2Reactive);
     if (bSnapshotLitColor) {
         renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (bGIGatherScreenSpace && viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
+            renderGraph->CreateTexture(RESTIR_DIFFUSE_RATIO, TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+            renderGraph->CreateVersionedTexture(GI_SCREEN_DIFFUSE, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        }
     }
 
     renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0,
@@ -676,7 +680,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos, framerateScale);
                 ddgiPreviousCascades = ddgiCascades;
                 const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
-                const auto radianceCacheAccumCap = static_cast<uint32_t>(static_cast<float>(frameBuffer.ddgi.radianceCacheAccumCap) * framerateScale + 0.5f);
+                // Never below the configured cap: at low fps the cell responds slower instead of getting noisier.
+                const auto radianceCacheAccumCap = glm::max(static_cast<uint32_t>(static_cast<float>(frameBuffer.ddgi.radianceCacheAccumCap) * framerateScale + 0.5f), frameBuffer.ddgi.radianceCacheAccumCap);
                 SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance, frameBuffer.ddgi.bounceIntensity, radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
                 if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer("readback_buffer"_sid)) {
                     RenderPass& wcStatsReadback = renderGraph->AddPass("Radiance Cache Stats Readback"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);

@@ -155,7 +155,12 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         if (pc.shadowsIndex != ~0x0u) {
             gtao = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).y;
         }
-        ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * albedo * gtao + reflectionSpecular;
+        ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * albedo * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + reflectionSpecular;
+    }
+
+    if (pc.screenDiffuseOutIndex != ~0x0u) {
+        float ratio = rdgTexturesFloat[pc.diffuseRatioIndex].Load(int3(pixel, 0)).r;
+        rdgStorageFloat4[pc.screenDiffuseOutIndex][pixel] = float4((diffuse * ratio + indirectDiffuse) * scene.preExposure, 1.0);
     }
 
     float3 finalColor;

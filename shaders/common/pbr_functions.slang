@@ -188,6 +188,20 @@ public float Diffuse_OrenNayar(float NdotL, float NdotV, float3 L, float3 V, flo
     return (A + B * s / t) / PI;
 }
 
+/** Directional albedo of Diffuse_OrenNayar: the cosine-weighted hemispherical integral of the BRDF, i.e. what multiplies albedo * E/pi under uniform incident radiance. Closed form of this exact formulation (A at NdotV = 1). */
+public float OrenNayarDirectionalAlbedo(float NdotV, float roughness) {
+    float a = roughness * roughness;
+    float A = 1.0f - 0.5f * a / (a + 0.33f);
+    float B = 0.45f * a / (a + 0.09f);
+    float c = clamp(NdotV, 1e-4f, 1.0f);
+    float thetaV = acos(c);
+    float sinV = sqrt(max(1.0f - c * c, 0.0f));
+    float sin3 = sinV * sinV * sinV;
+    float inner = 0.5f * thetaV - 0.5f * sinV * c - sin3 / 3.0f;
+    float outer = (1.0f / c - 1.0f) * (1.0f - sin3) / 3.0f;
+    return A + 2.0f * B * sinV * (inner + outer) / PI;
+}
+
 /** Disney diffuse (Burley 2012); Fresnel-based retroreflection peak and grazing darkening. Returns BRDF value (PI division included). @param VdotH dot(V, H) */
 public float Diffuse_Disney(float NdotL, float NdotV, float VdotH, float roughness) {
     float FD90 = 0.5f + 2.0f * roughness * VdotH * VdotH;

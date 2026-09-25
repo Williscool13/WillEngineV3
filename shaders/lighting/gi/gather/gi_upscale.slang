@@ -10,12 +10,13 @@ import ddgi_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 
-// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 gather-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection.
+// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 gather-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection. Also updates the short fast-luma history that gi_temporal_clamp bounds this result against.
 
 static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
+static const float GI_UPSCALE_FAST_ACCUM = 6.0;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -55,6 +56,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
     if (depth <= 0.0 || (gt1.w & 1u) == 0u) {
         rdgStorageFloat4[pc.outputIndex][pixel] = float4(0.0);
+        rdgStorageFloat2[pc.fastOutIndex][pixel] = float2(0.0);
         return;
     }
 
@@ -81,11 +83,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float4 shR = float4(0.0);
     float4 shG = float4(0.0);
     float4 shB = float4(0.0);
+    float3 mean = float3(0.0);
     float sumW = 0.0;
     float sumV = 0.0;
     float4 fbShR = float4(0.0);
     float4 fbShG = float4(0.0);
     float4 fbShB = float4(0.0);
+    float3 fbMean = float3(0.0);
     float fbW = 0.0;
     float fbV = 0.0;
     float2 gatherCoord = (float2(pixel) + 0.5) / float(pc.gatherScale);
@@ -96,10 +100,6 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     uint4 footprintNormals = rdgTexturesUInt2[pc.guideIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
     uint4 footprintViewZBits = rdgTexturesUInt2[pc.guideIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
     float4 footprintTiers = rdgTexturesFloat2[pc.dataIndex].GatherGreen(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
-    float4 footprintSkyVis = float4(0.0);
-    if (pc.skyVisIndex != ~0x0u) {
-        footprintSkyVis = rdgTexturesFloat[pc.skyVisIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], footprintUv).wzxy;
-    }
     [unroll]
     for (uint i = 0; i < 4; i++) {
         int2 tap = clamp(footprintBase + int2(int(i & 1u), int(i >> 1u)), int2(0), int2(pc.gatherExtent) - 1);
@@ -114,23 +114,26 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, tapUv, tapViewZ);
         float3 tapNormal = UnpackNormalOct16(tapGuide.x);
 
-        float w = exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
+        float2 bw2 = lerp(1.0 - footprintFrac, footprintFrac, float2(float(i & 1u), float(i >> 1u)));
+        float bw = bw2.x * bw2.y;
+        float w = bw * exp(-abs(dot(centerNormal, tapXv - centerXv)) * invPlaneSigma);
         w *= pow(saturate(dot(centerNormal, tapNormal)), GI_UPSCALE_NORMAL_POWER);
 
         float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
         float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
         float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
-        float tapV = footprintSkyVis[i];
+        float4 tapMeanV = rdgTexturesFloat4[pc.skyVisIndex].Load(int3(tap, 0));
+        float tapV = tapMeanV.a;
         shR += tapShR * w;
         shG += tapShG * w;
         shB += tapShB * w;
+        mean += tapMeanV.rgb * w;
         sumW += w;
         sumV += tapV * w;
-        float2 bw2 = lerp(1.0 - footprintFrac, footprintFrac, float2(float(i & 1u), float(i >> 1u)));
-        float bw = bw2.x * bw2.y;
         fbShR += tapShR * bw;
         fbShG += tapShG * bw;
         fbShB += tapShB * bw;
+        fbMean += tapMeanV.rgb * bw;
         fbW += bw;
         fbV += tapV * bw;
     }
@@ -141,13 +144,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 current;
     if (sumW > 1e-4) {
         float invW = 1.0 / sumW;
-        current = max(float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN)) * invW, float3(0.0));
+        current = GIGatherEvaluate(shR, shG, shB, mean * invW, worldN, evalN);
         skyVisCurrent = sumV * invW;
         bSkyCurrent = true;
     } else if (fbW > 1e-4) {
         // All taps guide-rejected but valid geometry exists (sub-half-res features: slots, trim): bilinear over the valid taps only. A single best tap is quad-constant and shows as 2x2 blocks; bilinear is continuous, and backface/sky texels never enter (validity-gated above).
         float invW = 1.0 / fbW;
-        current = max(float3(fbShR.x + dot(fbShR.yzw, evalN), fbShG.x + dot(fbShG.yzw, evalN), fbShB.x + dot(fbShB.yzw, evalN)) * invW, float3(0.0));
+        current = GIGatherEvaluate(fbShR, fbShG, fbShB, fbMean * invW, worldN, evalN);
         skyVisCurrent = fbV * invW;
         bSkyCurrent = true;
     } else if (!bAnyBackfaceTap) {
@@ -158,10 +161,17 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     GIGatherHistory history = { float3(0.0), 0.0, 0.0 };
+    GIGatherScalarHistory fastHistory = { 0.0, 0.0, 0.0 };
     if (pc.bHistoryValid != 0u) {
         float NoV = saturate(abs(dot(centerNormal, normalize(centerXv))));
-        history = GIGatherFetchHistory(scene, pc.historyIndex, pc.depthIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        GIGatherHistoryTaps taps = GIGatherResolveHistoryTaps(scene, pc.depthIndex, pc.depthHistoryIndex, pc.gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, pc.renderExtent);
+        history = GIGatherFetchHistory(taps, pc.historyIndex, pc.renderExtent);
         history.color *= historyRatio;
+        if (pc.fastHistoryIndex != ~0x0u) {
+            fastHistory = GIGatherFetchScalarHistory(taps, pc.fastHistoryIndex);
+            fastHistory.value *= historyRatio;
+            fastHistory.count *= taps.countScale;
+        }
     }
 
     float n = min(history.count, (GI_GATHER_MAX_ACCUM - 1.0) * scene.framerateScale);
@@ -195,10 +205,9 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
                     float4 tapShR = rdgTexturesFloat4[pc.shRIndex].Load(int3(tap, 0));
                     float4 tapShG = rdgTexturesFloat4[pc.shGIndex].Load(int3(tap, 0));
                     float4 tapShB = rdgTexturesFloat4[pc.shBIndex].Load(int3(tap, 0));
-                    fixSum += max(float3(tapShR.x + dot(tapShR.yzw, evalN), tapShG.x + dot(tapShG.yzw, evalN), tapShB.x + dot(tapShB.yzw, evalN)), float3(0.0)) * w;
-                    if (pc.skyVisIndex != ~0x0u) {
-                        fixV += rdgTexturesFloat[pc.skyVisIndex].Load(int3(tap, 0)).r * w;
-                    }
+                    float4 tapMeanV = rdgTexturesFloat4[pc.skyVisIndex].Load(int3(tap, 0));
+                    fixSum += GIGatherEvaluate(tapShR, tapShG, tapShB, tapMeanV.rgb, worldN, evalN) * w;
+                    fixV += tapMeanV.a * w;
                     fixW += w;
                 }
             }
@@ -227,4 +236,13 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
 
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(result, accum);
+
+    float nFast = min(fastHistory.count, (GI_UPSCALE_FAST_ACCUM - 1.0) * scene.framerateScale) * fastHistory.quality;
+    float fastLuma = fastHistory.value;
+    float fastCount = max(nFast, 1.0);
+    if (bHasCurrent) {
+        fastLuma = (nFast * fastHistory.value + Luma(current)) / (nFast + 1.0);
+        fastCount = nFast + 1.0;
+    }
+    rdgStorageFloat2[pc.fastOutIndex][pixel] = float2(fastLuma, fastCount);
 }

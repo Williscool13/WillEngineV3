@@ -2044,6 +2044,12 @@ bool RenderGraph::ResourceHasVersion(StringID name, uint32_t age)
     return ring != nullptr && age <= ring->depth && ring->versions[age].IsValid();
 }
 
+bool RenderGraph::ResourceHasBufferVersion(StringID name, VkDeviceSize size)
+{
+    const ResourceRing* ring = FindRing(name);
+    return ring != nullptr && !ring->bImage && !ring->bTLAS && ring->bufferSize == size && ring->versions[0].IsValid();
+}
+
 void RenderGraph::ValidateAsyncHazards(uint64_t currentFrame)
 {
 #ifdef WDEBUG

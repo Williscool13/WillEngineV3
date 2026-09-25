@@ -174,6 +174,9 @@ public: // Rings
     /** @returns true when that version holds a produced physical. Age 0 is pending on a shifting source until frame end, so it answers "was anything produced before" on the no-shift sources */
     [[nodiscard]] bool ResourceHasVersion(StringID name, uint32_t age);
 
+    /** @returns true when the buffer ring holds a produced age-0 version of exactly this size; redeclaring with another size drops it. */
+    [[nodiscard]] bool ResourceHasBufferVersion(StringID name, VkDeviceSize size);
+
 public: // Pass setup
     RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, RenderCategory category);
 

@@ -424,6 +424,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .lightSpecularFromReflectionsMax = lightSpecularFromReflectionsMax,
                     .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
+                    .diffuseRatioIndex = ~0x0u,
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };
@@ -440,15 +441,17 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   bool bReset,
-                                  uint32_t accumulationCount,
+                                  uint32_t& accumulationCount,
                                   uint64_t frameNumber)
 {
     ZoneScoped;
     const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
-    if (!graph.ResourceHasVersion("gt_accum"_sid, 0)) { bReset = true; }
-    graph.CreateVersionedBuffer("gt_accum"_sid, bufferSize, 0, graph.ResourceHasVersion("gt_accum"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
+    const bool bHistory = graph.ResourceHasBufferVersion("gt_accum"_sid, bufferSize);
+    if (!bHistory) { bReset = true; }
+    if (bReset) { accumulationCount = 0; }
+    graph.CreateVersionedBuffer("gt_accum"_sid, bufferSize, 0, bHistory ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
 
     if (bReset) {
         RenderPass& clearPass = graph.AddPass("GT Accum Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::GroundTruth);

@@ -481,16 +481,16 @@ struct DDGIParams
     uint32_t outerRaysPerProbe{64};
     bool bClassification{true};
     bool bInfiniteBounce{true};
-    float bounceIntensity{0.75f};
+    float bounceIntensity{1.0f};
     float maxRayRadiance{1310720.0f};
     uint32_t radianceCacheShadeInterval{8};
-    uint32_t radianceCacheAccumCap{4};
+    uint32_t radianceCacheAccumCap{8};
 
     float hysteresis{0.97f};
     float visibilityHysteresis{0.97f};
     float irradianceGamma{5.0f};
-    float irradianceThreshold{2.297f};
-    float brightnessThreshold{0.919f};
+    float irradianceThreshold{0.9f};
+    float brightnessThreshold{2.0f};
     float distanceExponent{50.0f};
 
     bool bApplyToLighting{true};

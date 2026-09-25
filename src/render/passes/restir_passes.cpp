@@ -566,7 +566,11 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     }
     lightingResolve.WriteStorageImage(targets.intermediateOne);
     lightingResolve.WriteStorageImage(targets.intermediateTwo);
-    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent,
+    const bool bDiffuseRatio = graph.HasTexture(RESTIR_DIFFUSE_RATIO);
+    if (bDiffuseRatio) {
+        lightingResolve.WriteStorageImage(RESTIR_DIFFUSE_RATIO);
+    }
+    lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, bDiffuseRatio,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
             diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
@@ -608,6 +612,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .reflectionIndex = bMergedReflections ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET) : ~0x0u,
                     .bFullRateResolve = fullRate,
                     .lightSpecularFromReflectionsMax = ComputeLightSpecularFromReflectionsMax(reflectionConfig),
+                    .diffuseRatioIndex = bDiffuseRatio ? graph.GetStorageImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
                     .sunVisIndex = graph.HasTexture("restir_sun_vis"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_sun_vis"_sid) : ~0x0u,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                 };
@@ -664,10 +669,15 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
         pass.ReadSampledImage(GI_GATHER_DATA);
     }
     pass.WriteStorageImage(targets.colorOutput);
+    const bool bScreenDiffuse = graph.HasTexture(RESTIR_DIFFUSE_RATIO) && graph.HasTexture(GI_SCREEN_DIFFUSE);
+    if (bScreenDiffuse) {
+        pass.ReadSampledImage(RESTIR_DIFFUSE_RATIO);
+        pass.WriteStorageImage(GI_SCREEN_DIFFUSE);
+    }
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
     const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute,
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute, bScreenDiffuse,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -699,6 +709,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
                 .worldGridProbeGrid = (!bProbeBrute && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
+                .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
+                .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(GI_SCREEN_DIFFUSE) : ~0x0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
