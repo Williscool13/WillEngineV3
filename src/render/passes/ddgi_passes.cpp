@@ -60,13 +60,21 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
     DDGICascades cascades{};
     cascades.count = glm::clamp(params.cascadeCount, 1u, DDGI_MAX_CAMERA_CASCADES);
 
-    // Cold start (post full-clear or first startup): burst-update every cascade so cascade 0 validates immediately, else an odd-frame round-robin pick seeds indoor points from a coarse sky-lit outer cascade before the walls resolve.
-    const bool bColdStart = previous.count == 0;
+    // Cold start (post full-clear, first startup, re-enable, layout change): burst-update every cascade so cascade 0 validates immediately, else an odd-frame round-robin pick seeds indoor points from a coarse sky-lit outer cascade before the walls resolve.
+    const bool bColdStart = previous.count == 0 || previous.count != cascades.count || previous.volumes[0].probeCount != glm::uvec3(counts) || previous.volumes[0].probeSpacing != baseSpacing;
     const uint32_t updatedCascade = cascades.count == 1 || frameNumber % 2 == 0 ? 0u : 1u + static_cast<uint32_t>((frameNumber / 2) % (cascades.count - 1));
     for (uint32_t k = 0; k < cascades.count; ++k) {
-        cascades.bUpdated[k] = params.bCascadeSampling && !bFreeze && (bColdStart || k == updatedCascade);
-
         const float cascadeScale = static_cast<float>(1u << k);
+        const glm::ivec3 targetBaseCell = glm::ivec3(glm::floor(cameraPosition / (baseSpacing * cascadeScale) + 0.5f)) - counts / 2;
+        // A jump of half the window or more replaces most probes at once (teleport, cut); treat it like a cold start for this cascade.
+        const bool bJump = !bColdStart && glm::any(glm::greaterThanEqual(glm::abs(targetBaseCell - previous.volumes[k].baseCell), counts / 2));
+        const bool bReset = bColdStart || bJump;
+        cascades.bUpdated[k] = params.bCascadeSampling && !bFreeze && (bReset || k == updatedCascade);
+        cascades.cascadeWarmup[k] = bReset ? 0u : previous.cascadeWarmup[k];
+        if (cascades.bUpdated[k]) {
+            cascades.cascadeWarmup[k] = glm::min(cascades.cascadeWarmup[k] + 1u, DDGI_LOCAL_AGE_CAP);
+        }
+
         const float biasScale = params.bScaleBiasPerCascade ? cascadeScale : 1.0f;
         const float spacing = baseSpacing * cascadeScale;
         DDGIVolumeParams volume{};
@@ -78,7 +86,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
         volume.edgeFadeCells = glm::clamp(params.edgeBlendCells, 1.0f, 8.0f);
         volume.atlasSlot = 0u;
         volume.atlasRows = 1u;
-        volume.baseCell = glm::ivec3(glm::floor(cameraPosition / spacing + 0.5f)) - counts / 2;
+        volume.baseCell = targetBaseCell;
 
         if (!cascades.bUpdated[k] && k < previous.count && previous.volumes[k].probeCount == volume.probeCount && previous.volumes[k].probeSpacing == volume.probeSpacing) {
             volume.baseCell = previous.volumes[k].baseCell;
@@ -287,14 +295,14 @@ void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass)
     if (graph.HasBuffer(WORLD_GRID_DDGI_INDEX_BUFFER)) { pass.ReadBuffer(WORLD_GRID_DDGI_INDEX_BUFFER); }
 }
 
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale)
+bool SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale)
 {
     ZoneScoped;
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) {
-        return;
+        return false;
     }
     if (cascades.count == 0) {
-        return;
+        return false;
     }
 
     const uint32_t total = cascades.count + cascades.localCount;
@@ -507,7 +515,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
             vkCmdDispatch(cmd, (raysPerProbe + 63) / 64, probeCountTotal, 1);
         });
 
-        const uint32_t warmupUpdates = bLocal ? cascades.localWarmup[k] : 0u;
+        const uint32_t warmupUpdates = bLocal ? cascades.localWarmup[k] : cascades.cascadeWarmup[k];
         const bool bWarming = warmupUpdates > 1u && warmupUpdates < DDGI_LOCAL_WARMUP_UPDATES;
         const float runningMeanHysteresis = static_cast<float>(warmupUpdates - 1u) / static_cast<float>(glm::max(warmupUpdates, 1u));
         const float scaledHysteresis = glm::clamp(glm::pow(glm::clamp(params.hysteresis, 0.0f, 1.0f), 1.0f / framerateScale), 0.0f, 0.995f);
@@ -522,7 +530,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         blendPass.WriteStorageImage(irradianceId);
         if (graph.HasBuffer(DDGI_PROBE_RESTART_BUFFER)) { blendPass.ReadBuffer(DDGI_PROBE_RESTART_BUFFER); }
         if (graph.HasBuffer(DDGI_PROBE_ACTIVE_BUFFER)) { blendPass.ReadBuffer(DDGI_PROBE_ACTIVE_BUFFER); }
-        blendPass.Execute([pipelineManager, hysteresis = blendHysteresis, irradianceThreshold = params.irradianceThreshold, brightnessThreshold = params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = graph.ResourceVersionID(irradianceId, 1), nextId = irradianceId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        blendPass.Execute([pipelineManager, hysteresis = blendHysteresis, irradianceThreshold = params.irradianceThreshold, brightnessThreshold = bWarming ? FLT_MAX : params.brightnessThreshold, volume, rayRotation, previousBaseCell, bHistory = bHistoryValid[k], bRestartHistory = bRestartHistoryValid[k], bActiveHistory = bActiveHistoryValid[k], raysPerProbe, probeCountTotal, flagByteOffset, rayDataId = DDGI_RAY_DATA[k], historyId = graph.ResourceVersionID(irradianceId, 1), nextId = irradianceId](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ddgi_blend_irradiance"_sid);
             if (!pipelineEntry) {
                 return;
@@ -650,6 +658,7 @@ void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         }
     }
     AddDDGICascadeDescriptorUpload(graph, "DDGI Cascade Descriptors"_sid, DDGI_CASCADES_BUFFER, sources, gridCamPos, params.bWorldVolumeGridCull);
+    return true;
 }
 
 bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)

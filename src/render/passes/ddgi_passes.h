@@ -37,12 +37,14 @@ struct DDGICascades
     uint64_t localIds[DDGI_MAX_VOLUME_SLOTS]{};
     /** Updates a resident world volume has had, saturating at DDGI_LOCAL_WARMUP_UPDATES; the per-frame pick goes to the least-warmed slot so a volume that just became resident lights up immediately instead of waiting out the round-robin. */
     uint32_t localWarmup[DDGI_MAX_VOLUME_SLOTS]{};
+    /** Updates a camera cascade has had since its last cold start (first run, layout change, re-enable, or a window jump of half its extent); the blend runs a running mean while it is below DDGI_LOCAL_WARMUP_UPDATES. */
+    uint32_t cascadeWarmup[DDGI_MAX_CAMERA_CASCADES]{};
     uint32_t count{0};
     uint32_t localCount{0};
 };
 
 /**
- * Camera-following rolling windows; cascade 0 updates every frame, outer cascades round-robin so trace cost stays flat.
+ * Camera-following rolling windows; cascade 0 updates every other frame, outer cascades round-robin on the frames between so trace cost stays flat.
  * The nearest local volumes are appended as fixed fine-spacing windows, one updating per frame on its own round-robin.
  * @param params
  * @param cameraPosition
@@ -70,8 +72,9 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the fallback shading's probe pick
  * @param gridCamPos camera the world grid binned against; stored in the uploaded descriptor set so samplers resolve the same cell the bin wrote
  * @param framerateScale fps / 60
+ * @return false when nothing was recorded (no TLAS or geometry yet); the caller treats the next frame as a cold start
  */
-void SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale);
+bool SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale);
 
 /** Declares the world-volume cull buffers that any pass calling DDGISampleIrradianceCascaded dereferences through its cascade set. */
 void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass);

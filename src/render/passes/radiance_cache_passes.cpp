@@ -15,7 +15,7 @@
 
 namespace Render
 {
-RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze)
+RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze, uint32_t shadeInterval)
 {
     ZoneScoped;
     graph.CreateVersionedBuffer(RADIANCE_CACHE_ENTRIES, RADIANCE_CACHE_ENTRIES_BYTES, 1, VersionSource::Fresh);
@@ -65,7 +65,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_KEYS);
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_CELLS);
         carryPass.ReadWriteBuffer(RADIANCE_CACHE_STATS);
-        carryPass.Execute([pipelineManager, frameNumber, cameraPos, bFreeze, bTouchValid, touchEntries, prevEntries, prevKeys, prevCells](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        carryPass.Execute([pipelineManager, frameNumber, cameraPos, bFreeze, shadeInterval, bTouchValid, touchEntries, prevEntries, prevKeys, prevCells](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("radiance_cache_carry_forward"_sid);
             if (!pipelineEntry) {
                 return;
@@ -85,6 +85,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
                 .stats = GPU_STATS_ENABLED ? graph.GetBufferAddress(RADIANCE_CACHE_STATS) : 0,
                 .touchEntries = bTouchValid ? graph.GetBufferAddress(touchEntries) : 0,
                 .touchFrame = static_cast<uint32_t>(frameNumber - Core::FRAME_BUFFER_COUNT),
+                .staleShadeAge = 4u * glm::max(shadeInterval, 1u) + 3u,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             const uint32_t groups = (RADIANCE_CACHE_HASH_CAPACITY + 63u) / 64u;

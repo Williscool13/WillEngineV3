@@ -44,7 +44,7 @@ using float4x4 = glm::mat4;
 // Key = cell pos + LOD + normal bucket (Normal is quantized to dominant axis).
 
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_CAPACITY = 524288u;
-SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_PROBE = 8u;
+SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_PROBE = 32u; // linear-probe window; 8 dropped ~0.5-1.3% of live cells per rebuild at load 0.5-0.6. Find still stops at the first empty slot
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_EMPTY = 0u;
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_INVALID = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float RADIANCE_CACHE_CELL_SIZE_BASE = 0.25;

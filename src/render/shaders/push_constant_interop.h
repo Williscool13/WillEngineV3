@@ -756,7 +756,7 @@ SHADER_PUBLIC struct RadianceCacheCarryForwardPushConstant
     SHADER_PUBLIC SHADER_PTR(RadianceCacheStats) stats;
     SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
     SHADER_PUBLIC uint32_t touchFrame;
-    SHADER_PUBLIC uint32_t pad0;
+    SHADER_PUBLIC uint32_t staleShadeAge;
 };
 
 SHADER_PUBLIC struct RadianceCacheBuildIndirectPushConstant

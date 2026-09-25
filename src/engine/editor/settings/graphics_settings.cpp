@@ -1919,7 +1919,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             ddgiF("Probe Spacing##ddgi", &ddgi.probeSpacing, ddgiDefaults.probeSpacing, 0.25f, 8.0f, "%.2f", "World-space distance between probes (meters); coverage = count * spacing per axis. Changing it restarts probe history.");
             int cascadeCount = static_cast<int>(ddgi.cascadeCount);
             if (Widgets::SliderInt("Cascade Count##ddgi", &cascadeCount, 1, static_cast<int>(DDGI_MAX_CAMERA_CASCADES), {
-                                       .tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every frame, outer cascades round-robin one per frame (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)
+                                       .tooltip = "Concentric volumes with identical counts; each doubles the previous spacing, so range doubles per cascade for linear memory. Cascade 0 updates every other frame, outer cascades round-robin on the frames between (flat trace cost).", .reset = true, .resetTo = static_cast<double>(ddgiDefaults.cascadeCount)
                                    })) {
                 ddgi.cascadeCount = static_cast<uint32_t>(cascadeCount);
                 changed = true;

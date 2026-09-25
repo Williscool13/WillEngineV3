@@ -47,9 +47,10 @@ struct RadianceCacheFrame
  * @param frameNumber
  * @param cameraPos current camera world position; carry-forward drops cells whose distance-implied LOD no longer matches their stored level
  * @param bFreeze suspends carry-forward eviction (LRU + LOD) and pins cell ages, so a frozen GI field keeps its cache intact indefinitely
+ * @param shadeInterval cache shade interval; a cell unshaded for 4 intervals is evicted, since only probe rays re-shade and the gather's touches alone would keep stale radiance alive
  * @return
  */
-RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze);
+RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze, uint32_t shadeInterval);
 
 /**
  * Shades the frame's armed cells via budgeted indirect dispatch over the compact active list.

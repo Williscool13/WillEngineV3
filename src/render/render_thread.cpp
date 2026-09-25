@@ -676,9 +676,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
             const bool bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
             if (frameBuffer.ddgi.bEnabled) {
-                const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField);
-                SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos, framerateScale);
-                ddgiPreviousCascades = ddgiCascades;
+                const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField, frameBuffer.ddgi.radianceCacheShadeInterval);
+                const bool bDDGIRecorded = SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos, framerateScale);
+                ddgiPreviousCascades = bDDGIRecorded ? ddgiCascades : DDGICascades{};
                 const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
                 // Never below the configured cap: at low fps the cell responds slower instead of getting noisier.
                 const auto radianceCacheAccumCap = glm::max(static_cast<uint32_t>(static_cast<float>(frameBuffer.ddgi.radianceCacheAccumCap) * framerateScale + 0.5f), frameBuffer.ddgi.radianceCacheAccumCap);
@@ -702,6 +702,8 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bRadianceCacheDebug && !frameBuffer.debug.bLockGPUDebug) {
                     SetupRadianceCacheDebug(*renderGraph, pipelineManager, radianceCache, frameBuffer.debug.radianceCacheDebugExposure, frameBuffer.debug.radianceCacheDebugBucket);
                 }
+            } else {
+                ddgiPreviousCascades = DDGICascades{};
             }
 
             // Copy depth to R32_SFLOAT for all downstream compute passes.
