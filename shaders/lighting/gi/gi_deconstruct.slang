@@ -27,6 +27,17 @@ static const uint GI_DECONSTRUCT_DDGI_MARGIN = 4u;
 static const uint GI_DECONSTRUCT_DDGI_COVERAGE = 5u;
 static const uint GI_DECONSTRUCT_DDGI_IRRADIANCE = 6u;
 static const uint GI_DECONSTRUCT_VOLUME_COVERAGE = 7u;
+static const uint GI_DECONSTRUCT_DDGI_CASCADE = 8u;
+static const uint GI_DECONSTRUCT_STALE_FRAMES = 32u;
+
+static float3 GIDeconstructSlotColor(uint slot, uint cascadeCount)
+{
+    if (slot >= cascadeCount) {
+        return float3(1.0);
+    }
+    const float3 palette[6] = { float3(1.0, 0.15, 0.15), float3(1.0, 0.6, 0.0), float3(0.95, 0.95, 0.0), float3(0.1, 0.9, 0.2), float3(0.0, 0.8, 1.0), float3(0.3, 0.3, 1.0) };
+    return palette[min(slot, 5u)];
+}
 
 static const float GI_DECONSTRUCT_SKY_MEAN_FRACTION = 0.95;
 
@@ -217,9 +228,6 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                 }
                 GICageStats s = GIDeconstructCage(worldPosition, worldN, cameraDirection, desc.volume, desc.visibilityIndex, desc.probeOffsets, desc.bOffsetsValid, length(viewPosition));
                 float w = s.fade * saturate(s.weightSum / 0.02);
-                if (!bLocal) {
-                    w *= 1.0 - localFade;
-                }
                 if (w <= 0.0) {
                     continue;
                 }
@@ -237,7 +245,17 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                     bSaturated = true;
                 }
             }
-            if (pc.mode == GI_DECONSTRUCT_VOLUME_COVERAGE) {
+            if (pc.mode == GI_DECONSTRUCT_DDGI_CASCADE) {
+                if (coverage <= 0.01) {
+                    color = float3(1.0, 0.0, 1.0);
+                } else {
+                    color = GIDeconstructSlotColor(dominantIndex, count) * (0.25 + 0.75 * coverage);
+                    bool bStale = pc.ddgiCascades->cascades[dominantIndex].framesSinceUpdate > GI_DECONSTRUCT_STALE_FRAMES;
+                    if (bStale && ((pixel.x + pixel.y) / 8u) % 2u == 0u) {
+                        color = float3(0.0);
+                    }
+                }
+            } else if (pc.mode == GI_DECONSTRUCT_VOLUME_COVERAGE) {
                 // Authoring aid: continuous red -> yellow -> green ramp on localFade (green = an authored world volume owns this surface, yellow = its fade band, red = cascade fallback), magenta = nothing covers it. Continuous so faces sitting at the band edge do not flicker under TAA jitter. Value tracks coverage so starved pockets inside a volume read dark.
                 float lit = max(coverage, 0.05);
                 if (coverage <= 0.01) {

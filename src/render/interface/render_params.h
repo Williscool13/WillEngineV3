@@ -583,7 +583,7 @@ struct DebugRenderParams
     int32_t ddgiProbeDebugMode{0};
     // 0 = off, 1 = irradiance, 2 = tiers, 3 = hit distance, 4 = accumulation, 5 = escape, 6 = variance guide
     int32_t giGatherDebugMode{0};
-    // 0 = off, 1 = cache cell id, 2 = cache radiance, 3 = ddgi cheb gate, 4 = ddgi mean vs dist, 5 = ddgi coverage, 6 = ddgi irradiance
+    // 0 = off, 1 = cache cell id, 2 = cache radiance, 3 = ddgi cheb gate, 4 = ddgi mean vs dist, 5 = ddgi coverage, 6 = ddgi irradiance, 7 = volume coverage, 8 = ddgi cascade
     int32_t giDeconstructMode{0};
     // -1 = off, otherwise pyramid mip shown in hiz_debug_target
     int32_t hizDebugMip{-1};

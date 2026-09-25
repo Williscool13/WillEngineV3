@@ -27,6 +27,8 @@ static const float GI_UPSCALE_NOISE_ACCUM = 8.0;
 static const float GI_UPSCALE_NOISY_MAX_ACCUM = 96.0;
 // Kept low on purpose: a reveal that fades up from dark reads better than one that settles down from too bright (probes miss the enclosure of slits behind furniture).
 static const float GI_UPSCALE_PRIOR_SCALE = 0.65;
+// Per cascade step past cascade 0's range: coarser probes leak more, and far detail reads fine darker.
+static const float GI_UPSCALE_PRIOR_CASCADE_FALLOFF = 0.5;
 
 /** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
@@ -288,7 +290,12 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float accum = 1.0;
     if (history.quality <= 0.0 && bSkyCurrent) {
         // Disocclusion (chair slits) has no same-surface neighbours to filter with; seed from the probe field as a few frames of prior that the counter then averages out.
-        float3 prior = GIUpscaleWorldIrradiance(pc, scene, mul(scene.invView, float4(centerXv, 1.0)).xyz, evalN, centerXv) * GI_UPSCALE_PRIOR_SCALE;
+        float priorScale = GI_UPSCALE_PRIOR_SCALE;
+        if (pc.bCascadesValid != 0) {
+            float cascade0HalfExtent = 0.5 * float(pc.ddgiCascades->cascades[0].volume.probeCount.x) * pc.ddgiCascades->cascades[0].volume.probeSpacing;
+            priorScale *= pow(GI_UPSCALE_PRIOR_CASCADE_FALLOFF, log2(max(length(centerXv) / max(cascade0HalfExtent, 1e-3), 1.0)));
+        }
+        float3 prior = GIUpscaleWorldIrradiance(pc, scene, mul(scene.invView, float4(centerXv, 1.0)).xyz, evalN, centerXv) * priorScale;
         result = (GI_UPSCALE_PRIOR_FRAMES * prior + current) / (GI_UPSCALE_PRIOR_FRAMES + 1.0);
         accum = GI_UPSCALE_PRIOR_FRAMES + 1.0;
     } else if (history.quality > 0.0) {

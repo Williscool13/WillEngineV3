@@ -200,10 +200,10 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
     });
 
-    Register(state, Origin::Engine, "gi_deconstruct", "`gi_deconstruct <0-7>` GI deconstruct mode (1 cache cell id, 2 cache radiance, 3 ddgi cheb, 4 ddgi margin, 5 ddgi coverage, 6 ddgi irradiance, 7 volume coverage); pair with `view gi_deconstruct_target`",
+    Register(state, Origin::Engine, "gi_deconstruct", "`gi_deconstruct <0-7>` GI deconstruct mode (1 cache cell id, 2 cache radiance, 3 ddgi cheb, 4 ddgi margin, 5 ddgi coverage, 6 ddgi irradiance, 7 volume coverage, 8 ddgi cascade); pair with `view gi_deconstruct_target`",
              [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
                  if (args.Size() > 1) {
-                     state->debug.render.giDeconstructMode = std::clamp(static_cast<int32_t>(std::strtol(args[1], nullptr, 10)), 0, 7);
+                     state->debug.render.giDeconstructMode = std::clamp(static_cast<int32_t>(std::strtol(args[1], nullptr, 10)), 0, 8);
                  }
                  Print(state, Core::InlineString<64>::Format("  gi_deconstruct %d", state->debug.render.giDeconstructMode).c_str());
              });

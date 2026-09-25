@@ -39,6 +39,7 @@ struct DDGICascades
     uint32_t localWarmup[DDGI_MAX_VOLUME_SLOTS]{};
     /** Updates a camera cascade has had since its last cold start (first run, layout change, re-enable, or a window jump of half its extent); the blend runs a running mean while it is below DDGI_LOCAL_WARMUP_UPDATES. */
     uint32_t cascadeWarmup[DDGI_MAX_CAMERA_CASCADES]{};
+    uint64_t lastUpdateFrame[DDGI_MAX_VOLUME_SLOTS]{};
     uint32_t count{0};
     uint32_t localCount{0};
 };

@@ -71,8 +71,10 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
         const bool bReset = bColdStart || bJump;
         cascades.bUpdated[k] = params.bCascadeSampling && !bFreeze && (bReset || k == updatedCascade);
         cascades.cascadeWarmup[k] = bReset ? 0u : previous.cascadeWarmup[k];
+        cascades.lastUpdateFrame[k] = bReset ? frameNumber : previous.lastUpdateFrame[k];
         if (cascades.bUpdated[k]) {
             cascades.cascadeWarmup[k] = glm::min(cascades.cascadeWarmup[k] + 1u, DDGI_LOCAL_AGE_CAP);
+            cascades.lastUpdateFrame[k] = frameNumber;
         }
 
         const float biasScale = params.bScaleBiasPerCascade ? cascadeScale : 1.0f;
@@ -154,6 +156,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             const uint32_t k = slotOf[s];
             const bool bSameVolume = previous.localIds[k] == localVolumes[selected[s]].volumeId && previous.volumes[k].origin == localVolumes[selected[s]].corner;
             cascades.localWarmup[k] = bSameVolume ? previous.localWarmup[k] : 0u;
+            cascades.lastUpdateFrame[k] = bSameVolume ? previous.lastUpdateFrame[k] : frameNumber;
         }
 
         bool bWarmupPick[DDGI_MAX_VOLUME_SLOTS]{};
@@ -202,6 +205,9 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
             cascades.volumes[k] = volume;
             cascades.localIds[k] = local.volumeId;
             cascades.bUpdated[k] = !bFreeze && (bColdStart || bWarmupPick[k]);
+            if (cascades.bUpdated[k]) {
+                cascades.lastUpdateFrame[k] = frameNumber;
+            }
         }
     }
     return cascades;
@@ -234,6 +240,7 @@ struct DDGICascadeDescSource
     /** Byte offset of this slot's region in the flat offsets buffer. */
     uint32_t offsetsByteOffset{0};
     bool bValid{false};
+    uint32_t framesSinceUpdate{0};
 };
 
 /** Element offset of slot k in the flat probe-data buffers. Every cascade shares one probe count, so the cascade region is uniform; locals follow at the fixed 10^3 stride. */
@@ -284,6 +291,7 @@ static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName
             desc.probeOffsets = source.offsets != StringID{} ? graph.PeekBufferAddress(source.offsets) + source.offsetsByteOffset : 0;
             desc.bOffsetsValid = source.offsets != StringID{} ? 1u : 0u;
             desc.bValid = 1u;
+            desc.framesSinceUpdate = source.framesSinceUpdate;
         }
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(bufferId), 0, sizeof(set), &set);
     });
@@ -652,6 +660,7 @@ bool SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
                 .offsets = params.bRelocation && (cascades.bUpdated[k] || bOffsetsHistoryValid[k]) ? DDGI_PROBE_OFFSETS_BUFFER : StringID{},
                 .offsetsByteOffset = DDGIProbeDataElemOffset(cascades, k) * static_cast<uint32_t>(sizeof(glm::vec4)),
                 .bValid = true,
+                .framesSinceUpdate = static_cast<uint32_t>(glm::min<uint64_t>(frameNumber - cascades.lastUpdateFrame[k], UINT32_MAX)),
             };
         } else {
             sources->entries[k].volume = cascades.volumes[k];

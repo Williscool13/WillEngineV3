@@ -48,6 +48,30 @@ public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance,
     return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, bMirror);
 }
 
+/** Remodulates the albedo-free radiance cache at a probe-ray hit. */
+public float3 DecodeHitDiffuseColor(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+{
+    Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
+    uint firstIndex = primitive.indexOffset + triangleIndex * 3;
+    VertexAttribute a0 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 0]];
+    VertexAttribute a1 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 1]];
+    VertexAttribute a2 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 2]];
+    float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
+    float2 uv = bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2);
+    float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
+
+    MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    float4 albedo = material.colorFactor * vertexColor;
+    if (material.textureImageIndices.x >= 0) {
+        float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
+        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleLevel(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, HIT_SHADING_TEXTURE_LOD);
+    }
+    float metallic;
+    float mrRoughness;
+    SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
+    return albedo.rgb * (1.0 - metallic);
+}
+
 /** A ray reaching the back of a two-sided material sees a surface facing it: shade the mirror of the front instead of treating it as the inside of solid geometry. */
 public bool IsTwoSidedBackHit(MaterialProperties* materialBuffer, Instance instance, bool bFrontFace)
 {
@@ -498,7 +522,6 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
     float metallic;
     float mrRoughness;
     SampleMetalRoughLod(material, uv, HIT_SHADING_TEXTURE_LOD, metallic, mrRoughness);
-    float3 diffuseColor = albedo.rgb * (1.0 - metallic);
     float roughness = max(mrRoughness, MIN_ROUGHNESS);
     float3 V = N;
     float NoV = 1.0;
@@ -537,7 +560,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
             }
             sunVisibility /= float(sampleCount);
             if (sunVisibility > 0.0) {
-                radiance += sunVisibility * diffuseColor * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
+                radiance += sunVisibility * Diffuse_OrenNayar(NoL, NoV, L, V, roughness) * NoL * sun.directionIntensity.w * UnpackUnorm4x8(sun.packedColor).rgb;
             }
         }
     }
@@ -548,7 +571,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         worldGridLights.camPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
         worldGridLights.grid = pc.worldGridBuffer;
         worldGridLights.indexList = pc.worldGridIndexList;
-        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, diffuseColor, metallic, roughness, rngSeed, RADIANCE_CACHE_NEE_SAMPLES);
+        radiance += ShadeLocalLightsRIS(worldGridLights, pc.lightData, pc.tlasIndex, worldPosition, N, V, NoV, albedo.rgb, float3(1.0), metallic, roughness, rngSeed, RADIANCE_CACHE_NEE_SAMPLES);
     }
 
     float3 indirectDiffuse = float3(0.0);
@@ -569,6 +592,6 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
             indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
         }
     }
-    radiance += diffuseColor * OrenNayarDirectionalAlbedo(NoV, roughness) * indirectDiffuse;
+    radiance += OrenNayarDirectionalAlbedo(NoV, roughness) * indirectDiffuse;
     return radiance;
 }

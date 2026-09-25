@@ -88,7 +88,7 @@ SHADER_PUBLIC struct DDGICascadeDescriptor
     SHADER_PUBLIC uint visibilityIndex;
     SHADER_PUBLIC uint bOffsetsValid;
     SHADER_PUBLIC uint bValid;
-    SHADER_PUBLIC uint pad0;
+    SHADER_PUBLIC uint framesSinceUpdate; // debug views only
     SHADER_PUBLIC uint pad1;
 };
 

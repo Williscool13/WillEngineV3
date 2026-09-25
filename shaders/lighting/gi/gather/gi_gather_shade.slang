@@ -110,7 +110,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
     uint slot = RadianceCacheHashFindLodTolerant(pc.cacheEntries, pc.cacheKeys, key, hitWorldPos, hit.normal);
     uint2 packedRadiance = slot != RADIANCE_CACHE_HASH_INVALID ? pc.cacheCells[slot].packedRadiance : uint2(RADIANCE_CACHE_RADIANCE_UNSHADED, RADIANCE_CACHE_RADIANCE_UNSHADED);
     if (RadianceCacheRadianceShaded(packedRadiance)) {
-        radiance = RadianceCacheUnpackRadiance(packedRadiance);
+        radiance = RadianceCacheUnpackRadiance(packedRadiance) * hit.diffuseColor;
         tier = GI_GATHER_TIER_CACHE;
         GatherTouchCell(pc, slot);
     } else {

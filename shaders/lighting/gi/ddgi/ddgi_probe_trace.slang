@@ -97,7 +97,8 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                     }
 
                     if (RadianceCacheRadianceShaded(packedRadiance)) {
-                        radiance = RadianceCacheUnpackRadiance(packedRadiance) + RadianceCacheUnpackEmissive(pc.radianceCache->cells[wcSlot].packedEmissive);
+                        float3 hitDiffuseColor = DecodeHitDiffuseColor(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+                        radiance = RadianceCacheUnpackRadiance(packedRadiance) * hitDiffuseColor + RadianceCacheUnpackEmissive(pc.radianceCache->cells[wcSlot].packedEmissive);
                         bCacheRead = true;
                     }
                     pc.radianceCache->cells[wcSlot].lastTouched = pc.frameIndex;
