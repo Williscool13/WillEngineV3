@@ -71,7 +71,6 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateVersionedTexture(GI_GATHER_HISTORY, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID gatherHistory = graph.ResourceVersionID(GI_GATHER_HISTORY, 1);
     graph.CreateTexture(GI_GATHER_RESOLVED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-    graph.CreateTexture(GI_GATHER_UPSCALED, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
     graph.CreateVersionedTexture(GI_GATHER_FAST, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID fastHistory = graph.ResourceVersionID(GI_GATHER_FAST, 1);
     graph.CreateVersionedTexture(GI_GATHER_SKY_VIS_HISTORY, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -323,7 +322,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
         upscale.ReadSampledImage("gtao_bent_normals"_sid);
     }
     const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale);
-    upscale.WriteStorageImage(GI_GATHER_UPSCALED);
+    upscale.WriteStorageImage(GI_GATHER_HISTORY);
     upscale.WriteStorageImage(GI_GATHER_FAST);
     upscale.WriteStorageImage(GI_GATHER_SKY_VIS_HISTORY);
     upscale.WriteStorageImage(GI_GATHER_NOISE);
@@ -350,7 +349,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .historyIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(gatherHistory) : ~0x0u,
             .depthHistoryIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0x0u,
             .gbufferOneHistoryIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0x0u,
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_UPSCALED),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_HISTORY),
             .guideIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_GUIDE),
             .bHistoryValid = bTemporal ? 1u : 0u,
             .dataIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_DATA),
@@ -370,27 +369,6 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
             .skyVisOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY),
             .noiseHistoryIndex = bNoiseHistory ? graph.GetSampledImageViewDescriptorIndex(noiseHistory) : ~0x0u,
             .noiseOutIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_NOISE),
-        };
-        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);
-    });
-
-    RenderPass& clamp = graph.AddPass("GI Diffuse Temporal Clamp"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::FinalGather);
-    clamp.ReadSampledImage(GI_GATHER_UPSCALED);
-    clamp.ReadSampledImage(GI_GATHER_FAST);
-    clamp.WriteStorageImage(GI_GATHER_HISTORY);
-    clamp.Execute([pipelineManager, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_temporal_clamp"_sid);
-        if (!pipelineEntry) {
-            return;
-        }
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
-
-        GITemporalClampPushConstant pc{
-            .renderExtent = {renderExtent[0], renderExtent[1]},
-            .upscaledIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_UPSCALED),
-            .fastIndex = graph.GetSampledImageViewDescriptorIndex(GI_GATHER_FAST),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(GI_GATHER_HISTORY),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, (renderExtent[0] + 15u) / 16u, (renderExtent[1] + 15u) / 16u, 1);

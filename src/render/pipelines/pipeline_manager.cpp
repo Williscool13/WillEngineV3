@@ -538,8 +538,6 @@ void PipelineManager::RegisterPipelines()
                             sizeof(GIDenoisePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gi_upscale"_sid, src / "gi_upscale.spv", "ComputeGIUpscale",
                             sizeof(GIUpscalePushConstant), PipelineCategory::Critical);
-    RegisterComputePipeline("gi_temporal_clamp"_sid, src / "gi_temporal_clamp.spv", "ComputeGITemporalClamp",
-                            sizeof(GITemporalClampPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gi_post_blur"_sid, src / "gi_post_blur.spv", "ComputeGIPostBlur",
                             sizeof(GIPostBlurPushConstant), PipelineCategory::Critical);
 

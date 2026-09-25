@@ -10,7 +10,7 @@ import ddgi_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 
-// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 gather-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection. Also updates the short fast-luma history that gi_temporal_clamp bounds this result against.
+// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 gather-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection. Also updates the short fast-luma history the noise estimate compares against.
 
 static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;

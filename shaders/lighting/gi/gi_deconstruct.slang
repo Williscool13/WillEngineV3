@@ -180,7 +180,7 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                 uint2 packedRadiance = pc.cacheCells[slot].packedRadiance;
                 uint cellCount = (pc.cacheCells[slot].changeStreak >> 16u) & 0xFFu;
                 if (RadianceCacheRadianceShaded(packedRadiance) && cellCount >= 2u) {
-                    color = RadianceCacheUnpackRadiance(packedRadiance);
+                    color = RadianceCacheUnpackRadiance(packedRadiance) * scene.preExposure;
                 } else {
                     color = float3(0.5, 0.0, 0.5);
                 }
@@ -190,7 +190,7 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
         if (pc.mode == GI_DECONSTRUCT_DDGI_IRRADIANCE) {
             float edgeFade;
             float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
-            color = gi.rgb * gi.w;
+            color = gi.rgb * gi.w * scene.preExposure;
         } else {
             uint count = min(pc.ddgiCascades->cascadeCount, DDGI_MAX_VOLUME_SLOTS);
             uint localCount = min(pc.ddgiCascades->localCount, DDGI_MAX_VOLUME_SLOTS - count);

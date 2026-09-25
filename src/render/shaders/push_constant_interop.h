@@ -928,14 +928,6 @@ SHADER_PUBLIC struct GIPostBlurPushConstant
     SHADER_PUBLIC uint32_t noiseIndex;
 };
 
-SHADER_PUBLIC struct GITemporalClampPushConstant
-{
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint32_t upscaledIndex;
-    SHADER_PUBLIC uint32_t fastIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC uint32_t pad0;
-};
 
 SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
 {
