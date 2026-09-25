@@ -15,10 +15,9 @@ import restir_common;
 import bindless_declarations;
 import bucket_dispatch_common;
 
-// =============== Shader Summary ============
-// lighting_pbr_restir with the diffuse posterized. The demodulated outputs and hitT must stay identical or the denoiser breaks.
+// Demodulated outputs and hitT must stay identical to lighting_pbr_restir or the denoiser breaks.
 
-// Directional-light hit distance for the denoiser's specular hitT channel; matches the sun trace TMax.
+// Matches the sun trace TMax.
 static const float SUN_SPEC_HIT_T = 10000.0;
 static const float NEIGHBOR_REJECT_DISTANCE = 3.0e+38;
 static const float TOON_DIFFUSE_BANDS = 4.0;
@@ -153,7 +152,6 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
                     diffHitDistance = s.dist;
                 }
 
-                // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
                 if (roughness > pc.lightSpecularFromReflectionsMax)
                 {
                     float3 specContribution = specularAl * commonTerm;
@@ -203,7 +201,6 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
                     diffHitDistance = SUN_SPEC_HIT_T;
                 }
 
-                // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
                 if (roughness > pc.lightSpecularFromReflectionsMax)
                 {
                     float3 specContribution = specularSun * commonSun;
@@ -228,8 +225,7 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
     float diffHitT = (isnan(diffHitDistance) || isinf(diffHitDistance)) ? 0.0 : diffHitDistance;
     float specHitT = IsValidHitT(specHitDistance) ? specHitDistance : 0.0;
 
-    // Merged reflections: the reflection shade pass wrote radiance demodulated by this same specReflectance, so it sums
-    // directly into the specular channel. The traced in-lobe hitT wins over light-sample distances, even when it shaded to black.
+    // Reflection radiance is demodulated by this same specReflectance. Its hitT wins even when it shaded to black.
     if (pc.reflectionIndex != ~0x0u)
     {
         uint2 reflCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? PixelPosToReservoirPos(pixel, field) : pixel;
@@ -248,12 +244,11 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
     if (field != 0u && !bFullRate && pc.bCheckerboardPacked == 0u) {
         int2 o = OppositeFieldPixel(pixel, field);
         if (o.x >= 0 && o.x < int(pc.renderExtent.x)) {
-            // Keep hitT in the duplicated field: a zeroed .w oscillates the accumulated hit distance toward
-            // half its value and trips the miss paths in the ReBLUR prepass.
+            // Keep hitT in the duplicated field: a zeroed .w trips the miss paths in the ReBLUR prepass.
             rdgStorageFloat4[pc.primaryOutputImageIndex][uint2(o)] = diffPacked;
             rdgStorageFloat4[pc.secondaryOutputImageIndex][uint2(o)] = specPacked;
         }
-        // Odd-width orphan: on phantom rows the inactive rightmost column has no active partner writing into it; the last active column (x-2) fills it here.
+        // Odd-width orphan: the rightmost column has no active partner, so the last active column fills it.
         if ((pc.renderExtent.x & 1u) != 0u && pixel.x == pc.renderExtent.x - 2u && ((pixel.y + field) & 1u) == 1u) {
             uint2 orphan = uint2(pc.renderExtent.x - 1u, pixel.y);
             rdgStorageFloat4[pc.primaryOutputImageIndex][orphan] = diffPacked;

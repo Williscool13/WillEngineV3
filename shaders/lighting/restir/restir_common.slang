@@ -63,7 +63,7 @@ public int2 OppositeFieldPixel(uint2 pixel, uint field)
     return p;
 }
 
-/** Lambert irradiance/pi over the resolved (kD * Oren-Nayar at the camera V) diffuse; turns the denoised diffuse DI into the view-independent term the gather's screen tier needs. Fills the inactive checkerboard partner; clamped because kD reaches zero at grazing Fresnel. */
+/** Fills the inactive checkerboard partner; clamped because kD reaches zero at grazing Fresnel. */
 public void WriteDiffuseRatio(uint index, uint2 pixel, uint2 renderExtent, uint field, bool bFullRate, float resolved, float baseline)
 {
     if (index == ~0x0u) {
@@ -604,8 +604,7 @@ public float3 SunDirectionWorld(DirectionalLightData sun)
     return normalize(-sun.directionIntensity.xyz);
 }
 
-// Uniform cone sampling over the sun disk has pdf 1/solidAngle, which cancels the solid-angle divide that
-// would turn illuminance into radiance. Both terms are therefore dropped and the shading path uses illuminance directly.
+// Cone pdf 1/solidAngle cancels the illuminance-to-radiance divide, so shading uses illuminance directly.
 public float3 SunIlluminance(DirectionalLightData sun)
 {
     return UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w;
@@ -678,7 +677,7 @@ public float RestirSunShadowBlockerT(RaytracingAccelerationStructure tlas, float
     return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? q.CommittedRayT() : -1.0;
 }
 
-/** Non-sun variant for callers that already unpacked the light; the sun branch, sun argument load, and per-call lightVS element load are hoisted out. */
+/** Non-sun variant for callers that already unpacked the light. */
 public float EvalReservoirPHatLight(LightView vs, uint sampleOffsetPacked, float3 viewPos, float3 N, float3 V,
                                     float3 albedo, float3 F0, float metallic, float roughness, float lightSpecularFromReflectionsMax)
 {

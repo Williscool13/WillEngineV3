@@ -42,7 +42,7 @@ void CreateSpriteTextures(Core::MemoryManager* memoryManager,
                           Core::Path outputPointLightPath,
                           Engine::TextureID pointLightTextureId);
 
-/** Spatiotemporal blue noise: 64 slices of 128x128 RG8 (independent channels) packed into a 1024x1024 atlas, slice t at tile (t % 8, t / 8). Skipped when the file is already an atlas of that size. */
+/** 64 slices of 128x128 RG8 in a 1024x1024 atlas, slice t at tile (t % 8, t / 8). Skipped when the file is already that atlas. */
 void CreateBlueNoiseTexture(Core::MemoryManager* memoryManager,
                             Core::Path outputPath,
                             Engine::TextureID textureId);

@@ -60,7 +60,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
     DDGICascades cascades{};
     cascades.count = glm::clamp(params.cascadeCount, 1u, DDGI_MAX_CAMERA_CASCADES);
 
-    // Cold start (post full-clear, first startup, re-enable, layout change): burst-update every cascade so cascade 0 validates immediately, else an odd-frame round-robin pick seeds indoor points from a coarse sky-lit outer cascade before the walls resolve.
+    // Cold start updates every cascade, else round-robin seeds indoor points from a sky-lit outer cascade before the walls resolve.
     const bool bColdStart = previous.count == 0 || previous.count != cascades.count || previous.volumes[0].probeCount != glm::uvec3(counts) || previous.volumes[0].probeSpacing != baseSpacing;
     const uint32_t updatedCascade = cascades.count == 1 || frameNumber % 2 == 0 ? 0u : 1u + static_cast<uint32_t>((frameNumber / 2) % (cascades.count - 1));
     for (uint32_t k = 0; k < cascades.count; ++k) {
@@ -126,7 +126,7 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
         }
         cascades.localCount = selectedCount;
 
-        // Slot-sticky assignment: a still-resident volume keeps last frame's slot (and with it the atlas history); newcomers take the free slots and reconverge cold.
+        // Resident volumes keep last frame's slot so their atlas history stays valid.
         const uint32_t localBase = cascades.count;
         bool slotUsed[DDGI_MAX_VOLUME_SLOTS]{};
         uint32_t slotOf[DDGI_MAX_VOLUME_SLOTS]{};
@@ -243,7 +243,7 @@ struct DDGICascadeDescSource
     uint32_t framesSinceUpdate{0};
 };
 
-/** Element offset of slot k in the flat probe-data buffers. Every cascade shares one probe count, so the cascade region is uniform; locals follow at the fixed 10^3 stride. */
+/** Element offset of slot k in the flat probe-data buffers; locals follow the cascades at the fixed 10^3 stride. */
 static uint32_t DDGIProbeDataElemOffset(const DDGICascades& cascades, uint32_t k)
 {
     const glm::uvec3 c = cascades.volumes[0].probeCount;
@@ -259,9 +259,7 @@ struct DDGICascadeDescSources
     uint32_t localCount{0};
 };
 
-/**
- * Small vkCmdUpdateBuffer pass resolving the sources' descriptor indices/addresses at execute time into a DDGICascadeSetGPU. Sources must outlive execution (arena-allocated).
- */
+/** Resolves descriptor indices at execute time; sources must outlive execution. */
 static void AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName, StringID bufferId, const DDGICascadeDescSources* sources, const glm::vec3& gridCamPos, bool bGridCull)
 {
     graph.CreateBuffer(bufferId, sizeof(DDGICascadeSetGPU), false);
@@ -601,7 +599,7 @@ bool SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, 
         });
 
         if (params.bRelocation) {
-            // World-space standoff scales with the cascade like the biases, so coarse probes keep proportionate clearance; locals are finest and stay unscaled.
+            // Standoff scales with the cascade like the biases; locals are finest and stay unscaled.
             const float minFrontfaceDistance = glm::max(params.minFrontfaceDistance, 0.0f) * (bLocal ? 1.0f : static_cast<float>(1u << k));
 
             RenderPass& relocatePass = graph.AddPass(DDGI_RELOCATE_PASS[k], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DDGI);
@@ -689,7 +687,7 @@ bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass)
     return true;
 }
 
-/** Slot identification tint for the all-volumes debug view (unorm RGBA, low byte = red). Golden-ratio hue walk at low saturation so neighbouring slots stay distinguishable at any slot count; slot 0 stays white. */
+/** Packs unorm RGBA, low byte = red. */
 static uint32_t DDGIPackTint(const glm::vec3& rgb)
 {
     const glm::uvec3 quantized = glm::uvec3(glm::round(glm::clamp(rgb, 0.0f, 1.0f) * 255.0f));

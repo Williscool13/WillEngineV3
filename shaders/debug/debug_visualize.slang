@@ -20,7 +20,6 @@ static float3 HueToRgb(float hue)
     return saturate(abs(k * 6.0 - 3.0) - 1.0);
 }
 
-/** A hue per analytic light; emissive triangles share their mesh's hue, stepped in brightness per triangle. */
 static float3 LightIdxColor(uint lightIdx)
 {
     if (lightIdx == ~0u) { return float3(0.0); }
@@ -263,18 +262,18 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = ndotv <= 0.0 ? float3(1.0, 0, 0) : float3(0, ndotv, 0);
             break;
         }
-        case 28: { // SunShadowVisibility - .r is sqrt(visibility) (binary trace squares to itself); show linear (white lit, black shadowed)
+        case 28: { // SunShadowVisibility, .r stores sqrt(visibility)
             float v = srcPixel.x * srcPixel.x;
             srcPixel.xyz = float3(v);
             break;
         }
-        case 29: { // SunShadowPenumbra - .g packed penumbra (world radius); dark blue where lit (FP16_MAX sentinel), grey ramp otherwise
+        case 29: { // SunShadowPenumbra, FP16_MAX = lit sentinel
             float penum = srcPixel.y;
             bool lit = penum >= 60000.0;
             srcPixel.xyz = lit ? float3(0.0, 0.0, 0.15) : float3(saturate(penum * 2.0));
             break;
         }
-        case 30: { // SunShadowTiles - sigma_tiles (needsFilter, maxRadius/16, isSky): red = penumbra tile (brighter = bigger radius), grey = uniform, blue = sky
+        case 30: { // SunShadowTiles
             float needsFilter = srcPixel.x;
             float radius = srcPixel.y;
             float isSky = srcPixel.z;
@@ -283,7 +282,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             else { srcPixel.xyz = float3(0.12); }
             break;
         }
-        case 31: { // SunShadowTileValue - sigma_tiles_smoothed.y dilated filter mask (the tileValue the blur uses to scale its kernel)
+        case 31: { // SunShadowTileValue
             srcPixel.xyz = float3(srcPixel.y);
             break;
         }
@@ -291,22 +290,22 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = max(MLYCoCgToRgb(srcPixel.xyz), 0.0);
             break;
         }
-        case 33: { // ReblurInternalData: r = diff accum frames/63, g = spec/63 (raw uint, float() is lossy)
+        case 33: { // ReblurInternalData, raw uint Load because float() is lossy
             uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
             srcPixel.xyz = float3(float(p & 0x3Fu), float((p >> 6) & 0x3Fu), 0.0) / 63.0;
             break;
         }
-        case 34: { // ReblurData2: r = smb taps/4, g = vmb taps/4, b = virtualHistoryAmount
+        case 34: { // ReblurData2
             uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
             srcPixel.xyz = float3(float(countbits(p & 0xFu)) / 4.0, float(countbits((p >> 4) & 0xFu)) / 4.0, float((p >> 8) & 0x7Fu) / 127.0);
             break;
         }
-        case 35: { // BentNormal: oct16 in R32_UINT (raw uint, float() is lossy). Same view-space RGB encoding as case 10 so it A/Bs against GBuffer Normal.
+        case 35: { // BentNormal, raw uint Load because float() is lossy
             uint p = rdgTexturesUInt[pc.textureIndexInArray].Load(sampleTexCoord).r;
             srcPixel = float4(UnpackNormalOct16(p) * 0.5 + 0.5, 1.0);
             break;
         }
-        case 40: { // ReflectionProbeIndex: hash-color the probe covering the pixel. Black = sky, magenta = no probe.
+        case 40: { // ReflectionProbeIndex
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
@@ -321,7 +320,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             }
             break;
         }
-        case 41: { // ReflectionProbeBinDisagreement: brute vs cell-lookup pick. Green = agree, red = bin lost a probe, yellow = different probe, magenta = bin-only (bug), gray = both empty.
+        case 41: { // ReflectionProbeBinDisagreement
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
@@ -342,7 +341,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             }
             break;
         }
-        case 49: { // ReGIRCell: hue = cell key hash, brightness = entry count / REGIR_ENTRIES_PER_CELL. Magenta = cell absent, black = sky.
+        case 49: { // ReGIRCell
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0 || pc.regirHashEntries == nullptr) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
@@ -360,7 +359,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             }
             break;
         }
-        case 50: { // ReGIRCellMass: greyscale log2(1 + total mass) / 24. Magenta = cell absent, black = sky.
+        case 50: { // ReGIRCellMass
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0 || pc.regirHashEntries == nullptr || pc.regirCellData == nullptr) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
@@ -374,7 +373,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(saturate(log2(1.0 + max(total, 0.0)) / 24.0));
             break;
         }
-        case 51: { // ReGIRCursorCell: cell hue; the entry table of the cell under the mouse is read back by the ReGIR Cursor Cell pass. Magenta = cell absent, black = sky.
+        case 51: { // ReGIRCursorCell
             float depth = rdgTexturesFloat[pc.depthTextureIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0).r;
             if (depth <= 0.0 || pc.regirHashEntries == nullptr) { srcPixel.xyz = float3(0.0); break; }
             float viewSpaceDepth = ScreenToViewSpaceDepth(depth, pc.sceneData->depthLinearizeMult, pc.sceneData->depthLinearizeAdd);
@@ -387,16 +386,16 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(float(h >> 24), float((h >> 16) & 0xFF), float((h >> 8) & 0xFF)) / 255.0;
             break;
         }
-        case 52: { // Tonemap: x / (1 + x) for HDR targets that clip to white unscaled (demodulated lighting, RELAX illumination)
+        case 52: { // Tonemap
             srcPixel.xyz = max(srcPixel.xyz, 0.0) / (1.0 + max(srcPixel.xyz, 0.0));
             break;
         }
-        case 42: { // DofCoc: signed circle of confusion in dof_color_coc.a. Red = near field, blue = far, black = sharp; sqrt ramp over a 64px reference (the radius slider cap) so typical radii do not read black.
+        case 42: { // DofCoc
             float coc = srcPixel.a;
             srcPixel.xyz = float3(sqrt(saturate(-coc / 64.0)), 0.0, sqrt(saturate(coc / 64.0)));
             break;
         }
-        case 43: { // DofTileMax: r = max near magnitude, g = max far, both full-res pixel radii. Red = near reach, blue = far reach, same 64px sqrt ramp as case 42.
+        case 43: { // DofTileMax
             srcPixel.xyz = float3(sqrt(saturate(srcPixel.r / 64.0)), 0.0, sqrt(saturate(srcPixel.g / 64.0)));
             break;
         }
@@ -404,7 +403,7 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = float3(srcPixel.a);
             break;
         }
-        case 45: { // DofZones on dof_color_coc.a: green = in focus, orange ramp = near transition, red = near saturated, cyan ramp = far transition, blue = far saturated. Ramp brightness shows progress, so the transition corners read as bands.
+        case 45: { // DofZones
             float coc = srcPixel.a;
             float nearR = max(f16tof32(pc.dofPackedRadii & 0xFFFFu), 1e-3);
             float farR = max(f16tof32(pc.dofPackedRadii >> 16), 1e-3);
@@ -415,15 +414,15 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             else { srcPixel.xyz = lerp(float3(0.0, 0.05, 0.1), float3(0.0, 0.8, 1.0), coc / farR); }
             break;
         }
-        case 46: { // GTAOTemporalAO: gtao_temporal.x accumulated visibility (white open, black occluded); A/Bs against GTAO Filtered
+        case 46: { // GTAOTemporalAO
             srcPixel.xyz = float3(srcPixel.x);
             break;
         }
-        case 47: { // GTAOTemporalCount: gtao_temporal.y is count/64; black = fresh disocclusion, white = fully converged
+        case 47: { // GTAOTemporalCount
             srcPixel.xyz = float3(srcPixel.y);
             break;
         }
-        case 48: { // GTAOResolved: shadows_resolve_target.y, the AO term lighting multiplies
+        case 48: { // GTAOResolved
             srcPixel.xyz = float3(srcPixel.y);
             break;
         }

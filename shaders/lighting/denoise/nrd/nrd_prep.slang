@@ -12,7 +12,6 @@ import push_constant_interop;
 import bindless_declarations;
 import shader_functions;
 
-// Mirrors NRD.hlsli _NRD_EncodeNormalRoughness101010 (NRD_NORMAL_ENCODING == R10G10B10A2_UNORM)
 float3 NrdEncodeNormalRoughness101010(float3 n, float roughness)
 {
     n /= abs(n.x) + abs(n.y) + abs(n.z);
@@ -85,7 +84,6 @@ void NrdRadianceCopyMain(uniform NrdRadianceCopyPushConstant pc, uint3 dtid : SV
     rdgStorageFloat4[pc.outSpecIndex][pixel] = float4(NrdScaleAndSanitizeRadiance(spec.rgb, pc.radianceScale, pc.maxLuminance), spec.w);
 }
 
-// Mirrors NRD.hlsli _NRD_LinearToYCoCg / _NRD_YCoCgToLinear
 float3 NrdLinearToYCoCg(float3 color)
 {
     float y = dot(color, float3(0.25, 0.5, 0.25));
@@ -104,7 +102,7 @@ float3 NrdYCoCgToLinear(float3 color)
     return max(r, 0.0);
 }
 
-// Mirrors NRD.hlsli _REBLUR_GetHitDistanceNormalization (NRD 4.17 magic-curve form; the port keeps the older hitDistD curve)
+// NRD 4.17 magic-curve form; the ReBLUR port keeps the older hitDistD curve.
 float NrdReblurHitDistNormalization(float viewZ, float3 hitDistParams, float roughness)
 {
     float smc = 1.0 - exp2(-200.0 * roughness * roughness);
@@ -112,7 +110,6 @@ float NrdReblurHitDistNormalization(float viewZ, float3 hitDistParams, float rou
     return (hitDistParams.x + abs(viewZ) * hitDistParams.y) * lerp(hitDistParams.z, 1.0, smc);
 }
 
-// REBLUR_FrontEnd_GetNormHitDist + REBLUR_FrontEnd_PackRadianceAndNormHitDist (sanitize = true)
 float4 NrdReblurFrontEndPack(float4 radianceHitT, float viewZ, float3 hitDistParams, float roughness)
 {
     float3 radiance = radianceHitT.rgb;
@@ -145,7 +142,7 @@ void NrdReblurRadiancePackMain(uniform NrdReblurRadiancePackPushConstant pc, uin
     rdgStorageFloat4[pc.outSpecIndex][pixel] = NrdReblurFrontEndPack(spec, viewZ, pc.hitDistParams.xyz, roughness);
 }
 
-// REBLUR_BackEnd_UnpackRadianceAndNormHitDist; .w keeps the normalized hitT (unused downstream)
+// .w keeps the normalized hitT (unused downstream).
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void NrdReblurOutputCopyMain(uniform NrdRadianceCopyPushConstant pc, uint3 dtid : SV_DispatchThreadID)

@@ -18,14 +18,10 @@ import gi_gather_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 
-// =============== Shader Summary ============
-// One cosine-weighted ray per gather-res (half or quarter res) pixel, zero shading at the hit: last frame's lit screen, else cache radiance, else albedo * DDGI irradiance (one material fetch). MC-projected into per-channel 2-band SH, evaluated at the full-res normal at composite.
-// Sky misses do not feed the SH; the miss fraction goes to the sky-visibility texture's alpha (rgb = mean ray radiance), filtered separately and multiplied by prefiltered sky irradiance at upscale.
-
-// Per-sample outlier cap relative to display white (Lumen's MaxRayIntensity idea); replaces the denoiser's neighbour-relative cap, which discarded real bounce from small bright sources.
+// Exposed units, relative to display white.
 static const float GI_GATHER_MAX_EXPOSED_RADIANCE = 40.0;
 
-/** Hue-preserving firefly clamp, matching radiance_cache_shade: a per-channel min() shifts a clipped sample's colour, so the same physical radiance came out tinted differently depending on which tier resolved it. */
+/** Hue-preserving; must match radiance_cache_shade so every tier tints the same. */
 static float3 GIGatherClampRadiance(float3 radiance, float maxRadiance)
 {
     if (any(isnan(radiance))) {
@@ -72,7 +68,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     return s;
 }
 
-/** DDGI scaled by bounceIntensity to match what ShadeRadianceCacheCell feeds the cache. */
+/** Scaled by bounceIntensity to match what ShadeRadianceCacheCell feeds the cache. */
 static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, ReflectionProbeBlend probeBlend)
 {
     float3 indirectDiffuse = float3(0.0);
@@ -88,13 +84,13 @@ static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, 
     }
     if (probeBlend.indexA >= 0) {
         float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, normal);
-        // Fill, not override: a cubemap has no positional validity, so it stands in only where the cascades have no answer.
+        // Fill, not override: a cubemap has no positional validity.
         indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
     }
     return indirectDiffuse;
 }
 
-/** Reader keep-alive: the cell lands in this frame's touch set and carry forward stamps it later, once no graphics work can still be reading the table it rebuilds. */
+/** Reader keep-alive: carry forward stamps touched cells later, once no graphics work can still read the table it rebuilds. */
 static void GatherTouchCell(GIGatherPushConstant pc, uint slot)
 {
     if (pc.touchEntries == nullptr) {
@@ -104,7 +100,6 @@ static void GatherTouchCell(GIGatherPushConstant pc, uint slot)
     RadianceCacheHashInsert(pc.touchEntries, nullptr, nullptr, RadianceCacheUnpackKey(pc.cacheKeys[slot]), isNew);
 }
 
-/** Cache-then-probe resolution at a ray hit; shared by front-face hits whose screen tier failed and backface hits. */
 static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos, float3 hitWorldPos, GatherHitSurface hit, float3 direction, float hitT, out uint tier)
 {
     float3 radiance;
@@ -120,8 +115,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
         if (pc.reflectionProbeCount > 0u) {
             probeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
         }
-        // No light loop at fallback hits; their own direct light is missing (TDA's same trade).
-        // V = N, as the cache cell it stands in for.
+        // Deliberately no light loop at fallback hits. V = N, as the cache cell it stands in for.
         radiance = hit.diffuseColor * OrenNayarDirectionalAlbedo(1.0, hit.roughness) * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
         tier = GI_GATHER_TIER_PROBE;
         if (probeBlend.indexA >= 0 && probeBlend.coverage > 0.5) {
@@ -196,15 +190,13 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                     bFrontFace = true;
                 }
 
-                // Tier 0: last frame's on-screen diffuse at the hit (ReSTIR: view-independent screen diffuse; otherwise lit color as-is), when visible and geometry agrees.
-                // Emission never rides the gather (emissive DI belongs to ReSTIR tri-lights, absent otherwise by design; probes carry the bounce), and lit history at an emitter contains its glow.
+                // Emitters skipped: emission never rides the gather, and lit history at an emitter contains its glow.
                 bool bResolved = false;
                 if (bFrontFace && !hit.bEmissive && pc.litHistoryIndex != ~0x0u) {
                     float4 prevClip = mul(scene.prevViewProj, float4(hitWorldPos, 1.0));
                     if (prevClip.w > 0.0) {
                         float2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
                         if (all(prevUV >= float2(0.0)) && all(prevUV <= float2(1.0))) {
-                            // Validity-weighted bilinear: every gate applies per corner, so a disoccluded texel contributes nothing instead of bleeding into the blend.
                             float2 texelPos = prevUV * float2(pc.renderExtent) - 0.5;
                             int2 base = int2(floor(texelPos));
                             float2 f = texelPos - float2(base);
@@ -232,7 +224,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                                 if (dot(hit.normal, prevWorldN) <= 0.5) {
                                     continue;
                                 }
-                                // Emitter texel: rays through a light proxy hit the surface just behind it and reproject onto the emitter's own pixels, importing its glow.
+                                // Rays through a light proxy hit the surface behind it and would reproject onto the emitter's glow.
                                 if ((prevGt1.w & 2u) != 0u) {
                                     continue;
                                 }
@@ -242,7 +234,6 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                             if (sumW > 1e-3) {
                                 radiance = sum / (sumW * scene.prevPreExposure);
                                 if (bScreenDiffuse) {
-                                    // Same quantity the cache stores: Oren-Nayar at V = N is A(r) * Lambert.
                                     radiance *= hit.diffuseColor * OrenNayarDirectionalAlbedo(1.0, hit.roughness);
                                 }
                                 tier = GI_GATHER_TIER_SCREEN;
@@ -253,8 +244,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                 }
 
                 if (!bFrontFace) {
-                    // Near backface = origin buried in geometry (leak guard).
-                    // Far backface = open space behind a single-sided surface: shade its back through the world tiers.
+                    // Near backface = origin buried in geometry; far backface = open space behind a single-sided surface.
                     if (hitT > GI_GATHER_BACKFACE_GUARD_DISTANCE) {
                         hit.normal = -hit.normal;
                         radiance = ResolveHitFallback(pc, scene.cameraWorldPos.xyz, hitWorldPos, hit, direction, hitT, tier);
@@ -269,7 +259,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                 tier = GI_GATHER_TIER_SKY;
             }
 
-            // The SH carries only the directional tilt; the plain mean of the cosine-sampled radiance is the unbiased E/pi at worldN (GIGatherEvaluate).
+            // The SH carries only the tilt; the plain mean is the unbiased E/pi at worldN.
             radiance = GIGatherClampRadiance(radiance, min(pc.maxRayRadiance > 0.0 ? pc.maxRayRadiance : 1e30, GI_GATHER_MAX_EXPOSED_RADIANCE / scene.preExposure));
             float NoD = max(dot(worldN, direction), 0.25);
             float l0 = 0.25 / NoD;

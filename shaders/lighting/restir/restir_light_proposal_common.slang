@@ -9,20 +9,13 @@ import lights_interop;
 import random_common;
 import packing_functions;
 
-/**
- * Candidate light proposal for ReSTIR DI initial sampling. Two backends conform:
- * ReGIRProposal (world-space hash grid of per-cell entry tables) and WorldGridProposal (cascaded strongest-K light bin).
- * The generic base kernel ReSTIRDIBase is specialized per backend; only these three ops differ, everything downstream is shared.
- */
 public interface ILightProposal
 {
-    /** Resolve the shading point into this backend's cell; populates internal cell state. Advances h only if the backend jitters. */
     [mutating] void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h);
 
-    /** Draw candidate i of m. Returns false only when there is no cell (caller falls back to uniform, as Marginal does); a failed draw inside a cell returns true with lightIdx = -1. Advances h. */
+    /** Returns false only when there is no cell; a failed draw inside a cell returns true with lightIdx = -1. */
     bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect);
 
-    /** Marginal light-selection pdf for an arbitrary (BRDF-hit) light; feeds the Talbot-MIS denominator. */
     float Marginal(int lightIdx, LightView vs, int liveCount);
 }
 
@@ -66,8 +59,6 @@ float MeshletTriPdf(LightData* lightData, EmissiveMeshlet meshlet, MeshletTriCdf
     return (width > 0.0 && cdf.total > 0.0) ? width / cdf.total : 0.0;
 }
 
-/** ReGIR: the cell's entry table (see ReGIREntry). Draw binary-searches cumMass for a stratified u, then picks a triangle inside a meshlet by power;
- *  Marginal binary-searches the key, so the selection pdf is exact both ways and Talbot MIS stays unbiased. */
 public struct ReGIRProposal : ILightProposal
 {
     public uint* hashEntries;
@@ -162,7 +153,6 @@ public struct ReGIRProposal : ILightProposal
             target = REGIR_KEY_MESHLET | meshletIdx;
         }
 
-        // A light the cell does not hold cannot come from the grid, so its light-strategy pdf is 0
         uint lo = 0u;
         uint hi = entryCount;
         while (lo < hi) {
@@ -183,10 +173,6 @@ public struct ReGIRProposal : ILightProposal
     }
 }
 
-/** WorldGridBin: cascaded strongest-K light list. The cell holds analytic lights and emissive meshlets in two
- *  parallel top-K lists. A draw splits between the two lists proportional to their kept-set power sums (so low-power emissive meshlets
- *  cannot starve the analytic candidate budget), then picks uniformly among analytics, or a meshlet by its power share and a triangle
- *  by power within it. All terms are exact, so Marginal() keeps the Talbot-MIS denominator unbiased. */
 public struct WorldGridProposal : ILightProposal
 {
     public uint2* grid;
@@ -240,7 +226,6 @@ public struct WorldGridProposal : ILightProposal
         lightIdx = -1;
         pSelect = 0.0;
         uint total = cellCount + meshletCount;
-        // Empty cell: let the caller's uniform-over-all-lights fallback handle it (already covers emissives).
         if (total == 0u) { return false; }
 
         float u = (float(i) + HashStep(h)) / float(m);
@@ -248,7 +233,7 @@ public struct WorldGridProposal : ILightProposal
         if (UsePowerSplit()) {
             float T = analyticPow + meshletPow;
             float pA = analyticPow / T;
-            // Branch on counts, never on float compares alone: pA==1.0 is not guaranteed exact, and the meshlet path with meshletCount==0 underflows the index
+            // Branch on counts: pA == 1.0 is not exact, and meshletCount == 0 would underflow the index.
             if (meshletCount == 0u || (cellCount > 0u && u < pA)) {
                 uint j = min(uint((u / max(pA, 1e-8)) * float(cellCount)), cellCount - 1u);
                 uint idx = indexList[cellOffset + j];
@@ -283,7 +268,6 @@ public struct WorldGridProposal : ILightProposal
             return true;
         }
 
-        // Meshlet path draws one extra step; with no emissive meshlets present it is never taken
         EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + (j - cellCount)]];
         if (meshlet.lightCount == 0u) { return true; }
         MeshletTriCdf cdf = MeshletTriCdfOf(lightData, meshlet);
@@ -296,7 +280,6 @@ public struct WorldGridProposal : ILightProposal
 
     public float Marginal(int lightIdx, LightView vs, int liveCount)
     {
-        // Exact: a light is a candidate iff it survived its cell list, at the same pdf the draw used
         uint total = cellCount + meshletCount;
         if (total == 0u) { return 1.0 / float(liveCount); }
 
@@ -312,7 +295,6 @@ public struct WorldGridProposal : ILightProposal
             return 0.0;
         }
 
-        // Meshlet runs are disjoint, so an emissive triangle matches at most one binned meshlet.
         for (uint k = 0u; k < meshletCount; k++) {
             EmissiveMeshlet meshlet = lightData->emissiveMeshlets[emissiveIndexList[meshletOffset + k]];
             if (uint(lightIdx) >= meshlet.firstLight && uint(lightIdx) < meshlet.firstLight + meshlet.lightCount) {

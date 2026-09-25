@@ -6,8 +6,6 @@ import shader_functions;
 import packing_functions;
 import gi_gather_common;
 
-// Separable bilateral gaussian over the gather SH, iterated a-trous (H then V via pc.direction, stride via pc.stepSize); FP16 groupshared preload, weights from plane-distance/normal/hitT deltas.
-
 static const int GI_DENOISE_RADIUS = 2;
 static const int GI_DENOISE_MAX_STRIDE = 4;
 static const int GI_DENOISE_TILE_RADIUS = GI_DENOISE_RADIUS * GI_DENOISE_MAX_STRIDE;
@@ -55,8 +53,7 @@ void ComputeGIDenoise(uniform GIDenoisePushConstant pc, uint3 gtid : SV_GroupThr
         sShB[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcShBIndex].Load(int3(p, 0)));
         sNormal[t] = g.x;
         sViewZ[t] = valid ? asfloat(g.y) : 0.0;
-        // Sky misses opt out of the hitT guide (sentinel -1): a miss is a legit 0-radiance sample of the same integral as a neighboring hit, but hitT=10000 vs metres walls them off; with no IBL that blocks exactly the smoothing the outdoor speckle needs.
-        // Far surface hits take the same opt-out. Past a few metres the exact distance carries no geometric correlation, but the edge-stop still reads the gap as a hard boundary and walls a far-bright outlier off from the near-dark neighbours that should average it down.
+        // Sky misses and far hits opt out of the hitT guide (sentinel -1): their distance carries no geometric correlation and the edge-stop would wall them off.
         bool bFarField = uint(data.y + 0.5) == GI_GATHER_TIER_SKY || data.x >= GI_DENOISE_HITT_FAR_METERS;
         sHitT[t] = bFarField ? -1.0 : data.x;
         sMeanV[t] = PackHalf2x16Pair(rdgTexturesFloat4[pc.srcSkyVisIndex].Load(int3(p, 0)));

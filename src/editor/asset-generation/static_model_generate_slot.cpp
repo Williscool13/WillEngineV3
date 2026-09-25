@@ -28,9 +28,7 @@
 
 namespace Editor
 {
-/**
- * A BLAS build needs roughly 200 bytes of scratch per triangle, so this keeps every primitive under the loader's fixed per-slot scratch buffer (AssetLoad::BLAS_SCRATCH_SLOT_SIZE) with margin for driver variance.
- */
+/** ~200 bytes of BLAS scratch per triangle; keeps each primitive under AssetLoad::BLAS_SCRATCH_SLOT_SIZE with driver margin. */
 static constexpr uint32_t BLAS_SPLIT_TRIANGLE_TARGET = 16384;
 // glTF emissive strength is unitless; strength 1 imports as 65536 nits
 static constexpr float GLTF_EMISSIVE_STRENGTH_TO_NITS = 65536.0f;
@@ -65,7 +63,6 @@ static void AppendPng(void* context, void* data, int size)
     out.Append(bytes, bytes + size);
 }
 
-/** Loads one spec-gloss image, converts it to metal-rough and writes it as a PNG at parentPath/relName. */
 static bool ConvertSpecGlossImage(Core::TlsfAllocator* scratch, const Core::Path& parentPath, const RawImage& source, float glossFactor, float specFactor, const char* relName)
 {
     int32_t w = source.w;
@@ -173,7 +170,7 @@ static bool IsEmissiveTexelLit(const EmissiveMask& mask, const Engine::SamplerDe
     return mask.texels[static_cast<size_t>(y) * mask.w + x] >= EMISSIVE_LIT_TEXEL_THRESHOLD;
 }
 
-/** Marks each triangle lit when at least EMISSIVE_LIT_TRIANGLE_COVERAGE of its area samples lit emissive texels. Returns the lit triangle count. */
+/** Lit when at least EMISSIVE_LIT_TRIANGLE_COVERAGE of a triangle's area samples are lit. Returns the lit count. */
 static uint32_t ClassifyEmissiveTriangles(const EmissiveMask& mask, const Engine::SamplerDesc& sampler, const glm::vec4& uvTransform, const uint32_t* indices, uint32_t triangleCount, const float* uvs, uint8_t* triangleLit)
 {
     const glm::vec2 texelScale{static_cast<float>(mask.w), static_cast<float>(mask.h)};
@@ -840,7 +837,7 @@ bool StaticModelGenerateSlot::LoadGltf()
 
                     // todo: Skinned Rendering will be done in another model format (JOINTS_0/WEIGHTS_0 in the skinned generate slot)
 
-                    // UV (unpack_floats applies KHR_mesh_quantization normalization; the -1 snorm floor only applies to normalized accessors, raw float tiling UVs may span far below -1)
+                    // UV (raw float tiling UVs may go far below -1; only normalized accessors get the snorm floor)
                     if (uvAccessor != nullptr) {
                         cgltf_accessor_unpack_floats(uvAccessor, attrScratch.Data(), uvAccessor->count * 2);
                         const float uvFloor = uvAccessor->normalized ? -1.0f : -FLT_MAX;

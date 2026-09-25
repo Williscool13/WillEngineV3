@@ -47,7 +47,7 @@ SHADER_PUBLIC SHADER_CONST uint DDGI_SENTINEL_RAYS = 16u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_CAMERA_CASCADES = 6u;
 // World Volume
 SHADER_PUBLIC SHADER_CONST uint32_t DDGI_MAX_RESIDENT_LOCAL_VOLUMES = 100u;
-/** Both kinds share one descriptor array: camera cascades occupy the first entries, resident world volumes the rest. */
+/** Camera cascades occupy the first entries, resident world volumes the rest. */
 SHADER_PUBLIC SHADER_CONST uint DDGI_MAX_VOLUME_SLOTS = 106u;
 
 SHADER_PUBLIC SHADER_CONST uint32_t DDGI_LOCAL_WARMUP_UPDATES = 16u;
@@ -58,12 +58,7 @@ SHADER_PUBLIC SHADER_CONST uint DDGI_IRRADIANCE_INTERIOR = 6u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_TILE = 16u;
 SHADER_PUBLIC SHADER_CONST uint DDGI_VISIBILITY_INTERIOR = 14u;
 
-/**
- * Rolling probe window over a world-space lattice. Probe cell g sits at origin + g * probeSpacing; the window spans probeCount cells from baseCell.
- * Camera cascades use origin 0 and scroll baseCell; world volumes use origin = authored corner and baseCell 0, so the authored box is exact.
- * Storage slot s holds cell baseCell + EuclideanMod(s - baseCell, probeCount), so a scroll only changes the cells of the newly exposed planes.
- * Also carries the sampling parameters (biases, encoding gamma) so consumers need only this struct plus the two atlas textures.
- */
+/** Cell g sits at origin + g * probeSpacing; storage slot s holds cell baseCell + EuclideanMod(s - baseCell, probeCount). */
 SHADER_PUBLIC struct DDGIVolumeParams
 {
     SHADER_PUBLIC int3 baseCell;
@@ -74,12 +69,12 @@ SHADER_PUBLIC struct DDGIVolumeParams
     SHADER_PUBLIC float probeSpacing;
     SHADER_PUBLIC float irradianceGamma;
     SHADER_PUBLIC float edgeFadeCells;
-    /** Row atlasSlot of atlasRows in the atlas. Every volume now owns its atlas outright (slot 0 of 1); the fields stay so the tile math is layout-agnostic. */
+    /** Always slot 0 of 1; kept so the tile math is layout-agnostic. */
     SHADER_PUBLIC uint atlasSlot;
     SHADER_PUBLIC uint atlasRows;
 };
 
-/** One sampleable cascade: the volume it was built with plus the atlas/offsets it should be read through. Explicit pads keep the C++ size at the std430 array stride (96). */
+/** Explicit pads keep the C++ size at the std430 array stride (96). */
 SHADER_PUBLIC struct DDGICascadeDescriptor
 {
     SHADER_PUBLIC DDGIVolumeParams volume;
@@ -92,8 +87,7 @@ SHADER_PUBLIC struct DDGICascadeDescriptor
     SHADER_PUBLIC uint pad1;
 };
 
-/** Per-frame cascade chain, finest first; consumers get one pointer to this instead of inline volume fields.
- * Local volumes (fixed hand-placed windows, finer than cascade 0) occupy [cascadeCount, cascadeCount + localCount) and are sampled before the cascades. */
+/** Local volumes occupy [cascadeCount, cascadeCount + localCount) and are sampled before the cascades. */
 SHADER_PUBLIC struct DDGICascadeSetGPU
 {
     SHADER_PUBLIC uint cascadeCount;

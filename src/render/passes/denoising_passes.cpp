@@ -116,7 +116,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     rc.gWorldToClip = proj * rotView;
     rc.gWorldToClipPrev = prevProj * worldToViewPrev;
 
-    // gWorldToViewPrev must emit positive viewZ (NRD convention) to match the positive linearized depths it is compared against; negate the z-output row of the camera-relative world->prevView matrix.
+    // NRD expects positive viewZ from gWorldToViewPrev; negate the z-output row.
     glm::mat4 worldToViewPrevPosZ = worldToViewPrev;
     worldToViewPrevPosZ[0][2] = -worldToViewPrevPosZ[0][2];
     worldToViewPrevPosZ[1][2] = -worldToViewPrevPosZ[1][2];
@@ -378,8 +378,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     graph.CreateTexture("relax_atrous_diff_0"_sid, colorInfo, {std::nullopt}, true);
     graph.CreateTexture("relax_atrous_diff_1"_sid, colorInfo, {std::nullopt}, true);
 
-    // Pass 4: History Fix. Filters the slow history but writes the responsive (fast) textures in place,
-    // only at short-history pixels; clamping then promotes the fixed responsive value into the slow output.
+    // Pass 4: History Fix. Writes the responsive textures in place at short-history pixels; clamping promotes them into the slow output.
     {
         auto& pass = graph.AddPass("[ReLAX] History Fix"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer("relax_constants"_sid);
@@ -411,15 +410,11 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     }
 
 
-    // ----------------------------------------------------------------
     // Pass 5: History Clamping
-    // ----------------------------------------------------------------
     {
         const StringID specNoisy = bPrepass ? "relax_spec_prepass"_sid : specInput;
         const StringID diffNoisy = bPrepass ? "relax_diff_prepass"_sid : diffInput;
 
-        // With anti-firefly enabled the clamped slow output goes into the atrous scratch and anti-firefly produces relax_*_hist.
-        // Without it, the clamping output is the carried slow history directly.
         const StringID clampSpecOut = params.enableAntiFirefly ? "relax_atrous_spec_0"_sid : "relax_spec_hist"_sid;
         const StringID clampDiffOut = params.enableAntiFirefly ? "relax_atrous_diff_0"_sid : "relax_diff_hist"_sid;
 
@@ -468,8 +463,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         });
     }
 
-    // Pass 6: Anti-Firefly. RCRS filter from the clamped slow history (in the history-fix scratch) into relax_*_hist, so the firefly-suppressed result is what gets carried as next frame's history (matches NRD's Copy + Anti-Firefly writing into SPEC/DIFF_ILLUM_PREV).
-    // Distinct input/output textures: the shared-memory preload reads a border from neighboring workgroups, so in-place filtering would race.
+    // Pass 6: Anti-Firefly. Writes relax_*_hist so the suppressed result is what gets carried as history.
+    // Separate input/output: the shared-memory preload reads neighboring workgroup borders, so in-place would race.
     if (params.enableAntiFirefly) {
         auto& pass = graph.AddPass("[ReLAX] Anti-Firefly"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReLAX);
         pass.ReadBuffer("relax_constants"_sid);
@@ -498,9 +493,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     }
 
 
-    // Pass 7: A-Trous (N iterations). Iteration 0 reads the carried slow history (relax_*_hist).
-    // Later iterations ping-pong the atrous scratch buffers. The hist textures are never written by the A-Trous chain, so they survive end-of-frame to be carried as next frame's slow history.
-    // Last iteration writes into the intermediates so remodulate can composite them.
+    // Pass 7: A-Trous. Never writes relax_*_hist, so it survives to be carried as next frame's slow history.
     {
         const int32_t iters = glm::max(1, params.atrousIterations);
         const int32_t chromaIters = params.bChromaAtrous ? glm::clamp(params.chromaAtrousIterations, 1, 4) : 0;
@@ -633,6 +626,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
         if (bGIGather) {
             pass.ReadSampledImage(GI_GATHER_RESOLVED);
             pass.ReadSampledImage(GI_GATHER_DATA);
+            pass.ReadSampledImage(GI_GATHER_SKY_VIS_HISTORY);
         }
         pass.WriteStorageImage(noisyInput);
 
@@ -670,6 +664,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
                 .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
                 .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(GI_SCREEN_DIFFUSE) : ~0x0u,
+                .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -697,8 +692,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
 {
     ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
-    // NRD resolves checkerboard inside the prepass, so it must run when checkerboard is on
-    // (with radius 0 when the user disabled it; the shader gates the Poisson loops on radius).
+    // NRD resolves checkerboard inside the prepass; radius 0 when the user disabled it.
     const bool bPrepass = params.enablePrepass || bCheckerboard;
     const uint32_t width = renderExtent[0];
     const uint32_t height = renderExtent[1];
@@ -971,8 +965,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     // Fast (responsive) history is NRD-faithful single-channel luma (R16F), not RGBA.
     graph.CreateTexture("reblur_spec_fast"_sid, histLenInfo, {std::nullopt}, true);
     graph.CreateTexture("reblur_diff_fast"_sid, histLenInfo, {std::nullopt}, true);
-    // DATA1 = per-lobe accum frames (RG8), DATA2 = occlusion bits + curvature + vha (R32U);
-    // internal data = carried per-lobe accum speeds written by stabilization with antilag feedback.
+    // DATA1 = per-lobe accum frames (RG8), DATA2 = occlusion bits + curvature + vha (R32U).
     graph.CreateTexture("reblur_data1"_sid, data1Info, {std::nullopt}, true);
     graph.CreateTexture("reblur_data2"_sid, data2Info, {std::nullopt}, true);
     graph.CreateTexture("reblur_spec_hfix"_sid, colorInfo, {std::nullopt}, true);
@@ -1133,8 +1126,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     const int32_t chromaIters = params.bChromaAtrous ? glm::clamp(params.chromaAtrousIterations, 1, 4) : 0;
     const StringID stabilizationDiffOut = chromaIters > 0 ? "reblur_diff_blur"_sid : diffInput;
 
-    // Pass 8: Temporal stabilization (luma-only stabilized ping-pong, surface + virtual motion via the DATA2
-    // occlusion bits, antilag feedback written into the carried internal data, final RGB into intermediates)
+    // Pass 8: Temporal stabilization
     {
         auto& pass = graph.AddPass("[ReBLUR] Temporal Stabilization"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReBLUR);
         pass.ReadBuffer("reblur_constants"_sid);
@@ -1261,6 +1253,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         if (bGIGather) {
             pass.ReadSampledImage(GI_GATHER_RESOLVED);
             pass.ReadSampledImage(GI_GATHER_DATA);
+            pass.ReadSampledImage(GI_GATHER_SKY_VIS_HISTORY);
         }
         pass.WriteStorageImage(noisyInput);
 
@@ -1298,6 +1291,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
                 .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
                 .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(GI_SCREEN_DIFFUSE) : ~0x0u,
+                .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY) : ~0x0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

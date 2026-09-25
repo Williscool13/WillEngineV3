@@ -21,7 +21,6 @@ import restir_light_proposal_common;
 
 #include "restir_features_macros.h"
 
-// Generic over the candidate proposal (ReGIR grid or WorldGrid strongest-K bin); the two backends differ only in Acquire/Draw/Marginal.
 void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPushConstant pc, uint3 threadID) {
     uint field = pc.activeCheckerboardField;
     uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
@@ -208,7 +207,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     if (bReflEligible) {
                         ReflectionHitDescriptor refl;
                         refl.rayDir = ray.Direction;
-                        // Defer specular from local lights to the traced reflection pass across its whole eligible roughness range
+                        // Below this roughness the traced reflection pass supplies the specular.
                         if (bOwnedByReSTIR && roughness > pc.lightSpecularFromReflectionsMax) {
                             refl.hitT = REFLECTION_HIT_T_OWNED;
                             refl.bary = float2(0.0);

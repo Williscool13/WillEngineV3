@@ -46,7 +46,6 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
     float centerViewZ = RelaxLoadViewZ(pc.viewZIndex, fullPixel, rc.depthLinearizeMult, rc.depthLinearizeAdd);
     if (!RelaxIsInDenoisingRange(centerViewZ, rc.gDenoisingRange)) { return; }
 
-    // Checkerboard holes blend the two horizontal packed neighbors, depth-weighted.
     uint cbCheckerboard = ((uint(pixelPos.x) ^ uint(pixelPos.y)) ^ rc.gFrameIndex) & 1u;
     int2 cbPosL = int2(max(pixelPos.x - 1, 0) >> 1, pixelPos.y);
     int2 cbPosR = int2(min(pixelPos.x + 1, rc.gRectSize.x - 1) >> 1, pixelPos.y);
@@ -70,7 +69,6 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
     float frustumSize = RelaxPixelRadiusToWorld(rc.gUnproject, rc.gOrthoMode, min(float(rc.gRectSize.x), float(rc.gRectSize.y)), centerViewZ);
     float planeDistanceCenterZ = rc.gOrthoMode == 0 ? centerViewZ : 1.0;
 
-    // ---------------- Diffuse pre-blur ----------------
     int2 diffPos = (rc.gCheckerboard != 2u) ? int2(pixelPos.x >> 1, pixelPos.y) : pixelPos;
     float4 diffSum = rdgTexturesFloat4[pc.diffInputIndex].Load(int3(diffPos, 0));
     if (rc.gCheckerboard != 2u && cbCheckerboard != rc.gCheckerboard)
@@ -84,8 +82,6 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
     }
     if (rc.gDiffPrepassBlurRadius > 0.0)
     {
-        // NRD pre-blur: areaFactor = hitDistFactor; blurRadius = gDiffPrepassBlurRadius * sqrt(areaFactor).
-        // Signal .w is normalized; de-normalize before world-domain radius math.
         float hitDist = ReblurDenormHitDist(diffSum.a == 0.0 ? 1.0 : diffSum.a, centerViewZ, rc.gHitDistParams, 1.0);
         float blurRadius = rc.gDiffPrepassBlurRadius * sqrt(saturate(RelaxGetHitDistFactor(hitDist, frustumSize)));
         if (diffSum.a == 0.0) { blurRadius = max(blurRadius, 1.0); }
@@ -123,7 +119,6 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
     }
     rdgStorageFloat4[pc.diffOutIndex][pixelPos] = diffSum;
 
-    // ---------------- Specular pre-blur ----------------
     int2 specPos = (rc.gCheckerboard != 2u) ? int2(pixelPos.x >> 1, pixelPos.y) : pixelPos;
     float4 specSum = rdgTexturesFloat4[pc.specInputIndex].Load(int3(specPos, 0));
     if (rc.gCheckerboard != 2u && cbCheckerboard != rc.gCheckerboard)
@@ -143,8 +138,7 @@ void ReblurPrepassMain(uniform ReblurPrepassPushConstant pc, int2 pixelPos : SV_
         float NoD = abs(dot(centerNormal, D.xyz));
         float NoV = abs(dot(centerNormal, viewVector));
 
-        // NRD spec pre-blur: areaFactor = roughness * hitDistFactor; blurRadius = gSpecPrepassBlurRadius * sqrt(areaFactor).
-        // hitDistFactor uses world hitDist WITHOUT *NoD (NRD note: *NoD worsens glancing angles); roughness replaces specMagicCurve.
+        // No *NoD on hitDist, it worsens glancing angles.
         float smc = RelaxGetSpecMagicCurve(centerRoughness);
         float hitDist = ReblurDenormHitDist(specSum.a == 0.0 ? 1.0 : specSum.a, centerViewZ, rc.gHitDistParams, centerRoughness);
         float hitDistFactor = RelaxGetHitDistFactor(hitDist, frustumSize);

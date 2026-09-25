@@ -12,7 +12,7 @@ namespace Render
 {
 class PipelineManager;
 
-// Entries/keys/cells are versioned depth 1: carry forward rebuilds this frame's table from Version(name, 1).
+// Entries/keys/cells are versioned depth 1; carry-forward rebuilds from Version(name, 1).
 inline const StringID RADIANCE_CACHE_ENTRIES = "radiance_cache_entries"_sid;
 inline const StringID RADIANCE_CACHE_KEYS = "radiance_cache_keys"_sid;
 inline const StringID RADIANCE_CACHE_CELLS = "radiance_cache_cells"_sid;
@@ -32,7 +32,6 @@ inline constexpr VkDeviceSize RADIANCE_CACHE_DESCRIPTORS_BYTES = static_cast<VkD
 inline constexpr VkDeviceSize RADIANCE_CACHE_ACTIVE_LIST_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_SHADE_BUDGET) * sizeof(uint32_t);
 inline constexpr VkDeviceSize RADIANCE_CACHE_SHADE_ARGS_BYTES = 3u * sizeof(uint32_t);
 
-/** Gates every radiance-cache consumer this frame. */
 struct RadianceCacheFrame
 {
     bool bValid{false};
@@ -40,7 +39,7 @@ struct RadianceCacheFrame
 
 
 /**
- * Creates and clears this frame's cache buffers, carries forward last frame's survivors.
+ * Cells unshaded for 4 shadeIntervals are evicted even if touched. bFreeze suspends eviction and pins cell ages.
  * @param graph
  * @param pipelineManager
  * @param frameNumber
@@ -52,7 +51,7 @@ struct RadianceCacheFrame
 RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* pipelineManager, uint64_t frameNumber, const glm::vec3& cameraPos, bool bFreeze, uint32_t shadeInterval);
 
 /**
- * Shades the frame's armed cells via budgeted indirect dispatch over the compact active list.
+ * skyboxIndex -1 disables the sky fallback; maxRadiance 0 disables the firefly clamp. bounceIntensity stays below 1 to bound the cache/DDGI loop gain.
  * @param graph
  * @param pipelineManager
  * @param frame
@@ -69,7 +68,7 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
 void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
 
 /**
- * One solid cube per occupied hash slot, colored by decoded radiance.
+ * normalBucket: -1 all, 0-5 = +X, -X, +Y, -Y, +Z, -Z.
  * @param graph
  * @param pipelineManager
  * @param frame

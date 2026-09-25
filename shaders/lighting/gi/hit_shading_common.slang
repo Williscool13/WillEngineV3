@@ -21,10 +21,8 @@ import reflection_probe_common;
 import reflection_interop;
 import rt_alpha_test_common;
 
-// Coarse fixed mip: hit-point shading is low frequency (DDGI probes, reflection rays)
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
-/** Geometry-only normal decode, no material/lighting work. Used to key the radiance cache before deciding whether a full shade is even needed. */
 static float3 DecodeHitNormalImpl(Primitive* primitiveBuffer, uint32_t* indexBuffer, VertexAttribute* vertexAttrBuffer, Model* modelBuffer, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror)
 {
     Primitive primitive = primitiveBuffer[instance.primitiveIndex];
@@ -48,7 +46,6 @@ public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance,
     return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, bMirror);
 }
 
-/** Diffuse color and emissive at a probe-ray hit; the radiance cache stores neither. */
 public float3 DecodeHitDiffuseEmissive(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, out float3 emissive)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -80,13 +77,11 @@ public float3 DecodeHitDiffuseEmissive(DDGIProbeTracePushConstant pc, Instance i
     return albedo.rgb * (1.0 - metallic);
 }
 
-/** A ray reaching the back of a two-sided material sees a surface facing it: shade the mirror of the front instead of treating it as the inside of solid geometry. */
 public bool IsTwoSidedBackHit(MaterialProperties* materialBuffer, Instance instance, bool bFrontFace)
 {
     return !bFrontFace && materialBuffer[instance.materialIndex].alphaProperties.z != 0.0;
 }
 
-/** For hits that kept no front-face bit: faces the triangle itself, oriented to its vertex normal so winding never matters. */
 public bool IsTwoSidedBackHit(ReflectionShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 rayDirection)
 {
     if (pc.materialBuffer[instance.materialIndex].alphaProperties.z == 0.0) {
@@ -161,8 +156,6 @@ static float3 ShadeSelectedLocalLight(LightInfo light, uint tlasIndex, float3 wo
 
 /**
  * RIS over the analytic lights binned into this cell, diffuse only, sampleCount independent one-sample estimates averaged.
- * One bin walk runs sampleCount weighted reservoirs on the unshadowed punctual luma (arithmetic only), then each winner is area-sampled and
- * shadow-tested, so cost is sampleCount rays regardless of bin size. Each estimate returns sum_i f_i in expectation, since E[F_j * W/w_j] = sum_j (w_j/W) * F_j * (W/w_j).
  * @param rngSeed salted per shade event; the caller's sun samples use a different stream.
  * @param sampleCount clamped to [1, RADIANCE_CACHE_NEE_SAMPLES].
  */
@@ -214,7 +207,7 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
     return sum / float(sampleCount);
 }
 
-/** Fallback for DDGI probe rays when the radiance cache has no slot for the hit: sun (shadow-ray tested) + emissive + one-sample RIS over the cell's analytic lights + IBL/DDGI feedback. Kept matched to ShadeRadianceCacheCell so cache-miss fallbacks agree with the cell values they stand in for. */
+/** Keep matched to ShadeRadianceCacheCell so cache-miss fallbacks agree with the cells they stand in for. */
 public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, float3 worldPosition, float3 rayDirection, uint rngSeed, float maxBias)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -307,8 +300,6 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     return radiance;
 }
 
-/** Used by the reflection shade pass. */
-/** Top-N unshadowed local-light contributions at a reflection hit, sorted by luma; the local shadow-ray budget is spent on these. */
 struct HitShadowCandidates
 {
     float3 contribution[REFLECTION_HIT_SHADOW_RAYS_MAX];
@@ -459,7 +450,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     if (pc.skyboxIndex >= 0) {
         specRadiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], CubemapDirection(R), sqrt(roughness) * float(ENVIRONMENT_MAP_SPECULAR_MIPS - 1)).rgb * pc.iblIntensity;
         if (pc.bDDGIApply != 0u) {
-            // Same sky-visibility ratio as remodulate's GI_SKY_SPECULAR_OCCLUSION
+            // Must match remodulate's GI_SKY_SPECULAR_OCCLUSION.
             float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], N) * pc.iblIntensity;
             float3 indirectDiffuse = gi.rgb * gi.w + skyIrradiance * (1.0 - gi.w);
             specRadiance *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
@@ -477,7 +468,6 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
 }
 
 
-/** Uniformly sample a ray direction inside the sun's angular cone (half-angle = angularRadius) around the mean direction. */
 static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float u1, float u2)
 {
     float cosThetaMax = cos(angularRadius);
@@ -492,8 +482,7 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
     return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
 }
 
-// V = N (NoV = 1): no single ray direction to use, and this value gets read back from every direction later.
-// Returns the non-emissive radiosity; own emission goes out separately so the cell EMA/streak never sees bary-jitter on/off emissive texels.
+// V = N since the cell is read back from every direction. Excludes own emission.
 public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -534,7 +523,6 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
         float3 L = normalize(-sun.directionIntensity.xyz);
         float NoL = dot(N, L);
         if (NoL > 0.0) {
-            // Zero angular radius makes every cone sample identical; one ray suffices.
             uint sampleCount = sun.angularRadius > 0.0 ? RADIANCE_CACHE_NEE_SAMPLES : 1u;
             float sunVisibility = 0.0;
             for (uint s = 0u; s < sampleCount; s++) {

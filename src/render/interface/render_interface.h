@@ -115,7 +115,6 @@ enum class ScreenFadeMode : uint8_t
     Letterbox,
 };
 
-/** Gameplay-driven screen cover, not a graphics setting. */
 struct ScreenFadeState
 {
     ScreenFadeMode mode{ScreenFadeMode::None};
@@ -125,7 +124,6 @@ struct ScreenFadeState
     glm::vec2 center{0.5f, 0.5f};
     glm::vec2 direction{1.0f, 0.0f};
     glm::vec3 color{0.0f, 0.0f, 0.0f};
-    /** Composite after the game UI instead of before it, so the fade covers the HUD. */
     bool bDrawOverUI{false};
 };
 
@@ -217,7 +215,7 @@ struct DebugArrow
     float width{0.03f};
 };
 
-/** Axis = local Y. `halfHeight` is the cylindrical body half-length (excludes the hemispherical caps). */
+/** Axis = local Y. `halfHeight` excludes the hemispherical caps. */
 struct DebugCapsule
 {
     glm::vec3 center;
@@ -410,7 +408,6 @@ struct ViewFamilyWatermarks
     size_t spriteBatches{16};
 };
 
-/** One editor preview sphere, drawn cubemap-shaded at a reflection probe's capture position. */
 struct ProbePreviewSphere
 {
     uint32_t cubemapIndex{0};
@@ -418,7 +415,6 @@ struct ProbePreviewSphere
     float radianceScale{1.0f};
 };
 
-/** Shared settings for the probe preview spheres. */
 struct ProbePreviewSettings
 {
     bool bActive{false};
@@ -508,7 +504,6 @@ struct ViewFamily
     bool bReflectionProbeBruteForce{false};
     float resolutionScale{1.0f};
 
-
     // Debugging
     InlineString<> debugResourceName{};
     DebugTransformationType debugTransformationType{};
@@ -589,7 +584,6 @@ struct FrameBuffer
     /** The one member that flows render -> game; read FRAMES_IN_FLIGHT frames later, so always stale. */
     uint64_t stableIdUnderCursor{0};
 
-    /** Drives the selection outline pass. */
     uint64_t selectedStableId{0};
 
     // Written by WillEngine, before the game's frame prepare runs

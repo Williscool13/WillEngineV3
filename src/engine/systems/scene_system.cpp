@@ -782,7 +782,7 @@ void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Tr
 
     const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
     if (node && registry.valid(node->parent)) {
-        // The parent's cached world already encodes the chain above it; reading it is O(1) and keeps both on the same one-frame-behind clock.
+        // Cached parent world keeps both on the same one-frame-behind clock.
         const Transform parentWorld = registry.get<Component::WorldTransformComponent>(node->parent);
         registry.get<Component::TransformComponent>(entity) = Component::ComposeLocalFromWorld(parentWorld, world);
     }

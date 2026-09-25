@@ -16,9 +16,6 @@ import radiance_cache_interop;
 import binning_common;
 import common_interop;
 
-// =============== Shader Summary ============
-// DDGI probe trace: one thread per probe ray against the scene TLAS + light proxies; misses sample the skybox, front-face hits key+read the radiance cache (last frame's shaded value; NEE shading only as a fallback when the cache has no slot for the hit). Light-proxy hits return the light's emission (front face only), sign-tagged so relocation ignores them.
-
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTracePushConstant pc)
@@ -41,7 +38,6 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         return;
     }
 
-    // The per-frame rotation doubles as relocation's direction search; found escapes persist in the carried offset.
     float3 direction = DDGIRotate(DDGISphericalFibonacci(rayIndex, rayBudget), pc.rayRotation);
 
     // Relocation offsets are last frame's
@@ -67,7 +63,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
         bool bMirror = IsTwoSidedBackHit(pc.materialBuffer, instance, q.CommittedTriangleFrontFace());
         if (instance.lightIndex != 0xFFFFFFFF) {
             float3 radiance = float3(0.0);
-            // Negative x tags a light-proxy hit so relocation/classification skip it; x carries -(emission.r + 1) for the irradiance blend to decode.
+            // Negative x tags a light-proxy hit; x carries -(emission.r + 1).
             result = float4(-(radiance.r + 1.0), radiance.g, radiance.b, hitT);
         } else if (q.CommittedTriangleFrontFace() || bMirror) {
             float3 hitWorldPos = ray.Origin + direction * hitT;
@@ -80,7 +76,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                 RadianceCacheKey wcKey = RadianceCacheComputeKey(hitWorldPos, hitNormal, scene.cameraWorldPos.xyz);
                 bool isNew;
                 uint wcSlot = RadianceCacheHashInsert(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->stats, wcKey, isNew);
-                // Checksum alias (or a same-dispatch insert whose key is not written yet): skip the cache for this ray.
+                // Checksum alias, or a same-dispatch insert whose key is not written yet.
                 if (wcSlot != RADIANCE_CACHE_HASH_INVALID && !isNew && any(pc.radianceCache->keys[wcSlot] != RadianceCachePackKey(wcKey))) {
                     wcSlot = RADIANCE_CACHE_HASH_INVALID;
                 }
@@ -90,7 +86,6 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
                         uint seedCount;
                         packedRadiance = RadianceCacheWarmStartRadiance(pc.radianceCache->entries, pc.radianceCache->keys, pc.radianceCache->cells, wcKey, seedCount);
                         pc.radianceCache->cells[wcSlot].packedRadiance = packedRadiance;
-                        // Inherit the warm-start source's accumulation count so a re-keyed shell keeps its smoothing instead of a 50/50 first shade.
                         pc.radianceCache->cells[wcSlot].changeStreak = seedCount << 16u;
                     }
 
@@ -136,15 +131,15 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
             }
             result = float4(radiance, hitT);
         } else {
-            // Backface hits mark "probe likely inside geometry" with a shortened negative distance, classic DDGI convention.
+            // Negative shortened distance marks a backface hit.
             result = float4(0.0, 0.0, 0.0, -0.2 * hitT);
         }
     } else {
         float3 radiance = float3(0.0);
         if (pc.skyboxIndex >= 0 && (pc.previousBaseCellZFlags & (1u << 17u)) == 0u) {
-            // Matches the Y flip the visible skybox pass applies when sampling the cubemap.
+            // Matches the Y flip the skybox pass applies.
             float3 skyDirection = float3(direction.x, -direction.y, direction.z);
-            // Mip 1, not the roughness-1 level: that one is already cosine-convolved, and the probe's own irradiance integration would convolve the sky twice.
+            // Mip 1, not the cosine-convolved level, or the probe integration convolves the sky twice.
             radiance = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 1).rgb * pc.iblIntensity;
         }
         result = float4(radiance, 10000.0);

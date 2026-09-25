@@ -44,7 +44,7 @@ using float4x4 = glm::mat4;
 // Key = cell pos + LOD + normal bucket (Normal is quantized to dominant axis).
 
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_CAPACITY = 524288u;
-SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_PROBE = 32u; // linear-probe window; 8 dropped ~0.5-1.3% of live cells per rebuild at load 0.5-0.6. Find still stops at the first empty slot
+SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_PROBE = 32u; // Find still stops at the first empty slot
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_EMPTY = 0u;
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_HASH_INVALID = 0xFFFFFFFFu;
 SHADER_PUBLIC SHADER_CONST float RADIANCE_CACHE_CELL_SIZE_BASE = 0.25;
@@ -56,13 +56,13 @@ SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_LOD_REVALIDATE_MARGIN = 2u;
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_ACCUM_FRAMES = 16u;
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_SHADE_INTERVAL = 8u;
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_SHADE_BUDGET = 20480u;
-SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_NEE_SAMPLES = 4u; // independent sun cone rays and local-light RIS samples averaged per cell shade
-SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_WARMSTART_SEED_CAP = 8u; // count a re-keyed cell inherits from its warm-start source; ~half RADIANCE_CACHE_ACCUM_FRAMES so a coarser parent estimate can't fully dominate
+SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_NEE_SAMPLES = 4u;
+SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_WARMSTART_SEED_CAP = 8u; // ~half RADIANCE_CACHE_ACCUM_FRAMES so a coarser parent estimate can't dominate
 SHADER_PUBLIC SHADER_CONST uint RADIANCE_CACHE_RADIANCE_UNSHADED = 0xFFFFFFFFu;
 
 SHADER_PUBLIC struct RadianceCacheCell
 {
-    SHADER_PUBLIC uint2 packedRadiance; // fp16x3 non-emissive radiance / diffuseColor / RADIANCE_CACHE_PACK_SCALE (RGB9E5 EMA round-trips quantize chroma); .y high half 0xFFFF = unshaded, matching the 0xFFFFFFFF clear fill
+    SHADER_PUBLIC uint2 packedRadiance; // fp16x3 non-emissive radiance / diffuseColor / RADIANCE_CACHE_PACK_SCALE; .y high half 0xFFFF = unshaded
     SHADER_PUBLIC uint lastTouched;
     SHADER_PUBLIC uint lastShaded;
     SHADER_PUBLIC uint changeStreak; // bits 0-7 consecutive large-delta touches, bit 8 last delta direction, bits 16-23 accumulated shade count
@@ -76,13 +76,12 @@ SHADER_PUBLIC struct RadianceCacheHitDescriptor
     SHADER_PUBLIC uint bMirror;
 };
 
-// Per-frame occupancy/insert counters, atomically accumulated on the GPU and read back for the cache-capacity audit.
 SHADER_PUBLIC struct RadianceCacheStats
 {
-    SHADER_PUBLIC uint occupiedSlots; // non-empty slots walked by carry-forward (previous frame's live set)
-    SHADER_PUBLIC uint cellsCarried; // survivors re-inserted into this frame's table
-    SHADER_PUBLIC uint cellsEvicted; // survivors dropped (LRU age, LOD revalidation, or failed re-insert)
-    SHADER_PUBLIC uint insertsFailed; // full-probe insert failures from both trace and carry-forward
+    SHADER_PUBLIC uint occupiedSlots; // previous frame's live set
+    SHADER_PUBLIC uint cellsCarried;
+    SHADER_PUBLIC uint cellsEvicted;
+    SHADER_PUBLIC uint insertsFailed;
 };
 
 SHADER_PUBLIC struct RadianceCacheBuffers

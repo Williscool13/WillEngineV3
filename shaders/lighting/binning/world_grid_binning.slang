@@ -8,7 +8,7 @@ import reflection_probe_interop;
 import ddgi_interop;
 import pbr_functions;
 
-// Probe influence volume vs cell AABB. Sphere: point-AABB distance. Box: 15-axis OBB/AABB SAT (RTCD 4.4.1), OBB derived from worldToLocal (math row i = axis_i / extent_i; center solves Linear*c + t = 0).
+// Box: 15-axis OBB/AABB SAT (RTCD 4.4.1); worldToLocal row i = axis_i / extent_i.
 static bool ReflectionProbeIntersectsCellAABB(ReflectionProbeGPU probe, float3 aabbMin, float3 aabbMax)
 {
     float3 extent = ReflectionProbeWorldExtent(probe);
@@ -127,7 +127,6 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         }
         else if (mass > minMass)
         {
-            // Evict the weakest, then rescan the K slots to find the new weakest. Rescan cost is paid only on overflow (rare in bounded analytic scenes).
             pc.worldGridIndexList[indexOffset + minSlot] = uint(i);
             minMass = 1e30;
             for (uint k = 0u; k < MAX_LIGHTS_PER_WORLD_GRID_CELL; k++)
@@ -190,7 +189,7 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
     }
     pc.worldGridCellPower[flatIndex] = float2(analyticPowerSum, meshletPowerSum);
 
-    // Two smallest-volume probes intersecting this cell, packed 16 bits each; ascending-index strict-less tie-break. Written unconditionally (aliased RDG buffers are not zeroed).
+    // Two smallest-volume probes, 16 bits each. Written unconditionally: aliased RDG buffers are not zeroed.
     uint bestProbe = WORLD_GRID_PROBE_SLOT_SENTINEL;
     uint secondProbe = WORLD_GRID_PROBE_SLOT_SENTINEL;
     float bestProbeVolume = 1e30;

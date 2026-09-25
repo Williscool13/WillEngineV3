@@ -129,7 +129,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
     graph.CreateBuffer("world_grid_ddgi_index_list"_sid, ddgiIndexBytes, false);
     graph.CreateBuffer("ddgi_volume_windows"_sid, sizeof(DDGIVolumeParams) * DDGI_MAX_RESIDENT_LOCAL_VOLUMES, false);
 
-    // Cascades occupy volumes[0, count); the resident world volumes follow, and the bin emits their absolute slot so the sampler indexes cascades[] with no remap.
+    // Cascades occupy volumes[0, count) and world volumes follow; the bin emits absolute slots, so no remap.
     const uint32_t volumeSlotBase = ddgiCascades.count;
     const uint32_t volumeCount = glm::min(ddgiCascades.localCount, DDGI_MAX_RESIDENT_LOCAL_VOLUMES);
     if (volumeCount > 0u) {
@@ -370,6 +370,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (bGIGather) {
         lightingResolve.ReadSampledImage(GI_GATHER_RESOLVED);
         lightingResolve.ReadSampledImage(GI_GATHER_DATA);
+        lightingResolve.ReadSampledImage(GI_GATHER_SKY_VIS_HISTORY);
     }
     if (bReflection) {
         lightingResolve.ReadSampledImage(reflectionTarget);
@@ -428,6 +429,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
                     .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
                     .indirectIntensity = viewFamily.indirectIntensity,
+                    .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY) : ~0x0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), entry.index * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
@@ -528,7 +530,6 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
 
     const bool bHalfRes = pixelScale > 1u;
 
-    // Prefer the most-processed shadow available: temporally stabilized > spatially denoised > raw trace.
     StringID shadowTex = "rt_sun_shadow"_sid;
     if (graph.HasTexture("sigma_shadow"_sid)) { shadowTex = "sigma_shadow"_sid; }
     if (graph.HasTexture("sigma_stabilized"_sid)) { shadowTex = "sigma_stabilized"_sid; }

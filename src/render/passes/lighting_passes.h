@@ -23,14 +23,11 @@ void SetupFrustumBinningPass(RenderGraph& graph,
                              float clusterZNear,
                              float clusterZFar);
 
-/**
- * Rebuilds the LightInfo run and EmissiveMeshlet of each dirty emissive primitive instance in this frame's LightData slot, straight from the geometry buffers. Must run before anything that reads LightData's triangle region or its meshlets.
- */
+/** Must run before anything that reads LightData's triangle region or its meshlets. */
 void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, float emissiveTriRangeMultiplier);
 
 /**
  * Camera-centered cascaded world-space grid, rebuilt every frame; see world_grid_interop.h for the cascade layout.
- * Bins analytic lights, emissive groups, reflection probes and DDGI world volumes.
  * @param ddgiCascades this frame's cascade set; its resident world volumes are binned so DDGISampleIrradianceCascaded can visit a cell's overlaps instead of every slot
  */
 void SetupWorldGridBinningPass(RenderGraph& graph,
@@ -40,9 +37,7 @@ void SetupWorldGridBinningPass(RenderGraph& graph,
                                Core::Arena& arena,
                                const DDGICascades& ddgiCascades);
 
-/**
- * Editor cursor cell: writes the world-grid bin under cursorPixel (render-extent coordinates) into the readback buffer. No-ops without the grid or the readback buffer.
- */
+/** cursorPixel is in render-extent coordinates. */
 void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
                                        PipelineManager* pipelineManager,
                                        uint32_t sceneIndex,
@@ -50,9 +45,7 @@ void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
                                        Core::Array<uint32_t, 2> renderExtent,
                                        Core::Array<uint32_t, 2> cursorPixel);
 
-/**
- * Editor cursor cell: writes the ReGIR cell under cursorPixel (render-extent coordinates) into the readback buffer. No-ops without the ReGIR buffers or the readback buffer.
- */
+/** cursorPixel is in render-extent coordinates. */
 void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    uint32_t sceneIndex,
@@ -90,10 +83,6 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   uint32_t& accumulationCount,
                                   uint64_t frameNumber);
 
-/**
- * Adds the analytic directional (sun) light, modulated by the rt_sun_shadow visibility, into the color target.
- * Runs full-res over the gbuffer; no-ops if the rt_sun_shadow target is absent.
- */
 void SetupDirectionalLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,

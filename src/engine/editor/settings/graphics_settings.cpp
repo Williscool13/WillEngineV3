@@ -144,6 +144,7 @@ static void CopyDiagnosticsSection(const LightingBundle& from, LightingBundle& t
 }
 
 /**
+ * baseline is null when no profile is active; copy is null for sections not stored in profiles.
  * @param baseline null when no profile is active
  * @param copy null for sections not stored in profiles
  */
@@ -1645,7 +1646,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (bReSTIRMode && Widgets::BeginSection("Direct Lighting (ReSTIR)", &directHeader)) {
             Core::ReSTIRParams& restir = state->debug.restir;
 
-            // Sections compiled out via restir_features_macros.h are greyed: the runtime toggle has no effect until the macro is set to 1 and shaders are rebuilt.
+            // Sections compiled out via restir_features_macros.h are greyed: the toggle does nothing until the macro is 1 and shaders are rebuilt.
             Widgets::SubHeader("Candidate Generation");
             const char* proposalModes[] = {"World Grid Bin", "ReGIR"};
             int proposalIdx = static_cast<int>(restir.lightProposal);

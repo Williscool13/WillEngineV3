@@ -42,7 +42,6 @@ public uint RadianceCacheLevelFromDistance(float dist)
 
 public uint RadianceCacheNormalBucket(float3 n)
 {
-    // Dominant-axis cube face; front/back separation only.
     float3 a = abs(n);
     if (a.x >= a.y && a.x >= a.z) { return n.x >= 0.0 ? 0u : 1u; }
     if (a.y >= a.z) { return n.y >= 0.0 ? 2u : 3u; }
@@ -63,7 +62,7 @@ public float3 RadianceCacheBucketNormal(uint bucket)
 
 public static const float RADIANCE_CACHE_KEY_NORMAL_BIAS = 0.5;
 
-// A cell is a surface patch: the tangential footprint grows with level, but the bucket's dominant axis stays at base resolution at every level so co-normal surfaces closer than a coarse cell (interior vs exterior face of one wall) can never share a key.
+// The bucket axis stays at base resolution so co-normal surfaces closer than a coarse cell never share a key.
 public float3 RadianceCacheQuantum(uint normalBucket, uint level)
 {
     float cs = RadianceCacheCellSizeAtLevel(level);
@@ -79,7 +78,7 @@ public float3 RadianceCacheQuantum(uint normalBucket, uint level)
     return quantum;
 }
 
-// Half-quantum normal bias keys the surface's own air side: geometry sitting exactly on a cell plane otherwise coin-flips between the two adjacent cells (at insert AND find).
+// Half-quantum normal bias: geometry exactly on a cell plane otherwise coin-flips between adjacent cells.
 static int3 RadianceCacheQuantize(float3 worldPos, float3 normal, uint normalBucket, uint level)
 {
     float3 quantum = RadianceCacheQuantum(normalBucket, level);
@@ -143,7 +142,7 @@ static uint RadianceCacheChecksum(RadianceCacheKey key)
     return (c == RADIANCE_CACHE_HASH_EMPTY) ? 1u : c;
 }
 
-// keys may be nullptr (checksum only). With keys, a checksum alias is skipped; a slot inserted this dispatch whose key is not written yet reads as a miss.
+// keys may be nullptr. A slot inserted this dispatch whose key is not written yet reads as a miss.
 public uint RadianceCacheHashFind(uint* entries, uint2* keys, RadianceCacheKey key)
 {
     uint slot = RadianceCacheHashSlot(key);
@@ -158,7 +157,6 @@ public uint RadianceCacheHashFind(uint* entries, uint2* keys, RadianceCacheKey k
     return RADIANCE_CACHE_HASH_INVALID;
 }
 
-// Exact-level find with +/-1 LOD tolerance: a surface that just crossed a LOD ring reads the surviving neighbour-level cell (still smoothed) until its own-level cell converges, instead of the raw probe tier.
 public uint RadianceCacheHashFindLodTolerant(uint* entries, uint2* keys, RadianceCacheKey key, float3 worldPos, float3 normal)
 {
     uint slot = RadianceCacheHashFind(entries, keys, key);
@@ -175,16 +173,15 @@ public uint RadianceCacheHashFindLodTolerant(uint* entries, uint2* keys, Radianc
     if (key.level < RADIANCE_CACHE_MAX_LEVEL) {
         RadianceCacheKey coarser = key;
         coarser.level = key.level + 1u;
-        // Requantized (not cellPos >> 1) so the biased coordinate matches a native coarse-level key.
+        // Requantized, not cellPos >> 1, so the biased coordinate matches a native coarse-level key.
         coarser.cellPos = RadianceCacheQuantize(worldPos, normal, key.normalBucket, coarser.level);
         slot = RadianceCacheHashFind(entries, keys, coarser);
     }
     return slot;
 }
 
-// isNew true only when this call claimed a previously-empty slot; caller must init that slot's payload.
-// Checksum-only match below: comparing keys[] here too would race the CAS winner's same-dispatch write to it.
-// stats: full-probe failures bump stats->insertsFailed; shared by trace and carry-forward inserts.
+// Caller must init the slot's payload when isNew.
+// Checksum-only match: comparing keys[] here would race the CAS winner's same-dispatch write to it.
 public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheStats* stats, RadianceCacheKey key, out bool isNew)
 {
     uint slot = RadianceCacheHashSlot(key);
@@ -212,8 +209,6 @@ public uint RadianceCacheHashInsert(uint* entries, uint2* keys, RadianceCacheSta
     return RADIANCE_CACHE_HASH_INVALID;
 }
 
-// Seeds a newly-created cell from whichever adjacent LOD already has data, instead of starting black.
-// Parent (level+1) is a single lookup, one candidate. Children (level-1) are up to 4 (the bucket axis does not subdivide across levels), averaged if found.
 public uint2 RadianceCacheWarmStartRadiance(uint* entries, uint2* keys, RadianceCacheCell* cells, RadianceCacheKey key, out uint seedCount)
 {
     seedCount = 0u;

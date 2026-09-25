@@ -18,10 +18,7 @@ static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthGIPushConstant pc)
     return { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
 }
 
-// =============== Shader Summary ============
-// Progressive path-traced reference for the DDGI indirect diffuse: primary surface from the gbuffer, direct = one NEE light sample + cone-sampled sun (identical estimator to rt_ground_truth_di),
-// indirect = cosine-sampled diffuse-only path (Oren-Nayar at every bounce vertex, NEE at each, skybox on miss), accumulated per pixel until reset.
-// Indirect is modulated by the primary's kD * albedo like the engine's composite, so DDGI-on screenshots compare apples-to-apples. Specular indirect is deliberately absent (DDGI doesn't model it).
+// Specular indirect is deliberately absent, DDGI does not model it.
 
 static const uint GT_GI_MAX_BOUNCES = 8;
 
@@ -39,7 +36,7 @@ static float3 SampleSunConeDirection(float3 toLight, float angularRadius, float 
     return normalize(sinTheta * cos(phi) * t + sinTheta * sin(phi) * b + cosTheta * w);
 }
 
-/** pdf = cos/PI; dividing it out of a diffuse bounce cancels the cosine, leaving diffuse * OrenNayar * PI as the throughput factor. */
+/** pdf = cos/PI, so the bounce throughput factor is diffuse * OrenNayar * PI. */
 static float3 SampleCosineHemisphere(float3 n, float u1, float u2)
 {
     float r = sqrt(u1);
@@ -58,7 +55,7 @@ struct GTSurface
     float3 emissive;
 };
 
-/** Triangle fetch for bounce vertices; indices are global (rebased at upload), same chain as the DDGI trace. */
+/** Indices are global (rebased at upload). */
 static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
@@ -98,7 +95,6 @@ static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instan
     return surface;
 }
 
-/** Direct diffuse radiance at a bounce vertex: cone-sampled sun + one uniformly picked light, both shadow-ray tested (estimator matches rt_ground_truth_di). Oren-Nayar diffuse (V = direction back toward the previous vertex). */
 static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPosition, float3 N, float3 V, float3 diffuseColor, float roughness, inout uint rng)
 {
     float3 radiance = float3(0.0);
@@ -198,7 +194,6 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
 
-    // Primary miss: draw the environment map (matches the skybox pass reconstruction + Y flip).
     if (depth <= 1e-6) {
         float3 background = float3(0.0);
         if (pc.skyboxIndex >= 0) {
@@ -237,7 +232,6 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
     RaytracingAccelerationStructure tlas = rdgAccelerationStructures[pc.tlasIndex];
     uint rng = SeedRng(pixel, pc.frameIndex, 0x61C3A9u);
 
-    // Direct at the primary surface: one light sample + cone-sampled sun, full BRDF (spec + Oren-Nayar diffuse), matching rt_ground_truth_di.
     float3 direct = float3(0.0);
     // NEE (analytic lights)
     int analyticCount = pc.lightData->analyticLightCount;
@@ -342,7 +336,6 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         }
     }
 
-    // Indirect: diffuse-only path (Oren-Nayar). The diffuse transport is evaluated per vertex at sample time (cosine-sampled: f * cos / pdf = diffuse * OrenNayar * PI), so the view-dependent term matches the direct paths. Primary diffuse keeps the engine's (1 - F_ibl) * (1 - metallic) modulation.
     float3 indirect = float3(0.0);
     float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
     float3 throughput = float3(1.0);

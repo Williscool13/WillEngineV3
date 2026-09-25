@@ -87,7 +87,6 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
 
-    // Indirect: diffuse from the DDGI probe volume when it covers this point (skybox irradiance fallback), specular from the prefiltered skybox.
     float3 indirectDiffuse = float3(0.0);
     float3 ibl = float3(0.0);
     float3 reflectionSpecular = float3(0.0);
@@ -128,8 +127,11 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
         if (pc.skyboxIndex >= 0) {
             reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl, envBRDF) * pc.iblIntensity;
 #if GI_SKY_SPECULAR_OCCLUSION
-            // The diffuse GI already resolves local sky reachability, reuse for specular
-            reflectionSpecular *= saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
+            float skyOcclusion = saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
+            if (pc.skyVisIndex != ~0x0u) {
+                skyOcclusion = rdgTexturesFloat2[pc.skyVisIndex].Load(int3(pixel, 0)).x;
+            }
+            reflectionSpecular *= skyOcclusion;
 #endif
         }
 

@@ -2722,7 +2722,7 @@ bool RenderGraph::EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredS
         HostBuffer& slot = entry.slots[currentFrameIndex];
         if (requiredSize <= slot.capacity) { return false; }
 
-        // The one BAR read in the design, and it only ever happens once per mirrored buffer: at the first growth, when the old capacity is still tiny.
+        // The only BAR read, once per mirrored buffer at first growth while the old capacity is tiny.
         if (entry.bMirrored && entry.mirror.IsEmpty() && slot.mappedData != nullptr) {
             entry.mirror = Core::HeapArray<uint8_t>(alloc, Core::AllocTag::Render, slot.capacity);
             memcpy(entry.mirror.Data(), slot.mappedData, slot.capacity);
@@ -2774,7 +2774,7 @@ bool RenderGraph::EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredS
 
 void RenderGraph::RetireBuffer(VkBuffer buffer, VmaAllocation allocation)
 {
-    // ImportBuffer dedupes imported physicals by raw handle, so detach this one before the handle dies and a new allocation reuses its value.
+    // ImportBuffer dedupes by raw handle; detach before a new allocation can reuse this handle value.
     for (auto& phys : physicalResources) {
         if (phys.bIsImported && phys.buffer == buffer) {
             phys.buffer = VK_NULL_HANDLE;
@@ -3497,7 +3497,6 @@ VRAMReport RenderGraph::GenerateVramReport() const
         }
     }
 
-    // Roll leaf-level totals up into their parent RenderCategoryGroup for the tree breakdown.
     for (uint32_t bit = 0; bit < RENDER_CATEGORY_BIT_COUNT; ++bit) {
         const auto group = static_cast<uint32_t>(RENDER_CATEGORY_GROUP_OF[bit]);
         report.logicalGroup[group] += report.logical[bit];

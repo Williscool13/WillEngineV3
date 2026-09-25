@@ -466,7 +466,7 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
     const glm::mat4& prevProj = viewFamily.mainView.previousViewData.proj;
 
-    // The gbuffer is OGL window-origin (row 0 = NDC y -1) while NRD reconstructs and projects D3D-style; negating the view's y row flips gFrustumUp and the clip-space y of worldToClip together.
+    // Gbuffer is OGL window-origin, NRD is D3D-style; negating the view's y row flips gFrustumUp and clip-space y together.
     glm::mat4 view = viewFamily.mainView.currentViewData.view;
     glm::mat4 prevView = viewFamily.mainView.previousViewData.view;
     for (int c = 0; c < 4; c++) {
@@ -602,7 +602,7 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
     ReleaseRetired(frameNumber, false);
 
     activeBackend = backend;
-    // Reset history after a gap (denoiser toggled off/on leaves stale pool content) or a backend switch (the inactive denoiser's history goes stale)
+    // A frame gap or backend switch leaves stale history.
     const bool bHistoryReset = bPendingHistoryClear || backend != lastBackend || (lastRecordedFrame != UINT64_MAX && frameNumber != lastRecordedFrame + 1);
     lastBackend = backend;
     bHasConfidence = graph.HasTexture(RESTIR_CONFIDENCE_SID);

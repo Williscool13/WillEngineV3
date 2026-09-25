@@ -24,7 +24,7 @@ groupshared float4 sharedNormalSpecHitT[TA_BUFFER_Y][TA_BUFFER_X];
 static const uint TA_QUADS_X = TA_BUFFER_X / 2;
 static const uint TA_QUAD_COUNT = TA_QUADS_X * (TA_BUFFER_Y / 2);
 
-/** One thread fills one 2x2 quad of the shared buffer from two gathers; the clamp-to-edge point sampler stands in for the per-texel clamp. */
+/** The clamp-to-edge point sampler stands in for the per-texel clamp. */
 void TAPreloadQuad(uint2 sharedBase, int2 globalBase, float2 rectSizeInv, uint guideIndex, uint specInputIndex)
 {
     float2 quadUv = float2(globalBase + 1) * rectSizeInv;
@@ -44,7 +44,7 @@ float IsReprojectionTapValid(float3 currentWorldPos, float3 previousWorldPos, fl
     return d > disocclusionThreshold ? 0.0 : 1.0;
 }
 
-/** Surface-motion reprojection. Returns 0 = not found, 1 = bilinear, 2 = bicubic. */
+/** Returns 0 = not found, 1 = bilinear, 2 = bicubic. */
 float LoadSurfaceMotionBasedPrevData(
     RelaxDiffuseSpecularConstants* rc,
     float3 prevWorldPos, float2 prevUVSMB, float currentLinearZ, float3 currentNormal,
@@ -94,7 +94,6 @@ float LoadSurfaceMotionBasedPrevData(
     float bicubicFootprintValid = dot(tv0 + tv1 + tv2 + tv3, 1.0) > 11.5 ? 1.0 : 0.0;
     float4 bilinearTapsValid = float4(tv0.z, tv1.y, tv2.y, tv3.x);
 
-    // Reject backfacing history: bilinear-averaged prev normal facing away means the footprint reprojected onto the wrong side of the surface
     float2 prevNrUv = (float2(bilinearOrigin) + 1.0) * rc.gResourceSizeInvPrev;
     float3 prevNormalFlat = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], prevNrUv, 0)).xyz;
     if (dot(currentNormal, prevNormalFlat) < 0.0)
@@ -132,7 +131,7 @@ float LoadSurfaceMotionBasedPrevData(
     historyLength = 255.0 * RelaxBilinearWeightedFloat(prevHistLengths.x, prevHistLengths.y, prevHistLengths.z, prevHistLengths.w, bilinearCustomWeights);
 
     float4 prevHitTs = rdgTexturesFloat[prevSpecHitDistIndex].GatherRed(rdgSamplers[RDG_POINT_SAMPLER_INDEX], gatherOrigin).wzxy;
-    // On history reset relax_spec_hit_dist is an unwritten same-frame aliased transient; source current hitT so the accumulation lerp is a no-op instead of blending garbage.
+    // On reset this is an unwritten aliased transient; use current hitT so the lerp is a no-op.
     prevReflectionHitT = (rc.gResetHistory != 0) ? currentReflectionHitT : max(0.001, RelaxBilinearWeightedFloat(prevHitTs.x, prevHitTs.y, prevHitTs.z, prevHitTs.w, bilinearCustomWeights));
 
     float reprojectionFound = bicubicFootprintValid > 0 ? 2.0 : 1.0;
@@ -142,7 +141,6 @@ float LoadSurfaceMotionBasedPrevData(
     return reprojectionFound;
 }
 
-/** Virtual-motion reprojection for specular. Returns 1 = found, 0 = not found. */
 float LoadVirtualMotionBasedPrevData(
     RelaxDiffuseSpecularConstants* rc,
     float3 currentWorldPos, float3 currentNormal, float currentLinearZ,
@@ -199,7 +197,7 @@ float LoadVirtualMotionBasedPrevData(
         prevSpecResponsiveIllum = max(specFastResult, 0) * r;
 
         float2 uvVMB = prevUVVMB * rc.gRectSizePrev * rc.gResourceSizeInvPrev;
-        // On reset skip the unwritten same-frame aliased read; keep the finite gDenoisingRange not-found default to avoid NaN in confidence math.
+        // On reset skip the unwritten aliased read; the finite gDenoisingRange default avoids NaN in confidence math.
         prevReflectionHitT = (rc.gResetHistory != 0) ? rc.gDenoisingRange : max(0.001, rdgTexturesFloat[prevSpecHitDistIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvVMB, 0).r);
 
         float4 prevNR = RelaxUnpackPrevNormalRoughness(rdgTexturesFloat4[prevNormalRoughnessIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvVMB, 0));
@@ -210,7 +208,7 @@ float LoadVirtualMotionBasedPrevData(
     return dot(bilinearTapsValid, 1.0) == 4.0 ? 1.0 : 0.0;
 }
 
-/** RDG aliases transients and never clears them, so a skipped texel would hand the next reader another resource's content. Every dispatched thread must leave a defined value. */
+/** RDG never clears aliased transients, so every dispatched thread must write a defined value. */
 void TAWriteEmpty(RelaxTemporalAccumulationPushConstant pc, int2 pixelPos)
 {
     rdgStorageFloat4[pc.outDiffIndex][pixelPos] = float4(0.0);
@@ -263,8 +261,6 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
         return;
     }
 
-    // ReSTIR-provided history confidence (IN_DIFF/SPEC_CONFIDENCE equivalent). 1 = full trust; lower scales down the effective max accumulated frames here-and-now, collapsing history where the lighting changed in a way reprojection cannot see (moving-caster shadows on static surfaces).
-    // Single ReSTIR signal drives both lobes.
     float historyConfidence = 1.0;
     if (pc.confidenceIndex != ~0u) {
         historyConfidence = saturate(rdgTexturesFloat[pc.confidenceIndex].Load(int3(pixelPos, 0)).r);
@@ -277,7 +273,7 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     float3 V = -normalize(currentViewVec);
     float NoV = abs(dot(currentNormal, V));
 
-    // Motion vectors from GBuffer1 (.g = R16G16 XY, .w bits 16-31 = view-depth delta float16, NRD mv.z semantics)
+    // GBuffer1 .g = R16G16 motion XY, .w bits 16-31 = f16 view-depth delta (NRD mv.z semantics).
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
     uint4 gt1 = rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(fullPixel, 0));
     float2 mvXY = UnpackMotionVectors(gt1.g) * rc.gMvScale.xy;
@@ -538,7 +534,6 @@ void RelaxTemporalAccumulationMain(uniform RelaxTemporalAccumulationPushConstant
     virtualHistoryAmount *= (rc.gOrthoMode == 0) ? rw * 0.9 + 0.1 : 1.0;
 
     // Virtual history confidence - hit distance
-    // Thin lens equation: I = O / (2 * curvature * O + 1) (matches NRD ApplyThinLensEquation).
     float SMC = RelaxGetSpecMagicCurve(currentRoughnessModified);
     float hitDistC = lerp(specularIllumination.a, prevReflectionHitTSMB, SMC);
     float hitDist1 = hitDistC / (2.0 * curvature * hitDistC + 1.0);

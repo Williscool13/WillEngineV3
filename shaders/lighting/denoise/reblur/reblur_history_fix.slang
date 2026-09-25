@@ -16,14 +16,11 @@ import reblur_interop;
 import denoiser_common;
 import reblur_common;
 
-// REBLUR_Config.hlsli (inlined).
 static const int REBLUR_HISTORY_FIX_FILTER_RADIUS = 2;
 static const int REBLUR_FAST_HISTORY_CLAMPING_RADIUS = 2;
 static const int REBLUR_ANTI_FIREFLY_FILTER_RADIUS = 4;
 static const float REBLUR_ANTI_FIREFLY_SIGMA_SCALE = 2.0;
 
-/** Sparse cross-bilateral reconstruction over a (2*R+1)^2 neighborhood (center/corners skipped), taps
- *  at "stride" spacing, weighted by plane*normal*(1+tap accum frames)*hit-dist so converged neighbors dominate. */
 float4 ReconstructHistory(uint texIdx, uint data1Index, bool useSpecChannel, float2 pixelUv, float stride, float centerFrameNum, float nonLinearAccumSpeed,
     float3 centerNormal, float3 centerWorldPos, float planeZ, float normalWeightParam,
     ReblurDiffuseSpecularConstants* rc, uint viewZIndex, uint normalRoughnessIndex, float3x3 viewToWorld)
@@ -69,9 +66,7 @@ float4 ReconstructHistory(uint texIdx, uint data1Index, bool useSpecChannel, flo
     return sum / weightSum;
 }
 
-/** Clamp currentLuma (slow-history) to the responsive fast-history luma box; the mixed box-center is
- *  written back via fastCenterOut so the carried fast history includes this reconciliation.
- *  If antiFirefly, luma is first clamped to a wide-ring (radius 4, central 3x3 skipped) sigma box. */
+/** fastCenterOut is the mixed box center, written back so the carried fast history includes this clamp. */
 float ClampToFastHistory(uint fastIdx, uint viewZIndex, int2 pixelPos, float currentLuma, float f, float frameNum, bool antiFirefly, ReblurDiffuseSpecularConstants* rc, out float fastCenterOut)
 {
     float fastCenter = rdgTexturesFloat[fastIdx].Load(int3(pixelPos, 0)).r;
@@ -130,7 +125,6 @@ float ClampToFastHistory(uint fastIdx, uint viewZIndex, int2 pixelPos, float cur
     float sigma = sqrt(max(m2 - m1 * m1, 0.0)) * rc.gFastHistoryClampingSigmaScale;
     float clamped = clamp(currentLuma, m1 - sigma, m1 + sigma);
 
-    // Clamp weakens for short history (just reconstructed) and strengthens as the slow history accumulates.
     float clampLerp = 1.0 / (1.0 + float(rc.gMaxFastAccumulatedFrameNum < rc.gMaxAccumulatedFrameNum) * frameNum * 2.0);
     return lerp(clamped, currentLuma, clampLerp);
 }
@@ -169,7 +163,6 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
     float planeZ = rc.gOrthoMode == 0 ? centerViewZ : 1.0;
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
 
-    // Per-lobe accumulated frame counts (DATA1: x = diff, y = spec).
     float2 frameNums = ReblurUnpackData1(rdgTexturesFloat2[pc.data1Index].Load(int3(pixelPos, 0)));
     float invHistoryFixFrameNum = 1.0 / max(rc.gHistoryFixFrameNum, NRD_EPS);
     float2 frameNumAvgNorm = saturate(frameNums * invHistoryFixFrameNum);
@@ -179,8 +172,7 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
     float diffNonLinearAccumSpeed = 1.0 / (1.0 + frameNums.x);
     float specNonLinearAccumSpeed = 1.0 / (1.0 + frameNums.y);
 
-    // Base stride (NRD): gHistoryFixBasePixelStride / 2 (RELAX-matched "1" frame after temporal accumulation),
-    // normalized to the 2-tap blur radius, and zeroed per lobe once converged.
+    // The /(1 + 1) is NRD's "1 frame after temporal accumulation", not a typo.
     float baseStride = rc.gHistoryFixBasePixelStride;
     baseStride /= 1.0 + 1.0;
     baseStride *= 2.0 / float(REBLUR_HISTORY_FIX_FILTER_RADIUS);
@@ -190,9 +182,7 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
     float4 outDiff = diff;
     float4 outSpec = spec;
 
-    // ---- Diffuse short-history reconstruction ----
     {
-        // Signal .w is normalized; de-normalize for the world-domain hitDistFactor.
         float hitDistFactor = RelaxGetHitDistFactor(ReblurDenormHitDist(diff.w, centerViewZ, rc.gHitDistParams, 1.0), frustumSize);
         float diffStride = diffBaseStride * lerp(0.25 + 0.75 * sqrt(saturate(hitDistFactor)), 1.0, diffNonLinearAccumSpeed);
         diffStride = round(diffStride);
@@ -202,7 +192,6 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
         }
     }
 
-    // ---- Specular short-history reconstruction ----
     {
         float specHitDistForTracking = rdgTexturesFloat[pc.specHitDistIndex].Load(int3(pixelPos, 0)).r;
         float specHitDist = lerp(specHitDistForTracking, ReblurDenormHitDist(spec.w, centerViewZ, rc.gHitDistParams, centerRoughness), smc);
@@ -216,8 +205,6 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
         }
     }
 
-    // ---- Fast-history reconciliation + optional anti-firefly ring clamp; mixed fast center is
-    // written back so the carried fast history includes the reconciliation. ----
     {
         bool antiFirefly = rc.gAntiFirefly != 0u;
 
@@ -228,7 +215,7 @@ void ReblurHistoryFixMain(uniform ReblurHistoryFixPushConstant pc, int2 pixelPos
         rdgStorageFloat[pc.outDiffFastIndex][pixelPos] = diffFastCenter;
 
         float specLuma = ReblurGetLuma(outSpec);
-        // HistoryFix-ed data is undesired in fast history for low roughness (NRD: f = lerp(1, avgNorm, smc)).
+        // HistoryFix-ed data is undesired in fast history for low roughness.
         float specF = lerp(1.0, frameNumAvgNorm.y, smc);
         float specFastCenter;
         specLuma = ClampToFastHistory(pc.specFastIndex, pc.viewZIndex, pixelPos, specLuma, specF, frameNums.y, antiFirefly, rc, specFastCenter);

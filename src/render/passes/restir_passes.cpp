@@ -204,7 +204,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
             graph.CreateTexture("restir_gradient"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gradientExtent[0], gradientExtent[1], 1}, {std::nullopt}, true);
         }
 
-        // Last frame's TLAS lets the temporal pass re-shade the winner against last frame's occluder positions; the TLAS ring is one frame deep by construction (BLAS lifetime).
+        // Last frame's TLAS re-shades the winner against last frame's occluders; the TLAS ring is one frame deep (BLAS lifetime).
         const bool bHasPrevTlas = bConfidence && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
         const StringID prevTlas = bHasPrevTlas ? graph.ResourceVersionID(RT_TLAS_BUFFER, 1) : StringID{};
 
@@ -667,6 +667,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
     if (bGIGather) {
         pass.ReadSampledImage(GI_GATHER_RESOLVED);
         pass.ReadSampledImage(GI_GATHER_DATA);
+        pass.ReadSampledImage(GI_GATHER_SKY_VIS_HISTORY);
     }
     pass.WriteStorageImage(targets.colorOutput);
     const bool bScreenDiffuse = graph.HasTexture(RESTIR_DIFFUSE_RATIO) && graph.HasTexture(GI_SCREEN_DIFFUSE);
@@ -711,6 +712,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .bReflectionMerged = bReflectionMerged ? 1u : 0u,
                 .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
                 .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(GI_SCREEN_DIFFUSE) : ~0x0u,
+                .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY) : ~0x0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

@@ -96,7 +96,6 @@ struct LightingState
     int32_t skyboxLOD{0};
 };
 
-/** Whether an emissive instance's triangle lights are lit on the GPU, and if not, why. */
 enum class EmissiveDispatchState : uint8_t
 {
     Live,
@@ -104,7 +103,6 @@ enum class EmissiveDispatchState : uint8_t
     ProbeBakeHidden,
 };
 
-/** Mirrors the fields the tri-light build reads, so a wrong value here is a wrong value on the GPU. */
 struct EmissiveDebugEntry
 {
     entt::entity entity{entt::null};
@@ -118,21 +116,21 @@ struct EmissiveDebugEntry
     EmissiveDispatchState dispatchState{EmissiveDispatchState::Live};
 };
 
-/** Refreshed by GatherLights. Counts are always current; entries only fill while bCapture is set. */
+/** Counts are always current; entries only fill while bCapture is set. */
 struct EmissiveDebugState
 {
     static constexpr uint32_t MAX_ENTRIES = 4096;
 
     bool bCapture{false};
-    /** Instances holding a TriLightStore reservation, lit or not. */
+    /** Lit or not. */
     uint32_t reservedInstances{0};
-    /** Emissive meshlet slots in use (one per LOD0 meshlet of a reserved instance). */
+    /** One per LOD0 meshlet of a reserved instance. */
     uint32_t meshletWatermark{0};
     uint32_t liveMeshes{0};
     uint32_t rebuiltMeshes{0};
     uint32_t rebuiltTriangles{0};
     uint32_t triLightWatermark{0};
-    /** ViewFamily::triLightCount as handed to the render thread; zero when the feature is off. */
+    /** Zero when the feature is off. */
     uint32_t triLightCountFed{0};
     uint32_t analyticLightCount{0};
     bool bEntriesTruncated{false};
@@ -206,7 +204,6 @@ struct DDGIConvergeBoost
     uint32_t stashedRadianceCacheAccumCap{0};
 };
 
-/** One-shot requests raised during the game tick and drained by the next render prepare. */
 struct FrameRequests
 {
     bool bWantsScreenshot{false};
@@ -222,7 +219,6 @@ struct FrameRequests
     Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
 };
 
-/** Drained by the per-frame asset-resolve block. */
 struct AssetLoadState
 {
     Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
@@ -271,7 +267,6 @@ struct EngineState
     CommandQueue commandQueue{};
     entt::registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
-    /** Set by hierarchy mutators (SetParent/ClearParent/SpawnModel/load); EnsureHierarchyOrder re-sorts the HierarchyComponent pool when set. */
     bool bHierarchyOrderDirty{true};
     ComponentRegistry componentRegistry{};
     MCP::ToolRegistry mcpTools{};

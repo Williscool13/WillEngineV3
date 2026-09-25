@@ -167,10 +167,9 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC float adaptedLuminance;
     SHADER_PUBLIC uint32_t regirActiveCells;
     SHADER_PUBLIC uint32_t regirInsertsFailed;
-    // Fill candidates dropped past REGIR_GATHER_SCRATCH, summed over the frame's cells
     SHADER_PUBLIC uint32_t regirGatherOverflow;
     SHADER_PUBLIC uint32_t regirConeRejected;
-    // ReGIR cursor cell: the entry table of the cell under the mouse, top 8 entries by mass share
+    // Top 8 entries by mass share.
     SHADER_PUBLIC uint32_t regirCursorValid;
     SHADER_PUBLIC uint32_t regirCursorLevel;
     SHADER_PUBLIC int32_t regirCursorCell[3];
@@ -182,7 +181,7 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t regirCursorTopLightCount[8];
     SHADER_PUBLIC float regirCursorTopPos[24];
     SHADER_PUBLIC uint32_t _pad1;
-    // World grid cursor cell: the bin under the mouse. Kept = what binning listed, inRange = everything passing its membership test
+    // Kept = what binning listed, inRange = everything passing its membership test.
     SHADER_PUBLIC uint32_t wgCursorValid;
     SHADER_PUBLIC uint32_t wgCursorLevel;
     SHADER_PUBLIC uint32_t wgCursorCell[3];

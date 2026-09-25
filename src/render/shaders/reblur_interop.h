@@ -25,18 +25,15 @@ using float4x4 = glm::mat4;
 #define SHADER_PUBLIC
 #endif
 
-/** @brief Per-frame constants consumed by all ReBLUR DiffuseSpecular passes. Pass as SHADER_PTR.
- *  Geometry/reconstruction fields match RelaxDiffuseSpecularConstants so relax_utils.slang helpers are reused. */
+/** Geometry fields match RelaxDiffuseSpecularConstants so relax_utils.slang helpers are reused. Scalar groups keep even counts for 8-byte alignment. */
 SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
 {
-    // Matrices (320 bytes)
     SHADER_PUBLIC float4x4 gWorldToClip;
     SHADER_PUBLIC float4x4 gWorldToClipPrev;
     SHADER_PUBLIC float4x4 gWorldToViewPrev;
     SHADER_PUBLIC float4x4 gWorldPrevToWorld;
     SHADER_PUBLIC float4x4 gViewToWorld;
 
-    // Frustum vectors (176 bytes)
     SHADER_PUBLIC float4 gRotatorPre;
     SHADER_PUBLIC float4 gRotator;
     SHADER_PUBLIC float4 gRotatorPost;
@@ -49,11 +46,9 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC float4 gCameraDelta;
     SHADER_PUBLIC float4 gMvScale;
 
-    // ReBLUR float4 settings (32 bytes)
-    SHADER_PUBLIC float4 gHitDistParams;        // hit distance normalization: x=A, y=B, z=C, w=D
-    SHADER_PUBLIC float4 gConvergenceSettings;  // x=s, y=b, z=p, w=unused
+    SHADER_PUBLIC float4 gHitDistParams; // x=A, y=B, z=C, w=D
+    SHADER_PUBLIC float4 gConvergenceSettings; // x=s, y=b, z=p, w=unused
 
-    // Float2 parameters (80 bytes, all 8-byte aligned, even count)
     SHADER_PUBLIC float2 gJitter;
     SHADER_PUBLIC float2 gResolutionScale;
     SHADER_PUBLIC float2 gRectOffset;
@@ -62,16 +57,14 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC float2 gRectSizeInv;
     SHADER_PUBLIC float2 gRectSizePrev;
     SHADER_PUBLIC float2 gResourceSizeInvPrev;
-    SHADER_PUBLIC float2 gAntilagSettings;                              // x: luminanceSigmaScale, y: luminanceSensitivity
-    SHADER_PUBLIC float2 gSpecProbabilityThresholdsForMvModification;   // x: low, y: high
+    SHADER_PUBLIC float2 gAntilagSettings; // x: luminanceSigmaScale, y: luminanceSensitivity
+    SHADER_PUBLIC float2 gSpecProbabilityThresholdsForMvModification; // x: low, y: high
 
-    // Integer parameters (32 bytes)
     SHADER_PUBLIC uint2 gPrintfAt;
     SHADER_PUBLIC uint2 gRectOrigin;
     SHADER_PUBLIC int2 gRectSize;
     SHADER_PUBLIC int2 _pad0;
 
-    // Float parameters (104 bytes, even count)
     SHADER_PUBLIC float gMaxAccumulatedFrameNum;
     SHADER_PUBLIC float gMaxFastAccumulatedFrameNum;
     SHADER_PUBLIC float gMaxStabilizedFrameNum;
@@ -101,7 +94,6 @@ SHADER_PUBLIC struct ReblurDiffuseSpecularConstants
     SHADER_PUBLIC float gDebug;
     SHADER_PUBLIC float gHistoryExposureRatio;
 
-    // Uint parameters (40 bytes, even count)
     SHADER_PUBLIC uint gFrameIndex;
     SHADER_PUBLIC uint gResetHistory;
     SHADER_PUBLIC uint gAntiFirefly;

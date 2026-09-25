@@ -2,9 +2,7 @@ import push_constant_interop;
 import bindless_declarations;
 import gi_gather_common;
 
-// =============== Shader Summary ============
-// Gather debug views written to gi_gather_debug_target for the debug visualizer, so the lit composite and its history stay authentic while inspecting.
-// Modes (shader-side, UI mode + 1): 2 resolved irradiance, 3 fallback tier, 4 hit distance, 5 accumulation, 6 first-ray escape.
+// Shader mode = UI mode + 1: 2 resolved irradiance, 3 fallback tier, 4 hit distance, 5 accumulation, 6 first-ray escape.
 
 [shader("compute")]
 [numthreads(16, 16, 1)]

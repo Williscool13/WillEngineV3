@@ -9,17 +9,6 @@ import constants_interop;
 import shader_functions;
 import packing_functions;
 
-// =============== Shader Summary ============
-// GI leak deconstruction: per-pixel diagnostics at the primary surface, written to gi_deconstruct_target for the debug visualizer.
-// Modes:
-//   1 cache cell identity hash
-//   2 cache radiance/servability
-//   3 DDGI Chebyshev-gate weight fractions
-//   4 dominant-probe mean-vs-distance margin
-//   5 coverage/confidence/dominant volume (blue = descriptor index / 15, locals sit past the cascades)
-//   6 raw DDGI irradiance
-//   7 world-volume coverage: authoring aid answering "does an authored volume own this surface, or do cascades".
-
 static const uint GI_DECONSTRUCT_CACHE_KEY = 1u;
 static const uint GI_DECONSTRUCT_CACHE_RADIANCE = 2u;
 static const uint GI_DECONSTRUCT_DDGI_CHEB = 3u;
@@ -53,7 +42,7 @@ struct GICageStats
     float fade;
 };
 
-/** Mirrors DDGISampleIrradiance's weight chain (wrap, Chebyshev with its private 0.3 cap and 0.05 floor, crush, trilinear) but classifies each probe's weight by whether the occlusion gate ran, instead of fetching irradiance. */
+/** Must mirror DDGISampleIrradiance's weight chain. */
 static GICageStats GIDeconstructCage(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias)
 {
     GICageStats s;
@@ -256,7 +245,6 @@ void ComputeGIDeconstruct(uniform GIDeconstructPushConstant pc, uint3 dtid: SV_D
                     }
                 }
             } else if (pc.mode == GI_DECONSTRUCT_VOLUME_COVERAGE) {
-                // Authoring aid: continuous red -> yellow -> green ramp on localFade (green = an authored world volume owns this surface, yellow = its fade band, red = cascade fallback), magenta = nothing covers it. Continuous so faces sitting at the band edge do not flicker under TAA jitter. Value tracks coverage so starved pockets inside a volume read dark.
                 float lit = max(coverage, 0.05);
                 if (coverage <= 0.01) {
                     color = float3(1.0, 0.0, 1.0);

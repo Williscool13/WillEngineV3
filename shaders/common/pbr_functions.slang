@@ -49,14 +49,13 @@ public float LightRangeCull(float dist, float range)
     return a * a;
 }
 
-/** Spot cone on an emitter cosine: 1 inside the inner cone, smoothstep to 0 at the outer cone. cosInner == cosOuter == 0 is identity, so every light type can apply it unconditionally. */
+/** cosInner == cosOuter == 0 is identity, so every light type can apply it unconditionally. */
 public float LightConeFalloff(float cosLight, float cosInner, float cosOuter)
 {
     float t = saturate((cosLight - cosOuter) / max(cosInner - cosOuter, 1e-4));
     return t * t * (3.0 - 2.0 * t);
 }
 
-/** Shirley-Chiu concentric map: unit square -> unit disk, area preserving. */
 public float2 ConcentricSampleDisk(float u1, float u2)
 {
     float2 o = 2.0 * float2(u1, u2) - 1.0;
@@ -96,7 +95,6 @@ public float D_GGX(float3 N, float3 H, float roughness) {
     return a2 / (PI * denom * denom);
 }
 
-/** Beckmann NDF: predecessor to GGX, Gaussian-shaped specular lobe, slightly different rolloff. */
 public float D_Beckmann(float3 N, float3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -106,7 +104,6 @@ public float D_Beckmann(float3 N, float3 H, float roughness) {
     return exp((NdotH2 - 1.0f) / max(a2 * NdotH2, 1e-6f)) / max(PI * a2 * NdotH4, 1e-6f);
 }
 
-/** Energy-conserving Blinn-Phong NDF; cheaper than GGX with a less natural tail. Shininess from the Beckmann-to-Phong mapping n = 2/alpha^2 - 2. */
 public float D_BlinnPhong(float3 N, float3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -122,7 +119,6 @@ float G_SCHLICKGGX(float NdotX, float k) {
     return NdotX / (NdotX * (1.0f - k) + k);
 }
 
-/** Separable Schlick-GGX Smith with Disney "reduced hotness" k remapping (Brian Karis). */
 public float G_SCHLICKGGX_SMITH(float3 N, float3 V, float3 L, float roughness) {
     float r = roughness + 1.0f;
     float k = (r * r) / 8.0f;
@@ -131,7 +127,7 @@ public float G_SCHLICKGGX_SMITH(float3 N, float3 V, float3 L, float roughness) {
     return G_SCHLICKGGX(NDotV, k) * G_SCHLICKGGX(NDotL, k);
 }
 
-/** Height-correlated Smith GGX (Heitz 2014); more physically correct than separable by accounting for masking/shadowing correlation. Returns G2 in [0,1], same denominator as G_SCHLICKGGX_SMITH. */
+/** Returns G2, same denominator convention as G_SCHLICKGGX_SMITH. */
 public float G_SMITH_HEIGHT_CORRELATED(float3 N, float3 V, float3 L, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -142,7 +138,7 @@ public float G_SMITH_HEIGHT_CORRELATED(float3 N, float3 V, float3 L, float rough
     return 2.0f * NdotL * NdotV / max(lambdaV + lambdaL, 1e-6f);
 }
 
-/** Kelemen-Szirmay-Kalos G term; very cheap, reduces to 1/(4*HdotV^2) in the specular denominator. Less accurate at grazing angles. Returns G matching the standard Cook-Torrance denominator. */
+/** Returns G for the standard Cook-Torrance denominator. */
 public float G_KELEMEN(float3 N, float3 V, float3 L, float3 H) {
     float NdotV = max(dot(N, V), 0.0f);
     float NdotL = max(dot(N, L), 0.0f);
@@ -158,12 +154,10 @@ float FRESNEL_POWER_UNREAL(float3 V, float3 H) {
     return (-5.55473f * VDotH - 6.98316f) * VDotH;
 }
 
-/** Schlick Fresnel with Unreal fast-pow approximation. */
 public float3 F_SCHLICK(float3 V, float3 H, float3 F0) {
     return F0 + (1.0f - F0) * pow(2.0f, FRESNEL_POWER_UNREAL(V, H));
 }
 
-/** Schlick Fresnel attenuated by roughness for IBL ambient evaluation. */
 public float3 F_SCHLICK_ROUGHNESS(float NdotV, float3 F0, float roughness) {
     float3 F90 = max(float3(1.0f - roughness), F0);
     float Fc = pow(2.0f, (-5.55473f * NdotV - 6.98316f) * NdotV);
@@ -173,12 +167,12 @@ public float3 F_SCHLICK_ROUGHNESS(float NdotV, float3 F0, float roughness) {
 
 // ==================== Diffuse BRDF Models ====================
 
-/** Lambertian diffuse; constant albedo/PI lobe. Returns BRDF value (PI division included). */
+/** PI division included. */
 public float Diffuse_Lambert() {
     return 1.0f / PI;
 }
 
-/** Oren-Nayar diffuse (qualitative model, Oren & Nayar 1994); stable formulation that divides by max(NdotL, NdotV) instead of the smaller cosine, so it stays bounded at silhouette edges. Returns BRDF value (PI division included). */
+/** Divides by max(NdotL, NdotV) so it stays bounded at silhouettes. PI division included. */
 public float Diffuse_OrenNayar(float NdotL, float NdotV, float3 L, float3 V, float roughness) {
     float a = roughness * roughness;
     float A = 1.0f - 0.5f * a / (a + 0.33f);
@@ -188,7 +182,7 @@ public float Diffuse_OrenNayar(float NdotL, float NdotV, float3 L, float3 V, flo
     return (A + B * s / t) / PI;
 }
 
-/** Directional albedo of Diffuse_OrenNayar: the cosine-weighted hemispherical integral of the BRDF, i.e. what multiplies albedo * E/pi under uniform incident radiance. Closed form of this exact formulation (A at NdotV = 1). */
+/** Cosine-weighted hemispherical integral of Diffuse_OrenNayar, the factor on albedo * E/pi under uniform radiance. */
 public float OrenNayarDirectionalAlbedo(float NdotV, float roughness) {
     float a = roughness * roughness;
     float A = 1.0f - 0.5f * a / (a + 0.33f);
@@ -202,7 +196,7 @@ public float OrenNayarDirectionalAlbedo(float NdotV, float roughness) {
     return A + 2.0f * B * sinV * (inner + outer) / PI;
 }
 
-/** Disney diffuse (Burley 2012); Fresnel-based retroreflection peak and grazing darkening. Returns BRDF value (PI division included). @param VdotH dot(V, H) */
+/** PI division included. */
 public float Diffuse_Disney(float NdotL, float NdotV, float VdotH, float roughness) {
     float FD90 = 0.5f + 2.0f * roughness * VdotH * VdotH;
     float FdV = 1.0f + (FD90 - 1.0f) * pow(1.0f - NdotV, 5.0f);
@@ -210,7 +204,7 @@ public float Diffuse_Disney(float NdotL, float NdotV, float VdotH, float roughne
     return FdV * FdL / PI;
 }
 
-/** Hammon diffuse (GDC 2017); energy-conserving Oren-Nayar fit that pairs naturally with GGX+Smith. Returns single-scatter term (PI included); add albedo*0.1159*roughness at call site for multi-scatter. @param LdotV dot(L, V) */
+/** Single-scatter, PI included; add albedo*0.1159*roughness at the call site for multi-scatter. */
 public float Diffuse_Hammon(float NdotL, float NdotV, float NdotH, float LdotV, float roughness) {
     float facing = 0.5f + 0.5f * LdotV;
     float rough = facing * (0.9f - 0.4f * facing) * ((0.5f + NdotH) / max(NdotH, 0.05f));
@@ -225,7 +219,6 @@ public float3 CubemapDirection(float3 worldDir)
     return float3(worldDir.x, -worldDir.y, worldDir.z);
 }
 
-/** Prefiltered diffuse irradiance lookup; flips Y to convert engine world space to cubemap space. */
 public float3 DiffuseIrradiance(TextureCube envMap, SamplerState linearSampler, float3 worldNormal)
 {
     return envMap.SampleLevel(linearSampler, CubemapDirection(worldNormal), ENVIRONMENT_MAP_DIFFUSE_MIP).rgb;

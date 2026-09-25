@@ -10,7 +10,7 @@ public static const float GI_GATHER_DISOCCLUSION_SENSITIVITY = 0.01;
 public static const float GI_GATHER_BACKFACE_GUARD_DISTANCE = 0.1;
 public static const float GI_GATHER_REVEAL_FACING_SCALE = 2.0;
 
-/** Trace and shade must agree (hitT is measured from here). Lifted along the view ray, free space for any visible pixel, far enough to clear the surface by two pixels; a normal lift crossed into surfaces in contact (chair feet through the floor). */
+/** Trace and shade must agree; hitT is measured from here. A normal lift crossed into surfaces in contact. */
 public float3 GIGatherRayOrigin(float3 worldPosition, float3 worldN, float3 toCamera, float pixelSize)
 {
     return worldPosition + toCamera * (2.0 * pixelSize / max(abs(dot(worldN, toCamera)), 0.1)) + worldN * max(0.002, length(worldPosition) * 1e-5);
@@ -24,16 +24,13 @@ public static const uint GI_GATHER_TIER_BACKFACE = 4u;
 public static const uint GI_GATHER_TIER_INVALID = 5u;
 public static const uint GI_GATHER_TIER_BAKED = 6u;
 
-/** The full-res pixel a gather texel represents; fixed to the quad's center so the sample sits where the upscale footprint expects the texel and the bias is direction-symmetric (the (0,0) corner biased left/up, which trailed bright edges behind rightward/downward reveals at quarter res). Deliberately not frame-cycled: cycling strobed depth edges every 4 frames; temporal supersampling lives in the ray RNG instead. */
+/** Deliberately fixed to the quad center and not frame-cycled: cycling strobed depth edges. */
 public uint2 GIGatherRepresentativePixel(uint2 gatherPixel, uint2 renderExtent, uint gatherScale)
 {
     return min(gatherPixel * gatherScale + (gatherScale >> 1u), renderExtent - 1u);
 }
 
-/**
- * E/pi at evalN from filtered gather SH plus the filtered mean ray radiance: mean is the unbiased E/pi at the gather normal gatherN,
- * the SH only supplies the tilt ratio SH(evalN)/SH(gatherN). The L1 kernel (1/4 + c/2) bounds that ratio to [0, 3].
- */
+/** E/pi at evalN: mean is E/pi at gatherN, the SH only supplies the tilt ratio SH(evalN)/SH(gatherN). */
 public float3 GIGatherEvaluate(float4 shR, float4 shG, float4 shB, float3 mean, float3 gatherN, float3 evalN)
 {
     float3 atEval = float3(shR.x + dot(shR.yzw, evalN), shG.x + dot(shG.yzw, evalN), shB.x + dot(shB.yzw, evalN));
@@ -42,7 +39,7 @@ public float3 GIGatherEvaluate(float4 shR, float4 shG, float4 shB, float3 mean, 
     return max(mean, float3(0.0)) * ratio;
 }
 
-/** Bilinear-samples the half-res gather SH, evaluated at the pixel's world normal; returns indirectDiffuse (E/pi). */
+/** Returns E/pi. */
 public float3 GIGatherIndirectDiffuse(uint shRIndex, uint shGIndex, uint shBIndex, float2 uv, float3 worldN)
 {
     float4 shR = rdgTexturesFloat4[shRIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uv, 0);
@@ -58,7 +55,6 @@ public struct GIGatherHistory
     public float quality;
 };
 
-/** View-space geometric normal from a depth texture; each axis takes its shallower step so a silhouette neighbour never enters. */
 public float3 GIGatherDepthNormal(SceneData scene, uint depthIndex, int2 px, uint2 renderExtent)
 {
     float2 cornerUv = float2(px) / float2(renderExtent);
@@ -80,20 +76,19 @@ public float3 GIGatherDepthNormal(SceneData scene, uint depthIndex, int2 px, uin
 public static const float GI_GATHER_NOISE_LO = 0.15;
 public static const float GI_GATHER_NOISE_HI = 0.5;
 
-/** 0..1 from a relative noise variance (per-frame deviation from the fast history over its level): how much harder to average this pixel. */
 public float GIGatherNoisiness(float relativeVariance)
 {
     return saturate((sqrt(max(relativeVariance, 0.0)) - GI_GATHER_NOISE_LO) / (GI_GATHER_NOISE_HI - GI_GATHER_NOISE_LO));
 }
 
-/** View-space filter-guide normal: the depth normal, oriented to the shading normal's side. Normal maps (carpet) make neighbouring shading normals disagree on a flat surface, which starves every plane/normal-weighted filter. */
+/** Depth normal, not shading normal: normal maps make neighbours disagree on flat surfaces and starve the filters. */
 public float3 GIGatherGuideNormal(SceneData scene, uint depthIndex, int2 px, uint2 renderExtent, float3 viewShadingNormal)
 {
     float3 n = GIGatherDepthNormal(scene, depthIndex, px, renderExtent);
     return dot(n, viewShadingNormal) < 0.0 ? -n : n;
 }
 
-/** Per-tap reprojection gate shared by every full-res history fetch: plane-distance disocclusion (the compared |dz|*NoV already projects out slant, so the tolerance is flat) plus a normal test. bShadingNormalAgrees false = caller settles it on geometric normals. */
+/** bShadingNormalAgrees false = caller settles it on geometric normals. */
 public bool GIGatherHistoryTapValid(SceneData scene, float prevRawDepth, uint prevPackedNormal, float expectedPrevViewZ, float NoV, float disocclusionThreshold, float3 worldN, out bool bShadingNormalAgrees)
 {
     bShadingNormalAgrees = false;
@@ -105,12 +100,12 @@ public bool GIGatherHistoryTapValid(SceneData scene, float prevRawDepth, uint pr
         return false;
     }
     float3 prevWorldN = normalize(mul(transpose(float3x3(scene.prevView)), UnpackNormalOct16(prevPackedNormal)));
-    // 60 degrees, matching the tier-0 screen gate: the plane test is blind to old surfaces CROSSING the current plane (buried pillar faces at ground level), and those arrive with perpendicular normals (dot ~ 0).
+    // The plane test is blind to old surfaces crossing the current plane; those arrive with perpendicular normals.
     bShadingNormalAgrees = dot(worldN, prevWorldN) >= 0.5;
     return true;
 }
 
-/** Flat plane-distance tolerance for GIGatherHistoryTapValid. The NRD-style 1/lerp(0.05,1,NoV) expansion inflated the accepted raw mismatch to ~2x viewZ at grazing (ground history never rejected); do not reintroduce it. */
+/** Flat on purpose: the NRD-style 1/lerp(0.05,1,NoV) expansion never rejected grazing history. */
 public float GIGatherDisocclusionThreshold(SceneData scene, float centerViewZ)
 {
     return GI_GATHER_DISOCCLUSION_SENSITIVITY * abs(scene.ndcToViewMul.y) * abs(centerViewZ);
@@ -126,7 +121,6 @@ public struct GIGatherHistoryTaps
     public float2 quadUv;
 };
 
-/** Reprojection and per-tap validity for a full-res history fetch, resolved once so several histories at the same pixel share the depth/normal gate. */
 public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
     GIGatherHistoryTaps taps = { int2(0), float2(0.0), float4(0.0), 0.0, 1.0, float2(0.0) };
@@ -190,7 +184,7 @@ public GIGatherHistoryTaps GIGatherResolveHistoryTaps(SceneData scene, uint dept
     return taps;
 }
 
-/** 2x2 bilinear history fetch over pre-resolved taps with weight renormalization. quality is the surviving bilinear weight; 0 means no usable history. */
+/** quality = surviving bilinear weight; 0 means no usable history. */
 public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint historyIndex, uint2 renderExtent)
 {
     GIGatherHistory result = { float3(0.0), 0.0, 0.0 };
@@ -217,7 +211,6 @@ public GIGatherHistory GIGatherFetchHistory(GIGatherHistoryTaps taps, uint histo
     return result;
 }
 
-/** MV-reprojected 2x2 bilinear history fetch with per-tap depth/backface validity and weight renormalization. */
 public GIGatherHistory GIGatherFetchHistory(SceneData scene, uint historyIndex, uint depthIndex, uint depthHistoryIndex, uint gbufferOneHistoryIndex, float2 uv, uint4 gt1, float centerViewZ, float NoV, float3 worldN, uint2 renderExtent)
 {
     return GIGatherFetchHistory(GIGatherResolveHistoryTaps(scene, depthIndex, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex, renderExtent);
@@ -230,7 +223,6 @@ public struct GIGatherScalarHistory
     public float quality;
 };
 
-/** GIGatherFetchHistory for a float2 (value, count) history such as the AO accumulator; bilinear only. count is returned as stored. */
 public GIGatherScalarHistory GIGatherFetchScalarHistory(GIGatherHistoryTaps taps, uint historyIndex)
 {
     GIGatherScalarHistory result = { 0.0, 0.0, 0.0 };
@@ -261,7 +253,6 @@ public GIGatherScalarHistory GIGatherFetchScalarHistory(SceneData scene, uint hi
     return GIGatherFetchScalarHistory(GIGatherResolveHistoryTaps(scene, depthIndex, depthHistoryIndex, gbufferOneHistoryIndex, uv, gt1, centerViewZ, NoV, worldN, renderExtent), historyIndex);
 }
 
-/** Debug views: 2 = resolved irradiance, 3 = fallback tier (cyan screen / green cache / blue probe / yellow sky / red backface / magenta baked), 4 = hit distance, 5 = temporal accumulation count, 6 = first-ray escape (yellow sky miss, magenta backface, front-face hitT green-to-red over 2-10m). */
 public float3 GIGatherDebugColor(uint dataIndex, uint resolvedIndex, uint2 pixel, uint mode, float3 indirectDiffuse, uint gatherScale)
 {
     if (mode == 2u) {

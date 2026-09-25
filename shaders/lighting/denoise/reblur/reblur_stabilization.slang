@@ -18,8 +18,6 @@ import denoiser_common;
 import reblur_common;
 import shader_functions;
 
-/** 3x3 luma mean + standard deviation over a YCoCg signal (luma = .x). Out-of-range neighbors
- *  substitute the center luma. */
 void NeighborhoodLumaMoments(uint texIdx, uint viewZIndex, int2 pixelPos, int2 rectSize, ReblurDiffuseSpecularConstants* rc, out float mean, out float sigma)
 {
     float centerLuma = ReblurGetLuma(rdgTexturesFloat4[texIdx].Load(int3(pixelPos, 0)));
@@ -45,7 +43,6 @@ void NeighborhoodLumaMoments(uint texIdx, uint viewZIndex, int2 pixelPos, int2 r
     sigma = sqrt(max(m2 - m1 * m1, 0.0));
 }
 
-/** Occlusion-weighted bilinear fetch of a single-channel luma history. */
 float FetchLumaHistory(uint texIdx, float2 uv, float2 rectSizePrev, float2 resourceSizeInvPrev, float4 occlusion)
 {
     float2 pos = saturate(uv) * rectSizePrev;
@@ -90,7 +87,6 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     float3x3 viewToWorld = (float3x3)rc.gViewToWorld;
     float2 pixelUv = (float2(pixelPos) + 0.5) * rc.gRectSizeInv;
 
-    // Position + surface motion (camera-relative, rotation-only view).
     float3 X = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, viewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
     uint4 gt1 = rdgTexturesUInt4[pc.normalRoughnessIndex].Load(int3(pixelPos, 0));
     float3 mv = float3(UnpackMotionVectors(gt1.g) * rc.gMvScale.xy, UnpackViewZDelta(gt1.w));
@@ -110,7 +106,6 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     float3 N = nr.xyz;
     float roughness = nr.w;
 
-    // Shared data from TA.
     float2 data1 = ReblurUnpackData1(rdgTexturesFloat2[pc.data1Index].Load(int3(pixelPos, 0)));
     uint bits;
     bool smbAllowCatRom;
@@ -120,7 +115,6 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
 
     if (rc.gResetHistory != 0) { bits = 0u; data1 = float2(0.0, 0.0); }
 
-    // Surface-motion footprint from the DATA2 occlusion bits.
     float4 smbOcclusion = float4((bits & 1u) != 0u ? 1.0 : 0.0, (bits & 2u) != 0u ? 1.0 : 0.0, (bits & 4u) != 0u ? 1.0 : 0.0, (bits & 8u) != 0u ? 1.0 : 0.0);
     smbOcclusion *= RelaxIsInScreenNearest(smbPixelUv);
     MLBilinear smbBilinear;
@@ -129,20 +123,18 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     smbBilinear.weights = frac(smbPos - 0.5);
     float smbFootprintQuality = sqrt(saturate(dot(MLGetBilinearCustomWeights(smbBilinear, smbOcclusion), 1.0)));
 
-    // Effective stabilization strength: user knob * frame-count saturation; antilag feedback still runs even at 0.
+    // Antilag feedback still runs when the strength is 0.
     float stabilizationStrength = rc.gStabilizationStrength * (rc.gMaxStabilizedFrameNum / (1.0 + rc.gMaxStabilizedFrameNum));
 
-    // ===== Diffuse =====
     float diffLumaM1, diffLumaSigma;
     NeighborhoodLumaMoments(pc.diffIndex, pc.viewZIndex, pixelPos, rc.gRectSize, rc, diffLumaM1, diffLumaSigma);
     float diffLuma = ReblurGetLuma(diffCur);
 
-    // NRD short-history firefly cap; on sparse just-disoccluded signal M1 ~ luma/9 and it eats the band's energy, so default OFF.
     if (rc.gStabilizationFireflyCleanup != 0u && data1.x < rc.gHistoryFixFrameNum) {
         diffLuma = min(diffLuma, diffLumaM1 * (1.2 + 1.0 / (1.0 + data1.x)));
     }
 
-    // The carried luma history aliases unwritten memory on the first frame, so seed it from the current signal.
+    // The luma history aliases unwritten memory on the first frame.
     float smbDiffLumaHistory = diffLuma;
     if (rc.gResetHistory == 0) {
         smbDiffLumaHistory = max(FetchLumaHistory(pc.prevDiffLumaStabIndex, smbPixelUv, rc.gRectSizePrev, rc.gResourceSizeInvPrev, smbOcclusion), 0.0) * rc.gHistoryExposureRatio;
@@ -150,11 +142,10 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
 
     float diffAntilag = ReblurComputeAntilag(smbDiffLumaHistory, diffLumaM1, diffLumaSigma, smbFootprintQuality * data1.x, rc.gAntilagSettings, rc.gFramerateScale);
 
-    // Antilag feedback: cut next frame's accumulation without re-invoking HistoryFix.
+    // Floor at gHistoryFixFrameNum so antilag cuts accumulation without re-triggering HistoryFix.
     float diffMinAccumSpeed = min(data1.x, rc.gHistoryFixFrameNum);
     data1.x = lerp(diffMinAccumSpeed, data1.x, diffAntilag);
 
-    // History weight + color-box sigma scale.
     float diffW = smbFootprintQuality * (1.0 - ReblurGetAdvancedNonLinearAccumSpeed(data1.x, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz)) * diffAntilag;
     float diffSigmaScale = 1.0 + 6.0 * rc.gFramerateScale * diffW;
 
@@ -162,7 +153,6 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     float diffLumaStabilized = lerp(diffLuma, smbDiffLumaHistory, min(diffW, stabilizationStrength));
     float4 diffStab = ReblurChangeLuma(diffCur, diffLumaStabilized);
 
-    // ===== Specular =====
     float specLumaM1, specLumaSigma;
     NeighborhoodLumaMoments(pc.specIndex, pc.viewZIndex, pixelPos, rc.gRectSize, rc, specLumaM1, specLumaSigma);
     float specLuma = ReblurGetLuma(specCur);
@@ -171,10 +161,9 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
         specLuma = min(specLuma, specLumaM1 * (1.2 + 1.0 / (1.0 + data1.y)));
     }
 
-    // TA's min-3x3 world hit distance; must match what the DATA2 vmb occlusion bits were computed for.
+    // Must match the hit distance the DATA2 vmb occlusion bits were computed for.
     float hitDistForTracking = rdgTexturesFloat[pc.specHitDistIndex].Load(int3(pixelPos, 0)).r;
 
-    // Virtual motion uv.
     float3 V = rc.gOrthoMode == 0.0 ? -normalize(X) : -normalize(rc.gFrustumForward.xyz);
     float3 Xvirtual = RelaxGetXvirtual(hitDistForTracking, curvature, X, Xprev, N, V, roughness);
     float2 vmbPixelUv = MLGetScreenUv(rc.gWorldToClipPrev, Xvirtual);
@@ -204,7 +193,6 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     float specW = specFootprintQuality * (1.0 - ReblurGetAdvancedNonLinearAccumSpeed(data1.y, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz)) * specAntilag;
     float specSigmaScale = 1.0 + 6.0 * rc.gFramerateScale * specW;
 
-    // Weaken spec stabilization on smooth surfaces so reflections stay responsive.
     float responsiveFactor = ReblurRemapRoughnessToResponsiveFactor(roughness, rc.gResponsiveAccumulationInvRoughnessThreshold);
     float acceleration = lerp(RelaxGetSpecMagicCurve(roughness), 1.0, 0.5 + 0.5 * responsiveFactor);
     specW *= acceleration;
@@ -212,23 +200,19 @@ void ReblurStabilizationMain(uniform ReblurStabilizationPushConstant pc, int2 pi
     float specLumaHistoryRaw = specLumaHistory;
     specLumaHistory = clamp(specLumaHistory, specLumaM1 - specLumaSigma * specSigmaScale, specLumaM1 + specLumaSigma * specSigmaScale);
     float specLumaStabilized = lerp(specLuma, specLumaHistory, min(specW, stabilizationStrength));
-    // Up-scaling only where own luma is significant vs the neighborhood: unbounded explodes on near-zero luma, full saturate darkens short-history pixels.
+    // Bounded upscale: unbounded explodes on near-zero luma, full saturate darkens short-history pixels.
     float specLumaRaw = ReblurGetLuma(specCur);
     float upAllowance = saturate(specLumaRaw / (0.25 * specLumaM1 + NRD_EPS));
     float specLumaScale = min(ReblurGetLumaScale(specLumaRaw, specLumaStabilized), lerp(1.0, 4.0, upAllowance));
     float4 specStab = specCur;
     specStab.xyz *= specLumaScale;
 
-    // ===== Outputs =====
-    // Carried luma histories for next-frame reprojection.
     rdgStorageFloat[pc.outDiffLumaStabIndex][pixelPos] = diffLumaStabilized;
     rdgStorageFloat[pc.outSpecLumaStabIndex][pixelPos] = specLumaStabilized;
 
-    // Carried internal data: antilag-modified per-lobe accum speeds (+1 increment at pack).
     float maxAccum = min(rc.gMaxAccumulatedFrameNum, REBLUR_MAX_ACCUM_FRAME_NUM);
     rdgStorageUInt[pc.outInternalDataIndex][pixelPos] = ReblurPackInternalData(data1.x, data1.y, 0.0, maxAccum);
 
-    // Final linear-RGB result for remodulation (max 0); keep normalized hit distance in .w.
     rdgStorageFloat4[pc.outDiffFinalIndex][pixelPos] = float4(max(MLYCoCgToRgb(diffStab.xyz), 0.0), diffStab.w);
     rdgStorageFloat4[pc.outSpecFinalIndex][pixelPos] = float4(max(MLYCoCgToRgb(specStab.xyz), 0.0), specStab.w);
 }

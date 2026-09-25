@@ -1,7 +1,6 @@
 //
 // Created by William on 2025-12-27.
 //
-
 #ifndef WILL_ENGINE_RENDER_GRAPH_H
 #define WILL_ENGINE_RENDER_GRAPH_H
 
@@ -62,7 +61,7 @@ struct RenderGraphAllocFns
     Core::InlineFunction<void(VkCommandBuffer, VkImage, VkImageLayout, const VkClearDepthStencilValue*, uint32_t, const VkImageSubresourceRange*), 64> cmdClearDepthStencilImage{DefaultCmdClearDepthStencilImage};
     Core::InlineFunction<void(VkCommandBuffer, const VkDebugUtilsLabelEXT*), 64> cmdBeginDebugUtilsLabel{DefaultCmdBeginDebugUtilsLabel};
     Core::InlineFunction<void(VkCommandBuffer), 64> cmdEndDebugUtilsLabel{DefaultCmdEndDebugUtilsLabel};
-    // Optional: when set, replaces the entire NeedsDescriptorWrite block for a physical resource. Tests set this to a no-op.
+    // When set, replaces the NeedsDescriptorWrite block for a physical; tests set it to a no-op
     Core::InlineFunction<void(PhysicalResource&), 64> writeDescriptors;
 };
 
@@ -73,9 +72,8 @@ public:
 
     ~RenderGraph();
 
-public: // Frame setup
+public:
     /**
-     *
      * @param _currentFrameIndex
      * @param currentFrame
      * @param maxFramesUnused physical resources unused for this many frames are evicted
@@ -94,24 +92,17 @@ public: // Frame setup
     bool IsForceGraphicsQueue() const { return bForceGraphicsQueue; }
     void ClearGraphicsFrameStamps();
 
-    /**
-     * Destroys all viewport-scaled physical resources so they are recreated at the new size next frame
-     */
     void InvalidateAllViewportAssociated() { bDestroyViewportAssociated = true; }
 
-    /**
-     * Drops every versioned resource (textures, buffers, the TLAS ring) regardless of viewport flag; physicals age out normally
-     */
+    /** Drops every ring regardless of viewport flag; physicals age out normally. */
     void InvalidateAllVersioned() { bDropAllRings = true; }
 
-    /**
-     * Drops every versioned resource backed by a viewport-scaled physical; physicals are kept
-     */
+    /** Drops rings backed by a viewport-scaled physical; physicals are kept. */
     void InvalidateViewportHistory() { bDropViewportRings = true; }
 
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
-public: // Resource registration
+public:
     void CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue = std::nullopt, bool bIsViewportScaled = false);
 
     /**
@@ -141,10 +132,9 @@ public: // Resource registration
 
     void ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
 
-public: // Rings
+public:
     /**
-     * Declares a texture the graph keeps across frames. The bare name is the newest version, ResourceVersionID(name, age) the one produced age versions earlier (1..depth).
-     * A ring not declared for a frame is dropped; a changed description resets it.
+     * ResourceVersionID(name, age) is the version produced age versions earlier (1..depth). A ring not declared for a frame is dropped; a changed description resets it.
      * @param name
      * @param texInfo
      * @param depth 0..RDG_MAX_RING_DEPTH; 0 is the in-place case (Fresh once, then NoShiftReadWrite: one physical for life)
@@ -161,26 +151,34 @@ public: // Rings
     void CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
 
     /**
-     * Supplies this frame's version of a ring declared VersionSource::Emplaced from an existing logical's physical.
-     * The ring takes the source's description, so the next declaration must match it or the history resets.
+     * Emplaced ring source; the ring takes resourceSrc's description, so the next declaration must match it or the history resets.
      * @param resourceDst
      * @param resourceSrc
      */
     void EmplaceVersion(StringID resourceDst, StringID resourceSrc);
 
-    /** @returns the logical name of the version from age frames ago; age 0 is the bare name. Pure naming, no lookup: the version need not exist (see HasVersion) */
+    /**
+     * Pure naming, no lookup; the version need not exist.
+     * @returns the logical name of the version from age frames ago; age 0 is the bare name. Pure naming, no lookup: the version need not exist (see HasVersion)
+     */
     [[nodiscard]] StringID ResourceVersionID(StringID name, uint32_t age);
 
-    /** @returns true when that version holds a produced physical. Age 0 is pending on a shifting source until frame end, so it answers "was anything produced before" on the no-shift sources */
+    /**
+     * Age 0 stays pending on a shifting source until frame end, so it only means "produced before" on no-shift sources.
+     * @returns true when that version holds a produced physical. Age 0 is pending on a shifting source until frame end, so it answers "was anything produced before" on the no-shift sources
+     */
     [[nodiscard]] bool ResourceHasVersion(StringID name, uint32_t age);
 
-    /** @returns true when the buffer ring holds a produced age-0 version of exactly this size; redeclaring with another size drops it. */
+    /**
+     * True only for a produced age-0 version of exactly this size; redeclaring with another size drops it.
+     * @returns true when the buffer ring holds a produced age-0 version of exactly this size; redeclaring with another size drops it.
+     */
     [[nodiscard]] bool ResourceHasBufferVersion(StringID name, VkDeviceSize size);
 
-public: // Pass setup
+public:
     RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, RenderCategory category);
 
-public: // Resource queries
+public:
     bool HasTexture(StringID textureId);
 
     bool HasBuffer(StringID bufferId);
@@ -203,9 +201,7 @@ public: // Resource queries
 
     uint32_t GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel = 0);
 
-    /**
-     * Capture variants for passes that bake handles into a bundle for downstream consumers without accessing the resource themselves (No usage/aliasing validation).
-     */
+    /** No usage/aliasing validation; for passes that bake handles for downstream consumers without accessing the resource. */
     uint32_t PeekSampledImageViewDescriptorIndex(StringID textureId);
 
     VkDeviceAddress PeekBufferAddress(StringID bufferId);
@@ -224,102 +220,86 @@ public: // Resource queries
     PipelineEvent GetBufferState(StringID bufferId);
 
     /**
-     * If true render graph will not execute and the application will be requested to shut down.
+     * When true the graph will not execute and the application is asked to shut down.
      * @return
      */
     [[nodiscard]] bool IsFrameCorrupted() const { return bFrameCorrupted; }
 
-public: // VRAM reporting
+public:
     VRAMReport GenerateVramReport() const;
 
-public: // Compile and execute
-    /**
-     * Accumulates VkImageUsageFlags / VkBufferUsageFlags across all passes for physical resource creation
-     */
+public:
     void AccumulateUsage();
 
     void BuildDependencyEdges();
 
-    /**
-     * Pulls graph-synthesized upload passes into the async cut of their consumer and rejects any async pass that depends on a graphics pass.
-     */
+    /** Pulls graph-synthesized upload passes into their consumer's async cut; rejects async passes that depend on a graphics pass. */
     void PropagateAsyncPasses();
 
     void TopologicalSortPasses();
 
     void AssignWaveIndices();
 
-    /**
-     * Computes firstPass/lastPass for each logical resource to drive physical resource aliasing
-     */
     void CalculateLifetimes();
 
     void PopulateAutoClearTextures();
 
     void AssignPhysicalResources(uint64_t currentFrame);
 
-    /**
-     * Every async pass declaration must touch memory graphics cannot still be using: writes need FRAME_BUFFER_COUNT frames since any graphics touch, reads since a graphics write, unless an async pass wrote it this frame or last touched it.
-     */
+    /** Async writes need FRAME_BUFFER_COUNT frames since any graphics touch, reads since a graphics write, unless an async pass wrote it this frame or last touched it. */
     void ValidateAsyncHazards(uint64_t currentFrame);
 
-    /**
-     * Precomputes per-wave and per-pass barriers into flat arrays; call after Compile
-     */
+    /** Call after Compile. */
     void PrecomputeBarriers(uint64_t currentFrame);
 
     /**
-     * Allocates/aliases physical resources and writes descriptors; call after CalculateLifetimes
+     * Call after CalculateLifetimes.
      * @param currentFrame
      */
     void Compile(uint64_t currentFrame);
 
     void Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd);
 
-    /** Accumulated dst stages of the suppressed async->graphics barriers */
+    /** Accumulated dst stages of the suppressed async->graphics barriers. */
     [[nodiscard]] VkPipelineStageFlags2 GetCrossCutWaitStageMask() const { return crossCutWaitStageMask; }
 
     /**
-     * Transitions the named texture to present-src layout; call after Execute
+     * Call after Execute.
      * @param cmd
      * @param textureId
      */
     void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
 
-public: // Persistent Per-FIF Buffers
+public:
     /**
-     * Registers the buffer on first use, grows it to size, imports the current frame's slot so passes can declare reads against the name, and returns memory to write into.
-     * On a device without resizable BAR the returned memory is staging and a copy into the slot is queued automatically, so callers never branch.
+     * Without resizable BAR the returned memory is staging and the copy is queued automatically. extraUsage exists because a persistent slot cannot take usage from pass declarations.
      * @param name
      * @param size
      * @param extraUsage usage beyond storage/device address/transfer, needed because a persistent slot cannot pick usage up from pass declarations
      */
     void* OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
-    /**
-     * OpenHostBuffer for a caller that writes only the parts that changed. Returns every destination the write has to reach, so the buffer survives a reallocation and works without REBAR.
-     * Only use it for a buffer whose unwritten bytes must persist: a buffer rewritten in full every frame must stay on OpenHostBuffer, or it pays for a mirror that only goes stale.
-     */
+    /** Only for buffers whose unwritten bytes must persist; a buffer rewritten in full every frame stays on OpenHostBuffer. */
     HostBufferWrite OpenHostBufferMirrored(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
     VkAccelerationStructureKHR GetAccelerationStructureHandle(StringID name);
 
     uint32_t GetAccelerationStructureDescriptorIndex(StringID name);
 
-public: // Transient Uploader
+public:
     UploadAllocation AllocateTransient(size_t size);
 
     [[nodiscard]] VkBuffer GetTransientUploadBuffer() const { return uploadArenas[currentFrameIndex].buffer; }
 
     [[nodiscard]] void* GetTransientUploadMapped() const { return uploadArenas[currentFrameIndex].mappedData; }
 
-public: // Readback
+public:
     [[nodiscard]] VkBuffer GetReadback() const { return meshletCountReadbacks[currentFrameIndex].buffer; }
 
     [[nodiscard]] ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].mappedData); }
 
-public: // GPU pass timing
-    /** Reads the previous use of this frame-in-flight slot; call once per frame before Execute (mirrors PipelineStatsQueryPool::Collect). */
+public:
+    /** Reads the previous use of this frame-in-flight slot; call once per frame before Execute. */
     GPUProfileSnapshot CollectGPUProfile(uint32_t frameIndex);
 
 private:
@@ -329,22 +309,22 @@ private:
     void ValidatePassDeclaresTexture(uint32_t textureIndex);
     void ValidatePassDeclaresBuffer(uint32_t bufferIndex);
 
-    /** Queues a replaced buffer for destruction once no frame in flight can still reference it. */
     void RetireBuffer(VkBuffer buffer, VmaAllocation allocation);
 
     void RegisterHostBuffer(StringID name, VkBufferUsageFlags usage);
 
-    /** @return true if the slot was reallocated, which clears its contents */
+    /**
+     * @return true if the slot was reallocated, which clears its contents
+     */
     bool EnsureHostBufferCapacity(StringID name, VkDeviceSize requiredSize);
 
     HostBuffer& GetHostBuffer(StringID name);
 
     HostBufferSlots& GetHostBufferSlots(StringID name);
 
-    /** Queues the pass that carries a non-REBAR slot's mirror into its device buffer. Returns the staging offset the caller's regions are relative to. */
+    /** Returns the staging offset the caller's regions are relative to. */
     VkDeviceSize QueueHostBufferStagingCopy(StringID name, VkDeviceSize size, bool bFullCopy);
 
-    /** Imports the current frame's slot into the pass system so passes can declare reads against it. */
     void ImportHostBuffer(StringID name);
     const RenderPass* currentRecordingPass{};
     bool bFrameCorrupted{};
@@ -355,7 +335,6 @@ private:
     Core::Arena* arena;
     RenderGraphAllocFns allocFns;
 
-    // Logical resources
     Core::ArenaFixedVector<TextureResource> textures;
     Core::ArenaFixedMap<StringID, uint32_t> textureNameToIndex;
 
@@ -378,12 +357,9 @@ private:
     Core::ArenaFixedVector<BufferResource> buffers;
     Core::ArenaFixedMap<StringID, uint32_t> bufferNameToIndex;
 
-    // Physical resources
     Core::Vector<PhysicalResource> physicalResources;
 
-    // Render passes
     Core::ArenaFixedVector<RenderPass*> passes;
-    // Generated at compile time
     Core::ArenaFixedVector<RenderPass*> sortedPasses;
     Core::Vector<uint32_t> waveOffsets;
 
@@ -434,25 +410,20 @@ private:
     BufferResource* GetOrCreateBuffer(StringID textureId);
 
     /**
-     * Releases a logical from the physical it was bound to so the compile pass allocates it fresh; the previous contents are lost.
-     * Only the logical side is touched here; ReconcileDetachedPhysicals does the physical bookkeeping at compile time.
+     * Contents are lost; only the logical side is touched, ReconcileDetachedPhysicals fixes the physical side at compile time.
      * @param tex
      */
     void DetachTexture(TextureResource& tex) const;
 
     void DetachBuffer(BufferResource& buf) const;
 
-    /**
-     * Clears physical to logical back-references left dangling by a detach, re-opening any physical that is now unreferenced for aliasing this frame.
-     */
     void ReconcileDetachedPhysicals();
 
-private: // Rings
+private:
     ResourceRing* FindRing(StringID name);
 
     void ResetRing(ResourceRing& ring);
 
-    /** Shifts the ages for Fresh/Emplaced, then creates the logicals for every existing version and binds them to their physicals; the bare name is fresh, absent, or slot 0 by source. */
     void BindRingLogicals(ResourceRing& ring);
 
     /** Frame end: drops undeclared rings, refreshes image layouts, and captures the physical of a pending slot 0. */
@@ -460,7 +431,7 @@ private: // Rings
 
     void OnPhysicalRemoved(uint32_t physicalIndex);
 
-private: // Physicals
+private:
 
     void DestroyPhysicalResource(PhysicalResource& resource);
 

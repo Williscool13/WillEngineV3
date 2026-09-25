@@ -127,13 +127,7 @@ struct RendererStatistics
     float gpuSpanMs{};
 };
 
-/**
- * Accumulates renderer statistics on the render thread each frame, then publishes
- * them atomically so any thread can read a consistent snapshot.
- *
- * Render thread: write into `scratch` freely, call `Publish()` once per frame when done.
- * Any thread:    call `GetPublished()` to retrieve the latest committed snapshot.
- */
+/** Render thread writes `scratch` and calls Publish() once per frame; any thread may call GetPublished(). */
 struct RendererStatisticsManager
 {
     RendererStatistics scratch{};

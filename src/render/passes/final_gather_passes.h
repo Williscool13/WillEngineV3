@@ -45,20 +45,16 @@ inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;
 
-/** Gates the composite passes' gather read this frame. */
 struct FinalGatherFrame
 {
     bool bValid{false};
 };
 
-/**
- * Shared per-pixel object motion at render extent, RGBA16F (motionUv.xy = gbuffer MV minus camera-static reprojection, linear viewZ, motion blur mask).
- * Idempotent; the first caller adds the pass.
- */
+/** RGBA16F: xy = gbuffer MV minus camera-static reprojection, z = linear viewZ, w = motion blur mask. Idempotent, the first caller adds the pass. */
 void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex);
 
 /**
- * TDA-style final gather: one cosine-weighted ray per half-res pixel, resolved against last frame's lit screen, then the radiance cache, then probes (skybox on miss), projected into per-channel 2-band SH targets.
+ * bDebugView disables the screen tier so debug color is not fed back as radiance. maxRayRadiance 0 = off.
  * @param graph
  * @param pipelineManager
  * @param viewFamily
@@ -80,7 +76,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity, float maxRayRadiance);
 
 /**
- * Full-screen GI leak deconstruction at the primary surface, written to gi_deconstruct_target for the debug visualizer.
+ * mode: 1 cache cell hash, 2 cache radiance, 3 Chebyshev weights, 4 dominant-probe distance margin, 5 coverage/cascade, 6 raw DDGI irradiance.
  * @param graph
  * @param pipelineManager
  * @param renderExtent
@@ -91,7 +87,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
 void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode);
 
 /**
- * Gather debug views written to gi_gather_debug_target for the debug visualizer instead of hijacking the lit composite, so the lit-color snapshot and the screen tier stay authentic while inspecting.
+ * bQuarterRes must match this frame's SetupFinalGather.
  * @param graph
  * @param pipelineManager
  * @param renderExtent

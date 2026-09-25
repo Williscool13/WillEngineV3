@@ -18,8 +18,6 @@ import reblur_interop;
 import denoiser_common;
 import reblur_common;
 
-// REBLUR_Config.hlsli (inlined). Post-blur widens the radius (x2) and tightens edge-stopping fractions
-// (fractionScale narrows the normal / roughness tolerances vs the blur pass).
 static const float REBLUR_POST_BLUR_RADIUS_SCALE = 2.0;
 static const float REBLUR_BLUR_FRACTION_SCALE = 1.0;
 static const float REBLUR_POST_BLUR_FRACTION_SCALE = 0.5;
@@ -52,11 +50,9 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
     float centerRoughness = centerNR.w;
     float3 centerWorldPos = RelaxGetCurrentWorldPosFromPixelPos(pixelPos, centerViewZ, rc.gRectSizeInv, rc.gFrustumForward, rc.gFrustumRight, rc.gFrustumUp, rc.gOrthoMode);
 
-    // World-space view vector (surface -> camera), needed for the specular dominant direction.
     float3 cameraPos = MLAffineTransform(rc.gViewToWorld, float3(0.0, 0.0, 0.0));
     float3 V = rc.gOrthoMode == 0.0 ? normalize(cameraPos - centerWorldPos) : -normalize(rc.gFrustumForward.xyz);
 
-    // Per-lobe accum frames from DATA1; radius decays slower than 1/(1+N) so blur outlasts noise.
     float2 frameNums = ReblurUnpackData1(rdgTexturesFloat2[pc.data1Index].Load(int3(pixelPos, 0)));
     float diffNonLinearAccumSpeed = ReblurGetAdvancedNonLinearAccumSpeed(frameNums.x, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz);
     float specNonLinearAccumSpeed = ReblurGetAdvancedNonLinearAccumSpeed(frameNums.y, rc.gMaxAccumulatedFrameNum, rc.gConvergenceSettings.xyz);
@@ -68,11 +64,8 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
     float radiusScale = isPostBlur ? REBLUR_POST_BLUR_RADIUS_SCALE : 1.0;
     float fractionScale = isPostBlur ? REBLUR_POST_BLUR_FRACTION_SCALE : REBLUR_BLUR_FRACTION_SCALE;
 
-    // ---------------- Diffuse blur (screen-space isotropic disk) ----------------
-    // NRD: areaFactor = hitDistFactor * nonLinearAccumSpeed, hitDistFactor from de-normalized world hit distance
-    // (roughness = 1 for diffuse, so the spec magic curve is 1.0), radiusScale sits INSIDE the saturate.
     {
-        // A missed ray (.w == 0) would collapse the radius to the minimum; treat it as a full-range hit (prepass convention).
+        // .w == 0 is a missed ray; treat it as a full-range hit so the radius does not collapse.
         float worldHitDist = ReblurDenormHitDist(diffCenter.w == 0.0 ? 1.0 : diffCenter.w, centerViewZ, rc.gHitDistParams, 1.0);
         float hitDistFactor = RelaxGetHitDistFactor(worldHitDist, frustumSize);
         float areaFactor = hitDistFactor * diffNonLinearAccumSpeed;
@@ -82,10 +75,8 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
         float2 geometryWeightParams = RelaxGetGeometryWeightParams(rc.gPlaneDistSensitivity, frustumSize, centerWorldPos, centerNormal);
         float normalWeightParam = ReblurGetNormalWeightParam(diffNonLinearAccumSpeed, rc.gLobeAngleFraction, 1.0) / fractionScale;
         float2 hitDistanceWeightParams = ReblurGetHitDistanceWeightParams(diffCenter.w, diffNonLinearAccumSpeed);
-        // Hit-dist floor decays with convergence to preserve contact details; applied additively.
         float minHitDistWeight = rc.gMinHitDistanceWeight * fractionScale * diffNonLinearAccumSpeed;
 
-        // Shrink the disk along the projected normal at grazing angles.
         float3 Nv = mul(transpose(viewToWorld), centerNormal);
         float NoV = abs(dot(centerNormal, V));
         float2 skew = lerp(1.0 - abs(Nv.xy), float2(1.0, 1.0), NoV);
@@ -102,7 +93,7 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
             float2 uv = samplePosF * rc.gRectSizeInv;
             float w = RelaxGetGaussianWeight(offset.z);
             if (RelaxIsInScreenNearest(uv) == 0.0) {
-                // Mirror instead of dropping the tap; Gaussian weight is invalid after mirroring.
+                // Gaussian weight is invalid after mirroring.
                 uv = RelaxMirrorUv(uv);
                 w = 1.0;
             }
@@ -133,23 +124,17 @@ void ReblurBlurMain(uniform ReblurBlurPushConstant pc, int2 pixelPos : SV_Dispat
         rdgStorageFloat4[pc.outDiffIndex][pixelPos] = outDiff;
     }
 
-    // ---------------- Specular blur (anisotropic world-space kernel) ----------------
-    // NRD: areaFactor = hitDistFactor * nonLinearAccumSpeed (no roughness term; the spec magic curve scales the
-    // radius instead). hitDistFactor uses de-normalized world hit distance WITHOUT *NoD ("hitDist * NoD
-    // worsens denoising at glancing angles"). The kernel basis is stretched along the reflection direction.
     {
         float smc05 = ReblurGetSpecMagicCurve05(centerRoughness);
 
-        // A missed ray (.w == 0) would collapse the radius to the minimum; treat it as a full-range hit (prepass convention).
+        // .w == 0 is a missed ray; treat it as a full-range hit so the radius does not collapse.
         float worldHitDist = ReblurDenormHitDist(specCenter.w == 0.0 ? 1.0 : specCenter.w, centerViewZ, rc.gHitDistParams, centerRoughness);
+        // No *NoD on the hit distance, it worsens denoising at glancing angles (NRD).
         float hitDistFactor = RelaxGetHitDistFactor(worldHitDist, frustumSize);
         float areaFactor = hitDistFactor * specNonLinearAccumSpeed;
         float blurRadius = saturate(radiusScale * sqrt(saturate(areaFactor))) * rc.gMaxBlurRadius * smc05;
         blurRadius = max(blurRadius, rc.gMinBlurRadius * smc05);
 
-        // Anisotropic basis: skew the kernel along the bent reflection direction. Stretch T (worldRadius * skew),
-        // squeeze B (worldRadius / skew); skew tends to 1 (isotropic) at grazing angles, high roughness and as
-        // the history converges, and is faded toward 1 for short hit distances (NRD spec spatial filter).
         float4 Dv = MLGetSpecularDominantDirection(centerNormal, V, centerRoughness);
         float NoD = abs(dot(centerNormal, Dv.xyz));
         float bentFactor = sqrt(saturate(hitDistFactor));

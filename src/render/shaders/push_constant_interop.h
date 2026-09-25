@@ -1,7 +1,6 @@
 //
 // Created by William on 2025-12-28.
 //
-
 #ifndef WILL_ENGINE_PUSH_CONSTANT_INTEROP_H
 #define WILL_ENGINE_PUSH_CONSTANT_INTEROP_H
 
@@ -150,20 +149,16 @@ SHADER_PUBLIC struct DebugPickPixelPushConstant
 
 SHADER_PUBLIC struct InstanceLODPushConstant
 {
-    // Read-Only
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
-    // Last frame's occlusion visibility bits
     SHADER_PUBLIC SHADER_PTR(uint) visBits;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
     // [0] frustum, [1] contribution (readback culledInstanceFrustum base)
     SHADER_PUBLIC SHADER_PTR(uint) cullStats;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC int32_t lodBias;
@@ -190,66 +185,51 @@ SHADER_PUBLIC struct InstanceLODOcclusionPushConstant
 
 SHADER_PUBLIC struct PrefixSumUpsweep1PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(uint32_t) level1Sums;
     SHADER_PUBLIC SHADER_PTR(uint32_t) level1BlockSums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t elementCount;
     SHADER_PUBLIC uint32_t blockCount;
 };
 
 SHADER_PUBLIC struct PrefixSumUpsweep2PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint32_t) level1BlockSums;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(uint32_t) level2Sums;
     SHADER_PUBLIC SHADER_PTR(uint32_t) level2BlockSums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t elementCount;
     SHADER_PUBLIC uint32_t blockCount;
 };
 
 SHADER_PUBLIC struct PrefixSumScanBlocksPushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint32_t) level2BlockSums;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(uint32_t) scannedLevel2BlockSums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t blockCount;
 };
 
 SHADER_PUBLIC struct PrefixSumDownsweep1PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint32_t) scannedLevel2BlockSums;
 
-    // Read-Write
     SHADER_PUBLIC SHADER_PTR(uint32_t) level2Sums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t elementCount;
 };
 
 SHADER_PUBLIC struct PrefixSumDownsweep2PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint32_t) level1Sums;
     SHADER_PUBLIC SHADER_PTR(uint32_t) level2Sums;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t elementCount;
 };
 
@@ -263,7 +243,7 @@ SHADER_PUBLIC struct TotalMeshletCountPushConstant
 
 SHADER_PUBLIC struct ExpandMeshletsPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshletCount
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
 
@@ -282,7 +262,6 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
     SHADER_PUBLIC uint32_t hizIndex;
     SHADER_PUBLIC uint32_t hizMipCount;
-    // Phase 2 sets this; phase 1 runs frustum + cone + contribution only
     SHADER_PUBLIC uint32_t bHiZ;
     SHADER_PUBLIC uint32_t cullFlags;
 };
@@ -290,69 +269,55 @@ SHADER_PUBLIC struct ExpandMeshletsPushConstant
 // Meshlet visibility scans run on uint4: one visible-count lane per draw region (MESHLET_REGION_*)
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumUpsweep1PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for totalMeshlets
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(uint4) meshletLevel1Sums;
     SHADER_PUBLIC SHADER_PTR(uint4) meshletLevel1BlockSums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t blockCount;
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
 SHADER_PUBLIC struct RegionPrefixSumUpsweep2PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint4) level1BlockSums;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(uint4) level2Sums;
     SHADER_PUBLIC SHADER_PTR(uint4) level2BlockSums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t elementCount;
     SHADER_PUBLIC uint32_t blockCount;
 };
 
 SHADER_PUBLIC struct RegionPrefixSumScanBlocksPushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint4) level2BlockSums;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(uint4) scannedLevel2BlockSums;
-    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer; // region totals + bases
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t blockCount;
 };
 
 SHADER_PUBLIC struct RegionPrefixSumDownsweep1PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint4) scannedLevel2BlockSums;
 
-    // Read-Write
     SHADER_PUBLIC SHADER_PTR(uint4) level2Sums;
 
-    // Read-Only
     SHADER_PUBLIC uint32_t elementCount;
 };
 
 SHADER_PUBLIC struct MeshletVisibilityPrefixSumDownsweep2PushConstant
 {
-    // Read
     SHADER_PUBLIC SHADER_PTR(uint4) meshletLevel1Sums;
     SHADER_PUBLIC SHADER_PTR(uint4) meshletLevel2Sums;
     SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
-    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer; // for elementCount (totalMeshlets)
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
 
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
 
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
@@ -364,7 +329,7 @@ SHADER_PUBLIC struct CompactedMeshletDispatchPushConstant
     // Readback meshletRegionVisible base; null when stats are off
     SHADER_PUBLIC SHADER_PTR(uint) regionVisibleStats;
 
-    // We do a readback that updates the meshlet intermediate/final buffer, so there is a 3-frame delay for expansion
+    // Grown via readback, so it lags meshlet buffer expansion by 3 frames
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
@@ -395,23 +360,22 @@ SHADER_PUBLIC struct ShadeBucketingPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) shadeDispatchBuffer; // out
-    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer; // out
-    SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileListBuffer; // out, tileCapacity entries per bucket
-    SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileListBuffer; // out
-    SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileBitsBuffer; // out, per-tile bucket bitset (MAX_SHADE_BUCKETS/32 words), null unless a shade debug view is on
-    SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileBitsBuffer; // out, per-tile bucket bitset (MAX_LIGHTING_BUCKETS/32 words), null unless a light debug view is on
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) shadeDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileListBuffer; // tileCapacity entries per bucket
+    SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileListBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) shadeTileBitsBuffer; // per-tile bucket bitset (MAX_SHADE_BUCKETS/32 words), null unless a shade debug view is on
+    SHADER_PUBLIC SHADER_PTR(uint32_t) lightTileBitsBuffer; // per-tile bucket bitset (MAX_LIGHTING_BUCKETS/32 words), null unless a light debug view is on
     SHADER_PUBLIC uint2 extents;
-    // In
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
     SHADER_PUBLIC uint32_t tileCapacity;
 };
 
 SHADER_PUBLIC struct BucketDispatchCountPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) shadeDispatchBuffer; // in
-    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer; // in
-    SHADER_PUBLIC SHADER_PTR(uint32_t) countBuffer; // out: [shadingActive, lightingActive]
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) shadeDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(BucketDispatchParameters) lightDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) countBuffer; // [shadingActive, lightingActive]
     SHADER_PUBLIC uint32_t materialCount;
     SHADER_PUBLIC uint32_t lightingCount;
 };
@@ -441,14 +405,12 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer; // in
+    SHADER_PUBLIC SHADER_PTR(uint32_t) tileListBuffer;
     SHADER_PUBLIC uint32_t tileCapacity;
     uint32_t pad0;
     SHADER_PUBLIC uint2 extents;
-    // In
     SHADER_PUBLIC uint32_t materialIndex;
     SHADER_PUBLIC uint32_t visibilityBufferIndex;
-    // Out
     SHADER_PUBLIC uint32_t gbufferOneIndex;
     SHADER_PUBLIC uint32_t gbufferTwoIndex;
     SHADER_PUBLIC uint32_t shadowOriginOffsetIndex;
@@ -693,9 +655,9 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t sunVisIndex;
     SHADER_PUBLIC uint32_t tileCapacity;
     SHADER_PUBLIC float indirectIntensity;
+    SHADER_PUBLIC uint32_t skyVisIndex;
 };
 
-// Unused: kept around alongside WorldGridBinningPushConstant.
 SHADER_PUBLIC struct FrustumBinningPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -708,7 +670,6 @@ SHADER_PUBLIC struct FrustumBinningPushConstant
     SHADER_PUBLIC uint32_t pad0;
 };
 
-// No zNear/zFar: cascade selection is purely camera-relative (see binning_common.slang).
 SHADER_PUBLIC struct WorldGridBinningPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -850,7 +811,7 @@ SHADER_PUBLIC struct GIGatherPushConstant
     SHADER_PUBLIC SHADER_PTR(uint) touchEntries;
     SHADER_PUBLIC SHADER_PTR(GIGatherHit) hitBuffer;
     SHADER_PUBLIC float bounceIntensity;
-    // Last frame's GI_SCREEN_DIFFUSE; ~0u falls back to lit history as-is (non-ReSTIR paths).
+    // Last frame's GI_SCREEN_DIFFUSE; ~0u falls back to lit history (non-ReSTIR paths)
     SHADER_PUBLIC uint32_t screenDiffuseHistoryIndex;
     SHADER_PUBLIC float maxRayRadiance;
 };
@@ -904,13 +865,13 @@ SHADER_PUBLIC struct GIUpscalePushConstant
     SHADER_PUBLIC uint32_t gatherScale;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
-    // Short (luma, count) history the temporal clamp bounds the long history against; ~0u history = none yet.
+    // (luma, count), bounds the long history in the temporal clamp; ~0u history = none yet
     SHADER_PUBLIC uint32_t fastHistoryIndex;
     SHADER_PUBLIC uint32_t fastOutIndex;
-    // (sky visibility, count) history, kept apart from the radiance so it can average longer; ~0u history = none yet.
+    // (sky visibility, count); ~0u history = none yet
     SHADER_PUBLIC uint32_t skyVisHistoryIndex;
     SHADER_PUBLIC uint32_t skyVisOutIndex;
-    // (relative noise variance, count); steers the history cap here and the post blur radius.
+    // (relative noise variance, count)
     SHADER_PUBLIC uint32_t noiseHistoryIndex;
     SHADER_PUBLIC uint32_t noiseOutIndex;
     SHADER_PUBLIC uint32_t guideNormalOutIndex;
@@ -959,13 +920,13 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
-    // Traced reflections were already summed into the denoised specular channel at the lighting resolve; suppress the
-    // separate reflection composite (and its probe/sky replacement) inside the traced roughness range.
+    // Traced reflections are already in the denoised specular; skip the composite inside the traced roughness range
     SHADER_PUBLIC uint32_t bReflectionMerged;
     SHADER_PUBLIC uint32_t diffuseRatioIndex;
-    // Gather screen-tier source: Lambert direct irradiance/pi + indirect E/pi, pre-exposed; ~0u when the gather has no screen tier.
+    // Lambert direct irradiance/pi + indirect E/pi, pre-exposed; ~0u when the gather has no screen tier
     SHADER_PUBLIC uint32_t screenDiffuseOutIndex;
-    SHADER_PUBLIC uint32_t padR0;
+    // GI_GATHER_SKY_VIS_HISTORY .x; ~0u = derive from the diffuse ratio
+    SHADER_PUBLIC uint32_t skyVisIndex;
 };
 
 SHADER_PUBLIC struct ReflectionTracePushConstant
@@ -1034,7 +995,7 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC uint32_t reflectionProbeCount;
     SHADER_PUBLIC SHADER_PTR(ReflectionProbeGPU) reflectionProbes;
     SHADER_PUBLIC SHADER_PTR(uint) worldGridProbeGrid;
-    SHADER_PUBLIC uint32_t sunMode; // REFLECTION_SUN_* for the analytic hit-shading fallback
+    SHADER_PUBLIC uint32_t sunMode; // REFLECTION_SUN_*
     SHADER_PUBLIC float maxRayIntensity;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC float mirrorRoughnessMax;
@@ -1065,7 +1026,6 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float grazingTurnoverStrength;
 };
 
-// Donut-ported native-res TAA resolve (shaders/donut_taa.slang); fields match the shader.
 SHADER_PUBLIC struct DonutTaaPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -1097,7 +1057,7 @@ SHADER_PUBLIC struct Fsr2Constants
     SHADER_PUBLIC float2 displaySize;
     SHADER_PUBLIC float2 jitter; // pixels, FSR2 sign: content at pixel c was rendered at unjittered c - jitter
     SHADER_PUBLIC float2 downscaleFactor; // render / display
-    SHADER_PUBLIC float2 lumaMipSize; // allocated shading-change mip texture size
+    SHADER_PUBLIC float2 lumaMipSize;
     SHADER_PUBLIC float2 lumaMipClampSize; // floor(render / 32), sample clamp bound
     SHADER_PUBLIC float2 depthToView; // viewZ = y / (deviceDepth - x)
     SHADER_PUBLIC float2 tanHalfFov;
@@ -1236,15 +1196,11 @@ SHADER_PUBLIC SHADER_CONST uint32_t POST_PROCESS_FINALIZE_FLAG_GRADING = 1u << 2
 // 172 bytes; relies on the Vulkan 1.4 256-byte maxPushConstantsSize guarantee
 SHADER_PUBLIC struct PostProcessFinalizePushConstant
 {
-    // White balance * identity-saturation basis, rows of a 3x3 matrix applied post-tonemap (w unused)
+    // White balance * saturation 3x3 rows, applied post-tonemap (w unused)
     SHADER_PUBLIC float4 wbRow0;
     SHADER_PUBLIC float4 wbRow1;
     SHADER_PUBLIC float4 wbRow2;
-    // Operator params, vector-packed so the layout is stride-unambiguous:
-    // Hable/Reinhard: params0.x=whitePoint
-    // Uchimura: params0=(P,a,m,l), params1=(c,b,_,_)
-    // AgX: params0=(minEV,maxEV,_,_)
-    // Khronos: params0=(startCompression,desaturation,_,_)
+    // Hable/Reinhard: params0.x=whitePoint; Uchimura: params0=(P,a,m,l), params1=(c,b); AgX: params0=(minEV,maxEV); Khronos: params0=(startCompression,desaturation)
     SHADER_PUBLIC float4 params0;
     SHADER_PUBLIC float4 params1;
     SHADER_PUBLIC SHADER_PTR(float) luminanceBufferAddress;
@@ -1265,7 +1221,7 @@ SHADER_PUBLIC struct PostProcessFinalizePushConstant
     SHADER_PUBLIC float vignetteRoundness;
     SHADER_PUBLIC float chromaticAberrationStrength;
     SHADER_PUBLIC float paniniStrength;
-    SHADER_PUBLIC float paniniB; // stable screen-fit scale, CPU-precomputed
+    SHADER_PUBLIC float paniniB;
     SHADER_PUBLIC float paniniVerticalFocalLength;
     SHADER_PUBLIC float aspect;
     SHADER_PUBLIC uint32_t flags;
@@ -1297,7 +1253,7 @@ SHADER_PUBLIC struct ScreenFadePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC float2 center;
     SHADER_PUBLIC float2 direction;
-    SHADER_PUBLIC float4 color; // w unused
+    SHADER_PUBLIC float4 color;
     SHADER_PUBLIC float progress;
     SHADER_PUBLIC float softness;
     SHADER_PUBLIC float aspect;
@@ -1357,8 +1313,8 @@ SHADER_PUBLIC struct ExposureCalculatePushConstant
     SHADER_PUBLIC float alphaDarken; // applied while adapted luminance increases
     SHADER_PUBLIC float lowPercentile;
     SHADER_PUBLIC float highPercentile;
-    SHADER_PUBLIC float minAdaptedLuminance; // EV100ToLuminance(exposureMidwnEV100)
-    SHADER_PUBLIC float maxAdaptedLuminance; // EV100ToLuminance(exposureMaxEV100)
+    SHADER_PUBLIC float minAdaptedLuminance;
+    SHADER_PUBLIC float maxAdaptedLuminance;
     SHADER_PUBLIC uint32_t totalPixels;
 };
 
@@ -1898,7 +1854,7 @@ SHADER_PUBLIC struct UIRectRenderPushConstant
 SHADER_PUBLIC struct UITextRenderPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(UIGlyphQuad) uiGlyphQuads;
-    /** Base of THIS FONT's Slug blob: megabuffer address + fontCurveByteOffset. */
+    /** Megabuffer address + this font's fontCurveByteOffset. */
     SHADER_PUBLIC SHADER_PTR(uint2) fontCurveTexels;
     SHADER_PUBLIC float4 colorTint;
     SHADER_PUBLIC uint32_t quadOffset;
@@ -1920,12 +1876,12 @@ SHADER_PUBLIC struct UIImagePushConstant
 
 SHADER_PUBLIC struct UIBorderPushConstant
 {
-    SHADER_PUBLIC float2 ndcMin; // NDC position for vertex stage
+    SHADER_PUBLIC float2 ndcMin;
     SHADER_PUBLIC float2 ndcMax;
     SHADER_PUBLIC float4 color;
     SHADER_PUBLIC float4 borderWidths; // x=left, y=right, z=top, w=bottom in pixels
     SHADER_PUBLIC float4 cornerRadius; // x=TL, y=TR, z=BL, w=BR in pixels
-    SHADER_PUBLIC float2 pxMin; // pixel-space bounds for SDF in fragment stage
+    SHADER_PUBLIC float2 pxMin;
     SHADER_PUBLIC float2 pxMax;
 };
 
@@ -1945,16 +1901,12 @@ SHADER_PUBLIC struct SpritePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(SpriteData) sprites;
-    SHADER_PUBLIC uint32_t spriteCount; // count for this batch
-    SHADER_PUBLIC uint32_t spriteOffset; // start index into sprites for this batch
-    SHADER_PUBLIC uint32_t textureIndex; // bindless texture index, uniform for this batch
-    SHADER_PUBLIC uint32_t samplerIndex; // bindless sampler index, uniform for this batch
+    SHADER_PUBLIC uint32_t spriteCount;
+    SHADER_PUBLIC uint32_t spriteOffset;
+    SHADER_PUBLIC uint32_t textureIndex;
+    SHADER_PUBLIC uint32_t samplerIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
-
-// =====================================================================
-// NRD input/output adaptation push constants
-// =====================================================================
 
 SHADER_PUBLIC struct NrdPrepGuidesPushConstant
 {
@@ -1992,12 +1944,9 @@ SHADER_PUBLIC struct NrdReblurRadiancePackPushConstant
     SHADER_PUBLIC float radianceScale;
 };
 
-// =====================================================================
-// RELAX DiffuseSpecular denoiser push constants
 // This software contains source code provided by NVIDIA Corporation.
 // Adapted from NVIDIA Real-Time Denoisers (NRD). Copyright (c) 2022-2024 NVIDIA Corporation. All rights reserved.
 // https://github.com/NVIDIA-RTX/NRD -- NVIDIA RTX SDKs LICENSE
-// =====================================================================
 
 SHADER_PUBLIC struct RelaxGenerateViewZPushConstant
 {
@@ -2116,8 +2065,6 @@ SHADER_PUBLIC struct RelaxAntiFireflyPushConstant
     SHADER_PUBLIC uint32_t outSpecIndex;
     SHADER_PUBLIC uint32_t outDiffIndex;
 };
-
-// ===================== ReBLUR =====================
 
 SHADER_PUBLIC struct ReblurPackPushConstant
 {
@@ -2303,12 +2250,10 @@ SHADER_PUBLIC struct EmissiveTriLightPushConstant
 
 SHADER_PUBLIC struct TLASInstancePushConstant
 {
-    // Read-Only
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
 
-    // Write
     SHADER_PUBLIC SHADER_PTR(AccelerationStructureInstance) outInstances;
 
     SHADER_PUBLIC uint32_t instanceCount;
@@ -2391,8 +2336,8 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint2 fullExtent;
     SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t outputDepthIndex; // for half res
-    SHADER_PUBLIC uint32_t outputGbufferIndex; // for half res
+    SHADER_PUBLIC uint32_t outputDepthIndex;
+    SHADER_PUBLIC uint32_t outputGbufferIndex;
     SHADER_PUBLIC uint32_t bAlphaTest;
 };
 
@@ -2409,8 +2354,8 @@ SHADER_PUBLIC struct DirectionalLightPushConstant
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint2 shadowExtent;
     SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t shadowDepthIndex; // for half res
-    SHADER_PUBLIC uint32_t shadowNormalIndex; // for half res
+    SHADER_PUBLIC uint32_t shadowDepthIndex;
+    SHADER_PUBLIC uint32_t shadowNormalIndex;
 };
 
 SHADER_PUBLIC struct SigmaClassifyPushConstant

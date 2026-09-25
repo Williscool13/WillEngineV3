@@ -22,22 +22,21 @@ namespace Render
 class PipelineManager;
 class RenderPass;
 
-/** Per-frame GPU descriptor chain sampled by lighting/remodulate and the trace's infinite-bounce feedback. */
 inline const StringID DDGI_CASCADES_BUFFER = "ddgi_cascades"_sid;
 inline const StringID DDGI_CASCADES_PREV_BUFFER = "ddgi_cascades_prev"_sid;
 inline const StringID WORLD_GRID_DDGI_GRID_BUFFER = "world_grid_ddgi_grid"_sid;
 inline const StringID WORLD_GRID_DDGI_INDEX_BUFFER = "world_grid_ddgi_index_list"_sid;
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
 
-/** CPU-side cascade chain, finest first; bUpdated marks which entries trace/blend/relocate this frame. Local volumes occupy entries [count, count + localCount), slot-sticky by localIds so a resident volume keeps its history. Every entry owns its own atlas pair. */
+/** Finest first. Locals occupy [count, count + localCount), slot-sticky by localIds to keep history. */
 struct DDGICascades
 {
     DDGIVolumeParams volumes[DDGI_MAX_VOLUME_SLOTS]{};
     bool bUpdated[DDGI_MAX_VOLUME_SLOTS]{};
     uint64_t localIds[DDGI_MAX_VOLUME_SLOTS]{};
-    /** Updates a resident world volume has had, saturating at DDGI_LOCAL_WARMUP_UPDATES; the per-frame pick goes to the least-warmed slot so a volume that just became resident lights up immediately instead of waiting out the round-robin. */
+    /** Saturates at DDGI_LOCAL_WARMUP_UPDATES; the least-warmed slot updates first. */
     uint32_t localWarmup[DDGI_MAX_VOLUME_SLOTS]{};
-    /** Updates a camera cascade has had since its last cold start (first run, layout change, re-enable, or a window jump of half its extent); the blend runs a running mean while it is below DDGI_LOCAL_WARMUP_UPDATES. */
+    /** Blend is a running mean while below DDGI_LOCAL_WARMUP_UPDATES. */
     uint32_t cascadeWarmup[DDGI_MAX_CAMERA_CASCADES]{};
     uint64_t lastUpdateFrame[DDGI_MAX_VOLUME_SLOTS]{};
     uint32_t count{0};
@@ -45,8 +44,7 @@ struct DDGICascades
 };
 
 /**
- * Camera-following rolling windows; cascade 0 updates every other frame, outer cascades round-robin on the frames between so trace cost stays flat.
- * The nearest local volumes are appended as fixed fine-spacing windows, one updating per frame on its own round-robin.
+ * Cascade 0 every other frame, outer cascades round-robin between, one local volume per frame.
  * @param params
  * @param cameraPosition
  * @param localVolumes hand-placed local volumes gathered this frame (may be null when none)
@@ -57,7 +55,7 @@ struct DDGICascades
 DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const Core::LocalDDGIVolume* localVolumes, uint32_t localVolumeCount, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze);
 
 /**
- * Probe trace + irradiance/visibility blend, run per updated entry (cascades and resident local volumes); also uploads DDGI_CASCADES_BUFFER/_PREV_BUFFER. No-op without the TLAS and geometry/material/light buffers.
+ * False when nothing was recorded; the caller treats that as a cold start. framerateScale = fps / 60.
  * @param graph
  * @param pipelineManager
  * @param arena frame arena backing the descriptor sources captured by the upload passes
@@ -77,7 +75,6 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  */
 bool SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale);
 
-/** Declares the world-volume cull buffers that any pass calling DDGISampleIrradianceCascaded dereferences through its cascade set. */
 void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass);
 
 /**
@@ -88,7 +85,7 @@ void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass);
 bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass);
 
 /**
- * One debug sphere per probe per cascade; dead probes render flat red, classification-inactive flat blue.
+ * debugCascade: -1 all entries tinted, -2 locals only, >= 0 that entry untinted. probeDebugMode: 0 irradiance, 1 visibility, 2 flat volume tint.
  * @param graph
  * @param pipelineManager
  * @param cascades

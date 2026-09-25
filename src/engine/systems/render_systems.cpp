@@ -81,7 +81,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
     }
 
-    // Children in depth order. EnsureHierarchyOrder re-sorts only if a topology change flagged it dirty (cheap bool check otherwise).
+    // Children in depth order
     EnsureHierarchyOrder(state);
     auto orphans = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 8);
     auto hierarchy = registry.view<Component::HierarchyComponent>();

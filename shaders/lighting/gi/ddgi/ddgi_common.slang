@@ -6,22 +6,17 @@ import bindless_declarations;
 import world_grid_interop;
 import binning_common;
 
-// =============== Shader Summary ============
-// Rolling-grid math for the DDGI probe volume. Probes live on a world-space lattice (origin + cell * spacing); a camera cascade is a window of probeCount cells starting at baseCell that follows the camera in whole-cell steps, a world volume is the window [0, probeCount) anchored at its authored origin.
-// Storage slots map to cells via Euclidean modulo so a scroll only invalidates the newly exposed planes; every other slot keeps its probe.
-
 public int3 DDGIEuclideanMod(int3 v, int3 m)
 {
     return ((v % m) + m) % m;
 }
 
-/** Lattice cell held by a storage slot for the current window. */
 public int3 DDGICellFromSlot(int3 slot, DDGIVolumeParams volume)
 {
     return volume.baseCell + DDGIEuclideanMod(slot - volume.baseCell, int3(volume.probeCount));
 }
 
-/** Storage slot holding a lattice cell; only meaningful for cells inside the window. */
+/** Only meaningful for cells inside the window. */
 public int3 DDGISlotFromCell(int3 cell, DDGIVolumeParams volume)
 {
     return DDGIEuclideanMod(cell, int3(volume.probeCount));
@@ -43,7 +38,6 @@ public uint DDGIProbeIndexFromSlot(int3 slot, DDGIVolumeParams volume)
     return uint(slot.x) + uint(slot.y) * volume.probeCount.x + uint(slot.z) * volume.probeCount.x * volume.probeCount.y;
 }
 
-/** Texel origin of a probe's tile, offset into this volume's row of the shared atlas (atlasSlot 0 of 1 row = the volume owns the whole texture). */
 public int2 DDGIProbeTileOrigin(int3 slot, DDGIVolumeParams volume, uint tileSize)
 {
     return int2(slot.x + slot.y * int(volume.probeCount.x), slot.z + int(volume.atlasSlot * volume.probeCount.z)) * int(tileSize);
@@ -66,14 +60,13 @@ public float3 DDGIOctDecode(float2 f)
     return normalize(n);
 }
 
-/** Direction of an interior tile texel, texel in [1, interior]. */
+/** texel in [1, interior]. */
 public float3 DDGIOctTexelDirection(int2 texelInTile, uint interior)
 {
     float2 uv = (float2(texelInTile - 1) + 0.5) / float(interior);
     return DDGIOctDecode(uv * 2.0 - 1.0);
 }
 
-/** Bilinear atlas UV for a direction within a probe's tile; the 1-texel wrapped border makes edge taps seamless. */
 public float2 DDGIAtlasUV(int3 slot, float3 direction, DDGIVolumeParams volume, uint tileSize, uint interior)
 {
     float2 uv01 = DDGIOctEncode(direction) * 0.5 + 0.5;
@@ -82,23 +75,16 @@ public float2 DDGIAtlasUV(int3 slot, float3 direction, DDGIVolumeParams volume, 
     return texel / atlasSize;
 }
 
-// Probes whose rays hit this many backfaces are inside geometry beyond what relocation could fix; the sampler and debug viz treat them as dead.
 public static const float DDGI_PROBE_DEAD_BACKFACE_FRACTION = 0.35;
 
-// Non-escape relocation moves below this fraction of spacing are skipped (rotation-noise jitter, not convergence); matches the temporal-restart threshold so every applied move restarts the blends.
+// Must match the temporal-restart threshold so every applied move restarts the blends.
 public static const float DDGI_RELOCATE_DEADBAND = 0.05;
-/** length(float3(spacing)) / spacing: cell-diagonal factor the classification and visibility caps were tuned against. */
 public static const float DDGI_CELL_DIAGONAL = 1.7320508;
 
 public static const float DDGI_VISIBILITY_VARIANCE_CAP = 0.3;
 
-/**
- * Irradiance lookup at a surface point: the 8 surrounding probes, weighted by trilinear position, soft backface (wrap lighting), and Chebyshev visibility from the distance atlas. cameraDirection points from the viewer toward the surface (bias direction).
- * Atlas args are rdgTexturesFloat4/rdgTexturesFloat2 descriptor indices (resource-typed params through module imports crash slangc's spirv emit).
- * probeOffsets (when bProbeOffsetsValid) holds per-slot relocation offsets in xyz and the backface fraction in w; relocated positions drive direction/distance/Chebyshev, trilinear stays on the lattice, dead probes are skipped.
- * Returns E/PI in rgb (Lambertian outgoing radiance = albedo * rgb), normalised over the probe weights (RTXGI); w in [0,1] combines the window edge fade with weight support (dead-probe pockets report low w) so the cascade chain can hand off. fade is the edge fade alone.
- * maxBias caps the bias length; a negative value caps at max(-maxBias, half the probe spacing), for callers with no occluder distance.
- */
+// Atlas args are descriptor indices: resource-typed params through module imports crash slangc's spirv emit.
+/** Returns E/PI in rgb. Negative maxBias caps at max(-maxBias, half the probe spacing). */
 public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 cameraDirection, DDGIVolumeParams volume, uint irradianceAtlasIndex, uint visibilityAtlasIndex, float4* probeOffsets, uint bProbeOffsetsValid, float maxBias, out float fade)
 {
     float3 biasOffset = normal * volume.normalBias - cameraDirection * volume.viewBias;
@@ -137,12 +123,10 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
             probePosition += probeOffset.xyz;
         }
 
-        // Wrap lighting instead of a hard cosine cut so probes just behind thin geometry keep some support.
         float3 toProbe = normalize(probePosition - worldPosition);
         float wrap = (dot(toProbe, normal) + 1.0) * 0.5;
         float weight = wrap * wrap + 0.2;
 
-        // Chebyshev test against the probe's mean/mean^2 distance along this direction: probably-occluded probes fade out.
         float3 biasedToProbe = probePosition - biasedPosition;
         float distanceToProbe = length(biasedToProbe);
         float2 moments = rdgTexturesFloat2[NonUniformResourceIndex(visibilityAtlasIndex)].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, -biasedToProbe / max(distanceToProbe, 1e-6), volume, DDGI_VISIBILITY_TILE, DDGI_VISIBILITY_INTERIOR), 0);
@@ -156,7 +140,6 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         }
 
         weight = max(weight, 1e-6);
-        // Crush (rather than clip) small weights so probes fade out without popping.
         const float crushThreshold = 0.2;
         if (weight < crushThreshold) {
             weight *= weight * weight / (crushThreshold * crushThreshold);
@@ -165,7 +148,7 @@ public float4 DDGISampleIrradiance(float3 worldPosition, float3 normal, float3 c
         weight *= trilinear.x * trilinear.y * trilinear.z;
 
         float4 encoded = rdgTexturesFloat4[NonUniformResourceIndex(irradianceAtlasIndex)].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], DDGIAtlasUV(slot, normal, volume, DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_INTERIOR), 0);
-        // Blend in half-gamma space and square after the weighted sum: perceptual interpolation between probes (RTXGI).
+        // Blended in half-gamma space, squared after the weighted sum.
         irradianceSum += weight * pow(max(encoded.rgb, float3(0.0)), volume.irradianceGamma * 0.5);
         weightSum += weight;
     }
@@ -184,10 +167,6 @@ public struct DDGILocalWalk
     public bool bGrid;
 };
 
-/**
- * Local slots worth visiting at this point: the world-grid cell's overlap list, else every resident slot.
- * The list is exact for the local edge fade too, since a volume whose fade band reaches the point necessarily overlaps its cell; a cell that overflowed K carries the sentinel count and falls back to the full walk.
- */
 [ForceInline]
 public DDGILocalWalk DDGIResolveLocalWalk(float3 worldPosition, DDGICascadeSetGPU* cascadeSet, uint localCount)
 {
@@ -208,11 +187,6 @@ public DDGILocalWalk DDGIResolveLocalWalk(float3 worldPosition, DDGICascadeSetGP
     return walk;
 }
 
-/**
- * Cascade-chain lookup: front-to-back composite finest-first, so a fine cascade's edge fade (and dead-pocket zero-weight failures) fall through to the next coarser cascade.
- * Local volumes sample before cascade 0 (finest of all); their windows do not extend edgeFade, which tracks only the camera-following cascade set.
- * rgb is normalised over the composited support; w is edge coverage for the caller's fallback blend, dropping below 1 only outside every window's interior. Weight starvation hands off to the next cascade but never darkens.
- */
 [ForceInline] // the struct ptr fails to compile
 public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias, out float edgeFade)
 {
@@ -235,7 +209,6 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
             continue;
         }
 
-        // Locals come first; their edge fade is already in gi.w, and front-to-back coverage hands the remainder to the cascades.
         if (!bLocal) {
             float3 gridCoord = (worldPosition - desc.volume.origin) / desc.volume.probeSpacing;
             float3 edgeDistance = min(gridCoord - float3(desc.volume.baseCell), float3(desc.volume.baseCell + int3(desc.volume.probeCount) - 1) - gridCoord);
@@ -263,7 +236,6 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     return float4(color / coverage, max(edgeCoverage, coverage));
 }
 
-/** No-fade variant; keeps the hard early break for callers that never blend against the set edge (per-probe-ray bounce feedback). */
 [ForceInline]
 public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, float3 cameraDirection, DDGICascadeSetGPU* cascadeSet, float maxBias)
 {
@@ -302,7 +274,6 @@ public float4 DDGISampleIrradianceCascaded(float3 worldPosition, float3 normal, 
     return float4(color / coverage, max(edgeCoverage, coverage));
 }
 
-/** Border texel -> wrapped interior source texel; identity for interior texels. Corners copy the diagonally opposite interior corner. */
 public int2 DDGIOctBorderSource(int2 texel, int n)
 {
     bool onX = texel.x == 0 || texel.x == n + 1;

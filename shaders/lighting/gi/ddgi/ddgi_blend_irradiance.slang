@@ -4,9 +4,6 @@ import ddgi_common;
 import bindless_declarations;
 import shader_functions;
 
-// =============== Shader Summary ============
-// DDGI blend irradiance: one thread group per probe tile; each interior texel cosine-integrates the probe's rays into octahedral irradiance stored as pow(E, 1/gamma), hysteresis-blended in linear space with RTXGI's change/brightness thresholds taken relative to the previous value. Slots whose lattice cell changed since last frame (window scroll) or with no history start fresh. Border texels copy wrapped interior texels so bilinear taps stay seamless.
-
 static float DDGIMaxComponent(float3 v)
 {
     return max(v.x, max(v.y, v.z));
@@ -27,7 +24,7 @@ static float3 DDGIDecodeRayRadiance(float4 rayData)
 groupshared float4 gsRays[DDGI_MAX_RAYS_PER_PROBE];
 groupshared float3 gsRayDirections[DDGI_MAX_RAYS_PER_PROBE];
 groupshared float4 gsTexels[DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE];
-groupshared float gsRayLumaCap;
+groupshared float2 gsLumaPartials[2][DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE];
 
 [shader("compute")]
 [numthreads(DDGI_IRRADIANCE_TILE, DDGI_IRRADIANCE_TILE, 1)]
@@ -54,24 +51,24 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
     }
     GroupMemoryBarrierWithGroupSync();
 
-    if (threadIndex == 0u) {
-        float cap = 1e30;
-        for (uint pass = 0u; pass < 2u; ++pass) {
-            float lumaSum = 0.0;
-            float count = 0.0;
-            for (uint r = 0; r < rayBudget; ++r) {
-                if (gsRays[r].w < 0.0 || any(isnan(gsRays[r].rgb))) {
-                    continue;
-                }
-                lumaSum += min(Luma(DDGIDecodeRayRadiance(gsRays[r])), cap);
-                count += 1.0;
+    float rayLumaCap = 1e30;
+    for (uint pass = 0u; pass < 2u; ++pass) {
+        float2 partial = float2(0.0);
+        for (uint r = threadIndex; r < rayBudget; r += DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE) {
+            if (gsRays[r].w < 0.0 || any(isnan(gsRays[r].rgb))) {
+                continue;
             }
-            float mean = count > 0.0 ? lumaSum / count : 0.0;
-            cap = mean > 1e-8 ? DDGI_RELATIVE_RAY_CLAMP * mean : 1e30;
+            partial += float2(min(Luma(DDGIDecodeRayRadiance(gsRays[r])), rayLumaCap), 1.0);
         }
-        gsRayLumaCap = cap;
+        gsLumaPartials[pass][threadIndex] = partial;
+        GroupMemoryBarrierWithGroupSync();
+        float2 total = float2(0.0);
+        for (uint t = 0u; t < DDGI_IRRADIANCE_TILE * DDGI_IRRADIANCE_TILE; ++t) {
+            total += gsLumaPartials[pass][t];
+        }
+        float mean = total.y > 0.0 ? total.x / total.y : 0.0;
+        rayLumaCap = mean > 1e-8 ? DDGI_RELATIVE_RAY_CLAMP * mean : 1e30;
     }
-    GroupMemoryBarrierWithGroupSync();
 
     int2 texel = int2(gtid.xy);
     bool bInterior = all(texel >= 1) && all(texel <= int(DDGI_IRRADIANCE_INTERIOR));
@@ -80,15 +77,15 @@ void ComputeDDGIBlendIrradiance(uint3 groupId: SV_GroupID, uint3 gtid: SV_GroupT
         float3 radianceSum = float3(0.0);
         float weightSum = 0.0;
         for (uint r = 0; r < rayBudget; ++r) {
-            // Backface hits are excluded entirely (RTXGI); counting their weight darkens probes near geometry.
+            // Backface hits are excluded; counting their weight darkens probes near geometry.
             float4 rayData = gsRays[r];
             if (rayData.w < 0.0 || any(isnan(rayData.rgb))) {
                 continue;
             }
             float3 radiance = DDGIDecodeRayRadiance(rayData);
             float rayLuma = Luma(radiance);
-            if (rayLuma > gsRayLumaCap) {
-                radiance *= gsRayLumaCap / rayLuma;
+            if (rayLuma > rayLumaCap) {
+                radiance *= rayLumaCap / rayLuma;
             }
             float3 rayDirection = gsRayDirections[r];
             float weight = max(dot(texelDirection, rayDirection), 0.0);

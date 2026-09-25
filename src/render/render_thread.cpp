@@ -744,7 +744,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
             relax.framerateScale = framerateScale;
             reblur.framerateScale = framerateScale;
 
-            // Ground-truth reference overlays are orthogonal to LightingMode: when one is active it replaces the normal lighting path entirely.
+            // An active ground-truth overlay replaces the normal lighting path regardless of LightingMode.
             if (viewFamily.groundTruthMode != Core::GroundTruthMode::None) {
                 switch (viewFamily.groundTruthMode) {
                     case Core::GroundTruthMode::DI:
@@ -795,7 +795,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                             constexpr float kDebugClusterZFar = 500.0f;
                             SetupClusterGridDebug(*renderGraph, pipelineManager, 0, viewFamily.mainView.currentViewData.nearPlane, kDebugClusterZFar);
                         }
-                        // No ReSTIR BRDF ray to piggyback here, so reflections trace their own; the shade/denoise/composite path downstream is shared.
+                        // No ReSTIR BRDF ray to piggyback on here, so reflections trace their own.
                         if (frameBuffer.reflection.bScreenSpaceTrace) {
                             SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection);
                         }
@@ -2117,7 +2117,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
                 segments[segmentOffset++] = {.a = top + d0, .width = cap.width, .b = bot + d0, .pad = 0.0f, .color = cap.color};
             }
         }
-        // Hemispherical caps: a great-circle half-arc in each of the ex/ez planes, per end. The 12-step half-arc angles land exactly on c24 entries 0..12.
+        // The 12-step half-arc angles land exactly on c24 entries 0..12.
         constexpr int H = 12;
         for (int i = 0; i < H; ++i) {
             const float c0 = dirs[i].x, s0 = dirs[i].y, c1 = dirs[i + 1].x, s1 = dirs[i + 1].y;

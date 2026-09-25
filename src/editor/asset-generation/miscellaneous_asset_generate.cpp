@@ -277,17 +277,14 @@ static void STBNHeapSiftDown(float* keys, uint32_t* ids, uint32_t count, uint32_
     }
 }
 
-/**
- * Spatiotemporal void-and-cluster (Wolfe et al. 2022): points are placed one at a time at the lowest energy, where energy sums a spatial Gaussian over the same slice and a temporal Gaussian over the same pixel in other slices (toroidal in x, y and t).
- * Each slice is then spatially blue and each pixel's sequence over slices temporally blue. Placement order becomes the value.
- */
+/** Spatiotemporal void-and-cluster (Wolfe et al. 2022), toroidal in x, y and t; placement order becomes the value. */
 static void GenerateSTBNRanks(uint32_t seed, Core::MemoryManager* memoryManager, uint8_t* atlas, uint32_t channel)
 {
     constexpr uint32_t sliceTexels = STBN_SIZE * STBN_SIZE;
     constexpr uint32_t count = sliceTexels * STBN_SLICES;
     constexpr int spatialRadius = 10;
     constexpr int temporalRadius = 10;
-    // exp(-1 / (2 * 1.9^2)): Gaussian weights as powers of this by repeated IEEE multiplication instead of expf, so every compiler and CRT produces the same texture.
+    // exp(-1 / (2 * 1.9^2)): powers by repeated multiplication instead of expf, so every compiler and CRT produces the same texture.
     constexpr float gaussianRatio = 0.870659649f;
     constexpr int maxDistanceSq = 2 * spatialRadius * spatialRadius;
     float gaussian[maxDistanceSq + 1];

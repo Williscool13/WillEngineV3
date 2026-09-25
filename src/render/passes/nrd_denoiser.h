@@ -30,10 +30,6 @@ inline constexpr uint32_t NRD_REBLUR_IDENTIFIER = 2;
 
 enum class NrdBackend : uint32_t { Relax = 0, Reblur = 1 };
 
-/**
- * Reference integration of the real NRD library (RELAX_DIFFUSE_SPECULAR + REBLUR_DIFFUSE_SPECULAR) via its raw API.
- * Owns the nrd::Instance, all pool/IO textures, per-pipeline layouts/pipelines, samplers, per-frame descriptor pools and the constant ring buffer. Records all NRD dispatches inside a single RDG pass and issues manual barriers between dispatches (mirrors NRDIntegration).
- */
 class NrdDenoiser
 {
 public:
@@ -46,8 +42,7 @@ public:
     NrdDenoiser& operator=(const NrdDenoiser&) = delete;
 
     /**
-     * Ensures instance + resources exist, imports the IO textures into the graph and stages settings.
-     * Call before the prep passes; AddDispatchPass must be added after them (RDG edges follow declaration order).
+     * Call before the prep passes, AddDispatchPass after them. On false, skip prep/dispatch/writeback.
      * @return false if NRD initialization failed; callers must skip the prep/dispatch/writeback passes then.
      */
     bool Prepare(RenderGraph& graph,
@@ -60,10 +55,7 @@ public:
                  uint32_t frameInFlightIndex,
                  float renderFps);
 
-    /**
-     * Adds the single NRD dispatch pass for the active backend; call between the prep passes and the output writeback.
-     * Binding NRD's classic descriptor sets invalidates the engine's descriptor buffer bindings, so the pass rebinds them after the dispatches.
-     */
+    /** NRD's classic descriptor sets invalidate the engine's descriptor buffer bindings, so the pass rebinds them afterward. */
     void AddDispatchPass(RenderGraph& graph, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex);
 
     void RequestHistoryClear() { bPendingHistoryClear = true; }
@@ -165,10 +157,10 @@ private:
     nrd::ReblurSettings stagedReblur{};
 };
 
-/** Fills IN_NORMAL_ROUGHNESS / IN_MV / IN_VIEWZ from gbuffer_one + depth, and IN_DIFF/IN_SPEC from the demodulated intermediates (ReBLUR backend: YCoCg + normalized hitT front-end packing). */
+/** ReBLUR backend packs YCoCg + normalized hitT. */
 void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure);
 
-/** Copies OUT_DIFF/OUT_SPEC back into the intermediates the engine remodulate pass consumes (ReBLUR backend: YCoCg back to linear). */
+/** ReBLUR backend converts YCoCg back to linear. */
 void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure);
 } // Render
 

@@ -30,7 +30,7 @@ void ComputeRadianceCacheCarryForward(uint3 dtid: SV_DispatchThreadID, uniform R
         cell.lastTouched = pc.frameIndex;
     } else {
         uint age = pc.frameIndex - cell.lastTouched;
-        // Only probe rays queue shades; a cell kept alive by gather touches alone would hold stale radiance. Never-shaded cells (lastShaded still the clear fill) are waiting for their first shade.
+        // Only probe rays queue shades, so gather touches alone would keep stale radiance alive. Never-shaded cells await their first shade.
         bool bStale = cell.lastShaded != RADIANCE_CACHE_RADIANCE_UNSHADED && pc.frameIndex - cell.lastShaded > pc.staleShadeAge;
         if (age >= RADIANCE_CACHE_LRU_THRESHOLD || bStale) {
 #if WILL_EDITOR

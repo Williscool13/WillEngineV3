@@ -1,7 +1,6 @@
 //
 // Created by William on 2026-01-12.
 //
-
 #ifndef WILL_ENGINE_LIGHTS_INTEROP_H
 #define WILL_ENGINE_LIGHTS_INTEROP_H
 
@@ -54,19 +53,18 @@ SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_SPHERE = 1u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_TRIANGLE = 2u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_DISK = 3u;
 
-// Froxel clustering (non-restir): resolution-independent XY tiles, log-distributed Z slices.
+// Resolution-independent XY tiles, log-distributed Z slices
 SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_X = 16u;
 SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_Y = 9u;
 SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_Z = 24u;
 SHADER_PUBLIC SHADER_CONST uint CLUSTER_COUNT = CLUSTER_GRID_X * CLUSTER_GRID_Y * CLUSTER_GRID_Z;
 SHADER_PUBLIC SHADER_CONST uint MAX_LIGHTS_PER_CLUSTER = 128u;
 
-/** Directional light: direction (xyz) + intensity (w), color packed as RGBA8 unorm. */
 SHADER_PUBLIC struct DirectionalLightData
 {
     SHADER_PUBLIC float4 directionIntensity; // xyz world-space direction, w intensity
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
-    SHADER_PUBLIC float angularRadius; // radians; sun-disk half-angle for soft shadows (0 = hard)
+    SHADER_PUBLIC float angularRadius; // radians, sun-disk half-angle (0 = hard shadows)
     SHADER_PUBLIC float _pad1;
     SHADER_PUBLIC float _pad2;
 };
@@ -80,11 +78,11 @@ SHADER_PUBLIC struct LightInfo
     SHADER_PUBLIC float4 up; // xyz up axis (area) / edge e2 (triangle), w half-height (area) / inclusive power prefix across the owning mesh (triangle)
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm, alpha 0 = no proxy surface in the TLAS
     SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC float range; // smoothstep attenuation cutoff distance
+    SHADER_PUBLIC float range;
     SHADER_PUBLIC uint type; // LIGHT_TYPE_*
 };
 
-/** Light pre-transformed to view space with derived geometry and emission cached. Written once per frame by the ReSTIR transform-lights pass. Sphere: center (xyz) + radius (centerHalfWidth.w), area = 4*pi*r^2 in rightArea.w. Triangle: center = v0, right/up = edges e1/e2 (unnormalized), halfWidth/halfHeight = 0. */
+/** Sphere: radius in centerHalfWidth.w, area = 4*pi*r^2 in rightArea.w. Triangle: center = v0, right/up = edges e1/e2 (unnormalized), halfWidth/halfHeight = 0. */
 SHADER_PUBLIC struct LightVSData
 {
     SHADER_PUBLIC float4 centerHalfWidth; // xyz view-space center, w half-width (area) / radius (sphere)
@@ -100,11 +98,7 @@ SHADER_PUBLIC struct LightVSData
 SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_MESHES = 1024;
 SHADER_PUBLIC SHADER_CONST int MAX_EMISSIVE_MESHLETS = 4096;
 
-/**
- * One LOD0 meshlet of an emissive primitive instance: a contiguous run of LIGHT_TYPE_TRIANGLE entries in LightData::lights.
- * The AABB is the geometry padded by the whole emitter's range (rangePad); shrink by rangePad for the geometric bounds.
- * packedConeAxis/coneCutoff are the world-space normal cone, cutoff = sin(half angle), >= 1 means never rejected.
- */
+/** AABB is padded by rangePad (shrink for geometric bounds). World-space normal cone: coneCutoff = sin(half angle), >= 1 never rejects. */
 SHADER_PUBLIC struct EmissiveMeshlet
 {
     SHADER_PUBLIC float3 aabbMin;
@@ -117,9 +111,6 @@ SHADER_PUBLIC struct EmissiveMeshlet
     SHADER_PUBLIC float coneCutoff;
 };
 
-/**
- * One emissive primitive instance: the union of its EmissiveMeshlet run and of their triangle runs. Gathers reject a whole emitter on this box before walking its meshlets.
- */
 SHADER_PUBLIC struct EmissiveMesh
 {
     SHADER_PUBLIC float3 aabbMin;
@@ -132,9 +123,7 @@ SHADER_PUBLIC struct EmissiveMesh
     SHADER_PUBLIC float rangePad;
 };
 
-/**
- * One dirty emissive primitive instance to rebuild into this frame's LightData: its triangle run, its meshlets and EmissiveMesh[meshSlot]. Dead = zero lights and inverted AABBs.
- */
+/** Dead = zero lights and inverted AABBs. */
 SHADER_PUBLIC struct EmissiveTriLightWork
 {
     SHADER_PUBLIC uint instanceSlot;
@@ -150,9 +139,7 @@ SHADER_PUBLIC struct EmissiveTriLightWork
 SHADER_PUBLIC struct LightData
 {
     SHADER_PUBLIC int lightCount;
-    // [0, analyticLightCount) are analytic (area/sphere) slots
-    //   analyticLightCount = analytic store watermark <= MAX_ANALYTIC_LIGHTS.
-    //   Emissive triangles start at MAX_ANALYTIC_LIGHTS, so index >= analyticLightCount still means triangle-or-dead.
+    // Analytic store watermark <= MAX_ANALYTIC_LIGHTS; triangles start at MAX_ANALYTIC_LIGHTS, so index >= analyticLightCount is triangle or dead
     SHADER_PUBLIC int analyticLightCount;
     SHADER_PUBLIC int emissiveMeshletCount;
     SHADER_PUBLIC int emissiveMeshCount;
@@ -160,7 +147,7 @@ SHADER_PUBLIC struct LightData
     SHADER_PUBLIC LightInfo lights[MAX_LIGHTS];
     SHADER_PUBLIC EmissiveMeshlet emissiveMeshlets[MAX_EMISSIVE_MESHLETS];
     SHADER_PUBLIC EmissiveMesh emissiveMeshes[MAX_EMISSIVE_MESHES];
-    // Emissive triangle -> its EmissiveMeshlet, indexed by (lightIndex - MAX_ANALYTIC_LIGHTS); ~0u = none
+    // Indexed by lightIndex - MAX_ANALYTIC_LIGHTS; ~0u = none
     SHADER_PUBLIC uint meshletOf[MAX_LIGHTS - MAX_ANALYTIC_LIGHTS];
 };
 

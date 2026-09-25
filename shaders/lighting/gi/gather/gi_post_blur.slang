@@ -5,8 +5,7 @@ import shader_functions;
 import random_common;
 import gi_gather_common;
 
-// Post-temporal spatial blur with radius ~ 1/sqrt(1 + history count) (ReBLUR's history-driven radius): young pixels blur wide, converged ones keep detail.
-// The tap pattern rotates per pixel and frame; a fixed 8-tap pattern stamped offset copies of bright regions instead of blurring them.
+// Taps rotate per pixel and frame: a fixed pattern stamped offset copies of bright regions.
 // Output only; the history keeps the unblurred result so the blur never compounds.
 
 static const float GI_POST_BLUR_RADIUS_GATHER_TEXELS = 14.0;

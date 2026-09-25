@@ -182,7 +182,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
                 }
             }
 
-            // Prefer last frame's lit color at the hit (fully shadowed lighting); analytic fallback shades local lights with no visibility.
+            // Prefer last frame's lit color at the hit; the analytic fallback shades local lights with no visibility.
             bool bShaded = false;
             if (pc.litHistoryIndex != ~0u) {
                 float4 prevClip = mul(scene.prevViewProj, float4(hitWorldPos, 1.0));
@@ -225,7 +225,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         }
         hitTOut = 10000.0;
     }
-    // hit.hitT == REFLECTION_HIT_T_OWNED (or the NaN clear-sentinel): radiance and hitTOut stay 0, matching the "no hit" convention RELAX's temporal accumulation expects.
+    // REFLECTION_HIT_T_OWNED or the NaN clear sentinel: outputs stay 0, the no-hit convention RELAX expects.
 
     radiance *= pc.intensity;
     if (pc.maxRayIntensity > 0.0) {
@@ -235,8 +235,8 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
         }
     }
 
-    // Incoming radiance is already the demodulated form: the outgoing specular is specReflectance * radiance, and every consumer applies that factor at remodulation.
-    // Packed (rcoord) when a checkerboard-aware consumer (the merged lighting resolve or the reflection RELAX prepass) will resolve it; otherwise dense-duplicated to both fields so a direct .Load(pixel) fallback (denoiser off, full-rate resolve, or ReBLUR/plain modes) sees no holes. Matches lighting_pbr_restir.slang's writeCoord logic exactly.
+    // Demodulated: consumers multiply by specReflectance at remodulation.
+    // Packed when a checkerboard-aware consumer resolves it, else duplicated to both fields; must match lighting_pbr_restir's writeCoord.
     float4 outColor = float4(radiance * scene.preExposure, hitTOut);
     uint2 writeCoord = (field != 0u && pc.bCheckerboardPacked != 0u) ? rcoord : pixel;
     rdgStorageFloat4[pc.outputIndex][writeCoord] = outColor;

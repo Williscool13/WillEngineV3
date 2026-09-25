@@ -85,7 +85,7 @@ struct RadianceCacheStatsSnapshot
     uint32_t cellsShaded{};
 };
 
-/** ReGIR cell under the mouse; layout mirrors Render::ReGIRCursorCell (memcpy'd). */
+/** Layout mirrors Render::ReGIRCursorCell (memcpy'd). */
 struct ReGIRCursorCell
 {
     uint32_t valid{};
@@ -109,7 +109,7 @@ struct ReGIRStatsSnapshot
     ReGIRCursorCell cursor{};
 };
 
-/** World-grid bin under the mouse; layout mirrors Render::WorldGridCursorCell (memcpy'd). */
+/** Layout mirrors Render::WorldGridCursorCell (memcpy'd). */
 struct WorldGridCursorCell
 {
     uint32_t valid{};
@@ -135,7 +135,7 @@ struct WorldGridCursorCell
     float topMeshletCenter[24]{};
 };
 
-/** Game-side landing zone for a captured probe face; pixels are S x S RGBA16F half-floats (4 per texel). */
+/** pixels are S x S RGBA16F half-floats (4 per texel). */
 struct ProbeCaptureStaging
 {
     Core::HeapArray<uint16_t> pixels{};
@@ -144,7 +144,7 @@ struct ProbeCaptureStaging
     std::atomic<bool> bReady{false};
 };
 
-/** Game -> engine handoff of a completed probe bake for engine-side assembly into a filtered cubemap asset. Face buffers are S x S RGBA16F, moved in. */
+/** Face buffers are S x S RGBA16F, moved in. */
 struct ProbeAssembleStaging
 {
     Core::HeapArray<uint16_t> faces[6]{};
@@ -177,7 +177,6 @@ struct FrameEvents
     int32_t fontsUnloaded{0};
 };
 
-/** Deferred rescan requests, consumed by the owning manager. */
 struct RescanRequests
 {
     bool bResources{false};
@@ -187,7 +186,6 @@ struct RescanRequests
 
 inline constexpr size_t MAX_ASSET_RESOLVES_PER_TICK = 2048;
 
-/** Engine-thread copy of the current TimeFrame, readable from any thread. Mirrors RendererStatisticsManager. */
 struct PublishedTimeFrame
 {
     void Publish(const Core::TimeFrame& frame)
@@ -262,14 +260,16 @@ struct EngineContext
 
     ProbeCaptureStaging probeCapture{};
 
-    /** @returns true when a probe-face capture has been delivered by the renderer and not yet consumed. */
+    /**
+     * @returns true when a probe-face capture has been delivered by the renderer and not yet consumed.
+     */
     bool IsProbeCaptureReady() const { return probeCapture.bReady.load(std::memory_order_acquire); }
     const ProbeCaptureStaging& GetProbeCapture() const { return probeCapture; }
     void ConsumeProbeCapture() { probeCapture.bReady.store(false, std::memory_order_release); }
 
     ProbeAssembleStaging probeAssemble{};
 
-    /** Hands a finished bake's 6 face buffers off (moved) for engine-side assembly; the engine forwards it to the asset generator next frame. */
+    /** Moves the 6 face buffers; the engine forwards them to the asset generator next frame. */
     void SubmitProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const ProbeBakeSnapshot& snapshot, float radianceScale)
     {
         for (uint32_t face = 0; face < 6; ++face) { probeAssemble.faces[face] = std::move(faces[face]); }
@@ -282,7 +282,9 @@ struct EngineContext
         probeAssemble.bPending.store(true, std::memory_order_release);
     }
 
-    /** @returns true when a bake has been submitted for assembly and not yet forwarded. */
+    /**
+     * @returns true when a bake has been submitted for assembly and not yet forwarded.
+     */
     bool IsProbeAssemblePending() const { return probeAssemble.bPending.load(std::memory_order_acquire); }
 
     RescanRequests rescan{};

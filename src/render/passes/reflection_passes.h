@@ -22,7 +22,6 @@ namespace Render
 {
 class PipelineManager;
 
-/** Descriptor buffer + noisy output name shared between the ReSTIR-mode base-pass side-output producer and the Default-mode dedicated trace producer. */
 inline const StringID REFLECTION_HIT_DESCRIPTORS_BUFFER = "reflection_hit_descriptors"_sid;
 inline const StringID REFLECTION_SPEC_NOISY_TARGET = "reflection_spec_noisy"_sid;
 inline const StringID REFLECTION_HIT_DELTA_TARGET = "reflection_hit_delta"_sid;
@@ -41,10 +40,6 @@ inline float ComputeLightSpecularFromReflectionsMax(const Core::ReflectionConfig
     return config.lightSpecularFromReflectionsMax < config.tracedRoughnessMax ? config.lightSpecularFromReflectionsMax : config.tracedRoughnessMax;
 }
 
-/**
- * Creates and fills the reflection descriptor buffer with a dedicated GGX ray per pixel, for lighting modes that have no ReSTIR BRDF ray to
- * piggyback. Every pixel is written, so no clear pass is required. No-op when reflections are disabled or no TLAS exists.
- */
 void SetupReflectionTracePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               Core::Array<uint32_t, 2> renderExtent,
@@ -53,10 +48,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
                               uint64_t frameNumber,
                               const Core::ReflectionConfiguration& reflectionConfig);
 
-/**
- * Screen-space alternative to SetupReflectionTracePass: marches the same GGX ray against depth_copy instead of the TLAS, writing the shared
- * reflection descriptor buffer with the REFLECTION_INSTANCE_NONE sentinel. Every pixel is written, so no clear pass is required. Requires no TLAS.
- */
+/** Hits carry the REFLECTION_INSTANCE_NONE sentinel. */
 void SetupSSRTracePass(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        Core::Array<uint32_t, 2> renderExtent,
@@ -66,7 +58,7 @@ void SetupSSRTracePass(RenderGraph& graph,
                        uint32_t activeCheckerboardField,
                        const Core::ReflectionConfiguration& reflectionConfig);
 
-/** Shades each hit in the reflection descriptor buffer (sun + one NEE light + emissive + DDGI irradiance, reusing ShadeProbeRayHit); sky misses sample the skybox; ReSTIR-owned hits contribute nothing. Demodulated output; no-op when disabled. */
+/** ReSTIR-owned hits contribute nothing. Output is demodulated. */
 void SetupReflectionShadePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,

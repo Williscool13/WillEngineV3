@@ -1,13 +1,11 @@
 //
 // Created by William on 2026-08-01.
 //
-
 #ifndef WILL_ENGINE_RENDER_PARAMS_H
 #define WILL_ENGINE_RENDER_PARAMS_H
 
 #include <cstdint>
 
-/** Every tunable the game hands the renderer. Engine-side authoring state embeds these structs directly. */
 namespace Core
 {
 enum class ExposureMode : int32_t
@@ -21,15 +19,15 @@ struct PostProcessConfiguration
 {
     ExposureMode exposureMode{ExposureMode::Auto};
     float exposureTargetLuminance{0.18f};
-    float exposureSpeedBrighten{2.0f}; // 1/s, applied while adapted luminance decreases (image brightening)
-    float exposureSpeedDarken{6.0f}; // 1/s, applied while adapted luminance increases (image darkening)
-    float exposureMinEV100{12.5f}; // auto exposure adaptation range, absolute EV100 (ISO 100, K = 12.5)
+    float exposureSpeedBrighten{2.0f}; // 1/s, applied while adapted luminance decreases
+    float exposureSpeedDarken{6.0f}; // 1/s, applied while adapted luminance increases
+    float exposureMinEV100{12.5f}; // absolute EV100 (ISO 100, K = 12.5)
     float exposureMaxEV100{22.5f};
-    float exposureLowPercentile{0.5f}; // histogram band metered, fraction of non-black pixels
+    float exposureLowPercentile{0.5f}; // fraction of non-black pixels
     float exposureHighPercentile{0.9f};
     float exposureManualEV100{16.5f};
     float cameraAperture{16.0f}; // f-number
-    float cameraShutterInv{100.0f}; // shutter speed denominator, 100 = 1/100 s
+    float cameraShutterInv{100.0f}; // 100 = 1/100 s
     float cameraISO{100.0f};
 
     bool bBloomEnabled{true};
@@ -84,12 +82,12 @@ struct PostProcessConfiguration
     } khronosParams;
 
     bool bDepthOfFieldEnabled{false};
-    float dofFocusDistance{5.0f}; // view units from camera to the focal plane
-    float dofFocusRange{1.0f}; // fully sharp band centered on the focal plane, view units
-    float dofNearTransition{2.0f}; // view units from the sharp band to the max near radius
-    float dofFarTransition{20.0f}; // view units from the sharp band to the max far radius
-    float dofNearRadiusPx{16.0f}; // max CoC radius in front of focus, output pixels
-    float dofFarRadiusPx{16.0f}; // max CoC radius behind focus, output pixels
+    float dofFocusDistance{5.0f};
+    float dofFocusRange{1.0f}; // full width of the sharp band centered on the focal plane
+    float dofNearTransition{2.0f}; // from the sharp band to the max near radius
+    float dofFarTransition{20.0f};
+    float dofNearRadiusPx{16.0f}; // output pixels
+    float dofFarRadiusPx{16.0f};
 
     bool bMotionBlurEnabled{false};
     float motionBlurVelocityScale{0.8f};
@@ -103,7 +101,7 @@ struct PostProcessConfiguration
     float motionBlurCameraMaxRadiusPx{32.0f};
 
     bool bColorGradingEnabled{true};
-    float colorGradingExposure = 0.0f; // EV bias folded into exposure before tonemapping
+    float colorGradingExposure = 0.0f; // EV bias
     float colorGradingContrast = 1.0f;
     float colorGradingSaturation = 1.0f;
     float colorGradingTemperature = 0.0f;
@@ -178,7 +176,7 @@ struct TAAConfiguration
 struct DonutTAAConfiguration
 {
     float clampingFactor{1.0f}; // mean +/- k*sigma in PQ space; < 0 disables clamping
-    float newFrameWeight{0.1f}; // steady-state new-sample blend
+    float newFrameWeight{0.1f};
     float maxRadiance{1000.0f}; // pqC (cd/m^2); clamped to [1e-4, 1e8] CPU-side
     bool bUseCatmullRom{true};
 };
@@ -187,11 +185,11 @@ struct Fsr2Configuration
 {
     bool bSharpen{true};
     float sharpness{0.8f}; // 0 = no sharpening, 1 = maximum
-    bool bReactiveMask{true}; // from the pre-overlay colour snapshot (text, sprites, debug draw)
+    bool bReactiveMask{true};
     float reactiveScale{1.0f};
     float reactiveThreshold{0.2f};
     float reflectionReactive{0.6f}; // mirror-roughness surfaces under camera motion; 0 = off
-    float mipBias{-1.0f}; // FSR2 recommends -1
+    float mipBias{-1.0f};
 };
 
 struct AntiAliasingConfiguration
@@ -217,11 +215,11 @@ struct GTAOConfiguration
     float sliceCount{5.0f};
     float stepsPerSlice{3.0f};
     float denoiseBlurBeta{1.2f};
-    /** Edge-aware denoise passes over the raw AO, clamped to [1, 8]. Stored as float to match the slider widget. */
+    /** Clamped to [1, 8]; float to match the slider widget. */
     float denoisePasses{2.0f};
-    /** Frames of MV-reprojected history the AO accumulates (shadows_resolve), 0 disables. */
+    /** 0 disables. */
     float temporalMaxAccum{16.0f};
-    /** Scale on the 3x3 neighborhood box the AO history is clamped into; smaller cuts ghosting harder, 0 disables the clamp. */
+    /** Scales the 3x3 neighborhood clamp box; 0 disables the clamp. */
     float temporalClampScale{1.0f};
 
     bool operator==(const GTAOConfiguration&) const = default;
@@ -230,7 +228,7 @@ struct GTAOConfiguration
 enum class LightingMode : uint8_t
 {
     Default = 0,
-    ReSTIR, // (incl. ReGIR)
+    ReSTIR,
     PathTracing,
 };
 
@@ -251,25 +249,21 @@ enum class ReSTIRDebugStop : uint8_t
 
 struct RELAXParams
 {
-    // General
     float denoisingRange{1000.f};
     float disocclusionThreshold{0.01f};
     float depthThreshold{0.003f};
     float framerateScale{1.f};
 
-    // Accumulation
     float specMaxAccumFrames{32.f};
     float specMaxFastAccumFrames{6.f};
     float diffMaxAccumFrames{32.f};
     float diffMaxFastAccumFrames{6.f};
     float historyAccelerationAmount{1.f};
 
-    // Prepass
     float diffBlurRadius{30.f};
     float specBlurRadius{50.f};
     float minHitDistanceWeight{0.f};
 
-    // A-Trous / edge stopping
     int32_t atrousIterations{5};
     // Diffuse-only CoCg iterations
     bool bChromaAtrous{true};
@@ -289,12 +283,10 @@ struct RELAXParams
     float specVarianceBoost{0.f};
     bool roughnessEdgeStoppingEnabled{true};
 
-    // History fix
     float historyFixEdgeStoppingNormalPower{8.f};
     float historyFixFrameNum{4.f};
     float historyFixBasePixelStride{14.f};
 
-    // History clamp / reset
     float fastHistoryClampingSigmaScale{2.f};
     float historyResetTemporalSigmaScale{5.f};
     float historyResetSpatialSigmaScale{1.f};
@@ -318,7 +310,6 @@ struct SIGMAParams
 
 struct ReBLURParams
 {
-    // General
     float denoisingRange{1000.f};
     float disocclusionThreshold{0.01f};
     float disocclusionThresholdAlternate{0.05f};
@@ -327,23 +318,21 @@ struct ReBLURParams
     float lobeAngleFraction{0.15f};
     float roughnessFraction{0.15f};
 
-    // Hit distance normalization (ReblurHitDistanceParameters A/B/C/D)
+    // ReblurHitDistanceParameters A/B/C/D
     float hitDistA{3.f};
     float hitDistB{0.1f};
     float hitDistC{20.f};
     float hitDistD{-25.f};
 
-    // Accumulation (frames; 0 stabilized disables the stabilization pass)
+    // maxStabilizedFrameNum 0 disables the stabilization pass
     float maxAccumulatedFrameNum{30.f};
     float maxFastAccumulatedFrameNum{6.f};
     float maxStabilizedFrameNum{30.f};
 
-    // History fix / clamping
     float historyFixFrameNum{3.f};
     float historyFixBasePixelStride{14.f};
     float fastHistoryClampingSigmaScale{2.f};
 
-    // Prepass / blur radii (pixels)
     float diffusePrepassBlurRadius{30.f};
     float specularPrepassBlurRadius{50.f};
     float minBlurRadius{1.f};
@@ -355,24 +344,21 @@ struct ReBLURParams
     int32_t chromaAtrousIterations{2};
     float chromaLumaPower{2.f};
 
-    // Antilag
     float antilagLuminanceSigmaScale{2.f};
     float antilagLuminanceSensitivity{3.f};
 
-    // Stabilization / firefly suppression
     float stabilizationStrength{1.f};
     float fireflySuppressorMinRelativeScale{2.f};
 
-    // Specular motion-vector modification thresholds (smoothstep over spec probability)
+    // Smoothstep over spec probability
     float specProbThresholdMvLow{0.5f};
     float specProbThresholdMvHigh{0.9f};
 
-    // Convergence (REBLUR f = 1 / (1 + k*N))
+    // f = 1 / (1 + k*N)
     float convergenceS{1.f};
     float convergenceB{0.2f};
     float convergenceP{0.8f};
 
-    // Feature toggles
     int32_t hitDistanceReconstructionMode{0}; // 0 = off, 1 = AREA_3X3, 2 = AREA_5X5
     bool enablePrepass{true};
     bool enableAntiFirefly{true};
@@ -394,21 +380,19 @@ struct ReSTIRParams
     uint32_t temporalMCap{20u};
     bool bTemporalSearch{true};
     bool bCheckerboard{false};
-    // With bCheckerboard: local-light reservoirs stay half-rate, sun visibility and the lighting resolve run full-rate so the denoisers see no checkerboard.
+    // Local-light reservoirs stay half-rate; sun visibility and the resolve run full-rate so the denoisers see no checkerboard
     bool bCheckerboardFullRateResolve{true};
     float boilingFilterStrength{0.2f};
     bool bInitialVisibility{true};
     bool bSunLight{true};
     float sunAlphaTestMaxDistance{25.0f};
     float restirWClamp{0.0f};
-    // WorldGridBin = cascaded strongest-K analytic bin (default, sparse analytic scenes)
-    // ReGIR = deterministic per-cell entry table over a world hash grid (dense/emissive-triangle scenes). Only ReGIR schedules the touch/fill producer chain.
+    // Only ReGIR schedules the touch/fill producer chain
     enum class LightProposal : uint32_t { WorldGridBin = 0, ReGIR = 1 };
     LightProposal lightProposal{LightProposal::WorldGridBin};
-    // Emissive triangle lights
     bool bEmissiveTriangleLights{true};
     float emissiveTriRangeMultiplier{0.03125f};
-    // Temporal-gradient antilag confidence (RELAX only)
+    // RELAX only
     bool bEnableConfidence{true};
     float confidenceStrength{0.75f};
     float confidenceSensitivity{3.0f};
@@ -416,7 +400,6 @@ struct ReSTIRParams
     float confidenceHistoryLength{4.0f};
     uint32_t confidenceBlurRadius{2u};
 
-    // todo: Disabled atrous and asvgf. Readd as needed
     enum class DenoiserMode { None = 0, ATrous = 1, ASVGF = 2, RELAX = 3, ReBLUR = 4, NRD = 5, NRDReBLUR = 6 };
 
     DenoiserMode denoiserMode{DenoiserMode::None};
@@ -462,7 +445,7 @@ struct DDGIParams
 {
     bool bEnabled{true};
 
-    // Volume (count/spacing changes restart probe history)
+    // Count/spacing changes restart probe history
     int32_t probeCountX{24};
     int32_t probeCountY{12};
     int32_t probeCountZ{24};

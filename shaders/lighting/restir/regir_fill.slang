@@ -10,9 +10,7 @@ import binning_common;
 import restir_common;
 import regir_hash_common;
 
-// =============== Shader Summary ============
-// One workgroup of 512 per active cell, rebuilding its entry table from scratch: every analytic light and emissive meshlet in reach gets a distance-aware mass, the strongest
-// REGIR_ENTRIES_PER_CELL are tempered, sorted by key and prefix-summed into cumMass. Deterministic given the frame's lights, so draws and marginal pdfs are exact.
+// Rebuilt from scratch each frame so draws and marginal pdfs are exact.
 
 static const uint FILL_GROUP = 512u;
 static const uint ENTRIES_PER_LANE = REGIR_ENTRIES_PER_CELL / FILL_GROUP;
@@ -71,7 +69,7 @@ static void SortByKeyAscending(uint tid, uint n)
     }
 }
 
-/** Hillis-Steele inclusive prefix sum of gMass over [0, REGIR_ENTRIES_PER_CELL). */
+/** Inclusive. */
 static void PrefixSumMass(uint tid)
 {
     const uint N = REGIR_ENTRIES_PER_CELL;

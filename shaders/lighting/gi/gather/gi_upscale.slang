@@ -10,27 +10,23 @@ import ddgi_common;
 import reflection_probe_interop;
 import reflection_probe_common;
 
-// Full-res resolve: bilateral upsample of the gather SH from the pixel's nearest 2x2 gather-res footprint (the own texel is always among the taps), evaluated at the pixel normal, then counter temporal New=(n*Prev+Curr)/(n+1) via gbuffer MV reprojection. Also updates the short fast-luma history the noise estimate compares against.
-
 static const float GI_UPSCALE_PLANE_DIST_SIGMA = 0.01;
 static const float GI_UPSCALE_NORMAL_POWER = 32.0;
 static const float GI_UPSCALE_HISTORY_FIX_FRAMES = 8.0;
 static const float GI_UPSCALE_HISTORY_FIX_STRIDE = 8.0;
 static const float GI_UPSCALE_FAST_ACCUM = 6.0;
-// Visibility does not change with lighting (sky light is applied after), so it can average far longer than the radiance without lagging light changes.
+// Sky light is applied after, so visibility can average far longer without lagging light changes.
 static const float GI_UPSCALE_SKY_VIS_MAX_ACCUM = 64.0;
 static const float GI_UPSCALE_SKY_VIS_FIX_FRAMES = 16.0;
 static const float GI_UPSCALE_SKY_VIS_FIX_STRIDE = 12.0;
 static const float GI_UPSCALE_PRIOR_FRAMES = 2.0;
-// Noisy pixels (dim rooms lit through small bright openings) ramp the history cap up to this.
 static const float GI_UPSCALE_NOISE_ACCUM = 8.0;
 static const float GI_UPSCALE_NOISY_MAX_ACCUM = 96.0;
-// Kept low on purpose: a reveal that fades up from dark reads better than one that settles down from too bright (probes miss the enclosure of slits behind furniture).
+// Kept low on purpose: a reveal fading up from dark reads better than one settling down from too bright.
 static const float GI_UPSCALE_PRIOR_SCALE = 0.65;
-// Per cascade step past cascade 0's range: coarser probes leak more, and far detail reads fine darker.
+// Per cascade step past cascade 0's range.
 static const float GI_UPSCALE_PRIOR_CASCADE_FALLOFF = 0.5;
 
-/** Stable world-tier irradiance (sky + DDGI cascades + reflection probe) at the pixel's own surface; the fallback when the half-res gather field cannot represent it. */
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
 {
     float3 irr = float3(0.0);
@@ -91,7 +87,6 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 centerXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, centerViewZ);
     float invPlaneSigma = 1.0 / (GI_UPSCALE_PLANE_DIST_SIGMA * abs(centerViewZ));
 
-    // Restores the sky the gather SH no longer carries: filtered miss fraction times prefiltered sky irradiance.
     float3 skyTerm = float3(0.0);
     if (pc.skyVisIndex != ~0x0u && pc.skyboxIndex >= 0) {
         skyTerm = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], evalN) * pc.iblIntensity * scene.preExposure;
@@ -165,7 +160,6 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         skyVisCurrent = sumV * invW;
         bSkyCurrent = true;
     } else if (fbW > 1e-4) {
-        // All taps guide-rejected but valid geometry exists (sub-half-res features: slots, trim): bilinear over the valid taps only. A single best tap is quad-constant and shows as 2x2 blocks; bilinear is continuous, and backface/sky texels never enter (validity-gated above).
         float invW = 1.0 / fbW;
         current = GIGatherEvaluate(fbShR, fbShG, fbShB, fbMean * invW, worldN, evalN);
         skyVisCurrent = fbV * invW;
@@ -199,12 +193,10 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         }
     }
 
-    // No noise history (new pixel) counts as noisy.
     float noisy = noiseHistory.quality > 0.0 ? GIGatherNoisiness(noiseHistory.value) : 1.0;
     float n = min(history.count, (lerp(GI_GATHER_MAX_ACCUM, GI_UPSCALE_NOISY_MAX_ACCUM, noisy) - 1.0) * scene.framerateScale);
     float nBlend = n * history.quality;
 
-    // NRD HistoryFix: young pixels trade spatial resolution for variance.
     if (bHasCurrent && nBlend < GI_UPSCALE_HISTORY_FIX_FRAMES) {
         int stride = int(round(GI_UPSCALE_HISTORY_FIX_STRIDE / (1.0 + nBlend)));
         if (stride >= 1) {
@@ -248,7 +240,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     }
     float nV = min(skyVisHistory.count, (GI_UPSCALE_SKY_VIS_MAX_ACCUM - 1.0) * scene.framerateScale) * skyVisHistory.quality;
 
-    // Young visibility against a 64-frame neighbourhood shows as a noisy trail (disocclusion, jittered edges); widen its own fix until the history catches up. Taps are pre-blurred +-6 texels, so stride 12 still tiles.
+    // Taps are pre-blurred +-6 texels, so stride 12 still tiles.
     if (bSkyCurrent && nV < GI_UPSCALE_SKY_VIS_FIX_FRAMES) {
         int stride = int(round(GI_UPSCALE_SKY_VIS_FIX_STRIDE / (1.0 + nV)));
         if (stride >= 1) {
@@ -291,7 +283,6 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     float3 result = current;
     float accum = 1.0;
     if (history.quality <= 0.0 && bSkyCurrent) {
-        // Disocclusion (chair slits) has no same-surface neighbours to filter with; seed from the probe field as a few frames of prior that the counter then averages out.
         float priorScale = GI_UPSCALE_PRIOR_SCALE;
         if (pc.bCascadesValid != 0) {
             float cascade0HalfExtent = 0.5 * float(pc.ddgiCascades->cascades[0].volume.probeCount.x) * pc.ddgiCascades->cascades[0].volume.probeSpacing;
