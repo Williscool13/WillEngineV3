@@ -47,7 +47,7 @@ import wscene_authoring as wa
 wa.seed_ids("di_ladder")   # must precede every next_id() call
 
 from wscene_authoring import (
-    base_entity, box_params, next_id, name_id, add_procedural, add_room,
+    base_entity, box_params, next_id, name_id, add_procedural, add_room, add_render_flags,
     add_sphere_light, add_area_light, add_skybox, add_world_text, RENDER_DEFAULTS,
     PROCEDURAL, NAME, FOLDER, SCENE_FOLDER,
 )
@@ -238,7 +238,8 @@ def emissive_room(entities, tag, cx, cz, n, heavy, clustered, folder_id):
         else:
             mat = EM_MAT[("U", n)]
         corner = (pos[0] - h, pos[1] - h, pos[2] - h)
-        render_box(entities, f"[{tag}] E{i:03d}", corner, (EMITTER_SIZE,) * 3, mat, folder_id)
+        e = render_box(entities, f"[{tag}] E{i:03d}", corner, (EMITTER_SIZE,) * 3, mat, folder_id)
+        add_render_flags(e, emissive_light=True)
 
 # =============================================================================
 # build
