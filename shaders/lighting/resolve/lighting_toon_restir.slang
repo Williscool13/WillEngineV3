@@ -209,7 +209,7 @@ void ComputeLightingToonRestir(uniform VisibilityLightingPushConstant pc, uint3 
                     if (specLum > bestSpecLum)
                     {
                         bestSpecLum = specLum;
-                        specHitDistance = SUN_SPEC_HIT_T;
+                        specHitDistance = 0.0;
                     }
                 }
             }
