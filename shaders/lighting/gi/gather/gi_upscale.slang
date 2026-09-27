@@ -26,6 +26,8 @@ static const float GI_UPSCALE_NOISY_MAX_ACCUM = 96.0;
 static const float GI_UPSCALE_PRIOR_SCALE = 0.65;
 // Per cascade step past cascade 0's range.
 static const float GI_UPSCALE_PRIOR_CASCADE_FALLOFF = 0.5;
+static const float GI_UPSCALE_YOUNG_FRAMES = 16.0;
+static const float GI_UPSCALE_YOUNG_RADIUS = 32.0;
 
 static float3 GIUpscaleWorldIrradiance(GIUpscalePushConstant pc, SceneData scene, float3 worldPos, float3 evalN, float3 centerXv)
 {
@@ -298,6 +300,41 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
         } else {
             result = history.color;
             accum = max(n, 1.0);
+        }
+    }
+
+    // Young pixels start from older same-plane history nearby instead of one frame of spatially correlated noise.
+    if (pc.bHistoryValid != 0u && bHasCurrent && nBlend < GI_UPSCALE_YOUNG_FRAMES) {
+        float youth = 1.0 - nBlend / GI_UPSCALE_YOUNG_FRAMES;
+        float2 historyUv = uv + UnpackMotionVectors(gt1.g) * 0.5;
+        float3 prevXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, historyUv, centerViewZ + UnpackViewZDelta(gt1.w));
+        float3 prevN = normalize(mul((float3x3)scene.prevView, worldN));
+        int2 prevPixel = int2(floor(historyUv * float2(pc.renderExtent)));
+        float3 priorSum = float3(0.0);
+        float priorW = 0.0;
+        [unroll]
+        for (uint ring = 0u; ring < 2u; ring++) {
+            float radius = ring == 0u ? GI_UPSCALE_YOUNG_RADIUS * 0.4 : GI_UPSCALE_YOUNG_RADIUS;
+            [unroll]
+            for (uint d = 0u; d < 8u; d++) {
+                float angle = (float(d) + 0.5 * float(ring)) * 0.785398;
+                int2 tap = prevPixel + int2(round(float2(cos(angle), sin(angle)) * radius));
+                if (any(tap < int2(0)) || any(tap >= int2(pc.renderExtent))) { continue; }
+                float tapRawDepth = rdgTexturesFloat[pc.depthHistoryIndex].Load(int3(tap, 0)).r;
+                if (tapRawDepth <= 0.0) { continue; }
+                float4 tapHistory = rdgTexturesFloat4[pc.historyIndex].Load(int3(tap, 0));
+                float w = saturate((tapHistory.a - nBlend) / GI_UPSCALE_YOUNG_FRAMES);
+                if (w <= 0.0) { continue; }
+                float tapViewZ = ScreenToViewSpaceDepth(tapRawDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+                float3 tapXv = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, (float2(tap) + 0.5) / float2(pc.renderExtent), tapViewZ);
+                w *= exp(-abs(dot(prevN, tapXv - prevXv)) * invPlaneSigma);
+                w *= pow(saturate(dot(prevN, UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneHistoryIndex].Load(int3(tap, 0)).r))), GI_UPSCALE_NORMAL_POWER);
+                priorSum += tapHistory.rgb * w;
+                priorW += w;
+            }
+        }
+        if (priorW > 1e-3) {
+            result = lerp(result, priorSum / priorW * historyRatio, youth * saturate(priorW));
         }
     }
 
