@@ -172,6 +172,8 @@ function(compile_shader TARGET SHADER_SOURCE)
     set(SLANG_DEFINE_FLAGS "")
     if(WILL_ENGINE_BUILD_EDITOR)
         list(APPEND SLANG_DEFINE_FLAGS -DWILL_EDITOR=1)
+    else()
+        list(APPEND SLANG_DEFINE_FLAGS -DWILL_EDITOR=0)
     endif()
 
     add_custom_command(

@@ -65,29 +65,34 @@ T_BRICK = tex_set("red_brick", False)
 T_PLATE = tex_set("metal_plate", True)
 T_GRAVEL = tex_set("gravelly_sand", True)
 
+MAX_ALBEDO = 0.9    # flat albedo / texture tint cap: anything near 1 gains energy over bounces
+
 def textured(name, tex, uv=0.5, tint=(1.0, 1.0, 1.0), metallic=0.0, roughness=1.0):
+    assert max(tint) <= 1.0, f"{name}: tint {tint} > 1 pushes textured albedo past 1"
     diff, nor, mr = tex
     return wa.write_material(name, base_color=(*tint, 1.0), metallic=metallic, roughness=roughness,
                              albedo_tex=diff, metal_rough_tex=mr, normal_tex=nor, uv_scale=(uv, uv))
 
 def flat(name, rgb, roughness=0.9, metallic=0.0):
+    assert metallic > 0.0 or max(rgb) <= MAX_ALBEDO, f"{name}: albedo {rgb} > {MAX_ALBEDO}"
     return wa.write_material(name, base_color=(*rgb, 1.0), metallic=metallic, roughness=roughness)
 
 def glow(name, rgb, strength):
     return wa.write_material(name, base_color=(0.0, 0.0, 0.0, 1.0), emissive=(*rgb, strength * K), lighting_shader="default_pbr")
 
-M_TRACK = textured("prism_track_tiles", T_TILES, uv=0.5, tint=(1.05, 1.0, 0.95))
-M_STONE = textured("prism_stone", T_CONCRETE, uv=0.25, tint=(1.1, 1.05, 0.98))
+M_TRACK = textured("prism_track_tiles", T_TILES, uv=0.5, tint=(1.0, 0.96, 0.9))
+M_STONE = textured("prism_stone", T_CONCRETE, uv=0.25, tint=(1.0, 0.96, 0.9))
 M_WOOD = textured("prism_wood", T_WOOD, uv=0.5, tint=(0.9, 0.75, 0.6))
 M_HALL_WHITE = flat("prism_hall_white", (0.80, 0.78, 0.74))
-M_HALL_FLOOR = textured("prism_hall_floor", T_CONCRETE, uv=0.25, tint=(1.3, 1.28, 1.22))
+M_HALL_FLOOR = textured("prism_hall_floor", T_CONCRETE, uv=0.25, tint=(1.0, 0.98, 0.94))
 M_CRIMSON = flat("prism_crimson", (0.78, 0.05, 0.04), 0.85)
 M_COBALT = flat("prism_cobalt", (0.05, 0.14, 0.75), 0.85)
-M_SAFFRON = flat("prism_saffron", (0.92, 0.62, 0.10), 0.7)
-M_PUSHER = flat("prism_pusher", (0.95, 0.30, 0.06), 0.35)
-M_GLOSS = flat("prism_gloss_black", (0.02, 0.02, 0.025), 0.06)
-M_MIRROR = flat("prism_mirror", (0.95, 0.95, 0.97), 0.03, metallic=1.0)
-M_TUNNEL = textured("prism_tunnel_plate", T_PLATE, uv=0.5, tint=(0.25, 0.25, 0.28), metallic=1.0, roughness=0.8)
+M_SAFFRON = flat("prism_saffron", (0.88, 0.62, 0.10), 0.7)
+M_PUSHER = flat("prism_pusher", (0.9, 0.30, 0.06), 0.35)
+# Neon gallery is all dielectric: ReSTIR spec on metals and emissives seen through RT reflections are both weak
+M_GLOSS = flat("prism_gloss_black", (0.02, 0.02, 0.025), 0.35)
+M_POOL = flat("prism_pool", (0.02, 0.03, 0.04), 0.3)
+M_TUNNEL = textured("prism_tunnel_plate", T_PLATE, uv=0.5, tint=(0.25, 0.25, 0.28), metallic=0.0, roughness=0.7)
 M_NEON_MAGENTA = glow("prism_neon_magenta", (1.0, 0.08, 0.75), 40.0)
 M_NEON_CYAN = glow("prism_neon_cyan", (0.08, 0.8, 1.0), 40.0)
 M_BRICK = textured("prism_brick", T_BRICK, uv=0.5, tint=(0.75, 0.7, 0.68))
@@ -101,9 +106,9 @@ M_CHROME = flat("prism_chrome", (0.95, 0.95, 0.95), 0.05, metallic=1.0)
 M_SEA = flat("prism_sea", (0.02, 0.06, 0.09), 0.12)
 M_CHECKPOINT = glow("prism_checkpoint", (0.2, 1.0, 0.35), 1.5)
 M_FINISH = glow("prism_finish_text", (1.0, 0.72, 0.3), 12.0)
-M_TITLE = flat("prism_title", (0.92, 0.9, 0.86), 0.5)
+M_TITLE = flat("prism_title", (0.88, 0.86, 0.82), 0.5)
 M_CRATES = [flat(f"prism_crate_{i}", c, 0.3) for i, c in enumerate(
-    [(0.85, 0.1, 0.08), (0.1, 0.35, 0.9), (0.95, 0.75, 0.1), (0.1, 0.7, 0.3), (0.9, 0.9, 0.9)])]
+    [(0.85, 0.1, 0.08), (0.1, 0.35, 0.9), (0.9, 0.75, 0.1), (0.1, 0.7, 0.3), (0.85, 0.85, 0.85)])]
 
 # =============================================================================
 # entity helpers
@@ -195,9 +200,25 @@ def yaw_quat(deg):
 FACE_NEG_Z = yaw_quat(180.0)   # Text3D glyph face -> -Z, read by a camera looking +Z
 FACE_NEG_X = yaw_quat(-90.0)   # glyph face -> -X, read by a camera looking +X
 
-def emissive_light(e):
+LIGHTS = []   # (zone, name, rgb, largest emissive extent) for light_budget_check()
+MAX_EMISSIVE_EXTENT = 2.0   # uniform area sampling over a long strip lands most samples far from the shading point
+
+def zone():
+    return _folders[CUR[0]]
+
+def emissive_light(e, rgb, extent):
     add_render_flags(e, emissive_light=True)
+    LIGHTS.append((zone(), e[wa.NAME]["name"], rgb, extent))
     return e
+
+def cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+def glow_quad(name, center, normal, tangent, length, height, material, rgb):
+    """Single-sided emissive quad (2 triangles, no hidden faces): lit side along normal, length along tangent."""
+    e = ent(name, center, list(wa.mat_to_quat(tangent, normal, cross(tangent, normal))))
+    mesh(e, plane_params(length, height), material)
+    return emissive_light(e, rgb, max(length, height))
 
 def death_zone(name, lo, hi):
     size = (hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
@@ -336,7 +357,6 @@ def checkpoint(pad_name, priority, label):
     add_checkpoint(e, name_id(f"prism_cp_{label}"), priority=priority, spawn_offset=(sx / 2, 1.0, sz / 2))
     disc = ent(f"Checkpoint {priority} Disc", (cx, y + 0.02, cz))
     mesh(disc, ring_params(1.3, 1.0, 48, False), M_CHECKPOINT)
-    emissive_light(disc)
     CHECKPOINTS.append((priority, label, (cx, y + 1.0, cz)))
     return e
 
@@ -407,20 +427,22 @@ slab("Hall South Wall A", (HX0, HY0, HZ0 - T), (21.0, HY1, HZ0), M_HALL_WHITE)
 slab("Hall South Wall B", (27.0, HY0, HZ0 - T), (HX1, HY1, HZ0), M_HALL_WHITE)
 slab("Hall South Wall Sill", (21.0, HY0, HZ0 - T), (27.0, 35.0, HZ0), M_HALL_WHITE)
 slab("Hall South Wall Lintel", (21.0, 38.4, HZ0 - T), (27.0, HY1, HZ0), M_HALL_WHITE)
-# north wall, door x 35..41, y 28.4..33 into the tunnel
-slab("Hall North Wall A", (HX0, HY0, HZ1), (35.0, HY1, HZ1 + T), M_COBALT)
-slab("Hall North Wall B", (41.0, HY0, HZ1), (HX1, HY1, HZ1 + T), M_COBALT)
-slab("Hall North Wall Sill", (35.0, HY0, HZ1), (41.0, 28.4, HZ1 + T), M_COBALT)
-slab("Hall North Wall Lintel", (35.0, 33.0, HZ1), (41.0, HY1, HZ1 + T), M_COBALT)
-# east wall: four tall windows facing the sun
-WIN = [(53.0, 55.5), (60.0, 62.5), (67.0, 69.5), (74.0, 76.5)]
-slab("Hall East Sill", (HX1, HY0, HZ0 - T), (HX1 + T, 29.0, HZ1 + T), M_HALL_WHITE)
-slab("Hall East Head", (HX1, 37.0, HZ0 - T), (HX1 + T, HY1, HZ1 + T), M_HALL_WHITE)
+# north wall: a ball-sized mouth into the tunnel (track + rails, 1.8 m clear), so the neon barely reaches the hall
+DOOR_X0, DOOR_X1, DOOR_Y0, DOOR_Y1 = 36.1, 39.9, 28.4, 31.4
+slab("Hall North Wall A", (HX0, HY0, HZ1), (DOOR_X0, HY1, HZ1 + T), M_COBALT)
+slab("Hall North Wall B", (DOOR_X1, HY0, HZ1), (HX1, HY1, HZ1 + T), M_COBALT)
+slab("Hall North Wall Sill", (DOOR_X0, HY0, HZ1), (DOOR_X1, DOOR_Y0, HZ1 + T), M_COBALT)
+slab("Hall North Wall Lintel", (DOOR_X0, DOOR_Y1, HZ1), (DOOR_X1, HY1, HZ1 + T), M_COBALT)
+# east wall: four wide windows facing the sun; one bounce off small sun patches cannot light a room this size
+WIN = [(51.5, 56.0), (58.5, 63.0), (65.5, 70.0), (72.5, 77.0)]
+WIN_Y0, WIN_Y1 = 28.0, 38.5
+slab("Hall East Sill", (HX1, HY0, HZ0 - T), (HX1 + T, WIN_Y0, HZ1 + T), M_HALL_WHITE)
+slab("Hall East Head", (HX1, WIN_Y1, HZ0 - T), (HX1 + T, HY1, HZ1 + T), M_HALL_WHITE)
 edges = [HZ0 - T] + [v for w in WIN for v in w] + [HZ1 + T]
 for i in range(0, len(edges), 2):
-    slab(f"Hall East Pier {i // 2}", (HX1, 29.0, edges[i]), (HX1 + T, 37.0, edges[i + 1]), M_HALL_WHITE)
-# roof with two skylight slots
-SKY_SLOTS = [(58.0, 59.5), (70.0, 71.5)]
+    slab(f"Hall East Pier {i // 2}", (HX1, WIN_Y0, edges[i]), (HX1 + T, WIN_Y1, edges[i + 1]), M_HALL_WHITE)
+# roof with three skylight slots
+SKY_SLOTS = [(55.0, 58.5), (64.25, 67.75), (73.5, 77.0)]
 edges = [HZ0 - T] + [v for s in SKY_SLOTS for v in s] + [HZ1 + T]
 for i in range(0, len(edges), 2):
     slab(f"Hall Roof {i // 2}", (HX0 - T, HY1, edges[i]), (HX1 + T, HY1 + T, edges[i + 1]), M_HALL_WHITE)
@@ -462,17 +484,25 @@ add_reflection_probe(e, name_id("prism_probe_hall"), capture_offset=(0.0, 4.0, 0
 CUR[0] = folder("III Neon Gallery")
 TX0, TX1, TZ0, TZ1, TY0, TY1 = 34.0, 42.0, HZ1 + T, 125.0, 24.0, 33.0
 slab("Tunnel Foundation", (TX0 - T, -1.0, TZ0), (TX1 + T, TY0 - T, TZ1), M_STONE, physics=False)
-slab("Tunnel Mirror Pool", (TX0 - T, TY0 - T, TZ0), (TX1 + T, TY0, TZ1), M_MIRROR)
+slab("Tunnel Pool", (TX0 - T, TY0 - T, TZ0), (TX1 + T, TY0, TZ1), M_POOL)
 slab("Tunnel West Wall", (TX0 - T, TY0, TZ0), (TX0, TY1, TZ1), M_TUNNEL)
 slab("Tunnel East Wall", (TX1, TY0, TZ0), (TX1 + T, TY1, TZ1), M_TUNNEL)
 slab("Tunnel Ceiling", (TX0 - T, TY1, TZ0), (TX1 + T, TY1 + T, TZ1), M_TUNNEL)
-for side, x0, mat_hi, mat_lo in (("W", TX0, M_NEON_MAGENTA, M_NEON_CYAN), ("E", TX1 - 0.12, M_NEON_CYAN, M_NEON_MAGENTA)):
-    for tag, y, mat in (("High", 31.2, mat_hi), ("Low", 26.2, mat_lo)):
-        emissive_light(slab(f"Neon {side} {tag}", (x0, y, TZ0 + 0.5), (x0 + 0.12, y + 0.12, TZ1 - 0.5), mat, physics=False))
-    for i in range(7):
-        z = TZ0 + 3.0 + i * 6.0
-        mat = mat_hi if i % 2 == 0 else mat_lo
-        emissive_light(slab(f"Neon {side} Rib {i}", (x0, 26.5, z), (x0 + 0.12, 31.0, z + 0.12), mat, physics=False))
+# one hue per wall, tube segments of 1.6 m, unlit first stretch so the hall mouth does not look straight at them
+NEON_Z0, NEON_SEG, NEON_PITCH, NEON_H = TZ0 + 8.0, 1.6, 2.0, 0.12
+NEON_OFF = 0.02
+for side, x, nx, mat, rgb in (("W", TX0 + NEON_OFF, 1.0, M_NEON_MAGENTA, (1.0, 0.08, 0.75)),
+                              ("E", TX1 - NEON_OFF, -1.0, M_NEON_CYAN, (0.08, 0.8, 1.0))):
+    normal, along, up = (nx, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)
+    for tag, y in (("High", 31.25), ("Low", 26.25)):
+        i = 0
+        while NEON_Z0 + i * NEON_PITCH + NEON_SEG <= TZ1 - 0.5:
+            z = NEON_Z0 + i * NEON_PITCH + NEON_SEG / 2
+            glow_quad(f"Neon {side} {tag} {i}", (x, y, z), normal, along, NEON_SEG, NEON_H, mat, rgb)
+            i += 1
+    for i in range(5):
+        z = NEON_Z0 + 3.0 + i * 6.0
+        glow_quad(f"Neon {side} Rib {i}", (x, 28.75, z), normal, up, 1.6, NEON_H, mat, rgb)
 
 pad("T0 Landing", (38.0, 29.0, 88.0), (5.0, 5.0), M_GLOSS, walls="EW")
 link("H4 Exit", "T0 Landing", 3.0, M_HALL_WHITE)
@@ -493,7 +523,8 @@ PADS["T3 Exit"]["links"]["S"] = (3.0, False)
 PADS["T0 Landing"]["links"]["N"] = (3.0, False)
 
 soft = ent("Sweeper Softbox", (DISC_C[0], TY1 - 0.05, DISC_C[1]), face_dir(0.0, -1.0, 0.0))
-add_area_light(soft, color=(0.85, 0.8, 1.0), intensity=40.0 * K, half_width=1.6, half_height=1.6, draw_range=14.0)
+add_area_light(soft, color=(0.85, 0.8, 1.0), intensity=40.0 * K, half_width=1.0, half_height=1.0, draw_range=14.0)
+LIGHTS.append((zone(), "Sweeper Softbox", (0.85, 0.8, 1.0), 2.0))
 
 death_zone("Tunnel Pool Death Zone", (TX0, TY0 - 0.1, TZ0), (TX1, TY0 + 0.5, TZ1))
 e = ent("Tunnel Probe", ((TX0 + TX1) / 2, (TY0 + TY1) / 2, (TZ0 + TZ1) / 2))
@@ -545,9 +576,18 @@ for turn in range(int(SP_SWEEP // 360)):
         x, y, z = pts[k]
         proc(f"Spiral Rail Post {turn}.{k}", (x, y - RAIL_LIFT / 2, z), cylinder_params(0.05, RAIL_LIFT, 8), M_CHROME, physics=False)
 
-for i in range(11):
-    y = CY0 + 2.0 + i * 2.6
-    emissive_light(proc(f"Column Band {i}", (SP_C[0], y, SP_C[2]), cylinder_params(SP_IN - 0.04, 0.35, 48), M_BAND, physics=False))
+# bands as separate panels on the column face (between the column and the ramp's inner edge), so the far side
+# of the column is not one light whose triangles mostly face away from any shading point
+BAND_R, BAND_W, BAND_H, BAND_PANELS = SP_IN - 0.05, 0.9, 0.3, 8
+for i in range(7):
+    y = CY0 + 3.0 + i * 4.2
+    for k in range(BAND_PANELS):
+        a = 2.0 * math.pi * (k + 0.5 * (i % 2)) / BAND_PANELS
+        n = (math.cos(a), 0.0, math.sin(a))
+        glow_quad(f"Column Band {i}.{k}", (SP_C[0] + n[0] * BAND_R, y, SP_C[2] + n[2] * BAND_R), n, (-n[2], 0.0, n[0]),
+                  BAND_W, BAND_H, M_BAND, (1.0, 0.55, 0.18))
+assert math.hypot(BAND_R, BAND_W / 2) < SP_IN, "band panel corners would cut into the spiral ramp"
+assert BAND_R > (SP_IN - 0.08) * math.cos(math.pi / 48), "band panels would sink into the column facets"
 
 ramp("Spiral Feed", (38.0, 27.2, 124.5), (38.0, SP_TOP_Y, SP_C[2]), 4.0, M_TRACK)
 PADS["T3 Exit"]["links"]["N"] = (4.0, True)
@@ -557,7 +597,7 @@ checkpoint("T3 Exit", 5, "cavern")
 import random
 rng = random.Random(7)
 lanterns = 0
-while lanterns < 22:
+while lanterns < 12:
     a = rng.uniform(0.0, 2.0 * math.pi)
     r = rng.uniform(SP_OUT + 1.2, 12.5)
     x, z = SP_C[0] + math.cos(a) * r, SP_C[2] + math.sin(a) * r
@@ -570,11 +610,13 @@ while lanterns < 22:
     proc(f"Lantern Chain {lanterns}", (x, y + chain / 2, z), cylinder_params(0.025, chain, 6), M_CHAIN, physics=False)
     L = ent(f"Lantern {lanterns}", (x, y, z))
     add_sphere_light(L, color=(1.0, 0.62, 0.3), intensity=2.0 * 65536.0 * 20.0, radius=0.15, draw_range=14.0)
+    LIGHTS.append((zone(), f"Lantern {lanterns}", (1.0, 0.62, 0.3), 0.3))
     lanterns += 1
 
-for i, (color, radius, y, speed) in enumerate((((1.0, 0.15, 0.1), 11.0, 24.0, 0.12),
-                                                ((0.15, 1.0, 0.3), 10.0, 19.0, 0.10),
-                                                ((0.2, 0.35, 1.0), 11.5, 13.5, 0.14))):
+# one warm hue for the whole cavern: several saturated hues in range of every pixel break 1 spp light selection
+for i, (color, radius, y, speed) in enumerate((((1.0, 0.7, 0.45), 11.0, 24.0, 0.12),
+                                                ((1.0, 0.6, 0.3), 10.0, 19.0, 0.10),
+                                                ((1.0, 0.7, 0.45), 11.5, 13.5, 0.14))):
     start = (SP_C[0] + radius, y, SP_C[2])
     pts = []
     for j in range(8):
@@ -583,9 +625,11 @@ for i, (color, radius, y, speed) in enumerate((((1.0, 0.15, 0.1), 11.0, 24.0, 0.
     L = ent(f"Orbit Light {i}", start)
     add_sphere_light(L, color=color, intensity=60.0 * K, radius=0.3, draw_range=22.0)
     add_path_mover(L, pts, speed=speed * 8.0, loop_mode=LOOP_LOOP, mode=1)
+    LIGHTS.append((zone(), f"Orbit Light {i}", color, 0.6))
 
 exit_glow = ent("Cavern Exit Light", (38.0, 19.3, CZ1 - 0.05), face_dir(0.0, -0.4, -1.0))
-add_area_light(exit_glow, color=(0.55, 0.75, 1.0), intensity=30.0 * K, half_width=2.2, half_height=0.3, draw_range=16.0)
+add_area_light(exit_glow, color=(1.0, 0.85, 0.7), intensity=30.0 * K, half_width=1.0, half_height=0.3, draw_range=16.0)
+LIGHTS.append((zone(), "Cavern Exit Light", (1.0, 0.85, 0.7), 2.0))
 
 death_zone("Cavern Floor Death Zone", (CX0, CY0 - 0.1, CZ0), (CX1, CY0 + 0.5, CZ1))
 e = ent("Cavern Probe", ((CX0 + CX1) / 2, (CY0 + CY1) / 2, (CZ0 + CZ1) / 2))
@@ -709,10 +753,46 @@ def zfight_check(tol=1e-4):
         print("  Z-FIGHT:", h)
     return hits
 
+HUE_SATURATION_MIN = 0.35   # below this a light reads as white and costs no colour budget
+HUE_SAME_DEG = 25.0
+MAX_HUES_PER_ZONE = 2
+
+def hue_deg(rgb):
+    hi, lo = max(rgb), min(rgb)
+    if hi <= 0.0 or (hi - lo) / hi < HUE_SATURATION_MIN:
+        return None
+    r, g, b = rgb
+    d = hi - lo
+    h = ((g - b) / d) % 6.0 if hi == r else ((b - r) / d + 2.0 if hi == g else (r - g) / d + 4.0)
+    return h * 60.0
+
+def light_budget_check():
+    problems = []
+    zones = {}
+    for zone_name, name, rgb, extent in LIGHTS:
+        if extent > MAX_EMISSIVE_EXTENT + 1e-6:
+            problems.append(f"{name}: emissive extent {extent:.2f} m > {MAX_EMISSIVE_EXTENT}")
+        h = hue_deg(rgb)
+        if h is None:
+            continue
+        hues = zones.setdefault(zone_name, [])
+        if not any(min(abs(h - o), 360.0 - abs(h - o)) < HUE_SAME_DEG for o in hues):
+            hues.append(h)
+    for zone_name, hues in zones.items():
+        count = sum(1 for z, *_ in LIGHTS if z == zone_name)
+        print(f"  {zone_name:22s} lights {count:3d}  hues {[round(h) for h in hues]}")
+        if len(hues) > MAX_HUES_PER_ZONE:
+            problems.append(f"{zone_name}: {len(hues)} hues > {MAX_HUES_PER_ZONE}")
+    for p in problems:
+        print("  PROBLEM:", p)
+    assert not problems
+
 print("segments:")
 verify()
 print(f"z-fight check over {len(AABBS)} boxes:")
 zfight_check()
+print("light budget:")
+light_budget_check()
 
 if len(sys.argv) > 2 and sys.argv[1] == "--test-spawn":
     label = sys.argv[2]
