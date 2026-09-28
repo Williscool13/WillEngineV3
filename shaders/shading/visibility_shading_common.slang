@@ -7,6 +7,7 @@ import instancing_interop;
 import push_constant_interop;
 import shader_functions;
 import bindless_declarations;
+import material_uv_common;
 
 public struct ShadingInputs
 {
@@ -15,6 +16,10 @@ public struct ShadingInputs
     public InterpolatedVertex interp;
     public float2 uvDdx;
     public float2 uvDdy;
+    public float3 normalOS;
+    // Screen derivatives of objPos, scaled like uvDdx/uvDdy
+    public float3 objPosDdx;
+    public float3 objPosDdy;
     public float2 velocity;
     public float viewZDelta;
     public float4x4 mv;
@@ -28,6 +33,88 @@ public struct ReconstructedShadingData
     public Primitive primitive;
     public Model model;
     public float3 shadowOriginOffsetWS;
+}
+
+/** Texture coordinate sets for one pixel: the mesh UV, or up to 3 weighted triplanar axes. Frames are view space. */
+public struct SurfaceUVLayers
+{
+    public uint count;
+    public float weight[3];
+    public float2 uv[3];
+    public float2 ddx[3];
+    public float2 ddy[3];
+    public float3 tangentVS[3];
+    public float3 bitangentVS[3];
+}
+
+/**
+ * @param N view-space vertex normal (after any two-sided flip).
+ * @param T, B view-space tangent frame of the mesh UV.
+ */
+public SurfaceUVLayers BuildSurfaceUVLayers(MaterialProperties material, ShadingInputs si, float4x4 modelMatrix, float3 N, float3 T, float3 B)
+{
+    SurfaceUVLayers layers;
+    if (material.uvMode != MATERIAL_UV_TRIPLANAR) {
+        layers.count = 1u;
+        layers.weight[0] = 1.0;
+        layers.uv[0] = si.interp.uv;
+        layers.ddx[0] = si.uvDdx;
+        layers.ddy[0] = si.uvDdy;
+        layers.tangentVS[0] = T;
+        layers.bitangentVS[0] = B;
+        return layers;
+    }
+
+    float3 scale = ModelScale(modelMatrix);
+    float3 p = si.objPos * scale;
+    float3 dpdx = si.objPosDdx * scale;
+    float3 dpdy = si.objPosDdy * scale;
+    float3 w = TriplanarWeights(si.normalOS);
+    float3x3 mv3 = (float3x3)si.mv;
+    layers.count = 0u;
+    for (uint axis = 0u; axis < 3u; axis++) {
+        if (w[axis] <= 0.0) {
+            continue;
+        }
+        uint i = layers.count++;
+        layers.weight[i] = w[axis];
+        layers.uv[i] = TriplanarAxis(p, si.normalOS, axis);
+        layers.ddx[i] = TriplanarAxis(dpdx, si.normalOS, axis);
+        layers.ddy[i] = TriplanarAxis(dpdy, si.normalOS, axis);
+        float3 tangentOS;
+        float3 bitangentOS;
+        TriplanarAxisFrame(si.normalOS, axis, tangentOS, bitangentOS);
+        float3 t = mul(mv3, tangentOS);
+        float3 b = mul(mv3, bitangentOS);
+        layers.tangentVS[i] = normalize(t - N * dot(N, t));
+        layers.bitangentVS[i] = normalize(b - N * dot(N, b));
+    }
+    return layers;
+}
+
+public float4 SampleSurfaceLayers(SurfaceUVLayers layers, int imageIndex, int samplerIndex, float4 uvTransform)
+{
+    float4 result = float4(0.0);
+    for (uint i = 0u; i < layers.count; i++) {
+        result += layers.weight[i] * assetTextures[NonUniformResourceIndex(imageIndex)].SampleGrad(assetSamplers[NonUniformResourceIndex(samplerIndex)], layers.uv[i] * uvTransform.xy + uvTransform.zw, layers.ddx[i] * uvTransform.xy, layers.ddy[i] * uvTransform.xy);
+    }
+    return result;
+}
+
+/** Tangent-space normal map per layer, blended in view space. */
+public float3 SampleSurfaceLayersNormal(SurfaceUVLayers layers, int imageIndex, int samplerIndex, float4 uvTransform, float normalScale, float3 N)
+{
+    float3 blended = float3(0.0);
+    for (uint i = 0u; i < layers.count; i++) {
+        float2 normalRG = assetTextures[NonUniformResourceIndex(imageIndex)].SampleGrad(assetSamplers[NonUniformResourceIndex(samplerIndex)], layers.uv[i] * uvTransform.xy + uvTransform.zw, layers.ddx[i] * uvTransform.xy, layers.ddy[i] * uvTransform.xy).xy;
+        float3 tsNormal;
+        tsNormal.xy = normalRG * 2.0 - 1.0;
+        tsNormal.z = sqrt(saturate(1.0 - dot(tsNormal.xy, tsNormal.xy)));
+        tsNormal.xy *= normalScale;
+        tsNormal = normalize(tsNormal);
+        blended += layers.weight[i] * normalize(tsNormal.x * layers.tangentVS[i] + tsNormal.y * layers.bitangentVS[i] + tsNormal.z * N);
+    }
+    return normalize(blended);
 }
 
 struct BarycentricDeriv
@@ -169,6 +256,9 @@ public ReconstructedShadingData ReconstructShadingInputs(
     }
     result.shadingInputs.uvDdx = (baryDeriv.m_ddx.x * uv0 + baryDeriv.m_ddx.y * uv1 + baryDeriv.m_ddx.z * uv2) * sceneData->uvDerivativeScale;
     result.shadingInputs.uvDdy = (baryDeriv.m_ddy.x * uv0 + baryDeriv.m_ddy.y * uv1 + baryDeriv.m_ddy.z * uv2) * sceneData->uvDerivativeScale;
+    result.shadingInputs.objPosDdx = (baryDeriv.m_ddx.x * objPos0 + baryDeriv.m_ddx.y * objPos1 + baryDeriv.m_ddx.z * objPos2) * sceneData->uvDerivativeScale;
+    result.shadingInputs.objPosDdy = (baryDeriv.m_ddy.x * objPos0 + baryDeriv.m_ddy.y * objPos1 + baryDeriv.m_ddy.z * objPos2) * sceneData->uvDerivativeScale;
+    result.shadingInputs.normalOS = normalize(bary.x * DecodeNormal(vertexAttribute0) + bary.y * DecodeNormal(vertexAttribute1) + bary.z * DecodeNormal(vertexAttribute2));
 
     float4 currClip = mul(sceneData->viewProj, mul(result.model.modelMatrix, float4(result.shadingInputs.objPos, 1.0)));
     float4 prevClip = mul(sceneData->prevViewProj, mul(result.model.prevModelMatrix, float4(result.shadingInputs.objPos, 1.0)));

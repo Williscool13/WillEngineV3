@@ -1183,6 +1183,15 @@ void WillEngine::EditorImgui()
                     bool mips = true;
                     bool flipY = true;
                     DXGI_FORMAT format = DXGI_FORMAT_BC7_UNORM_SRGB;
+                    const Core::InlineString<256> stem(entry.sourcePath.Stem());
+                    constexpr std::string_view NORMAL_TOKENS[] = {"_nor", "_nrm", "_normal"};
+                    constexpr std::string_view LINEAR_TOKENS[] = {"_arm", "_orm", "_rough", "_metal", "_ao", "_disp", "_height", "_mask"};
+                    for (const std::string_view token : LINEAR_TOKENS) {
+                        if (stem.Contains(token, Core::CaseSensitivity::Insensitive)) { format = DXGI_FORMAT_BC7_UNORM; }
+                    }
+                    for (const std::string_view token : NORMAL_TOKENS) {
+                        if (stem.Contains(token, Core::CaseSensitivity::Insensitive)) { format = DXGI_FORMAT_BC5_UNORM; }
+                    }
                     if (auto header = ReadWTextureHeaderAnyVersion(output); header && header->genSource[0] != '\0') {
                         format = static_cast<DXGI_FORMAT>(header->genFormat);
                         mips = header->bGenMips;

@@ -38,6 +38,22 @@ struct PostProcessContext
     PipelineManager* pipelines;
 };
 
+struct PaniniParams
+{
+    float strength{0.0f};
+    float b{0.0f};
+    float verticalFocalLength{0.0f};
+};
+
+/** @returns the Panini constants PPFinalize uses; strength 0 is rectilinear. */
+PaniniParams ComputePaniniParams(const Core::PostProcessConfiguration& config, float fovRadians, float aspect);
+
+/**
+ * Maps a displayed-image UV to the rectilinear source UV the finalize pass samples there.
+ * @return false if that display point shows no source pixel.
+ */
+bool PaniniDisplayToSourceUv(const PaniniParams& panini, float aspect, float& u, float& v);
+
 /** @returns the average scene luminance that meters to ev100 (ISO 100, K = 12.5). */
 float EV100ToLuminance(float ev100);
 

@@ -20,6 +20,7 @@ import reflection_probe_interop;
 import reflection_probe_common;
 import reflection_interop;
 import rt_alpha_test_common;
+import material_uv_common;
 
 public static const float HIT_SHADING_TEXTURE_LOD = 3.0;
 
@@ -46,7 +47,7 @@ public float3 DecodeHitNormal(ReflectionShadePushConstant pc, Instance instance,
     return DecodeHitNormalImpl(pc.primitiveBuffer, pc.indexBuffer, pc.vertexAttrBuffer, pc.modelBuffer, instance, triangleIndex, barycentrics, bMirror);
 }
 
-public float3 DecodeHitDiffuseEmissive(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, out float3 emissive)
+public float3 DecodeHitDiffuseEmissive(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition, out float3 emissive)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
     uint firstIndex = primitive.indexOffset + triangleIndex * 3;
@@ -54,10 +55,11 @@ public float3 DecodeHitDiffuseEmissive(DDGIProbeTracePushConstant pc, Instance i
     VertexAttribute a1 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 1]];
     VertexAttribute a2 = pc.vertexAttrBuffer[pc.indexBuffer[firstIndex + 2]];
     float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
-    float2 uv = bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2);
     float4 vertexColor = bary.x * DecodeColor(a0) + bary.y * DecodeColor(a1) + bary.z * DecodeColor(a2);
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    float3 normalOS = bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2);
+    float2 uv = MaterialBaseUV(material, bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2), MetricObjectPosition(pc.modelBuffer[instance.modelIndex].modelMatrix, worldPosition), normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
@@ -226,6 +228,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS)) * (bMirror ? -1.0 : 1.0);
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
@@ -352,6 +355,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
     float3 N = normalize(mul(Adjugate((float3x3)model.modelMatrix), normalOS)) * (bMirror ? -1.0 : 1.0);
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
@@ -506,6 +510,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
     float3 worldPosition = InterpolatePosition(bary, p0, p1, p2, model.modelMatrix, primitive.boundingBoxMin, primitive.boundingBoxMax - primitive.boundingBoxMin);
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;

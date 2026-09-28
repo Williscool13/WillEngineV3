@@ -46,7 +46,13 @@ MaterialID HashMaterial(const Material& m)
     key.fragmentShaderID = m.fragmentShader.id;
     key.lightingShaderID = m.lightingShader.id;
 
-    return MaterialID(Hash(&key, sizeof(StableKey)));
+    // Folded in only when set so existing (mesh UV) materials keep their IDs
+    const uint64_t hash = Hash(&key, sizeof(StableKey));
+    if (m.props.uvMode == MATERIAL_UV_MESH) {
+        return MaterialID(hash);
+    }
+    const uint64_t withMode[2] = {hash, m.props.uvMode};
+    return MaterialID(Hash(withMode, sizeof(withMode)));
 }
 
 void SerializeMaterial(const Material& mat, TextWriter& w)
@@ -71,6 +77,7 @@ void SerializeMaterial(const Material& mat, TextWriter& w)
     w.Key("emissiveFactor", p.emissiveFactor);
     w.Key("alphaProperties", p.alphaProperties);
     w.Key("physicalProperties", p.physicalProperties);
+    w.KeyOpt("uvMode", p.uvMode, MATERIAL_UV_MESH);
 
     w.Count("samplers", 6);
     for (int32_t i = 0; i < 6; ++i) {
@@ -111,6 +118,7 @@ Material DeserializeMaterial(const TextReader& r, const Core::Path& sourcePath)
     p.emissiveFactor = r.Vec4("emissiveFactor");
     p.alphaProperties = r.Vec4("alphaProperties");
     p.physicalProperties = r.Vec4("physicalProperties");
+    p.uvMode = r.UInt("uvMode", MATERIAL_UV_MESH);
 
     // Runtime properties
     p.textureImageIndices = {-1, -1, -1, -1};

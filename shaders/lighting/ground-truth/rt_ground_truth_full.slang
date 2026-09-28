@@ -12,6 +12,7 @@ import pbr_functions;
 import packing_functions;
 import random_common;
 import rt_alpha_test_common;
+import material_uv_common;
 
 static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthGIPushConstant pc)
 {
@@ -103,7 +104,7 @@ struct GTFullSurface
 };
 
 /** Triangle fetch for bounce vertices (same chain as the DDGI trace); pulls full material for specular bounces. */
-static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -119,6 +120,7 @@ static GTFullSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance in
 
     Model model = pc.modelBuffer[instance.modelIndex];
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
 
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
@@ -465,7 +467,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
 
                 float3 hitPosition = rayOrigin + rayDir * segmentT;
                 Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
-                GTFullSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+                GTFullSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitPosition);
                 float3 shadingN = dot(surface.normal, -rayDir) < 0.0 ? -surface.normal : surface.normal;
                 float3 Vnext = -rayDir;
                 float3 hitOrigin = OffsetHitRayOrigin(hitPosition, shadingN);
@@ -600,7 +602,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
         float hitT = segmentT;
         float3 hitPosition = ray.Origin + bs.direction * hitT;
         Instance instance = pc.instanceBuffer[q.CommittedInstanceID()];
-        GTFullSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+        GTFullSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitPosition);
 
         // Two-sided shading: face the geometric normal toward the incoming ray so specular chains hitting a back face keep going instead of terminating.
         float3 shadingN = dot(surface.normal, -bs.direction) < 0.0 ? -surface.normal : surface.normal;

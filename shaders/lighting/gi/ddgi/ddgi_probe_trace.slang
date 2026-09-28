@@ -91,7 +91,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
                     if (RadianceCacheRadianceShaded(packedRadiance)) {
                         float3 hitEmissive;
-                        float3 hitDiffuseColor = DecodeHitDiffuseEmissive(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitEmissive);
+                        float3 hitDiffuseColor = DecodeHitDiffuseEmissive(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitWorldPos, hitEmissive);
                         radiance = RadianceCacheUnpackRadiance(packedRadiance) * hitDiffuseColor + hitEmissive;
                         bCacheRead = true;
                     }

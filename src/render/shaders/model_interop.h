@@ -147,7 +147,7 @@ SHADER_PUBLIC struct MaterialProperties
 {
     SHADER_PUBLIC uint32_t shadingBucketIndex;
     SHADER_PUBLIC uint32_t lightingBucketIndex;
-    SHADER_PUBLIC uint32_t padding1;
+    SHADER_PUBLIC uint32_t uvMode; // MATERIAL_UV_*
     SHADER_PUBLIC uint32_t padding2;
 
     // Base PBR properties
@@ -177,6 +177,10 @@ SHADER_PUBLIC struct MaterialProperties
 SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_ALPHA_SOLID = 0;
 SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_ALPHA_BLEND = 1;
 SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_ALPHA_CUTOUT = 2;
+
+// MaterialProperties.uvMode. TRIPLANAR projects object-space metres (entity scale kept) along the object axes.
+SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_UV_MESH = 0;
+SHADER_PUBLIC SHADER_CONST uint32_t MATERIAL_UV_TRIPLANAR = 1;
 
 SHADER_PUBLIC SHADER_CONST uint32_t DEAD_SLOT_PRIMITIVE_INDEX = 0xFFFFFFFFu;
 

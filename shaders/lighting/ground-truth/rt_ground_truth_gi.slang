@@ -12,6 +12,7 @@ import pbr_functions;
 import packing_functions;
 import random_common;
 import rt_alpha_test_common;
+import material_uv_common;
 
 static RTAlphaTestBuffers GTAlphaBuffers(RTGroundTruthGIPushConstant pc)
 {
@@ -56,7 +57,7 @@ struct GTSurface
 };
 
 /** Indices are global (rebased at upload). */
-static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -73,6 +74,7 @@ static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instan
     Model model = pc.modelBuffer[instance.modelIndex];
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
@@ -380,7 +382,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
         float hitT = q.CommittedRayT();
         float3 hitPosition = origin + direction * hitT;
-        GTSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics());
+        GTSurface surface = FetchHitSurface(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), hitPosition);
         if (bMirror) {
             surface.normal = -surface.normal;
         }

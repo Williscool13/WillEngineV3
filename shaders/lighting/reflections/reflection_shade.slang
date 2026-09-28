@@ -19,6 +19,7 @@ import reflection_probe_common;
 import random_common;
 import binning_common;
 import rt_alpha_test_common;
+import material_uv_common;
 import instance_mask_interop;
 
 import bindless_declarations;
@@ -27,7 +28,8 @@ import bindless_declarations;
 static void ResolveCutoutHit(ReflectionShadePushConstant pc, float3 rayOrigin, inout ReflectionHitDescriptor hit)
 {
     RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
-    if (RTAlphaTestPasses(alphaBuffers, hit.instanceID, hit.primIndex, hit.bary)) {
+    float3 metricPosOS = MetricObjectPosition(pc.modelBuffer[pc.instanceBuffer[hit.instanceID].modelIndex].modelMatrix, rayOrigin + hit.rayDir * hit.hitT);
+    if (RTAlphaTestPasses(alphaBuffers, hit.instanceID, hit.primIndex, hit.bary, metricPosOS)) {
         return;
     }
 

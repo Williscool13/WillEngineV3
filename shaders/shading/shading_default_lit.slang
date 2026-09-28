@@ -41,48 +41,32 @@ void ComputeShadingDefaultLit(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThrea
     float3 N = shadingNormal;
     float3 B = cross(N, T) * shadingInputs.interp.tangentSign;
 
+    SurfaceUVLayers layers = BuildSurfaceUVLayers(material, shadingInputs, data.model.modelMatrix, N, T, B);
+
     // Albedo
-    float2 colorUV = shadingInputs.interp.uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
     float4 albedo = material.colorFactor * shadingInputs.interp.color;
     if (material.textureImageIndices.x >= 0) {
-        float2 ddx = shadingInputs.uvDdx * material.colorUvTransform.xy;
-        float2 ddy = shadingInputs.uvDdy * material.colorUvTransform.xy;
-        albedo *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.x)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.x)], colorUV, ddx, ddy);
+        albedo *= SampleSurfaceLayers(layers, material.textureImageIndices.x, material.textureSamplerIndices.x, material.colorUvTransform);
     }
 
     float metallic  = material.metalRoughFactors.x;
     float roughness = material.metalRoughFactors.y;
     if (material.textureImageIndices.y >= 0) {
-        float2 mrUV = shadingInputs.interp.uv * material.metalRoughUvTransform.xy + material.metalRoughUvTransform.zw;
-        float2 ddxM = shadingInputs.uvDdx * material.metalRoughUvTransform.xy;
-        float2 ddyM = shadingInputs.uvDdy * material.metalRoughUvTransform.xy;
         // glTF packs roughness in G and metalness in B.
-        float4 mr = assetTextures[NonUniformResourceIndex(material.textureImageIndices.y)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.y)], mrUV, ddxM, ddyM);
+        float4 mr = SampleSurfaceLayers(layers, material.textureImageIndices.y, material.textureSamplerIndices.y, material.metalRoughUvTransform);
         roughness *= mr.g;
         metallic *= mr.b;
     }
 
     // Normal map
     if (material.textureImageIndices.z >= 0) {
-        float2 normalUV = shadingInputs.interp.uv * material.normalUvTransform.xy + material.normalUvTransform.zw;
-        float2 ddxN = shadingInputs.uvDdx * material.normalUvTransform.xy;
-        float2 ddyN = shadingInputs.uvDdy * material.normalUvTransform.xy;
-        float2 normalRG = assetTextures[NonUniformResourceIndex(material.textureImageIndices.z)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.z)], normalUV, ddxN, ddyN).xy;
-        float3 tsNormal;
-        tsNormal.xy = normalRG * 2.0 - 1.0;
-        tsNormal.z  = sqrt(saturate(1.0 - dot(tsNormal.xy, tsNormal.xy)));
-        tsNormal.xy *= material.physicalProperties.z; // normal scale
-        tsNormal = normalize(tsNormal);
-        shadingNormal = normalize(tsNormal.x * T + tsNormal.y * B + tsNormal.z * N);
+        shadingNormal = SampleSurfaceLayersNormal(layers, material.textureImageIndices.z, material.textureSamplerIndices.z, material.normalUvTransform, material.physicalProperties.z, N);
     }
 
     // Emissive
     float3 emissiveColor = material.emissiveFactor.rgb * material.emissiveFactor.w;
     if (material.textureImageIndices.w >= 0) {
-        float2 emissiveUV = shadingInputs.interp.uv * material.emissiveUvTransform.xy + material.emissiveUvTransform.zw;
-        float2 ddx = shadingInputs.uvDdx * material.emissiveUvTransform.xy;
-        float2 ddy = shadingInputs.uvDdy * material.emissiveUvTransform.xy;
-        emissiveColor *= assetTextures[NonUniformResourceIndex(material.textureImageIndices.w)].SampleGrad(assetSamplers[NonUniformResourceIndex(material.textureSamplerIndices.w)], emissiveUV, ddx, ddy).rgb;
+        emissiveColor *= SampleSurfaceLayers(layers, material.textureImageIndices.w, material.textureSamplerIndices.w, material.emissiveUvTransform).rgb;
     }
 
     uint4 gbufferOne = uint4(

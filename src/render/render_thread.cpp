@@ -42,6 +42,7 @@
 #include "engine/logging/engine_log.h"
 #include "pipelines/pipeline_manager.h"
 #include "render-view/render_view_helpers.h"
+#include "post-processing/post_processing.h"
 
 #if WILL_EDITOR
 #include "editor/renderer/debug_readback_buffer.h"
@@ -51,6 +52,14 @@
 
 namespace Render
 {
+static bool DisplayUvToRenderPixel(float u, float v, const PaniniParams& panini, float aspect, Core::Array<uint32_t, 2> renderExtent, Core::Array<uint32_t, 2>& outPixel)
+{
+    if (!PaniniDisplayToSourceUv(panini, aspect, u, v)) { return false; }
+    outPixel[0] = std::min(renderExtent[0] - 1, static_cast<uint32_t>(u * static_cast<float>(renderExtent[0])));
+    outPixel[1] = std::min(renderExtent[1] - 1, static_cast<uint32_t>(v * static_cast<float>(renderExtent[1])));
+    return true;
+}
+
 RenderThread::RenderThread() = default;
 
 RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* engineRenderSynchronization, enki::TaskScheduler* scheduler,
@@ -447,6 +456,11 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
     Core::Array<uint32_t, 2> renderExtent = renderExtents->GetScaledExtent();
     Core::Array<uint32_t, 2> outputExtent = renderExtents->GetViewportExtent();
+
+    const float displayAspect = static_cast<float>(outputExtent[0]) / static_cast<float>(outputExtent[1]);
+    const PaniniParams displayPanini = viewFamily.debugResourceName.IsEmpty()
+        ? ComputePaniniParams(viewFamily.postProcessConfig, viewFamily.mainView.currentViewData.fovRadians, displayAspect)
+        : PaniniParams{};
 
     // For non-TAAU AA passes
     Core::Array<uint32_t, 2> postAaExtent = renderExtent;
@@ -1036,10 +1050,14 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
 
 
 #if WILL_EDITOR
+        Core::Array<uint32_t, 2> cursorPixel{};
         if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent[0] &&
-            frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1]) {
-            debugCursorReadback.pixel[0] = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * renderExtent[0] / static_cast<float>(outputExtent[0]))));
-            debugCursorReadback.pixel[1] = std::min(renderExtent[1] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * renderExtent[1] / static_cast<float>(outputExtent[1]))));
+            frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1] &&
+            DisplayUvToRenderPixel((static_cast<float>(frameBuffer.currentMousePosition[0]) + 0.5f) / static_cast<float>(outputExtent[0]),
+                                   (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent[1]),
+                                   displayPanini, displayAspect, renderExtent, cursorPixel)) {
+            debugCursorReadback.pixel[0] = cursorPixel[0];
+            debugCursorReadback.pixel[1] = cursorPixel[1];
             if (GPU_STATS_ENABLED) {
                 if (frameBuffer.debug.bWorldGridCursorCell && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin) {
                     SetupDebugWorldGridCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
@@ -1053,9 +1071,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         }
 
         if (frameBuffer.debug.pickRequestId != 0u) {
-            const uint32_t pickX = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::clamp(frameBuffer.debug.pickU, 0.0f, 1.0f) * static_cast<float>(renderExtent[0])));
-            const uint32_t pickY = std::min(renderExtent[1] - 1, static_cast<uint32_t>((1.0f - std::clamp(frameBuffer.debug.pickV, 0.0f, 1.0f)) * static_cast<float>(renderExtent[1])));
-            SetupDebugPickPixelPass(*renderGraph, pipelineManager, 0, targets.visibility, targets.depthCopy, renderExtent, {pickX, pickY}, frameBuffer.debug.pickRequestId);
+            Core::Array<uint32_t, 2> pickPixel = renderExtent;
+            DisplayUvToRenderPixel(std::clamp(frameBuffer.debug.pickU, 0.0f, 1.0f), 1.0f - std::clamp(frameBuffer.debug.pickV, 0.0f, 1.0f), displayPanini, displayAspect, renderExtent, pickPixel);
+            SetupDebugPickPixelPass(*renderGraph, pipelineManager, 0, targets.visibility, targets.depthCopy, renderExtent, pickPixel, frameBuffer.debug.pickRequestId);
         }
         resourceManager->debugReadback.ScheduleCopies(*renderGraph, "debug_readback_buffer"_sid);
 
@@ -1292,14 +1310,20 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     }
 
 #if WILL_EDITOR
-    const uint32_t scaledMouseX = std::min(renderExtent[0] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[0]) * renderExtent[0] / static_cast<float>(outputExtent[0]))));
-    const uint32_t scaledMouseY = std::min(renderExtent[1] - 1, static_cast<uint32_t>(std::lround(static_cast<float>(frameBuffer.currentMousePosition[1]) * renderExtent[1] / static_cast<float>(outputExtent[1]))));
     if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent[0] &&
         frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1]) {
+        Core::Array<uint32_t, 2> mousePixel{};
+        const bool bMouseOnSource = DisplayUvToRenderPixel((static_cast<float>(frameBuffer.currentMousePosition[0]) + 0.5f) / static_cast<float>(outputExtent[0]),
+                                                           (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent[1]),
+                                                           displayPanini, displayAspect, renderExtent, mousePixel);
         RenderPass& copyStableId = renderGraph->AddPass("Copy Stable ID"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
         copyStableId.ReadCopyImage("stable_id"_sid);
         copyStableId.WriteTransferBuffer("readback_buffer"_sid);
-        copyStableId.Execute([&, mouseX = scaledMouseX, mouseY = scaledMouseY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        copyStableId.Execute([&, bMouseOnSource, mouseX = mousePixel[0], mouseY = mousePixel[1]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            if (!bMouseOnSource) {
+                vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle("readback_buffer"_sid), offsetof(ReadbackStruct, selectedStableId), sizeof(uint64_t), 0u);
+                return;
+            }
             VkBufferImageCopy region{};
             region.bufferOffset = offsetof(ReadbackStruct, selectedStableId);
             region.bufferRowLength = 0;

@@ -734,6 +734,46 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
     return input;
 }
 
+PaniniParams ComputePaniniParams(const Core::PostProcessConfiguration& config, float fovRadians, float aspect)
+{
+    PaniniParams panini{};
+    panini.strength = config.bPaniniEnabled ? std::clamp(config.paniniStrength, 0.0f, 1.0f) : 0.0f;
+    if (panini.strength > 0.0f) {
+        const float d = panini.strength;
+        const float horizontalFov = 2.0f * std::atan(std::tan(fovRadians * 0.5f) * aspect);
+        const float f = std::tan(horizontalFov * 0.5f);
+        panini.b = f * (d + 1.0f) / (d * std::sqrt(1.0f + f * f) + 1.0f);
+        panini.verticalFocalLength = 1.0f / std::tan(fovRadians * 0.5f);
+    }
+    return panini;
+}
+
+// Mirrors the remap at the top of post_process_finalize.slang
+bool PaniniDisplayToSourceUv(const PaniniParams& panini, float aspect, float& u, float& v)
+{
+    if (panini.strength <= 0.0f) { return true; }
+
+    const float d = panini.strength;
+    const float d2 = d * d;
+    const float tcX = (u * 2.0f - 1.0f) * panini.b;
+    const float tcY = (v * 2.0f - 1.0f) / aspect * panini.b;
+
+    const float k = tcX * tcX / ((d + 1.0f) * (d + 1.0f));
+    const float discriminant = k * k * d2 - (k + 1.0f) * (k * d2 - 1.0f);
+    if (discriminant < 0.0f) { return false; }
+
+    const float cosPhi = (-k * d + std::sqrt(discriminant)) / (k + 1.0f);
+    const float s = (d + 1.0f) / (d + cosPhi);
+    const float tanTheta = tcY / s;
+
+    float sinPhi = std::sqrt(std::max(0.0f, 1.0f - cosPhi * cosPhi));
+    if (tcX < 0.0f) { sinPhi = -sinPhi; }
+
+    u =(sinPhi / cosPhi / aspect * panini.verticalFocalLength) * 0.5f + 0.5f;
+    v = (tanTheta / cosPhi * panini.verticalFocalLength) * 0.5f + 0.5f;
+    return u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f;
+}
+
 StringID PPFinalize(PostProcessContext& ctx, StringID input)
 {
     RenderGraph& graph = ctx.graph;
@@ -783,15 +823,10 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input)
     constants.vignetteRoundness = std::clamp(config.vignetteRoundness, 0.0f, 1.0f);
     constants.chromaticAberrationStrength = config.bChromaticAberrationEnabled ? std::max(config.chromaticAberrationStrength, 0.0f) : 0.0f;
 
-    const float paniniD = config.bPaniniEnabled ? std::clamp(config.paniniStrength, 0.0f, 1.0f) : 0.0f;
-    constants.paniniStrength = paniniD;
-    if (paniniD > 0.0f) {
-        float fov = ctx.view.mainView.currentViewData.fovRadians;
-        float horizontalFov = 2.0f * std::atan(std::tan(fov * 0.5f) * aspect);
-        float f = std::tan(horizontalFov * 0.5f);
-        constants.paniniB = f * (paniniD + 1.0f) / (paniniD * std::sqrt(1.0f + f * f) + 1.0f);
-        constants.paniniVerticalFocalLength = 1.0f / std::tan(fov * 0.5f);
-    }
+    const PaniniParams panini = ComputePaniniParams(config, ctx.view.mainView.currentViewData.fovRadians, aspect);
+    constants.paniniStrength = panini.strength;
+    constants.paniniB = panini.b;
+    constants.paniniVerticalFocalLength = panini.verticalFocalLength;
 
     constants.flags = (bBloomEnabled ? POST_PROCESS_FINALIZE_FLAG_BLOOM : 0u) |
                       (bGradingActive ? POST_PROCESS_FINALIZE_FLAG_GRADING : 0u);

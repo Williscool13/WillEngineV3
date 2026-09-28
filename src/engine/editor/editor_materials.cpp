@@ -797,6 +797,16 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
     changed |= ImGui::SliderFloat("Normal Intensity", &props.physicalProperties.z, 0.0f, 2.0f);
     changed |= ImGui::SliderFloat("Occlusion Strength", &props.physicalProperties.w, 0.0f, 1.0f);
 
+    const char* uvModes[] = {"Mesh UV", "Triplanar"};
+    int uvMode = static_cast<int>(props.uvMode);
+    if (ImGui::Combo("UV Mode", &uvMode, uvModes, 2)) {
+        props.uvMode = static_cast<uint32_t>(uvMode);
+        changed = true;
+    }
+    if (props.uvMode == MATERIAL_UV_TRIPLANAR) {
+        ImGui::TextDisabled("Object space, 1 UV per metre; UV scale = tiles per metre");
+    }
+
     if (ImGui::TreeNode("UV Transforms")) {
         ImGui::SeparatorText("Color");
         changed |= ImGui::DragFloat2("Scale##color_uv", &props.colorUvTransform.x, 0.01f);

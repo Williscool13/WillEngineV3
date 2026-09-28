@@ -12,6 +12,7 @@ import pbr_functions;
 import shader_constants;
 import random_common;
 import hit_shading_common;
+import material_uv_common;
 import radiance_cache_hash_common;
 import radiance_cache_interop;
 import gi_gather_common;
@@ -38,7 +39,7 @@ struct GatherHitSurface {
     bool bEmissive;
 };
 
-static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics)
+static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, float3 worldPosition)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
     uint firstIndex = primitive.indexOffset + triangleIndex * 3;
@@ -52,6 +53,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
     Model model = pc.modelBuffer[instance.modelIndex];
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
+    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
@@ -183,7 +185,7 @@ void ComputeGIGatherShade(uniform GIGatherPushConstant pc, uint3 dtid: SV_Dispat
                 hitT = rec.hitT;
                 Instance instance = pc.instanceBuffer[rec.instanceID];
                 float3 hitWorldPos = rayOrigin + direction * hitT;
-                GatherHitSurface hit = DecodeGatherHit(pc, instance, rec.primIndex & ~GI_GATHER_HIT_FRONT_FACE_BIT, rec.bary);
+                GatherHitSurface hit = DecodeGatherHit(pc, instance, rec.primIndex & ~GI_GATHER_HIT_FRONT_FACE_BIT, rec.bary, hitWorldPos);
                 bool bFrontFace = (rec.primIndex & GI_GATHER_HIT_FRONT_FACE_BIT) != 0u;
                 if (IsTwoSidedBackHit(pc.materialBuffer, instance, bFrontFace)) {
                     hit.normal = -hit.normal;
