@@ -139,6 +139,9 @@ struct StaircaseParams
 struct BoxParams
 {
     float sizeX{1.0f}, sizeY{1.0f}, sizeZ{1.0f};
+    float chamferX[4]{};
+    float chamferY[4]{};
+    float chamferZ[4]{};
 };
 
 struct CylinderParams

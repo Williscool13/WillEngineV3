@@ -93,6 +93,9 @@ void Component::SerializeProceduralShape(const Engine::ProceduralParams& params,
             w.Key("sizeX", p.sizeX);
             w.Key("sizeY", p.sizeY);
             w.Key("sizeZ", p.sizeZ);
+            w.KeyOpt("chamferX", glm::vec4(p.chamferX[0], p.chamferX[1], p.chamferX[2], p.chamferX[3]), glm::vec4(0.0f));
+            w.KeyOpt("chamferY", glm::vec4(p.chamferY[0], p.chamferY[1], p.chamferY[2], p.chamferY[3]), glm::vec4(0.0f));
+            w.KeyOpt("chamferZ", glm::vec4(p.chamferZ[0], p.chamferZ[1], p.chamferZ[2], p.chamferZ[3]), glm::vec4(0.0f));
         }
         else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
             w.Key("radius", p.radius);
@@ -285,6 +288,14 @@ Engine::ProceduralParams Component::DeserializeProceduralShape(int32_t type, con
         p.sizeX = r.Float("sizeX", p.sizeX);
         p.sizeY = r.Float("sizeY", p.sizeY);
         p.sizeZ = r.Float("sizeZ", p.sizeZ);
+        const glm::vec4 cx = r.Vec4("chamferX");
+        const glm::vec4 cy = r.Vec4("chamferY");
+        const glm::vec4 cz = r.Vec4("chamferZ");
+        for (int32_t i = 0; i < 4; i++) {
+            p.chamferX[i] = cx[i];
+            p.chamferY[i] = cy[i];
+            p.chamferZ[i] = cz[i];
+        }
         params = p;
     }
     else if (type == 3) {
@@ -763,6 +774,48 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     drawSizeField("##bsx", &p.sizeX, Editor::COLOR_AXIS_X); ImGui::SameLine(0, innerSpacing);
                     drawSizeField("##bsy", &p.sizeY, Editor::COLOR_AXIS_Y); ImGui::SameLine(0, innerSpacing);
                     drawSizeField("##bsz", &p.sizeZ, Editor::COLOR_AXIS_Z);
+
+                    float* edges[3] = {p.chamferX, p.chamferY, p.chamferZ};
+                    float depth = 0.0f;
+                    for (int32_t c = 0; c < 3; c++) {
+                        for (int32_t i = 0; i < 4; i++) { depth = glm::max(depth, edges[c][i]); }
+                    }
+                    const bool bAnyChamfered = depth > 0.0f;
+                    if (ImGui::DragFloat("Chamfer", &depth, 0.002f, 0.0f, 10.0f, "%.3f")) {
+                        for (int32_t c = 0; c < 3; c++) {
+                            for (int32_t i = 0; i < 4; i++) {
+                                if (!bAnyChamfered || edges[c][i] > 0.0f) { edges[c][i] = depth; }
+                            }
+                        }
+                    }
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+
+                    auto applyPreset = [&](uint32_t mask) {
+                        const float presetDepth = depth > 0.0f ? depth : 0.02f;
+                        for (int32_t c = 0; c < 3; c++) {
+                            for (int32_t i = 0; i < 4; i++) { edges[c][i] = (mask >> (c * 4 + i)) & 1u ? presetDepth : 0.0f; }
+                        }
+                        dirty = true;
+                    };
+                    if (ImGui::SmallButton("All")) { applyPreset(0xFFFu); }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Top")) { applyPreset(0xAu | (0xCu << 8)); }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Bottom")) { applyPreset(0x5u | (0x3u << 8)); }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Vertical")) { applyPreset(0xFu << 4); }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Clear")) { applyPreset(0u); }
+
+                    if (ImGui::TreeNode("Chamfer Per Edge")) {
+                        ImGui::DragFloat4("X Edges", p.chamferX, 0.002f, 0.0f, 10.0f, "%.3f");
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragFloat4("Y Edges", p.chamferY, 0.002f, 0.0f, 10.0f, "%.3f");
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragFloat4("Z Edges", p.chamferZ, 0.002f, 0.0f, 10.0f, "%.3f");
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::TreePop();
+                    }
                 }
                 else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);

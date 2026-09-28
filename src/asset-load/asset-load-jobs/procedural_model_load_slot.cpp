@@ -573,64 +573,133 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
 {
     ZoneScopedN("GenerateBox");
 
-    const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
+    const Vec3 size{p.sizeX, p.sizeY, p.sizeZ};
+    if (size.x <= 0.0f || size.y <= 0.0f || size.z <= 0.0f) { return false; }
 
-    // 6 quads × 4 verts = 24, 6 quads × 6 indices = 36
-    Core::HeapArray<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 24);
-    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 36);
-    size_t vi = 0, ii = 0;
-
-    auto addFace = [&](Vec3 n, Vec3 t,
-                       Vec3 v0, Vec3 v1, Vec3 v2, Vec3 v3,
-                       Vec2 uv0, Vec2 uv1, Vec2 uv2, Vec2 uv3) {
-        auto base = static_cast<uint32_t>(vi);
-        auto push = [&](Vec3 pos, Vec2 uv) {
-            Engine::FullVertex v{};
-            v.position = pos;
-            v.normal = n;
-            v.uv = { uv.x, uv.y};
-            v.tangent = {t.x, t.y, t.z, 1.0f};
-            v.color = {1, 1, 1, 1};
-            vertices[vi++] = v;
-        };
-        push(v0, uv0);
-        push(v1, uv1);
-        push(v2, uv2);
-        push(v3, uv3);
-        indices[ii++] = base; indices[ii++] = base + 1; indices[ii++] = base + 2;
-        indices[ii++] = base; indices[ii++] = base + 2; indices[ii++] = base + 3;
+    struct BoxPlane
+    {
+        Vec3 n;
+        float d;
+        Vec3 t;
+        float uOffset;
     };
+    constexpr int32_t MAX_PLANES = 18;
+    BoxPlane planes[MAX_PLANES];
+    int32_t planeCount = 0;
 
-    // Corner pivot: origin at (0,0,0), box extends to (sizeX, sizeY, sizeZ).
-    // Vertex order per face is chosen so (v1-v0)×(v2-v0) points outward (CCW from outside).
-    // UV: world-space (1 UV unit = 1 world unit).
+    planes[planeCount++] = {{1, 0, 0}, size.x, {0, 0, -1}, size.z};
+    planes[planeCount++] = {{-1, 0, 0}, 0.0f, {0, 0, 1}, 0.0f};
+    planes[planeCount++] = {{0, 1, 0}, size.y, {-1, 0, 0}, size.x};
+    planes[planeCount++] = {{0, -1, 0}, 0.0f, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, 1}, size.z, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, size.x};
 
-    // +X: normal=(1,0,0), U=Z(flipped), V=Y
-    addFace({1, 0, 0}, {0, 0, -1},
-            {sx, 0, 0}, {sx, sy, 0}, {sx, sy, sz}, {sx, 0, sz},
-            {sz, 0}, {sz, sy}, {0, sy}, {0, 0});
-    // -X: normal=(-1,0,0), U=Z(mirrored), V=Y
-    addFace({-1, 0, 0}, {0, 0, -1},
-            {0, 0, sz}, {0, sy, sz}, {0, sy, 0}, {0, 0, 0},
-            {sz, 0}, {sz, sy}, {0, sy}, {0, 0});
-    // +Y: normal=(0,1,0), U=X(flipped), V=Z
-    addFace({0, 1, 0}, {-1, 0, 0},
-            {0, sy, 0}, {0, sy, sz}, {sx, sy, sz}, {sx, sy, 0},
-            {sx, 0}, {sx, sz}, {0, sz}, {0, 0});
-    // -Y: normal=(0,-1,0), U=X, V=Z
-    addFace({0, -1, 0}, {1, 0, 0},
-            {0, 0, 0}, {sx, 0, 0}, {sx, 0, sz}, {0, 0, sz},
-            {0, 0}, {sx, 0}, {sx, sz}, {0, sz});
-    // +Z: normal=(0,0,1), U=X, V=Y
-    addFace({0, 0, 1}, {1, 0, 0},
-            {0, 0, sz}, {sx, 0, sz}, {sx, sy, sz}, {0, sy, sz},
-            {0, 0}, {sx, 0}, {sx, sy}, {0, sy});
-    // -Z: normal=(0,0,-1), U=X, V=Y
-    addFace({0, 0, -1}, {1, 0, 0},
-            {0, 0, 0}, {0, sy, 0}, {sx, sy, 0}, {sx, 0, 0},
-            {sx, 0}, {sx, sy}, {0, sy}, {0, 0});
+    const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
+    const float invSqrt2 = 1.0f / glm::sqrt(2.0f);
+    for (int32_t c = 0; c < 3; c++) {
+        const int32_t a = c == 0 ? 1 : 0;
+        const int32_t b = c == 2 ? 1 : 2;
+        const float maxDepth = 0.5f * glm::min(size[a], size[b]);
+        for (int32_t i = 0; i < 4; i++) {
+            const float depth = glm::clamp(chamfers[c][i], 0.0f, maxDepth);
+            if (depth <= 1e-5f) { continue; }
+            const bool highA = (i & 1) != 0;
+            const bool highB = (i >> 1) != 0;
+            Vec3 n{0.0f};
+            n[a] = highA ? invSqrt2 : -invSqrt2;
+            n[b] = highB ? invSqrt2 : -invSqrt2;
+            Vec3 edge{0.0f};
+            edge[a] = highA ? size[a] : 0.0f;
+            edge[b] = highB ? size[b] : 0.0f;
+            Vec3 t{0.0f};
+            t[c] = 1.0f;
+            planes[planeCount++] = {n, glm::dot(n, edge) - depth * invSqrt2, t, 0.0f};
+        }
+    }
 
-    return FinalizeGeometry(vertices, indices);
+    const float eps = 1e-5f * glm::max(1.0f, glm::max(size.x, glm::max(size.y, size.z)));
+    Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    for (int32_t i = 0; i < planeCount; i++) {
+        for (int32_t j = i + 1; j < planeCount; j++) {
+            const Vec3 nij = glm::cross(planes[i].n, planes[j].n);
+            for (int32_t k = j + 1; k < planeCount; k++) {
+                const float det = glm::dot(nij, planes[k].n);
+                if (glm::abs(det) < 1e-6f) { continue; }
+                const Vec3 pt = (planes[i].d * glm::cross(planes[j].n, planes[k].n) + planes[j].d * glm::cross(planes[k].n, planes[i].n) + planes[k].d * nij) / det;
+
+                bool bInside = true;
+                for (int32_t m = 0; m < planeCount && bInside; m++) {
+                    bInside = glm::dot(planes[m].n, pt) <= planes[m].d + eps;
+                }
+                if (!bInside) { continue; }
+
+                bool bDuplicate = false;
+                for (size_t m = 0; m < corners.Size() && !bDuplicate; m++) {
+                    bDuplicate = glm::length(corners[m] - pt) < eps;
+                }
+                if (!bDuplicate) { corners.PushBack(pt); }
+            }
+        }
+    }
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    constexpr int32_t MAX_FACE_VERTS = 32;
+    for (int32_t i = 0; i < planeCount; i++) {
+        const BoxPlane& plane = planes[i];
+        const Vec3 bitangent = glm::cross(plane.n, plane.t);
+
+        Vec3 face[MAX_FACE_VERTS];
+        float angle[MAX_FACE_VERTS];
+        int32_t count = 0;
+        Vec3 centroid{0.0f};
+        for (size_t m = 0; m < corners.Size() && count < MAX_FACE_VERTS; m++) {
+            if (glm::abs(glm::dot(plane.n, corners[m]) - plane.d) < eps) {
+                face[count++] = corners[m];
+                centroid += corners[m];
+            }
+        }
+        if (count < 3) { continue; }
+        centroid /= static_cast<float>(count);
+
+        // CCW around n, since cross(t, bitangent) == n
+        for (int32_t m = 0; m < count; m++) {
+            const Vec3 rel = face[m] - centroid;
+            angle[m] = glm::atan(glm::dot(rel, bitangent), glm::dot(rel, plane.t));
+        }
+        for (int32_t m = 1; m < count; m++) {
+            const Vec3 fv = face[m];
+            const float fa = angle[m];
+            int32_t k = m - 1;
+            while (k >= 0 && angle[k] > fa) {
+                face[k + 1] = face[k];
+                angle[k + 1] = angle[k];
+                k--;
+            }
+            face[k + 1] = fv;
+            angle[k + 1] = fa;
+        }
+
+        const auto base = static_cast<uint32_t>(vertices.Size());
+        for (int32_t m = 0; m < count; m++) {
+            Engine::FullVertex v{};
+            v.position = face[m];
+            v.normal = plane.n;
+            v.uv = {glm::dot(face[m], plane.t) + plane.uOffset, glm::dot(face[m], bitangent)};
+            v.tangent = {plane.t.x, plane.t.y, plane.t.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            vertices.PushBack(v);
+        }
+        for (int32_t m = 1; m + 1 < count; m++) {
+            const float area = glm::length(glm::cross(face[m] - face[0], face[m + 1] - face[0]));
+            if (area < eps * eps) { continue; }
+            indices.PushBack(base);
+            indices.PushBack(base + m);
+            indices.PushBack(base + m + 1);
+        }
+    }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateCylinder(const Engine::CylinderParams& p)

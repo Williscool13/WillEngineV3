@@ -93,8 +93,6 @@ M_PUSHER = flat("prism_pusher", (0.9, 0.30, 0.06), 0.35)
 M_GLOSS = flat("prism_gloss_black", (0.02, 0.02, 0.025), 0.35)
 M_POOL = flat("prism_pool", (0.02, 0.03, 0.04), 0.3)
 M_TUNNEL = textured("prism_tunnel_plate", T_PLATE, uv=0.5, tint=(0.25, 0.25, 0.28), metallic=0.0, roughness=0.7)
-M_NEON_MAGENTA = glow("prism_neon_magenta", (1.0, 0.08, 0.75), 40.0)
-M_NEON_CYAN = glow("prism_neon_cyan", (0.08, 0.8, 1.0), 40.0)
 M_BRICK = textured("prism_brick", T_BRICK, uv=0.5, tint=(0.75, 0.7, 0.68))
 M_GRAVEL = textured("prism_gravel", T_GRAVEL, uv=0.25, tint=(0.5, 0.48, 0.45))
 M_COLUMN = textured("prism_column", T_BRICK, uv=1.0, tint=(0.45, 0.4, 0.38))
@@ -219,6 +217,13 @@ def glow_quad(name, center, normal, tangent, length, height, material, rgb):
     e = ent(name, center, list(wa.mat_to_quat(tangent, normal, cross(tangent, normal))))
     mesh(e, plane_params(length, height), material)
     return emissive_light(e, rgb, max(length, height))
+
+def area_quad(name, center, normal, tangent, length, height, rgb, strength, draw_range):
+    """Area light quad: lit side along normal, length along tangent."""
+    e = ent(name, center, list(wa.mat_to_quat(tangent, cross(normal, tangent), normal)))
+    add_area_light(e, color=rgb, intensity=strength * K, half_width=length / 2, half_height=height / 2, draw_range=draw_range)
+    LIGHTS.append((zone(), name, rgb, max(length, height)))
+    return e
 
 def death_zone(name, lo, hi):
     size = (hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
@@ -491,18 +496,18 @@ slab("Tunnel Ceiling", (TX0 - T, TY1, TZ0), (TX1 + T, TY1 + T, TZ1), M_TUNNEL)
 # one hue per wall, tube segments of 1.6 m, unlit first stretch so the hall mouth does not look straight at them
 NEON_Z0, NEON_SEG, NEON_PITCH, NEON_H = TZ0 + 8.0, 1.6, 2.0, 0.12
 NEON_OFF = 0.02
-for side, x, nx, mat, rgb in (("W", TX0 + NEON_OFF, 1.0, M_NEON_MAGENTA, (1.0, 0.08, 0.75)),
-                              ("E", TX1 - NEON_OFF, -1.0, M_NEON_CYAN, (0.08, 0.8, 1.0))):
+NEON_RGB, NEON_STRENGTH, NEON_RANGE = (1.0, 0.08, 0.75), 40.0, 10.0
+for side, x, nx in (("W", TX0 + NEON_OFF, 1.0), ("E", TX1 - NEON_OFF, -1.0)):
     normal, along, up = (nx, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)
     for tag, y in (("High", 31.25), ("Low", 26.25)):
         i = 0
         while NEON_Z0 + i * NEON_PITCH + NEON_SEG <= TZ1 - 0.5:
             z = NEON_Z0 + i * NEON_PITCH + NEON_SEG / 2
-            glow_quad(f"Neon {side} {tag} {i}", (x, y, z), normal, along, NEON_SEG, NEON_H, mat, rgb)
+            area_quad(f"Neon {side} {tag} {i}", (x, y, z), normal, along, NEON_SEG, NEON_H, NEON_RGB, NEON_STRENGTH, NEON_RANGE)
             i += 1
     for i in range(5):
         z = NEON_Z0 + 3.0 + i * 6.0
-        glow_quad(f"Neon {side} Rib {i}", (x, 28.75, z), normal, up, 1.6, NEON_H, mat, rgb)
+        area_quad(f"Neon {side} Rib {i}", (x, 28.75, z), normal, up, 1.6, NEON_H, NEON_RGB, NEON_STRENGTH, NEON_RANGE)
 
 pad("T0 Landing", (38.0, 29.0, 88.0), (5.0, 5.0), M_GLOSS, walls="EW")
 link("H4 Exit", "T0 Landing", 3.0, M_HALL_WHITE)
