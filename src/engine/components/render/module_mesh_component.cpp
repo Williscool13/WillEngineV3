@@ -14,10 +14,9 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/editor/editor_materials.h"
 #include "engine/components/core_components.h"
+#include "engine/editor/edit_context.h"
 
 namespace Engine::Component
 {
@@ -52,61 +51,17 @@ bool Component::ModuleMeshComponent::CanAdd(const entt::registry& registry, entt
     return Component::MeshSources::NoneOtherThan<Component::ModuleMeshComponent>(registry, entity);
 }
 
-void Component::ModuleMeshComponent::Serialize(const ModuleMeshComponent& comp, Engine::TextWriter& w)
+void Component::ModuleMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    static const ModuleMeshComponent DEF{};
-    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
-    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
-
-    w.Count("slotMaterials", Engine::MAX_MODULE_SLOTS);
-    for (int32_t slot = 0; slot < Engine::MAX_MODULE_SLOTS; slot++) {
-        w.BeginBlock("s");
-        w.KeyOpt("id", comp.slotMaterials[slot].id, Engine::MaterialID::INVALID.id);
-        w.EndBlock();
-    }
-
-    if (!comp.params.parts.IsEmpty()) {
-        w.Count("parts", static_cast<uint32_t>(comp.params.parts.Size()));
-        for (const Engine::ModulePart& part : comp.params.parts) {
-            w.BeginBlock("p");
-            w.Key("type", static_cast<uint32_t>(part.shape.index()));
-            SerializeProceduralShape(part.shape, w);
-            w.Key("offset", part.offset);
-            w.Key("rotation", part.rotation);
-            w.Key("slot", part.materialSlot);
-            w.EndBlock();
-        }
-    }
+    registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
 }
 
-void Component::ModuleMeshComponent::Deserialize(ModuleMeshComponent& comp, const Engine::TextReader& r)
+Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
-    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
-
-    int32_t slot = 0;
-    r.ForEachRecord("slotMaterials", [&](const Engine::TextReader& s) {
-        if (slot >= Engine::MAX_MODULE_SLOTS) { return; }
-        comp.slotMaterials[slot++] = Engine::MaterialID(s.U64("id", Engine::MaterialID::INVALID.id));
-    });
-
-    comp.params.parts.Clear();
-    r.ForEachRecord("parts", [&](const Engine::TextReader& p) {
-        if (comp.params.parts.IsFull()) { return; }
-        Engine::ModulePart part{};
-        part.shape = DeserializeProceduralShape(p.Int("type", 0), p);
-        part.offset = p.Vec3("offset", part.offset);
-        part.rotation = p.Quat("rotation", part.rotation);
-        part.materialSlot = glm::clamp(p.Int("slot", 0), 0, Engine::MAX_MODULE_SLOTS - 1);
-        comp.params.parts.PushBack(part);
-    });
-}
-
-Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
-{
-    auto& component = registry.get<ModuleMeshComponent>(entity);
+    entt::registry& registry = edit.Registry();
+    const auto& component = edit.Get<ModuleMeshComponent>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
 
     bool open = ImGui::CollapsingHeader("Module Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -114,18 +69,9 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
     bool remove = ImGui::SmallButton("X##deletemodulemesh");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
-        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
-        if (ImGui::Checkbox("Visible##modulemesh", &visible)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible); }
-        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-        if (ImGui::Checkbox("Probe Bake Exclude##modulemesh", &probeBakeExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
-        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
-        if (ImGui::Checkbox("Emissive Light##modulemesh", &emissiveLight)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
-            registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-            modified = true;
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_PROBE_BAKE | RENDER_TOGGLE_EMISSIVE)) {
+            edit.ForEachTarget<ModuleMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ModuleMeshLoadingTag>(e); });
         }
 
         // Parts are script-authored; the editor only re-skins slots
@@ -146,17 +92,11 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
             Core::InlineString<32> label = Core::InlineString<32>::Format("Slot %d", slot);
             if (ImGui::BeginCombo(label.c_str(), currentLabel, ImGuiComboFlags_HeightLarge)) {
                 if (ImGui::Selectable("(default)", !component.slotMaterials[slot].IsValid())) {
-                    if (component.slotMaterials[slot].IsValid()) {
-                        component.slotMaterials[slot] = Engine::MaterialID{};
-                        registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-                        modified = true;
-                    }
+                    edit.Modify<ModuleMeshComponent>([slot](ModuleMeshComponent& c) { c.slotMaterials[slot] = Engine::MaterialID{}; });
                 }
                 const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.slotMaterials[slot]);
                 if (picked.IsValid() && picked != component.slotMaterials[slot]) {
-                    component.slotMaterials[slot] = picked;
-                    registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
-                    modified = true;
+                    edit.Modify<ModuleMeshComponent>([slot, picked](ModuleMeshComponent& c) { c.slotMaterials[slot] = picked; });
                 }
                 ImGui::EndCombo();
             }
@@ -164,6 +104,6 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 } // Engine

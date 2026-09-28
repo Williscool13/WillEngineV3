@@ -209,6 +209,16 @@ add_library(engine STATIC
         editor/editor_materials.h
         editor/editor_multi_edit.cpp
         editor/editor_multi_edit.h
+        editor/edit_context.cpp
+        editor/edit_context.h
+        editor/edit_widgets.h
+        editor/reflected_inspector.h
+        editor/undo_stack.cpp
+        editor/undo_stack.h
+
+        reflection/reflection.h
+        reflection/reflection_diff.h
+        reflection/reflection_serialize.h
         editor/editor_widgets.cpp
         editor/editor_widgets.h
         editor/editor_gizmo_helpers.cpp

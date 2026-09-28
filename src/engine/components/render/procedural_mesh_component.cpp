@@ -11,8 +11,6 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "engine/components/common_components.h"
 #include "engine/components/core_components.h"
@@ -65,454 +63,6 @@ bool Component::ProceduralMeshComponent::CanAdd(const entt::registry& registry, 
     return Component::MeshSources::NoneOtherThan<Component::ProceduralMeshComponent>(registry, entity);
 }
 
-void Component::ProceduralMeshComponent::Serialize(const ProceduralMeshComponent& comp, Engine::TextWriter& w)
-{
-    static const ProceduralMeshComponent DEF{};
-    w.Key("type", static_cast<uint32_t>(comp.params.index()));
-    w.Key("material", comp.material.id);
-    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
-    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
-
-    SerializeProceduralShape(comp.params, w);
-}
-
-void Component::SerializeProceduralShape(const Engine::ProceduralParams& params, Engine::TextWriter& w)
-{
-    std::visit([&w](const auto& p) {
-        using T = std::decay_t<decltype(p)>;
-        if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
-            w.Key("stepCount", p.stepCount);
-            w.Key("width", p.width);
-            w.Key("totalDepth", p.totalDepth);
-            w.Key("totalHeight", p.totalHeight);
-            w.Key("bSpecifyStepHeight", p.bSpecifyStepHeight);
-            w.Key("stepHeight", p.stepHeight);
-            w.Key("bIsClosed", p.bIsClosed);
-        }
-        else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
-            w.Key("sizeX", p.sizeX);
-            w.Key("sizeY", p.sizeY);
-            w.Key("sizeZ", p.sizeZ);
-            w.KeyOpt("chamferX", glm::vec4(p.chamferX[0], p.chamferX[1], p.chamferX[2], p.chamferX[3]), glm::vec4(0.0f));
-            w.KeyOpt("chamferY", glm::vec4(p.chamferY[0], p.chamferY[1], p.chamferY[2], p.chamferY[3]), glm::vec4(0.0f));
-            w.KeyOpt("chamferZ", glm::vec4(p.chamferZ[0], p.chamferZ[1], p.chamferZ[2], p.chamferZ[3]), glm::vec4(0.0f));
-        }
-        else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
-            w.Key("radius", p.radius);
-            w.Key("height", p.height);
-            w.Key("slices", p.slices);
-            w.Key("bCapped", p.bCapped);
-        }
-        else if constexpr (std::is_same_v<T, Engine::CapsuleParams>) {
-            w.Key("radius", p.radius);
-            w.Key("height", p.height);
-            w.Key("slices", p.slices);
-            w.Key("rings", p.rings);
-        }
-        else if constexpr (std::is_same_v<T, Engine::TorusParams>) {
-            w.Key("ringRadius", p.ringRadius);
-            w.Key("tubeRadius", p.tubeRadius);
-            w.Key("slices", p.slices);
-            w.Key("stacks", p.stacks);
-        }
-        else if constexpr (std::is_same_v<T, Engine::ArchParams>) {
-            w.Key("width", p.width);
-            w.Key("height", p.height);
-            w.Key("depth", p.depth);
-            w.Key("thickness", p.thickness);
-            w.Key("sides", p.sides);
-            w.Key("bFillCorners", p.bFillCorners);
-        }
-        else if constexpr (std::is_same_v<T, Engine::WedgeParams>) {
-            w.Key("sizeX", p.sizeX);
-            w.Key("sizeY", p.sizeY);
-            w.Key("sizeZ", p.sizeZ);
-        }
-        else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
-            w.Key("radius", p.radius);
-            w.Key("height", p.height);
-            w.Key("slices", p.slices);
-            w.Key("bCapped", p.bCapped);
-        }
-        else if constexpr (std::is_same_v<T, Engine::DoorParams>) {
-            w.Key("width", p.width);
-            w.Key("height", p.height);
-            w.Key("depth", p.depth);
-            w.Key("archHeight", p.archHeight);
-            w.Key("gap", p.gap);
-            w.Key("sides", p.sides);
-            w.Key("bHalf", p.bHalf);
-            w.Key("bFlip", p.bFlip);
-        }
-        else if constexpr (std::is_same_v<T, Engine::PlaneParams>) {
-            w.Key("sizeX", p.sizeX);
-            w.Key("sizeZ", p.sizeZ);
-            w.Key("tilesX", p.tilesX);
-            w.Key("tilesZ", p.tilesZ);
-        }
-        else if constexpr (std::is_same_v<T, Engine::SphereParams>) {
-            w.Key("radius", p.radius);
-            w.Key("slices", p.slices);
-            w.Key("stacks", p.stacks);
-        }
-        else if constexpr (std::is_same_v<T, Engine::SubdividedSphereParams>) {
-            w.Key("radius", p.radius);
-            w.Key("subdivisions", p.subdivisions);
-        }
-        else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
-            w.Key("radius", p.radius);
-            w.Key("slices", p.slices);
-            w.Key("stacks", p.stacks);
-        }
-        else if constexpr (std::is_same_v<T, Engine::PipeParams>) {
-            w.Key("outerRadius", p.outerRadius);
-            w.Key("innerRadius", p.innerRadius);
-            w.Key("height", p.height);
-            w.Key("slices", p.slices);
-        }
-        else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||
-                           std::is_same_v<T, Engine::OctahedronParams> ||
-                           std::is_same_v<T, Engine::IcosahedronParams> ||
-                           std::is_same_v<T, Engine::DodecahedronParams>) {
-            w.Key("radius", p.radius);
-        }
-        else if constexpr (std::is_same_v<T, Engine::KleinBottleParams>) {
-            w.Key("scale", p.scale);
-            w.Key("slices", p.slices);
-            w.Key("stacks", p.stacks);
-        }
-        else if constexpr (std::is_same_v<T, Engine::TrefoilKnotParams>) {
-            w.Key("scale", p.scale);
-            w.Key("tubeRadius", p.tubeRadius);
-            w.Key("slices", p.slices);
-            w.Key("stacks", p.stacks);
-        }
-        else if constexpr (std::is_same_v<T, Engine::CurvedRampParams>) {
-            w.Key("width", p.width);
-            w.Key("height", p.height);
-            w.Key("radius", p.radius);
-            w.Key("segments", p.segments);
-            w.Key("bHalfPipe", p.bHalfPipe);
-            w.Key("flatLength", p.flatLength);
-            w.Key("lipHeight", p.lipHeight);
-        }
-        else if constexpr (std::is_same_v<T, Engine::BowlParams>) {
-            w.Key("radius", p.radius);
-            w.Key("height", p.height);
-            w.Key("curveRadius", p.curveRadius);
-            w.Key("flatRadius", p.flatRadius);
-            w.Key("lipHeight", p.lipHeight);
-            w.Key("slices", p.slices);
-            w.Key("segments", p.segments);
-        }
-        else if constexpr (std::is_same_v<T, Engine::SpiralStaircaseParams>) {
-            w.Key("stepCount", p.stepCount);
-            w.Key("stepHeight", p.stepHeight);
-            w.Key("totalHeight", p.totalHeight);
-            w.Key("bSpecifyStepHeight", p.bSpecifyStepHeight);
-            w.Key("outerRadius", p.outerRadius);
-            w.Key("centerColumnRadius", p.centerColumnRadius);
-            w.Key("treadThickness", p.treadThickness);
-            w.Key("degreesPerStep", p.degreesPerStep);
-            w.Key("totalSweep", p.totalSweep);
-            w.Key("bSpecifyDegreesPerStep", p.bSpecifyDegreesPerStep);
-            w.Key("arcSegments", p.arcSegments);
-            w.Key("bShowCenterColumn", p.bShowCenterColumn);
-            w.Key("bRamp", p.bRamp);
-        }
-        else if constexpr (std::is_same_v<T, Engine::RingParams>) {
-            w.Key("outerRadius", p.outerRadius);
-            w.Key("innerRadius", p.innerRadius);
-            w.Key("slices", p.slices);
-            w.Key("bDoubleSided", p.bDoubleSided);
-        }
-        else if constexpr (std::is_same_v<T, Engine::WallParams>) {
-            w.Key("sizeX", p.sizeX);
-            w.Key("sizeY", p.sizeY);
-            w.Key("sizeZ", p.sizeZ);
-            const int32_t n = glm::clamp(p.openingCount, 0, Engine::WallParams::MAX_OPENINGS);
-            if (n > 0) {
-                w.Count("openings", static_cast<uint32_t>(n));
-                for (int32_t i = 0; i < n; i++) {
-                    w.BeginBlock("o");
-                    w.Key("rect", glm::vec4(p.openings[i].x, p.openings[i].y, p.openings[i].w, p.openings[i].h));
-                    w.EndBlock();
-                }
-            }
-        }
-        else if constexpr (std::is_same_v<T, Engine::LatticeParams>) {
-            w.Key("sizeX", p.sizeX);
-            w.Key("sizeY", p.sizeY);
-            w.Key("sizeZ", p.sizeZ);
-            w.Key("chordSize", p.chordSize);
-            w.Key("braceSize", p.braceSize);
-            w.Key("bayCount", p.bayCount);
-            w.Key("pattern", p.pattern);
-        }
-        else if constexpr (std::is_same_v<T, Engine::CorrugatedPanelParams>) {
-            w.Key("sizeX", p.sizeX);
-            w.Key("sizeY", p.sizeY);
-            w.Key("sizeZ", p.sizeZ);
-            w.Key("ribDepth", p.ribDepth);
-            w.Key("ribWidth", p.ribWidth);
-            w.Key("ribCount", p.ribCount);
-        }
-    }, params);
-}
-
-void Component::ProceduralMeshComponent::Deserialize(ProceduralMeshComponent& comp, const Engine::TextReader& r)
-{
-    comp.material = Engine::MaterialID(r.U64("material", comp.material.id));
-    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
-    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
-
-    comp.params = DeserializeProceduralShape(r.Int("type", 0), r);
-}
-
-Engine::ProceduralParams Component::DeserializeProceduralShape(int32_t type, const Engine::TextReader& r)
-{
-    Engine::ProceduralParams params{};
-    if (type == 1) {
-        Engine::StaircaseParams p{};
-        p.stepCount = r.Int("stepCount", p.stepCount);
-        p.width = r.Float("width", p.width);
-        p.totalDepth = r.Float("totalDepth", p.totalDepth);
-        p.totalHeight = r.Float("totalHeight", p.totalHeight);
-        p.bSpecifyStepHeight = r.Bool("bSpecifyStepHeight", false);
-        p.stepHeight = r.Float("stepHeight", p.totalHeight / static_cast<float>(std::max(p.stepCount, 1)));
-        p.bIsClosed = r.Bool("bIsClosed", true);
-        params = p;
-    }
-    else if (type == 2) {
-        Engine::BoxParams p{};
-        p.sizeX = r.Float("sizeX", p.sizeX);
-        p.sizeY = r.Float("sizeY", p.sizeY);
-        p.sizeZ = r.Float("sizeZ", p.sizeZ);
-        const glm::vec4 cx = r.Vec4("chamferX");
-        const glm::vec4 cy = r.Vec4("chamferY");
-        const glm::vec4 cz = r.Vec4("chamferZ");
-        for (int32_t i = 0; i < 4; i++) {
-            p.chamferX[i] = cx[i];
-            p.chamferY[i] = cy[i];
-            p.chamferZ[i] = cz[i];
-        }
-        params = p;
-    }
-    else if (type == 3) {
-        Engine::CylinderParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.height = r.Float("height", p.height);
-        p.slices = r.Int("slices", p.slices);
-        p.bCapped = r.Bool("bCapped", p.bCapped);
-        params = p;
-    }
-    else if (type == 4) {
-        Engine::CapsuleParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.height = r.Float("height", p.height);
-        p.slices = r.Int("slices", p.slices);
-        p.rings = r.Int("rings", p.rings);
-        params = p;
-    }
-    else if (type == 5) {
-        Engine::TorusParams p{};
-        p.ringRadius = r.Float("ringRadius", p.ringRadius);
-        p.tubeRadius = r.Float("tubeRadius", p.tubeRadius);
-        p.slices = r.Int("slices", p.slices);
-        p.stacks = r.Int("stacks", p.stacks);
-        params = p;
-    }
-    else if (type == 6) {
-        Engine::ArchParams p{};
-        p.width = r.Float("width", p.width);
-        p.height = r.Float("height", p.height);
-        p.depth = r.Float("depth", p.depth);
-        p.thickness = r.Float("thickness", p.thickness);
-        p.sides = r.Int("sides", p.sides);
-        p.bFillCorners = r.Bool("bFillCorners", false);
-        params = p;
-    }
-    else if (type == 7) {
-        Engine::WedgeParams p{};
-        p.sizeX = r.Float("sizeX", p.sizeX);
-        p.sizeY = r.Float("sizeY", p.sizeY);
-        p.sizeZ = r.Float("sizeZ", p.sizeZ);
-        params = p;
-    }
-    else if (type == 8) {
-        Engine::ConeParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.height = r.Float("height", p.height);
-        p.slices = r.Int("slices", p.slices);
-        p.bCapped = r.Bool("bCapped", p.bCapped);
-        params = p;
-    }
-    else if (type == 9) {
-        Engine::DoorParams p{};
-        p.width = r.Float("width", p.width);
-        p.height = r.Float("height", p.height);
-        p.depth = r.Float("depth", p.depth);
-        p.archHeight = r.Float("archHeight", 0.5f);
-        p.gap = r.Float("gap", 0.0f);
-        p.sides = r.Int("sides", p.sides);
-        p.bHalf = r.Bool("bHalf", p.bHalf);
-        p.bFlip = r.Bool("bFlip", false);
-        params = p;
-    }
-    else if (type == 10) {
-        Engine::PlaneParams p{};
-        p.sizeX = r.Float("sizeX", p.sizeX);
-        p.sizeZ = r.Float("sizeZ", p.sizeZ);
-        p.tilesX = r.Int("tilesX", p.tilesX);
-        p.tilesZ = r.Int("tilesZ", p.tilesZ);
-        params = p;
-    }
-    else if (type == 11) {
-        Engine::SphereParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.slices = r.Int("slices", p.slices);
-        p.stacks = r.Int("stacks", p.stacks);
-        params = p;
-    }
-    else if (type == 12) {
-        Engine::SubdividedSphereParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.subdivisions = glm::clamp(r.Int("subdivisions", p.subdivisions), 0, 4);
-        params = p;
-    }
-    else if (type == 13) {
-        Engine::HemisphereParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.slices = r.Int("slices", p.slices);
-        p.stacks = r.Int("stacks", p.stacks);
-        params = p;
-    }
-    else if (type == 14) {
-        Engine::PipeParams p{};
-        p.outerRadius = r.Float("outerRadius", p.outerRadius);
-        p.innerRadius = r.Float("innerRadius", p.innerRadius);
-        p.height = r.Float("height", p.height);
-        p.slices = r.Int("slices", p.slices);
-        params = p;
-    }
-    else if (type == 15) {
-        Engine::TetrahedronParams p{};
-        p.radius = r.Float("radius", p.radius);
-        params = p;
-    }
-    else if (type == 16) {
-        Engine::OctahedronParams p{};
-        p.radius = r.Float("radius", p.radius);
-        params = p;
-    }
-    else if (type == 17) {
-        Engine::IcosahedronParams p{};
-        p.radius = r.Float("radius", p.radius);
-        params = p;
-    }
-    else if (type == 18) {
-        Engine::DodecahedronParams p{};
-        p.radius = r.Float("radius", p.radius);
-        params = p;
-    }
-    else if (type == 19) {
-        Engine::KleinBottleParams p{};
-        p.scale = r.Float("scale", p.scale);
-        p.slices = r.Int("slices", p.slices);
-        p.stacks = r.Int("stacks", p.stacks);
-        params = p;
-    }
-    else if (type == 20) {
-        Engine::TrefoilKnotParams p{};
-        p.scale = r.Float("scale", p.scale);
-        p.tubeRadius = r.Float("tubeRadius", p.tubeRadius);
-        p.slices = r.Int("slices", p.slices);
-        p.stacks = r.Int("stacks", p.stacks);
-        params = p;
-    }
-    else if (type == 21) {
-        Engine::CurvedRampParams p{};
-        p.width = r.Float("width", p.width);
-        p.height = r.Float("height", p.height);
-        p.radius = r.Float("radius", p.radius);
-        p.segments = r.Int("segments", p.segments);
-        p.bHalfPipe = r.Bool("bHalfPipe", false);
-        p.flatLength = r.Float("flatLength", 1.0f);
-        p.lipHeight = r.Float("lipHeight", 0.02f);
-        params = p;
-    }
-    else if (type == 22) {
-        Engine::BowlParams p{};
-        p.radius = r.Float("radius", p.radius);
-        p.height = r.Float("height", p.height);
-        p.curveRadius = r.Float("curveRadius", p.curveRadius);
-        p.flatRadius = r.Float("flatRadius", 0.0f);
-        p.lipHeight = r.Float("lipHeight", 0.02f);
-        p.slices = r.Int("slices", p.slices);
-        p.segments = r.Int("segments", p.segments);
-        params = p;
-    }
-    else if (type == 23) {
-        Engine::SpiralStaircaseParams p{};
-        p.stepCount = r.Int("stepCount", p.stepCount);
-        p.stepHeight = r.Float("stepHeight", p.stepHeight);
-        p.totalHeight = r.Float("totalHeight", p.stepHeight * static_cast<float>(std::max(p.stepCount, 1)));
-        p.bSpecifyStepHeight = r.Bool("bSpecifyStepHeight", false);
-        p.outerRadius = r.Float("outerRadius", p.outerRadius);
-        p.centerColumnRadius = r.Float("centerColumnRadius", p.centerColumnRadius);
-        p.treadThickness = r.Float("treadThickness", 0.08f);
-        p.degreesPerStep = r.Float("degreesPerStep", 30.0f);
-        p.totalSweep = r.Float("totalSweep", p.degreesPerStep * static_cast<float>(std::max(p.stepCount, 1)));
-        p.bSpecifyDegreesPerStep = r.Bool("bSpecifyDegreesPerStep", false);
-        p.arcSegments = r.Int("arcSegments", 6);
-        p.bShowCenterColumn = r.Bool("bShowCenterColumn", true);
-        p.bRamp = r.Bool("bRamp", false);
-        params = p;
-    }
-    else if (type == 24) {
-        Engine::RingParams p{};
-        p.outerRadius = r.Float("outerRadius", p.outerRadius);
-        p.innerRadius = r.Float("innerRadius", p.innerRadius);
-        p.slices = r.Int("slices", p.slices);
-        p.bDoubleSided = r.Bool("bDoubleSided", true);
-        params = p;
-    }
-    else if (type == 25) {
-        Engine::WallParams p{};
-        p.sizeX = r.Float("sizeX", p.sizeX);
-        p.sizeY = r.Float("sizeY", p.sizeY);
-        p.sizeZ = r.Float("sizeZ", p.sizeZ);
-        r.ForEachRecord("openings", [&](const Engine::TextReader& o) {
-            if (p.openingCount >= Engine::WallParams::MAX_OPENINGS) { return; }
-            const glm::vec4 rect = o.Vec4("rect");
-            p.openings[p.openingCount++] = {rect.x, rect.y, rect.z, rect.w};
-        });
-        params = p;
-    }
-    else if (type == 26) {
-        Engine::LatticeParams p{};
-        p.sizeX = r.Float("sizeX", p.sizeX);
-        p.sizeY = r.Float("sizeY", p.sizeY);
-        p.sizeZ = r.Float("sizeZ", p.sizeZ);
-        p.chordSize = r.Float("chordSize", p.chordSize);
-        p.braceSize = r.Float("braceSize", p.braceSize);
-        p.bayCount = r.Int("bayCount", p.bayCount);
-        p.pattern = r.Int("pattern", 0);
-        params = p;
-    }
-    else if (type == 27) {
-        Engine::CorrugatedPanelParams p{};
-        p.sizeX = r.Float("sizeX", p.sizeX);
-        p.sizeY = r.Float("sizeY", p.sizeY);
-        p.sizeZ = r.Float("sizeZ", p.sizeZ);
-        p.ribDepth = r.Float("ribDepth", p.ribDepth);
-        p.ribWidth = r.Float("ribWidth", p.ribWidth);
-        p.ribCount = r.Int("ribCount", p.ribCount);
-        params = p;
-    }
-    return params;
-}
-
 /**
  * Samples the staircase helix into a control-point spline at the given radius, railHeight above the (continuous) nosing line.
  * Points are in stair-local space; capped at Spline::MaxPoints (subsamples evenly only past that many steps).
@@ -537,8 +87,7 @@ static Engine::Spline BuildSpiralRailingSpline(const Engine::SpiralStaircasePara
         const float f = (count <= 1) ? 0.0f : static_cast<float>(k) / static_cast<float>(count - 1);
         const float a = f * totalAngle;
         const float h = a * heightPerRad + railHeight;
-        spline.points.PushBack(glm::vec3{radius * cosf(a), h, radius * sinf(a)});
-        spline.rolls.PushBack(0.0f);
+        spline.points.PushBack({glm::vec3{radius * cosf(a), h, radius * sinf(a)}});
     }
     return spline;
 }
@@ -584,20 +133,38 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, entt::registry
     MarkSceneModified(state, state->scene.currentSceneId);
 }
 
-Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                                              entt::entity entity, const char* name)
+void Component::ProceduralMeshComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
+    const auto& component = registry.get<ProceduralMeshComponent>(entity);
+    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+        rt->renderOffset = component.renderOffset;
+        rt->renderRotation = component.renderRotation;
+        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    }
+}
+
+void Component::ProceduralMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+{
+    RecreateProceduralMesh(registry.get<ProceduralMeshComponent>(entity), registry, entity);
+}
+
+Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditingOffset = false;
 
-    if (editEntity != entity) {
+    if (editEntity != entity || edit.IsMulti()) {
         editEntity = entity;
         bEditingOffset = false;
     }
 
-    auto& component = registry.get<ProceduralMeshComponent>(entity);
+    const ProceduralMeshComponent before = edit.Get<ProceduralMeshComponent>();
+    ProceduralMeshComponent component = before;
+    bool bCommit = false;
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
 
     if (bEditingOffset) { state->editor.bExclusiveGizmoActive = true; }
 
@@ -607,50 +174,16 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     bool remove = ImGui::SmallButton("X##deleteproceduralmesh");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
-        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
-        bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
-        if (ImGui::Checkbox("Visible##proceduralmesh", &visible)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible);
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox("DDGI Contribution##proceduralmesh", &ddgiContribution)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution);
-        }
-        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-        if (ImGui::Checkbox("Probe Bake Exclude##proceduralmesh", &probeBakeExclude)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude);
-        }
-        ImGui::SameLine();
-        bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
-        if (ImGui::Checkbox("Motion Blur Exclude##proceduralmesh", &motionBlurExclude)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude);
-        }
-        ImGui::SameLine();
-        bool cameraMotionBlurExclude = !renderFlags.Has(RenderFlagsComponent::CAMERA_MOTION_BLUR);
-        if (ImGui::Checkbox("Camera Motion Blur Exclude##proceduralmesh", &cameraMotionBlurExclude)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::CAMERA_MOTION_BLUR, !cameraMotionBlurExclude);
-        }
-        ImGui::SameLine();
-        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
-        if (ImGui::Checkbox("Emissive Light##proceduralmesh", &emissiveLight)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
-            registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-            modified = true;
-        }
-        bool alphaCutoutExclude = !renderFlags.Has(RenderFlagsComponent::ALPHA_CUTOUT);
-        if (ImGui::Checkbox("Alpha Cutout Exclude##proceduralmesh", &alphaCutoutExclude)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::ALPHA_CUTOUT, !alphaCutoutExclude);
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_ALL)) {
+            edit.ForEachTarget<ProceduralMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ProceduralMeshLoadingTag>(e); });
         }
 
         if (std::holds_alternative<std::monostate>(component.params)) {
             if (ImGui::BeginCombo("Shape", "")) {
                 auto selectShape = [&](auto&& params) {
                     component.params = std::move(params);
-                    RecreateProceduralMesh(component, registry, entity);
-                    modified = true;
+                    bCommit = true;
                 };
                 if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
                 if (ImGui::Selectable("Box")) selectShape(Engine::BoxParams{});
@@ -692,8 +225,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             if (ImGui::SmallButton("X##deselect_shape")) {
                 component.params = std::monostate{};
-                RecreateProceduralMesh(component, registry, entity);
-                modified = true;
+                bCommit = true;
             }
             ImGui::PopStyleColor();
 
@@ -1178,10 +710,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 }
             }, component.params);
 
-            if (dirty) {
-                RecreateProceduralMesh(component, registry, entity);
-                modified = true;
-            }
+            bCommit |= dirty;
         }
 
         // Material selector
@@ -1192,19 +721,15 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     currentLabel = m->name.c_str();
                 }
             }
-            if (ImGui::BeginCombo("Material", currentLabel, ImGuiComboFlags_HeightLarge)) {
+            if (ImGui::BeginCombo("Material", edit.IsMixed(&ProceduralMeshComponent::material) ? "--" : currentLabel, ImGuiComboFlags_HeightLarge)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
-                    if (component.material.IsValid()) {
-                        component.material = Engine::MaterialID{};
-                        registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-                        modified = true;
-                    }
+                    component.material = Engine::MaterialID{};
+                    bCommit = true;
                 }
                 const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.material);
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
-                    registry.emplace_or_replace<ProceduralMeshLoadingTag>(entity);
-                    modified = true;
+                    bCommit = true;
                 }
                 ImGui::EndCombo();
             }
@@ -1225,6 +750,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             ImGui::SetNextItemWidth(fieldW);
             ImGui::BeginDisabled(!editable);
             bool changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.2f");
+            bCommit |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::EndDisabled();
             ImVec2 p = ImGui::GetItemRectMin();
             dl->AddRectFilled(p, {p.x + stripW, p.y + fieldH}, strip, frameRounding, ImDrawFlags_RoundCornersLeft);
@@ -1244,14 +770,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Offset");
         ImGui::SameLine(labelColW);
-        if (drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset)) {
-            modified = true;
-            auto* rt = registry.try_get<RenderTransformComponent>(entity);
-            if (rt) {
-                rt->renderOffset = component.renderOffset;
-                registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-            }
-        }
+        drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset);
 
         // Rotation row
         glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(component.renderRotation));
@@ -1259,17 +778,11 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         ImGui::TextUnformatted("Rotation");
         ImGui::SameLine(labelColW);
         if (drawXYZ("##rrx", "##rry", "##rrz", &renderEuler.x, 0.5f, bEditingOffset)) {
-            modified = true;
             component.renderRotation = glm::quat(glm::radians(renderEuler));
-            auto* rt = registry.try_get<RenderTransformComponent>(entity);
-            if (rt) {
-                rt->renderRotation = component.renderRotation;
-                registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-            }
         }
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditingOffset ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
-        ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditingOffset);
+        ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditingOffset));
         if (ImGui::Button(bEditingOffset ? "Done##offsetedit" : "Edit##offsetedit")) {
             bEditingOffset = !bEditingOffset;
         }
@@ -1306,15 +819,8 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             const Quat worldRenderRot = world.rotation * component.renderRotation;
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), pivotWorld) * glm::mat4_cast(worldRenderRot);
             if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), state->editor.currentGizmoOperation, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
-                modified = true;
                 component.renderOffset = Vec3(entityMatInv * Vec4(Vec3(gizmoMat[3]), 1.0f));
                 component.renderRotation = glm::inverse(world.rotation) * glm::quat_cast(Mat3(gizmoMat));
-                auto* rt = registry.try_get<RenderTransformComponent>(entity);
-                if (rt) {
-                    rt->renderOffset = component.renderOffset;
-                    rt->renderRotation = component.renderRotation;
-                    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-                }
             }
             if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
             ImGuizmo::PopID();
@@ -1322,7 +828,12 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    edit.PreviewDiff(before, component);
+    if (bCommit) {
+        edit.Commit<ProceduralMeshComponent>();
+    }
+
+    return {.bRequestRemoval = remove};
 }
 
 } // Engine

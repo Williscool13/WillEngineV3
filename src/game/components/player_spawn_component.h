@@ -9,6 +9,7 @@
 #include <entt/entt.hpp>
 
 #include "engine/component_registry.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -21,9 +22,11 @@ struct PlayerSpawnComponent
     int32_t priority{0};
     glm::vec3 offset{0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const PlayerSpawnComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(PlayerSpawnComponent& comp, const Engine::TextReader& r);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(PlayerSpawnComponent,
+        WILL_FIELD(priority),
+        WILL_FIELD(offset, .speed = 0.1f))
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }
 

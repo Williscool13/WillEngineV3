@@ -542,7 +542,7 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
     const auto& nodes = model->modelData.nodes;
     const auto& meshes = model->modelData.meshes;
     const Engine::ModelID modelId = registry.get<Component::StaticMeshComponent>(parent).modelId;
-    const uint32_t parentFlags = registry.get_or_emplace<Component::RenderFlagsComponent>(parent).flags;
+    const Component::RenderFlagsComponent parentFlags = registry.get_or_emplace<Component::RenderFlagsComponent>(parent);
     const Engine::InstanceStore::Range range = runtime->range;
 
     auto nodeEntities = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), std::max(nodes.Size(), size_t{1}));
@@ -611,8 +611,8 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
         }
         registry.emplace<Component::StaticMeshPrimitiveComponent>(child, childMesh);
 
-        Component::RenderFlagsComponent childFlags{};
-        childFlags.flags = bEmissive ? (parentFlags | Component::RenderFlagsComponent::EMISSIVE_LIGHT) : (parentFlags & ~Component::RenderFlagsComponent::EMISSIVE_LIGHT);
+        Component::RenderFlagsComponent childFlags = parentFlags;
+        childFlags.bEmissiveLight = bEmissive;
         registry.emplace_or_replace<Component::RenderFlagsComponent>(child, childFlags);
     }
 

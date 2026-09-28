@@ -12,6 +12,7 @@
 #include "engine/asset_manager_types.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/resources/model/instance_store.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core
 {
@@ -40,11 +41,26 @@ struct AreaLightComponent
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(AreaLightComponent,
+        WILL_FIELD(color),
+        WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
+        WILL_FIELD(halfWidth, .min = 0.001f, .speed = 0.01f),
+        WILL_FIELD(halfHeight, .min = 0.001f, .speed = 0.01f),
+        WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
+        WILL_FIELD(coneOuterDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
+        WILL_FIELD(coneInnerDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
+        WILL_FIELD(bDisk),
+        WILL_FIELD(drawEmissiveSurface),
+        WILL_FIELD(bExcludeFromProbeBake))
 
-    static void Serialize(const AreaLightComponent& comp, Engine::TextWriter& w);
+    static void Sanitize(AreaLightComponent& comp);
 
-    static void Deserialize(AreaLightComponent& comp, const Engine::TextReader& r);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
@@ -75,11 +91,19 @@ struct SphereLightComponent
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(SphereLightComponent,
+        WILL_FIELD(color),
+        WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
+        WILL_FIELD(radius, .min = 0.001f, .speed = 0.01f),
+        WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
+        WILL_FIELD(drawEmissiveSurface),
+        WILL_FIELD(bExcludeFromProbeBake))
 
-    static void Serialize(const SphereLightComponent& comp, Engine::TextWriter& w);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void Deserialize(SphereLightComponent& comp, const Engine::TextReader& r);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
@@ -119,11 +143,13 @@ struct DirectionalLightComponent
     int32_t priority{0};
     float angularRadiusDegrees{1.0f}; // sun-disk half-angle for soft shadows; 0 = hard
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(DirectionalLightComponent,
+        WILL_FIELD(color),
+        WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
+        WILL_FIELD(priority),
+        WILL_FIELD(angularRadiusDegrees, .min = 0.0f, .max = 30.0f, .speed = 0.02f))
 
-    static void Serialize(const DirectionalLightComponent& comp, Engine::TextWriter& w);
-
-    static void Deserialize(DirectionalLightComponent& comp, const Engine::TextReader& r);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /**
@@ -141,11 +167,15 @@ struct SkyboxComponent
     // Runtime-only: refcounted cubemap acquired lazily by the skybox gather.
     Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(SkyboxComponent,
+        WILL_FIELD(envMap),
+        WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
+        WILL_FIELD(priority),
+        WILL_FIELD(bEnabled))
 
-    static void Serialize(const SkyboxComponent& comp, Engine::TextWriter& w);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void Deserialize(SkyboxComponent& comp, const Engine::TextReader& r);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 

@@ -25,46 +25,29 @@ void CheckpointComponent::OnConstruct(entt::registry& registry, entt::entity ent
     }
 }
 
-void CheckpointComponent::Serialize(const CheckpointComponent& comp, Engine::TextWriter& w)
-{
-    static const CheckpointComponent DEF{};
-    w.KeyOpt("checkpointId", comp.checkpointId.id, uint64_t{0});
-    w.KeyOpt("priority", comp.priority, DEF.priority);
-    w.KeyOpt("spawnOffset", comp.spawnOffset, DEF.spawnOffset);
-    w.KeyOpt("spawnRotation", comp.spawnRotation, DEF.spawnRotation);
-}
 
-void CheckpointComponent::Deserialize(CheckpointComponent& comp, const Engine::TextReader& r)
+Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    comp.checkpointId = StringID(r.U64("checkpointId", comp.checkpointId.id));
-    comp.priority = r.Int("priority", comp.priority);
-    comp.spawnOffset = r.Vec3("spawnOffset", comp.spawnOffset);
-    comp.spawnRotation = r.Vec3("spawnRotation", comp.spawnRotation);
-}
-
-Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
-{
-    auto& component = registry.get<CheckpointComponent>(entity);
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const auto& component = edit.Get<CheckpointComponent>();
     bool open = ImGui::CollapsingHeader("Checkpoint", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     bool remove = ImGui::SmallButton("X##deletecheckpoint");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        char idLabel[64];
-        snprintf(idLabel, sizeof(idLabel), "ID: %llu", component.checkpointId.id);
-        ImGui::TextUnformatted(idLabel);
+        const auto idLabel = Core::InlineString<64>::Format("ID: %llu", component.checkpointId.id);
+        ImGui::TextUnformatted(edit.IsMixed(&CheckpointComponent::checkpointId) ? "ID: --" : idLabel.c_str());
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 50.f);
         if (ImGui::SmallButton("Regenerate")) {
-            auto* state = registry.ctx().get<Engine::EngineState*>();
-            component.checkpointId = StringID(state->rng());
-            modified = true;
+            Engine::EngineState* state = edit.State();
+            edit.Modify<CheckpointComponent>([state](CheckpointComponent& c) { c.checkpointId = StringID(state->rng()); });
         }
-        modified |= ImGui::DragInt("Priority", &component.priority);
-        modified |= ImGui::DragFloat3("Spawn Offset", &component.spawnOffset.x, 0.1f);
-        modified |= ImGui::DragFloat3("Spawn Rotation", &component.spawnRotation.x, 0.5f);
+        Engine::EditWidgets::DragInt(edit, "Priority", &CheckpointComponent::priority);
+        Engine::EditWidgets::DragFloat3(edit, "Spawn Offset", &CheckpointComponent::spawnOffset, 0.1f);
+        Engine::EditWidgets::DragFloat3(edit, "Spawn Rotation", &CheckpointComponent::spawnRotation, 0.5f);
     }
 
 #ifdef WDEBUG
@@ -95,7 +78,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
     }
 #endif
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 } // Game::Component
 

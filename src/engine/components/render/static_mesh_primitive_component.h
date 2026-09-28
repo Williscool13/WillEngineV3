@@ -31,12 +31,21 @@ struct StaticMeshPrimitiveComponent
     Vec3 renderOffset{0.0f};
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const StaticMeshPrimitiveComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(StaticMeshPrimitiveComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(StaticMeshPrimitiveComponent,
+        WILL_FIELD(modelId, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(primitiveOrdinal, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(materialOverride),
+        WILL_FIELD(shadingShaderOverride),
+        WILL_FIELD(lightingShaderOverride),
+        WILL_FIELD(renderOffset, .speed = 0.1f),
+        WILL_FIELD(renderRotation))
+
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 struct StaticMeshPrimitiveLoadPendingTag

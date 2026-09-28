@@ -7,6 +7,7 @@
 #include "engine/engine_api.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
+#include "engine/editor/edit_context.h"
 
 namespace Engine::Component
 {
@@ -51,10 +52,9 @@ void StableIdComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 
 namespace Engine
 {
-Engine::ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                       entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    auto& component = registry.get<Component::StableIdComponent>(entity);
+    const auto& component = edit.Get<Component::StableIdComponent>();
     char headerLabel[64];
     snprintf(headerLabel, sizeof(headerLabel), "Stable ID: %llu", component.id.id);
     ImGui::CollapsingHeader(headerLabel, ImGuiTreeNodeFlags_Leaf);

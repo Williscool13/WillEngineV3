@@ -15,23 +15,13 @@
 
 namespace Engine::Component
 {
-void EntityFolderComponent::Serialize(const EntityFolderComponent& comp, Engine::TextWriter& w)
-{
-    w.KeyOpt("folderId", comp.folderId.id, uint64_t{0});
-}
 
-void EntityFolderComponent::Deserialize(EntityFolderComponent& comp, const Engine::TextReader& r)
+Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    comp.folderId = StringID(r.U64("folderId", comp.folderId.id));
-}
-
-Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                        const char* name)
-{
-    auto& comp = registry.get<EntityFolderComponent>(entity);
+    entt::registry& registry = edit.Registry();
+    const auto& comp = edit.Get<EntityFolderComponent>();
     bool open = ImGui::CollapsingHeader("Folder##entityfolder", ImGuiTreeNodeFlags_DefaultOpen);
 
-    bool modified = false;
     if (open) {
         const char* current = "(None)";
         auto anchorView = registry.view<SceneFolderComponent>();
@@ -44,10 +34,10 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
 
         ImGui::Text("Folder");
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##entity_folder", comp.folderId.IsValid() ? current : "(None)")) {
+        const bool bMixed = edit.IsMixed(&EntityFolderComponent::folderId);
+        if (ImGui::BeginCombo("##entity_folder", bMixed ? "--" : comp.folderId.IsValid() ? current : "(None)")) {
             if (ImGui::Selectable("(None)", !comp.folderId.IsValid())) {
-                comp.folderId = StringID();
-                modified = true;
+                edit.Set(&EntityFolderComponent::folderId, StringID());
             }
             for (auto a : anchorView) {
                 const auto& fc = anchorView.get<SceneFolderComponent>(a);
@@ -55,14 +45,13 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
                 if (fc.parentFolder.IsValid()) { label.Append("    "); }
                 label.Append(fc.name);
                 if (ImGui::Selectable(label.c_str(), comp.folderId == fc.folderId)) {
-                    comp.folderId = fc.folderId;
-                    modified = true;
+                    edit.Set(&EntityFolderComponent::folderId, fc.folderId);
                 }
             }
             ImGui::EndCombo();
         }
     }
-    return {.bModified = modified};
+    return {};
 }
 
 bool SceneFolderComponent::CanAdd(const entt::registry& registry, entt::entity entity)
@@ -70,19 +59,4 @@ bool SceneFolderComponent::CanAdd(const entt::registry& registry, entt::entity e
     return false;
 }
 
-void SceneFolderComponent::Serialize(const SceneFolderComponent& comp, Engine::TextWriter& w)
-{
-    w.KeyOpt("folderId", comp.folderId.id, uint64_t{0});
-    w.KeyOpt("parentFolder", comp.parentFolder.id, uint64_t{0});
-    if (!comp.name.IsEmpty()) {
-        w.KeyStr("name", comp.name.View());
-    }
-}
-
-void SceneFolderComponent::Deserialize(SceneFolderComponent& comp, const Engine::TextReader& r)
-{
-    comp.folderId = StringID(r.U64("folderId", comp.folderId.id));
-    comp.parentFolder = StringID(r.U64("parentFolder", comp.parentFolder.id));
-    r.Str("name", comp.name);
-}
 } // Engine::Component

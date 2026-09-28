@@ -411,15 +411,15 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
 static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity entity)
 {
     const auto* renderFlags = registry.try_get<Component::RenderFlagsComponent>(entity);
-    return renderFlags && renderFlags->Has(Component::RenderFlagsComponent::EMISSIVE_LIGHT);
+    return renderFlags && renderFlags->bEmissiveLight;
 }
 
 static uint32_t InstanceFlagsFrom(const Component::RenderFlagsComponent& renderFlags)
 {
-    return (renderFlags.Has(Component::RenderFlagsComponent::MOTION_BLUR) ? INSTANCE_FLAG_MOTION_BLUR : 0u)
-           | (renderFlags.Has(Component::RenderFlagsComponent::ALPHA_CUTOUT) ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
-           | (renderFlags.Has(Component::RenderFlagsComponent::DDGI_CONTRIBUTE) ? INSTANCE_FLAG_DDGI_VISIBLE : 0u)
-           | (renderFlags.Has(Component::RenderFlagsComponent::CAMERA_MOTION_BLUR) ? INSTANCE_FLAG_CAMERA_MOTION_BLUR : 0u);
+    return (renderFlags.bMotionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u)
+           | (renderFlags.bAlphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
+           | (renderFlags.bDdgiContribute ? INSTANCE_FLAG_DDGI_VISIBLE : 0u)
+           | (renderFlags.bCameraMotionBlur ? INSTANCE_FLAG_CAMERA_MOTION_BLUR : 0u);
 }
 
 void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity)
@@ -430,7 +430,7 @@ void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity
 
     if (!runtime->range.IsValid()) { return; }
 
-    const bool bVisible = renderFlags->Has(Component::RenderFlagsComponent::VISIBLE) && !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+    const bool bVisible = renderFlags->bVisible &&!state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
     const uint32_t flags = InstanceFlagsFrom(*renderFlags);
 
     const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
@@ -447,7 +447,7 @@ void EvaluateAllInstanceRenderStates(Engine::EngineState* state)
     for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
 
-        bool bVisible = renderFlags.Has(Component::RenderFlagsComponent::VISIBLE);
+        bool bVisible = renderFlags.bVisible;
         if (bVisible && bAnyHideTags) {
             bVisible = !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
         }

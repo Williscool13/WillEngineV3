@@ -10,6 +10,7 @@
 #include "engine/engine_api.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/environment_map_id.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core
 {
@@ -64,14 +65,23 @@ struct ReflectionProbeComponent
     ContentSource contentSource{ContentSource::None};
     bool bBakeRequested{false};
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(ReflectionProbeComponent,
+        WILL_FIELD(probeId),
+        WILL_FIELD(bEnabled),
+        WILL_FIELD(shape),
+        WILL_FIELD(fadeMargin, .min = 0.0f, .max = 10.0f, .speed = 0.02f),
+        WILL_FIELD(captureOffset, .speed = 0.05f),
+        WILL_FIELD(bParallax),
+        WILL_FIELD(resolution),
+        WILL_FIELD(standInEnvMap),
+        WILL_FIELD(standInIntensity, .min = 0.0f, .max = 1.0e9f))
+
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
     /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
     static bool IsBakeStale(const WorldTransformComponent& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
-
-    static void Serialize(const ReflectionProbeComponent& comp, Engine::TextWriter& w);
-
-    static void Deserialize(ReflectionProbeComponent& comp, const Engine::TextReader& r);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 

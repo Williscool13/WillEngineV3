@@ -73,36 +73,25 @@ void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
     registry.remove<MultiframeDirtyComponent>(entity);
 }
 
-void TextComponent::Serialize(const TextComponent& comp, Engine::TextWriter& w)
-{
-    static const TextComponent DEF{};
-    w.Key("fontId", comp.fontId.id);
-    w.KeyOpt("textMaterialId", comp.textMaterialId.id, DEF.textMaterialId.id);
-    if (!comp.text.IsEmpty()) {
-        w.KeyStr("text", comp.text.View());
-    }
-    w.KeyOpt("scale", comp.scale, DEF.scale);
-    w.KeyOpt("color", comp.color, DEF.color);
-    w.KeyOpt("align", static_cast<uint32_t>(comp.align), static_cast<uint32_t>(DEF.align));
-    w.KeyOpt("anchor", static_cast<uint32_t>(comp.anchor), static_cast<uint32_t>(DEF.anchor));
-    w.KeyOpt("wrapWidth", comp.wrapWidth, DEF.wrapWidth);
-}
 
-void TextComponent::Deserialize(TextComponent& comp, const Engine::TextReader& r)
-{
-    comp.fontId = Engine::FontID(r.U64("fontId", comp.fontId.id));
-    comp.textMaterialId = Engine::TextMaterialID(r.U64("textMaterialId", comp.textMaterialId.id));
-    r.Str("text", comp.text);
-    comp.scale = r.Float("scale", comp.scale);
-    comp.color = r.Vec4("color", comp.color);
-    comp.align = static_cast<Engine::Text3DAlign>(r.UInt("align", static_cast<uint32_t>(comp.align)));
-    comp.anchor = static_cast<Engine::Text3DAnchor>(r.UInt("anchor", static_cast<uint32_t>(comp.anchor)));
-    comp.wrapWidth = r.Float("wrapWidth", comp.wrapWidth);
-}
-
-Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+void TextComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
     auto& comp = registry.get<TextComponent>(entity);
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    const auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    const Engine::Font* font = runtime.fontHandle.IsValid() ? ctx->assetManager->GetFont(runtime.fontHandle) : nullptr;
+    const bool bFontCurrent = (font != nullptr && font->fontId == comp.fontId) || registry.all_of<TextFontPendingTag>(entity);
+    if (!bFontCurrent) {
+        UnloadTextComponent(comp, registry, entity);
+        LoadTextComponent(comp, registry, entity);
+    }
+}
+
+Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const auto& comp = edit.Get<TextComponent>();
 
     bool open = ImGui::CollapsingHeader("Text", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -116,7 +105,6 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
 
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
-    bool modified = false;
 
     // Font picker
     const char* fontLabel = "(none)";
@@ -136,10 +124,7 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
                             ctx->assetManager->GetFont(runtime.fontHandle) &&
                             ctx->assetManager->GetFont(runtime.fontHandle)->fontId == fontId;
             if (ImGui::Selectable(meta.name.c_str(), selected)) {
-                UnloadTextComponent(comp, registry, entity);
-                comp.fontId = fontId;
-                LoadTextComponent(comp, registry, entity);
-                modified = true;
+                edit.Set(&TextComponent::fontId, fontId);
             }
         }
         ImGui::EndCombo();
@@ -153,48 +138,30 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
 
         if (ImGui::BeginCombo("Text Material", matLabel)) {
             if (ImGui::Selectable("(none)", !comp.textMaterialId.IsValid())) {
-                comp.textMaterialId = Engine::TextMaterialID::INVALID;
-                modified = true;
+                edit.Set(&TextComponent::textMaterialId, Engine::TextMaterialID::INVALID);
             }
             const auto& textMats = ctx->materialManager->GetTextMaterials();
             for (const auto& [matId, mat] : textMats) {
                 bool selected = comp.textMaterialId == matId;
                 if (ImGui::Selectable(mat.name.c_str(), selected)) {
-                    comp.textMaterialId = matId;
-                    modified = true;
+                    edit.Set(&TextComponent::textMaterialId, matId);
                 }
             }
             ImGui::EndCombo();
         }
     }
 
-    // Text content
-    char buf[256];
-    strncpy_s(buf, comp.text.c_str(), sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    if (ImGui::InputText("Text##field", buf, sizeof(buf))) {
-        comp.text = Core::InlineString<256>(buf);
-        modified = true;
-    }
-
-    modified |= ImGui::DragFloat("Scale", &comp.scale, 0.01f, 0.01f, 100.0f, "%.2f");
-    modified |= ImGui::ColorEdit4("Color", glm::value_ptr(comp.color));
+    EditWidgets::InputText(edit, "Text##field", &TextComponent::text);
+    EditWidgets::DragFloat(edit, "Scale", &TextComponent::scale, 0.01f, 0.01f, 100.0f, "%.2f");
+    EditWidgets::ColorEdit4(edit, "Color", &TextComponent::color);
 
     const char* alignLabels[] = {"Left", "Center", "Right"};
-    int alignIdx = static_cast<int>(comp.align);
-    if (ImGui::Combo("Align", &alignIdx, alignLabels, IM_ARRAYSIZE(alignLabels))) {
-        comp.align = static_cast<Engine::Text3DAlign>(alignIdx);
-        modified = true;
-    }
+    EditWidgets::Combo(edit, "Align", &TextComponent::align, alignLabels, IM_ARRAYSIZE(alignLabels));
 
     const char* anchorLabels[] = {"Baseline", "Top", "Center", "Bottom"};
-    int anchorIdx = static_cast<int>(comp.anchor);
-    if (ImGui::Combo("Anchor", &anchorIdx, anchorLabels, IM_ARRAYSIZE(anchorLabels))) {
-        comp.anchor = static_cast<Engine::Text3DAnchor>(anchorIdx);
-        modified = true;
-    }
+    EditWidgets::Combo(edit, "Anchor", &TextComponent::anchor, anchorLabels, IM_ARRAYSIZE(anchorLabels));
 
-    modified |= ImGui::DragFloat("Wrap Width", &comp.wrapWidth, 0.05f, 0.0f, 1000.0f, "%.2f");
+    EditWidgets::DragFloat(edit, "Wrap Width", &TextComponent::wrapWidth, 0.05f, 0.0f, 1000.0f, "%.2f");
 
     if (runtime.fontHandle.IsValid()) {
         Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
@@ -208,6 +175,6 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 } // Engine::Component

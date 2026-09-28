@@ -43,12 +43,28 @@ struct Text3DComponent
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const Text3DComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(Text3DComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(Text3DComponent,
+        WILL_FIELD(fontId, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(text),
+        WILL_FIELD(depth, .min = 0.001f, .max = 10.0f, .speed = 0.005f),
+        WILL_FIELD(flatness, .min = 0.0005f, .max = 0.1f, .speed = 0.0005f),
+        WILL_FIELD(tracking, .min = -1.0f, .max = 1.0f, .speed = 0.005f),
+        WILL_FIELD(scale, .min = 0.01f, .max = 100.0f, .speed = 0.01f),
+        WILL_FIELD(wrapWidth, .min = 0.0f, .max = 1000.0f, .speed = 0.05f),
+        WILL_FIELD(bendRadius, .min = -1000.0f, .max = 1000.0f, .speed = 0.05f),
+        WILL_FIELD(bSmoothNormals, .key = "smoothNormals"),
+        WILL_FIELD(align),
+        WILL_FIELD(anchor),
+        WILL_FIELD(material, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(renderOffset, .speed = 0.01f),
+        WILL_FIELD(renderRotation))
+
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Mesh needs (re)generating; the kickoff generates it (freeze-gated on the source font). */

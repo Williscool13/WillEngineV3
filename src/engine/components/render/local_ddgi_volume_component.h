@@ -29,11 +29,14 @@ struct LocalDDGIVolumeComponent
     bool bEnabled{true};
     float probeSpacing{0.5f};
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(LocalDDGIVolumeComponent,
+        WILL_FIELD(volumeId),
+        WILL_FIELD(bEnabled),
+        WILL_FIELD(probeSpacing, .min = 0.25f, .max = 2.0f, .speed = 0.01f))
 
-    static void Serialize(const LocalDDGIVolumeComponent& comp, Engine::TextWriter& w);
+    static void Sanitize(LocalDDGIVolumeComponent& comp);
 
-    static void Deserialize(LocalDDGIVolumeComponent& comp, const Engine::TextReader& r);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 

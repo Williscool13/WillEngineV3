@@ -1,13 +1,37 @@
 wscene
 version 2 0
 id 17128958053682175714
-content_version 3
+content_version 6
 name Study_Brutalism
-entity_count 2
+entity_count 3
 end_header
 scene_id|17128958053682175714
 scene_name|Study_Brutalism
-entities|2
+entities|3
+entity
+13819805800635272091
+name|Base1
+;
+14478730078215061411
+id|7546639222316636856
+sortOrder|3
+;
+5878230453007731534
+;
+8357514868041474787
+translation|0x00000000|0x3fe00000|0x00000000
+;
+9933298491518004787
+;
+3252190671657260935
+type|3
+material|7978723786507672229
+radius|0x3f000000
+height|0x40000000
+slices|128
+bCapped|1
+;
+;
 entity
 13819805800635272091
 name|Base
@@ -24,7 +48,7 @@ sortOrder|1
 ;
 3252190671657260935
 type|2
-material|0
+material|7978723786507672229
 renderOffset|0xc1200000|0x00000000|0xc1200000
 sizeX|0x41a00000
 sizeY|0x3f800000
@@ -56,6 +80,6 @@ envMap|7655518780955383049
 ;
 ;
 editor_camera
-translation|0x4137c368|0x3fc4fcbd|0xc134a5a5
-rotation|0x3ecb4501|0xbd88e023|0x3f6715c9|0x3e1b9af6
+translation|0x3fdff3bd|0x4046e690|0x40068fd3
+rotation|0x3f6f0bf4|0xbe8a0ba7|0x3e677e17|0x3d85af49
 ;

@@ -16,8 +16,7 @@
 #include "engine/asset_manager.h"
 #include "engine/resources/physics/collider_generation.h"
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
+#include "engine/reflection/reflection_serialize.h"
 #include "engine/components/core_components.h"
 #include "engine/components/render/procedural_mesh_component.h"
 #include "engine/components/render/spline_mesh_component.h"
@@ -190,44 +189,9 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, Engine::
             case Component::PhysicsShapeType::Collider:
                 w.Key("meshSourceModelId", shape.meshSourceModelId.id);
                 w.Key("meshPrecise", shape.bMeshPrecise);
-                w.Key("proceduralType", static_cast<uint32_t>(shape.proceduralParams.index()));
                 if (!shape.splineParams.spline.points.IsEmpty()) {
                     w.BeginBlock("splineParams");
-                    w.BeginBlock("spline");
-                    Engine::Spline::Serialize(shape.splineParams.spline, w);
-                    w.EndBlock();
-                    w.Key("radius", shape.splineParams.radius);
-                    w.Key("rollAngle", shape.splineParams.rollAngle);
-                    w.Key("sides", shape.splineParams.sides);
-                    w.Key("segmentsPerSpan", shape.splineParams.segmentsPerSpan);
-                    w.Key("bCaps", shape.splineParams.bCaps);
-                    w.Key("bCrossPlanks", shape.splineParams.bCrossPlanks);
-                    w.Key("crossPlankInterval", shape.splineParams.crossPlankInterval);
-                    w.Key("crossPlankHeight", shape.splineParams.crossPlankHeight);
-                    w.Key("crossPlankThickness", shape.splineParams.crossPlankThickness);
-                    w.Key("crossPlankLength", shape.splineParams.crossPlankLength);
-                    w.Key("profileType", static_cast<int32_t>(shape.splineParams.profile.type));
-                    w.Key("profileWidth", shape.splineParams.profile.width);
-                    w.Key("profileHeight", shape.splineParams.profile.height);
-                    w.Key("profileCornerRadius", shape.splineParams.profile.cornerRadius);
-                    w.Key("profileCornerSegments", shape.splineParams.profile.cornerSegments);
-                    w.Key("profileThickness", shape.splineParams.profile.thickness);
-                    w.Key("railingEnabled", shape.splineParams.railing.bEnabled);
-                    w.Key("railingPosts", shape.splineParams.railing.bPosts);
-                    w.Key("railingPostInterval", shape.splineParams.railing.postInterval);
-                    w.Key("railingPostBottom", shape.splineParams.railing.postBottom);
-                    w.Key("railingPostTop", shape.splineParams.railing.postTop);
-                    w.Key("railingPostSize", glm::vec2(shape.splineParams.railing.postSize.x, shape.splineParams.railing.postSize.y));
-                    w.Key("railingPostLateral", shape.splineParams.railing.postLateral);
-                    w.Key("railingLateralOffset", shape.splineParams.railing.lateralOffset);
-                    if (!shape.splineParams.railing.lanes.IsEmpty()) {
-                        w.Count("railingLanes", static_cast<uint32_t>(shape.splineParams.railing.lanes.Size()));
-                        for (int li = 0; li < static_cast<int>(shape.splineParams.railing.lanes.Size()); li++) {
-                            w.BeginBlock("l");
-                            w.Key("lane", glm::vec2(shape.splineParams.railing.lanes[li].x, shape.splineParams.railing.lanes[li].y));
-                            w.EndBlock();
-                        }
-                    }
+                    Engine::SerializeFields(shape.splineParams, w);
                     w.EndBlock();
                 }
                 if (shape.text3DSource.IsValid()) {
@@ -246,7 +210,7 @@ void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, Engine::
                     w.Key("precise", shape.text3DSource.bPrecise);
                     w.EndBlock();
                 }
-                Component::SerializeProceduralShape(shape.proceduralParams, w);
+                Engine::FieldTraits<Engine::ProceduralParams>::WriteFlattened(w, "proceduralType", shape.proceduralParams);
                 break;
         }
 
@@ -298,45 +262,10 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const Engine
             {
                 shape.meshSourceModelId = Engine::ModelID(s.U64("meshSourceModelId", 0));
                 shape.bMeshPrecise = s.Bool("meshPrecise", false);
-                shape.proceduralParams = Component::DeserializeProceduralShape(s.Int("proceduralType", 0), s);
+                Engine::FieldTraits<Engine::ProceduralParams>::ReadFlattened(s, "proceduralType", shape.proceduralParams);
                 const Engine::TextReader sp = s.Block("splineParams");
                 if (sp.IsValid()) {
-                    Engine::SplineParams spline{};
-                    const Engine::TextReader sr = sp.Block("spline");
-                    if (sr.IsValid()) { Engine::Spline::Deserialize(spline.spline, sr); }
-                    spline.radius = sp.Float("radius", 0.5f);
-                    spline.rollAngle = sp.Float("rollAngle", 0.0f);
-                    spline.sides = sp.Int("sides", 8);
-                    spline.segmentsPerSpan = sp.Int("segmentsPerSpan", 8);
-                    spline.bCaps = sp.Bool("bCaps", true);
-                    spline.bCrossPlanks = sp.Bool("bCrossPlanks", false);
-                    spline.crossPlankInterval = sp.Int("crossPlankInterval", 4);
-                    spline.crossPlankHeight = sp.Float("crossPlankHeight", 0.0f);
-                    spline.crossPlankThickness = sp.Float("crossPlankThickness", 0.1f);
-                    spline.crossPlankLength = sp.Float("crossPlankLength", 0.3f);
-                    spline.profile.type = static_cast<Engine::SplineProfileType>(sp.Int("profileType", 0));
-                    spline.profile.width = sp.Float("profileWidth", 0.4f);
-                    spline.profile.height = sp.Float("profileHeight", 0.4f);
-                    spline.profile.cornerRadius = sp.Float("profileCornerRadius", 0.08f);
-                    spline.profile.cornerSegments = sp.Int("profileCornerSegments", 3);
-                    spline.profile.thickness = sp.Float("profileThickness", 0.05f);
-                    spline.railing.bEnabled = sp.Bool("railingEnabled", false);
-                    spline.railing.bPosts = sp.Bool("railingPosts", true);
-                    spline.railing.postInterval = sp.Int("railingPostInterval", 4);
-                    spline.railing.postBottom = sp.Float("railingPostBottom", 0.0f);
-                    spline.railing.postTop = sp.Float("railingPostTop", 1.0f);
-                    const glm::vec2 postSize = sp.Vec2("railingPostSize", glm::vec2(0.05f, 0.05f));
-                    spline.railing.postSize.x = postSize.x;
-                    spline.railing.postSize.y = postSize.y;
-                    spline.railing.postLateral = sp.Float("railingPostLateral", 0.0f);
-                    spline.railing.lateralOffset = sp.Float("railingLateralOffset", 0.0f);
-                    spline.railing.lanes.Clear();
-                    sp.ForEachRecord("railingLanes", [&](const Engine::TextReader& l) {
-                        if (spline.railing.lanes.Size() >= 8) { return; }
-                        const glm::vec2 lane = l.Vec2("lane");
-                        spline.railing.lanes.PushBack(Vec2{lane.x, lane.y});
-                    });
-                    shape.splineParams = spline;
+                    Engine::DeserializeFields(shape.splineParams, sp);
                 }
                 const Engine::TextReader t3 = s.Block("text3DSource");
                 if (t3.IsValid()) {
@@ -363,18 +292,27 @@ void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const Engine
     });
 }
 
-Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                     const char* name)
+void Component::PhysicsBodyDesc::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<PhysicsBodyDesc>(entity);
+    registry.patch<PhysicsBodyDesc>(entity);
+}
+
+/** Shapes hold runtime collider handles, so they are edited on single selections only and written back whole. */
+Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const PhysicsBodyDesc before = edit.Get<PhysicsBodyDesc>();
+    PhysicsBodyDesc component = before;
+    bool bCommit = false;
     static int editShapeIdx = -1;
     static entt::entity editEntity = entt::null;
     static bool bGizmoWasDragging = false;
 
-    auto state = registry.ctx().get<Engine::EngineState*>();
+    auto state = edit.State();
     auto ctx = registry.ctx().get<Engine::EngineContext*>();
 
-    if (editEntity != entity) {
+    if (editEntity != entity || edit.IsMulti()) {
         editShapeIdx = -1;
         editEntity = entity;
         bGizmoWasDragging = false;
@@ -402,8 +340,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     const auto newMotion = static_cast<PhysicsMotionType>(m);
                     if (newMotion != component.motionType) {
                         component.motionType = newMotion;
-                        registry.patch<PhysicsBodyDesc>(entity);
-                        modified = true;
+                        bCommit = true;
                     }
                 }
                 if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -414,27 +351,33 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             ImGui::EndCombo();
         }
 
-        modified |= ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f);
-        modified |= ImGui::DragFloat("Friction", &component.friction, 0.01f, 0.0f, 10.0f);
-        modified |= ImGui::DragFloat("Restitution", &component.restitution, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat("Mass", &component.mass, 0.1f, 0.001f, 10000.0f, EditWidgets::MixedFormat(edit.IsMixed(&PhysicsBodyDesc::mass), "%.3f"));
+        bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::DragFloat("Friction", &component.friction, 0.01f, 0.0f, 10.0f, EditWidgets::MixedFormat(edit.IsMixed(&PhysicsBodyDesc::friction), "%.3f"));
+        bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::DragFloat("Restitution", &component.restitution, 0.01f, 0.0f, 1.0f, EditWidgets::MixedFormat(edit.IsMixed(&PhysicsBodyDesc::restitution), "%.3f"));
+        bCommit |= ImGui::IsItemDeactivatedAfterEdit();
 
         const char* qualityTypes[] = {"Discrete", "LinearCast"};
         int currentQuality = static_cast<int>(component.motionQuality);
         if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes))) {
             component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
-            modified = true;
+            bCommit = true;
         }
 
         int layer = static_cast<int>(component.layerOverride);
         if (layer == 0xFFFF) layer = -1;
         if (ImGui::InputInt("Layer Override", &layer)) {
             component.layerOverride = layer < 0 ? JPH::ObjectLayer(0xFFFF) : JPH::ObjectLayer(layer);
-            modified = true;
+            bCommit = true;
         }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("-1 = auto (derived from motion type)"); }
 
-        modified |= ImGui::Checkbox("Enhanced Internal Edge Removal", &component.bEnhancedInternalEdgeRemoval);
-        modified |= ImGui::Checkbox("Is Sensor", &component.bIsSensor);
+        bCommit |= ImGui::Checkbox("Enhanced Internal Edge Removal", &component.bEnhancedInternalEdgeRemoval);
+        bCommit |= ImGui::Checkbox("Is Sensor", &component.bIsSensor);
+
+        ImGui::BeginDisabled(edit.IsMulti());
+        if (edit.IsMulti()) { ImGui::TextDisabled("Shapes are edited one entity at a time"); }
 
         const glm::mat4 view = viewFamily.mainView.currentViewData.view;
         const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
@@ -505,8 +448,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         else if (!wasMesh && isMesh) {
                             FitMeshShapeToEntity(registry, entity, shape, scale);
                         }
-                        registry.patch<PhysicsBodyDesc>(entity);
                         modified = true;
+                        bCommit = true;
                     }
                     if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                         ImGui::SetTooltip("This concave procedural source only has a triangle-mesh collider; switch the body to Static or Kinematic to use it.");
@@ -517,19 +460,25 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             }
 
             modified |= ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
+            bCommit |= ImGui::IsItemDeactivatedAfterEdit();
             modified |= ImGui::DragFloat3("Baked Scale", &shape.bakedScale.x, 0.01f, 0.001f, 100.0f);
+            bCommit |= ImGui::IsItemDeactivatedAfterEdit();
 
             bool bAnyChange = false;
             switch (shape.type) {
                 case PhysicsShapeType::Box:
-                    bAnyChange |= ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
+                    modified |= ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
+                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
                     break;
                 case PhysicsShapeType::Sphere:
-                    bAnyChange |= ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
+                    modified |= ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
+                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
                     break;
                 case PhysicsShapeType::Capsule:
-                    bAnyChange |= ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
-                    bAnyChange |= ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
+                    modified |= ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
+                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+                    modified |= ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
+                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
                     break;
                 case PhysicsShapeType::Collider:
                 {
@@ -612,8 +561,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 }
             }
             if (bAnyChange) {
-                registry.patch<PhysicsBodyDesc>(entity);
                 modified = true;
+                bCommit = true;
             }
 
             //
@@ -628,8 +577,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     else {
                         FitPrimitiveShapeToEntity(registry, entity, shape, scale, fitModel->bounds);
                     }
-                    registry.patch<PhysicsBodyDesc>(entity);
                     modified = true;
+                    bCommit = true;
                 }
                 ImGui::EndDisabled();
             }
@@ -714,7 +663,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 Mat4 mat = glm::translate(Mat4(1.0f), shapeCenter);
                 if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, glm::value_ptr(mat))) {
                     shape.offset = Vec3(entityMatInv * Vec4(Vec3(mat[3]), 1.0f));
-                    modified = true;
                 }
                 if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
                 ImGuizmo::PopID();
@@ -723,9 +671,10 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             // Rebuild the shape/body once on drag release rather than every frame of the drag.
             const bool bGizmoDragging = state->editor.activeDotHandleId != -1 || ImGuizmo::IsUsing();
+            modified |= bGizmoDragging;
             if (bGizmoWasDragging && !bGizmoDragging) {
-                registry.patch<PhysicsBodyDesc>(entity);
                 modified = true;
+                bCommit = true;
             }
             bGizmoWasDragging = bGizmoDragging;
 
@@ -821,8 +770,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             }
             if (shapeToRemove >= 0) {
                 component.shapes.RemoveAt(shapeToRemove);
-                registry.patch<PhysicsBodyDesc>(entity);
                 modified = true;
+                bCommit = true;
             }
         }
 
@@ -831,11 +780,20 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             desc.type = PhysicsShapeType::Box;
             desc.box.halfExtents = glm::vec3(0.5f);
             component.shapes.PushBack(desc);
-            registry.patch<PhysicsBodyDesc>(entity);
             modified = true;
+            bCommit = true;
         }
+        ImGui::EndDisabled();
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    edit.PreviewDiff(before, component);
+    if (modified && !edit.IsMulti()) {
+        edit.Preview<PhysicsBodyDesc>([&component](PhysicsBodyDesc& c) { c.shapes = component.shapes; });
+    }
+    if (bCommit) {
+        edit.Commit<PhysicsBodyDesc>();
+    }
+
+    return {.bRequestRemoval = remove};
 }
 }

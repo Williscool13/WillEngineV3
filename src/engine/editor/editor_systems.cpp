@@ -19,6 +19,10 @@
 #include "engine/editor/editor_scene_browser.h"
 #include "engine/editor/editor_materials.h"
 #include "engine/editor/editor_multi_edit.h"
+#include "engine/editor/edit_context.h"
+#include "engine/components/component_types.h"
+#include "engine/components/core_components.h"
+#include "engine/components/common/stable_id_component.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -45,6 +49,8 @@
 #include "engine/components/render/spline_mesh_component.h"
 #include "engine/components/render/text3d_component.h"
 #include "engine/components/render/text_component.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
 
 namespace Engine
 {
@@ -63,6 +69,10 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
 static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& view, const glm::mat4& proj, const glm::vec3& multiGizmoCentroid, bool bJustSelected);
 
 static void DrawSceneStatsWindow(Engine::EngineState* state);
+
+static void DrawUndoHistoryWindow(Engine::EngineState* state);
+
+static void DrawComponentPanels(Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 {
@@ -116,18 +126,15 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
 
             if (ImGui::InputText("Name##multi", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
                 const bool hasToken = MultiEdit::ContainsNameToken(buf);
-                int index = 0;
-                for (auto e : entities) {
-                    auto& name = state->registry.get<Component::NameComponent>(e).name;
+                Engine::EditContext edit(state, Core::Span<const entt::entity>(entities.Data(), entities.Size()));
+                edit.Modify<Component::NameComponent>([&](Component::NameComponent& nc, uint32_t index) {
                     if (hasToken) {
-                        MultiEdit::ExpandNameTemplate(name, buf, index, state->rng);
+                        MultiEdit::ExpandNameTemplate(nc.name, buf, static_cast<int>(index), state->rng);
                     }
                     else {
-                        name = Core::InlineString<128>(buf);
+                        nc.name = Core::InlineString<128>(buf);
                     }
-                    ++index;
-                }
-                MarkEntitiesModified(state, entities);
+                });
             }
         }
         else {
@@ -172,30 +179,19 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         const float labelColW = ImGui::CalcTextSize("Translation").x + ImGui::GetStyle().ItemSpacing.x;
 
+        Engine::EditContext edit(state, Core::Span<const entt::entity>(entities.Data(), entities.Size()));
         auto applyAxis = [&](int axis, const MultiEdit::FieldResult& r, auto&& get, auto&& set) {
-            if (r.action == MultiEdit::FieldAction::None) {
-                return;
+            if (r.action == MultiEdit::FieldAction::Drag) {
+                edit.Preview<Component::TransformComponent>([&](Component::TransformComponent& tf) { set(tf, axis, get(tf, axis) + r.dragDelta); });
             }
-            int index = 0;
-            for (auto e : entities) {
-                auto* tf = state->registry.try_get<Component::TransformComponent>(e);
-                if (!tf) {
-                    continue;
-                }
-                const float cur = get(*tf, axis);
-                if (r.action == MultiEdit::FieldAction::Drag) {
-                    set(*tf, axis, cur + r.dragDelta);
-                }
-                else {
+            else if (r.action == MultiEdit::FieldAction::Commit) {
+                edit.Modify<Component::TransformComponent>([&](Component::TransformComponent& tf, uint32_t index) {
                     float v;
-                    if (MultiEdit::EvaluateFloatField(r.expr, cur, index, state->rng, v)) {
-                        set(*tf, axis, v);
+                    if (MultiEdit::EvaluateFloatField(r.expr, get(tf, axis), static_cast<int>(index), state->rng, v)) {
+                        set(tf, axis, v);
                     }
-                }
-                state->registry.emplace_or_replace<Component::DirtyTransformTag>(e);
-                ++index;
+                });
             }
-            MarkEntitiesModified(state, entities);
         };
 
         auto drawRow = [&](const char* label, const char* idBase, const glm::vec3& value, const glm::bvec3& same, float speed, auto&& get, auto&& set) {
@@ -286,6 +282,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     state->editor.ResetFrameCache();
     state->editor.bExclusiveGizmoActivePrev = state->editor.bExclusiveGizmoActive;
     state->editor.bExclusiveGizmoActive = false;
+    state->editor.undo.Tick(state, ImGui::IsAnyItemActive() || ImGuizmo::IsUsingAny() || state->editor.activeDotHandleId >= 0);
 
     const bool bJustSelected = HandleViewportSelection(ctx, state);
 
@@ -331,6 +328,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
 
     DrawPostProcessingWindow(state);
     DrawSceneStatsWindow(state);
+    DrawUndoHistoryWindow(state);
     DrawMaterialsWindow(ctx, state);
     DrawTexturesWindow(ctx, state);
 }
@@ -430,6 +428,17 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 state->editor.selectedEntities.Clear();
                 for (auto copy : copies) { state->editor.selectedEntities.PushBack(copy); }
                 if (!copies.IsEmpty()) { MarkSceneModified(state, state->scene.currentSceneId); }
+            }
+
+            if (!popupOpen && ctrlHeld && !ImGui::IsAnyItemActive()) {
+                const bool shiftHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_SHIFT).down;
+                if (state->input.GetActionState(Actions::ACTION_UNDO).pressed) {
+                    if (shiftHeld) { state->editor.undo.Redo(state); }
+                    else { state->editor.undo.Undo(state); }
+                }
+                else if (state->input.GetActionState(Actions::ACTION_REDO).pressed) {
+                    state->editor.undo.Redo(state);
+                }
             }
 
             if (!popupOpen && !state->editor.bMaterialListFocused && state->input.GetActionState(Actions::ACTION_DELETE_SELECTED).pressed) {
@@ -951,7 +960,6 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
         ImGui::Separator();
 
         if (state->editor.selectedEntities.Size() == 1) {
-            Engine::ComponentEntry* entryToRemove = nullptr;
             entt::entity entity = state->editor.selectedEntities[0];
             ImGui::Text("Entity: %u", static_cast<uint32_t>(entity));
             if (const auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -959,28 +967,7 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
                 ImGui::TextDisabled("(order: %llu)", stable->sortOrder);
             }
 
-            auto* entityScene = state->registry.try_get<Component::SceneComponent>(entity);
-            for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
-                if (entry.hideInInspector && !state->editor.bExposeAllComponents) { continue; }
-                if (entry.has(state->registry, entity)) {
-                    const bool readOnly = entry.hideInInspector;
-
-                    if (readOnly) { ImGui::BeginDisabled(true); }
-                    Engine::ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, state->registry, entity, entry.name);
-                    if (readOnly) { ImGui::EndDisabled(); }
-
-                    if (result.bRequestRemoval && !entry.hidden) {
-                        entryToRemove = &entry;
-                        if (entityScene) MarkSceneModified(state, entityScene->sceneId);
-                    }
-                    else if (result.bModified && entityScene) {
-                        MarkSceneModified(state, entityScene->sceneId);
-                    }
-                }
-            }
-            if (entryToRemove) {
-                entryToRemove->remove(state->registry, entity);
-            }
+            DrawComponentPanels(state, frameBuffer);
 
             ImGui::Spacing();
             ImGui::SetNextWindowSize(ImVec2(250, 0));
@@ -1013,9 +1000,49 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
         }
         else if (state->editor.selectedEntities.Size() > 1) {
             DrawMultiSelectEditor(ctx, state, centroid, transformCount);
+            DrawComponentPanels(state, frameBuffer);
         }
     }
     ImGui::End();
+}
+
+static void DrawComponentPanels(Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    auto& entities = state->editor.selectedEntities;
+    const bool bMulti = entities.Size() > 1;
+    const StringID transformType = Engine::TypeSID<Component::TransformComponent>();
+    const StringID nameType = Engine::TypeSID<Component::NameComponent>();
+    Engine::EditContext edit(state, Core::Span<const entt::entity>(entities.Data(), entities.Size()));
+
+    Engine::ComponentEntry* entryToRemove = nullptr;
+    for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
+        if (entry.hideInInspector && (bMulti || !state->editor.bExposeAllComponents)) { continue; }
+        if (bMulti && (entry.typeId == transformType || entry.typeId == nameType)) { continue; }
+        bool bShared = true;
+        for (const entt::entity e : entities) {
+            if (!entry.has(state->registry, e)) {
+                bShared = false;
+                break;
+            }
+        }
+        if (!bShared) { continue; }
+
+        const bool bReadOnly = entry.hideInInspector;
+        if (bReadOnly) { ImGui::BeginDisabled(true); }
+        const Engine::ComponentEditorResult result = entry.drawEditor(frameBuffer->mainViewFamily, edit, entry.name);
+        if (bReadOnly) { ImGui::EndDisabled(); }
+
+        if (result.bRequestRemoval && !entry.hidden) {
+            entryToRemove = &entry;
+        }
+    }
+
+    if (entryToRemove) {
+        for (const entt::entity e : entities) {
+            entryToRemove->remove(state->registry, e);
+        }
+        MarkEntitiesModified(state, entities);
+    }
 }
 
 static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& view, const glm::mat4& proj, const glm::vec3& multiGizmoCentroid, bool bJustSelected)
@@ -1055,6 +1082,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                 const bool bUsing = ImGuizmo::IsUsing();
                 ImGuizmo::PopID();
                 if (bUsing) {
+                    state->editor.undo.Begin(state, Engine::TypeSID<Component::TransformComponent>(), Core::Span<const entt::entity>(&entity, 1));
                     const glm::mat4 localModel = glm::inverse(parentWorld) * model;
                     float t[3], r[3], s[3];
                     ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localModel), t, r, s);
@@ -1106,6 +1134,8 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
             ImGuizmo::PopID();
 
             if (bUsing) {
+                state->editor.undo.Begin(state, Engine::TypeSID<Component::TransformComponent>(),
+                                         Core::Span<const entt::entity>(state->editor.selectedEntities.Data(), state->editor.selectedEntities.Size()));
                 if (!s_wasDragging) {
                     s_prevTranslation = multiGizmoCentroid;
                     s_wasDragging = true;
@@ -1178,6 +1208,88 @@ static void DrawSceneStatsWindow(Engine::EngineState* state)
         ImGui::SeparatorText("Lights");
         ImGui::Text("Area:   %zu", state->registry.view<Component::AreaLightComponent>().size());
         ImGui::Text("Sphere: %zu", state->registry.view<Component::SphereLightComponent>().size());
+    }
+    ImGui::End();
+}
+
+static void DrawUndoSnapshot(Engine::EngineState* state, const Engine::ComponentEntry* entry, const char* text, uint32_t size)
+{
+    if (entry == nullptr || entry->fillDefaults == nullptr) {
+        ImGui::TextUnformatted(text, text + size);
+        return;
+    }
+    Core::Vector<std::byte> expanded(state->allocator, Core::AllocTag::EngineState);
+    Engine::TextWriter w(expanded, true);
+    entry->fillDefaults(Engine::TextReader(text, size), w);
+    const char* out = reinterpret_cast<const char*>(expanded.Data());
+    ImGui::TextUnformatted(out, out + expanded.Size());
+}
+
+static void DrawUndoRecord(Engine::EngineState* state, const Engine::UndoRecord& record, bool bPending, int32_t id)
+{
+    const size_t* index = state->componentRegistry.registryMapping.Find(record.typeId);
+    const Engine::ComponentEntry* entry = index ? &state->componentRegistry.registry[*index] : nullptr;
+    const char* typeName = entry ? entry->name : "(unknown type)";
+
+    ImGui::PushID(id);
+    if (ImGui::TreeNode("record", "%s  x%u", typeName, static_cast<uint32_t>(record.entries.Size()))) {
+        for (uint32_t i = 0; i < record.entries.Size(); ++i) {
+            const Engine::UndoEntry& u = record.entries[i];
+            const entt::entity* e = state->stableIdToEntityMap.Find(u.stableId);
+            const auto* nc = e && state->registry.valid(*e) ? state->registry.try_get<Component::NameComponent>(*e) : nullptr;
+            const char* entityName = e == nullptr ? "(entity gone)" : nc ? nc->name.c_str() : "(unnamed)";
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::TreeNode("entity", "%s  [%016llx]", entityName, static_cast<unsigned long long>(u.stableId.id))) {
+                const char* data = reinterpret_cast<const char*>(record.data.Data());
+                ImGui::SeparatorText("before");
+                DrawUndoSnapshot(state, entry, data + u.beforeOffset, u.beforeSize);
+                ImGui::SeparatorText("after");
+                if (bPending) { ImGui::TextDisabled("(interaction in progress)"); }
+                else { DrawUndoSnapshot(state, entry, data + u.afterOffset, u.afterSize); }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        ImGui::TreePop();
+    }
+    ImGui::PopID();
+}
+
+static void DrawUndoHistoryWindow(Engine::EngineState* state)
+{
+    if (!state->editor.bShowUndoHistory) { return; }
+
+    Engine::UndoStack& undo = state->editor.undo;
+    if (ImGui::Begin("Undo History", &state->editor.bShowUndoHistory)) {
+        ImGui::BeginDisabled(!undo.CanUndo());
+        if (ImGui::Button("Undo")) { undo.Undo(state); }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!undo.CanRedo());
+        if (ImGui::Button("Redo")) { undo.Redo(state); }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) { undo.Clear(); }
+
+        const Core::Span<const Engine::UndoRecord> undoRecords = undo.UndoRecords();
+        const Core::Span<const Engine::UndoRecord> redoRecords = undo.RedoRecords();
+        ImGui::Text("%u undo, %u redo (max %u)", static_cast<uint32_t>(undoRecords.Size()), static_cast<uint32_t>(redoRecords.Size()), Engine::UndoStack::MAX_RECORDS);
+
+        int32_t id = 0;
+        if (const Engine::UndoRecord* pending = undo.Pending()) {
+            ImGui::SeparatorText("In progress");
+            DrawUndoRecord(state, *pending, true, id++);
+        }
+
+        ImGui::SeparatorText("Redo (next first)");
+        for (size_t i = redoRecords.Size(); i-- > 0;) {
+            DrawUndoRecord(state, redoRecords[i], false, id++);
+        }
+
+        ImGui::SeparatorText("Undo (next first)");
+        for (size_t i = undoRecords.Size(); i-- > 0;) {
+            DrawUndoRecord(state, undoRecords[i], false, id++);
+        }
     }
     ImGui::End();
 }

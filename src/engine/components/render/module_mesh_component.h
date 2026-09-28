@@ -13,6 +13,7 @@
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 #include "core/containers/array.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -33,12 +34,17 @@ struct ModuleMeshComponent
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const ModuleMeshComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(ModuleMeshComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(ModuleMeshComponent,
+        WILL_FIELD(params, .flags = Engine::FIELD_FLATTEN),
+        WILL_FIELD(slotMaterials),
+        WILL_FIELD(renderOffset),
+        WILL_FIELD(renderRotation))
+
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; ModuleMeshPendingKickoff kicks the model build. */

@@ -63,17 +63,33 @@ bool ReflectionProbeComponent::IsBakeStale(const WorldTransformComponent& world,
     return false;
 }
 
-Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+void ReflectionProbeComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
+    auto& comp = registry.get<ReflectionProbeComponent>(entity);
+    if (comp.contentSource == ContentSource::Baked) {
+        return;
+    }
+    if (comp.contentHandle.IsValid()) {
+        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        ctx->assetManager->UnloadCubemap(comp.contentHandle);
+        comp.contentHandle = Engine::CubemapHandle::INVALID;
+    }
+    RequestReflectionProbeLoad(registry, entity);
+}
+
+Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
 
-    if (editEntity != entity) {
+    if (editEntity != entity || edit.IsMulti()) {
         editEntity = entity;
         bEditing = false;
     }
 
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
     if (bEditing) {
         state->editor.bExclusiveGizmoActive = true;
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
@@ -88,56 +104,40 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
     bool remove = ImGui::SmallButton("X##deletereflectionprobe");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& comp = registry.get<ReflectionProbeComponent>(entity);
+        const auto& comp = edit.Get<ReflectionProbeComponent>();
 
-        modified |= ImGui::Checkbox("Enabled##rp", &comp.bEnabled);
+        EditWidgets::Checkbox(edit, "Enabled##rp", &ReflectionProbeComponent::bEnabled);
 
         static constexpr const char* SHAPE_LABELS[] = {"Box", "Sphere"};
-        int shapeIndex = static_cast<int>(comp.shape);
-        if (ImGui::Combo("Shape##rp", &shapeIndex, SHAPE_LABELS, 2)) {
-            comp.shape = static_cast<Shape>(shapeIndex);
-            modified = true;
-        }
+        EditWidgets::Combo(edit, "Shape##rp", &ReflectionProbeComponent::shape, SHAPE_LABELS, 2);
 
-        modified |= ImGui::DragFloat("Fade Margin##rp", &comp.fadeMargin, 0.02f, 0.0f, 10.0f);
-        modified |= ImGui::DragFloat3("Capture Offset##rp", &comp.captureOffset.x, 0.05f);
-        modified |= ImGui::Checkbox("Parallax##rp", &comp.bParallax);
+        EditWidgets::DragFloat(edit, "Fade Margin##rp", &ReflectionProbeComponent::fadeMargin, 0.02f, 0.0f, 10.0f);
+        EditWidgets::DragFloat3(edit, "Capture Offset##rp", &ReflectionProbeComponent::captureOffset, 0.05f);
+        EditWidgets::Checkbox(edit, "Parallax##rp", &ReflectionProbeComponent::bParallax);
 
         static constexpr const char* RESOLUTION_LABELS[] = {"128", "256"};
-        int resolutionIndex = static_cast<int>(comp.resolution);
-        if (ImGui::Combo("Resolution##rp", &resolutionIndex, RESOLUTION_LABELS, 2)) {
-            comp.resolution = static_cast<Resolution>(resolutionIndex);
-            modified = true;
-        }
+        EditWidgets::Combo(edit, "Resolution##rp", &ReflectionProbeComponent::resolution, RESOLUTION_LABELS, 2);
 
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.standInEnvMap);
-        const char* preview = currentMeta ? currentMeta->name.c_str() : "None";
+        const char* preview = edit.IsMixed(&ReflectionProbeComponent::standInEnvMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Stand-in Env Map##rp", preview)) {
             for (const auto& [id, meta] : ctx->assetManager->GetCubemapCache()) {
-                const bool selected = id == comp.standInEnvMap;
-                if (ImGui::Selectable(meta.name.c_str(), selected) && id != comp.standInEnvMap) {
-                    if (comp.contentHandle.IsValid()) {
-                        ctx->assetManager->UnloadCubemap(comp.contentHandle);
-                        comp.contentHandle = Engine::CubemapHandle::INVALID;
-                    }
-                    comp.standInEnvMap = id;
-                    modified = true;
-                    RequestReflectionProbeLoad(registry, entity);
+                if (ImGui::Selectable(meta.name.c_str(), id == comp.standInEnvMap)) {
+                    edit.Set(&ReflectionProbeComponent::standInEnvMap, Engine::EnvironmentMapID{id});
                 }
             }
             ImGui::EndCombo();
         }
-        modified |= ImGui::DragFloat("Stand-in Intensity##rp", &comp.standInIntensity, glm::max(comp.standInIntensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
+        EditWidgets::DragFloat(edit, "Stand-in Intensity##rp", &ReflectionProbeComponent::standInIntensity, glm::max(comp.standInIntensity * 0.005f, 1.0f), 0.0f, 1.0e9f, "%.0f");
 
-        ProbeBakeSystem& bake = ProbeBakeGet(registry.ctx().get<Engine::EngineState*>());
+        ProbeBakeSystem& bake = ProbeBakeGet(state);
         const bool bBakeInFlight = bake.bBakeActive && bake.probeEntity == entity;
 
         ImGui::BeginDisabled(comp.bBakeRequested || bBakeInFlight);
         if (ImGui::Button("Bake##rp")) {
-            comp.bBakeRequested = true;
+            edit.ForEachTarget<ReflectionProbeComponent>([&registry](entt::entity e) { registry.get<ReflectionProbeComponent>(e).bBakeRequested = true; });
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -170,7 +170,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         }
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
-        ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
+        ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
         if (ImGui::Button(bEditing ? "Done##rp" : "Edit Bounds##rp")) {
             bEditing = !bEditing;
         }
@@ -178,9 +178,9 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         ImGui::PopStyleColor();
     }
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    const auto* transform = registry.try_get<TransformComponent>(entity);
     if (transform && bEditing) {
-        auto& comp = registry.get<ReflectionProbeComponent>(entity);
+        const auto& comp = edit.Get<ReflectionProbeComponent>();
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         const auto& vd = viewFamily.mainView.currentViewData;
         const Vec3 center = transform->translation;
@@ -202,8 +202,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
                                                 [&](Vec3 newPt) {
                                                     const float newR = glm::max(0.05f, glm::dot(newPt - center, right));
-                                                    transform->scale = Vec3(newR);
-                                                    registry.emplace_or_replace<DirtyTransformTag>(entity);
+                                                    edit.PreviewSet(&TransformComponent::scale, Vec3(newR));
                                                 },
                                                 Editor::COLOR_AXIS_X);
         }
@@ -223,9 +222,10 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
                                                             const Vec3 opposite = center - outward * transform->scale[i];
                                                             const float newExtentFull = glm::dot(newPt - opposite, outward);
                                                             const float newHalf = glm::max(0.05f, newExtentFull * 0.5f);
-                                                            transform->scale[i] = newHalf;
-                                                            transform->translation = opposite + outward * newHalf;
-                                                            registry.emplace_or_replace<DirtyTransformTag>(entity);
+                                                            edit.Preview<TransformComponent>([&](TransformComponent& t) {
+                                                                t.scale[i] = newHalf;
+                                                                t.translation = opposite + outward * newHalf;
+                                                            });
                                                         },
                                                         colors[i]);
                 }
@@ -245,8 +245,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             ImGuizmo::PushID(Editor::GizmoId::REFLECTION_PROBE_CAPTURE);
             Mat4 gizmoMat = glm::translate(Mat4(1.0f), capturePos) * glm::mat4_cast(rot);
             if (ImGuizmo::Manipulate(glm::value_ptr(vd.view), glm::value_ptr(vd.proj), ImGuizmo::TRANSLATE, state->editor.currentGizmoMode, glm::value_ptr(gizmoMat), nullptr, snap)) {
-                comp.captureOffset = glm::inverse(rot) * (Vec3(gizmoMat[3]) - center);
-                modified = true;
+                edit.PreviewSet(&ReflectionProbeComponent::captureOffset, Vec3(glm::inverse(rot) * (Vec3(gizmoMat[3]) - center)));
             }
             if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) { state->editor.bExclusiveGizmoActive = true; }
             ImGuizmo::PopID();
@@ -272,35 +271,9 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 
-void ReflectionProbeComponent::Serialize(const ReflectionProbeComponent& comp, Engine::TextWriter& w)
-{
-    static const ReflectionProbeComponent DEF{};
-    w.KeyOpt("probeId", comp.probeId, DEF.probeId);
-    w.KeyOpt("bEnabled", comp.bEnabled, DEF.bEnabled);
-    w.KeyOpt("shape", static_cast<uint32_t>(comp.shape), static_cast<uint32_t>(DEF.shape));
-    w.KeyOpt("fadeMargin", comp.fadeMargin, DEF.fadeMargin);
-    w.KeyOpt("captureOffset", comp.captureOffset, DEF.captureOffset);
-    w.KeyOpt("bParallax", comp.bParallax, DEF.bParallax);
-    w.KeyOpt("resolution", static_cast<uint32_t>(comp.resolution), static_cast<uint32_t>(DEF.resolution));
-    w.KeyOpt("standInEnvMap", comp.standInEnvMap.id, DEF.standInEnvMap.id);
-    w.KeyOpt("standInIntensity", comp.standInIntensity, DEF.standInIntensity);
-}
-
-void ReflectionProbeComponent::Deserialize(ReflectionProbeComponent& comp, const Engine::TextReader& r)
-{
-    comp.probeId = r.U64("probeId", comp.probeId);
-    comp.bEnabled = r.Bool("bEnabled", comp.bEnabled);
-    comp.shape = static_cast<Shape>(r.UInt("shape", static_cast<uint32_t>(comp.shape)));
-    comp.fadeMargin = r.Float("fadeMargin", comp.fadeMargin);
-    comp.captureOffset = r.Vec3("captureOffset", comp.captureOffset);
-    comp.bParallax = r.Bool("bParallax", comp.bParallax);
-    comp.resolution = static_cast<Resolution>(r.UInt("resolution", static_cast<uint32_t>(comp.resolution)));
-    comp.standInEnvMap = Engine::EnvironmentMapID{r.U64("standInEnvMap", comp.standInEnvMap.id)};
-    comp.standInIntensity = r.Float("standInIntensity", comp.standInIntensity);
-}
 
 void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {

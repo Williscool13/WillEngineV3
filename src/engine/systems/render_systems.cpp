@@ -593,7 +593,7 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     entt::registry& registry = state->registry;
 
     for (const auto& [entity, renderFlags] : registry.view<Component::RenderFlagsComponent>().each()) {
-        if (!renderFlags.Has(Component::RenderFlagsComponent::PROBE_BAKE_INCLUDE)) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        if (!renderFlags.bProbeBakeInclude) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
 
     for (const auto& [entity, light] : registry.view<Component::AreaLightComponent>().each()) {

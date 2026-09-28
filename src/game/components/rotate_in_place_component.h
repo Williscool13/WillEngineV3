@@ -10,6 +10,7 @@
 
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -23,11 +24,13 @@ struct RotateInPlaceComponent
     float speedDegrees{45.0f};
     bool bWorldSpace{false};
 
-    static void Serialize(const RotateInPlaceComponent& comp, Engine::TextWriter& w);
+    WILL_REFLECT(RotateInPlaceComponent,
+        WILL_FIELD(axis),
+        WILL_FIELD(speedDegrees, .speed = 1.0f),
+        WILL_FIELD(bWorldSpace))
 
-    static void Deserialize(RotateInPlaceComponent& comp, const Engine::TextReader& r);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }
 

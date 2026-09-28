@@ -27,12 +27,18 @@ struct ProceduralMeshComponent
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
-    static void Serialize(const ProceduralMeshComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(ProceduralMeshComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(ProceduralMeshComponent,
+        WILL_FIELD(params, .key = "type", .flags = Engine::FIELD_FLATTEN),
+        WILL_FIELD(material),
+        WILL_FIELD(renderOffset),
+        WILL_FIELD(renderRotation))
+
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; StartProceduralMeshLoads kicks the model build. */
@@ -44,10 +50,6 @@ struct ProceduralMeshLoadingTag
 {};
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
-
-/** Flat shape-field (de)serialization shared with ModuleMeshComponent parts; "type" (variant index) is written by the caller. */
-void SerializeProceduralShape(const Engine::ProceduralParams& params, Engine::TextWriter& w);
-Engine::ProceduralParams DeserializeProceduralShape(int32_t type, const Engine::TextReader& r);
 }
 
 #endif //WILL_ENGINE_PROCEDURAL_MESH_COMPONENT_H

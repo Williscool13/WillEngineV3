@@ -19,8 +19,15 @@
 
 namespace Engine::Component
 {
-Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+void LocalDDGIVolumeComponent::Sanitize(LocalDDGIVolumeComponent& comp)
 {
+    comp.probeSpacing = glm::clamp(comp.probeSpacing, 0.25f, 2.0f);
+}
+
+Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
 
@@ -45,15 +52,11 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
     bool remove = ImGui::SmallButton("X##deletelocalddgi");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
+        const auto& comp = edit.Get<LocalDDGIVolumeComponent>();
 
-        modified |= ImGui::Checkbox("Enabled##lddgi", &comp.bEnabled);
-        if (ImGui::DragFloat("Probe Spacing##lddgi", &comp.probeSpacing, 0.01f, 0.25f, 2.0f, "%.2f")) {
-            comp.probeSpacing = glm::clamp(comp.probeSpacing, 0.25f, 2.0f);
-            modified = true;
-        }
+        EditWidgets::Checkbox(edit, "Enabled##lddgi", &LocalDDGIVolumeComponent::bEnabled);
+        EditWidgets::DragFloat(edit, "Probe Spacing##lddgi", &LocalDDGIVolumeComponent::probeSpacing, 0.01f, 0.25f, 2.0f, "%.2f");
 
         const float extent = static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * comp.probeSpacing;
         ImGui::Text("Window: %.2f m cube, owns %.2f m", extent, extent - 2.0f * comp.probeSpacing);
@@ -69,7 +72,7 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
     }
 
     if (transform && bEditing) {
-        auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
+        const auto& comp = edit.Get<LocalDDGIVolumeComponent>();
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         const auto& vd = viewFamily.mainView.currentViewData;
         const Vec4 viewport{
@@ -94,8 +97,7 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
                 Editor::AxisDotHandle(handleId, handlePos, outward, vd.view, vd.proj, viewport, vd.cameraPos, state,
                                       [&](Vec3 newPt) {
                                           const float newExtent = 2.0f * glm::dot(newPt - center, outward);
-                                          comp.probeSpacing = glm::clamp(newExtent / static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1), 0.25f, 2.0f);
-                                          modified = true;
+                                          edit.PreviewSet(&LocalDDGIVolumeComponent::probeSpacing, newExtent / static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1));
                                       },
                                       handleColor);
             }
@@ -103,27 +105,13 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
     }
 
     if (transform && (open || bEditing)) {
-        const auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
+        const auto& comp = edit.Get<LocalDDGIVolumeComponent>();
         DrawWindow(viewFamily, transform->translation, comp.probeSpacing, Core::Math::HashColor(comp.volumeId, 0u, 0.08f, 0.84f), state->projectConfig.reflectionProbeLineWidth, true);
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 
-void LocalDDGIVolumeComponent::Serialize(const LocalDDGIVolumeComponent& comp, Engine::TextWriter& w)
-{
-    static const LocalDDGIVolumeComponent DEF{};
-    w.KeyOpt("volumeId", comp.volumeId, DEF.volumeId);
-    w.KeyOpt("bEnabled", comp.bEnabled, DEF.bEnabled);
-    w.KeyOpt("probeSpacing", comp.probeSpacing, DEF.probeSpacing);
-}
-
-void LocalDDGIVolumeComponent::Deserialize(LocalDDGIVolumeComponent& comp, const Engine::TextReader& r)
-{
-    comp.volumeId = r.U64("volumeId", comp.volumeId);
-    comp.bEnabled = r.Bool("bEnabled", comp.bEnabled);
-    comp.probeSpacing = r.Float("probeSpacing", comp.probeSpacing);
-}
 
 void LocalDDGIVolumeComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {

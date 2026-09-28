@@ -15,40 +15,57 @@
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
 #include "engine/systems/render_systems.h"
+#include "engine/editor/edit_widgets.h"
 
 namespace Engine::Component
 {
-static constexpr struct { const char* key; uint32_t bit; } RENDER_FLAG_KEYS[] = {
-    {"visible", RenderFlagsComponent::VISIBLE},
-    {"probeBake", RenderFlagsComponent::PROBE_BAKE_INCLUDE},
-    {"ddgi", RenderFlagsComponent::DDGI_CONTRIBUTE},
-    {"motionBlur", RenderFlagsComponent::MOTION_BLUR},
-    {"alphaCutout", RenderFlagsComponent::ALPHA_CUTOUT},
-    {"emissiveLight", RenderFlagsComponent::EMISSIVE_LIGHT},
-    {"cameraMotionBlur", RenderFlagsComponent::CAMERA_MOTION_BLUR},
-};
-
-void RenderFlagsComponent::Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w)
+void RenderFlagsComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    for (const auto& f : RENDER_FLAG_KEYS) {
-        w.KeyOpt(f.key, comp.Has(f.bit), (DEFAULT_FLAGS & f.bit) != 0);
-    }
+    EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
 }
 
-void RenderFlagsComponent::Deserialize(RenderFlagsComponent& comp, const Engine::TextReader& r)
+void RenderFlagsComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    for (const auto& f : RENDER_FLAG_KEYS) {
-        if (r.Bool(f.key, (DEFAULT_FLAGS & f.bit) != 0)) { comp.flags |= f.bit; }
-        else { comp.flags &= ~f.bit; }
-    }
+    EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
 }
 
-void SetRenderFlag(Engine::EngineState* state, entt::entity entity, RenderFlagsComponent& renderFlags, uint32_t bit, bool value)
+bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
 {
-    if (value) { renderFlags.flags |= bit; }
-    else { renderFlags.flags &= ~bit; }
-
-    EvaluateInstanceRenderState(state, entity);
+    ImGui::PushID("renderflags");
+    if (toggles & RENDER_TOGGLE_VISIBLE) {
+        EditWidgets::Checkbox(edit, "Visible", &RenderFlagsComponent::bVisible);
+        ImGui::SameLine();
+    }
+    if (toggles & RENDER_TOGGLE_DDGI) {
+        EditWidgets::Checkbox(edit, "DDGI Contribution", &RenderFlagsComponent::bDdgiContribute);
+        ImGui::SameLine();
+    }
+    ImGui::NewLine();
+    if (toggles & RENDER_TOGGLE_PROBE_BAKE) {
+        EditWidgets::Checkbox(edit, "Probe Bake", &RenderFlagsComponent::bProbeBakeInclude);
+        ImGui::SameLine();
+    }
+    if (toggles & RENDER_TOGGLE_MOTION_BLUR) {
+        EditWidgets::Checkbox(edit, "Motion Blur", &RenderFlagsComponent::bMotionBlur);
+        ImGui::SameLine();
+    }
+    if (toggles & RENDER_TOGGLE_CAMERA_MOTION_BLUR) {
+        EditWidgets::Checkbox(edit, "Camera Motion Blur", &RenderFlagsComponent::bCameraMotionBlur);
+        ImGui::SameLine();
+    }
+    ImGui::NewLine();
+    if (toggles & RENDER_TOGGLE_ALPHA_CUTOUT) {
+        EditWidgets::Checkbox(edit, "Alpha Cutout", &RenderFlagsComponent::bAlphaCutout);
+        ImGui::SameLine();
+    }
+    bool bEmissiveChanged = false;
+    if (toggles & RENDER_TOGGLE_EMISSIVE) {
+        bEmissiveChanged = EditWidgets::Checkbox(edit, "Emissive Light", &RenderFlagsComponent::bEmissiveLight);
+        ImGui::SameLine();
+    }
+    ImGui::NewLine();
+    ImGui::PopID();
+    return bEmissiveChanged;
 }
 
 void MeshRuntime::OnConstruct(entt::registry& registry, entt::entity entity)

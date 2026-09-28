@@ -40,12 +40,29 @@ struct SplineMeshComponent
     Engine::MaterialID material{};
     glm::vec3 renderOffset{0.0f};
 
-    static void Serialize(const SplineMeshComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(SplineMeshComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(SplineMeshComponent,
+        WILL_FIELD(spline),
+        WILL_FIELD(radius),
+        WILL_FIELD(rollAngle),
+        WILL_FIELD(sides),
+        WILL_FIELD(segmentsPerSpan),
+        WILL_FIELD(bCaps),
+        WILL_FIELD(bCrossPlanks),
+        WILL_FIELD(crossPlankInterval),
+        WILL_FIELD(crossPlankHeight),
+        WILL_FIELD(crossPlankThickness),
+        WILL_FIELD(crossPlankLength),
+        WILL_FIELD(profile),
+        WILL_FIELD(railing),
+        WILL_FIELD(material),
+        WILL_FIELD(renderOffset))
+
+    static void Sanitize(SplineMeshComponent& comp);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; StartSplineMeshLoads kicks the model build. */

@@ -134,6 +134,7 @@ void HotReloadSave(EngineContext* ctx, EngineState* state)
 
 void HotReloadRestore(EngineContext* ctx, EngineState* state)
 {
+    state->editor.undo.Clear();
     CreateCameras(state, state->editor.pieCameraTranslation, state->editor.pieCameraRotation);
 
     if (!state->editor.hotReloadSnapshot.IsEmpty()) {

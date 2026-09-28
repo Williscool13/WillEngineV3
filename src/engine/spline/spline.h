@@ -8,12 +8,10 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include "core/containers/inline_vector.h"
+#include "engine/reflection/reflection.h"
 
 namespace Engine
 {
-class TextWriter;
-class TextReader;
-
 enum class SplineMode : uint8_t
 {
     Linear,
@@ -26,14 +24,23 @@ inline const char* SplineModeNames[] = {
     "Catmull-Rom",
 };
 
+struct SplinePoint
+{
+    glm::vec3 pos{0.0f};
+    float roll{0.0f}; // rotation around tangent (degrees)
+
+    WILL_REFLECT(SplinePoint, WILL_FIELD(pos), WILL_FIELD(roll))
+};
+
 struct Spline
 {
     static constexpr size_t MaxPoints = 64;
 
-    Core::InlineVector<glm::vec3, MaxPoints> points;
-    Core::InlineVector<float, MaxPoints> rolls; // per-point rotation around tangent (degrees)
+    Core::InlineVector<SplinePoint, MaxPoints> points;
     SplineMode mode{SplineMode::CatmullRom};
     bool bClosed{false};
+
+    WILL_REFLECT(Spline, WILL_FIELD(mode), WILL_FIELD(bClosed), WILL_FIELD(points))
 
     /**
      * Evaluate position on segment [from -> to] at t in [0,1]
@@ -59,9 +66,6 @@ struct Spline
      * @return
      */
     [[nodiscard]] int32_t SegmentCount() const;
-
-    static void Serialize(const Spline& spline, TextWriter& w);
-    static void Deserialize(Spline& spline, const TextReader& r);
 };
 }
 

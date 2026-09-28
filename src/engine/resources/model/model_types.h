@@ -17,6 +17,7 @@
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
 #include "core/types/math.h"
+#include "engine/reflection/reflection.h"
 
 namespace Render
 {
@@ -134,6 +135,9 @@ struct StaircaseParams
     float stepHeight{0.2f};
     bool bIsClosed{true};
     uint8_t _pad1[3]{};
+
+    WILL_REFLECT(StaircaseParams, WILL_FIELD(stepCount), WILL_FIELD(width), WILL_FIELD(totalDepth), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight),
+                 WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed))
 };
 
 struct BoxParams
@@ -142,6 +146,8 @@ struct BoxParams
     float chamferX[4]{};
     float chamferY[4]{};
     float chamferZ[4]{};
+
+    WILL_REFLECT(BoxParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ))
 };
 
 struct CylinderParams
@@ -151,6 +157,8 @@ struct CylinderParams
     int32_t slices{16};
     bool bCapped{true};
     uint8_t _pad0[3]{};
+
+    WILL_REFLECT(CylinderParams, WILL_FIELD(radius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(bCapped))
 };
 
 struct CapsuleParams
@@ -159,6 +167,8 @@ struct CapsuleParams
     float height{2.0f};
     int32_t slices{16};
     int32_t rings{8};
+
+    WILL_REFLECT(CapsuleParams, WILL_FIELD(radius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(rings))
 };
 
 struct TorusParams
@@ -167,6 +177,8 @@ struct TorusParams
     float tubeRadius{0.25f};
     int32_t slices{16};
     int32_t stacks{16};
+
+    WILL_REFLECT(TorusParams, WILL_FIELD(ringRadius), WILL_FIELD(tubeRadius), WILL_FIELD(slices), WILL_FIELD(stacks))
 };
 
 struct ArchParams
@@ -178,6 +190,8 @@ struct ArchParams
     int32_t sides{8};
     bool bFillCorners{false};
     uint8_t _pad0[3]{};
+
+    WILL_REFLECT(ArchParams, WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(depth), WILL_FIELD(thickness), WILL_FIELD(sides), WILL_FIELD(bFillCorners))
 };
 
 struct WedgeParams
@@ -185,6 +199,8 @@ struct WedgeParams
     float sizeX{1.0f};
     float sizeY{1.0f};
     float sizeZ{1.0f};
+
+    WILL_REFLECT(WedgeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ))
 };
 
 struct ConeParams
@@ -194,6 +210,8 @@ struct ConeParams
     int32_t slices{16};
     bool bCapped{true};
     uint8_t _pad0[3]{};
+
+    WILL_REFLECT(ConeParams, WILL_FIELD(radius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(bCapped))
 };
 
 /**
@@ -210,6 +228,9 @@ struct DoorParams
     bool bHalf{false};
     bool bFlip{false};
     uint8_t _pad0[2]{};
+
+    WILL_REFLECT(DoorParams, WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(depth), WILL_FIELD(archHeight), WILL_FIELD(gap), WILL_FIELD(sides), WILL_FIELD(bHalf),
+                 WILL_FIELD(bFlip))
 };
 
 struct PlaneParams
@@ -218,6 +239,8 @@ struct PlaneParams
     float sizeZ{2.0f};
     int32_t tilesX{1};
     int32_t tilesZ{1};
+
+    WILL_REFLECT(PlaneParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(tilesX), WILL_FIELD(tilesZ))
 };
 
 struct SphereParams
@@ -225,12 +248,18 @@ struct SphereParams
     float radius{0.5f};
     int32_t slices{16};
     int32_t stacks{8};
+
+    WILL_REFLECT(SphereParams, WILL_FIELD(radius), WILL_FIELD(slices), WILL_FIELD(stacks))
 };
 
 struct SubdividedSphereParams
 {
     float radius{0.5f};
     int32_t subdivisions{3};
+
+    WILL_REFLECT(SubdividedSphereParams, WILL_FIELD(radius), WILL_FIELD(subdivisions))
+
+    static void Sanitize(SubdividedSphereParams& p) { p.subdivisions = glm::clamp(p.subdivisions, 0, 4); }
 };
 
 struct HemisphereParams
@@ -238,6 +267,8 @@ struct HemisphereParams
     float radius{0.5f};
     int32_t slices{16};
     int32_t stacks{8};
+
+    WILL_REFLECT(HemisphereParams, WILL_FIELD(radius), WILL_FIELD(slices), WILL_FIELD(stacks))
 };
 
 struct PipeParams
@@ -246,26 +277,36 @@ struct PipeParams
     float innerRadius{0.3f};
     float height{2.0f};
     int32_t slices{16};
+
+    WILL_REFLECT(PipeParams, WILL_FIELD(outerRadius), WILL_FIELD(innerRadius), WILL_FIELD(height), WILL_FIELD(slices))
 };
 
 struct TetrahedronParams
 {
     float radius{0.5f};
+
+    WILL_REFLECT(TetrahedronParams, WILL_FIELD(radius))
 };
 
 struct OctahedronParams
 {
     float radius{0.5f};
+
+    WILL_REFLECT(OctahedronParams, WILL_FIELD(radius))
 };
 
 struct IcosahedronParams
 {
     float radius{0.5f};
+
+    WILL_REFLECT(IcosahedronParams, WILL_FIELD(radius))
 };
 
 struct DodecahedronParams
 {
     float radius{0.5f};
+
+    WILL_REFLECT(DodecahedronParams, WILL_FIELD(radius))
 };
 
 struct KleinBottleParams
@@ -273,6 +314,8 @@ struct KleinBottleParams
     float scale{1.0f};
     int32_t slices{8};
     int32_t stacks{8};
+
+    WILL_REFLECT(KleinBottleParams, WILL_FIELD(scale), WILL_FIELD(slices), WILL_FIELD(stacks))
 };
 
 struct TrefoilKnotParams
@@ -281,6 +324,8 @@ struct TrefoilKnotParams
     float tubeRadius{1.0f};
     int32_t slices{16};
     int32_t stacks{128};
+
+    WILL_REFLECT(TrefoilKnotParams, WILL_FIELD(scale), WILL_FIELD(tubeRadius), WILL_FIELD(slices), WILL_FIELD(stacks))
 };
 
 enum class SplineProfileType : uint8_t
@@ -303,6 +348,8 @@ struct SplineProfile
     float cornerRadius{0.08f};
     int32_t cornerSegments{3};
     float thickness{0.05f};
+
+    WILL_REFLECT(SplineProfile, WILL_FIELD(type), WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(cornerRadius), WILL_FIELD(cornerSegments), WILL_FIELD(thickness))
 };
 
 struct SplineRailing
@@ -316,6 +363,9 @@ struct SplineRailing
     Vec2 postSize{0.05f, 0.05f};
     float postLateral{0.0f};
     float lateralOffset{0.0f};
+
+    WILL_REFLECT(SplineRailing, WILL_FIELD(bEnabled), WILL_FIELD(lanes), WILL_FIELD(bPosts), WILL_FIELD(postInterval), WILL_FIELD(postBottom), WILL_FIELD(postTop),
+                 WILL_FIELD(postSize), WILL_FIELD(postLateral), WILL_FIELD(lateralOffset))
 };
 
 struct SplineParams
@@ -333,6 +383,10 @@ struct SplineParams
     float crossPlankLength{0.3f};
     SplineProfile profile{};
     SplineRailing railing{};
+
+    WILL_REFLECT(SplineParams, WILL_FIELD(spline), WILL_FIELD(radius), WILL_FIELD(rollAngle), WILL_FIELD(sides), WILL_FIELD(segmentsPerSpan), WILL_FIELD(bCaps),
+                 WILL_FIELD(bCrossPlanks), WILL_FIELD(crossPlankInterval), WILL_FIELD(crossPlankHeight), WILL_FIELD(crossPlankThickness), WILL_FIELD(crossPlankLength),
+                 WILL_FIELD(profile), WILL_FIELD(railing))
 };
 
 struct BowlParams
@@ -344,6 +398,9 @@ struct BowlParams
     float lipHeight{0.02f};
     int32_t slices{16};
     int32_t segments{8};
+
+    WILL_REFLECT(BowlParams, WILL_FIELD(radius), WILL_FIELD(height), WILL_FIELD(curveRadius), WILL_FIELD(flatRadius), WILL_FIELD(lipHeight), WILL_FIELD(slices),
+                 WILL_FIELD(segments))
 };
 
 struct CurvedRampParams
@@ -356,6 +413,9 @@ struct CurvedRampParams
     uint8_t _pad0[3]{};
     float flatLength{1.0f};
     float lipHeight{0.02f};
+
+    WILL_REFLECT(CurvedRampParams, WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(radius), WILL_FIELD(segments), WILL_FIELD(bHalfPipe), WILL_FIELD(flatLength),
+                 WILL_FIELD(lipHeight))
 };
 
 /**
@@ -381,6 +441,10 @@ struct SpiralStaircaseParams
     bool bShowCenterColumn{true};
     bool bRamp{false};
     uint8_t _pad2[2]{};
+
+    WILL_REFLECT(SpiralStaircaseParams, WILL_FIELD(stepCount), WILL_FIELD(stepHeight), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight), WILL_FIELD(outerRadius),
+                 WILL_FIELD(centerColumnRadius), WILL_FIELD(treadThickness), WILL_FIELD(degreesPerStep), WILL_FIELD(totalSweep), WILL_FIELD(bSpecifyDegreesPerStep),
+                 WILL_FIELD(arcSegments), WILL_FIELD(bShowCenterColumn), WILL_FIELD(bRamp))
 };
 
 /**
@@ -394,6 +458,8 @@ struct RingParams
     int32_t slices{32};
     bool bDoubleSided{true};
     uint8_t _pad0[3]{};
+
+    WILL_REFLECT(RingParams, WILL_FIELD(outerRadius), WILL_FIELD(innerRadius), WILL_FIELD(slices), WILL_FIELD(bDoubleSided))
 };
 
 struct WallOpening
@@ -402,6 +468,8 @@ struct WallOpening
     float y{0.0f};
     float w{0.0f};
     float h{0.0f};
+
+    WILL_REFLECT(WallOpening, WILL_FIELD(x), WILL_FIELD(y), WILL_FIELD(w), WILL_FIELD(h))
 };
 
 /**
@@ -416,6 +484,8 @@ struct WallParams
     float sizeZ{0.2f};
     int32_t openingCount{0};
     WallOpening openings[MAX_OPENINGS]{};
+
+    WILL_REFLECT(WallParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(openingCount), WILL_FIELD(openings))
 };
 
 /**
@@ -433,6 +503,8 @@ struct LatticeParams
     float braceSize{0.04f};
     int32_t bayCount{4};
     int32_t pattern{0};
+
+    WILL_REFLECT(LatticeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(chordSize), WILL_FIELD(braceSize), WILL_FIELD(bayCount), WILL_FIELD(pattern))
 };
 
 /**
@@ -449,6 +521,8 @@ struct CorrugatedPanelParams
     float ribDepth{0.05f};
     float ribWidth{0.2f};
     int32_t ribCount{6};
+
+    WILL_REFLECT(CorrugatedPanelParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(ribDepth), WILL_FIELD(ribWidth), WILL_FIELD(ribCount))
 };
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
@@ -463,6 +537,10 @@ struct ModulePart
     Vec3 offset{0.0f};
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     int32_t materialSlot{0};
+
+    WILL_REFLECT(ModulePart, WILL_FIELD(shape, .key = "type", .flags = FIELD_FLATTEN), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(materialSlot, .key = "slot"))
+
+    static void Sanitize(ModulePart& p) { p.materialSlot = glm::clamp(p.materialSlot, 0, MAX_MODULE_SLOTS - 1); }
 };
 
 /**
@@ -471,6 +549,8 @@ struct ModulePart
 struct ModuleParams
 {
     Core::InlineVector<ModulePart, MAX_MODULE_PARTS> parts;
+
+    WILL_REFLECT(ModuleParams, WILL_FIELD(parts))
 };
 
 /** Horizontal placement of each line relative to the model origin. */

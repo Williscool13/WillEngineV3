@@ -17,6 +17,7 @@
 #include "engine/resources/model/model_types.h"
 #include "engine/resources/model/instance_store.h"
 #include "engine/resources/model/model_store.h"
+#include "engine/reflection/reflection.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine
@@ -36,24 +37,44 @@ struct RenderFlagsComponent
 {
     static constexpr const char* COMPONENT_NAME = "RenderFlagsComponent";
 
-    static constexpr uint32_t VISIBLE = 1u << 0;
-    static constexpr uint32_t PROBE_BAKE_INCLUDE = 1u << 1;
-    static constexpr uint32_t DDGI_CONTRIBUTE = 1u << 2;
-    static constexpr uint32_t MOTION_BLUR = 1u << 3;
-    static constexpr uint32_t ALPHA_CUTOUT = 1u << 4;
-    static constexpr uint32_t EMISSIVE_LIGHT = 1u << 5;
-    static constexpr uint32_t CAMERA_MOTION_BLUR = 1u << 6;
-    static constexpr uint32_t DEFAULT_FLAGS = VISIBLE | PROBE_BAKE_INCLUDE | DDGI_CONTRIBUTE | MOTION_BLUR | ALPHA_CUTOUT | CAMERA_MOTION_BLUR;
+    bool bVisible{true};
+    bool bProbeBakeInclude{true};
+    bool bDdgiContribute{true};
+    bool bMotionBlur{true};
+    bool bAlphaCutout{true};
+    bool bEmissiveLight{false};
+    bool bCameraMotionBlur{true};
 
-    uint32_t flags{DEFAULT_FLAGS};
+    WILL_REFLECT(RenderFlagsComponent,
+        WILL_FIELD(bVisible, .key = "visible"),
+        WILL_FIELD(bProbeBakeInclude, .key = "probeBake"),
+        WILL_FIELD(bDdgiContribute, .key = "ddgi"),
+        WILL_FIELD(bMotionBlur, .key = "motionBlur"),
+        WILL_FIELD(bAlphaCutout, .key = "alphaCutout"),
+        WILL_FIELD(bEmissiveLight, .key = "emissiveLight"),
+        WILL_FIELD(bCameraMotionBlur, .key = "cameraMotionBlur"))
 
-    [[nodiscard]] bool Has(uint32_t bit) const { return (flags & bit) != 0; }
-
-    static void Serialize(const RenderFlagsComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(RenderFlagsComponent& comp, const Engine::TextReader& r);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
 };
 
-void SetRenderFlag(Engine::EngineState* state, entt::entity entity, RenderFlagsComponent& renderFlags, uint32_t bit, bool value);
+enum RenderFlagToggle : uint32_t
+{
+    RENDER_TOGGLE_VISIBLE = 1u << 0,
+    RENDER_TOGGLE_DDGI = 1u << 1,
+    RENDER_TOGGLE_PROBE_BAKE = 1u << 2,
+    RENDER_TOGGLE_MOTION_BLUR = 1u << 3,
+    RENDER_TOGGLE_CAMERA_MOTION_BLUR = 1u << 4,
+    RENDER_TOGGLE_ALPHA_CUTOUT = 1u << 5,
+    RENDER_TOGGLE_EMISSIVE = 1u << 6,
+    RENDER_TOGGLE_ALL = 0x7Fu,
+};
+
+/**
+ * @param toggles RENDER_TOGGLE_* bits
+ * @return true when Emissive Light changed; the caller's mesh must rebuild its emissive light table
+ */
+bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles);
 
 struct RenderTransformComponent
 {

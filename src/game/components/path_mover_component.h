@@ -13,6 +13,7 @@
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 #include "core/containers/inline_vector.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core
 {
@@ -81,6 +82,8 @@ struct PathPointSettings
     EasingType easing{EasingType::Linear};
     float speed{1.0f};
     float waitTime{0.0f};
+
+    WILL_REFLECT(PathPointSettings, WILL_FIELD(rotation), WILL_FIELD(easing), WILL_FIELD(speed), WILL_FIELD(waitTime))
 };
 
 struct PathMoverComponent
@@ -98,11 +101,19 @@ struct PathMoverComponent
     bool bIsWaiting{false};
     float waitTimer{0.0f};
 
-    static void Serialize(const PathMoverComponent& comp, Engine::TextWriter& w);
+    WILL_REFLECT(PathMoverComponent,
+        WILL_FIELD(spline),
+        WILL_FIELD(pointSettings),
+        WILL_FIELD(loopMode),
+        WILL_FIELD(currentSegment),
+        WILL_FIELD(progress),
+        WILL_FIELD(direction),
+        WILL_FIELD(bIsWaiting),
+        WILL_FIELD(waitTimer))
 
-    static void Deserialize(PathMoverComponent& comp, const Engine::TextReader& r);
+    static void Sanitize(PathMoverComponent& comp);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 float ApplyEasing(EasingType type, float t);

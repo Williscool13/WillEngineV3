@@ -25,6 +25,11 @@ class TextWriter
 public:
     explicit TextWriter(Core::Vector<std::byte>& _out) : out(&_out) {}
 
+    /** bWriteDefaults makes KeyOpt write every value; for display only, the output still loads. */
+    TextWriter(Core::Vector<std::byte>& _out, bool _bWriteDefaults) : out(&_out), bWriteDefaults(_bWriteDefaults) {}
+
+    [[nodiscard]] bool WritesDefaults() const { return bWriteDefaults; }
+
     void Key(const char* key, float v) { AppendTextF(*out, "%s|0x%08x\n", key, FloatBits(v)); }
     void Key(const char* key, int32_t v) { AppendTextF(*out, "%s|%d\n", key, v); }
     void Key(const char* key, uint32_t v) { AppendTextF(*out, "%s|%u\n", key, v); }
@@ -67,7 +72,7 @@ public:
     template<typename T>
     void KeyOpt(const char* key, const T& v, const T& def)
     {
-        if (!(v == def)) { Key(key, v); }
+        if (bWriteDefaults || !(v == def)) { Key(key, v); }
     }
 
     /** Array count field; follow with exactly n record blocks. Omit entirely for an empty array. */
@@ -86,6 +91,7 @@ public:
 
 private:
     Core::Vector<std::byte>* out;
+    bool bWriteDefaults{false};
 
     void PushChar(char c) { out->PushBack(static_cast<std::byte>(c)); }
 };

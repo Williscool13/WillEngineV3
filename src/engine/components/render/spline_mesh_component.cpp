@@ -17,12 +17,11 @@
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/spline/spline.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/editor/editor_materials.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "engine/components/component_types.h"
 #include "engine/components/core_components.h"
+#include "engine/editor/edit_context.h"
 
 namespace Engine::Component
 {
@@ -50,16 +49,7 @@ void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<SplineMeshComponent>(entity);
 
-    if (component.spline.points.IsEmpty()) {
-        component.spline.points.PushBack({0, 0, 0});
-        component.spline.points.PushBack({0, 0, 1});
-        component.spline.points.PushBack({0, 0, 2});
-        component.spline.points.PushBack({0, 0, 3});
-        component.spline.rolls.PushBack(0.0f);
-        component.spline.rolls.PushBack(0.0f);
-        component.spline.rolls.PushBack(0.0f);
-        component.spline.rolls.PushBack(0.0f);
-    }
+    Sanitize(component);
 
     registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
 
@@ -86,113 +76,36 @@ bool Component::SplineMeshComponent::CanAdd(const entt::registry& registry, entt
     return Component::MeshSources::NoneOtherThan<Component::SplineMeshComponent>(registry, entity);
 }
 
-void Component::SplineMeshComponent::Serialize(const SplineMeshComponent& comp, Engine::TextWriter& w)
+void Component::SplineMeshComponent::Sanitize(SplineMeshComponent& comp)
 {
-    w.BeginBlock("spline");
-    Engine::Spline::Serialize(comp.spline, w);
-    w.EndBlock();
-    w.Key("radius", comp.radius);
-    w.Key("rollAngle", comp.rollAngle);
-    w.Key("sides", comp.sides);
-    w.Key("segmentsPerSpan", comp.segmentsPerSpan);
-    w.Key("bCaps", comp.bCaps);
-    w.Key("bCrossPlanks", comp.bCrossPlanks);
-    w.Key("crossPlankInterval", comp.crossPlankInterval);
-    w.Key("crossPlankHeight", comp.crossPlankHeight);
-    w.Key("crossPlankThickness", comp.crossPlankThickness);
-    w.Key("crossPlankLength", comp.crossPlankLength);
-    w.Key("profileType", static_cast<int32_t>(comp.profile.type));
-    w.Key("profileWidth", comp.profile.width);
-    w.Key("profileHeight", comp.profile.height);
-    w.Key("profileCornerRadius", comp.profile.cornerRadius);
-    w.Key("profileCornerSegments", comp.profile.cornerSegments);
-    w.Key("profileThickness", comp.profile.thickness);
-    w.Key("railingEnabled", comp.railing.bEnabled);
-    w.Key("railingPosts", comp.railing.bPosts);
-    w.Key("railingPostInterval", comp.railing.postInterval);
-    w.Key("railingPostBottom", comp.railing.postBottom);
-    w.Key("railingPostTop", comp.railing.postTop);
-    w.Key("railingPostSize", glm::vec2(comp.railing.postSize.x, comp.railing.postSize.y));
-    w.Key("railingPostLateral", comp.railing.postLateral);
-    w.Key("railingLateralOffset", comp.railing.lateralOffset);
-    if (!comp.railing.lanes.IsEmpty()) {
-        w.Count("railingLanes", static_cast<uint32_t>(comp.railing.lanes.Size()));
-        for (int i = 0; i < static_cast<int>(comp.railing.lanes.Size()); i++) {
-            w.BeginBlock("l");
-            w.Key("lane", glm::vec2(comp.railing.lanes[i].x, comp.railing.lanes[i].y));
-            w.EndBlock();
-        }
-    }
-    w.Key("material", comp.material.id);
-}
-
-void Component::SplineMeshComponent::Deserialize(SplineMeshComponent& comp, const Engine::TextReader& r)
-{
-    const Engine::TextReader spline = r.Block("spline");
-    if (spline.IsValid()) {
-        Engine::Spline::Deserialize(comp.spline, spline);
-    }
-
-    comp.radius = r.Float("radius", 0.5f);
-    comp.rollAngle = r.Float("rollAngle", 0.0f);
-    comp.sides = r.Int("sides", 8);
-    comp.segmentsPerSpan = r.Int("segmentsPerSpan", 8);
-    comp.bCaps = r.Bool("bCaps", true);
-    comp.bCrossPlanks = r.Bool("bCrossPlanks", false);
-    comp.crossPlankInterval = r.Int("crossPlankInterval", 4);
-    comp.crossPlankHeight = r.Float("crossPlankHeight", 0.0f);
-    comp.crossPlankThickness = r.Float("crossPlankThickness", 0.1f);
-    comp.crossPlankLength = r.Float("crossPlankLength", 0.3f);
-    comp.profile.type = static_cast<Engine::SplineProfileType>(r.Int("profileType", 0));
-    comp.profile.width = r.Float("profileWidth", 0.4f);
-    comp.profile.height = r.Float("profileHeight", 0.4f);
-    comp.profile.cornerRadius = r.Float("profileCornerRadius", 0.08f);
-    comp.profile.cornerSegments = r.Int("profileCornerSegments", 3);
-    comp.profile.thickness = r.Float("profileThickness", 0.05f);
-    comp.railing.bEnabled = r.Bool("railingEnabled", false);
-    comp.railing.bPosts = r.Bool("railingPosts", true);
-    comp.railing.postInterval = r.Int("railingPostInterval", 4);
-    comp.railing.postBottom = r.Float("railingPostBottom", 0.0f);
-    comp.railing.postTop = r.Float("railingPostTop", 1.0f);
-    const glm::vec2 postSize = r.Vec2("railingPostSize", glm::vec2(0.05f, 0.05f));
-    comp.railing.postSize.x = postSize.x;
-    comp.railing.postSize.y = postSize.y;
-    comp.railing.postLateral = r.Float("railingPostLateral", 0.0f);
-    comp.railing.lateralOffset = r.Float("railingLateralOffset", 0.0f);
-    comp.railing.lanes.Clear();
-    r.ForEachRecord("railingLanes", [&](const Engine::TextReader& l) {
-        if (comp.railing.lanes.Size() >= 8) { return; }
-        const glm::vec2 lane = l.Vec2("lane");
-        comp.railing.lanes.PushBack(Vec2{lane.x, lane.y});
-    });
-    comp.material = Engine::MaterialID(r.U64("material", 0));
-
-    if (comp.spline.points.Size() < 2) {
-        comp.spline.points.Clear();
-        comp.spline.rolls.Clear();
-        comp.spline.points.PushBack({0, 0, 0});
-        comp.spline.points.PushBack({0, 0, 1});
-        comp.spline.points.PushBack({0, 0, 2});
-        comp.spline.points.PushBack({0, 0, 3});
-        comp.spline.rolls.PushBack(0.0f);
-        comp.spline.rolls.PushBack(0.0f);
-        comp.spline.rolls.PushBack(0.0f);
-        comp.spline.rolls.PushBack(0.0f);
+    if (comp.spline.points.Size() >= 2) { return; }
+    comp.spline.points.Clear();
+    for (int32_t i = 0; i < 4; i++) {
+        comp.spline.points.PushBack({glm::vec3(0.0f, 0.0f, static_cast<float>(i))});
     }
 }
 
-Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity,
-                                                                          const char* name)
+void Component::SplineMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<SplineMeshComponent>(entity);
+    registry.remove<MeshRuntime>(entity);
+    registry.remove<SplineMeshLoadingTag>(entity);
+    registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
+}
+
+Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const SplineMeshComponent before = edit.Get<SplineMeshComponent>();
+    SplineMeshComponent component = before;
     static int editPointIdx = -1;
     static entt::entity editEntity = entt::null;
     static bool wasUsingGizmo = false;
 
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
 
-    if (editEntity != entity) {
+    if (editEntity != entity || edit.IsMulti()) {
         editPointIdx = -1;
         editEntity = entity;
         wasUsingGizmo = false;
@@ -206,21 +119,12 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     bool remove = ImGui::SmallButton("X##deletesplinemesh");
     ImGui::PopStyleColor();
 
-    bool modified = false;
+    bool dirty = false;
     if (open) {
-        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
-        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
-        if (ImGui::Checkbox("Visible##splinemesh", &visible)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible); }
-        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-        if (ImGui::Checkbox("Probe Bake Exclude##splinemesh", &probeBakeExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
-        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
-        if (ImGui::Checkbox("Emissive Light##splinemesh", &emissiveLight)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
-            registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-            modified = true;
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_PROBE_BAKE | RENDER_TOGGLE_EMISSIVE)) {
+            edit.ForEachTarget<SplineMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<SplineMeshLoadingTag>(e); });
         }
 
-        bool dirty = false;
 
         int splineModeInt = static_cast<int>(component.spline.mode);
         ImGui::SetNextItemWidth(140.0f);
@@ -378,7 +282,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             ImGui::SameLine();
 
             ImGui::PushStyleColor(ImGuiCol_Button, isEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
-            ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing);
+            ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !isEditing));
             if (ImGui::SmallButton(isEditing ? "D##edit" : "E##edit")) {
                 editPointIdx = isEditing ? -1 : i;
                 if (editPointIdx == -1) { hasGizmoClaim = false; }
@@ -389,7 +293,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
             char label[16];
             snprintf(label, sizeof(label), "##cp%d", i);
-            if (ImGui::DragFloat3(label, &component.spline.points[i].x, 0.01f)) {}
+            if (ImGui::DragFloat3(label, &component.spline.points[i].pos.x, 0.01f)) {}
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::SameLine();
 
@@ -408,10 +312,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 snprintf(rollLabel, sizeof(rollLabel), "##roll%d", i);
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 24.0f);
                 ImGui::SetNextItemWidth(80.0f);
-                float roll = (i < static_cast<int>(component.spline.rolls.Size())) ? component.spline.rolls[i] : 0.0f;
-                if (ImGui::DragFloat(rollLabel, &roll, 1.0f, -360.0f, 360.0f, "%.1f\xC2\xB0")) {
-                    if (i < static_cast<int>(component.spline.rolls.Size())) { component.spline.rolls[i] = roll; }
-                }
+                ImGui::DragFloat(rollLabel, &component.spline.points[i].roll, 1.0f, -360.0f, 360.0f, "%.1f\xC2\xB0");
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
             }
 
@@ -420,16 +321,10 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
         if (pointToRemove >= 0) {
             component.spline.points.RemoveAt(static_cast<size_t>(pointToRemove));
-            if (pointToRemove < static_cast<int>(component.spline.rolls.Size())) {
-                component.spline.rolls.RemoveAt(static_cast<size_t>(pointToRemove));
-            }
             dirty = true;
         }
         if (pointToSwap >= 0 && pointToSwap + 1 < cpCount) {
             std::swap(component.spline.points[pointToSwap], component.spline.points[pointToSwap + 1]);
-            if (pointToSwap < static_cast<int>(component.spline.rolls.Size()) - 1) {
-                std::swap(component.spline.rolls[pointToSwap], component.spline.rolls[pointToSwap + 1]);
-            }
             if (editPointIdx == pointToSwap) { editPointIdx = pointToSwap + 1; }
             else if (editPointIdx == pointToSwap + 1) { editPointIdx = pointToSwap; }
             dirty = true;
@@ -437,12 +332,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
         ImGui::BeginDisabled(component.spline.points.IsFull());
         if (ImGui::Button("Add Point")) {
-            const glm::vec3 last = component.spline.points.Back();
+            const Engine::SplinePoint last = component.spline.points.Back();
             const glm::vec3 prev = component.spline.points.Size() >= 2
-                                       ? component.spline.points[component.spline.points.Size() - 2]
-                                       : last - glm::vec3(0, 0, 1);
-            component.spline.points.PushBack(last + glm::normalize(last - prev));
-            component.spline.rolls.PushBack(component.spline.rolls.IsEmpty() ? 0.0f : component.spline.rolls.Back());
+                                       ? component.spline.points[component.spline.points.Size() - 2].pos
+                                       : last.pos - glm::vec3(0, 0, 1);
+            component.spline.points.PushBack({last.pos + glm::normalize(last.pos - prev), last.roll});
             dirty = true;
         }
         ImGui::EndDisabled();
@@ -467,14 +361,14 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
             const int idx = editPointIdx;
 
-            const glm::vec3& cpPos = component.spline.points[idx];
-            glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(cpPos, 1.0f));
+            const auto& points = component.spline.points;
+            glm::vec3 worldPt = glm::vec3(entityMat * glm::vec4(points[idx].pos, 1.0f));
 
             glm::vec3 localTangent;
             if (liveCpCount < 2) { localTangent = glm::vec3(0, 0, 1); }
-            else if (idx == 0) { localTangent = glm::normalize(component.spline.points[1] - component.spline.points[0]); }
-            else if (idx == liveCpCount - 1) { localTangent = glm::normalize(component.spline.points[liveCpCount - 1] - component.spline.points[liveCpCount - 2]); }
-            else { localTangent = glm::normalize(component.spline.points[idx + 1] - component.spline.points[idx - 1]); }
+            else if (idx == 0) { localTangent = glm::normalize(points[1].pos - points[0].pos); }
+            else if (idx == liveCpCount - 1) { localTangent = glm::normalize(points[liveCpCount - 1].pos - points[liveCpCount - 2].pos); }
+            else { localTangent = glm::normalize(points[idx + 1].pos - points[idx - 1].pos); }
 
             glm::vec3 worldTangent = glm::normalize(glm::vec3(entityMat * glm::vec4(localTangent, 0.0f)));
 
@@ -483,7 +377,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             glm::vec3 baseRight = glm::normalize(glm::cross(refUp, worldTangent));
             glm::vec3 baseUp = glm::normalize(glm::cross(worldTangent, baseRight));
 
-            float currentRoll = (idx < static_cast<int>(component.spline.rolls.Size())) ? glm::radians(component.spline.rolls[idx]) : 0.0f;
+            float currentRoll = glm::radians(points[idx].roll);
             glm::vec3 rRight = glm::cos(currentRoll) * baseRight + glm::sin(currentRoll) * baseUp;
             glm::vec3 rUp = -glm::sin(currentRoll) * baseRight + glm::cos(currentRoll) * baseUp;
 
@@ -502,10 +396,10 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 glm::value_ptr(view), glm::value_ptr(proj),
                 gizmoOp, ImGuizmo::LOCAL,
                 glm::value_ptr(mat))) {
-                component.spline.points[idx] = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
-                if (gizmoOp == ImGuizmo::ROTATE && idx < static_cast<int>(component.spline.rolls.Size())) {
+                component.spline.points[idx].pos = glm::vec3(entityMatInv * glm::vec4(glm::vec3(mat[3]), 1.0f));
+                if (gizmoOp == ImGuizmo::ROTATE) {
                     glm::vec3 newRight = glm::normalize(glm::vec3(mat[0]));
-                    component.spline.rolls[idx] = glm::degrees(glm::atan(glm::dot(newRight, baseUp), glm::dot(newRight, baseRight)));
+                    component.spline.points[idx].roll = glm::degrees(glm::atan(glm::dot(newRight, baseUp), glm::dot(newRight, baseRight)));
                 }
             }
             const bool usingGizmo = ImGuizmo::IsUsing();
@@ -524,11 +418,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             constexpr float kPointRadius = 0.08f;
 
             for (int i = 0; i < liveCpCount; i++) {
-                glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.spline.points[i], 1.0f));
+                glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.spline.points[i].pos, 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
                 const int nextI = component.spline.bClosed ? (i + 1) % liveCpCount : i + 1;
                 if (nextI < liveCpCount || component.spline.bClosed) {
-                    glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(component.spline.points[nextI], 1.0f));
+                    glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(component.spline.points[nextI].pos, 1.0f));
                     DEBUG_ADD_LINE(viewFamily.debugLines, {wp, wp2, kLineColor});
                 }
             }
@@ -542,34 +436,28 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                     currentLabel = m->name.c_str();
                 }
             }
-            if (ImGui::BeginCombo("Material##spline", currentLabel, ImGuiComboFlags_HeightLarge)) {
+            if (ImGui::BeginCombo("Material##spline", edit.IsMixed(&SplineMeshComponent::material) ? "--" : currentLabel, ImGuiComboFlags_HeightLarge)) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
-                    if (component.material.IsValid()) {
-                        component.material = Engine::MaterialID{};
-                        registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                        modified = true;
-                    }
+                    component.material = Engine::MaterialID{};
+                    dirty = true;
                 }
                 const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.material);
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
-                    registry.emplace_or_replace<SplineMeshLoadingTag>(entity);
-                    modified = true;
+                    dirty = true;
                 }
                 ImGui::EndCombo();
             }
         }
+    }
 
-        if (dirty) {
-            modified = true;
-            registry.remove<MeshRuntime>(entity);
-            registry.remove<SplineMeshLoadingTag>(entity);
-            registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
-        }
+    edit.PreviewDiff(before, component);
+    if (dirty) {
+        edit.Commit<SplineMeshComponent>();
     }
 
     if (hasGizmoClaim) { state->editor.bExclusiveGizmoActive = true; }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 } // Engine

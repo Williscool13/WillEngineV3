@@ -18,24 +18,11 @@
 
 namespace Game::Component
 {
-void RotateInPlaceComponent::Serialize(const RotateInPlaceComponent& comp, Engine::TextWriter& w)
+Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    static const RotateInPlaceComponent DEF{};
-    w.KeyOpt("axis", comp.axis, DEF.axis);
-    w.KeyOpt("speedDegrees", comp.speedDegrees, DEF.speedDegrees);
-    w.KeyOpt("bWorldSpace", comp.bWorldSpace, DEF.bWorldSpace);
-}
-
-void RotateInPlaceComponent::Deserialize(RotateInPlaceComponent& comp, const Engine::TextReader& r)
-{
-    comp.axis = r.Vec3("axis", comp.axis);
-    comp.speedDegrees = r.Float("speedDegrees", comp.speedDegrees);
-    comp.bWorldSpace = r.Bool("bWorldSpace", comp.bWorldSpace);
-}
-
-Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
-{
-    auto& component = registry.get<RotateInPlaceComponent>(entity);
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const auto& component = edit.Get<RotateInPlaceComponent>();
 
     bool open = ImGui::CollapsingHeader("Rotate In Place", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -43,11 +30,10 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
     bool remove = ImGui::SmallButton("X##deleterotateinplace");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        modified |= ImGui::DragFloat3("Axis", &component.axis.x, 0.01f);
-        modified |= ImGui::DragFloat("Speed", &component.speedDegrees, 1.0f, -3600.0f, 3600.0f, "%.1f deg/s");
-        modified |= ImGui::Checkbox("World Space", &component.bWorldSpace);
+        Engine::EditWidgets::DragFloat3(edit, "Axis", &RotateInPlaceComponent::axis, 0.01f);
+        Engine::EditWidgets::DragFloat(edit, "Speed", &RotateInPlaceComponent::speedDegrees, 1.0f, -3600.0f, 3600.0f, "%.1f deg/s");
+        Engine::EditWidgets::Checkbox(edit, "World Space", &RotateInPlaceComponent::bWorldSpace);
 
         auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
@@ -82,6 +68,6 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 } // Game::Component

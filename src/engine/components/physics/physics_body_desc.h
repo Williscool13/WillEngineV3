@@ -115,13 +115,27 @@ struct PhysicsBodyDesc
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;
 
+    // Shapes own runtime collider handles, so only scalars are reflected
+    WILL_REFLECT(PhysicsBodyDesc,
+        WILL_FIELD(motionType),
+        WILL_FIELD(mass),
+        WILL_FIELD(friction),
+        WILL_FIELD(restitution),
+        WILL_FIELD(motionQuality),
+        WILL_FIELD(layerOverride),
+        WILL_FIELD(bEnhancedInternalEdgeRemoval),
+        WILL_FIELD(bIsSensor))
+
+    static constexpr bool RESTORE_BY_REBUILD = true;
+
     static void Serialize(const PhysicsBodyDesc& comp, Engine::TextWriter& w);
     static void Deserialize(PhysicsBodyDesc& comp, const Engine::TextReader& r);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static void DeferredConstruct(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }
 

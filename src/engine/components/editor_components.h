@@ -11,6 +11,7 @@
 #include "core/containers/inline_string.h"
 #include "core/string_id.h"
 #include "engine/component_registry.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -26,9 +27,10 @@ struct EntityFolderComponent
      */
     StringID folderId;
 
-    static void Serialize(const EntityFolderComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(EntityFolderComponent& comp, const Engine::TextReader& r);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(EntityFolderComponent,
+        WILL_FIELD(folderId))
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /**
@@ -43,9 +45,12 @@ struct SceneFolderComponent
     StringID parentFolder;
     Core::ShortString name;
 
+    WILL_REFLECT(SceneFolderComponent,
+        WILL_FIELD(folderId),
+        WILL_FIELD(parentFolder),
+        WILL_FIELD(name))
+
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void Serialize(const SceneFolderComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(SceneFolderComponent& comp, const Engine::TextReader& r);
 };
 }
 

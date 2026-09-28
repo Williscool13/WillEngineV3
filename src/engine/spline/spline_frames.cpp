@@ -26,10 +26,8 @@ bool SampleSplineFrames(const Spline& spline, int segmentsPerSpan, float rollAng
     };
 
     auto getRollCP = [&](int i) -> float {
-        const int nR = static_cast<int>(spline.rolls.Size());
-        if (nR == 0) { return 0.0f; }
-        if (bClosed) { return spline.rolls[((i % nR) + nR) % nR]; }
-        return spline.rolls[std::clamp(i, 0, nR - 1)];
+        if (bClosed) { return spline.points[((i % N) + N) % N].roll; }
+        return spline.points[std::clamp(i, 0, N - 1)].roll;
     };
 
     out.Resize(static_cast<size_t>(totalRings));

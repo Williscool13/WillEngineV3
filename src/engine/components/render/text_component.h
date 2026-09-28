@@ -13,6 +13,7 @@
 #include "engine/core/text_material_id.h"
 #include "engine/engine_api.h"
 #include "engine/resources/model/model_store.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -31,11 +32,20 @@ struct TextComponent
     Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
     float wrapWidth{0.0f};
 
-    static void Serialize(const TextComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(TextComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(TextComponent,
+        WILL_FIELD(fontId, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(textMaterialId),
+        WILL_FIELD(text),
+        WILL_FIELD(scale, .min = 0.01f, .max = 100.0f, .speed = 0.01f),
+        WILL_FIELD(color),
+        WILL_FIELD(align),
+        WILL_FIELD(anchor),
+        WILL_FIELD(wrapWidth, .min = 0.0f, .max = 1000.0f, .speed = 0.05f))
+
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 struct TextRuntime

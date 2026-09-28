@@ -78,50 +78,35 @@ bool Component::Text3DComponent::CanAdd(const entt::registry& registry, entt::en
     return Component::MeshSources::NoneOtherThan<Component::Text3DComponent>(registry, entity);
 }
 
-void Component::Text3DComponent::Serialize(const Text3DComponent& comp, Engine::TextWriter& w)
+
+void Component::Text3DComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    static const Text3DComponent DEF{};
-    w.Key("fontId", comp.fontId.id);
-    if (!comp.text.IsEmpty()) {
-        w.KeyStr("text", comp.text.View());
+    const auto& comp = registry.get<Text3DComponent>(entity);
+    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+        rt->renderOffset = comp.renderOffset;
+        rt->renderRotation = comp.renderRotation;
+        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     }
-    w.KeyOpt("depth", comp.depth, DEF.depth);
-    w.KeyOpt("flatness", comp.flatness, DEF.flatness);
-    w.KeyOpt("tracking", comp.tracking, DEF.tracking);
-    w.KeyOpt("scale", comp.scale, DEF.scale);
-    w.KeyOpt("wrapWidth", comp.wrapWidth, DEF.wrapWidth);
-    w.KeyOpt("bendRadius", comp.bendRadius, DEF.bendRadius);
-    w.KeyOpt("smoothNormals", comp.bSmoothNormals, DEF.bSmoothNormals);
-    w.KeyOpt("align", static_cast<uint32_t>(comp.align), static_cast<uint32_t>(DEF.align));
-    w.KeyOpt("anchor", static_cast<uint32_t>(comp.anchor), static_cast<uint32_t>(DEF.anchor));
-    w.Key("material", comp.material.id);
-    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
-    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
 }
 
-void Component::Text3DComponent::Deserialize(Text3DComponent& comp, const Engine::TextReader& r)
-{
-    comp.fontId = Engine::FontID(r.U64("fontId", comp.fontId.id));
-    r.Str("text", comp.text);
-    comp.depth = r.Float("depth", comp.depth);
-    comp.flatness = r.Float("flatness", comp.flatness);
-    comp.tracking = r.Float("tracking", comp.tracking);
-    comp.scale = r.Float("scale", comp.scale);
-    comp.wrapWidth = r.Float("wrapWidth", comp.wrapWidth);
-    comp.bendRadius = r.Float("bendRadius", comp.bendRadius);
-    comp.bSmoothNormals = r.Bool("smoothNormals", comp.bSmoothNormals);
-    comp.align = static_cast<Engine::Text3DAlign>(r.UInt("align", static_cast<uint32_t>(comp.align)));
-    comp.anchor = static_cast<Engine::Text3DAnchor>(r.UInt("anchor", static_cast<uint32_t>(comp.anchor)));
-    comp.material = Engine::MaterialID(r.U64("material", comp.material.id));
-    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
-    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
-}
-
-Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+void Component::Text3DComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
     auto& comp = registry.get<Text3DComponent>(entity);
+    if (!comp.fontId.IsValid()) {
+        UnloadText3DFont(registry, entity);
+        return;
+    }
+    registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
+    OnEditPreview(registry, entity);
+}
+
+Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const auto& comp = edit.Get<Text3DComponent>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
     const bool busy = registry.any_of<Text3DGeneratePendingTag, Text3DLoadingTag>(entity);
 
     bool open = ImGui::CollapsingHeader("3D Text", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -138,93 +123,52 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         ImGui::TextDisabled("Generating mesh...");
     }
 
-    auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
-    bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
-    bool ddgiContribution = renderFlags.Has(RenderFlagsComponent::DDGI_CONTRIBUTE);
-    if (ImGui::Checkbox("Visible##text3d", &visible)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible); }
-    ImGui::SameLine();
-    if (ImGui::Checkbox("DDGI Contribution##text3d", &ddgiContribution)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::DDGI_CONTRIBUTE, ddgiContribution); }
-    bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-    if (ImGui::Checkbox("Probe Bake Exclude##text3d", &probeBakeExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
-    ImGui::SameLine();
-    bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
-    if (ImGui::Checkbox("Emissive Light##text3d", &emissiveLight)) {
-        SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
-        registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
+    if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_ALL & ~RENDER_TOGGLE_ALPHA_CUTOUT)) {
+        edit.ForEachTarget<Text3DComponent>([&registry](entt::entity e) { registry.emplace_or_replace<Text3DGeneratePendingTag>(e); });
     }
-    bool motionBlurExclude = !renderFlags.Has(RenderFlagsComponent::MOTION_BLUR);
-    if (ImGui::Checkbox("Motion Blur Exclude##text3d", &motionBlurExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::MOTION_BLUR, !motionBlurExclude); }
-    bool cameraMotionBlurExclude = !renderFlags.Has(RenderFlagsComponent::CAMERA_MOTION_BLUR);
-    if (ImGui::Checkbox("Camera Motion Blur Exclude##text3d", &cameraMotionBlurExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::CAMERA_MOTION_BLUR, !cameraMotionBlurExclude); }
 
-    bool modified = false;
     ImGui::BeginDisabled(busy);
 
     const char* fontLabel = "(none)";
     if (const Engine::AssetManager::CachedFontMetadata* meta = ctx->assetManager->GetFontMetadata(comp.fontId)) {
         fontLabel = meta->name.c_str();
     }
-    if (ImGui::BeginCombo("Font", fontLabel)) {
+    if (ImGui::BeginCombo("Font", edit.IsMixed(&Text3DComponent::fontId) ? "--" : fontLabel)) {
         const auto& fontCache = ctx->assetManager->GetFontCache();
         for (const auto& [fontId, meta] : fontCache) {
-            const bool selected = comp.fontId == fontId;
-            if (ImGui::Selectable(meta.name.c_str(), selected) && fontId != comp.fontId) {
-                Component::UnloadText3DFont(registry, entity);
-                comp.fontId = fontId;
-                LoadText3DFont(comp, registry, entity);
-                modified = true;
+            if (ImGui::Selectable(meta.name.c_str(), comp.fontId == fontId)) {
+                edit.Set(&Text3DComponent::fontId, fontId);
             }
         }
         ImGui::EndCombo();
     }
 
+    // Geometry fields regenerate the mesh, so they commit on release only
     char buf[256];
     strncpy_s(buf, comp.text.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
-    bool dirty = false;
     ImGui::InputTextMultiline("Text##text3dfield", buf, sizeof(buf), ImVec2(0.0f, ImGui::GetTextLineHeight() * 4.0f));
     if (ImGui::IsItemDeactivatedAfterEdit()) {
-        comp.text = Core::InlineString<256>(buf);
-        dirty = true;
+        edit.Set(&Text3DComponent::text, Core::InlineString<256>(buf));
     }
 
-    ImGui::DragFloat("Depth", &comp.depth, 0.005f, 0.001f, 10.0f, "%.3f");
-    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::DragFloat("Scale", &comp.scale, 0.01f, 0.01f, 100.0f, "%.3f");
-    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::DragFloat("Tracking", &comp.tracking, 0.005f, -1.0f, 1.0f, "%.3f");
-    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::DragFloat("Wrap Width", &comp.wrapWidth, 0.05f, 0.0f, 1000.0f, "%.2f");
-    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::DragFloat("Bend Radius", &comp.bendRadius, 0.05f, -1000.0f, 1000.0f, "%.2f");
-    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+    EditWidgets::DragFloat(edit, "Depth", &Text3DComponent::depth, 0.005f, 0.001f, 10.0f, "%.3f");
+    EditWidgets::DragFloat(edit, "Scale", &Text3DComponent::scale, 0.01f, 0.01f, 100.0f, "%.3f");
+    EditWidgets::DragFloat(edit, "Tracking", &Text3DComponent::tracking, 0.005f, -1.0f, 1.0f, "%.3f");
+    EditWidgets::DragFloat(edit, "Wrap Width", &Text3DComponent::wrapWidth, 0.05f, 0.0f, 1000.0f, "%.2f");
+    EditWidgets::DragFloat(edit, "Bend Radius", &Text3DComponent::bendRadius, 0.05f, -1000.0f, 1000.0f, "%.2f");
 
     const char* alignLabels[] = {"Left", "Center", "Right"};
-    int alignIdx = static_cast<int>(comp.align);
-    if (ImGui::Combo("Align", &alignIdx, alignLabels, IM_ARRAYSIZE(alignLabels))) {
-        comp.align = static_cast<Engine::Text3DAlign>(alignIdx);
-        dirty = true;
-    }
+    EditWidgets::Combo(edit, "Align", &Text3DComponent::align, alignLabels, IM_ARRAYSIZE(alignLabels));
 
     const char* anchorLabels[] = {"Baseline", "Top", "Center", "Bottom"};
-    int anchorIdx = static_cast<int>(comp.anchor);
-    if (ImGui::Combo("Anchor", &anchorIdx, anchorLabels, IM_ARRAYSIZE(anchorLabels))) {
-        comp.anchor = static_cast<Engine::Text3DAnchor>(anchorIdx);
-        dirty = true;
-    }
+    EditWidgets::Combo(edit, "Anchor", &Text3DComponent::anchor, anchorLabels, IM_ARRAYSIZE(anchorLabels));
 
-    ImGui::DragFloat("Flatness", &comp.flatness, 0.0005f, 0.0005f, 0.1f, "%.4f");
-    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-    dirty |= ImGui::Checkbox("Smooth Normals", &comp.bSmoothNormals);
-
-    if (dirty) {
-        modified = true;
-        registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
-    }
+    EditWidgets::DragFloat(edit, "Flatness", &Text3DComponent::flatness, 0.0005f, 0.0005f, 0.1f, "%.4f");
+    EditWidgets::Checkbox(edit, "Smooth Normals", &Text3DComponent::bSmoothNormals);
 
     ImGui::EndDisabled();
 
-    // Material change only re-binds at resolve; no regenerate needed.
     {
         const char* currentLabel = "(none)";
         if (comp.material.IsValid()) {
@@ -232,39 +176,25 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
                 currentLabel = m->name.c_str();
             }
         }
-        if (ImGui::BeginCombo("Material", currentLabel, ImGuiComboFlags_HeightLarge)) {
-            if (ImGui::Selectable("(none)", !comp.material.IsValid()) && comp.material.IsValid()) {
-                comp.material = Engine::MaterialID{};
-                registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                modified = true;
+        if (ImGui::BeginCombo("Material", edit.IsMixed(&Text3DComponent::material) ? "--" : currentLabel, ImGuiComboFlags_HeightLarge)) {
+            if (ImGui::Selectable("(none)", !comp.material.IsValid())) {
+                edit.Set(&Text3DComponent::material, Engine::MaterialID{});
             }
             const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, comp.material);
             if (picked.IsValid() && picked != comp.material) {
-                comp.material = picked;
-                registry.emplace_or_replace<Text3DLoadingTag>(entity);
-                modified = true;
+                edit.Set(&Text3DComponent::material, picked);
             }
             ImGui::EndCombo();
         }
     }
 
     ImGui::SeparatorText("Render Transform");
-    if (ImGui::DragFloat3("Offset", glm::value_ptr(comp.renderOffset), 0.01f)) {
-        modified = true;
-        if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
-            rt->renderOffset = comp.renderOffset;
-            registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-        }
-    }
+    EditWidgets::DragFloat3(edit, "Offset", &Text3DComponent::renderOffset, 0.01f);
     glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(comp.renderRotation));
     if (ImGui::DragFloat3("Rotation", glm::value_ptr(renderEuler), 0.5f)) {
-        modified = true;
-        comp.renderRotation = glm::quat(glm::radians(renderEuler));
-        if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
-            rt->renderRotation = comp.renderRotation;
-            registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-        }
+        edit.PreviewSet(&Text3DComponent::renderRotation, glm::quat(glm::radians(renderEuler)));
     }
+    EditWidgets::CommitOnRelease<Text3DComponent>(edit, false);
 
     if (const Engine::AssetManager::CachedFontMetadata* meta = ctx->assetManager->GetFontMetadata(comp.fontId)) {
         if (meta->header.contourGlyphCount == 0) {
@@ -272,6 +202,6 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 }

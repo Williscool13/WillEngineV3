@@ -14,6 +14,7 @@
 #include "core/types/transform.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core
 {
@@ -43,11 +44,16 @@ struct TransformComponent
         return *this;
     }
 
-    static void Serialize(const TransformComponent& comp, Engine::TextWriter& w);
+    WILL_REFLECT(TransformComponent,
+        WILL_FIELD(translation, .speed = 0.1f),
+        WILL_FIELD(rotation),
+        WILL_FIELD(scale, .speed = 0.01f))
 
-    static void Deserialize(TransformComponent& comp, const Engine::TextReader& r);
+    static void OnEditPreview(entt::registry& registry, entt::entity entity);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
@@ -98,9 +104,7 @@ struct HierarchyComponent
     StringID parentStableId;
     uint16_t depth{0};
 
-    static void Serialize(const HierarchyComponent& comp, Engine::TextWriter& w);
-
-    static void Deserialize(HierarchyComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(HierarchyComponent, WILL_FIELD(parentStableId))
 };
 
 inline Transform ComposeWorldTransform(const Transform& parent, const Transform& local)

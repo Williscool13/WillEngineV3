@@ -355,10 +355,9 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
 static uint64_t HashSplineParams(const SplineParams& params)
 {
     HashBuilder h;
-    h.Add(params.spline.points.Data(), params.spline.points.Size() * sizeof(Vec3));
+    h.Add(params.spline.points.Data(), params.spline.points.Size() * sizeof(SplinePoint));
     h.Add(params.spline.mode);
     h.Add(params.spline.bClosed);
-    h.Add(params.spline.rolls.Data(), params.spline.rolls.Size() * sizeof(float));
     h.Add(params.radius);
     h.Add(params.rollAngle);
     h.Add(params.sides);

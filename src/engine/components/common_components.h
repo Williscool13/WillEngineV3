@@ -12,6 +12,7 @@
 #include "core/string_id.h"
 #include "core/containers/inline_string.h"
 #include "engine/component_registry.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -23,9 +24,10 @@ struct NameComponent
 
     Core::InlineString<128> name;
 
-    static void Serialize(const NameComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(NameComponent& comp, const Engine::TextReader& r);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(NameComponent,
+        WILL_FIELD(name))
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 struct DoNotSerializeTag
@@ -38,9 +40,11 @@ struct PrefabInstanceComponent
     StringID prefabId;
     bool bMasterPrefab{false};
 
-    static void Serialize(const PrefabInstanceComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(PrefabInstanceComponent& comp, const Engine::TextReader& r);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    WILL_REFLECT(PrefabInstanceComponent,
+        WILL_FIELD(prefabId),
+        WILL_FIELD(bMasterPrefab))
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }
 

@@ -11,6 +11,7 @@
 #include "core/string_id.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -25,10 +26,14 @@ struct CheckpointComponent
     glm::vec3 spawnOffset{0.0f, 0.0f, 0.0f};
     glm::vec3 spawnRotation{0.0f, 0.0f, 0.0f};
 
+    WILL_REFLECT(CheckpointComponent,
+        WILL_FIELD(checkpointId),
+        WILL_FIELD(priority),
+        WILL_FIELD(spawnOffset, .speed = 0.1f),
+        WILL_FIELD(spawnRotation, .speed = 0.5f))
+
     static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void Serialize(const CheckpointComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(CheckpointComponent& comp, const Engine::TextReader& r);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }
 

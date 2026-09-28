@@ -22,9 +22,10 @@ namespace Engine
 class TextWriter;
 class TextReader;
 
+class EditContext;
+
 struct ComponentEditorResult {
     bool bRequestRemoval{false};
-    bool bModified{false};
 };
 
 using SerializeFn = void(*)(const entt::registry&, entt::entity, TextWriter&);
@@ -34,7 +35,9 @@ using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
 using EmplaceDefaultFn = void(*)(entt::registry&, entt::entity);
 using RemoveComponentFn = void(*)(entt::registry&, entt::entity);
 using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
-using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, entt::registry&, entt::entity, const char*);
+using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, EditContext&, const char*);
+using RestoreFn = void(*)(entt::registry&, entt::entity, const TextReader&);
+using FillDefaultsFn =void(*)(const TextReader&, TextWriter&);
 
 struct ComponentEntry
 {
@@ -59,6 +62,10 @@ struct ComponentEntry
 
     /** Hide in Details inspector unless "Expose all" is enabled. */
     bool hideInInspector{false};
+
+    // Restore undo/redo (teardown->remake)
+    RestoreFn restore{};
+    FillDefaultsFn fillDefaults{};
 };
 
 struct ComponentRegistry

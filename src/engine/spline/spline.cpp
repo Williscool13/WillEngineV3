@@ -6,9 +6,6 @@
 
 #include <algorithm>
 
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
-
 namespace Engine
 {
 static glm::vec3 CatmullRomPos(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t)
@@ -26,11 +23,11 @@ glm::vec3 Spline::EvaluatePosition(int32_t from, int32_t to, float t) const
 {
     const int32_t N = static_cast<int32_t>(points.Size());
     if (N < 2) {
-        return N == 1 ? points[0] : glm::vec3(0.0f);
+        return N == 1 ? points[0].pos : glm::vec3(0.0f);
     }
 
     if (mode == SplineMode::Linear) {
-        return glm::mix(points[from], points[to], t);
+        return glm::mix(points[from].pos, points[to].pos, t);
     }
 
     const bool bForward = bClosed ? (to == (from + 1) % N) : (from < to);
@@ -51,7 +48,7 @@ glm::vec3 Spline::EvaluatePosition(int32_t from, int32_t to, float t) const
         }
     }
 
-    return CatmullRomPos(points[i0], points[from], points[to], points[i3], t);
+    return CatmullRomPos(points[i0].pos, points[from].pos, points[to].pos, points[i3].pos, t);
 }
 
 glm::vec3 Spline::EvaluateTangent(int32_t from, int32_t to, float t) const
@@ -62,7 +59,7 @@ glm::vec3 Spline::EvaluateTangent(int32_t from, int32_t to, float t) const
     }
 
     if (mode == SplineMode::Linear) {
-        return points[to] - points[from];
+        return points[to].pos - points[from].pos;
     }
 
     const bool bForward = bClosed ? (to == (from + 1) % N) : (from < to);
@@ -83,39 +80,11 @@ glm::vec3 Spline::EvaluateTangent(int32_t from, int32_t to, float t) const
         }
     }
 
-    return CatmullRomTan(points[i0], points[from], points[to], points[i3], t);
+    return CatmullRomTan(points[i0].pos, points[from].pos, points[to].pos, points[i3].pos, t);
 }
 
 int32_t Spline::SegmentCount() const
 {
     return bClosed ? static_cast<int32_t>(points.Size()) : std::max(0, static_cast<int32_t>(points.Size()) - 1);
-}
-
-void Spline::Serialize(const Spline& spline, TextWriter& w)
-{
-    w.KeyOpt("mode", static_cast<uint32_t>(spline.mode), static_cast<uint32_t>(SplineMode::CatmullRom));
-    w.KeyOpt("bClosed", spline.bClosed, false);
-    if (!spline.points.IsEmpty()) {
-        w.Count("points", static_cast<uint32_t>(spline.points.Size()));
-        for (size_t i = 0; i < spline.points.Size(); i++) {
-            w.BeginBlock("p");
-            w.Key("pos", spline.points[i]);
-            w.KeyOpt("roll", i < spline.rolls.Size() ? spline.rolls[i] : 0.0f, 0.0f);
-            w.EndBlock();
-        }
-    }
-}
-
-void Spline::Deserialize(Spline& spline, const TextReader& r)
-{
-    spline.points.Clear();
-    spline.rolls.Clear();
-    r.ForEachRecord("points", [&](const TextReader& p) {
-        if (spline.points.Size() >= MaxPoints) { return; }
-        spline.points.PushBack(p.Vec3("pos"));
-        spline.rolls.PushBack(p.Float("roll", 0.0f));
-    });
-    spline.mode = static_cast<SplineMode>(r.UInt("mode", static_cast<uint32_t>(SplineMode::CatmullRom)));
-    spline.bClosed = r.Bool("bClosed", false);
 }
 }

@@ -94,6 +94,7 @@ bool ExecuteCommand(Engine::EngineContext* ctx, Engine::EngineState* state, cons
 
 void Print(Engine::EngineState* state, const char* text)
 {
+    LOG_INFO(Engine, "[console] {}", text);
     ConsoleState& c = state->console;
     if (c.lines.IsFull()) {
         c.lines.RemoveAt(0);
@@ -298,6 +299,11 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             return;
         }
         Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->projectConfig.sceneSlots[slot].sceneName.c_str()).c_str());
+    });
+
+    Register(state, Origin::Engine, "undo_history", "Toggles the Undo History window (records, before/after snapshots)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+        state->editor.bShowUndoHistory = !state->editor.bShowUndoHistory;
+        Print(state, state->editor.bShowUndoHistory ? "  undo history shown" : "  undo history hidden");
     });
 
     Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {

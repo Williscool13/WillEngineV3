@@ -67,34 +67,43 @@ bool StaticMeshPrimitiveComponent::CanAdd(const entt::registry& registry, entt::
     return MeshSources::NoneOtherThan<StaticMeshPrimitiveComponent>(registry, entity);
 }
 
-void StaticMeshPrimitiveComponent::Serialize(const StaticMeshPrimitiveComponent& comp, Engine::TextWriter& w)
+
+void StaticMeshPrimitiveComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    static const StaticMeshPrimitiveComponent DEF{};
-    w.Key("modelId", comp.modelId.id);
-    w.Key("primitiveOrdinal", comp.primitiveOrdinal);
-    w.KeyOpt("materialOverride", comp.materialOverride.id, Engine::MaterialID::INVALID.id);
-    w.KeyOpt("shadingShaderOverride", comp.shadingShaderOverride.id, uint64_t{0});
-    w.KeyOpt("lightingShaderOverride", comp.lightingShaderOverride.id, uint64_t{0});
-    w.KeyOpt("renderOffset", comp.renderOffset, DEF.renderOffset);
-    w.KeyOpt("renderRotation", comp.renderRotation, DEF.renderRotation);
+    const auto& component = registry.get<StaticMeshPrimitiveComponent>(entity);
+    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+        rt->renderOffset = component.renderOffset;
+        rt->renderRotation = component.renderRotation;
+        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    }
 }
 
-void StaticMeshPrimitiveComponent::Deserialize(StaticMeshPrimitiveComponent& comp, const Engine::TextReader& r)
-{
-    comp.modelId = Engine::ModelID(r.U64("modelId", comp.modelId.id));
-    comp.primitiveOrdinal = r.UInt("primitiveOrdinal", comp.primitiveOrdinal);
-    comp.materialOverride = Engine::MaterialID(r.U64("materialOverride", comp.materialOverride.id));
-    comp.shadingShaderOverride = StringID(r.U64("shadingShaderOverride", comp.shadingShaderOverride.id));
-    comp.lightingShaderOverride = StringID(r.U64("lightingShaderOverride", comp.lightingShaderOverride.id));
-    comp.renderOffset = r.Vec3("renderOffset", comp.renderOffset);
-    comp.renderRotation = r.Quat("renderRotation", comp.renderRotation);
-}
-
-Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+void StaticMeshPrimitiveComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
     auto& component = registry.get<StaticMeshPrimitiveComponent>(entity);
+    if (!component.modelId.IsValid()) {
+        UnloadStaticMeshPrimitive(registry, entity);
+        registry.remove<RenderTransformComponent>(entity);
+        registry.remove<MultiframeDirtyComponent>(entity);
+        return;
+    }
+    if (!registry.all_of<RenderTransformComponent>(entity)) {
+        LoadStaticMeshPrimitive(component, registry, entity);
+        return;
+    }
+    if (component.primitiveOrdinal != ~0u) {
+        registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
+    }
+    OnEditPreview(registry, entity);
+}
+
+Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    const auto& component = edit.Get<StaticMeshPrimitiveComponent>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
 
     bool open = ImGui::CollapsingHeader("Static Mesh Primitive", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -102,18 +111,9 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
     bool remove = ImGui::SmallButton("X##deletestaticmeshprimitive");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& renderFlags = registry.get_or_emplace<RenderFlagsComponent>(entity);
-        bool visible = renderFlags.Has(RenderFlagsComponent::VISIBLE);
-        if (ImGui::Checkbox("Visible", &visible)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::VISIBLE, visible); }
-        bool probeBakeExclude = !renderFlags.Has(RenderFlagsComponent::PROBE_BAKE_INCLUDE);
-        if (ImGui::Checkbox("Probe Bake Exclude", &probeBakeExclude)) { SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::PROBE_BAKE_INCLUDE, !probeBakeExclude); }
-        bool emissiveLight = renderFlags.Has(RenderFlagsComponent::EMISSIVE_LIGHT);
-        if (ImGui::Checkbox("Emissive Light##staticmeshprimitive", &emissiveLight)) {
-            SetRenderFlag(state, entity, renderFlags, RenderFlagsComponent::EMISSIVE_LIGHT, emissiveLight);
-            registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-            modified = true;
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_PROBE_BAKE | RENDER_TOGGLE_EMISSIVE)) {
+            edit.ForEachTarget<StaticMeshPrimitiveComponent>([&registry](entt::entity e) { registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(e); });
         }
 
         if (!component.modelId.IsValid()) {
@@ -121,26 +121,23 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 const auto& modelCache = ctx->assetManager->GetModelCache();
                 for (const auto& [key, meta] : modelCache) {
                     if (ImGui::Selectable(meta.name.c_str(), false)) {
-                        component.modelId = key;
-                        LoadStaticMeshPrimitive(component, registry, entity);
-                        modified = true;
+                        edit.Set(&StaticMeshPrimitiveComponent::modelId, key);
                     }
                 }
                 ImGui::EndCombo();
             }
-            return {.bRequestRemoval = remove, .bModified = modified};
+            return {.bRequestRemoval = remove};
         }
 
         const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
-        ImGui::Text("Model: %s", modelMeta ? modelMeta->name.c_str() : "(invalid)");
+        ImGui::Text("Model: %s", edit.IsMixed(&StaticMeshPrimitiveComponent::modelId) ? "--" : modelMeta ? modelMeta->name.c_str() : "(invalid)");
         ImGui::SameLine();
         if (ImGui::SmallButton("X##deselect_model")) {
-            UnloadStaticMeshPrimitive(registry, entity);
-            component.modelId = Engine::ModelID::INVALID;
-            component.primitiveOrdinal = ~0u;
-            registry.remove<RenderTransformComponent>(entity);
-            registry.remove<MultiframeDirtyComponent>(entity);
-            return {.bRequestRemoval = remove, .bModified = true};
+            edit.Modify<StaticMeshPrimitiveComponent>([](StaticMeshPrimitiveComponent& c) {
+                c.modelId = Engine::ModelID::INVALID;
+                c.primitiveOrdinal = ~0u;
+            });
+            return {.bRequestRemoval = remove};
         }
 
         auto* meshRuntime = registry.try_get<MeshRuntime>(entity);
@@ -172,9 +169,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                     ImGui::EndCombo();
                 }
                 if (pendingOrdinal != ~0u) {
-                    component.primitiveOrdinal = pendingOrdinal;
-                    registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-                    modified = true;
+                    edit.Set(&StaticMeshPrimitiveComponent::primitiveOrdinal, pendingOrdinal);
                 }
             }
         }
@@ -201,9 +196,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             ImGui::EndCombo();
         }
         if (changed || clear) {
-            component.materialOverride = clear ? Engine::MaterialID::INVALID : pendingMat;
-            registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-            modified = true;
+            edit.Set(&StaticMeshPrimitiveComponent::materialOverride, clear ? Engine::MaterialID::INVALID : pendingMat);
         }
 
         ImGui::SeparatorText("Shader Overrides");
@@ -212,7 +205,6 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             Core::Span<const StringID> shadingPipelines = pm->GetShadingPipelines();
             Core::Arena& arena = ctx->editorArena.Get();
             Core::ArenaFixedVector<StringID> lightingPipelines = pm->GetLightingPipelinesForMode(viewFamily.lightingMode, arena);
-            bool shaderChanged = false;
 
             {
                 const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
@@ -224,8 +216,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 int32_t comboIdx = current + 1;
                 auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
                 if (ImGui::Combo("Shading", &comboIdx, getter, &labels, static_cast<int32_t>(labels.Size()))) {
-                    component.shadingShaderOverride = comboIdx == 0 ? StringID{} : shadingPipelines[comboIdx - 1];
-                    shaderChanged = true;
+                    edit.Set(&StaticMeshPrimitiveComponent::shadingShaderOverride, comboIdx == 0 ? StringID{} : shadingPipelines[comboIdx - 1]);
                 }
             }
             {
@@ -238,35 +229,22 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
                 int32_t comboIdx = current + 1;
                 auto getter = [](void* data, int idx) -> const char* { return (*static_cast<Core::ArenaArray<Core::InlineString<64>>*>(data))[idx].c_str(); };
                 if (ImGui::Combo("Lighting", &comboIdx, getter, &labels, static_cast<int32_t>(labels.Size()))) {
-                    component.lightingShaderOverride = comboIdx == 0 ? StringID{} : lightingPipelines[comboIdx - 1];
-                    shaderChanged = true;
+                    edit.Set(&StaticMeshPrimitiveComponent::lightingShaderOverride, comboIdx == 0 ? StringID{} : lightingPipelines[comboIdx - 1]);
                 }
-            }
-            if (shaderChanged) {
-                registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
-                modified = true;
             }
         }
 
         ImGui::SeparatorText("Render Transform");
         {
-            bool changedTransform = ImGui::DragFloat3("Offset", &component.renderOffset.x, 0.1f);
+            EditWidgets::DragFloat3(edit, "Offset", &StaticMeshPrimitiveComponent::renderOffset, 0.1f);
             glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(component.renderRotation));
             if (ImGui::DragFloat3("Rotation", &renderEuler.x, 0.5f)) {
-                component.renderRotation = glm::quat(glm::radians(renderEuler));
-                changedTransform = true;
+                edit.PreviewSet(&StaticMeshPrimitiveComponent::renderRotation, glm::quat(glm::radians(renderEuler)));
             }
-            if (changedTransform) {
-                modified = true;
-                if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
-                    rt->renderOffset = component.renderOffset;
-                    rt->renderRotation = component.renderRotation;
-                    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-                }
-            }
+            EditWidgets::CommitOnRelease<StaticMeshPrimitiveComponent>(edit, false);
         }
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 }

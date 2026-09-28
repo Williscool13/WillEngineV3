@@ -12,12 +12,14 @@
 #include "render/interface/render_interface.h"
 #include "engine/components/component_types.h"
 #include "engine/component_registry.h"
+#include "engine/editor/edit_context.h"
+#include "engine/editor/edit_widgets.h"
 
 namespace Engine
 {
 template<typename T>
-concept HasDrawEditor = requires(Core::ViewFamily& vf, entt::registry& r, entt::entity e, const char* n) {
-    { T::DrawEditor(vf, r, e, n) } -> std::same_as<Engine::ComponentEditorResult>;
+concept HasDrawEditor = requires(Core::ViewFamily& vf, Engine::EditContext& edit, const char* n) {
+    { T::DrawEditor(vf, edit, n) } -> std::same_as<Engine::ComponentEditorResult>;
 };
 
 template<typename T>

@@ -9,27 +9,11 @@
 #include <ImGuizmo.h>
 
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 
 #include "engine/components/component_editor.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "engine/components/render_components.h"
 
-void Engine::Component::TransformComponent::Serialize(const TransformComponent& comp, Engine::TextWriter& w)
-{
-    static const TransformComponent DEF{};
-    w.KeyOpt("translation", comp.translation, DEF.translation);
-    w.KeyOpt("rotation", comp.rotation, DEF.rotation);
-    w.KeyOpt("scale", comp.scale, DEF.scale);
-}
-
-void Engine::Component::TransformComponent::Deserialize(TransformComponent& comp, const Engine::TextReader& r)
-{
-    comp.translation = r.Vec3("translation", comp.translation);
-    comp.rotation = r.Quat("rotation", comp.rotation);
-    comp.scale = r.Vec3("scale", comp.scale);
-}
 
 void Engine::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
@@ -53,23 +37,21 @@ Transform Engine::Component::ComputeWorldTransform(const entt::registry& registr
     return ComposeWorldTransform(ComputeWorldTransform(registry, node->parent), local);
 }
 
-void Engine::Component::HierarchyComponent::Serialize(const HierarchyComponent& comp, Engine::TextWriter& w)
+void Engine::Component::TransformComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    w.KeyOpt("parentStableId", comp.parentStableId.id, uint64_t{0});
+    registry.emplace_or_replace<DirtyTransformTag>(entity);
 }
 
-void Engine::Component::HierarchyComponent::Deserialize(HierarchyComponent& comp, const Engine::TextReader& r)
+void Engine::Component::TransformComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    comp.parentStableId = StringID(r.U64("parentStableId", comp.parentStableId.id));
-    comp.parent = entt::null;
+    registry.emplace_or_replace<DirtyTransformTag>(entity);
 }
 
 namespace Engine
 {
-Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry,
-                                                                        entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    auto& component = registry.get<Component::TransformComponent>(entity);
+    TransformComponent component = edit.Get<TransformComponent>();
     bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -79,7 +61,8 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
     if (!open) { return {.bRequestRemoval = remove}; }
 
     bool dirty = false;
-    Engine::EngineState* state = registry.ctx().get<Engine::EngineState*>();
+    bool bReleased = false;
+    Engine::EngineState* state = edit.State();
 
     const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
     const float outerSpacing = ImGui::GetStyle().ItemSpacing.x;
@@ -97,6 +80,7 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
         auto drawField = [&](const char* id, float* val, ImU32 strip) -> bool {
             ImGui::SetNextItemWidth(fieldW);
             bool changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.1f");
+            bReleased |= ImGui::IsItemDeactivatedAfterEdit();
             ImVec2 p = ImGui::GetItemRectMin();
             dl->AddRectFilled(p, {p.x + stripW, p.y + fieldH}, strip, frameRounding, ImDrawFlags_RoundCornersLeft);
             return changed;
@@ -153,9 +137,16 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
     }
 
     if (dirty) {
-        registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+        edit.Preview<TransformComponent>([&component](TransformComponent& c) {
+            c.translation = component.translation;
+            c.rotation = component.rotation;
+            c.scale = component.scale;
+        });
+    }
+    if (bReleased) {
+        edit.Commit<TransformComponent>();
     }
 
-    return {.bRequestRemoval = remove, .bModified = dirty};
+    return {.bRequestRemoval = remove};
 }
 }

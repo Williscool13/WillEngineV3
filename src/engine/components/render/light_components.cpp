@@ -40,17 +40,50 @@ static float SphereLightLumensPerNit(const Component::SphereLightComponent& ligh
     return 4.0f * LIGHT_PI * LIGHT_PI * radius * radius;
 }
 
-Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+template<typename C>
+static void EditLightIntensity(EditContext& edit, const char* label, float C::* member, const Widgets::LightIntensityOpts& opts)
 {
+    float v = edit.Get<C>().*member;
+    if (Widgets::DragLightIntensity(label, &v, opts)) {
+        edit.PreviewSet(member, v);
+    }
+    EditWidgets::CommitOnRelease<C>(edit, false);
+}
+
+void Component::AreaLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+{
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+}
+
+void Component::AreaLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+{
+    registry.emplace_or_replace<LightSurfacePendingTag>(entity);
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+}
+
+void Component::SphereLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+{
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+}
+
+void Component::SphereLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+{
+    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+}
+
+Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
 
-    if (editEntity != entity) {
+    if (editEntity != entity || edit.IsMulti()) {
         editEntity = entity;
         bEditing = false;
     }
 
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = edit.State();
     if (bEditing) { state->editor.bExclusiveGizmoActive = true; }
 
     bool open = ImGui::CollapsingHeader("Area Light", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -59,35 +92,30 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
     bool remove = ImGui::SmallButton("X##deletearealight");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& comp = registry.get<AreaLightComponent>(entity);
-        modified |= ImGui::ColorEdit3("Color##al", &comp.color.r);
-        modified |= Widgets::DragLightIntensity("Intensity##al", &comp.intensity, {.lumensPerNit = AreaLightLumensPerNit(comp, EditorLightScale(registry, entity))});
-        if (ImGui::Checkbox("Disk##al", &comp.bDisk)) {
-            registry.emplace_or_replace<LightSurfacePendingTag>(entity);
-            modified = true;
-        }
+        const auto& comp = edit.Get<AreaLightComponent>();
+        EditWidgets::ColorEdit3(edit, "Color##al", &AreaLightComponent::color);
+        EditLightIntensity(edit, "Intensity##al", &AreaLightComponent::intensity, {.lumensPerNit = AreaLightLumensPerNit(comp, EditorLightScale(registry, entity))});
+        EditWidgets::Checkbox(edit, "Disk##al", &AreaLightComponent::bDisk);
         ImGui::BeginDisabled(!bEditing);
-        bool extentChanged = false;
-        extentChanged |= ImGui::DragFloat(comp.bDisk ? "Radius##al" : "Half Width##al", &comp.halfWidth, 0.05f, 0.01f, 100.0f);
-        if (!comp.bDisk) { extentChanged |= ImGui::DragFloat("Half Height##al", &comp.halfHeight, 0.05f, 0.01f, 100.0f); }
-        modified |= extentChanged;
+        EditWidgets::DragFloat(edit, comp.bDisk ? "Radius##al" : "Half Width##al", &AreaLightComponent::halfWidth, 0.05f, 0.01f, 100.0f);
+        if (!comp.bDisk) { EditWidgets::DragFloat(edit, "Half Height##al", &AreaLightComponent::halfHeight, 0.05f, 0.01f, 100.0f); }
         ImGui::EndDisabled();
-        modified |= ImGui::DragFloat("Range##al", &comp.range, 0.5f, 0.0f, 1000.0f);
-        if (ImGui::DragFloat("Cone Outer##al", &comp.coneOuterDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg")) {
-            comp.coneInnerDegrees = glm::min(comp.coneInnerDegrees, comp.coneOuterDegrees);
-            modified = true;
+        EditWidgets::DragFloat(edit, "Range##al", &AreaLightComponent::range, 0.5f, 0.0f, 1000.0f);
+        EditWidgets::DragFloat(edit, "Cone Outer##al", &AreaLightComponent::coneOuterDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg");
+        float coneInner = comp.coneInnerDegrees;
+        if (ImGui::DragFloat("Cone Inner##al", &coneInner, 0.5f, 0.0f, 90.0f, EditWidgets::MixedFormat(edit.IsMixed(&AreaLightComponent::coneInnerDegrees), "%.1f deg"))) {
+            edit.Preview<AreaLightComponent>([coneInner](AreaLightComponent& c) {
+                c.coneOuterDegrees = glm::max(c.coneOuterDegrees, coneInner);
+                c.coneInnerDegrees = coneInner;
+            });
         }
-        if (ImGui::DragFloat("Cone Inner##al", &comp.coneInnerDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg")) {
-            comp.coneOuterDegrees = glm::max(comp.coneOuterDegrees, comp.coneInnerDegrees);
-            modified = true;
-        }
-        modified |= ImGui::Checkbox("Draw Emissive Surface##al", &comp.drawEmissiveSurface);
-        modified |= ImGui::Checkbox("Probe Bake Exclude##al", &comp.bExcludeFromProbeBake);
+        EditWidgets::CommitOnRelease<AreaLightComponent>(edit, false);
+        EditWidgets::Checkbox(edit, "Draw Emissive Surface##al", &AreaLightComponent::drawEmissiveSurface);
+        EditWidgets::Checkbox(edit, "Probe Bake Exclude##al", &AreaLightComponent::bExcludeFromProbeBake);
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
-        ImGui::BeginDisabled((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing);
+        ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
         if (ImGui::Button(bEditing ? "Done##aledit" : "Edit##aledit")) {
             bEditing = !bEditing;
         }
@@ -97,7 +125,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     if (transform && bEditing) {
-        auto& comp = registry.get<AreaLightComponent>(entity);
+        const auto& comp = edit.Get<AreaLightComponent>();
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
         const auto& vd = viewFamily.mainView.currentViewData;
         const Vec3 center = transform->translation;
@@ -115,53 +143,28 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         const Vec3 widthPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, right) * right);
         Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 0, center + right * comp.halfWidth * transform->scale.x, widthPlaneNormal,
                           vd.view, vd.proj, viewport, vd.cameraPos, state,
-                          [&](Vec3 newPt) { comp.halfWidth = glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x); modified = true; },
+                          [&](Vec3 newPt) { edit.PreviewSet(&AreaLightComponent::halfWidth, glm::max(0.01f, glm::dot(newPt - center, right) / transform->scale.x)); },
                           Editor::COLOR_AXIS_X);
 
         if (!comp.bDisk) {
             const Vec3 heightPlaneNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, up) * up);
             Editor::DotHandle(Editor::DotHandleId::LIGHT_AREA_BASE + 1, center + up * comp.halfHeight * transform->scale.y, heightPlaneNormal,
                               vd.view, vd.proj, viewport, vd.cameraPos, state,
-                              [&](Vec3 newPt) { comp.halfHeight = glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y); modified = true; },
+                              [&](Vec3 newPt) { edit.PreviewSet(&AreaLightComponent::halfHeight, glm::max(0.01f, glm::dot(newPt - center, up) / transform->scale.y)); },
                               Editor::COLOR_AXIS_Y);
         }
     }
 
-    if (modified) { registry.emplace_or_replace<MultiframeDirtyComponent>(entity); }
-
-    return {.bRequestRemoval = remove, .bModified = modified};
+    return {.bRequestRemoval = remove};
 }
 
-void Component::AreaLightComponent::Serialize(const AreaLightComponent& comp, Engine::TextWriter& w)
+void Component::AreaLightComponent::Sanitize(AreaLightComponent& comp)
 {
-    static const AreaLightComponent DEF{};
-    w.KeyOpt("color", comp.color, DEF.color);
-    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
-    w.KeyOpt("halfWidth", comp.halfWidth, DEF.halfWidth);
-    w.KeyOpt("halfHeight", comp.halfHeight, DEF.halfHeight);
-    w.KeyOpt("range", comp.range, DEF.range);
-    w.KeyOpt("coneOuterDegrees", comp.coneOuterDegrees, DEF.coneOuterDegrees);
-    w.KeyOpt("coneInnerDegrees", comp.coneInnerDegrees, DEF.coneInnerDegrees);
-    w.KeyOpt("bDisk", comp.bDisk, DEF.bDisk);
-    w.KeyOpt("drawEmissiveSurface", comp.drawEmissiveSurface, DEF.drawEmissiveSurface);
-    w.KeyOpt("bExcludeFromProbeBake", comp.bExcludeFromProbeBake, DEF.bExcludeFromProbeBake);
+    comp.coneOuterDegrees = glm::clamp(comp.coneOuterDegrees, 0.0f, 90.0f);
+    comp.coneInnerDegrees = glm::clamp(comp.coneInnerDegrees, 0.0f, comp.coneOuterDegrees);
 }
 
-void Component::AreaLightComponent::Deserialize(AreaLightComponent& comp, const Engine::TextReader& r)
-{
-    comp.color = r.Vec3("color", comp.color);
-    comp.intensity = r.Float("intensity", comp.intensity);
-    comp.halfWidth = r.Float("halfWidth", comp.halfWidth);
-    comp.halfHeight = r.Float("halfHeight", comp.halfHeight);
-    comp.range = r.Float("range", comp.range);
-    comp.coneOuterDegrees = glm::clamp(r.Float("coneOuterDegrees", comp.coneOuterDegrees), 0.0f, 90.0f);
-    comp.coneInnerDegrees = glm::clamp(r.Float("coneInnerDegrees", comp.coneInnerDegrees), 0.0f, comp.coneOuterDegrees);
-    comp.bDisk = r.Bool("bDisk", comp.bDisk);
-    comp.drawEmissiveSurface = r.Bool("drawEmissiveSurface", comp.drawEmissiveSurface);
-    comp.bExcludeFromProbeBake = r.Bool("bExcludeFromProbeBake", comp.bExcludeFromProbeBake);
-}
-
-Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Directional Light", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -169,33 +172,14 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
     bool remove = ImGui::SmallButton("X##deletedirlight");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& comp = registry.get<DirectionalLightComponent>(entity);
-        modified |= ImGui::ColorEdit3("Color##dl", &comp.color.r);
-        modified |= Widgets::DragLightIntensity("Intensity##dl", &comp.intensity, {.bIlluminance = true});
-        modified |= ImGui::DragFloat("Angular Radius (deg)##dl", &comp.angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
-        modified |= ImGui::DragInt("Priority##dl", &comp.priority, 1.0f, -100, 100);
+        EditWidgets::ColorEdit3(edit, "Color##dl", &DirectionalLightComponent::color);
+        EditLightIntensity(edit, "Intensity##dl", &DirectionalLightComponent::intensity, {.bIlluminance = true});
+        EditWidgets::DragFloat(edit, "Angular Radius (deg)##dl", &DirectionalLightComponent::angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
+        EditWidgets::DragInt(edit, "Priority##dl", &DirectionalLightComponent::priority, 1.0f, -100, 100);
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
-}
-
-void Component::DirectionalLightComponent::Serialize(const DirectionalLightComponent& comp, Engine::TextWriter& w)
-{
-    static const DirectionalLightComponent DEF{};
-    w.KeyOpt("color", comp.color, DEF.color);
-    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
-    w.KeyOpt("priority", comp.priority, DEF.priority);
-    w.KeyOpt("angularRadiusDegrees", comp.angularRadiusDegrees, DEF.angularRadiusDegrees);
-}
-
-void Component::DirectionalLightComponent::Deserialize(DirectionalLightComponent& comp, const Engine::TextReader& r)
-{
-    comp.color = r.Vec3("color", comp.color);
-    comp.intensity = r.Float("intensity", comp.intensity);
-    comp.priority = r.Int("priority", comp.priority);
-    comp.angularRadiusDegrees = r.Float("angularRadiusDegrees", comp.angularRadiusDegrees);
+    return {.bRequestRemoval = remove};
 }
 
 glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light)
@@ -251,7 +235,7 @@ void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::en
     registry.remove<LightSurfaceRuntime>(entity);
 }
 
-Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Sphere Light", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -259,41 +243,17 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
     bool remove = ImGui::SmallButton("X##deletespherelight");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& comp = registry.get<SphereLightComponent>(entity);
-        modified |= ImGui::ColorEdit3("Color##sl", &comp.color.r);
-        modified |= Widgets::DragLightIntensity("Intensity##sl", &comp.intensity, {.lumensPerNit = SphereLightLumensPerNit(comp, EditorLightScale(registry, entity))});
-        modified |= ImGui::DragFloat("Radius##sl", &comp.radius, 0.05f, 0.01f, 100.0f);
-        modified |= ImGui::DragFloat("Range##sl", &comp.range, 0.5f, 0.0f, 1000.0f);
-        modified |= ImGui::Checkbox("Draw Emissive Surface##sl", &comp.drawEmissiveSurface);
-        modified |= ImGui::Checkbox("Probe Bake Exclude##sl", &comp.bExcludeFromProbeBake);
+        const auto& comp = edit.Get<SphereLightComponent>();
+        EditWidgets::ColorEdit3(edit, "Color##sl", &SphereLightComponent::color);
+        EditLightIntensity(edit, "Intensity##sl", &SphereLightComponent::intensity, {.lumensPerNit = SphereLightLumensPerNit(comp, EditorLightScale(edit.Registry(), edit.Primary()))});
+        EditWidgets::DragFloat(edit, "Radius##sl", &SphereLightComponent::radius, 0.05f, 0.01f, 100.0f);
+        EditWidgets::DragFloat(edit, "Range##sl", &SphereLightComponent::range, 0.5f, 0.0f, 1000.0f);
+        EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
+        EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
     }
 
-    if (modified) { registry.emplace_or_replace<MultiframeDirtyComponent>(entity); }
-
-    return {.bRequestRemoval = remove, .bModified = modified};
-}
-
-void Component::SphereLightComponent::Serialize(const SphereLightComponent& comp, Engine::TextWriter& w)
-{
-    static const SphereLightComponent DEF{};
-    w.KeyOpt("color", comp.color, DEF.color);
-    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
-    w.KeyOpt("radius", comp.radius, DEF.radius);
-    w.KeyOpt("range", comp.range, DEF.range);
-    w.KeyOpt("drawEmissiveSurface", comp.drawEmissiveSurface, DEF.drawEmissiveSurface);
-    w.KeyOpt("bExcludeFromProbeBake", comp.bExcludeFromProbeBake, DEF.bExcludeFromProbeBake);
-}
-
-void Component::SphereLightComponent::Deserialize(SphereLightComponent& comp, const Engine::TextReader& r)
-{
-    comp.color = r.Vec3("color", comp.color);
-    comp.intensity = r.Float("intensity", comp.intensity);
-    comp.radius = r.Float("radius", comp.radius);
-    comp.range = r.Float("range", comp.range);
-    comp.drawEmissiveSurface = r.Bool("drawEmissiveSurface", comp.drawEmissiveSurface);
-    comp.bExcludeFromProbeBake = r.Bool("bExcludeFromProbeBake", comp.bExcludeFromProbeBake);
+    return {.bRequestRemoval = remove};
 }
 
 glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light)
@@ -359,7 +319,16 @@ void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::e
     runtime.modelRange = {};
 }
 
-Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, entt::registry& registry, entt::entity entity, const char* name)
+void Component::SkyboxComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+{
+    auto& comp = registry.get<SkyboxComponent>(entity);
+    if (comp.handle.IsValid()) {
+        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadCubemap(comp.handle);
+        comp.handle = Engine::CubemapHandle::INVALID;
+    }
+}
+
+Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -367,56 +336,32 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
     bool remove = ImGui::SmallButton("X##deleteskybox");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
-        auto& comp = registry.get<SkyboxComponent>(entity);
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        const auto& comp = edit.Get<SkyboxComponent>();
+        auto* ctx = edit.Registry().ctx().get<Engine::EngineContext*>();
 
-        modified |= ImGui::Checkbox("Enabled##sky", &comp.bEnabled);
+        EditWidgets::Checkbox(edit, "Enabled##sky", &SkyboxComponent::bEnabled);
 
         static bool bShowProbes = false;
 
         const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.envMap);
-        const char* preview = currentMeta ? currentMeta->name.c_str() : "None";
+        const char* preview = edit.IsMixed(&SkyboxComponent::envMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Env Map##sky", preview)) {
             for (const auto& [id, meta] : ctx->assetManager->GetCubemapCache()) {
                 if (!bShowProbes && meta.source.Extension() == ".wprobe" && id != comp.envMap) { continue; }
-                const bool selected = id == comp.envMap;
-                if (ImGui::Selectable(meta.name.c_str(), selected) && id != comp.envMap) {
-                    if (comp.handle.IsValid()) {
-                        ctx->assetManager->UnloadCubemap(comp.handle);
-                        comp.handle = Engine::CubemapHandle::INVALID;
-                    }
-                    comp.envMap = id;
-                    modified = true;
+                if (ImGui::Selectable(meta.name.c_str(), id == comp.envMap)) {
+                    edit.Set(&SkyboxComponent::envMap, Engine::EnvironmentMapID{id});
                 }
             }
             ImGui::EndCombo();
         }
         ImGui::Checkbox("Show Probes In Selection##sky", &bShowProbes);
 
-        modified |= Widgets::DragLightIntensity("Intensity##sky", &comp.intensity, {.tooltip = "Env map texel value to nits"});
-        modified |= ImGui::DragInt("Priority##sky", &comp.priority, 1.0f, -100, 100);
+        EditLightIntensity(edit, "Intensity##sky", &SkyboxComponent::intensity, {.tooltip = "Env map texel value to nits"});
+        EditWidgets::DragInt(edit, "Priority##sky", &SkyboxComponent::priority, 1.0f, -100, 100);
     }
 
-    return {.bRequestRemoval = remove, .bModified = modified};
-}
-
-void Component::SkyboxComponent::Serialize(const SkyboxComponent& comp, Engine::TextWriter& w)
-{
-    static const SkyboxComponent DEF{};
-    w.KeyOpt("envMap", comp.envMap.id, DEF.envMap.id);
-    w.KeyOpt("intensity", comp.intensity, DEF.intensity);
-    w.KeyOpt("priority", comp.priority, DEF.priority);
-    w.KeyOpt("bEnabled", comp.bEnabled, DEF.bEnabled);
-}
-
-void Component::SkyboxComponent::Deserialize(SkyboxComponent& comp, const Engine::TextReader& r)
-{
-    comp.envMap = Engine::EnvironmentMapID{r.U64("envMap", comp.envMap.id)};
-    comp.intensity = r.Float("intensity", comp.intensity);
-    comp.priority = r.Int("priority", comp.priority);
-    comp.bEnabled = r.Bool("bEnabled", comp.bEnabled);
+    return {.bRequestRemoval = remove};
 }
 
 void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)
