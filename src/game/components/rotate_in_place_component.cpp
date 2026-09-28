@@ -10,8 +10,6 @@
 
 #include "render/interface/render_interface.h"
 #include "engine/component_registry.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 #include "engine/components/core_components.h"
 #include "game/fwd_components.h"

@@ -7,8 +7,6 @@
 #include <imgui.h>
 #include <glm/glm.hpp>
 
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "engine/components/core_components.h"

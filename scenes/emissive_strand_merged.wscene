@@ -81,6 +81,7 @@ s
 ;
 s
 ;
+params
 parts|32
 p
 type|11
@@ -369,6 +370,7 @@ stacks|8
 offset|0x4114cccd|0x40000000|0x3d23d70a
 rotation|0x3f800000|0x00000000|0x00000000|0x00000000
 slot|0
+;
 ;
 ;
 9933298491518004787

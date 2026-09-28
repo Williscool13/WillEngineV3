@@ -12,6 +12,7 @@
 #include "core/string_id.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
+#include "engine/reflection/reflection.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -40,8 +41,8 @@ struct StableIdComponent
         return StringID(rng());
     }
 
-    static void Serialize(const StableIdComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(StableIdComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(StableIdComponent, WILL_FIELD(id), WILL_FIELD(sortOrder))
+
     static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);

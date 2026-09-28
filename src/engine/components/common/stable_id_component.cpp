@@ -5,25 +5,10 @@
 #include "stable_id_component.h"
 
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/editor/edit_context.h"
 
 namespace Engine::Component
 {
-
-void StableIdComponent::Serialize(const StableIdComponent& comp, Engine::TextWriter& w)
-{
-    w.KeyOpt("id", comp.id.id, uint64_t{0});
-    w.KeyOpt("sortOrder", comp.sortOrder, uint64_t{0});
-}
-
-void StableIdComponent::Deserialize(StableIdComponent& comp, const Engine::TextReader& r)
-{
-    // id 0 stays 0; OnConstruct generates a new one
-    comp.id = StringID(r.U64("id", comp.id.id));
-    comp.sortOrder = r.U64("sortOrder", comp.sortOrder);
-}
 void StableIdComponent::OnUpdate(entt::registry& registry, entt::entity entity)
 {
     assert(false && "StableIdComponent should never be updated");

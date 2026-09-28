@@ -32,8 +32,8 @@ struct StaticMeshPrimitiveComponent
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     WILL_REFLECT(StaticMeshPrimitiveComponent,
-        WILL_FIELD(modelId, .flags = Engine::FIELD_ALWAYS_WRITE),
-        WILL_FIELD(primitiveOrdinal, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(modelId),
+        WILL_FIELD(primitiveOrdinal),
         WILL_FIELD(materialOverride),
         WILL_FIELD(shadingShaderOverride),
         WILL_FIELD(lightingShaderOverride),

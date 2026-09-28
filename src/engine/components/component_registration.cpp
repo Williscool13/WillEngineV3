@@ -6,7 +6,6 @@
 
 #include "engine/logging/engine_assert.h"
 #include "engine/components/camera_components.h"
-#include "engine/components/character_components.h"
 #include "engine/components/common_components.h"
 #include "engine/components/common/stable_id_component.h"
 #include "engine/components/core_components.h"
@@ -70,7 +69,6 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::ModuleMeshComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::Text3DComponent>(componentRegistry, Origin::Engine, false, false);
 
-    RegisterComponent<Component::CharacterPhysicsComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, Origin::Engine, false, false);
 

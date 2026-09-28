@@ -33,7 +33,7 @@ struct TextComponent
     float wrapWidth{0.0f};
 
     WILL_REFLECT(TextComponent,
-        WILL_FIELD(fontId, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(fontId),
         WILL_FIELD(textMaterialId),
         WILL_FIELD(text),
         WILL_FIELD(scale, .min = 0.01f, .max = 100.0f, .speed = 0.01f),

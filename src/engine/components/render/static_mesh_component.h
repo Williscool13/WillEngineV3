@@ -29,7 +29,7 @@ struct StaticMeshComponent
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     WILL_REFLECT(StaticMeshComponent,
-        WILL_FIELD(modelId, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(modelId),
         WILL_FIELD(shadingShaderOverride),
         WILL_FIELD(lightingShaderOverride),
         WILL_FIELD(renderOffset),

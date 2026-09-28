@@ -13,8 +13,6 @@
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 #include "engine/components/core_components.h"
 #include "engine/components/render_components.h"

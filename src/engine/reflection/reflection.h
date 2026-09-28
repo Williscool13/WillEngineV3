@@ -12,20 +12,12 @@
 
 namespace Engine
 {
-enum FieldFlags : uint32_t
-{
-    FIELD_NONE = 0,
-    FIELD_ALWAYS_WRITE = 1u << 0,
-    FIELD_FLATTEN = 1u << 1,
-};
-
 struct FieldAttrs
 {
     const char* key{nullptr};
     float min{0.0f};
     float max{0.0f};
     float speed{0.0f};
-    uint32_t flags{FIELD_NONE};
 };
 
 template<typename Owner, typename Member>
@@ -39,7 +31,6 @@ struct Field
     FieldAttrs attrs;
 
     [[nodiscard]] constexpr const char* Key() const { return attrs.key ? attrs.key : name; }
-    [[nodiscard]] constexpr bool Has(uint32_t flag) const { return (attrs.flags & flag) != 0; }
 };
 
 template<typename T>

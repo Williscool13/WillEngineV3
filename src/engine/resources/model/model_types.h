@@ -538,7 +538,7 @@ struct ModulePart
     Quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     int32_t materialSlot{0};
 
-    WILL_REFLECT(ModulePart, WILL_FIELD(shape, .key = "type", .flags = FIELD_FLATTEN), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(materialSlot, .key = "slot"))
+    WILL_REFLECT(ModulePart, WILL_FIELD(shape, .key = "type"), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(materialSlot, .key = "slot"))
 
     static void Sanitize(ModulePart& p) { p.materialSlot = glm::clamp(p.materialSlot, 0, MAX_MODULE_SLOTS - 1); }
 };

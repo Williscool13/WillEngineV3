@@ -23,16 +23,6 @@ concept HasDrawEditor = requires(Core::ViewFamily& vf, Engine::EditContext& edit
 };
 
 template<typename T>
-concept HasSerialize = requires(const T& comp, Engine::TextWriter& w) {
-    { T::Serialize(comp, w) } -> std::same_as<void>;
-};
-
-template<typename T>
-concept HasDeserialize = requires(T& comp, const Engine::TextReader& r) {
-    { T::Deserialize(comp, r) } -> std::same_as<void>;
-};
-
-template<typename T>
 concept HasCanAdd = requires(const entt::registry& r, entt::entity e) {
     { T::CanAdd(r, e) } -> std::same_as<bool>;
 };

@@ -28,10 +28,6 @@ concept HasOnEditPreview = requires(entt::registry& r, entt::entity e) { C::OnEd
 template<typename C>
 concept HasOnEditCommit = requires(entt::registry& r, entt::entity e) { C::OnEditCommit(r, e); };
 
-/** Undo removes and re-adds the component instead of copying fields; for components holding runtime handles. */
-template<typename C>
-concept RestoresByRebuild = requires { requires C::RESTORE_BY_REBUILD; };
-
 template<typename V>
 void AssignValue(V& dst, const V& src)
 {

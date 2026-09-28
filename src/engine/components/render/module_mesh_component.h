@@ -35,7 +35,7 @@ struct ModuleMeshComponent
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     WILL_REFLECT(ModuleMeshComponent,
-        WILL_FIELD(params, .flags = Engine::FIELD_FLATTEN),
+        WILL_FIELD(params),
         WILL_FIELD(slotMaterials),
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))

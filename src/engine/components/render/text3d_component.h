@@ -44,7 +44,7 @@ struct Text3DComponent
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     WILL_REFLECT(Text3DComponent,
-        WILL_FIELD(fontId, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(fontId),
         WILL_FIELD(text),
         WILL_FIELD(depth, .min = 0.001f, .max = 10.0f, .speed = 0.005f),
         WILL_FIELD(flatness, .min = 0.0005f, .max = 0.1f, .speed = 0.0005f),
@@ -55,7 +55,7 @@ struct Text3DComponent
         WILL_FIELD(bSmoothNormals, .key = "smoothNormals"),
         WILL_FIELD(align),
         WILL_FIELD(anchor),
-        WILL_FIELD(material, .flags = Engine::FIELD_ALWAYS_WRITE),
+        WILL_FIELD(material),
         WILL_FIELD(renderOffset, .speed = 0.01f),
         WILL_FIELD(renderRotation))
 

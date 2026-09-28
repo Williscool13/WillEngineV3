@@ -3198,6 +3198,7 @@ s
 ;
 s
 ;
+params
 parts|7
 p
 type|25
@@ -3273,6 +3274,7 @@ pattern|0
 offset|0x3faccccd|0x404ccccd|0x3f333333
 rotation|0x3f800000|0x00000000|0x00000000|0x00000000
 slot|1
+;
 ;
 ;
 ;
@@ -3310,6 +3312,7 @@ s
 ;
 s
 ;
+params
 parts|7
 p
 type|25
@@ -3385,6 +3388,7 @@ pattern|0
 offset|0x3faccccd|0x404ccccd|0x3f333333
 rotation|0x3f800000|0x00000000|0x00000000|0x00000000
 slot|1
+;
 ;
 ;
 ;

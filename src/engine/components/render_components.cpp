@@ -12,8 +12,6 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/systems/render_systems.h"
 #include "engine/editor/edit_widgets.h"
 

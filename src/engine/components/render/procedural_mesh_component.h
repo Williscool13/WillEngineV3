@@ -28,7 +28,7 @@ struct ProceduralMeshComponent
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     WILL_REFLECT(ProceduralMeshComponent,
-        WILL_FIELD(params, .key = "type", .flags = Engine::FIELD_FLATTEN),
+        WILL_FIELD(params, .key = "type"),
         WILL_FIELD(material),
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))

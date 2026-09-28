@@ -190,7 +190,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     bool remove = ImGui::SmallButton("X");
     ImGui::PopStyleColor();
 
-    bool modified = false;
     if (open) {
         const bool bForbidDynamic = BodyHasConcaveExotic(component);
         const char* motionTypes[] = {"Static", "Kinematic", "Dynamic"};
@@ -286,7 +285,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                                 shape.bakedScale = glm::vec3(1.0f);
                             }
                         }
-                        modified = true;
                         bCommit = true;
                     }
                     if (bDisabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -297,24 +295,24 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 ImGui::EndCombo();
             }
 
-            modified |= ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
+            ImGui::DragFloat3("Offset", &shape.offset.x, 0.01f);
             bCommit |= ImGui::IsItemDeactivatedAfterEdit();
-            modified |= ImGui::DragFloat3("Baked Scale", &shape.bakedScale.x, 0.01f, 0.001f, 100.0f);
+            ImGui::DragFloat3("Baked Scale", &shape.bakedScale.x, 0.01f, 0.001f, 100.0f);
             bCommit |= ImGui::IsItemDeactivatedAfterEdit();
 
             bool bAnyChange = false;
             if (auto* box = std::get_if<BoxShape>(&shape.geometry)) {
-                modified |= ImGui::DragFloat3("Half Extents", &box->halfExtents.x, 0.01f, 0.001f, 100.0f);
+                ImGui::DragFloat3("Half Extents", &box->halfExtents.x, 0.01f, 0.001f, 100.0f);
                 bCommit |= ImGui::IsItemDeactivatedAfterEdit();
             }
             else if (auto* sphere = std::get_if<SphereShape>(&shape.geometry)) {
-                modified |= ImGui::DragFloat("Radius", &sphere->radius, 0.01f, 0.001f, 100.0f);
+                ImGui::DragFloat("Radius", &sphere->radius, 0.01f, 0.001f, 100.0f);
                 bCommit |= ImGui::IsItemDeactivatedAfterEdit();
             }
             else if (auto* capsule = std::get_if<CapsuleShape>(&shape.geometry)) {
-                modified |= ImGui::DragFloat("Radius", &capsule->radius, 0.01f, 0.001f, 100.0f);
+                ImGui::DragFloat("Radius", &capsule->radius, 0.01f, 0.001f, 100.0f);
                 bCommit |= ImGui::IsItemDeactivatedAfterEdit();
-                modified |= ImGui::DragFloat("Half Height", &capsule->halfHeight, 0.01f, 0.001f, 100.0f);
+                ImGui::DragFloat("Half Height", &capsule->halfHeight, 0.01f, 0.001f, 100.0f);
                 bCommit |= ImGui::IsItemDeactivatedAfterEdit();
             }
             else if (auto* collider = std::get_if<ColliderShape>(&shape.geometry)) {
@@ -377,10 +375,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     }
                 }
             }
-            if (bAnyChange) {
-                modified = true;
-                bCommit = true;
-            }
+            bCommit |= bAnyChange;
 
             //
             {
@@ -394,7 +389,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     else {
                         FitPrimitiveShapeToEntity(registry, entity, shape, scale, fitModel->bounds);
                     }
-                    modified = true;
                     bCommit = true;
                 }
                 ImGui::EndDisabled();
@@ -478,9 +472,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             // Rebuild the shape/body once on drag release rather than every frame of the drag.
             const bool bGizmoDragging = state->editor.activeDotHandleId != -1 || ImGuizmo::IsUsing();
-            modified |= bGizmoDragging;
             if (bGizmoWasDragging && !bGizmoDragging) {
-                modified = true;
                 bCommit = true;
             }
             bGizmoWasDragging = bGizmoDragging;
@@ -572,23 +564,18 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             }
             if (shapeToRemove >= 0) {
                 component.shapes.RemoveAt(shapeToRemove);
-                modified = true;
                 bCommit = true;
             }
         }
 
         if (ImGui::Button("Add Collider")) {
             component.shapes.PushBack({});
-            modified = true;
             bCommit = true;
         }
         ImGui::EndDisabled();
     }
 
     edit.PreviewDiff(before, component);
-    if (modified && !edit.IsMulti()) {
-        edit.Preview<PhysicsBodyDesc>([&component](PhysicsBodyDesc& c) { c.shapes = component.shapes; });
-    }
     if (bCommit) {
         edit.Commit<PhysicsBodyDesc>();
     }

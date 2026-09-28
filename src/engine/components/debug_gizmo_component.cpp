@@ -6,8 +6,6 @@
 
 #include "imgui.h"
 
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 
 namespace

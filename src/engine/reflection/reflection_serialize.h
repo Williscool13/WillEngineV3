@@ -23,7 +23,6 @@
 
 namespace Engine
 {
-/** Unsupported types can still be reflected for editing and undo; their owner keeps a hand-written serializer. */
 template<typename V>
 struct FieldTraits
 {
@@ -248,8 +247,6 @@ struct FieldTraits<V>
         if (block.IsValid()) { DeserializeFields(v, block); }
     }
 
-    static void WriteFlattened(TextWriter& w, const char*, const V& v) { SerializeFields(v, w); }
-    static void ReadFlattened(const TextReader& r, const char*, V& v) { DeserializeFields(v, r); }
     static bool Equal(const V& a, const V& b) { return DeepEqual(a, b); }
 };
 
@@ -275,7 +272,7 @@ void EmplaceVariantIndex(V& v, size_t index)
     }(std::make_index_sequence<std::variant_size_v<V>>{});
 }
 
-/** Variant of reflected structs (and monostate): `type|<index>` then the alternative's fields, in a block named by the key. */
+/** Variant of reflected structs (and monostate): `key|<index>` then the alternative's fields, in the owner's block. */
 template<typename... A>
 struct FieldTraits<std::variant<A...>>
 {
@@ -283,7 +280,7 @@ struct FieldTraits<std::variant<A...>>
 
     static constexpr bool SUPPORTED = (AlternativeSerializable<A>() && ...);
 
-    static void WriteFlattened(TextWriter& w, const char* key, const V& v)
+    static void Write(TextWriter& w, const char* key, const V& v)
     {
         w.Key(key, static_cast<uint32_t>(v.index()));
         std::visit([&w](const auto& alt) {
@@ -293,7 +290,7 @@ struct FieldTraits<std::variant<A...>>
         }, v);
     }
 
-    static void ReadFlattened(const TextReader& r, const char* key, V& v)
+    static void Read(const TextReader& r, const char* key, V& v)
     {
         if (!r.Has(key)) { return; }
         EmplaceVariantIndex(v, r.UInt(key));
@@ -302,19 +299,6 @@ struct FieldTraits<std::variant<A...>>
                 DeserializeFields(alt, r);
             }
         }, v);
-    }
-
-    static void Write(TextWriter& w, const char* key, const V& v)
-    {
-        w.BeginBlock(key);
-        WriteFlattened(w, "type", v);
-        w.EndBlock();
-    }
-
-    static void Read(const TextReader& r, const char* key, V& v)
-    {
-        const TextReader block = r.Block(key);
-        if (block.IsValid()) { ReadFlattened(block, "type", v); }
     }
 
     static bool Equal(const V& a, const V& b) { return DeepEqual(a, b); }
@@ -409,26 +393,14 @@ template<typename E, size_t N>
 struct FieldTraits<Core::Array<E, N>> : FixedArrayFieldTraits<Core::Array<E, N>, E, N>
 {};
 
-template<typename V>
-concept HasFlattenTraits = requires(TextWriter& w, const TextReader& r, V& v) {
-    FieldTraits<V>::WriteFlattened(w, "", v);
-    FieldTraits<V>::ReadFlattened(r, "", v);
-};
-
-/** Fields equal to T{} are omitted unless FIELD_ALWAYS_WRITE. */
+/** Fields equal to T{} are omitted. */
 template<ReflectedSerializable T>
 void SerializeFields(const T& v, TextWriter& w)
 {
     static const T DEF{};
     ForEachField<T>([&v, &w](const auto& f) {
         using M = FieldMemberType<decltype(f)>;
-        if (!w.WritesDefaults() && !f.Has(FIELD_ALWAYS_WRITE) && FieldTraits<M>::Equal(v.*f.member, DEF.*f.member)) { return; }
-        if constexpr (HasFlattenTraits<M>) {
-            if (f.Has(FIELD_FLATTEN)) {
-                FieldTraits<M>::WriteFlattened(w, f.Key(), v.*f.member);
-                return;
-            }
-        }
+        if (!w.WritesDefaults() && FieldTraits<M>::Equal(v.*f.member, DEF.*f.member)) { return; }
         FieldTraits<M>::Write(w, f.Key(), v.*f.member);
     });
 }
@@ -438,12 +410,6 @@ void DeserializeFields(T& v, const TextReader& r)
 {
     ForEachField<T>([&v, &r](const auto& f) {
         using M = FieldMemberType<decltype(f)>;
-        if constexpr (HasFlattenTraits<M>) {
-            if (f.Has(FIELD_FLATTEN)) {
-                FieldTraits<M>::ReadFlattened(r, f.Key(), v.*f.member);
-                return;
-            }
-        }
         FieldTraits<M>::Read(r, f.Key(), v.*f.member);
     });
     if constexpr (HasSanitize<T>) {

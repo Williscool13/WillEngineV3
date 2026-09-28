@@ -4,11 +4,7 @@
 #ifndef WILL_ENGINE_DEBUG_COMPONENTS_H
 #define WILL_ENGINE_DEBUG_COMPONENTS_H
 
-namespace Engine
-{
-class TextWriter;
-class TextReader;
-}
+#include "engine/reflection/reflection.h"
 
 namespace Game::Component
 {
@@ -18,8 +14,7 @@ struct MotionBlurMovementComponent
 
     bool bIsHorizontal{false};
 
-    static void Serialize(const MotionBlurMovementComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(MotionBlurMovementComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(MotionBlurMovementComponent, WILL_FIELD(bIsHorizontal))
 };
 struct AntiGravityTag
 {

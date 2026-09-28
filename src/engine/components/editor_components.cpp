@@ -9,8 +9,6 @@
 #include "component_types.h"
 #include "core/containers/arena_vector.h"
 #include "engine/include/engine_context.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 
 namespace Engine::Component

@@ -63,7 +63,7 @@ struct ComponentEntry
     /** Hide in Details inspector unless "Expose all" is enabled. */
     bool hideInInspector{false};
 
-    // Restore undo/redo (teardown->remake)
+    // Undo/redo: copies snapshot fields onto the live component, then OnEditCommit
     RestoreFn restore{};
     FillDefaultsFn fillDefaults{};
 };

@@ -135,7 +135,6 @@ add_library(engine STATIC
         components/component_editor.h
         components/component_registration.cpp
         components/component_registration.h
-        components/camera_components.cpp
         components/camera_components.h
         components/character_components.h
         components/common_components.cpp

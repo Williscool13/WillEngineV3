@@ -17,7 +17,6 @@ set(GAME_SOURCES
 
         components/component_registration.cpp
         components/component_registration.h
-        components/debug_components.cpp
         components/debug_components.h
 
         components/checkpoint_component.cpp

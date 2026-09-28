@@ -8,8 +8,6 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "engine/engine_api.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 #include "engine/components/core_components.h"
 #include "game/fwd_components.h"

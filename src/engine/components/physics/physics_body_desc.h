@@ -87,7 +87,7 @@ struct ColliderShape
     Text3DShapeSource text3DSource{};
 
     WILL_REFLECT(ColliderShape, WILL_FIELD(meshSourceModelId), WILL_FIELD(bMeshPrecise, .key = "meshPrecise"),
-                 WILL_FIELD(proceduralParams, .key = "proceduralType", .flags = Engine::FIELD_FLATTEN), WILL_FIELD(splineParams), WILL_FIELD(text3DSource))
+                 WILL_FIELD(proceduralParams, .key = "proceduralType"), WILL_FIELD(splineParams), WILL_FIELD(text3DSource))
 
     [[nodiscard]] bool HasSource() const
     {
@@ -104,7 +104,7 @@ struct PhysicsShapeDesc
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 bakedScale{1.0f};
 
-    WILL_REFLECT(PhysicsShapeDesc, WILL_FIELD(geometry, .key = "type", .flags = Engine::FIELD_FLATTEN), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(bakedScale))
+    WILL_REFLECT(PhysicsShapeDesc, WILL_FIELD(geometry, .key = "type"), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(bakedScale))
 };
 
 /** Runtime state derived from PhysicsBodyDesc; colliders is index-parallel to shapes and rebuilt with them. */

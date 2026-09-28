@@ -6,12 +6,7 @@
 #define WILL_ENGINE_CAMERACOMPONENT_H
 
 #include "render/interface/render_interface.h"
-
-namespace Engine
-{
-class TextWriter;
-class TextReader;
-}
+#include "engine/reflection/reflection.h"
 
 namespace Engine::Component
 {
@@ -42,8 +37,7 @@ struct FreeCameraComponent
     float moveSpeed = 5.0f;
     float lookSpeed = 0.1f;
 
-    static void Serialize(const FreeCameraComponent& comp, Engine::TextWriter& w);
-    static void Deserialize(FreeCameraComponent& comp, const Engine::TextReader& r);
+    WILL_REFLECT(FreeCameraComponent, WILL_FIELD(moveSpeed), WILL_FIELD(lookSpeed))
 };
 }
 

@@ -7,8 +7,6 @@
 #include "imgui.h"
 
 #include "engine/component_registry.h"
-#include "engine/serialization/text_reader.h"
-#include "engine/serialization/text_writer.h"
 #include "engine/components/component_editor.h"
 
 namespace Engine::Component
