@@ -32,7 +32,6 @@ namespace Engine
 void ConnectPhysicsObservers(entt::registry& registry)
 {
     registry.on_construct<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnConstruct>();
-    registry.on_update<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnUpdate>();
     registry.on_destroy<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnDestroy>();
 
     registry.on_construct<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnConstruct>();
@@ -42,7 +41,6 @@ void ConnectPhysicsObservers(entt::registry& registry)
 void DisconnectPhysicsObservers(entt::registry& registry)
 {
     registry.on_construct<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnConstruct>();
-    registry.on_update<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnUpdate>();
     registry.on_destroy<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnDestroy>();
 
     registry.on_construct<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnConstruct>();
@@ -267,7 +265,8 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
 }
 
 
-JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride)
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, const JPH::ShapeRefC& shapeRef, JPH::RVec3 position, JPH::Quat rotation,
+                                JPH::ObjectLayer layerOverride)
 {
     JPH::EMotionType motionType = desc.motionType == Component::PhysicsMotionType::Static
                                       ? JPH::EMotionType::Static
@@ -286,7 +285,7 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
         layer = desc.motionType == Component::PhysicsMotionType::Static ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
     }
 
-    JPH::BodyCreationSettings settings(desc.shapeRef, position, rotation.Normalized(), motionType, layer);
+    JPH::BodyCreationSettings settings(shapeRef, position, rotation.Normalized(), motionType, layer);
     if (desc.motionType != Component::PhysicsMotionType::Static) {
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
         settings.mMassPropertiesOverride.mMass = desc.mass;
@@ -431,41 +430,34 @@ static JPH::ShapeRefC CreateShapeFromCollider(const Engine::PhysicsColliderAsset
     return nullptr;
 }
 
-JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager)
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, Engine::AssetManager* assetManager)
 {
-    if (desc.colliderHandle.IsValid() && assetManager) {
-        auto* collider = assetManager->GetCollider(desc.colliderHandle);
+    if (colliderHandle.IsValid() && assetManager) {
+        auto* collider = assetManager->GetCollider(colliderHandle);
         if (!collider || collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) { return nullptr; }
         return CreateShapeFromCollider(*collider, desc.bakedScale);
     }
 
-    switch (desc.type) {
-        case Component::PhysicsShapeType::Box:
-        {
-            JPH::BoxShapeSettings s(JPH::Vec3(desc.box.halfExtents.x, desc.box.halfExtents.y, desc.box.halfExtents.z));
-            return s.Create().Get();
-        }
-        case Component::PhysicsShapeType::Sphere:
-        {
-            JPH::SphereShapeSettings s(desc.sphere.radius);
-            return s.Create().Get();
-        }
-        case Component::PhysicsShapeType::Capsule:
-        {
-            JPH::CapsuleShapeSettings s(desc.capsule.halfHeight, desc.capsule.radius);
-            return s.Create().Get();
-        }
-        case Component::PhysicsShapeType::Collider:
-            // Resolved above via colliderHandle; a Collider with no valid handle has nothing to build.
-            return nullptr;
+    if (const auto* box = std::get_if<Component::BoxShape>(&desc.geometry)) {
+        JPH::BoxShapeSettings s(JPH::Vec3(box->halfExtents.x, box->halfExtents.y, box->halfExtents.z));
+        return s.Create().Get();
     }
+    if (const auto* sphere = std::get_if<Component::SphereShape>(&desc.geometry)) {
+        JPH::SphereShapeSettings s(sphere->radius);
+        return s.Create().Get();
+    }
+    if (const auto* capsule = std::get_if<Component::CapsuleShape>(&desc.geometry)) {
+        JPH::CapsuleShapeSettings s(capsule->halfHeight, capsule->radius);
+        return s.Create().Get();
+    }
+    // A Collider resolves through its colliderHandle; without a valid one there is nothing to build.
     return nullptr;
 }
 
 void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsMeshTag>();
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PendingPhysicsMeshTag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -473,35 +465,37 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
     const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     auto abandoned = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (auto [entity, bodyDesc] : view.each()) {
+    for (auto [entity, bodyDesc, runtime] : view.each()) {
         if (started.Size() + abandoned.Size() >= budget) { break; }
         bool allArmed = true;
         bool shouldAbandon = false;
 
-        for (auto& shapeDesc : bodyDesc.shapes) {
-            if (shapeDesc.type != Component::PhysicsShapeType::Collider) { continue; }
-            if (shapeDesc.colliderHandle.IsValid()) { continue; }
+        for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
+            const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
+            if (!collider) { continue; }
+            Engine::PhysicsColliderHandle& handle = runtime.colliders[i];
+            if (handle.IsValid()) { continue; }
 
-            if (shapeDesc.meshSourceModelId.IsValid()) {
-                if (ctx->assetManager->IsModelFrozen(shapeDesc.meshSourceModelId)) { allArmed = false; break; }
+            if (collider->meshSourceModelId.IsValid()) {
+                if (ctx->assetManager->IsModelFrozen(collider->meshSourceModelId)) { allArmed = false; break; }
 
-                const bool bWantsMesh = shapeDesc.bMeshPrecise && bodyDesc.motionType != Component::PhysicsMotionType::Dynamic;
+                const bool bWantsMesh = collider->bMeshPrecise && bodyDesc.motionType != Component::PhysicsMotionType::Dynamic;
                 const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
-                shapeDesc.colliderHandle = ctx->assetManager->LoadModelCollider(shapeDesc.meshSourceModelId, kind);
+                handle = ctx->assetManager->LoadModelCollider(collider->meshSourceModelId, kind);
             }
-            else if (!std::holds_alternative<std::monostate>(shapeDesc.proceduralParams)) {
-                shapeDesc.colliderHandle = ctx->assetManager->LoadProceduralCollider(shapeDesc.proceduralParams);
+            else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
+                handle = ctx->assetManager->LoadProceduralCollider(collider->proceduralParams);
             }
-            else if (!shapeDesc.splineParams.spline.points.IsEmpty()) {
-                shapeDesc.colliderHandle = ctx->assetManager->LoadSplineCollider(shapeDesc.splineParams);
+            else if (!collider->splineParams.spline.points.IsEmpty()) {
+                handle = ctx->assetManager->LoadSplineCollider(collider->splineParams);
             }
-            else if (shapeDesc.text3DSource.IsValid()) {
-                const Component::Text3DShapeSource& t = shapeDesc.text3DSource;
+            else if (collider->text3DSource.IsValid()) {
+                const Component::Text3DShapeSource& t = collider->text3DSource;
                 if (ctx->assetManager->IsFontFrozen(t.fontId)) { allArmed = false; break; }
-                shapeDesc.colliderHandle = ctx->assetManager->LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
+                handle = ctx->assetManager->LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
             }
 
-            if (!shapeDesc.colliderHandle.IsValid()) {
+            if (!handle.IsValid()) {
                 LOG_WARN(Engine, "Physics collider source could not be loaded. Removing pending tag.");
                 shouldAbandon = true;
                 break;
@@ -530,22 +524,22 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
 void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsMeshLoadingTag>();
+    auto view = state->registry.view<Component::PhysicsShapeRuntime, Component::PhysicsMeshLoadingTag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
     }
     const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (auto [entity, bodyDesc] : view.each()) {
+    for (auto [entity, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }
         bool allReady = true;
         bool shouldAbandon = false;
 
-        for (const auto& shapeDesc : bodyDesc.shapes) {
-            if (!shapeDesc.colliderHandle.IsValid()) { continue; }
+        for (const Engine::PhysicsColliderHandle handle : runtime.colliders) {
+            if (!handle.IsValid()) { continue; }
 
-            auto* collider = ctx->assetManager->GetCollider(shapeDesc.colliderHandle);
+            auto* collider = ctx->assetManager->GetCollider(handle);
             if (!collider) {
                 LOG_WARN(Engine, "Physics collider not found. Removing loading tag.");
                 shouldAbandon = true;
@@ -579,7 +573,7 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
     ZoneScoped;
 
     // Mesh based physics need to wait for its mesh to load
-    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsShapeCreationTag>(
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PendingPhysicsShapeCreationTag>(
         entt::exclude<Component::PendingPhysicsMeshTag, Component::PhysicsMeshLoadingTag>);
 
     size_t viewCount = view.size_hint();
@@ -589,17 +583,12 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
     const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
 
-    for (const auto& [entity, bodyDesc] : view.each()) {
+    for (auto [entity, bodyDesc, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }
         bool bDegenerate = false;
         for (const auto& shape : bodyDesc.shapes) {
-            if (shape.type != Component::PhysicsShapeType::Collider) { continue; }
-
-            const bool bHasSource = shape.meshSourceModelId.IsValid()
-                                    || !std::holds_alternative<std::monostate>(shape.proceduralParams)
-                                    || !shape.splineParams.spline.points.IsEmpty()
-                                    || shape.text3DSource.IsValid();
-            if (!bHasSource) {
+            const auto* collider = std::get_if<Component::ColliderShape>(&shape.geometry);
+            if (collider && !collider->HasSource()) {
                 LOG_WARN(Engine, "PhysicsBodyDesc has a Collider shape with no source, skipping shape creation");
                 bDegenerate = true;
                 break;
@@ -618,13 +607,14 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
 
         JPH::ShapeRefC shape;
         if (bodyDesc.shapes.Size() == 1 && bodyDesc.shapes[0].offset == glm::vec3(0.0f)) {
-            shape = CreateShapeFromDesc(bodyDesc.shapes[0], ctx->assetManager);
+            shape = CreateShapeFromDesc(bodyDesc.shapes[0], runtime.colliders[0], ctx->assetManager);
         }
         else {
             JPH::StaticCompoundShapeSettings compound;
             bool bAnyNull = false;
-            for (const auto& shapeDesc : bodyDesc.shapes) {
-                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, ctx->assetManager);
+            for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
+                const Component::PhysicsShapeDesc& shapeDesc = bodyDesc.shapes[i];
+                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, runtime.colliders[i], ctx->assetManager);
                 if (!subShape) {
                     bAnyNull = true;
                     break;
@@ -644,7 +634,7 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
             continue;
         }
 
-        bodyDesc.shapeRef = shape;
+        runtime.shapeRef = shape;
         resolved.PushBack(entity);
     }
 
@@ -657,7 +647,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
 {
     ZoneScoped;
 
-    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PendingPhysicsBodyCreationTag>(
+    auto view = state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PendingPhysicsBodyCreationTag>(
         entt::exclude<Component::PendingPhysicsShapeCreationTag>);
 
     size_t viewCount = view.size_hint();
@@ -669,9 +659,9 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
 
     JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
 
-    for (const auto& [entity, bodyDesc] : view.each()) {
+    for (const auto& [entity, bodyDesc, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        if (!bodyDesc.shapeRef) {
+        if (!runtime.shapeRef) {
             resolved.PushBack(entity);
             continue;
         }
@@ -691,7 +681,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
         const Transform world = Component::ComputeWorldTransform(state->registry, entity);
         JPH::Vec3 pos(world.translation.x, world.translation.y, world.translation.z);
         JPH::Quat rot(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w);
-        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, pos, rot, bodyDesc.layerOverride);
+        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, runtime.shapeRef, pos, rot, bodyDesc.layerOverride);
         if (!bodyId.IsInvalid()) {
             if (bodyDesc.restitution > 0.0f) {
                 bodyInterface.SetRestitution(bodyId, bodyDesc.restitution);

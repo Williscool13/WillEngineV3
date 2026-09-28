@@ -25,14 +25,6 @@ namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
-enum class PhysicsShapeType : uint8_t
-{
-    Box,
-    Sphere,
-    Capsule,
-    Collider,
-};
-
 enum class PhysicsMotionType : uint8_t
 {
     Static,
@@ -56,44 +48,71 @@ struct Text3DShapeSource
     Engine::Text3DAnchor anchor{Engine::Text3DAnchor::Baseline};
     bool bPrecise{false};
 
+    WILL_REFLECT(Text3DShapeSource, WILL_FIELD(fontId), WILL_FIELD(text), WILL_FIELD(depth), WILL_FIELD(flatness), WILL_FIELD(tracking), WILL_FIELD(scale),
+                 WILL_FIELD(wrapWidth), WILL_FIELD(bendRadius), WILL_FIELD(bSmoothNormals, .key = "smoothNormals"), WILL_FIELD(align), WILL_FIELD(anchor),
+                 WILL_FIELD(bPrecise, .key = "precise"))
+
     bool IsValid() const { return fontId.IsValid() && text.Size() > 0; }
 };
 
-struct PhysicsShapeDesc
+struct BoxShape
 {
-    PhysicsShapeType type{PhysicsShapeType::Box};
-    glm::vec3 offset{0.0f};
-    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec3 bakedScale{1.0f};
+    glm::vec3 halfExtents{0.5f};
 
-    // Only used for Collider (mutually exclusive: modelId has priority, then procedural, spline, text3D).
+    WILL_REFLECT(BoxShape, WILL_FIELD(halfExtents))
+};
+
+struct SphereShape
+{
+    float radius{0.5f};
+
+    WILL_REFLECT(SphereShape, WILL_FIELD(radius))
+};
+
+struct CapsuleShape
+{
+    float radius{0.5f};
+    float halfHeight{0.5f};
+
+    WILL_REFLECT(CapsuleShape, WILL_FIELD(radius), WILL_FIELD(halfHeight))
+};
+
+/** Mutually exclusive sources: modelId has priority, then procedural, spline, text3D. */
+struct ColliderShape
+{
     Engine::ModelID meshSourceModelId{};
     bool bMeshPrecise{false};
     Engine::ProceduralParams proceduralParams{};
     Engine::SplineParams splineParams{};
     Text3DShapeSource text3DSource{};
 
-    // Transient
-    Engine::PhysicsColliderHandle colliderHandle{};
+    WILL_REFLECT(ColliderShape, WILL_FIELD(meshSourceModelId), WILL_FIELD(bMeshPrecise, .key = "meshPrecise"),
+                 WILL_FIELD(proceduralParams, .key = "proceduralType", .flags = Engine::FIELD_FLATTEN), WILL_FIELD(splineParams), WILL_FIELD(text3DSource))
 
-    union
+    [[nodiscard]] bool HasSource() const
     {
-        struct
-        {
-            glm::vec3 halfExtents;
-        } box;
+        return meshSourceModelId.IsValid() || !std::holds_alternative<std::monostate>(proceduralParams) || !splineParams.spline.points.IsEmpty() || text3DSource.IsValid();
+    }
+};
 
-        struct
-        {
-            float radius;
-        } sphere;
+using PhysicsShapeGeometry = std::variant<BoxShape, SphereShape, CapsuleShape, ColliderShape>;
 
-        struct
-        {
-            float radius;
-            float halfHeight;
-        } capsule;
-    };
+struct PhysicsShapeDesc
+{
+    PhysicsShapeGeometry geometry{};
+    glm::vec3 offset{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 bakedScale{1.0f};
+
+    WILL_REFLECT(PhysicsShapeDesc, WILL_FIELD(geometry, .key = "type", .flags = Engine::FIELD_FLATTEN), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(bakedScale))
+};
+
+/** Runtime state derived from PhysicsBodyDesc; colliders is index-parallel to shapes and rebuilt with them. */
+struct PhysicsShapeRuntime
+{
+    Core::InlineVector<Engine::PhysicsColliderHandle, 8> colliders;
+    // potentially also store its type (e.g. compound)
+    JPH::ShapeRefC shapeRef;
 };
 
 struct PhysicsBodyDesc
@@ -112,10 +131,6 @@ struct PhysicsBodyDesc
 
     Core::InlineVector<PhysicsShapeDesc, 8> shapes;
 
-    // potentially also store its type (e.g. compound)
-    JPH::ShapeRefC shapeRef;
-
-    // Shapes own runtime collider handles, so only scalars are reflected
     WILL_REFLECT(PhysicsBodyDesc,
         WILL_FIELD(motionType),
         WILL_FIELD(mass),
@@ -123,17 +138,15 @@ struct PhysicsBodyDesc
         WILL_FIELD(restitution),
         WILL_FIELD(motionQuality),
         WILL_FIELD(layerOverride),
-        WILL_FIELD(bEnhancedInternalEdgeRemoval),
-        WILL_FIELD(bIsSensor))
+        WILL_FIELD(bEnhancedInternalEdgeRemoval, .key = "enhancedInternalEdgeRemoval"),
+        WILL_FIELD(bIsSensor, .key = "isSensor"),
+        WILL_FIELD(shapes))
 
-    static constexpr bool RESTORE_BY_REBUILD = true;
-
-    static void Serialize(const PhysicsBodyDesc& comp, Engine::TextWriter& w);
-    static void Deserialize(PhysicsBodyDesc& comp, const Engine::TextReader& r);
     static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnUpdate(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
     static void DeferredConstruct(entt::registry& registry, entt::entity entity);
+    /** Releases the runtime colliders and queues a DeferredConstruct. */
+    static void RequestRebuild(entt::registry& registry, entt::entity entity);
     static void OnEditCommit(entt::registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };

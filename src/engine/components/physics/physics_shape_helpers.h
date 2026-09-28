@@ -32,8 +32,8 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
 void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale);
 
 /**
- * Fits a primitive shape (Box/Sphere/Capsule, per shape.type) to the given model bounds, pre-scaled by `scale`, and
- * bakes the attached mesh's render offset/rotation. shape.type must be set before calling.
+ * Fits a primitive shape (Box/Sphere/Capsule, per shape.geometry) to the given model bounds, pre-scaled by `scale`, and
+ * bakes the attached mesh's render offset/rotation. shape.geometry must hold the primitive before calling.
  */
 void FitPrimitiveShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds);
 } // Engine::Component

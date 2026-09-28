@@ -31,22 +31,31 @@ static void ApplyRenderTransform(PhysicsShapeDesc& shape, const glm::vec3& scale
     shape.rotation = renderRotation * shape.rotation;
 }
 
-static bool IsMeshShapeType(PhysicsShapeType type)
-{
-    return type == PhysicsShapeType::Collider;
-}
-
 // A concave collider source: a non-analytic procedural (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp) or a precise Text3D. Only a triangle mesh, so it cannot back a dynamic body.
 static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
 {
-    if (!IsMeshShapeType(shape.type)) { return false; }
-    if (!std::holds_alternative<std::monostate>(shape.proceduralParams)) {
-        return !Engine::CanBuildProceduralCollider(shape.proceduralParams);
+    const auto* collider = std::get_if<ColliderShape>(&shape.geometry);
+    if (!collider) { return false; }
+    if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
+        return !Engine::CanBuildProceduralCollider(collider->proceduralParams);
     }
-    if (shape.meshSourceModelId.IsValid()) {
-        return shape.bMeshPrecise;
+    if (collider->meshSourceModelId.IsValid()) {
+        return collider->bMeshPrecise;
     }
-    return shape.text3DSource.IsValid() && shape.text3DSource.bPrecise;
+    return collider->text3DSource.IsValid() && collider->text3DSource.bPrecise;
+}
+
+static void ReleaseColliders(entt::registry& registry, entt::entity entity)
+{
+    auto* runtime = registry.try_get<PhysicsShapeRuntime>(entity);
+    if (!runtime) { return; }
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    for (const Engine::PhysicsColliderHandle handle : runtime->colliders) {
+        if (handle.IsValid()) {
+            state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = handle}});
+        }
+    }
+    runtime->colliders.Clear();
 }
 
 static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
@@ -76,11 +85,9 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
 
         if (auto* sm = registry.try_get<StaticMeshComponent>(entity); sm && sm->modelId.IsValid()) {
             PhysicsShapeDesc box{};
-            box.type = PhysicsShapeType::Box;
-            box.box.halfExtents = glm::vec3(0.5f);
             const auto* meta = ctx->assetManager->GetModelMetadata(sm->modelId);
             if (meta && meta->bounds.aabb.min.x <= meta->bounds.aabb.max.x) {
-                box.box.halfExtents = meta->bounds.aabb.HalfExtents() * scale;
+                box.geometry = BoxShape{meta->bounds.aabb.HalfExtents() * scale};
                 box.offset = meta->bounds.aabb.Center() * scale;
             }
             ApplyRenderTransform(box, scale, sm->renderOffset, sm->renderRotation);
@@ -92,24 +99,29 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
             component.shapes.PushBack(shape);
         }
         else if (auto* splm = registry.try_get<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
+            ColliderShape collider{};
+            FillSplineParams(collider.splineParams, *splm);
             PhysicsShapeDesc s{};
-            s.type = PhysicsShapeType::Collider;
+            s.geometry = collider;
             s.bakedScale = scale;
-            FillSplineParams(s.splineParams, *splm);
             component.shapes.PushBack(s);
         }
         else {
-            PhysicsShapeDesc d{};
-            d.type = PhysicsShapeType::Box;
-            d.box.halfExtents = glm::vec3(0.5f);
-            component.shapes.PushBack(d);
+            component.shapes.PushBack({});
         }
     }
+
+    auto& runtime = registry.get_or_emplace<PhysicsShapeRuntime>(entity);
+    runtime.colliders.Clear();
+    for (size_t i = 0; i < component.shapes.Size(); ++i) {
+        runtime.colliders.PushBack({});
+    }
+    runtime.shapeRef = nullptr;
 
     // Source loaded (freeze-gated) in PhysicsMeshPendingKickoff so a model hot-reload can release this body's ref and re-acquire after the drain.
     bool bHasMeshShape = false;
     for (const auto& shape : component.shapes) {
-        if (shape.type == PhysicsShapeType::Collider) {
+        if (std::holds_alternative<ColliderShape>(shape.geometry)) {
             bHasMeshShape = true;
             break;
         }
@@ -123,29 +135,19 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
     registry.emplace_or_replace<PendingPhysicsBodyCreationTag>(entity);
 }
 
-void PhysicsBodyDesc::OnUpdate(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::RequestRebuild(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<PhysicsBodyDesc>(entity);
+    ReleaseColliders(registry, entity);
+    registry.remove<PendingPhysicsMeshTag, PhysicsMeshLoadingTag, PendingPhysicsShapeCreationTag, PendingPhysicsBodyCreationTag>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    for (auto& shape : component.shapes) {
-        if (shape.colliderHandle.IsValid()) {
-            state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = shape.colliderHandle}});
-            shape.colliderHandle = {};
-        }
-    }
     state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
 void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& component = registry.get<PhysicsBodyDesc>(entity);
+    ReleaseColliders(registry, entity);
+    registry.remove<PhysicsShapeRuntime>(entity);
     auto* state = registry.ctx().get<EngineState*>();
-    for (auto& shape : component.shapes) {
-        if (shape.colliderHandle.IsValid()) {
-            state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = shape.colliderHandle}});
-            shape.colliderHandle = {};
-        }
-    }
     state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
 }
 }
@@ -153,151 +155,12 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
 
 namespace Engine
 {
-void Component::PhysicsBodyDesc::Serialize(const PhysicsBodyDesc& comp, Engine::TextWriter& w)
-{
-    w.Key("motionType", static_cast<uint32_t>(comp.motionType));
-    w.Key("mass", comp.mass);
-    w.Key("friction", comp.friction);
-    w.Key("restitution", comp.restitution);
-    w.Key("motionQuality", static_cast<uint32_t>(comp.motionQuality));
-    w.Key("layerOverride", static_cast<uint32_t>(comp.layerOverride));
-    w.Key("enhancedInternalEdgeRemoval", comp.bEnhancedInternalEdgeRemoval);
-    w.Key("isSensor", comp.bIsSensor);
-
-    if (comp.shapes.IsEmpty()) {
-        return;
-    }
-    w.Count("shapes", static_cast<uint32_t>(comp.shapes.Size()));
-    for (const auto& shape : comp.shapes) {
-        w.BeginBlock("shape");
-        w.Key("type", static_cast<uint32_t>(shape.type));
-        w.Key("offset", shape.offset);
-        w.Key("rotation", shape.rotation);
-        w.Key("bakedScale", shape.bakedScale);
-
-        switch (shape.type) {
-            case Component::PhysicsShapeType::Box:
-                w.Key("halfExtents", shape.box.halfExtents);
-                break;
-            case Component::PhysicsShapeType::Sphere:
-                w.Key("radius", shape.sphere.radius);
-                break;
-            case Component::PhysicsShapeType::Capsule:
-                w.Key("radius", shape.capsule.radius);
-                w.Key("halfHeight", shape.capsule.halfHeight);
-                break;
-            case Component::PhysicsShapeType::Collider:
-                w.Key("meshSourceModelId", shape.meshSourceModelId.id);
-                w.Key("meshPrecise", shape.bMeshPrecise);
-                if (!shape.splineParams.spline.points.IsEmpty()) {
-                    w.BeginBlock("splineParams");
-                    Engine::SerializeFields(shape.splineParams, w);
-                    w.EndBlock();
-                }
-                if (shape.text3DSource.IsValid()) {
-                    w.BeginBlock("text3DSource");
-                    w.Key("fontId", shape.text3DSource.fontId.id);
-                    w.KeyStr("text", shape.text3DSource.text.View());
-                    w.Key("depth", shape.text3DSource.depth);
-                    w.Key("flatness", shape.text3DSource.flatness);
-                    w.Key("tracking", shape.text3DSource.tracking);
-                    w.Key("scale", shape.text3DSource.scale);
-                    w.Key("wrapWidth", shape.text3DSource.wrapWidth);
-                    w.Key("bendRadius", shape.text3DSource.bendRadius);
-                    w.Key("smoothNormals", shape.text3DSource.bSmoothNormals);
-                    w.Key("align", static_cast<uint32_t>(shape.text3DSource.align));
-                    w.Key("anchor", static_cast<uint32_t>(shape.text3DSource.anchor));
-                    w.Key("precise", shape.text3DSource.bPrecise);
-                    w.EndBlock();
-                }
-                Engine::FieldTraits<Engine::ProceduralParams>::WriteFlattened(w, "proceduralType", shape.proceduralParams);
-                break;
-        }
-
-        w.EndBlock();
-    }
-}
-
-void Component::PhysicsBodyDesc::Deserialize(PhysicsBodyDesc& comp, const Engine::TextReader& r)
-{
-    comp.motionType = static_cast<PhysicsMotionType>(r.UInt("motionType", 0));
-    comp.mass = r.Float("mass", comp.mass);
-    comp.friction = r.Float("friction", 0.0f);
-    comp.restitution = r.Float("restitution", 0.0f);
-    comp.motionQuality = static_cast<JPH::EMotionQuality>(r.UInt("motionQuality", 0));
-    comp.layerOverride = static_cast<JPH::ObjectLayer>(r.UInt("layerOverride", 0xFFFF));
-    comp.bEnhancedInternalEdgeRemoval = r.Bool("enhancedInternalEdgeRemoval", false);
-    comp.bIsSensor = r.Bool("isSensor", false);
-    comp.shapes.Clear();
-
-    r.ForEachRecord("shapes", [&](const Engine::TextReader& s) {
-        if (comp.shapes.IsFull()) { return; }
-        PhysicsShapeDesc shape{};
-        // Legacy migration: ConvexHull(3)/TriangleMesh(4)/Compound(5) collapsed into Collider(3)
-        const uint32_t rawType = s.UInt("type", 0);
-        shape.type = rawType >= static_cast<uint32_t>(PhysicsShapeType::Collider) ? PhysicsShapeType::Collider : static_cast<PhysicsShapeType>(rawType);
-
-        shape.offset = s.Vec3("offset", shape.offset);
-        shape.rotation = s.Quat("rotation", shape.rotation);
-        shape.bakedScale = s.Vec3("bakedScale", shape.bakedScale);
-
-        switch (shape.type) {
-            case PhysicsShapeType::Box:
-            {
-                shape.box.halfExtents = s.Vec3("halfExtents", glm::vec3(0.5f));
-                break;
-            }
-            case PhysicsShapeType::Sphere:
-            {
-                shape.sphere.radius = s.Float("radius", 0.5f);
-                break;
-            }
-            case PhysicsShapeType::Capsule:
-            {
-                shape.capsule.radius = s.Float("radius", 0.5f);
-                shape.capsule.halfHeight = s.Float("halfHeight", 0.5f);
-                break;
-            }
-            case PhysicsShapeType::Collider:
-            {
-                shape.meshSourceModelId = Engine::ModelID(s.U64("meshSourceModelId", 0));
-                shape.bMeshPrecise = s.Bool("meshPrecise", false);
-                Engine::FieldTraits<Engine::ProceduralParams>::ReadFlattened(s, "proceduralType", shape.proceduralParams);
-                const Engine::TextReader sp = s.Block("splineParams");
-                if (sp.IsValid()) {
-                    Engine::DeserializeFields(shape.splineParams, sp);
-                }
-                const Engine::TextReader t3 = s.Block("text3DSource");
-                if (t3.IsValid()) {
-                    Text3DShapeSource src{};
-                    src.fontId = Engine::FontID(t3.U64("fontId", 0));
-                    t3.Str("text", src.text);
-                    src.depth = t3.Float("depth", 0.2f);
-                    src.flatness = t3.Float("flatness", 0.005f);
-                    src.tracking = t3.Float("tracking", 0.0f);
-                    src.scale = t3.Float("scale", 1.0f);
-                    src.wrapWidth = t3.Float("wrapWidth", 0.0f);
-                    src.bendRadius = t3.Float("bendRadius", 0.0f);
-                    src.bSmoothNormals = t3.Bool("smoothNormals", true);
-                    src.align = static_cast<Engine::Text3DAlign>(t3.UInt("align", static_cast<uint32_t>(Engine::Text3DAlign::Left)));
-                    src.anchor = static_cast<Engine::Text3DAnchor>(t3.UInt("anchor", static_cast<uint32_t>(Engine::Text3DAnchor::Baseline)));
-                    src.bPrecise = t3.Bool("precise", false);
-                    shape.text3DSource = src;
-                }
-                break;
-            }
-        }
-
-        comp.shapes.PushBack(shape);
-    });
-}
-
 void Component::PhysicsBodyDesc::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    registry.patch<PhysicsBodyDesc>(entity);
+    RequestRebuild(registry, entity);
 }
 
-/** Shapes hold runtime collider handles, so they are edited on single selections only and written back whole. */
+/** Multi-edit replaces a whole shape list with the primary's, so shapes are edited on single selections only. */
 Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     entt::registry& registry = edit.Registry();
@@ -400,28 +263,20 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
             static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "Collider"};
-            if (ImGui::BeginCombo("Shape Type", kShapeTypes[static_cast<int>(shape.type)])) {
-                for (int s = 0; s < IM_ARRAYSIZE(kShapeTypes); ++s) {
-                    const auto candidate = static_cast<PhysicsShapeType>(s);
+            static constexpr size_t COLLIDER_INDEX = 3;
+            const size_t currentType = shape.geometry.index();
+            if (ImGui::BeginCombo("Shape Type", kShapeTypes[currentType])) {
+                for (size_t s = 0; s < std::size(kShapeTypes); ++s) {
                     // Exotics are concave and cannot be dynamic
-                    const bool bDisabled = bIsDynamic && candidate == PhysicsShapeType::Collider && bRenderSourceExotic;
+                    const bool bDisabled = bIsDynamic && s == COLLIDER_INDEX && bRenderSourceExotic;
                     ImGui::BeginDisabled(bDisabled);
-                    if (ImGui::Selectable(kShapeTypes[s], static_cast<int>(shape.type) == s)) {
-                        auto newType = candidate;
-                        bool wasMesh = IsMeshShapeType(shape.type);
-                        bool isMesh = IsMeshShapeType(newType);
-                        if (wasMesh && !isMesh) {
-                            if (shape.colliderHandle.IsValid()) {
-                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                                shape.colliderHandle = {};
-                            }
-                            shape.meshSourceModelId = Engine::ModelID::INVALID;
-                            shape.splineParams.spline.points.Clear();
-                            shape.text3DSource = {};
+                    if (ImGui::Selectable(kShapeTypes[s], currentType == s) && currentType != s) {
+                        const bool wasMesh = currentType == COLLIDER_INDEX;
+                        Engine::EmplaceVariantIndex(shape.geometry, s);
+                        if (s == COLLIDER_INDEX) {
+                            FitMeshShapeToEntity(registry, entity, shape, scale);
                         }
-
-                        shape.type = newType;
-                        if (wasMesh && !isMesh) {
+                        else if (wasMesh) {
                             if (bModelLoaded) {
                                 FitPrimitiveShapeToEntity(registry, entity, shape, scale, fitModel->bounds);
                             }
@@ -429,24 +284,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                                 shape.offset = glm::vec3(0.0f);
                                 shape.rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
                                 shape.bakedScale = glm::vec3(1.0f);
-                                switch (newType) {
-                                    case PhysicsShapeType::Box:
-                                        shape.box.halfExtents = glm::vec3(0.5f);
-                                        break;
-                                    case PhysicsShapeType::Sphere:
-                                        shape.sphere.radius = 0.5f;
-                                        break;
-                                    case PhysicsShapeType::Capsule:
-                                        shape.capsule.radius = 0.5f;
-                                        shape.capsule.halfHeight = 0.5f;
-                                        break;
-                                    default:
-                                        break;
-                                }
                             }
-                        }
-                        else if (!wasMesh && isMesh) {
-                            FitMeshShapeToEntity(registry, entity, shape, scale);
                         }
                         modified = true;
                         bCommit = true;
@@ -465,99 +303,78 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             bCommit |= ImGui::IsItemDeactivatedAfterEdit();
 
             bool bAnyChange = false;
-            switch (shape.type) {
-                case PhysicsShapeType::Box:
-                    modified |= ImGui::DragFloat3("Half Extents", &shape.box.halfExtents.x, 0.01f, 0.001f, 100.0f);
-                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
-                    break;
-                case PhysicsShapeType::Sphere:
-                    modified |= ImGui::DragFloat("Radius", &shape.sphere.radius, 0.01f, 0.001f, 100.0f);
-                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
-                    break;
-                case PhysicsShapeType::Capsule:
-                    modified |= ImGui::DragFloat("Radius", &shape.capsule.radius, 0.01f, 0.001f, 100.0f);
-                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
-                    modified |= ImGui::DragFloat("Half Height", &shape.capsule.halfHeight, 0.01f, 0.001f, 100.0f);
-                    bCommit |= ImGui::IsItemDeactivatedAfterEdit();
-                    break;
-                case PhysicsShapeType::Collider:
-                {
-                    bool bHasAny = false;
-                    const auto* meta = ctx->assetManager->GetModelMetadata(shape.meshSourceModelId);
-                    static constexpr Core::Array<const char*, 28> kProceduralNames = {
-                        nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
-                        "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
-                        "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
-                        "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring",
-                        "Wall", "Lattice", "Corrugated Panel",
-                    };
-                    const size_t idx = shape.proceduralParams.index();
+            if (auto* box = std::get_if<BoxShape>(&shape.geometry)) {
+                modified |= ImGui::DragFloat3("Half Extents", &box->halfExtents.x, 0.01f, 0.001f, 100.0f);
+                bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+            else if (auto* sphere = std::get_if<SphereShape>(&shape.geometry)) {
+                modified |= ImGui::DragFloat("Radius", &sphere->radius, 0.01f, 0.001f, 100.0f);
+                bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+            else if (auto* capsule = std::get_if<CapsuleShape>(&shape.geometry)) {
+                modified |= ImGui::DragFloat("Radius", &capsule->radius, 0.01f, 0.001f, 100.0f);
+                bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+                modified |= ImGui::DragFloat("Half Height", &capsule->halfHeight, 0.01f, 0.001f, 100.0f);
+                bCommit |= ImGui::IsItemDeactivatedAfterEdit();
+            }
+            else if (auto* collider = std::get_if<ColliderShape>(&shape.geometry)) {
+                bool bHasAny = false;
+                const auto* meta = ctx->assetManager->GetModelMetadata(collider->meshSourceModelId);
+                static constexpr Core::Array<const char*, 28> kProceduralNames = {
+                    nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
+                    "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
+                    "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
+                    "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring",
+                    "Wall", "Lattice", "Corrugated Panel",
+                };
+                const size_t idx = collider->proceduralParams.index();
 
-                    if (meta) {
-                        ImGui::Text("Mesh Source: %s", meta->name.c_str());
-                        bHasAny = true;
+                if (meta) {
+                    ImGui::Text("Mesh Source: %s", meta->name.c_str());
+                    bHasAny = true;
 
-                        ImGui::BeginDisabled(bIsDynamic);
-                        if (ImGui::Checkbox("Precise (Triangle Mesh)", &shape.bMeshPrecise)) {
-                            if (shape.colliderHandle.IsValid()) {
-                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                                shape.colliderHandle = {};
-                            }
-                            bAnyChange = true;
-                        }
-                        if (bIsDynamic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                            ImGui::SetTooltip("A precise mesh collider is concave and cannot back a dynamic body.");
-                        }
-                        ImGui::EndDisabled();
+                    ImGui::BeginDisabled(bIsDynamic);
+                    bAnyChange |= ImGui::Checkbox("Precise (Triangle Mesh)", &collider->bMeshPrecise);
+                    if (bIsDynamic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("A precise mesh collider is concave and cannot back a dynamic body.");
                     }
-                    else if (idx > 0 && idx < kProceduralNames.Size()) {
-                        ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
-                        bHasAny = true;
-                    }
-                    else if (!shape.splineParams.spline.points.IsEmpty()) {
-                        ImGui::Text("Mesh Source: Procedural Spline");
-                        bHasAny = true;
-                    }
-                    else if (shape.text3DSource.IsValid()) {
-                        ImGui::Text("Mesh Source: 3D Text");
-                        bHasAny = true;
+                    ImGui::EndDisabled();
+                }
+                else if (idx > 0 && idx < kProceduralNames.Size()) {
+                    ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
+                    bHasAny = true;
+                }
+                else if (!collider->splineParams.spline.points.IsEmpty()) {
+                    ImGui::Text("Mesh Source: Procedural Spline");
+                    bHasAny = true;
+                }
+                else if (collider->text3DSource.IsValid()) {
+                    ImGui::Text("Mesh Source: 3D Text");
+                    bHasAny = true;
 
-                        ImGui::BeginDisabled(bIsDynamic);
-                        if (ImGui::Checkbox("Precise (Triangle Mesh)", &shape.text3DSource.bPrecise)) {
-                            if (shape.colliderHandle.IsValid()) {
-                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                                shape.colliderHandle = {};
-                            }
-                            bAnyChange = true;
-                        }
-                        if (bIsDynamic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                            ImGui::SetTooltip("A precise text collider is a concave triangle mesh and cannot back a dynamic body.");
-                        }
-                        ImGui::EndDisabled();
+                    ImGui::BeginDisabled(bIsDynamic);
+                    bAnyChange |= ImGui::Checkbox("Precise (Triangle Mesh)", &collider->text3DSource.bPrecise);
+                    if (bIsDynamic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("A precise text collider is a concave triangle mesh and cannot back a dynamic body.");
                     }
-                    else {
-                        ImGui::Text("Mesh Source: (none)");
-                    }
+                    ImGui::EndDisabled();
+                }
+                else {
+                    ImGui::Text("Mesh Source: (none)");
+                }
 
-
-                    if (bHasAny) {
-                        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
-                        ImGui::PushStyleColor(ImGuiCol_Button, Editor::BUTTON_TRANSPAREN);
-                        const bool bShouldClearMesh = ImGui::SmallButton("X");
-                        ImGui::PopStyleColor();
-                        if (bShouldClearMesh) {
-                            if (shape.colliderHandle.IsValid()) {
-                                ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                                shape.colliderHandle = {};
-                            }
-                            shape.meshSourceModelId = Engine::ModelID::INVALID;
-                            shape.proceduralParams = std::monostate{};
-                            shape.splineParams.spline.points.Clear();
-                            shape.text3DSource = {};
-                            bAnyChange = true;
-                        }
+                if (bHasAny) {
+                    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+                    ImGui::PushStyleColor(ImGuiCol_Button, Editor::BUTTON_TRANSPAREN);
+                    const bool bShouldClearMesh = ImGui::SmallButton("X");
+                    ImGui::PopStyleColor();
+                    if (bShouldClearMesh) {
+                        collider->meshSourceModelId = Engine::ModelID::INVALID;
+                        collider->proceduralParams = std::monostate{};
+                        collider->splineParams.spline.points.Clear();
+                        collider->text3DSource = {};
+                        bAnyChange = true;
                     }
-                    break;
                 }
             }
             if (bAnyChange) {
@@ -567,7 +384,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             //
             {
-                const bool isMeshType = IsMeshShapeType(shape.type);
+                const bool isMeshType = std::holds_alternative<ColliderShape>(shape.geometry);
 
                 ImGui::BeginDisabled(!bModelLoaded && !isMeshType);
                 if (ImGui::Button("Auto-Fit")) {
@@ -610,51 +427,41 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
             // Handles run before the offset gizmo so they win overlapping clicks.
             bool bHandleBusy = false;
-            switch (shape.type) {
-                case PhysicsShapeType::Sphere:
-                {
-                    const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityRight * shape.sphere.radius, planeNormal,
-                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                                     [&](Vec3 newPt) { shape.sphere.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
-                                                     colorX);
-                    break;
-                }
-                case PhysicsShapeType::Capsule:
-                {
-                    const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
-                    const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityUp * shape.capsule.halfHeight, upPlane,
-                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                                     [&](Vec3 newPt) { shape.capsule.halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
-                                                     colorY);
-                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 1, shapeCenter + entityRight * shape.capsule.radius, rightPlane,
-                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                                     [&](Vec3 newPt) { shape.capsule.radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
-                                                     colorX);
-                    break;
-                }
-                case PhysicsShapeType::Box:
-                {
-                    const Vec3 xPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
-                    const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
-                    const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
-                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityRight * shape.box.halfExtents.x, xPlane,
-                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                                     [&](Vec3 newPt) { shape.box.halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
-                                                     colorX);
-                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 1, shapeCenter + entityUp * shape.box.halfExtents.y, yPlane,
-                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                                     [&](Vec3 newPt) { shape.box.halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
-                                                     colorY);
-                    bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 2, shapeCenter + entityForward * shape.box.halfExtents.z, zPlane,
-                                                     vd.view, vd.proj, viewport, vd.cameraPos, state,
-                                                     [&](Vec3 newPt) { shape.box.halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
-                                                     colorZ);
-                    break;
-                }
-                default:
-                    break;
+            if (auto* sphere = std::get_if<SphereShape>(&shape.geometry)) {
+                const Vec3 planeNormal = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityRight * sphere->radius, planeNormal,
+                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                 [&](Vec3 newPt) { sphere->radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                                                 colorX);
+            }
+            else if (auto* capsule = std::get_if<CapsuleShape>(&shape.geometry)) {
+                const Vec3 upPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
+                const Vec3 rightPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityUp * capsule->halfHeight, upPlane,
+                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                 [&](Vec3 newPt) { capsule->halfHeight = glm::max(0.001f, glm::dot(newPt - shapeCenter, entityUp)); },
+                                                 colorY);
+                bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 1, shapeCenter + entityRight * capsule->radius, rightPlane,
+                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                 [&](Vec3 newPt) { capsule->radius = glm::max(0.001f, glm::length(newPt - shapeCenter)); },
+                                                 colorX);
+            }
+            else if (auto* box = std::get_if<BoxShape>(&shape.geometry)) {
+                const Vec3 xPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityRight) * entityRight);
+                const Vec3 yPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityUp) * entityUp);
+                const Vec3 zPlane = glm::normalize(vd.cameraForward - glm::dot(vd.cameraForward, entityForward) * entityForward);
+                bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 0, shapeCenter + entityRight * box->halfExtents.x, xPlane,
+                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                 [&](Vec3 newPt) { box->halfExtents.x = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityRight))); },
+                                                 colorX);
+                bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 1, shapeCenter + entityUp * box->halfExtents.y, yPlane,
+                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                 [&](Vec3 newPt) { box->halfExtents.y = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityUp))); },
+                                                 colorY);
+                bHandleBusy |= Editor::DotHandle(Editor::DotHandleId::PHYSICS_SHAPE_BASE + 2, shapeCenter + entityForward * box->halfExtents.z, zPlane,
+                                                 vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                                 [&](Vec3 newPt) { box->halfExtents.z = glm::max(0.001f, glm::abs(glm::dot(newPt - shapeCenter, entityForward))); },
+                                                 colorZ);
             }
 
             if (!bHandleBusy && state->editor.activeDotHandleId == -1) {
@@ -681,36 +488,31 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             constexpr Vec4 editColorX = Editor::DEBUG_AXIS_X;
             constexpr Vec4 editColorY = Editor::DEBUG_AXIS_Y;
             constexpr Vec4 editColorZ = Editor::DEBUG_AXIS_Z;
-            switch (shape.type) {
-                case PhysicsShapeType::Sphere:
-                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, shape.sphere.radius, editColorX});
-                    break;
-                case PhysicsShapeType::Capsule:
-                {
-                    const Vec3 top = shapeCenter + entityUp * shape.capsule.halfHeight;
-                    const Vec3 bot = shapeCenter - entityUp * shape.capsule.halfHeight;
-                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, shape.capsule.radius, editColorY});
-                    DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, shape.capsule.radius, editColorY});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityRight * shape.capsule.radius, bot + entityRight * shape.capsule.radius, editColorX});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityRight * shape.capsule.radius, bot - entityRight * shape.capsule.radius, editColorX});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityForward * shape.capsule.radius, bot + entityForward * shape.capsule.radius, editColorZ});
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityForward * shape.capsule.radius, bot - entityForward * shape.capsule.radius, editColorZ});
-                    break;
-                }
-                case PhysicsShapeType::Box:
-                {
-                    const Quat boxRot = transform->rotation * shape.rotation;
-                    const Vec3 bx = boxRot * Vec3(shape.box.halfExtents.x, 0.0f, 0.0f);
-                    const Vec3 by = boxRot * Vec3(0.0f, shape.box.halfExtents.y, 0.0f);
-                    const Vec3 bz = boxRot * Vec3(0.0f, 0.0f, shape.box.halfExtents.z);
-                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bx, shape.box.halfExtents.y, shape.box.halfExtents.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
-                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bx, shape.box.halfExtents.y, shape.box.halfExtents.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
-                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + by, shape.box.halfExtents.x, shape.box.halfExtents.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
-                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - by, shape.box.halfExtents.x, shape.box.halfExtents.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
-                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bz, shape.box.halfExtents.x, shape.box.halfExtents.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
-                    DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bz, shape.box.halfExtents.x, shape.box.halfExtents.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
-                    break;
-                }
+            if (const auto* sphere = std::get_if<SphereShape>(&shape.geometry)) {
+                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, sphere->radius, editColorX});
+            }
+            else if (const auto* capsule = std::get_if<CapsuleShape>(&shape.geometry)) {
+                const Vec3 top = shapeCenter + entityUp * capsule->halfHeight;
+                const Vec3 bot = shapeCenter - entityUp * capsule->halfHeight;
+                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, capsule->radius, editColorY});
+                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, capsule->radius, editColorY});
+                DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityRight * capsule->radius, bot + entityRight * capsule->radius, editColorX});
+                DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityRight * capsule->radius, bot - entityRight * capsule->radius, editColorX});
+                DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityForward * capsule->radius, bot + entityForward * capsule->radius, editColorZ});
+                DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityForward * capsule->radius, bot - entityForward * capsule->radius, editColorZ});
+            }
+            else if (const auto* box = std::get_if<BoxShape>(&shape.geometry)) {
+                const glm::vec3 he = box->halfExtents;
+                const Quat boxRot = transform->rotation * shape.rotation;
+                const Vec3 bx = boxRot * Vec3(he.x, 0.0f, 0.0f);
+                const Vec3 by = boxRot * Vec3(0.0f, he.y, 0.0f);
+                const Vec3 bz = boxRot * Vec3(0.0f, 0.0f, he.z);
+                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bx, he.y, he.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
+                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bx, he.y, he.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
+                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + by, he.x, he.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
+                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - by, he.x, he.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
+                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bz, he.x, he.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
+                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bz, he.x, he.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
             }
         };
 
@@ -776,10 +578,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         }
 
         if (ImGui::Button("Add Collider")) {
-            PhysicsShapeDesc desc{};
-            desc.type = PhysicsShapeType::Box;
-            desc.box.halfExtents = glm::vec3(0.5f);
-            component.shapes.PushBack(desc);
+            component.shapes.PushBack({});
             modified = true;
             bCommit = true;
         }

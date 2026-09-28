@@ -39,38 +39,25 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
         using T = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<T, Engine::BoxParams>) {
             const glm::vec3 he = glm::vec3(p.sizeX, p.sizeY, p.sizeZ) * 0.5f * scale;
-            shape.type = PhysicsShapeType::Box;
-            shape.box.halfExtents = he;
+            shape.geometry = BoxShape{he};
             shape.offset = he; // procedural box uses a corner pivot
         }
         else if constexpr (std::is_same_v<T, Engine::PlaneParams>) {
-            shape.type = PhysicsShapeType::Box;
-            shape.box.halfExtents = glm::vec3(p.sizeX * 0.5f, 0.05f, p.sizeZ * 0.5f) * scale;
+            shape.geometry = BoxShape{glm::vec3(p.sizeX * 0.5f, 0.05f, p.sizeZ * 0.5f) * scale};
         }
         else if constexpr (std::is_same_v<T, Engine::SphereParams> || std::is_same_v<T, Engine::SubdividedSphereParams>) {
-            shape.type = PhysicsShapeType::Sphere;
-            shape.sphere.radius = p.radius * maxScale;
+            shape.geometry = SphereShape{p.radius * maxScale};
         }
         else if constexpr (std::is_same_v<T, Engine::CapsuleParams>) {
-            shape.type = PhysicsShapeType::Capsule;
-            shape.capsule.radius = p.radius * glm::max(scale.x, scale.z);
-            shape.capsule.halfHeight = glm::max(0.001f, (p.height * 0.5f - p.radius) * scale.y);
-        }
-        else if constexpr (std::is_same_v<T, Engine::CylinderParams> || std::is_same_v<T, Engine::ConeParams> || std::is_same_v<T, Engine::WedgeParams>
-                           || std::is_same_v<T, Engine::HemisphereParams> || std::is_same_v<T, Engine::TetrahedronParams>
-                           || std::is_same_v<T, Engine::OctahedronParams> || std::is_same_v<T, Engine::IcosahedronParams>
-                           || std::is_same_v<T, Engine::DodecahedronParams>) {
-            shape.type = PhysicsShapeType::Collider;
-            shape.proceduralParams = params;
-            shape.bakedScale = scale;
+            shape.geometry = CapsuleShape{p.radius * glm::max(scale.x, scale.z), glm::max(0.001f, (p.height * 0.5f - p.radius) * scale.y)};
         }
         else if constexpr (std::is_same_v<T, std::monostate>) {
-            shape.type = PhysicsShapeType::Box;
-            shape.box.halfExtents = glm::vec3(0.5f) * scale;
+            shape.geometry = BoxShape{glm::vec3(0.5f) * scale};
         }
         else {
-            shape.type = PhysicsShapeType::Collider;
-            shape.proceduralParams = params;
+            ColliderShape collider{};
+            collider.proceduralParams = params;
+            shape.geometry = collider;
             shape.bakedScale = scale;
         }
     }, params);
@@ -79,43 +66,41 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
 
 void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
 {
-    shape.meshSourceModelId = Engine::ModelID::INVALID;
-    shape.proceduralParams = std::monostate{};
-    shape.splineParams.spline.points.Clear();
-    shape.text3DSource = {};
+    ColliderShape collider{};
     shape.bakedScale = scale;
 
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
     if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
-        shape.meshSourceModelId = sm->modelId;
+        collider.meshSourceModelId = sm->modelId;
         renderOffset = sm->renderOffset;
         renderRotation = sm->renderRotation;
     }
     else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
-        shape.proceduralParams = pm->params;
+        collider.proceduralParams = pm->params;
         renderOffset = pm->renderOffset;
         renderRotation = pm->renderRotation;
     }
     else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
-        FillSplineParams(shape.splineParams, *splm);
+        FillSplineParams(collider.splineParams, *splm);
     }
     else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
-        shape.text3DSource.fontId = t3->fontId;
-        shape.text3DSource.text = t3->text;
-        shape.text3DSource.depth = t3->depth;
-        shape.text3DSource.flatness = t3->flatness;
-        shape.text3DSource.tracking = t3->tracking;
-        shape.text3DSource.scale = t3->scale;
-        shape.text3DSource.wrapWidth = t3->wrapWidth;
-        shape.text3DSource.bendRadius = t3->bendRadius;
-        shape.text3DSource.bSmoothNormals = t3->bSmoothNormals;
-        shape.text3DSource.align = t3->align;
-        shape.text3DSource.anchor = t3->anchor;
+        collider.text3DSource.fontId = t3->fontId;
+        collider.text3DSource.text = t3->text;
+        collider.text3DSource.depth = t3->depth;
+        collider.text3DSource.flatness = t3->flatness;
+        collider.text3DSource.tracking = t3->tracking;
+        collider.text3DSource.scale = t3->scale;
+        collider.text3DSource.wrapWidth = t3->wrapWidth;
+        collider.text3DSource.bendRadius = t3->bendRadius;
+        collider.text3DSource.bSmoothNormals = t3->bSmoothNormals;
+        collider.text3DSource.align = t3->align;
+        collider.text3DSource.anchor = t3->anchor;
         renderOffset = t3->renderOffset;
         renderRotation = t3->renderRotation;
     }
 
+    shape.geometry = collider;
     shape.offset = scale * renderOffset;
     shape.rotation = renderRotation;
 }
@@ -139,29 +124,20 @@ void FitPrimitiveShapeToEntity(entt::registry& registry, entt::entity entity, Ph
         renderRotation = t3->renderRotation;
     }
 
-    switch (shape.type) {
-        case PhysicsShapeType::Box:
-            shape.box.halfExtents = bounds.aabb.HalfExtents() * scale;
-            shape.offset = bounds.aabb.Center() * scale;
-            break;
-        case PhysicsShapeType::Sphere:
-        {
-            const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
-            shape.sphere.radius = bounds.sphere.radius * maxScale;
-            shape.offset = bounds.sphere.center * scale;
-            break;
-        }
-        case PhysicsShapeType::Capsule:
-        {
-            const glm::vec3 he = bounds.aabb.HalfExtents() * scale;
-            const float radius = glm::max(he.x, he.z);
-            shape.capsule.radius = radius;
-            shape.capsule.halfHeight = glm::max(0.001f, he.y - radius);
-            shape.offset = bounds.aabb.Center() * scale;
-            break;
-        }
-        default:
-            break;
+    if (auto* box = std::get_if<BoxShape>(&shape.geometry)) {
+        box->halfExtents = bounds.aabb.HalfExtents() * scale;
+        shape.offset = bounds.aabb.Center() * scale;
+    }
+    else if (auto* sphere = std::get_if<SphereShape>(&shape.geometry)) {
+        const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
+        sphere->radius = bounds.sphere.radius * maxScale;
+        shape.offset = bounds.sphere.center * scale;
+    }
+    else if (auto* capsule = std::get_if<CapsuleShape>(&shape.geometry)) {
+        const glm::vec3 he = bounds.aabb.HalfExtents() * scale;
+        capsule->radius = glm::max(he.x, he.z);
+        capsule->halfHeight = glm::max(0.001f, he.y - capsule->radius);
+        shape.offset = bounds.aabb.Center() * scale;
     }
 
     shape.offset = scale * renderOffset + renderRotation * shape.offset;

@@ -41,8 +41,9 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
 void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, JPH::RVec3 position, JPH::Quat rotation, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
-JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::AssetManager* assetManager);
+JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, const JPH::ShapeRefC& shapeRef, JPH::RVec3 position, JPH::Quat rotation,
+                                JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, Engine::AssetManager* assetManager);
 } // Engine
 
 #endif //WILL_ENGINE_PHYSICS_SYSTEM_H

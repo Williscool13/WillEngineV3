@@ -156,15 +156,14 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
     // Physics holds its own model ref (its serialized key, loaded independently), so it must also release + re-arm or the model can never drain.
-    for (auto [entity, bodyDesc] : state->registry.view<Component::PhysicsBodyDesc>().each()) {
+    for (auto [entity, bodyDesc, runtime] : state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime>().each()) {
         bool affected = false;
-        for (auto& shape : bodyDesc.shapes) {
-            if (shape.meshSourceModelId.IsValid() && isHot(shape.meshSourceModelId)) {
-                if (shape.colliderHandle.IsValid()) {
-                    ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                    shape.colliderHandle = {};
-                    affected = true;
-                }
+        for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
+            const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
+            if (collider && collider->meshSourceModelId.IsValid() && isHot(collider->meshSourceModelId) && runtime.colliders[i].IsValid()) {
+                ctx->assetManager->UnloadCollider(runtime.colliders[i]);
+                runtime.colliders[i] = {};
+                affected = true;
             }
         }
         if (!affected) { continue; }
@@ -217,15 +216,14 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
     // A Text3D physics collider holds its own ref to the generated mesh (keyed on the font), so it must release + re-arm too or that mesh can never drain.
-    for (auto [entity, bodyDesc] : state->registry.view<Component::PhysicsBodyDesc>().each()) {
+    for (auto [entity, bodyDesc, runtime] : state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime>().each()) {
         bool affected = false;
-        for (auto& shape : bodyDesc.shapes) {
-            if (shape.text3DSource.IsValid() && isHot(shape.text3DSource.fontId)) {
-                if (shape.colliderHandle.IsValid()) {
-                    ctx->assetManager->UnloadCollider(shape.colliderHandle);
-                    shape.colliderHandle = {};
-                    affected = true;
-                }
+        for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
+            const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
+            if (collider && collider->text3DSource.IsValid() && isHot(collider->text3DSource.fontId) && runtime.colliders[i].IsValid()) {
+                ctx->assetManager->UnloadCollider(runtime.colliders[i]);
+                runtime.colliders[i] = {};
+                affected = true;
             }
         }
         if (!affected) { continue; }

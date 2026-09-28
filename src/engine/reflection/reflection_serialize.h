@@ -93,6 +93,16 @@ struct FieldTraits<uint32_t> : DirectFieldTraits<uint32_t>
 };
 
 template<>
+struct FieldTraits<uint16_t>
+{
+    static constexpr bool SUPPORTED = true;
+
+    static void Write(TextWriter& w, const char* key, const uint16_t& v) { w.Key(key, static_cast<uint32_t>(v)); }
+    static void Read(const TextReader& r, const char* key, uint16_t& v) { v = static_cast<uint16_t>(r.UInt(key, v)); }
+    static bool Equal(const uint16_t& a, const uint16_t& b) { return a == b; }
+};
+
+template<>
 struct FieldTraits<uint64_t> : DirectFieldTraits<uint64_t>
 {
     static void Read(const TextReader& r, const char* key, uint64_t& v) { v = r.U64(key, v); }
