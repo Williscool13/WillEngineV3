@@ -235,8 +235,8 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             state->editor.autoSaveTimer = 0.0f;
             for (StringID sceneId : state->editor.modifiedScenes) {
                 const auto& sceneCache = ctx->assetManager->GetSceneCache();
-                if (const auto* it = sceneCache.Find(sceneId)) {
-                    SaveSceneToFile(sceneId, it->sceneName.c_str(), state, ctx->assetManager, ctx);
+                if (sceneCache.Contains(sceneId)) {
+                    SaveSceneToFile(sceneId, state, ctx->assetManager, ctx);
                 }
             }
             state->editor.modifiedScenes.Clear();
@@ -672,7 +672,7 @@ static const Engine::AssetManager::CachedPlayMetadata* FindRecording(Engine::Eng
 {
     const Core::InlineString<16> name = RecordSlotName(slot);
     for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
-        if (meta.name == name.c_str() && meta.sceneName == state->scene.currentSceneName) {
+        if (meta.name == name.c_str() && meta.sceneId == state->scene.currentSceneId) {
             return &meta;
         }
     }
@@ -799,7 +799,9 @@ static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
         if (ImGui::IsItemHovered()) {
             if (bOccupied) {
-                ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1, slot.sceneName.c_str(), i + 1, i + 1);
+                const auto* meta = ctx->assetManager->GetSceneCache().Find(slot.sceneId);
+                ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1,
+                                  meta ? meta->sceneName.c_str() : "(missing)", i + 1, i + 1);
             }
             else {
                 ImGui::SetTooltip("Numpad %d: empty.\nShift-click or Ctrl+Numpad %d to bind the current scene.", i + 1, i + 1);

@@ -1,0 +1,117 @@
+wplay
+version 2 0
+name Ballance confidence view
+scene_id 6680640857240007171
+content_version 1
+event_count 33
+end_header
+events|33
+e
+cam|held
+translation|0x40a00000|0x3fe66666|0x00000000
+rotation|0x3f338ea8|0xbdb7af9e|0x3f338ea8|0x3db7af9e
+;
+e
+fps|30
+;
+e
+console|gtao 0
+;
+e
+profile|ReSTIR ConfStrong
+;
+e
+console|gtao 0
+;
+e
+play|1
+;
+e
+wait|60
+;
+e
+capture|rest
+;
+e
+console|view restir_confidence
+;
+e
+wait|2
+;
+e
+capture|rest_conf
+;
+e
+console|view off
+;
+e
+action|Move
+axis|0x3f800000|0x00000000
+;
+e
+wait|12
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+wait|20
+;
+e
+capture|roll
+frames|6
+;
+e
+console|view restir_confidence
+;
+e
+wait|2
+;
+e
+capture|roll_conf
+frames|6
+;
+e
+console|view restir_signal
+;
+e
+wait|2
+;
+e
+capture|roll_signal
+frames|3
+;
+e
+console|view restir_gradient
+;
+e
+wait|2
+;
+e
+capture|roll_grad
+frames|3
+;
+e
+console|view off
+;
+e
+action|Move
+axis|0xbf800000|0x00000000
+;
+e
+wait|12
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+wait|60
+;
+e
+capture|rest2
+;
+e
+console|gtao 1
+;

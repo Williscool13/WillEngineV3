@@ -17,7 +17,7 @@
 #endif
 
 /**
- * --scene <name>   load this scene (by .wscene header name) instead of the .wplay header's scene or projectConfig.defaultScene
+ * --scene <name>   load this scene (by name, the .wscene file stem) instead of the .wplay header's scene or projectConfig.defaultScene
  * --play <file>    .wplay run script; arms it at startup
  * --out <dir>      capture PNG output directory (default <UserData>/screenshots/<run>/<timestamp>)
  * --exit           quit when the run finishes

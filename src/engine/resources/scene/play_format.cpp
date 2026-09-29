@@ -24,7 +24,7 @@ bool WriteWPlayHeader(Core::Vector<std::byte>& out, const WPlayHeader& header)
     AppendText(out, "wplay\n");
     AppendTextF(out, "version %u %u\n", header.major, header.minor);
     AppendTextF(out, "name %s\n", header.name);
-    AppendTextF(out, "scene %s\n", header.scene);
+    AppendTextF(out, "scene_id %llu\n", static_cast<unsigned long long>(header.sceneId));
     AppendTextF(out, "content_version %llu\n", static_cast<unsigned long long>(header.contentVersion));
     AppendTextF(out, "event_count %u\n", header.eventCount);
     AppendText(out, "end_header\n");
@@ -53,7 +53,7 @@ std::optional<WPlayHeader> ReadWPlayHeader(const void* data, uint64_t size)
         }
         else if (strncmp(line, "content_version ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.contentVersion); }
         else if (strncmp(line, "name ", 5) == 0) { CopyHeaderString(header.name, line + 5); }
-        else if (strncmp(line, "scene ", 6) == 0) { CopyHeaderString(header.scene, line + 6); }
+        else if (strncmp(line, "scene_id ", 9) == 0) { std::from_chars(line + 9, line + LINE_BUF, header.sceneId); }
         else if (strncmp(line, "event_count ", 12) == 0) { std::from_chars(line + 12, line + LINE_BUF, header.eventCount); }
     }
     return std::nullopt;

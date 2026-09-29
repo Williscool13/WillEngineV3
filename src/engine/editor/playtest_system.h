@@ -132,7 +132,7 @@ struct PlaytestSystem
     void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 };
 
-/** Editor camera recorder: one held cam + wait|1 per render frame, fps = measured recording rate. `record <name>` / `record stop` writes scenes/<name>.wplay. */
+/** Editor camera recorder: one held cam + wait|1 per render frame, fps = measured recording rate. `record <name>` / `record stop` writes <name>.wplay beside the current scene. */
 struct CameraRecorder
 {
     struct Sample

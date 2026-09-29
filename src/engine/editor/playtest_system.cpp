@@ -528,11 +528,13 @@ Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine:
         return {};
     }
     const int32_t fps = glm::max(1, static_cast<int32_t>(glm::round(static_cast<double>(samples.Size()) / seconds)));
-    const Core::Path path = Platform::GetScenePath() / Core::InlineString<160>::Format("%s.wplay", name.c_str()).c_str();
+    const auto* sceneMeta = ctx->assetManager->GetSceneMetadata(state->scene.currentSceneId);
+    const Core::Path folder = sceneMeta ? sceneMeta->source.Parent() : Platform::GetScenePath();
+    const Core::Path path = folder / Core::InlineString<160>::Format("%s.wplay", name.c_str()).c_str();
 
     WPlayHeader header{};
     memcpy(header.name, name.c_str(), std::min(name.Size(), WPLAY_NAME_LENGTH - 1));
-    memcpy(header.scene, state->scene.currentSceneName.c_str(), std::min(state->scene.currentSceneName.Size(), WPLAY_NAME_LENGTH - 1));
+    header.sceneId = state->scene.currentSceneId.id;
     header.contentVersion = 1;
     if (Platform::FileExists(path)) {
         if (const auto existing = ReadWPlayHeader(path)) {

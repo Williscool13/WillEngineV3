@@ -4,7 +4,12 @@
 # Loader rejects major != SCENE_MAJOR_VERSION.
 
 ================================================================================
-VERSION 2.0  (current)
+VERSION 2.1  (current)
+================================================================================
+- Header `name` line and body `scene_name` key removed; the scene's name is its file stem.
+
+================================================================================
+VERSION 2.0
 ================================================================================
 - Body is the bespoke text format (docs/serialization/text_format.md), was JSON.
   entity record blocks, component sub-blocks keyed by decimal typeId, editor_camera block.

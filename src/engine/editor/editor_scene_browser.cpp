@@ -27,6 +27,7 @@
 #include "engine/components/common_components.h"
 #include "engine/components/editor_components.h"
 #include "engine/components/scene_components.h"
+#include "platform/paths.h"
 
 namespace Engine
 {
@@ -107,7 +108,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::BeginDisabled(!bIsLoaded || !ctx->bGameLoaded);
         if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
         if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
-            SaveSceneToFile(state->scene.currentSceneId, state->scene.currentSceneName.View(), state, ctx->assetManager, ctx);
+            SaveSceneToFile(state->scene.currentSceneId, state, ctx->assetManager, ctx);
             state->editor.modifiedScenes.RemoveFirst(state->scene.currentSceneId);
         }
         if (bIsModified) { ImGui::PopStyleColor(); }
@@ -143,7 +144,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
 
         ImGui::BeginDisabled(!hasScene);
         if (ImGui::Button("Set Default")) {
-            state->projectConfig.defaultScene = Core::InlineString<256>(state->scene.currentSceneName.View());
+            state->projectConfig.defaultScene = state->scene.currentSceneId;
             Engine::WriteProjectConfig(state->projectConfig, state->allocator);
         }
         ImGui::EndDisabled();
@@ -161,7 +162,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
             const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty() || ProbeBakeActive(state);
             uint32_t runCount = 0;
             for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
-                if (!(meta.sceneName == state->scene.currentSceneName)) { continue; }
+                if (meta.sceneId != state->scene.currentSceneId) { continue; }
                 ++runCount;
                 ImGui::PushID(static_cast<int>(id.id));
                 ImGui::BeginDisabled(bRunBusy || !bIsLoaded);
@@ -181,8 +182,13 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         }
 
         ImGui::SeparatorText("New Scene");
-        static char newSceneName[128] = "New Scene";
-        ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName));
+        static char newSceneName[128] = "new_scene";
+        ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName), ImGuiInputTextFlags_CallbackCharFilter, [](ImGuiInputTextCallbackData* data) {
+            const ImWchar c = data->EventChar;
+            if (c >= 'A' && c <= 'Z') { data->EventChar = static_cast<ImWchar>(c - 'A' + 'a'); }
+            else if (c == ' ' || c == '-') { data->EventChar = '_'; }
+            return (data->EventChar >= 'a' && data->EventChar <= 'z') || (data->EventChar >= '0' && data->EventChar <= '9') || data->EventChar == '_' ? 0 : 1;
+        });
         ImGui::SameLine();
         const bool nameEmpty = newSceneName[0] == '\0';
         bool nameInUse = false;
@@ -197,7 +203,7 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         ImGui::BeginDisabled(nameEmpty || nameInUse);
         if (ImGui::Button("Create")) {
             StringID newId{state->rng()};
-            ctx->assetManager->RegisterScene(newId, newSceneName);
+            ctx->assetManager->RegisterScene(newId, Platform::GetScenePath() / Core::InlineString<160>::Format("%s.wscene", newSceneName).c_str());
             state->scene.currentSceneId = newId;
             state->scene.currentSceneName = Core::InlineString<128>(newSceneName);
             state->editor.loadedScenes.PushBack({newId});

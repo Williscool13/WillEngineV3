@@ -18,7 +18,6 @@ bool WriteWSceneHeader(Core::Vector<std::byte>& out, const WSceneHeader& header)
     AppendTextF(out, "version %u %u\n", header.major, header.minor);
     AppendTextF(out, "id %llu\n", header.sceneId);
     AppendTextF(out, "content_version %llu\n", header.contentVersion);
-    AppendTextF(out, "name %s\n", header.name);
     AppendTextF(out, "entity_count %u\n", header.entityCount);
     AppendText(out, "end_header\n");
     return true;
@@ -46,12 +45,6 @@ std::optional<WSceneHeader> ReadWSceneHeader(const void* data, uint64_t size)
         }
         else if (strncmp(line, "id ", 3) == 0) { std::from_chars(line + 3, line + LINE_BUF, header.sceneId); }
         else if (strncmp(line, "content_version ", 16) == 0) { std::from_chars(line + 16, line + LINE_BUF, header.contentVersion); }
-        else if (strncmp(line, "name ", 5) == 0) {
-            const char* name = line + 5;
-            const size_t copyLen = std::min(strlen(name), WSCENE_NAME_LENGTH - 1);
-            memcpy(header.name, name, copyLen);
-            header.name[copyLen] = '\0';
-        }
         else if (strncmp(line, "entity_count ", 13) == 0) { std::from_chars(line + 13, line + LINE_BUF, header.entityCount); }
     }
     return std::nullopt;

@@ -27,7 +27,7 @@ struct EngineState;
 
 namespace Engine
 {
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName);
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId);
 
 StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene);
 
@@ -47,7 +47,8 @@ void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes);
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId);
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx);
+/** Writes to the scene's registered source path; the scene must be registered. */
+void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx);
 
 struct LoadSceneResult
 {

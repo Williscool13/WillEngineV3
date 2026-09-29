@@ -590,8 +590,10 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
         call.SetError("No .wplay with that stem, name, or path is in the scan; check query_assets");
         return ToolResult::Error;
     }
-    if (!(found->sceneName == state->scene.currentSceneName)) {
-        call.SetError(Core::InlineString<256>::Format("Run wants scene '%s' but '%s' is loaded", found->sceneName.c_str(), state->scene.currentSceneName.c_str()).c_str());
+    if (found->sceneId != state->scene.currentSceneId) {
+        const auto* wanted = ctx->assetManager->GetSceneMetadata(found->sceneId);
+        call.SetError(Core::InlineString<256>::Format("Run wants scene '%s' but '%s' is current", wanted ? wanted->sceneName.c_str() : "(unregistered)",
+                                                      state->scene.currentSceneName.c_str()).c_str());
         return ToolResult::Error;
     }
 

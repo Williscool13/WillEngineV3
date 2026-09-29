@@ -38,7 +38,7 @@
 
 namespace Engine
 {
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, std::string_view sceneName)
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId)
 {
     ZoneScoped;
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -48,7 +48,6 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
     Engine::TextWriter w(outScene.content);
 
     w.Key("scene_id", sceneId.id);
-    w.KeyStr("scene_name", sceneName);
 
     auto view = registry.view<Component::SceneComponent>();
     const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
@@ -191,7 +190,7 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& com
     Core::InlineVector<Engine::Scene, 8> snapshots;
     for (int i = 0; i < loadedScenes.Size(); ++i) {
         auto& meta = loadedScenes[i];
-        snapshots.PushBack(SaveScene(componentRegistry, registry, assetManager, meta.sceneId, meta.sceneId.ToString()));
+        snapshots.PushBack(SaveScene(componentRegistry, registry, assetManager, meta.sceneId));
         LOG_INFO(Engine, "Saved scene snapshot '{}'", meta.sceneId.ToString());
     }
     return snapshots;
@@ -268,30 +267,22 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
     state->editor.modifiedScenes.RemoveFirst(sceneId);
 }
 
-void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx)
+void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx)
 {
     if (!ctx->bGameLoaded) {
         LOG_WARN(Engine, "Scene save refused: game.dll is not loaded, game components would be lost");
         return;
     }
 
-    const auto& sceneCache = assetManager->GetSceneCache();
-    Core::Path path;
-
-    auto it = sceneCache.Find(sceneID);
-    if (it && !it->source.IsEmpty()) {
-        path = it->source;
+    const auto* it = assetManager->GetSceneCache().Find(sceneID);
+    if (!it) {
+        LOG_ERROR(Engine, "Scene save refused: {} is not registered", sceneID.ToString());
+        return;
     }
-    else {
-        auto stem = Core::InlineString<128>(sceneName);
-        std::ranges::transform(stem.buf, stem.buf + stem.len, stem.buf, tolower);
-        std::ranges::replace(stem.buf, stem.buf + stem.len, ' ', '_');
-        stem.Append(".wscene");
-        path = Platform::GetScenePath() / stem.c_str();
-        assert(path.Extension() == ".wscene");
-    }
+    const Core::Path path = it->source;
+    assert(path.Extension() == ".wscene");
 
-    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID, sceneName); {
+    Engine::Scene s = SaveScene(state->componentRegistry, state->registry, assetManager, sceneID); {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
@@ -314,9 +305,6 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
     Engine::WSceneHeader sceneHeader{};
     sceneHeader.sceneId = sceneID.id;
     sceneHeader.contentVersion = contentVersion;
-    const auto nameLen = std::min(sceneName.size(), Engine::WSCENE_NAME_LENGTH - 1);
-    memcpy(sceneHeader.name, sceneName.data(), nameLen);
-    sceneHeader.name[nameLen] = '\0';
     sceneHeader.entityCount = s.entityCount;
 
     Core::Vector<std::byte> out(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
@@ -329,7 +317,7 @@ void SaveSceneToFile(StringID sceneID, std::string_view sceneName, Engine::Engin
 
     assetManager->UpdateSceneCachePath(sceneID, path, sceneHeader.entityCount);
 
-    LOG_INFO(Engine, "Saved scene '{}' to '{}'", sceneName, path.c_str());
+    LOG_INFO(Engine, "Saved scene '{}' to '{}'", it->sceneName.c_str(), path.c_str());
 }
 
 LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId)
@@ -414,10 +402,9 @@ bool SaveSceneSlot(Engine::EngineState* state, int slotIndex)
 
     Engine::SceneSlot& slot = state->projectConfig.sceneSlots[slotIndex];
     slot.sceneId = state->scene.currentSceneId;
-    slot.sceneName = state->scene.currentSceneName;
     Engine::WriteProjectConfig(state->projectConfig, state->allocator);
 
-    LOG_INFO(Engine, "Scene slot {} bound to '{}'", slotIndex + 1, slot.sceneName.c_str());
+    LOG_INFO(Engine, "Scene slot {} bound to '{}'", slotIndex + 1, state->scene.currentSceneName.c_str());
     return true;
 }
 
@@ -432,7 +419,7 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int s
         return false;
     }
     if (!ctx->assetManager->GetSceneCache().Find(slot.sceneId)) {
-        LOG_WARN(Engine, "Scene slot {} points at '{}', which is no longer registered", slotIndex + 1, slot.sceneName.c_str());
+        LOG_WARN(Engine, "Scene slot {} points at {}, which is no longer registered", slotIndex + 1, slot.sceneId.ToString());
         return false;
     }
 

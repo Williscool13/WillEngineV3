@@ -30,7 +30,7 @@ ProjectConfig ReadProjectConfig()
 
     const TextReader r(map.data, map.size);
 
-    r.Str("defaultScene", config.defaultScene);
+    config.defaultScene = StringID(r.U64("defaultScene"));
 
     config.bLimitFps = r.Bool("bLimitFps", config.bLimitFps);
     config.frameLimitTarget = r.Int("frameLimitTarget", config.frameLimitTarget);
@@ -76,7 +76,6 @@ ProjectConfig ReadProjectConfig()
         if (slotIndex >= MAX_SCENE_SLOTS) { return; }
         SceneSlot& s = config.sceneSlots[slotIndex++];
         s.sceneId = StringID(e.U64("id"));
-        e.Str("name", s.sceneName);
     });
 
     return config;
@@ -87,7 +86,7 @@ bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
     Core::Vector<std::byte> body(alloc, Core::AllocTag::EngineState);
     TextWriter w(body);
 
-    w.KeyStr("defaultScene", config.defaultScene.View());
+    w.Key("defaultScene", config.defaultScene.id);
     w.Key("bLimitFps", config.bLimitFps);
     w.Key("frameLimitTarget", config.frameLimitTarget);
     w.Key("bAutoSaveProjectConfig", config.bAutoSaveProjectConfig);
@@ -130,7 +129,6 @@ bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
     for (const SceneSlot& s : config.sceneSlots) {
         w.BeginBlock("s");
         w.Key("id", s.sceneId.id);
-        w.KeyStr("name", s.sceneName.View());
         w.EndBlock();
     }
 

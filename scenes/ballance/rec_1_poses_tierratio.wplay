@@ -1,0 +1,39 @@
+wplay
+version 2 0
+name rec_1_poses_tierratio
+scene_id 6680640857240007171
+content_version 4
+event_count 9
+end_header
+events|9
+e
+fps|117
+;
+e
+console|view gi_gather_variance_guide
+;
+e
+cam|held
+translation|0x40adaddd|0x401bb142|0x433773c6
+rotation|0xbef4712d|0x3cc9f0a4|0x3f608d68|0x3d398285
+;
+e
+wait|300
+;
+e
+capture|tierratio_preturn
+;
+e
+cam|held
+translation|0x40adaddd|0x401bb142|0x433773c6
+rotation|0xbde028be|0x3c20394f|0x3f7d70a6|0x3db527ef
+;
+e
+wait|600
+;
+e
+capture|tierratio_postturn
+;
+e
+console|view off
+;

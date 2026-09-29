@@ -21,8 +21,8 @@ if ($Generator) {
 
 $exe = Join-Path $repo "$BuildDir\will-engine.exe"
 if (-not (Test-Path $exe)) { throw "engine exe not found: $exe" }
-$playFile = Join-Path $repo "scenes\$Play.wplay"
-if (-not (Test-Path $playFile)) { throw "run script not found: $playFile" }
+$playFile = @(Get-ChildItem (Join-Path $repo "scenes") -Recurse -Filter "$Play.wplay")[0].FullName
+if (-not $playFile) { throw "run script not found: $Play.wplay under scenes\" }
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $outDir = Join-Path $repo "captures\$Play\$stamp"

@@ -488,7 +488,8 @@ public: // Scenes
 
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
-    void RegisterScene(StringID sceneId, const char* sceneName);
+    /** Registers a scene that has no file yet; the name is the path's stem. */
+    void RegisterScene(StringID sceneId, const Core::Path& source);
 
     void UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount);
 
@@ -514,7 +515,7 @@ public: // Runs (.wplay)
     {
         Core::Path source;
         Core::InlineString<128> name{};
-        Core::InlineString<128> sceneName{};
+        StringID sceneId{};
         uint32_t eventCount{};
         uint64_t contentVersion{0};
     };

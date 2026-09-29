@@ -1,0 +1,89 @@
+wplay
+version 2 0
+name Ballance roll vs rest forward
+scene_id 6680640857240007171
+content_version 1
+event_count 25
+end_header
+events|25
+e
+cam|follow
+;
+e
+fps|30
+;
+e
+console|gtao 0
+;
+e
+play|1
+;
+e
+wait|60
+;
+e
+capture|still
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|still_diff
+;
+e
+console|view off
+;
+e
+action|Move
+axis|0x00000000|0x3f800000
+;
+e
+wait|70
+;
+e
+capture|roll
+frames|6
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|roll_diff
+frames|6
+;
+e
+console|view off
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+wait|150
+;
+e
+capture|rest
+frames|3
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|rest_diff
+frames|3
+;
+e
+console|view off
+;
+e
+console|gtao 1
+;

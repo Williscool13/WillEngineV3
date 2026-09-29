@@ -1,0 +1,141 @@
+wplay
+version 2 0
+name Ballance roll follow sideways A/B
+scene_id 6680640857240007171
+content_version 1
+event_count 41
+end_header
+events|41
+e
+cam|follow
+;
+e
+fps|30
+;
+e
+console|gtao 0
+;
+e
+play|1
+;
+e
+wait|60
+;
+e
+action|Move
+axis|0x3f800000|0x00000000
+;
+e
+wait|70
+;
+e
+capture|base
+frames|6
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|base_diff
+frames|6
+;
+e
+console|view off
+;
+e
+wait|2
+;
+e
+profile|ReSTIR HistFix3
+;
+e
+wait|40
+;
+e
+capture|hf3
+frames|6
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|hf3_diff
+frames|6
+;
+e
+console|view off
+;
+e
+wait|2
+;
+e
+profile|ReSTIR Fast2
+;
+e
+wait|40
+;
+e
+capture|fast2
+frames|6
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|fast2_diff
+frames|6
+;
+e
+console|view off
+;
+e
+wait|2
+;
+e
+profile|ReSTIR
+;
+e
+wait|40
+;
+e
+capture|base2
+frames|6
+;
+e
+console|view relax_diff_illum
+;
+e
+wait|2
+;
+e
+capture|base2_diff
+frames|6
+;
+e
+console|view off
+;
+e
+wait|2
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+wait|120
+;
+e
+capture|rest
+;
+e
+console|gtao 1
+;

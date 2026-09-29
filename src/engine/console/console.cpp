@@ -298,7 +298,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             Print(state, Core::InlineString<64>::Format("  scene %d is empty or unregistered", slot + 1).c_str());
             return;
         }
-        Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->projectConfig.sceneSlots[slot].sceneName.c_str()).c_str());
+        Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->scene.currentSceneName.c_str()).c_str());
     });
 
     Register(state, Origin::Engine, "undo_history", "Toggles the Undo History window (records, before/after snapshots)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
@@ -311,7 +311,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, "  rescan queued");
     });
 
-    Register(state, Origin::Engine, "record", "`record <name>` records the editor camera into scenes/<name>.wplay until `record stop`", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "record", "`record <name>` records the editor camera into <name>.wplay beside the current scene until `record stop`", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() < 2) {
             Print(state, state->cameraRecorder.bActive ? Core::InlineString<192>::Format("  recording '%s', %d frames", state->cameraRecorder.name.c_str(), static_cast<int32_t>(state->cameraRecorder.samples.Size())).c_str() : "  usage: record <name> | record stop");
             return;

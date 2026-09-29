@@ -30,7 +30,6 @@ struct CameraPreset
 struct SceneSlot
 {
     StringID sceneId{0};
-    Core::InlineString<128> sceneName{};
 };
 
 /** Probe bake pipeline settings; bake-owned, deliberately outside every lighting profile. */
@@ -46,7 +45,7 @@ struct ProbeBakeSettings
 
 struct ProjectConfig
 {
-    Core::InlineString<256> defaultScene{};
+    StringID defaultScene{};
 
     bool bLimitFps{false};
     int32_t frameLimitTarget{60};

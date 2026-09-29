@@ -75,32 +75,39 @@ void LoadUIFont(EngineContext* ctx, EngineState* state)
 
 void LoadStartupScene(EngineContext* ctx, EngineState* state)
 {
-    Core::InlineString<128> playScene{};
-    if (state->automation.sceneOverride.IsEmpty() && state->automation.IsPlayRun()) {
-        if (const auto header = ReadWPlayHeader(Core::Path(state->automation.playPath.c_str()))) {
-            playScene = Core::InlineString<128>(header->scene);
+    const auto& sceneCache = ctx->assetManager->GetSceneCache();
+    StringID startupScene = state->projectConfig.defaultScene;
+    bool bExplicit = false;
+    if (!state->automation.sceneOverride.IsEmpty()) {
+        startupScene = {};
+        bExplicit = true;
+        for (const auto& pair : sceneCache) {
+            if (pair.value.sceneName == state->automation.sceneOverride.c_str()) {
+                startupScene = pair.key;
+                break;
+            }
         }
     }
-    const char* startupScene = !state->automation.sceneOverride.IsEmpty() ? state->automation.sceneOverride.c_str() : !playScene.IsEmpty() ? playScene.c_str() : state->projectConfig.defaultScene.c_str();
-    if (startupScene[0] == '\0') {
+    else if (state->automation.IsPlayRun()) {
+        if (const auto header = ReadWPlayHeader(Core::Path(state->automation.playPath.c_str()))) {
+            startupScene = StringID{header->sceneId};
+            bExplicit = true;
+        }
+    }
+    if (!startupScene.IsValid() && !bExplicit) {
         return;
     }
 
-    bool bFound = false;
-    const auto& sceneCache = ctx->assetManager->GetSceneCache();
-    for (const auto& pair : sceneCache) {
-        if (pair.value.sceneName == startupScene) {
-            auto res = LoadSceneFromFile(state, ctx->assetManager, pair.key);
-            if (res.bSuccess) {
-                state->scene.currentSceneId = res.sceneId;
-                state->scene.currentSceneName = res.sceneName;
-            }
-            bFound = true;
-            break;
+    if (!sceneCache.Contains(startupScene)) {
+        if (bExplicit) {
+            LOG_ERROR(Engine, "Startup scene '{}' ({:x}) not found in the scene cache", state->automation.sceneOverride.c_str(), startupScene.id);
         }
+        return;
     }
-    if (!bFound && (!state->automation.sceneOverride.IsEmpty() || !playScene.IsEmpty())) {
-        LOG_ERROR(Engine, "Startup scene '{}' not found in the scene cache", startupScene);
+    const auto res = LoadSceneFromFile(state, ctx->assetManager, startupScene);
+    if (res.bSuccess) {
+        state->scene.currentSceneId = res.sceneId;
+        state->scene.currentSceneName = res.sceneName;
     }
 }
 

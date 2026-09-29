@@ -209,10 +209,11 @@ const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID
     return sceneCache.Find(sceneId);
 }
 
-void AssetManager::RegisterScene(StringID sceneId, const char* sceneName)
+void AssetManager::RegisterScene(StringID sceneId, const Core::Path& source)
 {
     CachedSceneMetadata& cached = sceneCache[sceneId];
-    cached.sceneName = Core::InlineString<128>(sceneName);
+    cached.source = source;
+    cached.sceneName = Core::InlineString<128>(source.Stem());
     cached.entityCount = 0;
 }
 
@@ -1577,7 +1578,7 @@ void AssetManager::Scan()
                     const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedSceneMetadata& cached = sceneCache[id];
                     cached.source = Core::Path(path);
-                    cached.sceneName = Core::InlineString<128>(header->name);
+                    cached.sceneName = Core::InlineString<128>(path.Stem());
                     cached.entityCount = header->entityCount;
                     cached.contentVersion = header->contentVersion;
                     if (bExisted && prevVersion != header->contentVersion) {
@@ -1631,15 +1632,14 @@ void AssetManager::Scan()
                 else if (ext == ".wplay") {
                     auto header = ReadWPlayHeader(path);
                     if (!header) { continue; }
-                    const Core::InlineString<128> stem{path.Stem()};
-                    const StringID id{stem.c_str(), stem.Size()};
+                    const StringID id{path.c_str(), strlen(path.c_str())};
                     const CachedPlayMetadata* prev = playCache.Find(id);
                     const bool bExisted = prev != nullptr;
                     const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
                     CachedPlayMetadata& cached = playCache[id];
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(header->name);
-                    cached.sceneName = Core::InlineString<128>(header->scene);
+                    cached.sceneId = StringID{header->sceneId};
                     cached.eventCount = header->eventCount;
                     cached.contentVersion = header->contentVersion;
                     if (bExisted && prevVersion != header->contentVersion) {

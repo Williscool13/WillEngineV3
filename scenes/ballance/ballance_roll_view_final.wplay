@@ -1,0 +1,63 @@
+wplay
+version 2 0
+name Ballance fast side cam
+scene_id 6680640857240007171
+content_version 1
+event_count 16
+end_header
+events|16
+e
+cam|held
+translation|0x41100000|0x40333333|0x00000000
+rotation|0x3f339ace|0xbdb4b140|0x3f339ace|0x3db4b140
+;
+e
+fps|30
+;
+e
+console|gtao 0
+;
+e
+play|1
+;
+e
+wait|60
+;
+e
+capture|rest
+;
+e
+action|Move
+axis|0x3f800000|0x00000000
+;
+e
+wait|30
+;
+e
+capture|fast
+frames|12
+;
+e
+action|Move
+axis|0xbf800000|0x00000000
+;
+e
+wait|30
+;
+e
+action|Move
+axis|0x00000000|0x00000000
+;
+e
+capture|stop
+frames|12
+;
+e
+wait|90
+;
+e
+capture|rest2
+;
+e
+console|gtao 1
+;

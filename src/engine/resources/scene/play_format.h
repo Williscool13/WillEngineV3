@@ -13,15 +13,15 @@
 
 namespace Engine
 {
-constexpr uint32_t PLAY_MAJOR_VERSION = 1;
+constexpr uint32_t PLAY_MAJOR_VERSION = 2;
 constexpr uint32_t PLAY_MINOR_VERSION = 0;
 constexpr size_t WPLAY_NAME_LENGTH = 128;
 
-/** .wplay header; the run binds to a scene by the scene's header name. */
+/** .wplay header; the run binds to a scene by the scene's id. */
 struct WPlayHeader
 {
     char name[WPLAY_NAME_LENGTH]{};
-    char scene[WPLAY_NAME_LENGTH]{};
+    uint64_t sceneId{0};
 
     uint32_t major{PLAY_MAJOR_VERSION};
     uint32_t minor{PLAY_MINOR_VERSION};
