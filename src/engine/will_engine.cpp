@@ -56,6 +56,7 @@
 #include "editor/asset-generation/asset_generator.h"
 #include "editor/asset-generation/asset_source_catalog.h"
 #include "editor/editor_widgets.h"
+#include "engine/editor/editor_windows.h"
 #endif
 
 #if PROFILER_ENABLED
@@ -483,6 +484,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
         engineState = new(memoryManager.PersistentAllocRaw(sizeof(EngineState), Core::AllocTag::AssetGenerator)) EngineState(&memoryManager.General(), &memoryManager.Virtual());
         engineState->projectConfig = ReadProjectConfig();
+#if WILL_EDITOR
+        ReadEditorWindowConfig(engineState);
+#endif
         engineState->automation = automation;
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
@@ -678,6 +682,12 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         SPDLOG_WARN("Game dll path not found.");
     }
 #endif
+    const Core::Path& scenesDirectory = Platform::GetScenePath();
+    if (Platform::FileExists(scenesDirectory)) {
+        sceneWatcher.Start(scenesDirectory.c_str(), [&]() {
+            engineContext->rescan.bScenes = true;
+        }, 0.2f, nullptr, Platform::WATCH_WRITES | Platform::WATCH_NAMES);
+    }
 #endif
 #ifdef WDEBUG
     auto shaderDirectory = Platform::GetShaderPath();
@@ -725,6 +735,7 @@ void WillEngine::EditorImgui()
         ImGui::DockBuilderFinish(dockspaceID);
     }
 
+    DrawEditorMenuBar(engineContext, engineState);
     ImGui::DockSpaceOverViewport(dockspaceID, viewport, ImGuiDockNodeFlags_PassthruCentralNode);
 
     ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceID);
@@ -766,7 +777,9 @@ void WillEngine::EditorImgui()
         ImGui::End();
     }
 
-    if (ImGui::Begin("Editor")) {
+    bool& bEditorWindowOpen = engineState->editor.windowOpen[EDITOR_WINDOW_EDITOR];
+    const bool bEditorWindowBegun = bEditorWindowOpen;
+    if (bEditorWindowBegun && ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_EDITOR].title, &bEditorWindowOpen)) {
 #if !GAME_STATIC
         float gameDllTimeSinceReload = gameDllWatcher.GetTimeSinceLastTrigger();
         int gameDllSeconds = static_cast<int>(gameDllTimeSinceReload);
@@ -1355,7 +1368,9 @@ void WillEngine::EditorImgui()
         ImGui::Text("  Models: %u", asyncAssetLoadManager->GetActiveModelLoadCount());
         ImGui::Text("  Textures: %u", asyncAssetLoadManager->GetActiveTextureLoadCount());
     }
-    ImGui::End();
+    if (bEditorWindowBegun) {
+        ImGui::End();
+    }
 #endif
 }
 
@@ -1497,6 +1512,9 @@ void WillEngine::Run()
 #if !GAME_STATIC
         gameDllWatcher.Poll();
 #endif
+#if WILL_EDITOR
+        sceneWatcher.Poll();
+#endif
         shaderWatcher.Poll();
         if (Render::PipelineManager* pipelineManager = renderThread->GetPipelineManager()) {
             StringID reloadedPipeline{};
@@ -1558,7 +1576,11 @@ void WillEngine::Run()
             }
         }
         materialManager->Scan();
-        assetManager->Scan();
+        Core::InlineVector<StringID, 8> loadedSceneIds;
+        for (const RuntimeSceneMetadata& scene : engineState->editor.loadedScenes) {
+            loadedSceneIds.PushBack(scene.sceneId);
+        }
+        assetManager->Scan(loadedSceneIds);
         if (bTextureGenerated) {
             materialManager->ResolveMissingTextures();
         }

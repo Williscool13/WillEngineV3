@@ -18,7 +18,7 @@ import asset_index
 
 IDX = asset_index.scan()
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "sponza_light_swarm.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "sponza_light_swarm.wscene")
 SCENE_ID = name_id("sponza_light_swarm")
 
 # Sponza.gltf bounds at its 0.008 root scale: x -15.4..14.4, y -1.0..11.4, z -9.5..8.8; atrium floor y 0, gallery y 4
@@ -89,5 +89,5 @@ for i in range(48):
     lights += 1
 
 editor_camera = {"rotation": list(wa.camera_look_quat(-1.0, -0.12, 0.0)), "translation": [12.5, 4.5, 0.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "Sponza Light Swarm", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 print(f"wrote {SCENE_PATH}: {len(entities)} entities, {lights} lights")

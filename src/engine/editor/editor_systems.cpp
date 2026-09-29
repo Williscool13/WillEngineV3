@@ -584,7 +584,9 @@ static void DrawScreenFadeConfig(Core::ScreenFadeState& fade)
 
 static void DrawGameplayWindow(Engine::EngineState* state)
 {
-    if (ImGui::Begin("Gameplay")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_GAMEPLAY];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_GAMEPLAY].title, &bOpen)) {
         if (IsPlaying(state)) {
             ImGui::Text("Checkpoint ID:       %llu", state->scene.currentCheckpointId.id);
             ImGui::Text("Checkpoint Priority: %d", state->scene.currentCheckpointPriority);
@@ -818,7 +820,9 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->editor.currentGizmoMode = ImGuizmo::WORLD;
     }
 
-    if (ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_TOOLBAR];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_TOOLBAR].title, &bOpen, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
         if (ImGui::RadioButton("T##gizmo_op", state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE)) { state->editor.currentGizmoOperation = ImGuizmo::TRANSLATE; }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Translate (W)"); }
         ImGui::SameLine();
@@ -956,7 +960,9 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount)
 {
-    if (ImGui::Begin("Details")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_DETAILS];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_DETAILS].title, &bOpen)) {
         ImGui::Checkbox("Expose all components", &state->editor.bExposeAllComponents);
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Show engine-managed components (read-only)"); }
         ImGui::Separator();
@@ -1197,7 +1203,9 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
 
 static void DrawSceneStatsWindow(Engine::EngineState* state)
 {
-    if (ImGui::Begin("Scene")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_SCENE_STATS];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_SCENE_STATS].title, &bOpen)) {
         ImGui::Checkbox("Enable Physics", &state->physics.bEnabled);
 
         ImGui::SeparatorText("Meshes");
@@ -1259,10 +1267,11 @@ static void DrawUndoRecord(Engine::EngineState* state, const Engine::UndoRecord&
 
 static void DrawUndoHistoryWindow(Engine::EngineState* state)
 {
-    if (!state->editor.bShowUndoHistory) { return; }
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_UNDO_HISTORY];
+    if (!bOpen) { return; }
 
     Engine::UndoStack& undo = state->editor.undo;
-    if (ImGui::Begin("Undo History", &state->editor.bShowUndoHistory)) {
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_UNDO_HISTORY].title, &bOpen)) {
         ImGui::BeginDisabled(!undo.CanUndo());
         if (ImGui::Button("Undo")) { undo.Undo(state); }
         ImGui::EndDisabled();

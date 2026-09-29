@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Builds the GI sun-bounce scene: scenes/gi_sunbounce.wscene.
+Builds the GI sun-bounce scene: scenes/lighting/gi_sunbounce.wscene.
 Run from repo root:  python scripts/build_gi_sunbounce.py
 
 The fail case under test: the dominant light source reaches the interior only through GI
 (sun bounces off exterior ground / a small patch, everything else is 1+ bounce). One global
-sun, elevation 50 deg, azimuth 15 deg west of the door axis; skybox stays ON at 1.0 (sun and
+sun, elevation 50 deg, azimuth 15 deg west of the door axis; skybox stays ON at 65536 (sun and
 sky intensity are the live rungs to slide in-editor). All-white surfaces so chroma cannot
 mask noise. One box reflection probe per room interior: without probes fully enclosed
 rooms leak (known issue, probes are the sanctioned indoor fallback tier); bake them after
@@ -49,7 +49,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "gi_sunbounce.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "gi_sunbounce.wscene")
 SCENE_ID = name_id("gi_sunbounce")
 
 IDX = asset_index.scan()
@@ -265,18 +265,18 @@ build_xl_row()
 solid_box("Ground", (-65.0, -WALL_T - 0.52, -12.0), (130.0, 0.5, 100.0))
 
 sun = base_entity("Sun", (0.0, 25.0, -15.0), tuple(face_dir(*SUN_DIR)))
-add_directional_light(sun, color=(1.0, 0.96, 0.88), intensity=5.0, priority=0, angular_radius_deg=0.5)
+add_directional_light(sun, color=(1.0, 0.96, 0.88), intensity=327680.0, priority=0, angular_radius_deg=0.5)
 entities.append(sun)
 
 sky = base_entity("Skybox", (0.0, 0.0, 0.0))
-add_skybox(sky, ENV_MAP, intensity=1.0, priority=0)
+add_skybox(sky, ENV_MAP, intensity=65536.0, priority=0)
 entities.append(sky)
 
 entities.extend(folders)
 
 # 180 about Y at the aisle: look +Z into the S/I row fronts.
 editor_camera = {"rotation": [0.0, 0.0, 1.0, 0.0], "translation": [0.0, 5.0, -16.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "GI Sun Bounce", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 n_modules = sum(1 for e in entities if wa.MODULE in e)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities, {n_modules} modules)")
-print(f"sun dir {tuple(round(c, 4) for c in SUN_DIR)} (el 50, az 15 west); sun 5.0 / sky 1.0 are the rungs to slide")
+print(f"sun dir {tuple(round(c, 4) for c in SUN_DIR)} (el 50, az 15 west); sun 327680 / sky 65536 are the rungs to slide")

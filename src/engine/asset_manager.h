@@ -23,6 +23,7 @@
 #include "core/containers/inline_map.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
+#include "core/containers/span.h"
 #include "core/containers/vector.h"
 #include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
@@ -381,8 +382,9 @@ public: // Per-Tick calls
 
     /**
      * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
+     * @param loadedScenes stay registered when their file is missing
      */
-    void Scan();
+    void Scan(Core::Span<const StringID> loadedScenes = {});
 
     void RegisterProceduralTextures();
 
@@ -482,13 +484,15 @@ public: // Scenes
         Core::InlineString<128> sceneName{};
         uint32_t entityCount{};
         uint64_t contentVersion{0};
+        uint32_t scanGeneration{0};
+        /** No file on disk; kept registered only while loaded. */
+        bool bUnsaved{false};
     };
 
     const Core::FixedMap<StringID, CachedSceneMetadata>& GetSceneCache() { return sceneCache; }
 
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
-    /** Registers a scene that has no file yet; the name is the path's stem. */
     void RegisterScene(StringID sceneId, const Core::Path& source);
 
     void UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount);
@@ -518,6 +522,7 @@ public: // Runs (.wplay)
         StringID sceneId{};
         uint32_t eventCount{};
         uint64_t contentVersion{0};
+        uint32_t scanGeneration{0};
     };
 
     const Core::FixedMap<StringID, CachedPlayMetadata>& GetPlayCache() { return playCache; }
@@ -544,6 +549,7 @@ private: // Asset Registry
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
     Core::FixedMap<StringID, CachedPlayMetadata> playCache;
+    uint32_t sceneScanGeneration{0};
 
     Core::InlineVector<ModelID, 16> changedModelIds{};
     Core::InlineVector<TextureID, 16> changedTextureIds{};

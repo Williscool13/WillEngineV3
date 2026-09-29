@@ -16,7 +16,6 @@ namespace Engine
 constexpr uint32_t SCENE_MAJOR_VERSION = 2;
 constexpr uint32_t SCENE_MINOR_VERSION = 1;
 
-/** The scene's name is its file stem. */
 struct WSceneHeader
 {
     uint64_t sceneId{0};

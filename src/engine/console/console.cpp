@@ -301,11 +301,6 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->scene.currentSceneName.c_str()).c_str());
     });
 
-    Register(state, Origin::Engine, "undo_history", "Toggles the Undo History window (records, before/after snapshots)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
-        state->editor.bShowUndoHistory = !state->editor.bShowUndoHistory;
-        Print(state, state->editor.bShowUndoHistory ? "  undo history shown" : "  undo history hidden");
-    });
-
     Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->rescan.bResources = true;
         Print(state, "  rescan queued");

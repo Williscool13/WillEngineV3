@@ -180,6 +180,7 @@ struct FrameEvents
 struct RescanRequests
 {
     bool bResources{false};
+    bool bScenes{false};
     /** Atomic because asset worker threads raise it */
     std::atomic<bool> bMaterials{false};
 };

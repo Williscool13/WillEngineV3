@@ -45,7 +45,9 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         }
     }
 
-    if (ImGui::Begin("Scene Browser")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_SCENE_BROWSER];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_SCENE_BROWSER].title, &bOpen)) {
         const auto& sceneCache = ctx->assetManager->GetSceneCache();
 
         if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->scene.currentSceneId)) {

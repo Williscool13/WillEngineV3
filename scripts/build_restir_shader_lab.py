@@ -30,7 +30,7 @@ import asset_index
 IDX = asset_index.scan()
 ENV_MAP = IDX.envmap("modern_evening_street_4k")
 
-SCENE_PATH = os.path.join(wa._REPO_ROOT, "scenes", "restir_shader_lab.wscene")
+SCENE_PATH = os.path.join(wa._REPO_ROOT, "scenes", "lighting", "restir_shader_lab.wscene")
 SCENE_ID = wa.name_id("restir_shader_lab")
 
 
@@ -100,28 +100,28 @@ for row in range(ROWS):
         entities.append(ball)
 
 warm = base_entity("KeyLight", (-5.0, 4.5, 3.0))
-add_sphere_light(warm, color=(1.0, 0.82, 0.6), intensity=140.0, radius=0.35, draw_range=28.0)
+add_sphere_light(warm, color=(1.0, 0.82, 0.6), intensity=9175040.0, radius=0.35, draw_range=28.0)
 entities.append(warm)
 
 cool = base_entity("FillLight", (5.0, 4.5, 3.0))
-add_sphere_light(cool, color=(0.55, 0.7, 1.0), intensity=140.0, radius=0.35, draw_range=28.0)
+add_sphere_light(cool, color=(0.55, 0.7, 1.0), intensity=9175040.0, radius=0.35, draw_range=28.0)
 entities.append(cool)
 
 # Emissive quad lies in the local XZ plane, so an unrotated panel points straight down
 panel = base_entity("CeilingPanel", (0.0, 7.0, -2.0))
-add_area_light(panel, color=(1.0, 0.96, 0.9), intensity=90.0, half_width=6.0, half_height=2.0, draw_range=30.0)
+add_area_light(panel, color=(1.0, 0.96, 0.9), intensity=5898240.0, half_width=6.0, half_height=2.0, draw_range=30.0)
 entities.append(panel)
 
 sun = base_entity("Sun", (0.0, 12.0, 0.0), rot=tuple(face_dir(-0.35, -1.0, -0.4)))
-add_directional_light(sun, color=(1.0, 0.97, 0.92), intensity=1.6, priority=0, angular_radius_deg=1.0)
+add_directional_light(sun, color=(1.0, 0.97, 0.92), intensity=104857.6, priority=0, angular_radius_deg=1.0)
 entities.append(sun)
 
 sky = base_entity("Skybox", (0.0, 0.0, 0.0))
-add_skybox(sky, ENV_MAP, intensity=0.25, priority=0)
+add_skybox(sky, ENV_MAP, intensity=16384.0, priority=0)
 entities.append(sky)
 
 editor_camera = {"rotation": wa.camera_look_quat(0.0, -0.25, -1.0), "translation": [0.0, 5.0, 12.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "ReSTIR Shader Lab", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 
 n_toon = sum(1 for e in entities if e.get(wa.PROCEDURAL, {}).get("material") == MAT_TOON)
 n_pbr = sum(1 for e in entities if e.get(wa.PROCEDURAL, {}).get("material") == MAT_PBR)

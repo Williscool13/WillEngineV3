@@ -158,6 +158,9 @@ private: // Game DLL
     Platform::DirectoryWatcher gameDllWatcher{};
 #endif
     Platform::DirectoryWatcher shaderWatcher{};
+#if WILL_EDITOR
+    Platform::DirectoryWatcher sceneWatcher{};
+#endif
     Core::GameAPI gameFunctions{};
     SystemGraph systemGraph{};
     EngineContext* engineContext{};

@@ -12,11 +12,18 @@ DirectoryWatcher::~DirectoryWatcher()
     Stop();
 }
 
-bool DirectoryWatcher::Start(const char* directory, Callback cb, float debounceSeconds, const char* filterFilename)
+bool DirectoryWatcher::Start(const char* directory, Callback cb, float debounceSeconds, const char* filterFilename, uint32_t events)
 {
     callback = std::move(cb);
     debounceTime = debounceSeconds;
     lastTrigger = std::chrono::steady_clock::now();
+    notifyFilter = 0;
+    if (events & WATCH_WRITES) {
+        notifyFilter |= FILE_NOTIFY_CHANGE_LAST_WRITE;
+    }
+    if (events & WATCH_NAMES) {
+        notifyFilter |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME;
+    }
 
     filterFilenameW.clear();
     if (filterFilename && filterFilename[0] != '\0') {
@@ -49,7 +56,7 @@ bool DirectoryWatcher::Start(const char* directory, Callback cb, float debounceS
         buffer,
         sizeof(buffer),
         TRUE,
-        FILE_NOTIFY_CHANGE_LAST_WRITE,
+        notifyFilter,
         nullptr,
         &overlapped,
         nullptr
@@ -102,7 +109,7 @@ void DirectoryWatcher::Poll()
             buffer,
             sizeof(buffer),
             TRUE,
-            FILE_NOTIFY_CHANGE_LAST_WRITE,
+            notifyFilter,
             nullptr,
             &overlapped,
             nullptr

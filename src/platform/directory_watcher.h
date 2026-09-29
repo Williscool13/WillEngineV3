@@ -6,6 +6,7 @@
 #define WILL_ENGINE_DIRECTORY_WATCHER_H
 
 #include <chrono>
+#include <cstdint>
 #include <string>
 
 #ifdef _WIN32
@@ -16,6 +17,12 @@
 
 namespace Platform
 {
+enum WatchEvent : uint32_t
+{
+    WATCH_WRITES = 1u << 0,
+    WATCH_NAMES = 1u << 1,
+};
+
 class DirectoryWatcher
 {
 public:
@@ -34,8 +41,9 @@ public:
      * @param cb Callback fired after debounce when a matching change is detected.
      * @param debounceSeconds Seconds to wait after the last change before firing.
      * @param filterFilename If non-null, only changes to this filename (e.g. "game.dll") trigger the callback.
+     * @param events WatchEvent bits
      */
-    bool Start(const char* directory, Callback cb, float debounceSeconds = 0.2f, const char* filterFilename = nullptr);
+    bool Start(const char* directory, Callback cb, float debounceSeconds = 0.2f, const char* filterFilename = nullptr, uint32_t events = WATCH_WRITES);
 
     void Stop();
 
@@ -48,6 +56,7 @@ private:
     HANDLE handle = INVALID_HANDLE_VALUE;
     OVERLAPPED overlapped{};
     char buffer[4096];
+    DWORD notifyFilter = 0;
 #endif
     Callback callback;
     std::wstring filterFilenameW{};

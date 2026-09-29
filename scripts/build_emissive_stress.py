@@ -57,7 +57,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_DIR = os.path.join(REPO, "scenes")
+SCENE_DIR = os.path.join(REPO, "scenes", "emissive")
 MAT_DIR = os.path.join(REPO, "assets", "materials")
 
 FRAG_SHADER = 16532098932897623660
@@ -73,7 +73,7 @@ MAX_EMISSIVE_GROUPS_PER_CELL = 16
 TRI_LIGHT_CAPACITY = 81920 - 16384   # MAX_LIGHTS - MAX_ANALYTIC_LIGHTS
 WORLD_GRID_BASE_CELL_SIZE = 2.0
 WORLD_GRID_RES = 16
-EMISSIVE_RANGE_MULTIPLIER = 8.0      # ReSTIR.wprofile emissiveTriRangeMultiplier, current config
+EMISSIVE_RANGE_MULTIPLIER = 0.016    # ReSTIR.wprofile emissiveTriRangeMultiplier, current config
 
 
 def tri_light_range(intensity, triangle_area):
@@ -165,8 +165,8 @@ GROUP_HEIGHT = 1.5
 # and reduce every over-subscribed cell to "keep the first 16 in group order"; distinct powers make
 # the survivors the brightest, which is the behaviour worth testing.
 GROUP_TIERS = 8
-GROUP_INTENSITY_MIN = 0.60
-GROUP_INTENSITY_MAX = 0.95
+GROUP_INTENSITY_MIN = 39321.6
+GROUP_INTENSITY_MAX = 62259.2
 
 
 def group_tier_intensity(tier):
@@ -215,11 +215,11 @@ def build_groups(idx):
 
     # Spawn inside the field rather than outside it: the near field is what bins correctly.
     common_lighting(entities, idx.envmap("kloofendal_48d_partly_cloudy_puresky_4k"),
-                    sun_intensity=0.4, sky_intensity=0.05, spawn_pos=(0.0, 1.0, 0.0))
+                    sun_intensity=26214.4, sky_intensity=3276.8, spawn_pos=(0.0, 1.0, 0.0))
 
     camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 16.0, 55.0]}
     path = os.path.join(SCENE_DIR, "emissive_stress_groups.wscene")
-    write_scene(path, entities, name_id("emissive_stress_groups"), "emissive_stress_groups", editor_camera=camera)
+    write_scene(path, entities, name_id("emissive_stress_groups"), editor_camera=camera)
 
     lit = min(GROUP_COUNT, MAX_EMISSIVE_GROUPS)
     r_min = tri_light_range(group_tier_intensity(0), GROUP_BOX_TRI_AREA)
@@ -269,7 +269,7 @@ def build_triangles(idx):
                0.5 + 0.5 * math.cos(2.0 * math.pi * (hue + 1.0 / 3.0)),
                0.5 + 0.5 * math.cos(2.0 * math.pi * (hue + 2.0 / 3.0)))
         mat = write_material("emstress_sphere_{}".format(i), [0.0, 0.0, 0.0, 1.0],
-                             [rgb[0], rgb[1], rgb[2], 12.0], [0.0, 1.0, 0.0, 0.0], LIT_PBR)
+                             [rgb[0], rgb[1], rgb[2], 786432.0], [0.0, 1.0, 0.0, 0.0], LIT_PBR)
         pos = (math.cos(a) * TRI_RING_RADIUS, TRI_SPHERE_RADIUS + 1.0, math.sin(a) * TRI_RING_RADIUS)
         fields, ptype = sphere_params(TRI_SPHERE_RADIUS, TRI_SPHERE_SLICES, TRI_SPHERE_STACKS)
         entities.append(emissive_mesh("em_sphere_{}".format(i), pos, ptype, fields, mat))
@@ -280,11 +280,11 @@ def build_triangles(idx):
     entities.append(floor)
 
     common_lighting(entities, idx.envmap("kloofendal_48d_partly_cloudy_puresky_4k"),
-                    sun_intensity=0.4, sky_intensity=0.05, spawn_pos=(0.0, 1.0, 0.0))
+                    sun_intensity=26214.4, sky_intensity=3276.8, spawn_pos=(0.0, 1.0, 0.0))
 
     camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 10.0, TRI_RING_RADIUS + 26.0]}
     path = os.path.join(SCENE_DIR, "emissive_stress_triangles.wscene")
-    write_scene(path, entities, name_id("emissive_stress_triangles"), "emissive_stress_triangles", editor_camera=camera)
+    write_scene(path, entities, name_id("emissive_stress_triangles"), editor_camera=camera)
 
     total = TRI_SPHERE_COUNT * TRI_SPHERE_TRIS
     return path, [
@@ -316,7 +316,7 @@ SCAN_VOID_HALF = ((SCAN_VOID - 1) / 2.0) * SCAN_SPACING
 def build_scan(idx):
     wa.seed_ids("emissive_stress_scan")
     box_model = idx.model("BoxTextured4k.glb")
-    mat_em = write_material("emstress_scan_emissive", [0.0, 0.0, 0.0, 1.0], [0.6, 0.85, 1.0, 30.0],
+    mat_em = write_material("emstress_scan_emissive", [0.0, 0.0, 0.0, 1.0], [0.6, 0.85, 1.0, 1966080.0],
                             [0.0, 1.0, 0.0, 0.0], LIT_PBR)
 
     entities = []
@@ -344,11 +344,11 @@ def build_scan(idx):
         entities.append(emissive_mesh("em_scan_{}".format(i), pos, ptype, fields, mat_em))
 
     common_lighting(entities, idx.envmap("kloofendal_48d_partly_cloudy_puresky_4k"),
-                    sun_intensity=0.4, sky_intensity=0.05, spawn_pos=(0.0, 1.0, 0.0))
+                    sun_intensity=26214.4, sky_intensity=3276.8, spawn_pos=(0.0, 1.0, 0.0))
 
     camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 3.0, SCAN_VOID_HALF - 4.0]}
     path = os.path.join(SCENE_DIR, "emissive_stress_scan.wscene")
-    write_scene(path, entities, name_id("emissive_stress_scan"), "emissive_stress_scan", editor_camera=camera)
+    write_scene(path, entities, name_id("emissive_stress_scan"), editor_camera=camera)
 
     return path, [
         "instances {:,} total, {} emissive ({:.3f}%)".format(

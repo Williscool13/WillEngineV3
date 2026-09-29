@@ -9,7 +9,8 @@ component_registry.cpp (see component_key() below). Any registered component is
 therefore writable from here. Field schemas per key are noted inline.
 
 Usage: import this file, call the helpers to build entity dicts, append to a
-list, then call write_scene(path, entities, scene_id, scene_name).
+list, then call write_scene(path, entities, scene_id). The scene's name is the
+file stem, so name the file in snake_case.
 
 See also: memory note "wscene format cheat sheet" (project_wscene_cheatsheet.md)
 for the narrative version of everything below.
@@ -41,7 +42,8 @@ PHYSICS = component_key("PhysicsBodyDesc")                  # motionType/mass/fr
 TEXT3D = component_key("Text3DComponent")                   # fontId/text/depth/flatness/tracking/scale/smoothNormals/material/renderOffset/renderRotation
 SPLINE = component_key("SplineMeshComponent")               # profile/railing/spline fields, flattened (see spline_fields())
 MODULE = component_key("ModuleMeshComponent")               # parts[]{type, <shape fields>, offset[3], rotation[wxyz], slot}, slotMaterials[8]; see add_module()
-STATIC_MESH = component_key("StaticMeshComponent")          # modelId, materialOverrides{slot:id}, primitiveBlacklist[], renderOffset, renderRotation. ONE entity = one whole model.
+STATIC_MESH = component_key("StaticMeshComponent")          # modelId, shader overrides, renderOffset, renderRotation. ONE entity = one whole model.
+STATIC_MESH_OVERRIDES = component_key("StaticMeshOverridesComponent")  # materialOverrides{slot:id}, primitiveBlacklist[]; see add_static_mesh()
 STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, renderOffset, renderRotation
 RENDER_FLAGS = component_key("RenderFlagsComponent")        # visible, probeBake, ddgi, motionBlur, alphaCutout bools; absent key = true (engine default); see add_render_flags()
 SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
@@ -69,27 +71,31 @@ WORLD_TEXT = component_key("TextComponent")                 # text, fontId, text
 # =============================================================================
 # .wscene file structure
 # =============================================================================
-# Text header, then a JSON body:
+# Text header, then a v2 text body (docs/serialization/text_format.md):
 #   wscene
-#   version 1 0
+#   version 2 1
 #   id <uint64 scene id>
-#   name <scene name>
+#   content_version <n>        (bumped on every write; the engine hot-reloads on change)
 #   entity_count <n>
 #   end_header
-#   { "editor_camera": {"rotation":[w,x,y,z]  (SAME as entities -- scene_system.cpp:233/320),
-#                        "translation":[x,y,z]},
-#     "entities": [ {<entity object>}, ... ],
-#     "scene_id": <same uint64 as header id>,
-#     "scene_name": <same as header name> }
+#   scene_id|<same uint64 as header id>
+#   entities|<n>
+#   entity                     one block per entity, holding one block per component,
+#   <component key>            opened by the decimal component key above; fields are the
+#   ...                        component's reflected layout (docs/engine/reflection.md)
+#   ;
+#   ;
+#   editor_camera              translation, rotation [w,x,y,z]
+#   ;
 #
-# Each entity is a JSON object keyed by the decimal-string component keys above.
-# Quaternions on TransformComponent/shape rotations are stored [w,x,y,z].
+# There is no scene name in the file: the name is the file stem.
+# Entities here are dicts keyed by component key; wtext_serialize.py maps them onto the
+# reflected layout. Quaternions are [w,x,y,z] everywhere except PathMover pointSettings input.
 
 # =============================================================================
 # Procedural shape params -- variant index ("type" on the render component,
-# "proceduralType" on the physics shape) + required field names, confirmed
-# against physics_body_desc.cpp Serialize()/Deserialize() and template scene
-# instances. Pivot conventions (from src/engine/resources/physics/collider_generation.cpp
+# "proceduralType" on the physics shape) + field names, from the WILL_REFLECT
+# declarations in model_types.h. Pivot conventions (from src/engine/resources/physics/collider_generation.cpp
 # comments, "mirrors Generate*") noted per shape -- IMPORTANT when positioning:
 #
 #   Box, Wedge, Staircase        : CORNER pivot, (0,0,0)..(size), local Y up
@@ -235,12 +241,13 @@ def next_sort():
 RENDER_DEFAULTS = {"material": 0, "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
 
 def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True, motion_blur=True,
-                     alpha_cutout=True, emissive_light=False):
+                     alpha_cutout=True, emissive_light=False, camera_motion_blur=True):
     """RenderFlagsComponent entry. Only needed for NON-default flags; a missing key reads back as
-    that bit's DEFAULT_FLAGS state, which is set for every bit EXCEPT emissive_light (opt-in: it
+    that bit's default, which is set for every bit EXCEPT emissive_light (opt-in: it
     allocates a TriLightStore range per emissive primitive, so it cannot default on)."""
     entity[RENDER_FLAGS] = {"visible": visible, "probeBake": probe_bake_include, "ddgi": ddgi_contribute,
-                            "motionBlur": motion_blur, "alphaCutout": alpha_cutout, "emissiveLight": emissive_light}
+                            "motionBlur": motion_blur, "alphaCutout": alpha_cutout, "emissiveLight": emissive_light,
+                            "cameraMotionBlur": camera_motion_blur}
     return entity
 
 def base_entity(name, pos, rot=(1.0, 0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0), folder_id=0):
@@ -419,7 +426,8 @@ def add_static_mesh(entity, model_id, lighting_shader=0, shading_shader=0, mater
     """Whole imported model (.wsmesh) as ONE entity; model_id = asset_index.model(name).
     lighting_shader/shading_shader = string_id of a pipeline name (e.g. "default_pbr_restir"); 0 keeps
     each imported material's own shader (imports default to default_pbr, NOT the restir one).
-    material_overrides = {slot: material_id} (cap 32); primitive_blacklist = [ordinal, ...] (cap 64).
+    material_overrides = {slot: material_id} (cap 32); primitive_blacklist = [ordinal, ...] (cap 64); both
+    live on a separate StaticMeshOverridesComponent.
     No physics; add a PhysicsBodyDesc separately if the model needs collision."""
     comp = {"modelId": model_id,
             "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
@@ -427,11 +435,10 @@ def add_static_mesh(entity, model_id, lighting_shader=0, shading_shader=0, mater
         comp["lightingShaderOverride"] = lighting_shader
     if shading_shader:
         comp["shadingShaderOverride"] = shading_shader
-    if material_overrides:
-        comp["materialOverrides"] = {str(slot): mid for slot, mid in material_overrides.items()}
-    if primitive_blacklist:
-        comp["primitiveBlacklist"] = list(primitive_blacklist)
     entity[STATIC_MESH] = comp
+    if material_overrides or primitive_blacklist:
+        entity[STATIC_MESH_OVERRIDES] = {"materialOverrides": {str(slot): mid for slot, mid in (material_overrides or {}).items()},
+                                         "primitiveBlacklist": list(primitive_blacklist or [])}
     return entity
 
 def spline_fields(spline_points, closed=False, mode=1, radius=0.5, roll_angle=0.0, sides=8, segments_per_span=8,
@@ -545,7 +552,7 @@ def add_wall(entities, name, p_start, p_end, lateral_offset, height=0.6, thickne
 
 # =============================================================================
 # gameplay / structural components
-# Field names verified 2026-07-29 against each component's Serialize().
+# Field names follow each component's WILL_REFLECT declaration.
 # =============================================================================
 def add_prefab_instance(entity, prefab_id, master=False):
     """Marks the entity as an instance of assets/prefabs/<x>.wprefab (prefab_id = that file's
@@ -928,12 +935,29 @@ def shots_to_events(shots, settle=240):
     return events
 
 
-def write_play(path, name, scene, events, content_version=1):
-    """Run script for `will-engine.exe --play <path>` or the scene browser's Run button. `scene` is the .wscene header name.
-    Vector args are hex floats; rotation is [w,x,y,z] like everything else in this file."""
+def _next_content_version(path, content_version):
+    """Mirrors the engine's save: the existing file's content_version + 1, else 1."""
+    if content_version is not None:
+        return content_version
+    if os.path.exists(path):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if line == "end_header":
+                    break
+                if line.startswith("content_version "):
+                    return int(line[16:]) + 1
+    return 1
+
+
+def write_play(path, name, scene_id, events, content_version=None):
+    """Run script for `will-engine.exe --play <path>` or the scene browser's Run button. `scene_id` is the target
+    .wscene's header id; keep the .wplay beside its scene. Vector args are hex floats; rotation is [w,x,y,z]."""
     import wtext_serialize
     events = list(events)
-    header = f"wplay\nversion 1 0\nname {name}\nscene {scene}\ncontent_version {content_version}\nevent_count {len(events)}\nend_header\n"
+    content_version = _next_content_version(path, content_version)
+    header = (f"wplay\nversion 2 0\nname {name}\nscene_id {int(scene_id)}\ncontent_version {content_version}\n"
+              f"event_count {len(events)}\nend_header\n")
     lines = ["events|%d" % len(events)]
     for e in events:
         lines.append("e")
@@ -953,16 +977,16 @@ def write_play(path, name, scene, events, content_version=1):
 # =============================================================================
 # top-level write
 # =============================================================================
-def write_scene(path, entities, scene_id, scene_name, editor_camera=None):
+def write_scene(path, entities, scene_id, editor_camera=None, content_version=None):
+    """The scene's name is the file stem of `path`."""
     if editor_camera is None:
         # editor_camera rotation is [w,x,y,z] -- SAME as entity quats, NOT [x,y,z,w].
         # [1,0,0,0] = identity/upright. A stray w=0 here flips the camera upside-down.
         editor_camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 4.0, 12.0]}
-    # Entities stay the JSON-shaped dicts every add_* helper builds; wtext_serialize
-    # renders them into the v2 text body (docs/serialization/text_format.md).
     import wtext_serialize
-    body = {"editor_camera": editor_camera, "entities": entities, "scene_id": scene_id, "scene_name": scene_name}
-    header = f"wscene\nversion 2 0\nid {scene_id}\nname {scene_name}\nentity_count {len(entities)}\nend_header\n"
+    body = {"editor_camera": editor_camera, "entities": entities, "scene_id": scene_id}
+    content_version = _next_content_version(path, content_version)
+    header = f"wscene\nversion 2 1\nid {scene_id}\ncontent_version {content_version}\nentity_count {len(entities)}\nend_header\n"
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(header)
         f.write(wtext_serialize.scene_body(body))

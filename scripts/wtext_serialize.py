@@ -1,8 +1,11 @@
 """Canonical v2 text-body emitters for .wscene/.wprefab (docs/serialization/text_format.md).
 
-Mirrors the C++ TextWriter output byte-for-byte (field order, omit-default,
-0x%08x hex floats) so prefab-diff fragment compares stay clean. Scene bodies are
-built from the same dict shapes wscene_authoring.py has always produced.
+Mirrors the engine's reflected serializer (src/engine/reflection/reflection_serialize.h,
+docs/engine/reflection.md): per-component field lists below copy each WILL_REFLECT declaration,
+fields equal to the struct default are omitted, nested structs are blocks, variants are
+`key|<index>` plus the alternative's fields inline, containers are `key|<count>` plus one `item`
+block per element. Scene bodies are built from the dict shapes wscene_authoring.py produces;
+the adapters at the bottom map those onto the reflected layout.
 """
 
 import os
@@ -20,6 +23,10 @@ def type_key(s):
 
 def hx(v):
     return "0x%08x" % struct.unpack("<I", struct.pack("<f", float(v)))[0]
+
+
+def f32(v):
+    return struct.unpack("<f", struct.pack("<f", float(v)))[0]
 
 
 def bstr(v):
@@ -53,560 +60,342 @@ class W:
         return "\n".join(self.lines) + "\n" if self.lines else ""
 
 
-# ---- KeyOpt mirrors (float compares match C++ `!(v == def)`) ----
+# ---- reflected field types ----
+# Leaf kinds: "f" float, "i" int32, "u" unsigned / enum / id, "b" bool, "s" string,
+# "v2"/"v3"/"v4" float vectors, "q" quat [w,x,y,z]. Composite kinds are tuples:
+# ("struct", fields), ("variant", [fields-or-None per index]), ("list", elem), ("array", elem, n).
+# A field is (key, type, default); a struct's default is {} (every field at its own default).
 
-def opt_f(w, k, j, key, d):
-    v = float(j.get(key, d))
-    if v != float(d):
+VEC_LEN = {"v2": 2, "v3": 3, "v4": 4, "q": 4}
+
+
+def canon(t, v):
+    if isinstance(t, tuple):
+        kind = t[0]
+        if kind == "struct":
+            v = v or {}
+            return tuple(canon(ft, v.get(k, d)) for k, ft, d in t[1])
+        if kind == "variant":
+            index, fields = v
+            alt = t[1][index]
+            return (int(index), canon(("struct", alt), fields) if alt is not None else None)
+        if kind == "list":
+            return tuple(canon(t[1], e) for e in v)
+        if kind == "array":
+            elems = list(v) + [elem_default(t[1])] * (t[2] - len(v))
+            return tuple(canon(t[1], e) for e in elems)
+    if t == "f":
+        return f32(v)
+    if t in ("i", "u"):
+        return int(v)
+    if t == "b":
+        return bool(v)
+    if t == "s":
+        return str(v)
+    return tuple(f32(x) for x in v)
+
+
+def elem_default(t):
+    if isinstance(t, tuple):
+        if t[0] == "struct":
+            return {}
+        if t[0] in ("list", "array"):
+            return []
+        raise ValueError("no implicit default for " + t[0])
+    return {"f": 0.0, "i": 0, "u": 0, "b": False, "s": "", "v2": [0.0] * 2, "v3": [0.0] * 3, "v4": [0.0] * 4}[t]
+
+
+def write_value(w, k, t, v):
+    if isinstance(t, tuple):
+        kind = t[0]
+        if kind == "struct":
+            w.begin(k)
+            write_fields(w, t[1], v)
+            w.end()
+        elif kind == "variant":
+            index, fields = v
+            w.key(k, int(index))
+            if t[1][index] is not None:
+                write_fields(w, t[1][index], fields)
+        else:
+            elems = list(v)
+            if kind == "array":
+                elems += [elem_default(t[1])] * (t[2] - len(elems))
+                while elems and canon(t[1], elems[-1]) == canon(t[1], elem_default(t[1])):
+                    elems.pop()
+            w.key(k, len(elems))
+            for e in elems:
+                w.begin("item")
+                if isinstance(t[1], tuple) and t[1][0] == "struct":
+                    write_fields(w, t[1][1], e)
+                else:
+                    write_value(w, "v", t[1], e)
+                w.end()
+    elif t == "f":
         w.key_f(k, v)
-
-
-def opt_i(w, k, j, key, d):
-    v = int(j.get(key, d))
-    if v != d:
-        w.key(k, v)
-
-
-def opt_b(w, k, j, key, d):
-    v = bool(j.get(key, d))
-    if v != d:
+    elif t in ("i", "u"):
+        w.key(k, int(v))
+    elif t == "b":
         w.key(k, bstr(v))
+    elif t == "s":
+        w.key_str(k, v)
+    else:
+        vals = [float(x) for x in v]
+        if len(vals) != VEC_LEN[t]:
+            raise ValueError(f"{k}: expected {VEC_LEN[t]} components, got {len(vals)}")
+        w.key_f(k, *vals)
 
 
-def opt_vec(w, k, j, key, d):
-    v = [float(x) for x in j.get(key, d)]
-    if any(a != float(b) for a, b in zip(v, d)):
-        w.key_f(k, *v)
+def write_fields(w, fields, v):
+    for k, t, d in fields:
+        val = v.get(k, d)
+        if canon(t, val) == canon(t, d):
+            continue
+        write_value(w, k, t, val)
 
 
-def opt_quat_wxyz(w, k, j, key):
-    v = [float(x) for x in j.get(key, [1.0, 0.0, 0.0, 0.0])]
-    if v != [1.0, 0.0, 0.0, 0.0]:
-        w.key_f(k, *v)
+def S(fields):
+    return ("struct", fields)
 
 
-def opt_str(w, k, j, key):
-    s = j.get(key, "")
-    if s:
-        w.key_str(k, s)
+# ---- value types (model_types.h, spline.h, physics_body_desc.h, path_mover_component.h) ----
+
+SPLINE_POINT = [("pos", "v3", [0.0, 0.0, 0.0]), ("roll", "f", 0.0)]
+SPLINE = [("mode", "u", 1), ("bClosed", "b", False), ("points", ("list", S(SPLINE_POINT)), [])]
+
+SPLINE_PROFILE = [("type", "u", 0), ("width", "f", 0.4), ("height", "f", 0.4), ("cornerRadius", "f", 0.08),
+                  ("cornerSegments", "i", 3), ("thickness", "f", 0.05)]
+SPLINE_RAILING = [("bEnabled", "b", False), ("lanes", ("list", "v2"), []), ("bPosts", "b", True), ("postInterval", "i", 4),
+                  ("postBottom", "f", 0.0), ("postTop", "f", 1.0), ("postSize", "v2", [0.05, 0.05]), ("postLateral", "f", 0.0),
+                  ("lateralOffset", "f", 0.0)]
+SPLINE_PARAMS = [("spline", S(SPLINE), {}), ("radius", "f", 0.5), ("rollAngle", "f", 0.0), ("sides", "i", 8), ("segmentsPerSpan", "i", 8),
+                 ("bCaps", "b", True), ("bCrossPlanks", "b", False), ("crossPlankInterval", "i", 4), ("crossPlankHeight", "f", 0.0),
+                 ("crossPlankThickness", "f", 0.1), ("crossPlankLength", "f", 0.3), ("profile", S(SPLINE_PROFILE), {}),
+                 ("railing", S(SPLINE_RAILING), {})]
+
+WALL_OPENING = [("x", "f", 0.0), ("y", "f", 0.0), ("w", "f", 0.0), ("h", "f", 0.0)]
+
+# Engine::ProceduralParams alternatives, by variant index (0 = monostate).
+PROC_ALTS = [
+    None,
+    [("stepCount", "i", 10), ("width", "f", 1.0), ("totalDepth", "f", 3.0), ("totalHeight", "f", 2.0), ("bSpecifyStepHeight", "b", False),
+     ("stepHeight", "f", 0.2), ("bIsClosed", "b", True)],
+    [("sizeX", "f", 1.0), ("sizeY", "f", 1.0), ("sizeZ", "f", 1.0), ("chamferX", "v4", [0.0] * 4), ("chamferY", "v4", [0.0] * 4),
+     ("chamferZ", "v4", [0.0] * 4)],
+    [("radius", "f", 0.5), ("height", "f", 2.0), ("slices", "i", 16), ("bCapped", "b", True)],
+    [("radius", "f", 0.5), ("height", "f", 2.0), ("slices", "i", 16), ("rings", "i", 8)],
+    [("ringRadius", "f", 1.0), ("tubeRadius", "f", 0.25), ("slices", "i", 16), ("stacks", "i", 16)],
+    [("width", "f", 2.0), ("height", "f", 2.5), ("depth", "f", 0.5), ("thickness", "f", 0.3), ("sides", "i", 8), ("bFillCorners", "b", False)],
+    [("sizeX", "f", 1.0), ("sizeY", "f", 1.0), ("sizeZ", "f", 1.0)],
+    [("radius", "f", 0.5), ("height", "f", 2.0), ("slices", "i", 16), ("bCapped", "b", True)],
+    [("width", "f", 1.0), ("height", "f", 2.0), ("depth", "f", 0.05), ("archHeight", "f", 0.5), ("gap", "f", 0.0), ("sides", "i", 8),
+     ("bHalf", "b", False), ("bFlip", "b", False)],
+    [("sizeX", "f", 2.0), ("sizeZ", "f", 2.0), ("tilesX", "i", 1), ("tilesZ", "i", 1)],
+    [("radius", "f", 0.5), ("slices", "i", 16), ("stacks", "i", 8)],
+    [("radius", "f", 0.5), ("subdivisions", "i", 3)],
+    [("radius", "f", 0.5), ("slices", "i", 16), ("stacks", "i", 8)],
+    [("outerRadius", "f", 0.5), ("innerRadius", "f", 0.3), ("height", "f", 2.0), ("slices", "i", 16)],
+    [("radius", "f", 0.5)],
+    [("radius", "f", 0.5)],
+    [("radius", "f", 0.5)],
+    [("radius", "f", 0.5)],
+    [("scale", "f", 1.0), ("slices", "i", 8), ("stacks", "i", 8)],
+    [("scale", "f", 1.0), ("tubeRadius", "f", 1.0), ("slices", "i", 16), ("stacks", "i", 128)],
+    [("width", "f", 2.0), ("height", "f", 2.0), ("radius", "f", 2.0), ("segments", "i", 8), ("bHalfPipe", "b", False), ("flatLength", "f", 1.0),
+     ("lipHeight", "f", 0.02)],
+    [("radius", "f", 2.0), ("height", "f", 2.0), ("curveRadius", "f", 2.0), ("flatRadius", "f", 0.0), ("lipHeight", "f", 0.02),
+     ("slices", "i", 16), ("segments", "i", 8)],
+    [("stepCount", "i", 12), ("stepHeight", "f", 0.2), ("totalHeight", "f", 2.4), ("bSpecifyStepHeight", "b", False), ("outerRadius", "f", 1.5),
+     ("centerColumnRadius", "f", 0.25), ("treadThickness", "f", 0.08), ("degreesPerStep", "f", 30.0), ("totalSweep", "f", 360.0),
+     ("bSpecifyDegreesPerStep", "b", False), ("arcSegments", "i", 6), ("bShowCenterColumn", "b", True), ("bRamp", "b", False)],
+    [("outerRadius", "f", 0.5), ("innerRadius", "f", 0.25), ("slices", "i", 32), ("bDoubleSided", "b", True)],
+    [("sizeX", "f", 4.0), ("sizeY", "f", 3.0), ("sizeZ", "f", 0.2), ("openingCount", "i", 0), ("openings", ("array", S(WALL_OPENING), 8), [])],
+    [("sizeX", "f", 0.5), ("sizeY", "f", 3.0), ("sizeZ", "f", 0.5), ("chordSize", "f", 0.06), ("braceSize", "f", 0.04), ("bayCount", "i", 4),
+     ("pattern", "i", 0)],
+    [("sizeX", "f", 2.4), ("sizeY", "f", 2.4), ("sizeZ", "f", 0.05), ("ribDepth", "f", 0.05), ("ribWidth", "f", 0.2), ("ribCount", "i", 6)],
+]
+PROC = ("variant", PROC_ALTS)
+NO_PROC = (0, {})
+
+MODULE_PART = [("type", PROC, NO_PROC), ("offset", "v3", [0.0, 0.0, 0.0]), ("rotation", "q", [1.0, 0.0, 0.0, 0.0]), ("slot", "i", 0)]
+MODULE_PARAMS = [("parts", ("list", S(MODULE_PART)), [])]
+
+TEXT3D_SOURCE = [("fontId", "u", 0), ("text", "s", ""), ("depth", "f", 0.2), ("flatness", "f", 0.005), ("tracking", "f", 0.0), ("scale", "f", 1.0),
+                 ("wrapWidth", "f", 0.0), ("bendRadius", "f", 0.0), ("smoothNormals", "b", True), ("align", "u", 0), ("anchor", "u", 0),
+                 ("precise", "b", False)]
+
+SHAPE_ALTS = [
+    [("halfExtents", "v3", [0.5, 0.5, 0.5])],
+    [("radius", "f", 0.5)],
+    [("radius", "f", 0.5), ("halfHeight", "f", 0.5)],
+    [("meshSourceModelId", "u", 0), ("meshPrecise", "b", False), ("proceduralType", PROC, NO_PROC), ("splineParams", S(SPLINE_PARAMS), {}),
+     ("text3DSource", S(TEXT3D_SOURCE), {})],
+]
+PHYSICS_SHAPE = [("type", ("variant", SHAPE_ALTS), (0, {})), ("offset", "v3", [0.0, 0.0, 0.0]), ("rotation", "q", [1.0, 0.0, 0.0, 0.0]),
+                 ("bakedScale", "v3", [1.0, 1.0, 1.0])]
+
+PATH_POINT_SETTINGS = [("rotation", "q", [1.0, 0.0, 0.0, 0.0]), ("easing", "u", 0), ("speed", "f", 1.0), ("waitTime", "f", 0.0)]
+
+RENDER_TAIL = [("renderOffset", "v3", [0.0, 0.0, 0.0]), ("renderRotation", "q", [1.0, 0.0, 0.0, 0.0])]
+
+# ---- components (WILL_REFLECT field order) ----
+
+FIELDS = {
+    "TransformComponent": [("translation", "v3", [0.0, 0.0, 0.0]), ("rotation", "q", [1.0, 0.0, 0.0, 0.0]), ("scale", "v3", [1.0, 1.0, 1.0])],
+    "HierarchyComponent": [("parentStableId", "u", 0)],
+    "NameComponent": [("name", "s", "")],
+    "PrefabInstanceComponent": [("prefabId", "u", 0), ("bMasterPrefab", "b", False)],
+    "StableIdComponent": [("id", "u", 0), ("sortOrder", "u", 0)],
+    "EntityFolderComponent": [("folderId", "u", 0)],
+    "SceneFolderComponent": [("folderId", "u", 0), ("parentFolder", "u", 0), ("name", "s", "")],
+    "FreeCameraComponent": [("moveSpeed", "f", 5.0), ("lookSpeed", "f", 0.1)],
+    "MotionBlurMovementComponent": [("bIsHorizontal", "b", False)],
+    "RenderFlagsComponent": [("visible", "b", True), ("probeBake", "b", True), ("ddgi", "b", True), ("motionBlur", "b", True),
+                             ("alphaCutout", "b", True), ("emissiveLight", "b", False), ("cameraMotionBlur", "b", True)],
+    "CheckpointComponent": [("checkpointId", "u", 0), ("priority", "i", 0), ("spawnOffset", "v3", [0.0, 0.0, 0.0]),
+                            ("spawnRotation", "v3", [0.0, 0.0, 0.0])],
+    "PlayerSpawnComponent": [("priority", "i", 0), ("offset", "v3", [0.0, 0.0, 0.0])],
+    "RotateInPlaceComponent": [("axis", "v3", [0.0, 1.0, 0.0]), ("speedDegrees", "f", 45.0), ("bWorldSpace", "b", False)],
+    "PathMoverComponent": [("spline", S(SPLINE), {}), ("pointSettings", ("list", S(PATH_POINT_SETTINGS)), []), ("loopMode", "u", 2),
+                           ("currentSegment", "i", 0), ("progress", "f", 0.0), ("direction", "i", 1), ("bIsWaiting", "b", False),
+                           ("waitTimer", "f", 0.0)],
+    "DebugGizmoComponent": [("shape", "u", 1), ("extents", "v3", [0.5, 0.5, 0.5]), ("color", "v4", [0.0, 1.0, 0.0, 1.0]), ("lineWidth", "f", 0.05)],
+    "StaticMeshComponent": [("modelId", "u", 0), ("shadingShaderOverride", "u", 0), ("lightingShaderOverride", "u", 0)] + RENDER_TAIL,
+    "StaticMeshOverridesComponent": [("materialOverrides", ("list", S([("slot", "u", 0), ("id", "u", 0)])), []),
+                                     ("primitiveBlacklist", ("list", "u"), [])],
+    "StaticMeshPrimitiveComponent": [("modelId", "u", 0), ("primitiveOrdinal", "u", 0xFFFFFFFF), ("materialOverride", "u", 0),
+                                     ("shadingShaderOverride", "u", 0), ("lightingShaderOverride", "u", 0)] + RENDER_TAIL,
+    "ModuleMeshComponent": [("params", S(MODULE_PARAMS), {}), ("slotMaterials", ("array", "u", 8), [])] + RENDER_TAIL,
+    "ProceduralMeshComponent": [("type", PROC, NO_PROC), ("material", "u", 0)] + RENDER_TAIL,
+    "SplineMeshComponent": SPLINE_PARAMS + [("material", "u", 0), ("renderOffset", "v3", [0.0, 0.0, 0.0])],
+    "Text3DComponent": [f for f in TEXT3D_SOURCE if f[0] != "precise"] + [("material", "u", 0)] + RENDER_TAIL,
+    "TextComponent": [("fontId", "u", 0), ("textMaterialId", "u", 0), ("text", "s", ""), ("scale", "f", 1.0), ("color", "v4", [1.0, 1.0, 1.0, 1.0]),
+                      ("align", "u", 0), ("anchor", "u", 0), ("wrapWidth", "f", 0.0)],
+    "LocalDDGIVolumeComponent": [("volumeId", "u", 0), ("bEnabled", "b", True), ("probeSpacing", "f", 0.5)],
+    "ReflectionProbeComponent": [("probeId", "u", 0), ("bEnabled", "b", True), ("shape", "u", 0), ("fadeMargin", "f", 0.5),
+                                 ("captureOffset", "v3", [0.0, 0.0, 0.0]), ("bParallax", "b", True), ("resolution", "u", 1),
+                                 ("standInEnvMap", "u", 0), ("standInIntensity", "f", 65536.0)],
+    "AreaLightComponent": [("color", "v3", [1.0, 1.0, 1.0]), ("intensity", "f", 65536.0), ("halfWidth", "f", 1.0), ("halfHeight", "f", 1.0),
+                           ("range", "f", 10.0), ("coneOuterDegrees", "f", 90.0), ("coneInnerDegrees", "f", 90.0), ("bDisk", "b", False),
+                           ("drawEmissiveSurface", "b", True), ("bExcludeFromProbeBake", "b", False)],
+    "SphereLightComponent": [("color", "v3", [1.0, 1.0, 1.0]), ("intensity", "f", 65536.0), ("radius", "f", 0.5), ("range", "f", 10.0),
+                             ("drawEmissiveSurface", "b", True), ("bExcludeFromProbeBake", "b", False)],
+    "DirectionalLightComponent": [("color", "v3", [1.0, 1.0, 1.0]), ("intensity", "f", 131072.0), ("priority", "i", 0),
+                                  ("angularRadiusDegrees", "f", 1.0)],
+    "SkyboxComponent": [("envMap", "u", 0), ("intensity", "f", 65536.0), ("priority", "i", 0), ("bEnabled", "b", True)],
+    "PhysicsBodyDesc": [("motionType", "u", 0), ("mass", "f", 1.0), ("friction", "f", 0.5), ("restitution", "f", 0.0), ("motionQuality", "u", 0),
+                        ("layerOverride", "u", 0xFFFF), ("enhancedInternalEdgeRemoval", "b", False), ("isSensor", "b", False),
+                        ("shapes", ("list", S(PHYSICS_SHAPE)), [])],
+}
+
+TAGS = ["DeathZoneComponent", "AntiGravityTag", "FloorTag", "DrawPhysicsDebugTag"]
 
 
-# ---- shared: spline block body (Engine::Spline::Serialize) ----
+# ---- adapters: wscene_authoring dict shapes -> reflected field dicts ----
 
-def spline_body(w, j):
-    opt_i(w, "mode", j, "mode", 1)
-    opt_b(w, "bClosed", j, "bClosed", False)
+def proc_value(ptype, j):
+    ptype = int(ptype)
+    if ptype == 0:
+        return NO_PROC
+    fields = dict(j)
+    if ptype == 25:
+        openings = [o if isinstance(o, dict) else dict(zip("xywh", o)) for o in j.get("openings", [])]
+        fields["openings"] = openings
+        fields.setdefault("openingCount", len(openings))
+    return (ptype, fields)
+
+
+def spline_value(j):
     points = j.get("points", [])
     rolls = j.get("rolls", [])
-    if points:
-        w.key("points", len(points))
-        for i, p in enumerate(points):
-            w.begin("p")
-            w.key_f("pos", *p)
-            roll = float(rolls[i]) if i < len(rolls) else 0.0
-            if roll != 0.0:
-                w.key_f("roll", roll)
-            w.end()
+    return {"mode": j.get("mode", 1), "bClosed": j.get("bClosed", False),
+            "points": [p if isinstance(p, dict) else {"pos": p, "roll": rolls[i] if i < len(rolls) else 0.0} for i, p in enumerate(points)]}
 
 
-# ---- shared: procedural shape fields (Component::SerializeProceduralShape) ----
-# (key, kind, default); kind: f float, i int, b bool. Defaults mirror the C++ deserializer.
+def spline_params_value(j):
+    """Flat spline_fields() dict -> SplineParams (profile/railing blocks)."""
+    v = {k: j[k] for k in ("radius", "rollAngle", "sides", "segmentsPerSpan", "bCaps", "bCrossPlanks", "crossPlankInterval",
+                           "crossPlankHeight", "crossPlankThickness", "crossPlankLength") if k in j}
+    v["spline"] = spline_value(j.get("spline", {}))
+    v["profile"] = {"type": j.get("profileType", 0), "width": j.get("profileWidth", 0.4), "height": j.get("profileHeight", 0.4),
+                    "cornerRadius": j.get("profileCornerRadius", 0.08), "cornerSegments": j.get("profileCornerSegments", 3),
+                    "thickness": j.get("profileThickness", 0.05)}
+    v["railing"] = {"bEnabled": j.get("railingEnabled", False), "lanes": j.get("railingLanes", []), "bPosts": j.get("railingPosts", True),
+                    "postInterval": j.get("railingPostInterval", 4), "postBottom": j.get("railingPostBottom", 0.0),
+                    "postTop": j.get("railingPostTop", 1.0), "postSize": [j.get("railingPostSizeX", 0.05), j.get("railingPostSizeY", 0.05)],
+                    "postLateral": j.get("railingPostLateral", 0.0), "lateralOffset": j.get("railingLateralOffset", 0.0)}
+    return v
 
-def _stair_defaults(j):
-    steps = max(int(j.get("stepCount", 0)), 1)
-    return float(j.get("totalHeight", 0.0)) / steps
+
+def a_path_mover(j):
+    v = dict(j)
+    v["spline"] = spline_value(j.get("spline", {}))
+    settings = []
+    for ps in j.get("pointSettings", []):
+        r = ps.get("rotation", [0.0, 0.0, 0.0, 1.0])  # authored x,y,z,w
+        settings.append({**ps, "rotation": [r[3], r[0], r[1], r[2]]})
+    v["pointSettings"] = settings
+    return v
 
 
-PROC_FIELDS = {
-    1: lambda j: [("stepCount", "i", 0), ("width", "f", 0.0), ("totalDepth", "f", 0.0), ("totalHeight", "f", 0.0),
-                  ("bSpecifyStepHeight", "b", False), ("stepHeight", "f", _stair_defaults(j)), ("bIsClosed", "b", True)],
-    2: lambda j: [("sizeX", "f", 0.0), ("sizeY", "f", 0.0), ("sizeZ", "f", 0.0)],
-    3: lambda j: [("radius", "f", 0.0), ("height", "f", 0.0), ("slices", "i", 0), ("bCapped", "b", False)],
-    4: lambda j: [("radius", "f", 0.0), ("height", "f", 0.0), ("slices", "i", 0), ("rings", "i", 0)],
-    5: lambda j: [("ringRadius", "f", 0.0), ("tubeRadius", "f", 0.0), ("slices", "i", 0), ("stacks", "i", 0)],
-    6: lambda j: [("width", "f", 0.0), ("height", "f", 0.0), ("depth", "f", 0.0), ("thickness", "f", 0.0),
-                  ("sides", "i", 0), ("bFillCorners", "b", False)],
-    7: lambda j: [("sizeX", "f", 0.0), ("sizeY", "f", 0.0), ("sizeZ", "f", 0.0)],
-    8: lambda j: [("radius", "f", 0.0), ("height", "f", 0.0), ("slices", "i", 0), ("bCapped", "b", False)],
-    9: lambda j: [("width", "f", 0.0), ("height", "f", 0.0), ("depth", "f", 0.0), ("archHeight", "f", 0.5),
-                  ("gap", "f", 0.0), ("sides", "i", 0), ("bHalf", "b", False), ("bFlip", "b", False)],
-    10: lambda j: [("sizeX", "f", 0.0), ("sizeZ", "f", 0.0), ("tilesX", "i", 0), ("tilesZ", "i", 0)],
-    11: lambda j: [("radius", "f", 0.0), ("slices", "i", 0), ("stacks", "i", 0)],
-    12: lambda j: [("radius", "f", 0.0), ("subdivisions", "i", 0)],
-    13: lambda j: [("radius", "f", 0.0), ("slices", "i", 0), ("stacks", "i", 0)],
-    14: lambda j: [("outerRadius", "f", 0.0), ("innerRadius", "f", 0.0), ("height", "f", 0.0), ("slices", "i", 0)],
-    15: lambda j: [("radius", "f", 0.0)],
-    16: lambda j: [("radius", "f", 0.0)],
-    17: lambda j: [("radius", "f", 0.0)],
-    18: lambda j: [("radius", "f", 0.0)],
-    19: lambda j: [("scale", "f", 0.0), ("slices", "i", 0), ("stacks", "i", 0)],
-    20: lambda j: [("scale", "f", 0.0), ("tubeRadius", "f", 0.0), ("slices", "i", 0), ("stacks", "i", 0)],
-    21: lambda j: [("width", "f", 0.0), ("height", "f", 0.0), ("radius", "f", 0.0), ("segments", "i", 0),
-                   ("bHalfPipe", "b", False), ("flatLength", "f", 1.0), ("lipHeight", "f", 0.02)],
-    22: lambda j: [("radius", "f", 0.0), ("height", "f", 0.0), ("curveRadius", "f", 0.0), ("flatRadius", "f", 0.0),
-                   ("lipHeight", "f", 0.02), ("slices", "i", 0), ("segments", "i", 0)],
-    23: lambda j: [("stepCount", "i", 0), ("stepHeight", "f", 0.0),
-                   ("totalHeight", "f", float(j.get("stepHeight", 0.0)) * max(int(j.get("stepCount", 0)), 1)),
-                   ("bSpecifyStepHeight", "b", False), ("outerRadius", "f", 0.0), ("centerColumnRadius", "f", 0.0),
-                   ("treadThickness", "f", 0.08), ("degreesPerStep", "f", 30.0),
-                   ("totalSweep", "f", float(j.get("degreesPerStep", 30.0)) * max(int(j.get("stepCount", 0)), 1)),
-                   ("bSpecifyDegreesPerStep", "b", False), ("arcSegments", "i", 6), ("bShowCenterColumn", "b", True),
-                   ("bRamp", "b", False)],
-    24: lambda j: [("outerRadius", "f", 0.0), ("innerRadius", "f", 0.0), ("slices", "i", 0), ("bDoubleSided", "b", True)],
-    25: lambda j: [("sizeX", "f", 0.0), ("sizeY", "f", 0.0), ("sizeZ", "f", 0.0)],
-    26: lambda j: [("sizeX", "f", 0.0), ("sizeY", "f", 0.0), ("sizeZ", "f", 0.0), ("chordSize", "f", 0.0),
-                   ("braceSize", "f", 0.0), ("bayCount", "i", 0), ("pattern", "i", 0)],
-    27: lambda j: [("sizeX", "f", 0.0), ("sizeY", "f", 0.0), ("sizeZ", "f", 0.0), ("ribDepth", "f", 0.0),
-                   ("ribWidth", "f", 0.0), ("ribCount", "i", 0)],
+def a_module_mesh(j):
+    v = dict(j)
+    v["params"] = {"parts": [{**p, "type": proc_value(p.get("type", 0), p)} for p in j.get("parts", [])]}
+    v["slotMaterials"] = list(j.get("slotMaterials", []))
+    return v
+
+
+def a_procedural_mesh(j):
+    return {**j, "type": proc_value(j.get("type", 0), j)}
+
+
+def a_spline_mesh(j):
+    return {**spline_params_value(j), "material": j.get("material", 0), "renderOffset": j.get("renderOffset", [0.0, 0.0, 0.0])}
+
+
+def a_static_mesh_overrides(j):
+    return {"materialOverrides": [{"slot": int(slot), "id": mid} for slot, mid in j.get("materialOverrides", {}).items()],
+            "primitiveBlacklist": list(j.get("primitiveBlacklist", []))}
+
+
+def a_physics_shape(s):
+    stype = min(int(s.get("type", 0)), 3)  # legacy 4/5 were Collider
+    fields = dict(s)
+    if stype == 3:
+        fields["proceduralType"] = proc_value(s.get("proceduralType", 0), s)
+        if "splineParams" in s:
+            fields["splineParams"] = spline_params_value(s["splineParams"])
+    v = {"type": (stype, fields), "offset": s.get("offset", [0.0, 0.0, 0.0]), "rotation": s.get("rotation", [1.0, 0.0, 0.0, 0.0])}
+    v["bakedScale"] = s.get("bakedScale", [s.get("bakedScaleX", 1.0), s.get("bakedScaleY", 1.0), s.get("bakedScaleZ", 1.0)])
+    return v
+
+
+def a_physics_body(j):
+    return {**j, "shapes": [a_physics_shape(s) for s in j.get("shapes", [])]}
+
+
+ADAPTERS = {
+    "PathMoverComponent": a_path_mover,
+    "ModuleMeshComponent": a_module_mesh,
+    "ProceduralMeshComponent": a_procedural_mesh,
+    "SplineMeshComponent": a_spline_mesh,
+    "StaticMeshOverridesComponent": a_static_mesh_overrides,
+    "PhysicsBodyDesc": a_physics_body,
 }
 
-
-def proc_shape_fields(w, ptype, j):
-    if ptype not in PROC_FIELDS:
-        return
-    for key, kind, d in PROC_FIELDS[ptype](j):
-        if kind == "f":
-            w.key_f(key, float(j.get(key, d)))
-        elif kind == "i":
-            v = int(j.get(key, d))
-            if ptype == 12 and key == "subdivisions":
-                v = max(0, min(v, 4))
-            w.key(key, v)
-        else:
-            w.key(key, bstr(j.get(key, d)))
-    if ptype == 25:
-        openings = j.get("openings", [])
-        if openings:
-            w.key("openings", len(openings))
-            for o in openings:
-                w.begin("o")
-                w.key_f("rect", *o)
-                w.end()
-
-
-# ---- shared: splineParams block body (physics collider shape) ----
-
-def spline_params_body(w, sp):
-    w.begin("spline")
-    spline_body(w, sp.get("spline", {}))
-    w.end()
-    w.key_f("radius", sp.get("radius", 0.5))
-    w.key_f("rollAngle", sp.get("rollAngle", 0.0))
-    w.key("sides", int(sp.get("sides", 8)))
-    w.key("segmentsPerSpan", int(sp.get("segmentsPerSpan", 8)))
-    w.key("bCaps", bstr(sp.get("bCaps", True)))
-    w.key("bCrossPlanks", bstr(sp.get("bCrossPlanks", False)))
-    w.key("crossPlankInterval", int(sp.get("crossPlankInterval", 4)))
-    w.key_f("crossPlankHeight", sp.get("crossPlankHeight", 0.0))
-    w.key_f("crossPlankThickness", sp.get("crossPlankThickness", 0.1))
-    w.key_f("crossPlankLength", sp.get("crossPlankLength", 0.3))
-    w.key("profileType", int(sp.get("profileType", 0)))
-    w.key_f("profileWidth", sp.get("profileWidth", 0.4))
-    w.key_f("profileHeight", sp.get("profileHeight", 0.4))
-    w.key_f("profileCornerRadius", sp.get("profileCornerRadius", 0.08))
-    w.key("profileCornerSegments", int(sp.get("profileCornerSegments", 3)))
-    w.key_f("profileThickness", sp.get("profileThickness", 0.05))
-    w.key("railingEnabled", bstr(sp.get("railingEnabled", False)))
-    w.key("railingPosts", bstr(sp.get("railingPosts", True)))
-    w.key("railingPostInterval", int(sp.get("railingPostInterval", 4)))
-    w.key_f("railingPostBottom", sp.get("railingPostBottom", 0.0))
-    w.key_f("railingPostTop", sp.get("railingPostTop", 1.0))
-    w.key_f("railingPostSize", sp.get("railingPostSizeX", 0.05), sp.get("railingPostSizeY", 0.05))
-    w.key_f("railingPostLateral", sp.get("railingPostLateral", 0.0))
-    w.key_f("railingLateralOffset", sp.get("railingLateralOffset", 0.0))
-    lanes = sp.get("railingLanes", [])
-    if lanes:
-        w.key("railingLanes", len(lanes))
-        for lane in lanes:
-            w.begin("l")
-            w.key_f("lane", *lane)
-            w.end()
-
-
-def text3d_source_body(w, t3):
-    w.key("fontId", int(t3.get("fontId", 0)))
-    w.key_str("text", t3.get("text", ""))
-    w.key_f("depth", t3.get("depth", 0.2))
-    w.key_f("flatness", t3.get("flatness", 0.005))
-    w.key_f("tracking", t3.get("tracking", 0.0))
-    w.key_f("scale", t3.get("scale", 1.0))
-    w.key_f("wrapWidth", t3.get("wrapWidth", 0.0))
-    w.key_f("bendRadius", t3.get("bendRadius", 0.0))
-    w.key("smoothNormals", bstr(t3.get("smoothNormals", True)))
-    w.key("align", int(t3.get("align", 0)))
-    w.key("anchor", int(t3.get("anchor", 0)))
-    w.key("precise", bstr(t3.get("precise", False)))
-
-
-# ---- per-component emitters ----
-
-def c_transform(w, j):
-    opt_vec(w, "translation", j, "translation", [0.0, 0.0, 0.0])
-    opt_quat_wxyz(w, "rotation", j, "rotation")
-    opt_vec(w, "scale", j, "scale", [1.0, 1.0, 1.0])
-
-
-def c_hierarchy(w, j):
-    opt_i(w, "parentStableId", j, "parentStableId", 0)
-
-
-def c_name(w, j):
-    opt_str(w, "name", j, "name")
-
-
-def c_prefab_instance(w, j):
-    opt_i(w, "prefabId", j, "prefabId", 0)
-    opt_b(w, "bMasterPrefab", j, "bMasterPrefab", False)
-
-
-def c_stable_id(w, j):
-    opt_i(w, "id", j, "id", 0)
-    opt_i(w, "sortOrder", j, "sortOrder", 0)
-
-
-def c_entity_folder(w, j):
-    opt_i(w, "folderId", j, "folderId", 0)
-
-
-def c_scene_folder(w, j):
-    opt_i(w, "folderId", j, "folderId", 0)
-    opt_i(w, "parentFolder", j, "parentFolder", 0)
-    opt_str(w, "name", j, "name")
-
-
-def c_free_camera(w, j):
-    opt_f(w, "moveSpeed", j, "moveSpeed", 5.0)
-    opt_f(w, "lookSpeed", j, "lookSpeed", 0.1)
-
-
-def c_motion_blur(w, j):
-    opt_b(w, "bIsHorizontal", j, "bIsHorizontal", False)
-
-
-def c_render_flags(w, j):
-    for k in ("visible", "probeBake", "ddgi", "motionBlur", "alphaCutout"):
-        opt_b(w, k, j, k, True)
-    # Out of DEFAULT_FLAGS, so it defaults off rather than on like the rest.
-    opt_b(w, "emissiveLight", j, "emissiveLight", False)
-
-
-def c_checkpoint(w, j):
-    opt_i(w, "checkpointId", j, "checkpointId", 0)
-    opt_i(w, "priority", j, "priority", 0)
-    opt_vec(w, "spawnOffset", j, "spawnOffset", [0.0, 0.0, 0.0])
-    opt_vec(w, "spawnRotation", j, "spawnRotation", [0.0, 0.0, 0.0])
-
-
-def c_player_spawn(w, j):
-    opt_i(w, "priority", j, "priority", 0)
-    opt_vec(w, "offset", j, "offset", [0.0, 0.0, 0.0])
-
-
-def c_rotate_in_place(w, j):
-    opt_vec(w, "axis", j, "axis", [0.0, 1.0, 0.0])
-    opt_f(w, "speedDegrees", j, "speedDegrees", 45.0)
-    opt_b(w, "bWorldSpace", j, "bWorldSpace", False)
-
-
-def c_path_mover(w, j):
-    w.key("loopMode", int(j.get("loopMode", 0)))
-    w.begin("spline")
-    spline_body(w, j.get("spline", {}))
-    w.end()
-    settings = j.get("pointSettings", [])
-    if settings:
-        w.key("pointSettings", len(settings))
-        for ps in settings:
-            w.begin("p")
-            r = ps.get("rotation", [0.0, 0.0, 0.0, 1.0])  # JSON stored x,y,z,w
-            q = [float(r[3]), float(r[0]), float(r[1]), float(r[2])]
-            if q != [1.0, 0.0, 0.0, 0.0]:
-                w.key_f("rotation", *q)
-            opt_i(w, "easing", ps, "easing", 0)
-            opt_f(w, "speed", ps, "speed", 1.0)
-            opt_f(w, "waitTime", ps, "waitTime", 0.0)
-            w.end()
-    opt_i(w, "currentSegment", j, "currentSegment", 0)
-    opt_f(w, "progress", j, "progress", 0.0)
-    opt_i(w, "direction", j, "direction", 1)
-    opt_b(w, "bIsWaiting", j, "bIsWaiting", False)
-    opt_f(w, "waitTimer", j, "waitTimer", 0.0)
-
-
-def c_debug_gizmo(w, j):
-    opt_i(w, "shape", j, "shape", 1)
-    opt_vec(w, "extents", j, "extents", [0.5, 0.5, 0.5])
-    opt_vec(w, "color", j, "color", [0.0, 1.0, 0.0, 1.0])
-    opt_f(w, "lineWidth", j, "lineWidth", 0.05)
-
-
-def c_static_mesh(w, j):
-    w.key("modelId", int(j.get("modelId", 0)))
-    overrides = j.get("materialOverrides", {})
-    if overrides:
-        w.key("materialOverrides", len(overrides))
-        for slot, mid in overrides.items():
-            w.begin("m")
-            w.key("slot", int(slot))
-            w.key("id", int(mid))
-            w.end()
-    blacklist = j.get("primitiveBlacklist", [])
-    if blacklist:
-        w.key("primitiveBlacklist", *[int(v) for v in blacklist])
-    opt_i(w, "shadingShaderOverride", j, "shadingShaderOverride", 0)
-    opt_i(w, "lightingShaderOverride", j, "lightingShaderOverride", 0)
-    opt_vec(w, "renderOffset", j, "renderOffset", [0.0, 0.0, 0.0])
-    opt_quat_wxyz(w, "renderRotation", j, "renderRotation")
-
-
-def c_static_mesh_primitive(w, j):
-    w.key("modelId", int(j.get("modelId", 0)))
-    w.key("primitiveOrdinal", int(j.get("primitiveOrdinal", 0)) & 0xFFFFFFFF)
-    opt_i(w, "materialOverride", j, "materialOverride", 0)
-    opt_i(w, "shadingShaderOverride", j, "shadingShaderOverride", 0)
-    opt_i(w, "lightingShaderOverride", j, "lightingShaderOverride", 0)
-    opt_vec(w, "renderOffset", j, "renderOffset", [0.0, 0.0, 0.0])
-    opt_quat_wxyz(w, "renderRotation", j, "renderRotation")
-
-
-def c_module_mesh(w, j):
-    opt_vec(w, "renderOffset", j, "renderOffset", [0.0, 0.0, 0.0])
-    opt_quat_wxyz(w, "renderRotation", j, "renderRotation")
-    slots = j.get("slotMaterials", [])
-    w.key("slotMaterials", 8)
-    for i in range(8):
-        w.begin("s")
-        mid = int(slots[i]) if i < len(slots) else 0
-        if mid != 0:
-            w.key("id", mid)
-        w.end()
-    parts = j.get("parts", [])
-    if parts:
-        w.key("parts", len(parts))
-        for p in parts:
-            w.begin("p")
-            ptype = int(p.get("type", 0))
-            w.key("type", ptype)
-            proc_shape_fields(w, ptype, p)
-            w.key_f("offset", *p.get("offset", [0.0, 0.0, 0.0]))
-            w.key_f("rotation", *p.get("rotation", [1.0, 0.0, 0.0, 0.0]))  # already w,x,y,z
-            w.key("slot", int(p.get("slot", 0)))
-            w.end()
-
-
-def c_procedural_mesh(w, j):
-    ptype = int(j.get("type", 0))
-    w.key("type", ptype)
-    w.key("material", int(j.get("material", 0)))
-    opt_vec(w, "renderOffset", j, "renderOffset", [0.0, 0.0, 0.0])
-    opt_quat_wxyz(w, "renderRotation", j, "renderRotation")
-    proc_shape_fields(w, ptype, j)
-
-
-def c_spline_mesh(w, j):
-    w.begin("spline")
-    spline_body(w, j.get("spline", {}))
-    w.end()
-    spm = dict(j)
-    spm.pop("spline", None)
-    # same always-write field run as splineParams minus the wrapper block, plus material
-    w.key_f("radius", j.get("radius", 0.5))
-    w.key_f("rollAngle", j.get("rollAngle", 0.0))
-    w.key("sides", int(j.get("sides", 8)))
-    w.key("segmentsPerSpan", int(j.get("segmentsPerSpan", 8)))
-    w.key("bCaps", bstr(j.get("bCaps", True)))
-    w.key("bCrossPlanks", bstr(j.get("bCrossPlanks", False)))
-    w.key("crossPlankInterval", int(j.get("crossPlankInterval", 4)))
-    w.key_f("crossPlankHeight", j.get("crossPlankHeight", 0.0))
-    w.key_f("crossPlankThickness", j.get("crossPlankThickness", 0.1))
-    w.key_f("crossPlankLength", j.get("crossPlankLength", 0.3))
-    w.key("profileType", int(j.get("profileType", 0)))
-    w.key_f("profileWidth", j.get("profileWidth", 0.4))
-    w.key_f("profileHeight", j.get("profileHeight", 0.4))
-    w.key_f("profileCornerRadius", j.get("profileCornerRadius", 0.08))
-    w.key("profileCornerSegments", int(j.get("profileCornerSegments", 3)))
-    w.key_f("profileThickness", j.get("profileThickness", 0.05))
-    w.key("railingEnabled", bstr(j.get("railingEnabled", False)))
-    w.key("railingPosts", bstr(j.get("railingPosts", True)))
-    w.key("railingPostInterval", int(j.get("railingPostInterval", 4)))
-    w.key_f("railingPostBottom", j.get("railingPostBottom", 0.0))
-    w.key_f("railingPostTop", j.get("railingPostTop", 1.0))
-    w.key_f("railingPostSize", j.get("railingPostSizeX", 0.05), j.get("railingPostSizeY", 0.05))
-    w.key_f("railingPostLateral", j.get("railingPostLateral", 0.0))
-    w.key_f("railingLateralOffset", j.get("railingLateralOffset", 0.0))
-    lanes = j.get("railingLanes", [])
-    if lanes:
-        w.key("railingLanes", len(lanes))
-        for lane in lanes:
-            w.begin("l")
-            w.key_f("lane", *lane)
-            w.end()
-    w.key("material", int(j.get("material", 0)))
-
-
-def c_text3d(w, j):
-    w.key("fontId", int(j.get("fontId", 0)))
-    opt_str(w, "text", j, "text")
-    opt_f(w, "depth", j, "depth", 0.2)
-    opt_f(w, "flatness", j, "flatness", 0.005)
-    opt_f(w, "tracking", j, "tracking", 0.0)
-    opt_f(w, "scale", j, "scale", 1.0)
-    opt_f(w, "wrapWidth", j, "wrapWidth", 0.0)
-    opt_f(w, "bendRadius", j, "bendRadius", 0.0)
-    opt_b(w, "smoothNormals", j, "smoothNormals", True)
-    opt_i(w, "align", j, "align", 0)
-    opt_i(w, "anchor", j, "anchor", 0)
-    w.key("material", int(j.get("material", 0)))
-    opt_vec(w, "renderOffset", j, "renderOffset", [0.0, 0.0, 0.0])
-    opt_quat_wxyz(w, "renderRotation", j, "renderRotation")
-
-
-def c_text(w, j):
-    w.key("fontId", int(j.get("fontId", 0)))
-    opt_i(w, "textMaterialId", j, "textMaterialId", 0)
-    opt_str(w, "text", j, "text")
-    opt_f(w, "scale", j, "scale", 1.0)
-    opt_vec(w, "color", j, "color", [1.0, 1.0, 1.0, 1.0])
-    opt_i(w, "align", j, "align", 0)
-    opt_i(w, "anchor", j, "anchor", 0)
-    opt_f(w, "wrapWidth", j, "wrapWidth", 0.0)
-
-
-def c_local_ddgi(w, j):
-    opt_i(w, "volumeId", j, "volumeId", 0)
-    opt_b(w, "bEnabled", j, "bEnabled", True)
-    opt_f(w, "probeSpacing", j, "probeSpacing", 0.5)
-
-
-def c_reflection_probe(w, j):
-    opt_i(w, "probeId", j, "probeId", 0)
-    opt_b(w, "bEnabled", j, "bEnabled", True)
-    opt_i(w, "shape", j, "shape", 0)
-    opt_f(w, "fadeMargin", j, "fadeMargin", 0.5)
-    opt_vec(w, "captureOffset", j, "captureOffset", [0.0, 0.0, 0.0])
-    opt_b(w, "bParallax", j, "bParallax", True)
-    opt_i(w, "resolution", j, "resolution", 1)
-    opt_i(w, "standInEnvMap", j, "standInEnvMap", 0)
-
-
-def c_area_light(w, j):
-    opt_vec(w, "color", j, "color", [1.0, 1.0, 1.0])
-    opt_f(w, "intensity", j, "intensity", 1.0)
-    opt_f(w, "halfWidth", j, "halfWidth", 1.0)
-    opt_f(w, "halfHeight", j, "halfHeight", 1.0)
-    opt_f(w, "range", j, "range", 10.0)
-    opt_b(w, "drawEmissiveSurface", j, "drawEmissiveSurface", True)
-    opt_b(w, "bExcludeFromProbeBake", j, "bExcludeFromProbeBake", False)
-
-
-def c_sphere_light(w, j):
-    opt_vec(w, "color", j, "color", [1.0, 1.0, 1.0])
-    opt_f(w, "intensity", j, "intensity", 1.0)
-    opt_f(w, "radius", j, "radius", 0.5)
-    opt_f(w, "range", j, "range", 10.0)
-    opt_b(w, "drawEmissiveSurface", j, "drawEmissiveSurface", True)
-    opt_b(w, "bExcludeFromProbeBake", j, "bExcludeFromProbeBake", False)
-
-
-def c_directional_light(w, j):
-    opt_vec(w, "color", j, "color", [1.0, 1.0, 1.0])
-    opt_f(w, "intensity", j, "intensity", 2.0)
-    opt_i(w, "priority", j, "priority", 0)
-    opt_f(w, "angularRadiusDegrees", j, "angularRadiusDegrees", 1.0)
-
-
-def c_skybox(w, j):
-    opt_i(w, "envMap", j, "envMap", 0)
-    opt_f(w, "intensity", j, "intensity", 1.0)
-    opt_i(w, "priority", j, "priority", 0)
-
-
-def c_physics_body(w, j):
-    w.key("motionType", int(j.get("motionType", 0)))
-    w.key_f("mass", j.get("mass", 1.0))
-    w.key_f("friction", j.get("friction", 0.0))
-    w.key_f("restitution", j.get("restitution", 0.0))
-    w.key("motionQuality", int(j.get("motionQuality", 0)))
-    w.key("layerOverride", int(j.get("layerOverride", 0xFFFF)))
-    w.key("enhancedInternalEdgeRemoval", bstr(j.get("enhancedInternalEdgeRemoval", False)))
-    w.key("isSensor", bstr(j.get("isSensor", False)))
-    shapes = j.get("shapes", [])
-    if not shapes:
-        return
-    w.key("shapes", len(shapes))
-    for s in shapes:
-        w.begin("shape")
-        stype = min(int(s.get("type", 0)), 3)  # legacy 4/5 collapse to Collider, matching the C++ migration
-        w.key("type", stype)
-        w.key_f("offset", *s.get("offset", [0.0, 0.0, 0.0]))
-        w.key_f("rotation", *s.get("rotation", [1.0, 0.0, 0.0, 0.0]))  # already w,x,y,z
-        w.key_f("bakedScale", s.get("bakedScaleX", 1.0), s.get("bakedScaleY", 1.0), s.get("bakedScaleZ", 1.0))
-        if stype == 0:
-            w.key_f("halfExtents", *s.get("halfExtents", [0.5, 0.5, 0.5]))
-        elif stype == 1:
-            w.key_f("radius", s.get("radius", 0.5))
-        elif stype == 2:
-            w.key_f("radius", s.get("radius", 0.5))
-            w.key_f("halfHeight", s.get("halfHeight", 0.5))
-        elif stype == 3:
-            w.key("meshSourceModelId", int(s.get("meshSourceModelId", 0)))
-            w.key("meshPrecise", bstr(s.get("meshPrecise", False)))
-            ptype = int(s.get("proceduralType", 0))
-            w.key("proceduralType", ptype)
-            if "splineParams" in s:
-                w.begin("splineParams")
-                spline_params_body(w, s["splineParams"])
-                w.end()
-            if "text3DSource" in s:
-                w.begin("text3DSource")
-                text3d_source_body(w, s["text3DSource"])
-                w.end()
-            proc_shape_fields(w, ptype, s)
-        w.end()
-
-
-COMPONENTS = {
-    type_key("TransformComponent"): c_transform,
-    type_key("HierarchyComponent"): c_hierarchy,
-    type_key("NameComponent"): c_name,
-    type_key("PrefabInstanceComponent"): c_prefab_instance,
-    type_key("StableIdComponent"): c_stable_id,
-    type_key("EntityFolderComponent"): c_entity_folder,
-    type_key("SceneFolderComponent"): c_scene_folder,
-    type_key("FreeCameraComponent"): c_free_camera,
-    type_key("MotionBlurMovementComponent"): c_motion_blur,
-    type_key("RenderFlagsComponent"): c_render_flags,
-    type_key("CheckpointComponent"): c_checkpoint,
-    type_key("PlayerSpawnComponent"): c_player_spawn,
-    type_key("RotateInPlaceComponent"): c_rotate_in_place,
-    type_key("PathMoverComponent"): c_path_mover,
-    type_key("DebugGizmoComponent"): c_debug_gizmo,
-    type_key("StaticMeshComponent"): c_static_mesh,
-    type_key("StaticMeshPrimitiveComponent"): c_static_mesh_primitive,
-    type_key("ModuleMeshComponent"): c_module_mesh,
-    type_key("ProceduralMeshComponent"): c_procedural_mesh,
-    type_key("SplineMeshComponent"): c_spline_mesh,
-    type_key("Text3DComponent"): c_text3d,
-    type_key("TextComponent"): c_text,
-    type_key("LocalDDGIVolumeComponent"): c_local_ddgi,
-    type_key("ReflectionProbeComponent"): c_reflection_probe,
-    type_key("AreaLightComponent"): c_area_light,
-    type_key("SphereLightComponent"): c_sphere_light,
-    type_key("DirectionalLightComponent"): c_directional_light,
-    type_key("SkyboxComponent"): c_skybox,
-    type_key("PhysicsBodyDesc"): c_physics_body,
-}
-
-TAGS = {type_key(n) for n in ["DeathZoneComponent", "AntiGravityTag", "FloorTag", "DrawPhysicsDebugTag"]}
+COMPONENTS = {type_key(n): n for n in FIELDS}
+TAG_KEYS = {type_key(n) for n in TAGS}
 
 
 def emit_component_block(w, type_id, comp):
     w.begin(type_id)
     if type_id in COMPONENTS:
-        COMPONENTS[type_id](w, comp or {})
-    elif type_id in TAGS:
-        pass
-    else:
+        name = COMPONENTS[type_id]
+        v = comp or {}
+        if name in ADAPTERS:
+            v = ADAPTERS[name](v)
+        write_fields(w, FIELDS[name], v)
+    elif type_id not in TAG_KEYS:
         raise ValueError("unknown component typeId " + type_id)
     w.end()
 
@@ -614,7 +403,6 @@ def emit_component_block(w, type_id, comp):
 def scene_body(j):
     w = W()
     w.key("scene_id", int(j["scene_id"]))
-    w.key_str("scene_name", j.get("scene_name", ""))
     entities = j.get("entities", [])
     if entities:
         w.key("entities", len(entities))
@@ -637,5 +425,3 @@ def prefab_body(j):
     for type_id, comp in j.items():
         emit_component_block(w, type_id, comp)
     return w.text()
-
-

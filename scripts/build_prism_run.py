@@ -37,8 +37,7 @@ ROBOTO_FONT = IDX.font("Roboto")
 SKY = IDX.envmap("kloofendal_48d_partly_cloudy_puresky_4k")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_NAME = "Prism Run"
-SCENE_PATH = os.path.join(REPO, "scenes", "prism_run.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "ballance", "prism_run.wscene")
 SCENE_ID = name_id("prism_run")
 ROTATE = wa.component_key("RotateInPlaceComponent")
 
@@ -805,9 +804,9 @@ if len(sys.argv) > 2 and sys.argv[1] == "--test-spawn":
     t = base_entity("Test Spawn", pos)
     t[SPAWN] = {"offset": [0.0, 0.0, 0.0], "priority": 50}
     entities.append(t)
-    SCENE_PATH = os.path.join(REPO, "scenes", "_prism_test.wscene")
-    SCENE_NAME, SCENE_ID = "Prism Run Test", name_id("prism_run_test")
+    SCENE_PATH = os.path.join(REPO, "scenes", "ballance", "_prism_test.wscene")
+    SCENE_ID = name_id("prism_run_test")
 
 camera = {"rotation": list(wa.camera_look_quat(-40.0, -38.0, 95.0)), "translation": [75.0, 70.0, -10.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, SCENE_NAME, editor_camera=camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=camera)
 print(f"wrote {SCENE_PATH}: {len(entities)} entities, {len(CHECKPOINTS)} checkpoints")

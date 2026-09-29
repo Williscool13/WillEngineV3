@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builds the instance stress scene: scenes/instance_stress.wscene
+Builds the instance stress scene: scenes/sandbox/instance_stress.wscene
 Run from repo root:  python scripts/build_instance_stress.py
 
 A 47x47x47 lattice of BoxTextured4k instances with the central 13x13x13 block carved out,
@@ -37,7 +37,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "instance_stress.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "sandbox", "instance_stress.wscene")
 SCENE_ID = name_id("instance_stress")
 
 # 47 and 13 are both odd so the void centres exactly on the lattice centre cell (index 23).
@@ -139,11 +139,11 @@ def main():
     # Sun direction is the entity's local +Z, so build a basis whose fwd is the direction we want.
     sun_right, sun_up, sun_fwd, _ = wa.basis_for((0.0, 0.0, 0.0), (0.35, -1.0, 0.5))
     sun = base_entity("Sun", (0.0, 0.0, 0.0), rot=wa.mat_to_quat(sun_right, sun_up, sun_fwd))
-    add_directional_light(sun, color=(1.0, 0.96, 0.9), intensity=4.0, priority=1, angular_radius_deg=0.6)
+    add_directional_light(sun, color=(1.0, 0.96, 0.9), intensity=262144.0, priority=1, angular_radius_deg=0.6)
     entities.append(sun)
 
     sky = base_entity("Skybox", (0.0, 0.0, 0.0))
-    add_skybox(sky, envmap, intensity=1.0, priority=1)
+    add_skybox(sky, envmap, intensity=65536.0, priority=1)
     entities.append(sky)
 
     spawn = base_entity("PlayerSpawn", (0.0, SPAWN_HEIGHT, 0.0))
@@ -151,7 +151,7 @@ def main():
     entities.append(spawn)
 
     camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 3.0, 20.0]}
-    write_scene(SCENE_PATH, entities, SCENE_ID, "instance_stress", editor_camera=camera)
+    write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=camera)
 
     size_mb = os.path.getsize(SCENE_PATH) / (1024.0 * 1024.0)
     print("wrote {}".format(SCENE_PATH))

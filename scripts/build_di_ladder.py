@@ -55,7 +55,7 @@ import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
-SCENE_PATH = os.path.join(REPO, "scenes", "di_ladder.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "di_ladder.wscene")
 SCENE_ID = name_id("di_ladder")
 
 IDX = asset_index.scan()
@@ -115,9 +115,9 @@ HERO_FRAC = 0.5
 ANALYTIC_RUNGS = [4, 16, 64, 256]
 EMISSIVE_RUNGS = [4, 16, 64]
 AREA_RUNGS = [4, 16, 64, 256]
-ANALYTIC_TOTAL = 240.0          # summed sphere-light intensity per room; 4-rung lights land at 60 each, lab-typical
-EMISSIVE_TOTAL = 720.0          # summed emissive strength per room (0.25 boxes, ~0.375 m^2 each)
-AREA_TOTAL = 240.0              # summed area-light intensity per room
+ANALYTIC_TOTAL = 15728640.0     # summed sphere-light intensity per room; 4-rung lights land at 3932160 each, lab-typical
+EMISSIVE_TOTAL = 47185920.0     # summed emissive strength per room (0.25 boxes, ~0.375 m^2 each)
+AREA_TOTAL = 15728640.0         # summed area-light intensity per room
 EMITTER_SIZE = 0.25
 AREA_HALF_EXTENT = 0.15
 DOWN = (0.7071067811865476, 0.7071067811865476, 0.0, 0.0)   # +90 about X: local +Z (quad normal) points -Y
@@ -286,7 +286,7 @@ entities.append(sky)
 entities.extend(folders)
 
 editor_camera = {"rotation": [0.0, 0.0, 1.0, 0.0], "translation": [-2.0 * PITCH, 5.0, -14.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "DI Ladder", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 
 n_spheres = sum(1 for e in entities if wa.LIGHT_SPHERE in e)
 n_areas = sum(1 for e in entities if wa.LIGHT_AREA in e)

@@ -26,7 +26,7 @@ from build_emissive_stress import write_material, mesh_only, emissive_mesh, comm
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_DIR = os.path.join(REPO, "scenes")
+SCENE_DIR = os.path.join(REPO, "scenes", "emissive")
 
 BULB_COUNT = 32           # add_module part cap
 BULB_RADIUS = 0.02
@@ -35,7 +35,7 @@ BULB_STACKS = 8           # 2*8*8 = 128 triangles per bulb, 4096 merged
 BULB_SPACING = 0.3        # 9.3m strand
 BULB_GAP = 0.02           # bulb surface to wall face
 BULB_Y = 2.0
-BULB_RADIANCE = 40.0      # emissiveFactor.w; sphere-light `intensity` is the same radiance unit (EvalPHat: area * intensity)
+BULB_RADIANCE = 2621440.0  # emissiveFactor.w; sphere-light `intensity` is the same radiance unit (EvalPHat: area * intensity)
 WALL_SIZE = (12.0, 3.0, 0.2)
 WALL_CORNER = (-1.0, 0.0, -WALL_SIZE[2])   # front face on z = 0
 ENVMAP = "kloofendal_48d_partly_cloudy_puresky_4k"
@@ -80,10 +80,10 @@ def build(idx, variant):
         add_render_flags(strand, emissive_light=True)
         entities.append(strand)
 
-    common_lighting(entities, idx.envmap(ENVMAP), sun_intensity=0.0, sky_intensity=0.02, spawn_pos=SPAWN_POS)
+    common_lighting(entities, idx.envmap(ENVMAP), sun_intensity=0.0, sky_intensity=1310.72, spawn_pos=SPAWN_POS)
     name = "emissive_strand_" + variant
     path = os.path.join(SCENE_DIR, name + ".wscene")
-    write_scene(path, entities, name_id(name), name, editor_camera=CAMERA)
+    write_scene(path, entities, name_id(name), editor_camera=CAMERA)
     return path
 
 

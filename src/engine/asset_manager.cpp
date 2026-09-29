@@ -4,6 +4,7 @@
 
 #include "asset_manager.h"
 
+#include <algorithm>
 #include <chrono>
 
 #include "asset-load/async_asset_load_manager.h"
@@ -215,6 +216,7 @@ void AssetManager::RegisterScene(StringID sceneId, const Core::Path& source)
     cached.source = source;
     cached.sceneName = Core::InlineString<128>(source.Stem());
     cached.entityCount = 0;
+    cached.bUnsaved = true;
 }
 
 void AssetManager::UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount)
@@ -225,6 +227,7 @@ void AssetManager::UpdateSceneCachePath(StringID sceneId, const Core::Path& path
     }
     it->source = path;
     it->entityCount = entityCount;
+    it->bUnsaved = false;
 }
 
 const AssetManager::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(StringID prefabId) const
@@ -1411,20 +1414,22 @@ ResolveUnloadResult AssetManager::ResolveUnloads()
     return {.modelUnloadedCount = modelsUnloadedThisTick, .fontUnloadedCount = fontsUnloadedThisTick};
 }
 
-void AssetManager::Scan()
+void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
 {
     changedModelIds.Clear();
     changedTextureIds.Clear();
     changedFontIds.Clear();
     changedEnvironmentMapIds.Clear();
 
-    if (ctx->rescan.bResources) {
+    const bool bWalkAssets = ctx->rescan.bResources;
+    if (bWalkAssets || ctx->rescan.bScenes) {
         const Core::Path& assetPath = Platform::GetAssetPath();
         const Core::Path& scenePath = Platform::GetScenePath();
-        if (Platform::FileExists(assetPath) || Platform::FileExists(scenePath)) {
+        ++sceneScanGeneration;
+        if ((bWalkAssets && Platform::FileExists(assetPath)) || Platform::FileExists(scenePath)) {
             Core::Vector<Core::Path> paths;
             paths = Core::Vector<Core::Path>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
-            if (Platform::FileExists(assetPath)) { Platform::RecursiveDirectoryIterator(assetPath, paths); }
+            if (bWalkAssets && Platform::FileExists(assetPath)) { Platform::RecursiveDirectoryIterator(assetPath, paths); }
             if (Platform::FileExists(scenePath)) { Platform::RecursiveDirectoryIterator(scenePath, paths); }
 
             for (const auto& path : paths) {
@@ -1581,6 +1586,8 @@ void AssetManager::Scan()
                     cached.sceneName = Core::InlineString<128>(path.Stem());
                     cached.entityCount = header->entityCount;
                     cached.contentVersion = header->contentVersion;
+                    cached.scanGeneration = sceneScanGeneration;
+                    cached.bUnsaved = false;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Scene '{}' (id {:x}) content changed on disk: v{} -> v{}", cached.sceneName.c_str(), id.id, prevVersion, header->contentVersion);
                     }
@@ -1642,15 +1649,41 @@ void AssetManager::Scan()
                     cached.sceneId = StringID{header->sceneId};
                     cached.eventCount = header->eventCount;
                     cached.contentVersion = header->contentVersion;
+                    cached.scanGeneration = sceneScanGeneration;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Run '{}' content changed on disk: v{} -> v{}", cached.name.c_str(), prevVersion, header->contentVersion);
                     }
                 }
             }
         }
+
+        Core::Vector<StringID> gone(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+        for (auto [id, meta] : sceneCache) {
+            if (meta.scanGeneration == sceneScanGeneration) { continue; }
+            if (std::ranges::find(loadedScenes, id) != loadedScenes.end()) {
+                if (!meta.bUnsaved) {
+                    LOG_WARN(Asset, "Scene '{}' is loaded but its file is gone from disk; saving writes it back to {}", meta.sceneName.c_str(), meta.source.c_str());
+                    meta.bUnsaved = true;
+                }
+                continue;
+            }
+            gone.PushBack(id);
+        }
+        for (StringID id : gone) {
+            LOG_INFO(Asset, "Scene '{}' is gone from disk", sceneCache.Find(id)->sceneName.c_str());
+            sceneCache.Remove(id);
+        }
+        gone.Clear();
+        for (const auto& [id, meta] : playCache) {
+            if (meta.scanGeneration != sceneScanGeneration) { gone.PushBack(id); }
+        }
+        for (StringID id : gone) {
+            playCache.Remove(id);
+        }
     }
 
     ctx->rescan.bResources = false;
+    ctx->rescan.bScenes = false;
 }
 
 void AssetManager::RegisterProceduralTextures()

@@ -458,7 +458,9 @@ static void DrawPostProcessProfiles(Engine::EngineState* state)
 
 void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (ImGui::Begin("Project Config")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_PROJECT_CONFIG];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_PROJECT_CONFIG].title, &bOpen)) {
         bool changed = false;
         if (Widgets::SaveBar("projectconfig", &state->projectConfig.bAutoSaveProjectConfig)) {
             SaveProjectConfigTab(state);
@@ -710,7 +712,9 @@ static void DebugViewButton(Engine::EngineState* state, const char* label, const
 
 void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (ImGui::Begin("Debug View")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_DEBUG_VIEW];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_DEBUG_VIEW].title, &bOpen)) {
         Core::DebugRenderParams& render = state->debug.render;
         const Core::ReSTIRParams& restir = state->debug.restir;
         const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
@@ -1199,7 +1203,9 @@ void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* stat
     static Engine::ReGIRCursorCell latchedReGIRCursor{};
     static Engine::WorldGridCursorCell latchedWorldGridCursor{};
 
-    if (ImGui::Begin("Diagnostics")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_DIAGNOSTICS];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_DIAGNOSTICS].title, &bOpen)) {
         Engine::DiagnosticsState& diagnostics = state->debug.diagnostics;
         const Core::ReSTIRParams& restir = state->debug.restir;
         const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
@@ -1535,7 +1541,9 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
 
 void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (ImGui::Begin("Lighting")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_LIGHTING];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_LIGHTING].title, &bOpen)) {
         bool changed = false;
 
         auto featureSection = [&](const char* label, bool* enabled, auto&& body) {
@@ -2330,7 +2338,9 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp, Engine::EngineSta
 
 void DrawPostProcessingWindow(Engine::EngineState* state)
 {
-    if (ImGui::Begin("Post-Processing")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_POST_PROCESSING];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_POST_PROCESSING].title, &bOpen)) {
         bool changed = false;
 
         if (Widgets::SaveBar("pp", &state->projectConfig.bAutoSavePostProcess)) {

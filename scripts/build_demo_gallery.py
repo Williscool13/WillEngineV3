@@ -44,7 +44,7 @@ IDX = asset_index.scan()
 ROBOTO_FONT = IDX.font("Roboto")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "demo_gallery.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "sandbox", "demo_gallery.wscene")
 SCENE_ID = name_id("demo_gallery")
 
 H = 6.0      # interior height everywhere (court walls same, no roof)
@@ -86,9 +86,9 @@ MAT_MIRROR = wa.write_material("gallery_mirror", base_color=(0.95, 0.95, 0.95, 1
 MAT_BRUSHED = wa.write_material("gallery_brushed", base_color=(0.60, 0.60, 0.62, 1.0), metallic=1.0, roughness=0.3)
 MAT_GOLD = wa.write_material("gallery_gold", base_color=(1.0, 0.78, 0.35, 1.0), metallic=1.0, roughness=0.15)
 MAT_RIBBON = wa.write_material("gallery_ribbon", base_color=(0.55, 0.06, 0.05, 1.0), roughness=0.25)
-MAT_BEAM_WARM = wa.write_material("gallery_beam_warm", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(1.0, 0.62, 0.28, 8.0))
-MAT_BEAM_TEAL = wa.write_material("gallery_beam_teal", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(0.25, 0.85, 1.0, 8.0))
-MAT_HALO = wa.write_material("gallery_halo", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(1.0, 0.88, 0.72, 10.0))
+MAT_BEAM_WARM = wa.write_material("gallery_beam_warm", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(1.0, 0.62, 0.28, 524288.0))
+MAT_BEAM_TEAL = wa.write_material("gallery_beam_teal", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(0.25, 0.85, 1.0, 524288.0))
+MAT_HALO = wa.write_material("gallery_halo", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(1.0, 0.88, 0.72, 655360.0))
 MAT_VAULT_FLOOR = wa.write_material("gallery_vault_floor", base_color=(1.0, 1.0, 1.04, 1.0), roughness=0.45,
                                     albedo_tex=T_CONCRETE[0], uv_scale=(0.5, 0.5))
 # mirror ramp stays at/below the traced-reflection threshold (0.4); probe-fed roughness lives in VAULT
@@ -216,7 +216,7 @@ def carousels(tag, cx, cz, rings, colors):
             if speed < 0.0:
                 pts = list(reversed(pts))
             e = light_entity(f"[{tag}] Orbit {ci}-{li}", pts[0])
-            add_sphere_light(e, color=colors[li % len(colors)], intensity=25.0, radius=0.3, draw_range=14.0)
+            add_sphere_light(e, color=colors[li % len(colors)], intensity=1638400.0, radius=0.3, draw_range=14.0)
             add_path_mover(e, pts, speed=abs(speed), wait_time=0.0, easing=EASE_LINEAR, loop_mode=LOOP_LOOP)
 
 def gi_volumes(tag, region_min, region_max, spacing=2.0):
@@ -269,7 +269,7 @@ separator("[Shared] Gate", 138.0, opening_h=5.0)   # COURT -> TERRACE, frames sk
 # sun: from the south at 35 deg, slight east drift so shaft edges aren't axis-locked
 sun = light_entity("[Shared] Sun", (45.0, 30.0, -20.0))
 sun[wa.TRANSFORM]["rotation"] = list(face_dir(0.12, -math.sin(SUN_EL), math.cos(SUN_EL)))
-add_directional_light(sun, color=(1.0, 0.96, 0.88), intensity=10.0, priority=0, angular_radius_deg=0.75)
+add_directional_light(sun, color=(1.0, 0.96, 0.88), intensity=655360.0, priority=0, angular_radius_deg=0.75)
 tag_folder("Shared", _start)
 
 # =============================================================================
@@ -345,14 +345,14 @@ hall_ceiling("Lumen", LX0, LX1)
 
 # LUMEN is white-light ONLY (user ruling: chroma variance lives in the chroma annex)
 sky_a = light_entity("[Lumen] Skylight A", (29.0, 5.2, 3.5), tuple(face_dir(2.5, -5.2, 5.0)))
-add_area_light(sky_a, color=(1.0, 1.0, 1.0), intensity=30.0, half_width=2.0, half_height=1.0, draw_range=20.0)
+add_area_light(sky_a, color=(1.0, 1.0, 1.0), intensity=1966080.0, half_width=2.0, half_height=1.0, draw_range=20.0)
 sky_b = light_entity("[Lumen] Skylight B", (41.0, 5.2, 12.5), tuple(face_dir(-2.5, -5.2, -5.0)))
-add_area_light(sky_b, color=(1.0, 1.0, 1.0), intensity=30.0, half_width=2.0, half_height=1.0, draw_range=20.0)
+add_area_light(sky_b, color=(1.0, 1.0, 1.0), intensity=1966080.0, half_width=2.0, half_height=1.0, draw_range=20.0)
 
 GALLERY = [(27.5, (1.0, 1.0, 1.0), "sphere"), (33.0, (1.0, 1.0, 1.0), "torus"), (41.0, (1.0, 1.0, 1.0), "dodeca")]
 for gx, color, shape_name in GALLERY:
     p = light_entity(f"[Lumen] Panel {shape_name}", (gx, 3.0, 0.55))
-    add_area_light(p, color=color, intensity=25.0, half_width=1.5, half_height=1.0, draw_range=18.0)
+    add_area_light(p, color=color, intensity=1638400.0, half_width=1.5, half_height=1.0, draw_range=18.0)
     box(f"[Lumen] Pedestal {shape_name}", (gx - 0.5, 0.05, 3.1), (1.0, 0.9, 1.0), MAT_CHARCOAL)
     if shape_name == "sphere":
         sphere(f"[Lumen] Sculpt {shape_name}", (gx, 1.45, 3.6), 0.5, MAT_WHITE, physics=False)
@@ -368,7 +368,7 @@ for gx, color, shape_name in GALLERY:
         entities.append(e)
 
 traveler = light_entity("[Lumen] Traveler", (26.0, 5.4, 8.0), tuple(face_dir(0.0, -1.0, 0.0)))
-add_area_light(traveler, color=(1.0, 1.0, 1.0), intensity=30.0, half_width=1.2, half_height=1.2, draw_range=20.0)
+add_area_light(traveler, color=(1.0, 1.0, 1.0), intensity=1966080.0, half_width=1.2, half_height=1.2, draw_range=20.0)
 add_path_mover(traveler, [(26.0, 5.4, 8.0), (44.0, 5.4, 8.0)], speed=1.0, wait_time=1.0,
                easing=EASE_IN_OUT_SINE, loop_mode=LOOP_PINGPONG)
 
@@ -429,7 +429,7 @@ _start = len(entities)
 annex_shell("AnnexChroma", 48.0, AZ0, 10.0, AD, "CHROMA")
 for gx, color, cname in ((49.5, (1.0, 0.75, 0.40), "amber"), (53.0, (0.40, 0.70, 1.00), "cyan"), (56.5, (1.0, 0.35, 0.60), "magenta")):
     p = light_entity(f"[AnnexChroma] Panel {cname}", (gx, 3.0, AZ0 + 0.55))
-    add_area_light(p, color=color, intensity=25.0, half_width=1.5, half_height=1.0, draw_range=18.0)
+    add_area_light(p, color=color, intensity=1638400.0, half_width=1.5, half_height=1.0, draw_range=18.0)
 
 stage_disc("[AnnexChroma] Stage", 53.0, 34.5)
 box("[AnnexChroma] Plinth", (52.5, 0.05, 34.0), (1.0, 0.9, 1.0), MAT_CHARCOAL)
@@ -471,14 +471,14 @@ logo = sign3d("[Mirror] Logo", (62.9, 1.1, 8.0), "WILL ENGINE", scale=0.7, mater
 logo[TEXT3D]["depth"] = 0.4
 
 orbit = light_entity("[Mirror] Orbit Light", (65.6, 1.9, 8.0))
-add_sphere_light(orbit, color=(1.0, 0.75, 0.45), intensity=30.0, radius=0.15, draw_range=14.0)
+add_sphere_light(orbit, color=(1.0, 0.75, 0.45), intensity=1966080.0, radius=0.15, draw_range=14.0)
 add_path_mover(orbit, circle_points(63.0, 1.9, 8.0, 2.6), speed=2.0, wait_time=0.0,
                easing=EASE_LINEAR, loop_mode=LOOP_LOOP)
 
 wash_s = light_entity("[Mirror] Wash S", (60.0, 3.5, 0.8), tuple(face_dir(0.0, 0.0, 1.0)))
-add_area_light(wash_s, color=(0.7, 0.8, 1.0), intensity=35.0, half_width=3.0, half_height=1.1, draw_range=18.0)
+add_area_light(wash_s, color=(0.7, 0.8, 1.0), intensity=2293760.0, half_width=3.0, half_height=1.1, draw_range=18.0)
 wash_n = light_entity("[Mirror] Wash N", (60.0, 3.5, ZW - 0.8), tuple(face_dir(0.0, 0.0, -1.0)))
-add_area_light(wash_n, color=(0.7, 0.8, 1.0), intensity=35.0, half_width=3.0, half_height=1.1, draw_range=18.0)
+add_area_light(wash_n, color=(0.7, 0.8, 1.0), intensity=2293760.0, half_width=3.0, half_height=1.1, draw_range=18.0)
 
 sign3d("[Mirror] Sign", (45.88, 5.0, 8.0), "MIRROR COURT", scale=0.55)
 gi_volumes("Mirror", (MX0 - T, -T, -T), (MX1 + T, H + T, ZW + T))
@@ -501,7 +501,7 @@ hall_ceiling("Vault", VX0, VX1)
 
 for li, lx in enumerate([78.0, 86.0]):
     e = light_entity(f"[Vault] Downlight {li}", (lx, 5.5, 8.0), tuple(face_dir(0.0, -1.0, 0.0)))
-    add_area_light(e, color=(1.0, 1.0, 1.0), intensity=28.0, half_width=1.5, half_height=1.5, draw_range=20.0)
+    add_area_light(e, color=(1.0, 1.0, 1.0), intensity=1835008.0, half_width=1.5, half_height=1.5, draw_range=20.0)
 
 def alcove(tag, ax, mat):
     """Colored mini-room protruding from the south wall, open north face, nested probe inside."""
@@ -544,7 +544,7 @@ hall_ceiling("Foundry", FX0, FX1)
 
 for li, lx in enumerate([98.5, 103.0, 107.5]):
     e = light_entity(f"[Foundry] Downlight {li}", (lx, 5.5, 8.0), tuple(face_dir(0.0, -1.0, 0.0)))
-    add_area_light(e, color=(1.0, 0.98, 0.94), intensity=28.0, half_width=1.4, half_height=1.4, draw_range=20.0)
+    add_area_light(e, color=(1.0, 0.98, 0.94), intensity=1835008.0, half_width=1.4, half_height=1.4, draw_range=20.0)
 
 FOUNDRY_MATS = [MAT_WHITE, MAT_GOLD, MAT_WHITE, MAT_BRUSHED, MAT_WHITE, MAT_CHARCOAL]
 FOUNDRY_S = [
@@ -644,7 +644,7 @@ for tag, ranges in FOLDER_TAGS.items():
     entities.append({SCENE_FOLDER: {"folderId": fid, "name": tag, "parentFolder": 0}})
 
 editor_camera = {"rotation": list(wa.camera_look_quat(1.0, -0.05, 0.0)), "translation": [-6.5, 2.4, 8.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "Demo Gallery", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 n_probes = sum(1 for e in entities if wa.PROBE in e)
 n_gi = sum(1 for e in entities if wa.LOCAL_DDGI in e)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities, {n_gi} GI volumes, {n_probes} probes)")

@@ -1010,7 +1010,12 @@ static void DrawTextMaterialsTab(Engine::EngineContext* ctx, Engine::EngineState
 
 void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (ImGui::Begin("Materials")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_MATERIALS];
+    if (!bOpen) {
+        state->editor.bMaterialListFocused = false;
+        return;
+    }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_MATERIALS].title, &bOpen)) {
         state->editor.bMaterialListFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 
         if (ImGui::BeginTabBar("##MaterialTabs")) {
@@ -1051,7 +1056,9 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     static char s_search[64] = {};
     Engine::TextureID hoveredId = Engine::TextureID::INVALID;
 
-    if (ImGui::Begin("Textures")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_TEXTURES];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_TEXTURES].title, &bOpen)) {
         if (!state->editor.textureInfoCache) {
             const uint32_t count = ctx->assetManager->GetTextureInfoCount();
             state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(

@@ -46,7 +46,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "di_arch.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "di_arch.wscene")
 SCENE_ID = name_id("di_arch")
 
 IDX = asset_index.scan()
@@ -122,22 +122,22 @@ entities.append(shell)
 # sources blotch/boil at this sample budget, and that stress is the ladder's job, not this scene's.
 for i, x in enumerate(range(-15, 16, 5)):
     e = light_entity(f"Chandelier {i}", (float(x), 6.0, 0.0), fid_sibenik)
-    add_sphere_light(e, color=WARM, intensity=140.0, radius=0.25, draw_range=14.0, draw_emissive=True)
+    add_sphere_light(e, color=WARM, intensity=9175040.0, radius=0.25, draw_range=14.0, draw_emissive=True)
 
 # Aisle candles, one line per side
 ci = 0
 for side in (-1.0, 1.0):
     for x in range(-14, 15, 4):
         e = light_entity(f"Candle {ci}", (float(x), 1.6, side * 6.2), fid_sibenik)
-        add_sphere_light(e, color=CANDLE, intensity=12.0, radius=0.12, draw_range=5.0, draw_emissive=True)
+        add_sphere_light(e, color=CANDLE, intensity=786432.0, radius=0.12, draw_range=5.0, draw_emissive=True)
         ci += 1
 
 # Apse feature: one broad panel washing back down the nave, two candle stands
 e = light_entity("Apse Panel", (16.0, 5.0, 0.0), fid_sibenik, rot=facing((-1.0, 0.0, 0.0)))
-add_area_light(e, color=(0.9, 0.95, 1.0), intensity=220.0, half_width=1.5, half_height=1.0, draw_range=18.0, draw_emissive=True)
+add_area_light(e, color=(0.9, 0.95, 1.0), intensity=14417920.0, half_width=1.5, half_height=1.0, draw_range=18.0, draw_emissive=True)
 for k, z in enumerate((-2.0, 2.0)):
     e = light_entity(f"Apse Candle {k}", (16.0, 1.2, z), fid_sibenik)
-    add_sphere_light(e, color=CANDLE, intensity=25.0, radius=0.12, draw_range=6.0, draw_emissive=True)
+    add_sphere_light(e, color=CANDLE, intensity=1638400.0, radius=0.12, draw_range=6.0, draw_emissive=True)
 
 # Window fills: cool panels hung in the open nave volume above the arcade, aimed
 # down-outward 45 like light shafts falling from the clerestory. Free air is the only
@@ -149,7 +149,7 @@ for side in (-1.0, 1.0):
     rot = facing((0.0, -1.0, -side))
     for x in (-10.0, 0.0, 10.0):
         e = light_entity(f"Window Fill {wi}", (x, 13.0, side * 2.8), fid_sibenik, rot=rot)
-        add_area_light(e, color=DAYLIGHT, intensity=90.0, half_width=0.5, half_height=0.7, draw_range=15.0, draw_emissive=True)
+        add_area_light(e, color=DAYLIGHT, intensity=5898240.0, half_width=0.5, half_height=0.7, draw_range=15.0, draw_emissive=True)
         wi += 1
 
 # Barrel props in the south aisle: prefab provenance + the prefab's own components
@@ -173,7 +173,7 @@ ROOM_W, ROOM_H, ROOM_D = 6.0, 4.0, 6.0    # receiving room interior
 CHAMBER_D = 2.0                            # light chamber interior depth
 Z0 = 41.0                                  # receiving room front plane (open, faces -Z)
 PITCH = 16.0
-PANEL_INTENSITY = 400.0
+PANEL_INTENSITY = 26214400.0
 PANEL_RANGE = 10.0
 
 RUNGS = [
@@ -222,7 +222,7 @@ for i, (tag, openings) in enumerate(RUNGS):
     text = f"{tag} - {len(openings)} opening{'s' if len(openings) > 1 else ''}, {opening_area(openings):.2f} m2"
     label(f"[{tag}] Label", text, (cx, 4.7, Z0 - 0.7), fid)
 
-label("Wing Label", f"Aperture Sweep - constant panel power {PANEL_INTENSITY:.0f}", (0.0, 6.2, Z0 - 0.7), fid_wing)
+label("Wing Label", f"Aperture Sweep - constant panel power {PANEL_INTENSITY / 65536.0:.0f}", (0.0, 6.2, Z0 - 0.7), fid_wing)
 
 # =============================================================================
 # Phase 2 props: new shapes + a path mover, on the ground between chapel and wing
@@ -294,14 +294,14 @@ label("Props Label", "Phase 2 Props - Lattice, Corrugated Panel, Path Mover, Mod
 solid_box("Ground", (-55.0, GROUND_TOP - 0.5, -25.0), (110.0, 0.5, 85.0), MAT_WALL)
 
 sky = base_entity("Skybox", (0.0, 0.0, 0.0))
-add_skybox(sky, ENV_MAP, intensity=0.1, priority=0)
+add_skybox(sky, ENV_MAP, intensity=6553.6, priority=0)
 entities.append(sky)
 
 entities.extend(folders)
 
 # Start inside the nave looking down it (+X); [w,x,y,z], -90 about Y
 editor_camera = {"rotation": [0.7071068, 0.0, -0.7071068, 0.0], "translation": [-16.0, 4.0, 0.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "DI Architecture", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 
 n_spheres = sum(1 for e in entities if wa.LIGHT_SPHERE in e)
 n_areas = sum(1 for e in entities if wa.LIGHT_AREA in e)

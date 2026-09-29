@@ -47,7 +47,6 @@ void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes);
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId);
 
-/** Writes to the scene's registered source path; the scene must be registered. */
 void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx);
 
 struct LoadSceneResult

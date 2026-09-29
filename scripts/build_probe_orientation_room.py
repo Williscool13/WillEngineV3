@@ -19,7 +19,7 @@ Color key:            Expected label reading orientation:
 
 Emissive walls make the test lighting-independent; no sun, no sky exposure.
 
-WARNING: the live scenes/probe_orientation_room.wscene has been edited in the
+WARNING: the live scenes/lighting/probe_orientation_room.wscene has been edited in the
 editor since this script last wrote it -- it carries a hand-placed Probe entity (whose
 probeId names a baked .wprobe) and three hand-made view spheres. RE-RUNNING THIS SCRIPT
 DISCARDS THOSE. Only re-run if you mean to go back to the generated state.
@@ -46,7 +46,7 @@ LIT_EMISSIVE = 14720002576866434405
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
-SCENE_PATH = os.path.join(REPO, "scenes", "probe_orientation_room.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "probe_orientation_room.wscene")
 # Pinned: leaving this to the tail of the next_id() sequence changed the scene's identity
 # every time an entity was added ahead of it.
 SCENE_ID = 92882415086882491
@@ -82,21 +82,17 @@ def emissive_material(name, rgb, strength):
         "textureSamplerIndices": [2, 2, 2, 2],
         "textureSamplerIndices2": [2, 2, -1, -1],
     }
-    import json
-    header = f"wmaterial\nversion 1 0\nid {mid}\nname {name}\nend_header\n"
-    with open(os.path.join(MAT_DIR, name + ".wmaterial"), "w", encoding="utf-8") as f:
-        f.write(header)
-        f.write(json.dumps(body, indent=4))
+    wa.write_material_file(name, mid, body, MAT_DIR)
     return mid
 
 MAT = {
-    "+X": emissive_material("probe_room_px_red",     [1.0, 0.0, 0.0], 3.0),
-    "-X": emissive_material("probe_room_nx_magenta", [1.0, 0.0, 1.0], 3.0),
-    "+Y": emissive_material("probe_room_py_green",   [0.0, 1.0, 0.0], 3.0),
-    "-Y": emissive_material("probe_room_ny_yellow",  [1.0, 1.0, 0.0], 3.0),
-    "+Z": emissive_material("probe_room_pz_blue",    [0.0, 0.0, 1.0], 3.0),
-    "-Z": emissive_material("probe_room_nz_cyan",    [0.0, 1.0, 1.0], 3.0),
-    "label": emissive_material("probe_room_label_white", [1.0, 1.0, 1.0], 6.0),
+    "+X": emissive_material("probe_room_px_red",     [1.0, 0.0, 0.0], 196608.0),
+    "-X": emissive_material("probe_room_nx_magenta", [1.0, 0.0, 1.0], 196608.0),
+    "+Y": emissive_material("probe_room_py_green",   [0.0, 1.0, 0.0], 196608.0),
+    "-Y": emissive_material("probe_room_ny_yellow",  [1.0, 1.0, 0.0], 196608.0),
+    "+Z": emissive_material("probe_room_pz_blue",    [0.0, 0.0, 1.0], 196608.0),
+    "-Z": emissive_material("probe_room_nz_cyan",    [0.0, 1.0, 1.0], 196608.0),
+    "label": emissive_material("probe_room_label_white", [1.0, 1.0, 1.0], 393216.0),
 }
 
 entities = []
@@ -152,6 +148,6 @@ view_sphere("View Sphere Mirror", (-1.5, -2.8, 0.0), MAT_MIRROR)
 view_sphere("View Sphere Glossy", ( 1.5, -2.8, 0.0), MAT_GLOSSY)
 
 editor_camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 0.0, -2.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "Probe Orientation Room", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities)")
 print(f"wrote 7 materials to {MAT_DIR}")

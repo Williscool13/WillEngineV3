@@ -204,6 +204,8 @@ add_library(engine STATIC
         editor/editor_systems.h
         editor/editor_scene_browser.cpp
         editor/editor_scene_browser.h
+        editor/editor_windows.cpp
+        editor/editor_windows.h
         editor/editor_materials.cpp
         editor/editor_materials.h
         editor/editor_multi_edit.cpp

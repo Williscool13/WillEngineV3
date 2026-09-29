@@ -35,7 +35,7 @@ ROBOTO_FONT = IDX.font("Roboto")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAT_DIR = os.path.join(REPO, "assets", "materials")
-SCENE_PATH = os.path.join(REPO, "scenes", "lighting_lab.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "lighting_lab.wscene")
 # Pinned: next_id() is a deterministic sequence, so leaving the scene id to the tail of that
 # sequence would change the scene's identity every time an entity is added ahead of it.
 SCENE_ID = 908694288083905623
@@ -100,11 +100,11 @@ MAT["blue"]        = diffuse("lab_blue", [0.06, 0.06, 0.75])
 MAT["rough06"]     = metal("lab_metal_rough06", 0.6)
 MAT["rough09"]     = metal("lab_metal_rough09", 0.9)
 MAT["dark"]        = diffuse("lab_dark", [0.02, 0.02, 0.02])   # near-black, untextured (existing black.wmaterial is textured)
-MAT["em_red"]      = emissive("lab_emissive_red", [1.0, 0.0, 0.0], 4.0)
-MAT["em_green"]    = emissive("lab_emissive_green", [0.0, 1.0, 0.0], 4.0)
-MAT["em_white"]    = emissive("lab_emissive_white", [1.0, 1.0, 1.0], 4.0)
-MAT["em_bright"]   = emissive("lab_emissive_bright", [1.0, 1.0, 1.0], 60.0)
-MAT["em_warm"]     = emissive("lab_emissive_warm", [1.0, 0.5, 0.15], 4.0)
+MAT["em_red"]      = emissive("lab_emissive_red", [1.0, 0.0, 0.0], 262144.0)
+MAT["em_green"]    = emissive("lab_emissive_green", [0.0, 1.0, 0.0], 262144.0)
+MAT["em_white"]    = emissive("lab_emissive_white", [1.0, 1.0, 1.0], 262144.0)
+MAT["em_bright"]   = emissive("lab_emissive_bright", [1.0, 1.0, 1.0], 3932160.0)
+MAT["em_warm"]     = emissive("lab_emissive_warm", [1.0, 0.5, 0.15], 262144.0)
 
 # =============================================================================
 # geometry helpers (corner-pivot boxes; render-only unless physics requested)
@@ -295,22 +295,22 @@ def place_probes(entities, tag):
 def c_bleed(e, cx, cz):
     """GI: colour bleed. Red/green side walls, neutral light -> bounce colour accuracy."""
     cell_shell(e, "Bleed", cx, cz, 6, 4, 6, mat_floor=MAT["white"], mat_wall=MAT["white"], mat_left=MAT["red"], mat_right=MAT["green"])
-    add_sphere_light(light_entity(e, "[Bleed] Light", (cx, 3.4, cz)), intensity=40, radius=0.15, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Bleed] Light", (cx, 3.4, cz)), intensity=2621440.0, radius=0.15, draw_range=LR)
 
 def c_opposing(e, cx, cz):
     """DI: opposing-colour area lights + centre pillar -> competing selection + shadow cross-contamination."""
     cell_shell(e, "Opposing", cx, cz, 6, 4, 6, mat_floor=MAT["grey"], mat_wall=MAT["grey"])
     box(e, "[Opposing] Pillar", (cx - 0.15, WALL_T, cz - 0.6), (0.3, 4 - 2 * WALL_T, 1.2), MAT["white"])
     la = light_entity(e, "[Opposing] Red Light", (cx - 3 + WALL_T + 0.06, 2.0, cz), tuple(face_dir(1.0, 0.0, 0.0)))
-    add_area_light(la, color=(1.0, 0.1, 0.1), intensity=60, half_width=1.2, half_height=1.3, draw_range=LR)
+    add_area_light(la, color=(1.0, 0.1, 0.1), intensity=3932160.0, half_width=1.2, half_height=1.3, draw_range=LR)
     lb = light_entity(e, "[Opposing] Blue Light", (cx + 3 - WALL_T - 0.06, 2.0, cz), tuple(face_dir(-1.0, 0.0, 0.0)))
-    add_area_light(lb, color=(0.1, 0.1, 1.0), intensity=60, half_width=1.2, half_height=1.3, draw_range=LR)
+    add_area_light(lb, color=(0.1, 0.1, 1.0), intensity=3932160.0, half_width=1.2, half_height=1.3, draw_range=LR)
 
 def c_mirror(e, cx, cz):
     """Specular: mirror floor + chrome ball -> lobe narrowness / reflection."""
     cell_shell(e, "Mirror", cx, cz, 6, 4, 6, mat_floor=MAT_MIRROR, mat_wall=MAT["white"])
     sphere(e, "[Mirror] Chrome Ball", (cx, 0.9, cz), 0.8, MAT_MIRROR)
-    add_sphere_light(light_entity(e, "[Mirror] Light", (cx, 3.4, cz)), intensity=50, radius=0.1, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Mirror] Light", (cx, 3.4, cz)), intensity=3276800.0, radius=0.1, draw_range=LR)
 
 # ---- SIGMA / shadows ----
 def c_penumbra(e, cx, cz):
@@ -320,8 +320,8 @@ def c_penumbra(e, cx, cz):
     box(e, "[Penumbra] Divider", (cx - 0.075, WALL_T, cz - D * 0.5 + WALL_T), (0.15, H - 2 * WALL_T, D - 2 * WALL_T), MAT["grey"])
     pole(e, "[Penumbra] Post S", cx - W * 0.25, WALL_T, cz, 1.2, 0.3, MAT["grey"])
     pole(e, "[Penumbra] Post L", cx + W * 0.25, WALL_T, cz, 1.2, 0.3, MAT["grey"])
-    add_area_light(light_entity(e, "[Penumbra] Small Light", (cx - W * 0.25, H - 0.5, cz), DOWN), intensity=120, half_width=0.12, half_height=0.12, draw_range=LR)
-    add_area_light(light_entity(e, "[Penumbra] Large Light", (cx + W * 0.25, H - 0.5, cz), DOWN), intensity=120, half_width=1.4, half_height=1.4, draw_range=LR)
+    add_area_light(light_entity(e, "[Penumbra] Small Light", (cx - W * 0.25, H - 0.5, cz), DOWN), intensity=7864320.0, half_width=0.12, half_height=0.12, draw_range=LR)
+    add_area_light(light_entity(e, "[Penumbra] Large Light", (cx + W * 0.25, H - 0.5, cz), DOWN), intensity=7864320.0, half_width=1.4, half_height=1.4, draw_range=LR)
 
 def c_contact(e, cx, cz):
     """SIGMA: same occluder near vs far from receiver -> contact hardening."""
@@ -329,32 +329,32 @@ def c_contact(e, cx, cz):
     cell_shell(e, "Contact", cx, cz, W, H, D, mat_floor=MAT["white"], mat_wall=MAT["grey"])
     box(e, "[Contact] Bar Low", (cx - 1.6, WALL_T + 0.35, cz - 1.4), (3.2, 0.1, 0.25), MAT["grey"])
     box(e, "[Contact] Bar High", (cx - 1.6, WALL_T + 2.6, cz + 1.1), (3.2, 0.1, 0.25), MAT["grey"])
-    add_area_light(light_entity(e, "[Contact] Light", (cx, H - 0.5, cz), DOWN), intensity=120, half_width=0.7, half_height=0.7, draw_range=LR)
+    add_area_light(light_entity(e, "[Contact] Light", (cx, H - 0.5, cz), DOWN), intensity=7864320.0, half_width=0.7, half_height=0.7, draw_range=LR)
 
 def c_overlap(e, cx, cz):
     """SIGMA: two separate lights, one occluder -> two overlapping penumbras (denoiser cross-contamination)."""
     cell_shell(e, "Overlap", cx, cz, 6, 4, 6, mat_floor=MAT["white"], mat_wall=MAT["grey"])
     pole(e, "[Overlap] Pole", cx, WALL_T, cz, 2.6, 0.12, MAT["grey"])
-    add_sphere_light(light_entity(e, "[Overlap] Light A", (cx - 1.7, 3.4, cz - 0.4)), intensity=35, radius=0.15, draw_range=LR)
-    add_sphere_light(light_entity(e, "[Overlap] Light B", (cx + 1.7, 3.4, cz + 0.4)), intensity=35, radius=0.15, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Overlap] Light A", (cx - 1.7, 3.4, cz - 0.4)), intensity=2293760.0, radius=0.15, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Overlap] Light B", (cx + 1.7, 3.4, cz + 0.4)), intensity=2293760.0, radius=0.15, draw_range=LR)
 
 def c_grazing(e, cx, cz):
     """SIGMA: thin pole, light low at a grazing angle -> long-shadow undersampling / aliasing."""
     cell_shell(e, "Grazing", cx, cz, 6, 4, 6, mat_floor=MAT["white"], mat_wall=MAT["grey"])
     pole(e, "[Grazing] Pole", cx + 0.5, WALL_T, cz + 1.0, 3.2, 0.07, MAT["grey"])
-    add_sphere_light(light_entity(e, "[Grazing] Light", (cx - 2.3, 0.6, cz + 1.0)), intensity=28, radius=0.08, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Grazing] Light", (cx - 2.3, 0.6, cz + 1.0)), intensity=1835008.0, radius=0.08, draw_range=LR)
 
 # ---- GI ----
 def c_cornell_tall(e, cx, cz):
     """GI: tall-thin Cornell -> bounce distance vs cascade cell size (vertical)."""
     cell_shell(e, "Tall", cx, cz, 2.6, 7.5, 2.6, mat_floor=MAT["white"], mat_wall=MAT["white"], mat_left=MAT["red"], mat_right=MAT["green"])
-    add_sphere_light(light_entity(e, "[Tall] Light", (cx, 6.9, cz)), intensity=45, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Tall] Light", (cx, 6.9, cz)), intensity=2949120.0, radius=0.12, draw_range=LR)
 
 def c_cornell_wide(e, cx, cz):
     """GI: wide-flat Cornell -> bounce distance vs cell size (horizontal)."""
     W, H, D = 9, 2.2, 9
     cell_shell(e, "Wide", cx, cz, W, H, D, mat_floor=MAT["white"], mat_wall=MAT["white"], mat_left=MAT["red"], mat_right=MAT["blue"])
-    add_area_light(light_entity(e, "[Wide] Light", (cx, H - 0.35, cz), DOWN), intensity=90, half_width=0.6, half_height=0.6, draw_range=LR)
+    add_area_light(light_entity(e, "[Wide] Light", (cx, H - 0.35, cz), DOWN), intensity=5898240.0, half_width=0.6, half_height=0.6, draw_range=LR)
 
 def c_enclosed(e, cx, cz):
     """GI: fully enclosed room, single hidden emissive patch behind a baffle -> pure multi-bounce (no direct view of source)."""
@@ -370,21 +370,21 @@ def c_corridor(e, cx, cz):
     cell_shell(e, "Corridor", cx, cz, W, H, D, mat_floor=MAT["white"], mat_wall=MAT["grey"])
     box(e, "[Corridor] Baffle A", (cx - W * 0.5 + WALL_T, WALL_T, cz - 2.0), (W * 0.62, H - 2 * WALL_T, 0.15), MAT["grey"])
     box(e, "[Corridor] Baffle B", (cx + W * 0.5 - WALL_T - W * 0.62, WALL_T, cz + 1.6), (W * 0.62, H - 2 * WALL_T, 0.15), MAT["grey"])
-    add_sphere_light(light_entity(e, "[Corridor] Light", (cx, H - 0.5, cz + D * 0.5 - 1.0)), intensity=60, radius=0.15, draw_range=D + 4)
+    add_sphere_light(light_entity(e, "[Corridor] Light", (cx, H - 0.5, cz + D * 0.5 - 1.0)), intensity=3932160.0, radius=0.15, draw_range=D + 4)
 
 def c_crevice(e, cx, cz):
     """GI: deep parallel fins forming narrow crevices -> probe-in-geometry / backface classification stress."""
     cell_shell(e, "Crevice", cx, cz, 6, 4, 6, mat_floor=MAT["white"], mat_wall=MAT["white"])
     for i in range(4):
         box(e, f"[Crevice] Fin {i}", (cx - 1.65 + i * 1.0, WALL_T, cz - 1.0), (0.1, 2.2, 2.0), MAT["white"])
-    add_sphere_light(light_entity(e, "[Crevice] Light", (cx, 3.4, cz - 1.5)), intensity=45, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Crevice] Light", (cx, 3.4, cz - 1.5)), intensity=2949120.0, radius=0.12, draw_range=LR)
 
 def c_banner(e, cx, cz):
     """GI: two-sided thin banner between a red (front) and blue (back) light -> front/back normal-key separation."""
     cell_shell(e, "Banner", cx, cz, 6, 4, 6, mat_floor=MAT["grey"], mat_wall=MAT["grey"])
     box(e, "[Banner] Banner", (cx - 1.1, WALL_T + 0.4, cz - 0.02), (2.2, 2.6, 0.04), MAT["white"])
-    add_sphere_light(light_entity(e, "[Banner] Front Red", (cx, 2.0, cz - 1.8)), color=(1.0, 0.1, 0.1), intensity=35, radius=0.12, draw_range=LR)
-    add_sphere_light(light_entity(e, "[Banner] Back Blue", (cx, 2.0, cz + 1.8)), color=(0.1, 0.1, 1.0), intensity=35, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Banner] Front Red", (cx, 2.0, cz - 1.8)), color=(1.0, 0.1, 0.1), intensity=2293760.0, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Banner] Back Blue", (cx, 2.0, cz + 1.8)), color=(0.1, 0.1, 1.0), intensity=2293760.0, radius=0.12, draw_range=LR)
 
 def c_nested(e, cx, cz):
     """GI: room-in-a-room, light in the inner room, doorway only -> light leak through geometry seams."""
@@ -403,7 +403,7 @@ def c_nested(e, cx, cz):
     box(e, "[Nested] In Front L", (ix, WALL_T, iz), (side, ih, T), MAT["white"])
     box(e, "[Nested] In Front R", (ix + iw - side, WALL_T, iz), (side, ih, T), MAT["white"])
     box(e, "[Nested] In Lintel", (ix + side, WALL_T + 2.2, iz), (iw - 2 * side, ih - 2.2, T), MAT["white"])
-    add_sphere_light(light_entity(e, "[Nested] Light", (cx, WALL_T + 1.4, iz + idp * 0.5)), intensity=55, radius=0.15, draw_range=LR + 4)
+    add_sphere_light(light_entity(e, "[Nested] Light", (cx, WALL_T + 1.4, iz + idp * 0.5)), intensity=3604480.0, radius=0.15, draw_range=LR + 4)
     # inner room gets its own probe on top of the cell-wide one; shading picks the smallest containing
     # volume, so this is the nesting test. Capture pulled toward the doorway, off the light at the centre.
     probe_box(e, "[Nested] Probe Inner", ix + HT, ix + iw - HT, HT, WALL_T + ih - HT, iz + HT, iz + idp - HT,
@@ -420,7 +420,7 @@ def c_many_emitters(e, cx, cz):
         px = cx - 1.8 + col * 1.2
         py = 1.0 + row * 1.0
         pz = cz + 1.2
-        inten = 0.5 * (10.0 ** (i * 4.0 / (n - 1)))   # 0.5 -> ~5000
+        inten = 32768.0 * (10.0 ** (i * 4.0 / (n - 1)))   # 32768 -> ~3.3e8
         add_sphere_light(light_entity(e, f"[Many] Emitter {i}", (px, py, pz)), color=tints[i % len(tints)], intensity=inten, radius=0.05, draw_range=8)
 
 def c_emissive_mesh(e, cx, cz):
@@ -434,12 +434,12 @@ def c_occluder_edge(e, cx, cz):
     """DI: tiny light at a thin blade's edge -> temporal-reuse invalidation (drag the light in-editor to test)."""
     cell_shell(e, "Edge", cx, cz, 6, 4, 6, mat_floor=MAT["white"], mat_wall=MAT["grey"])
     box(e, "[Edge] Blade", (cx - 0.09, WALL_T, cz - 1.6), (0.18, 3.0, 3.0), MAT["grey"])
-    add_sphere_light(light_entity(e, "[Edge] Light", (cx + 0.6, 2.7, cz + 1.0)), intensity=45, radius=0.05, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Edge] Light", (cx + 0.6, 2.7, cz + 1.0)), intensity=2949120.0, radius=0.05, draw_range=LR)
 
 def c_coldstart(e, cx, cz):
     """DI/GI: clean neutral box, single light -> convergence-from-scratch baseline (history rejection / camera cut)."""
     cell_shell(e, "Cold", cx, cz, 6, 4, 6, mat_floor=MAT["grey"], mat_wall=MAT["grey"])
-    add_sphere_light(light_entity(e, "[Cold] Light", (cx, 3.4, cz)), intensity=45, radius=0.2, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Cold] Light", (cx, 3.4, cz)), intensity=2949120.0, radius=0.2, draw_range=LR)
 
 # ---- specular ----
 def c_roughness_strip(e, cx, cz):
@@ -449,13 +449,13 @@ def c_roughness_strip(e, cx, cz):
     mats = [MAT_MIRROR, MAT_GLOSSY, MAT["rough06"], MAT["rough09"]]
     for i, m in enumerate(mats):
         sphere(e, f"[Rough] Ball {i}", (cx - 3.0 + i * 2.0, 1.0, cz), 0.7, m)
-    add_sphere_light(light_entity(e, "[Rough] Light", (cx, H - 0.4, cz)), intensity=70, radius=0.1, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Rough] Light", (cx, H - 0.4, cz)), intensity=4587520.0, radius=0.1, draw_range=LR)
 
 def c_chrome_color(e, cx, cz):
     """Specular: chrome ball in a strongly-coloured room -> reflection colour accuracy / probe worst-case."""
     cell_shell(e, "ChromeCol", cx, cz, 6, 4, 6, mat_floor=MAT["white"], mat_wall=MAT["white"], mat_left=MAT["red"], mat_right=MAT["blue"], mat_back=MAT["green"])
     sphere(e, "[ChromeCol] Ball", (cx, 0.9, cz), 0.85, MAT_MIRROR)
-    add_sphere_light(light_entity(e, "[ChromeCol] Light", (cx, 3.4, cz)), intensity=45, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[ChromeCol] Light", (cx, 3.4, cz)), intensity=2949120.0, radius=0.12, draw_range=LR)
 
 # ---- competing / dynamic range ----
 def c_sun_vs_emissive(e, cx, cz):
@@ -470,13 +470,13 @@ def c_ibl_twins(e, cx, cz):
     box(e, "[IBL] Divider", (cx - 0.075, WALL_T, cz - D * 0.5 + WALL_T), (0.15, H - WALL_T, D - 2 * WALL_T), MAT["grey"])
     sphere(e, "[IBL] Ref L", (cx - W * 0.25, 0.7, cz), 0.5, MAT["white"])   # IBL-only half
     sphere(e, "[IBL] Ref R", (cx + W * 0.25, 0.7, cz), 0.5, MAT["white"])   # IBL + direct half
-    add_sphere_light(light_entity(e, "[IBL] Direct", (cx + W * 0.25, H - 0.4, cz)), intensity=40, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[IBL] Direct", (cx + W * 0.25, H - 0.4, cz)), intensity=2621440.0, radius=0.12, draw_range=LR)
 
 # ---- pathological ----
 def c_firefly(e, cx, cz):
     """Pathological: near-black room, one tiny very-bright distant emitter -> fireflies / importance-sampling stress."""
     cell_shell(e, "Firefly", cx, cz, 6, 4, 6, mat_floor=MAT["dark"], mat_wall=MAT["dark"])
-    add_sphere_light(light_entity(e, "[Firefly] Emitter", (cx + 2.0, 3.4, cz + 2.2)), intensity=250, radius=0.03, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Firefly] Emitter", (cx + 2.0, 3.4, cz + 2.2)), intensity=16384000.0, radius=0.03, draw_range=LR)
 
 def c_bounce_only(e, cx, cz):
     """Pathological: emitter tucked at the front-top facing in, no direct view from the aisle -> cache-only / bounce-lit surfaces."""
@@ -495,7 +495,7 @@ def c_fence(e, cx, cz):
     for i in range(n):
         px = cx - span * 0.5 + i * (span / (n - 1))
         box(e, f"[Fence] Bar {i}", (px, WALL_T, z_back), (w, 3.4, w), MAT["grey"])
-    add_sphere_light(light_entity(e, "[Fence] Light", (cx, 3.2, cz - 1.6)), intensity=55, radius=0.12, draw_range=LR)
+    add_sphere_light(light_entity(e, "[Fence] Light", (cx, 3.2, cz - 1.6)), intensity=3604480.0, radius=0.12, draw_range=LR)
 
 def c_rotating_emissive(e, cx, cz):
     """TAA: emissive object on a stand, static camera -> rotate it in-editor to isolate ghosting (no camera-motion confound)."""
@@ -558,7 +558,7 @@ box(entities, "Ground", (gx0, -0.52, gz0), (gx1 - gx0, 0.5, gz1 - gz0), MAT["gre
 _d = (0.35, -0.85, 0.4)
 _dl = math.sqrt(sum(c * c for c in _d))
 sun = base_entity("Sun", (0.0, 20.0, -10.0), tuple(face_dir(_d[0] / _dl, _d[1] / _dl, _d[2] / _dl)))
-add_directional_light(sun, color=(1.0, 0.97, 0.9), intensity=0.5, priority=0, angular_radius_deg=1.0)
+add_directional_light(sun, color=(1.0, 0.97, 0.9), intensity=32768.0, priority=0, angular_radius_deg=1.0)
 entities.append(sun)
 
 entities.extend(folders)
@@ -566,7 +566,7 @@ entities.extend(folders)
 # editor_camera rotation is [w,x,y,z] (same as entities, per scene_system.cpp:233/320).
 # 180 deg about Y = turn around to look +Z, staying upright (cells open toward -Z).
 editor_camera = {"rotation": [0.0, 0.0, 1.0, 0.0], "translation": [0.0, 6.0, -20.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "Lighting Lab", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 probe_count = sum(1 for ent in entities if wa.PROBE in ent)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities, {len(CELLS)} cells, {len(folders)} folders, {probe_count} probes)")
 print(f"wrote materials to {MAT_DIR}")

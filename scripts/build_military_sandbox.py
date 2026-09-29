@@ -102,7 +102,7 @@ from wscene_authoring import (
 )
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "military_sandbox.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "sandbox", "military_sandbox.wscene")
 SCENE_NAME = "military_sandbox"
 SCENE_ID = name_id(SCENE_NAME)
 
@@ -197,8 +197,8 @@ M["asphalt_pad"] = textured("mil_asphalt_pad", T_ASPHALT, uv=(12.0, 12.0))      
 # drawing its own proxy. A hand-made emissive rep sitting on top of an analytic light would
 # be counted twice (the mesh is gathered as a triangle light) AND would bake into the probe
 # as a blown-out blob, since only the engine's own proxies are auto-hidden during a bake.
-M["em_red"] = emissive("mil_em_red", [1.0, 0.07, 0.03], 40.0)
-M["em_green"] = emissive("mil_em_green", [0.14, 1.0, 0.34], 26.0)
+M["em_red"] = emissive("mil_em_red", [1.0, 0.07, 0.03], 2621440.0)
+M["em_green"] = emissive("mil_em_green", [0.14, 1.0, 0.34], 1703936.0)
 
 
 # =============================================================================
@@ -466,7 +466,7 @@ box(entities, "Gatehouse Roof", (GH_X0 - 0.3, GRADE + 0.15 + GH_H, GH_Z0 - 0.3),
     (GH_W + 0.6, 0.18, GH_D + 0.6), M["galv"], folder=F_SITE)
 e = light(entities, "Gatehouse Light", (GH_X0 + GH_W * 0.5, GRADE + GH_H - 0.15, GH_Z0 + GH_D * 0.5),
           folder=F_SITE)
-add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=14.0, radius=0.09, draw_range=9.0,
+add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=917504.0, radius=0.09, draw_range=9.0,
                  draw_emissive=True)
 
 # Small, sealed and lit by one weak bulb -- the same case as the huts. The east wall sits
@@ -503,8 +503,8 @@ F_LIGHT = folder_entity(folders, "Lighting")
 # the direction light TRAVELS, so -X/+Z means "coming from the south-east".
 SUN_DIR = (-0.52, -0.38, 0.62)
 sun = light(entities, "Sun", (0.0, 30.0, 0.0), face_dir(*SUN_DIR), folder=F_LIGHT)
-add_directional_light(sun, color=(1.0, 0.93, 0.82), intensity=6.0, priority=10, angular_radius_deg=0.6)
-add_skybox(sun, ENV_MAP, intensity=1.0)
+add_directional_light(sun, color=(1.0, 0.93, 0.82), intensity=393216.0, priority=10, angular_radius_deg=0.6)
+add_skybox(sun, ENV_MAP, intensity=65536.0)
 
 
 # =============================================================================
@@ -551,7 +551,7 @@ for i in range(4):
     cz = (HZ0 + HZ1) * 0.5
     e = light(entities, f"Hangar Work Light {i}", (lx, HH - 1.9, cz), face_dir(0.0, -1.0, 0.0),
               folder=F_HANGAR)
-    add_area_light(e, color=(1.0, 0.92, 0.80), intensity=190.0, half_width=2.2, half_height=1.1,
+    add_area_light(e, color=(1.0, 0.92, 0.80), intensity=12451840.0, half_width=2.2, half_height=1.1,
                    draw_range=26.0, draw_emissive=True)
     vbox(entities, f"Hangar Work Light Housing {i}", (lx - 2.4, HH - 1.75, cz - 1.3),
          (4.8, 0.25, 2.6), M["steel_rough"], folder=F_HANGAR)
@@ -754,7 +754,7 @@ e = light(entities, "Culvert Lamp", (CULV_X, CULV_Y + 1.4, LAMP_Z), face_dir(0.0
           folder=F_CULVERT)
 # Weak relative to the yard, but 9 crushed the whole bore to black, which shows the falloff
 # gradient nothing: the point is to read banding along it, not to prove it goes dark.
-add_sphere_light(e, color=(0.95, 0.92, 0.85), intensity=38.0, radius=0.1, draw_range=18.0,
+add_sphere_light(e, color=(0.95, 0.92, 0.85), intensity=2490368.0, radius=0.1, draw_range=18.0,
                  draw_emissive=True)
 
 # ONE probe for the whole run. This was three, one per segment, to keep the along-the-length
@@ -807,7 +807,7 @@ for i in range(12):
         M["galv"], folder=F_PAD)
     # Sphere bottom overlaps the post top so the fixture reads as mounted, not floating.
     e = light(entities, f"Helipad Light {i}", (lx, GRADE + 0.5, lz), folder=F_PAD)
-    add_sphere_light(e, color=(0.62, 0.84, 1.0), intensity=12.0, radius=0.13, draw_range=11.0,
+    add_sphere_light(e, color=(0.62, 0.84, 1.0), intensity=786432.0, radius=0.13, draw_range=11.0,
                      draw_emissive=True)
 
 box(entities, "Helipad Windsock Mast", (PAD_X - PAD_R - 3.0, GRADE, PAD_Z + 6.0), (0.22, 6.0, 0.22),
@@ -905,7 +905,7 @@ box(entities, "Revetment Lamp Mast", (REV_X - 0.12, REV_TOP, REV_Z + 3.38), (0.2
     M["galv"], folder=F_REV)
 e = light(entities, "Revetment Lamp", (REV_X, REV_TOP + 4.6, REV_Z + 3.5),
           face_dir(0.0, -1.0, 0.0), folder=F_REV)
-add_sphere_light(e, color=(1.0, 0.88, 0.70), intensity=95.0, radius=0.16, draw_range=18.0,
+add_sphere_light(e, color=(1.0, 0.88, 0.70), intensity=6225920.0, radius=0.16, draw_range=18.0,
                  draw_emissive=True)
 
 # The pocket is a distinct environment -- three 2.2m barriers and one lamp -- but it is open
@@ -955,7 +955,7 @@ shape(entities, "Mast Dish", (MX, DISH_Y, MZ + 1.2),
 
 for i, by in enumerate((MAST_Y0 + 5.0, MAST_Y0 + 10.5, DISH_Y + 3.1)):
     e = light(entities, f"Mast Beacon {i}", (MX, by, MZ), folder=F_MAST)
-    add_sphere_light(e, color=(1.0, 0.08, 0.03), intensity=55.0, radius=0.22, draw_range=34.0,
+    add_sphere_light(e, color=(1.0, 0.08, 0.03), intensity=3604480.0, radius=0.22, draw_range=34.0,
                      draw_emissive=True)
 
 # Thin verticals: a deliberately hostile case for thin-geometry shadowing. Set behind the
@@ -1010,7 +1010,7 @@ def watchtower(tag, cx, cz, facing_deg):
     roof_y = par_y + 2.4
     box(entities, f"{tag} Roof", (cx - 3.3, roof_y, cz - 3.3), (6.6, 0.22, 6.6), M["steel"], folder=F_TOWER)
     e = light(entities, f"{tag} Lamp", (cx, roof_y - 0.3, cz), face_dir(0.0, -1.0, 0.0), folder=F_TOWER)
-    add_sphere_light(e, color=(1.0, 0.90, 0.74), intensity=60.0, radius=0.13, draw_range=16.0,
+    add_sphere_light(e, color=(1.0, 0.90, 0.74), intensity=3932160.0, radius=0.13, draw_range=16.0,
                      draw_emissive=True)
     # Narrow aimed area light: the sharpest DI edge in the level.
     ax, az = math.cos(math.radians(facing_deg)), math.sin(math.radians(facing_deg))
@@ -1020,7 +1020,7 @@ def watchtower(tag, cx, cz, facing_deg):
         M["galv"], folder=F_TOWER)
     e = light(entities, f"{tag} Searchlight", (cx + ax * 2.4, par_y + 1.4, cz + az * 2.4),
               face_dir(ax, -0.34, az), folder=F_TOWER)
-    add_area_light(e, color=(1.0, 0.96, 0.88), intensity=420.0, half_width=0.5, half_height=0.5,
+    add_area_light(e, color=(1.0, 0.96, 0.88), intensity=27525120.0, half_width=0.5, half_height=0.5,
                    draw_range=46.0, draw_emissive=True)
 
 
@@ -1197,7 +1197,7 @@ for i, (fx, fz, aim) in enumerate(((-20.0, -12.0, 300.0), (4.0, -14.0, 240.0),
     visual(entities, f"Floodlight Housing {i}", (hx, GRADE + 9.0, hz), box_params(1.1, 0.5, 0.28),
            M["galv"], rot=yaw(-aim), folder=F_LIGHT)
     e = light(entities, f"Floodlight {i}", (hx, GRADE + 8.8, hz), face_dir(ax, -0.62, az), folder=F_LIGHT)
-    add_area_light(e, color=(1.0, 0.93, 0.80), intensity=300.0, half_width=0.55, half_height=0.25,
+    add_area_light(e, color=(1.0, 0.93, 0.80), intensity=19660800.0, half_width=0.55, half_height=0.25,
                    draw_range=34.0, draw_emissive=True)
 
 
@@ -1241,9 +1241,9 @@ for h, (hz0, wall_mat) in enumerate(((30.0, M["od_light"]), (37.5, M["panel"]), 
         M["galv"], folder=F_BARRACKS)
     e = light(entities, f"{n} Light", (hx0 + HUT_W * 0.5, GRADE + HUT_H - 0.2, hz0 + HUT_D * 0.5),
               folder=F_BARRACKS)
-    add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=34.0, radius=0.09, draw_range=10.0,
+    add_sphere_light(e, color=(1.0, 0.93, 0.80), intensity=2228224.0, radius=0.09, draw_range=10.0,
                      draw_emissive=True)
-    # Sealed rooms lit by one 34-intensity bulb, so they need their own environment rather
+    # Sealed rooms lit by one 2228224-nit bulb, so they need their own environment rather
     # than the skybox tier. Bounds clear the 0.15 shell and the 0.16 roof by PROBE_PAD, which
     # also covers the door and window reveals in the front run. Capture pushed 2.5m toward the
     # door-and-window face, the bright end of the room, and sits below the ceiling light
@@ -1298,11 +1298,11 @@ all_entities = folders + entities
 # the camera's forward axis is -Z, so a face_dir quat here looks the opposite way.
 CAM_POS = (24.0, 15.0, -64.0)
 CAMERA = {"rotation": list(camera_look_quat(-24.0, -13.0, 64.0)), "translation": list(CAM_POS)}
-wa.write_scene(SCENE_PATH, all_entities, SCENE_ID, SCENE_NAME, editor_camera=CAMERA)
+wa.write_scene(SCENE_PATH, all_entities, SCENE_ID, editor_camera=CAMERA)
 
 # Walkthrough run, one or two shots per zone; names order the PNG listing.
-SHOTS_PATH = os.path.join(REPO, "scenes", "military_sandbox.wplay")
-write_play(SHOTS_PATH, "Military sandbox walkthrough", SCENE_NAME, shots_to_events([
+SHOTS_PATH = os.path.join(REPO, "scenes", "sandbox", "military_sandbox.wplay")
+write_play(SHOTS_PATH, "Military sandbox walkthrough", SCENE_ID, shots_to_events([
     shot("01_overview", CAM_POS, (0.0, 2.0, 0.0)),
     shot("02_gate", (0.0, 1.8, -58.0), (0.0, 3.0, -40.0)),
     shot("03_motorpool_shadows", (-2.0, 8.0, -18.0), (-22.0, 1.0, -32.0)),

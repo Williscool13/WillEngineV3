@@ -265,6 +265,10 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
         return m.sceneId == sceneId;
     });
     state->editor.modifiedScenes.RemoveFirst(sceneId);
+
+    if (const auto* meta = ctx->assetManager->GetSceneMetadata(sceneId); meta && meta->bUnsaved) {
+        ctx->rescan.bScenes = true;
+    }
 }
 
 void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx)

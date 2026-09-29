@@ -73,7 +73,9 @@ static void DrawInputProfiles(Engine::EngineState* state)
 
 void DrawInputBindingsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (ImGui::Begin("Input Bindings")) {
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_INPUT_BINDINGS];
+    if (!bOpen) { return; }
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_INPUT_BINDINGS].title, &bOpen)) {
         DrawInputProfiles(state);
         ImGui::Separator();
 

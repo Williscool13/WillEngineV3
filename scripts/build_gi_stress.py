@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builds the GI stress scene: scenes/gi_stress.wscene + its materials.
+Builds the GI stress scene: scenes/lighting/gi_stress.wscene + its materials.
 Run from repo root:  python scripts/build_gi_stress.py
 
 Two rows of open-front rooms (front faces -Z, camera aisle between the rows), skybox at 0 so the
@@ -40,7 +40,7 @@ from wscene_authoring import (
 import asset_index
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE_PATH = os.path.join(REPO, "scenes", "gi_stress.wscene")
+SCENE_PATH = os.path.join(REPO, "scenes", "lighting", "gi_stress.wscene")
 SCENE_ID = name_id("gi_stress")
 
 IDX = asset_index.scan()
@@ -54,7 +54,7 @@ MAT_WHITE = write_material("gi_white", base_color=(0.73, 0.73, 0.73, 1.0))
 MAT_RED = write_material("gi_red", base_color=(0.63, 0.065, 0.05, 1.0))
 MAT_GREEN = write_material("gi_green", base_color=(0.14, 0.45, 0.091, 1.0))
 MAT_BLUE = write_material("gi_blue", base_color=(0.1, 0.2, 0.6, 1.0))
-MAT_EM_WARM = write_material("gi_em_warm", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(1.0, 0.85, 0.6, 30.0))
+MAT_EM_WARM = write_material("gi_em_warm", base_color=(0.0, 0.0, 0.0, 1.0), emissive=(1.0, 0.85, 0.6, 1966080.0))
 
 PBR = {s: IDX.material(f"pbr_{s}") for s in
        ("red_brick", "blue_plaster_wall", "wood_floor", "green_metal_rust", "clay_roof_tiles", "checkered_pavement_tiles")}
@@ -101,7 +101,7 @@ def open_front_room(tag, cx, cz, inner, mats, folder_id):
     solid_box(f"[{tag}] east", (x0 + sx, 0.0, z0 - WALL_T), (WALL_T, sy, sz + 2 * WALL_T), mats.get("east", d), folder_id)
     solid_box(f"[{tag}] north", (x0, 0.0, z0 + sz), (sx, sy, WALL_T), mats.get("north", d), folder_id)
 
-def ceiling_panel(tag, cx, cz, y, folder_id, intensity=250.0, half=0.8):
+def ceiling_panel(tag, cx, cz, y, folder_id, intensity=16384000.0, half=0.8):
     e = light_entity(f"[{tag}] panel", (cx, y, cz), folder_id, rot=DOWN)
     add_area_light(e, color=(1.0, 1.0, 1.0), intensity=intensity, half_width=half, half_height=half, draw_range=10.0, draw_emissive=True)
 
@@ -165,7 +165,7 @@ def build_corridor(fid):
     solid_box(f"[{tag}] leg north", (lx0, 0.0, z0 + W + LEG), (W, H, WALL_T), brick, fid)
     # The only light: at the far end of the hidden leg, facing down the leg (-Z)
     e = light_entity(f"[{tag}] light", (lx0 + W * 0.5, H * 0.6, z0 + W + LEG - 0.15), fid, rot=(0.0, 0.0, 1.0, 0.0))
-    add_area_light(e, color=(1.0, 0.95, 0.9), intensity=500.0, half_width=0.8, half_height=1.0, draw_range=14.0, draw_emissive=True)
+    add_area_light(e, color=(1.0, 0.95, 0.9), intensity=32768000.0, half_width=0.8, half_height=1.0, draw_range=14.0, draw_emissive=True)
     label(f"[{tag}] Label", "Bounce Corridor - light hidden around the corner, red brick tints every bounce", (cx0 + LEN * 0.5, 4.0, 18.3), fid)
 
 def build_leak_ladder(fid):
@@ -195,7 +195,7 @@ def build_leak_ladder(fid):
             solid_box(f"[{tag}] divider {i}", (sx0 - WALL_T * 0.5, 0.0, z0), (WALL_T, H, z_b - z0), MAT_WHITE, fid)
         label(f"[{tag}] t{t}", f"{t:.2f}", (sx0 + CELL_W * 0.5, 3.4, z0 - 0.4), fid)
     e = light_entity(f"[{tag}] blast", (cx, H - 0.2, z_b + ROOM_D * 0.5), fid, rot=DOWN)
-    add_area_light(e, color=(1.0, 1.0, 1.0), intensity=1200.0, half_width=7.0, half_height=1.2, draw_range=9.0, draw_emissive=True)
+    add_area_light(e, color=(1.0, 1.0, 1.0), intensity=78643200.0, half_width=7.0, half_height=1.2, draw_range=9.0, draw_emissive=True)
     label(f"[{tag}] Label", "Leak Ladder - sealed bright room behind; shared wall 2.0 down to 0.05, any light in a closet is a leak", (cx, 4.2, 19.3), fid)
 
 def build_pillar_court(fid):
@@ -218,7 +218,7 @@ def build_pillar_court(fid):
         add_procedural(e, idx, fields)
         e[PROCEDURAL]["material"] = PBR["green_metal_rust"]
         entities.append(e)
-    ceiling_panel(tag, cx, cz, INNER[1] - 0.05, fid, intensity=320.0, half=0.6)
+    ceiling_panel(tag, cx, cz, INNER[1] - 0.05, fid, intensity=20971520.0, half=0.6)
     label(f"[{tag}] Label", "Pillar Court - nearfield occlusion variance (arcade failure shape)", (cx, 5.0, 19.3), fid)
 
 def build_material_court(fid):
@@ -241,9 +241,9 @@ def build_material_court(fid):
     for i, (mat, dx, dz) in enumerate([("green_metal_rust", -2.0, 1.5), ("checkered_pavement_tiles", 1.5, 2.0)]):
         solid_box(f"[{tag}] box {i}", (cx + dx, 0.02, cz + dz), (1.4, 1.4, 1.4), PBR[mat], fid)
     e = light_entity(f"[{tag}] key", (cx - 2.0, INNER[1] - 0.05, cz), fid, rot=DOWN)
-    add_area_light(e, color=(1.0, 0.9, 0.75), intensity=300.0, half_width=1.0, half_height=1.0, draw_range=12.0, draw_emissive=True)
+    add_area_light(e, color=(1.0, 0.9, 0.75), intensity=19660800.0, half_width=1.0, half_height=1.0, draw_range=12.0, draw_emissive=True)
     e = light_entity(f"[{tag}] fill", (cx + 3.5, INNER[1] - 0.05, cz + 3.5), fid, rot=DOWN)
-    add_area_light(e, color=(0.7, 0.8, 1.0), intensity=120.0, half_width=0.6, half_height=0.6, draw_range=10.0, draw_emissive=True)
+    add_area_light(e, color=(0.7, 0.8, 1.0), intensity=7864320.0, half_width=0.6, half_height=0.6, draw_range=10.0, draw_emissive=True)
     label(f"[{tag}] Label", "Material Court - all six PBR sets, warm key + cool fill", (cx, 5.0, 18.3), fid)
 
 # =============================================================================
@@ -267,7 +267,7 @@ entities.append(sky)
 entities.extend(folders)
 
 editor_camera = {"rotation": [1.0, 0.0, 0.0, 0.0], "translation": [0.0, 4.0, 14.0]}
-wa.write_scene(SCENE_PATH, entities, SCENE_ID, "GI Stress", editor_camera=editor_camera)
+wa.write_scene(SCENE_PATH, entities, SCENE_ID, editor_camera=editor_camera)
 
 n_lights = sum(1 for e in entities if wa.LIGHT_AREA in e)
 print(f"wrote {SCENE_PATH} ({len(entities)} entities, {n_lights} area lights)")

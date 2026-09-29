@@ -19,6 +19,7 @@
 #include "engine/core/text_material_id.h"
 #include "engine/core/texture_id.h"
 #include "engine/editor_texture_residency.h"
+#include "engine/editor/editor_windows.h"
 #include "engine/editor/undo_stack.h"
 #include "resources/scene/scene.h"
 
@@ -103,7 +104,9 @@ struct EditorState
     Core::Vector<entt::entity> prevSelectedEntities{};
 
     UndoStack undo{};
-    bool bShowUndoHistory{false};
+
+    bool windowOpen[EDITOR_WINDOW_COUNT]{};
+    bool windowOpenSaved[EDITOR_WINDOW_COUNT]{};
 
     // Scene browser filter + selection
     char sceneBrowserSearch[64]{};
