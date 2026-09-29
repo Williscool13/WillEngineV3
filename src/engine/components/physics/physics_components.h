@@ -27,6 +27,9 @@ struct DynamicPhysicsBodyComponent
 struct TeleportPhysicsTransformTag
 {};
 
+struct StaticFollowWarnedTag
+{};
+
 struct DirtyKinematicPhysicsTransformTag
 {};
 

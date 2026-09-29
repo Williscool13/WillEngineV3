@@ -79,6 +79,11 @@ struct EditorState
     bool bExclusiveGizmoActivePrev{false};
     int32_t activeDotHandleId{-1};
 
+    /** Last Euler angles typed into an entity's rotation, shown while its rotation still matches so the fields never remap. */
+    entt::entity rotationHintEntity{entt::null};
+    Quat rotationHint{1.0f, 0.0f, 0.0f, 0.0f};
+    Vec3 rotationHintDegrees{0.0f};
+
     /** Bookmark bar row: 0 cam presets, 1 scene slots, 2 recordings. */
     int32_t bookmarkMode{0};
 

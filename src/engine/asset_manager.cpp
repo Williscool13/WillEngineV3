@@ -260,7 +260,7 @@ bool AssetManager::MoveScene(StringID sceneId, const Core::Path& newSource)
 
     const Core::Path oldSource = meta->source;
     if (!meta->bUnsaved) {
-        Platform::CreateDirectories(newSource);
+        Platform::CreateDirectories(newSource.Parent());
         if (!Platform::RenameFile(oldSource, newSource)) {
             LOG_ERROR(Asset, "Failed to move scene '{}' to '{}'", oldSource.c_str(), newSource.c_str());
             return false;

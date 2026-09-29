@@ -11,6 +11,7 @@
 #include "engine/include/engine_context.h"
 #include "core/time/time_frame.h"
 #include "engine/components/fwd_components.h"
+#include "engine/components/common_components.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
@@ -186,9 +187,20 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
 
 void MarkPhysicsTransformsDirty(Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::PhysicsBodyComponent, Component::DirtyTransformTag>();
+    auto& registry = state->registry;
+    auto view = registry.view<Component::PhysicsBodyComponent, Component::DirtyTransformTag>();
     for (auto entity : view) {
-        const auto* desc = state->registry.try_get<Component::PhysicsBodyDesc>(entity);
+        const auto* desc = registry.try_get<Component::PhysicsBodyDesc>(entity);
+        const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
+        const bool bMovedByParent = node && registry.valid(node->parent) && registry.all_of<Component::DirtyTransformTag>(node->parent);
+        if (bMovedByParent && (!desc || desc->motionType == Component::PhysicsMotionType::Static)) {
+            if (!registry.all_of<Component::StaticFollowWarnedTag>(entity)) {
+                const auto* name = registry.try_get<Component::NameComponent>(entity);
+                LOG_WARN(Physics, "Static body '{}' has a moving parent and stays put; make it kinematic", name ? name->name.c_str() : "Unnamed");
+                registry.emplace<Component::StaticFollowWarnedTag>(entity);
+            }
+            continue;
+        }
         if (desc && desc->motionType == Component::PhysicsMotionType::Kinematic) {
             state->registry.emplace_or_replace<Component::DirtyKinematicPhysicsTransformTag>(entity);
         }

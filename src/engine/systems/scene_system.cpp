@@ -31,6 +31,7 @@
 #include "engine/components/render/static_mesh_component.h"
 #include "engine/components/render/static_mesh_primitive_component.h"
 #include "engine/components/scene_components.h"
+#include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/systems/physics_system.h"
 #include "platform/file_utils.h"
@@ -705,6 +706,43 @@ void EnsureHierarchyOrder(Engine::EngineState* state)
     state->bHierarchyOrderDirty = false;
 }
 
+void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    auto& registry = state->registry;
+    if (registry.view<Component::DirtyTransformTag>().empty()) { return; }
+
+    const bool bPlaying = IsPlaying(state);
+    EnsureHierarchyOrder(state);
+    for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
+        if (!registry.valid(node.parent) || !registry.all_of<Component::DirtyTransformTag>(node.parent)) { continue; }
+        if (bPlaying && registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { continue; }
+        registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    }
+}
+
+uint32_t FindStaticBodiesUnderMovers(Engine::EngineState* state, Core::Span<entt::entity> out)
+{
+    auto& registry = state->registry;
+    uint32_t count = 0;
+    for (auto [entity, desc, node] : registry.view<Component::PhysicsBodyDesc, Component::HierarchyComponent>().each()) {
+        if (desc.motionType != Component::PhysicsMotionType::Static) { continue; }
+        entt::entity ancestor = node.parent;
+        for (int guard = 0; registry.valid(ancestor) && guard < 1024; ++guard) {
+            if (const auto* ancestorDesc = registry.try_get<Component::PhysicsBodyDesc>(ancestor)) {
+                if (ancestorDesc->motionType != Component::PhysicsMotionType::Static) {
+                    if (count < out.Size()) { out[count] = entity; }
+                    ++count;
+                }
+                break;
+            }
+            const auto* h = registry.try_get<Component::HierarchyComponent>(ancestor);
+            ancestor = h ? h->parent : entt::null;
+        }
+    }
+    return count;
+}
+
 void ResolveHierarchyLinks(Engine::EngineState* state)
 {
     ZoneScoped;
@@ -951,6 +989,13 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (!ctx->bGameLoaded) {
         LOG_WARN(Engine, "Play refused: game.dll is not loaded");
         return;
+    }
+
+    entt::entity stuck[16];
+    const uint32_t stuckCount = FindStaticBodiesUnderMovers(state, stuck);
+    for (uint32_t i = 0; i < std::min(stuckCount, static_cast<uint32_t>(std::size(stuck))); ++i) {
+        const auto* name = state->registry.try_get<Component::NameComponent>(stuck[i]);
+        LOG_WARN(Physics, "Static body '{}' is under a kinematic or dynamic body and will not follow it; make it kinematic", name ? name->name.c_str() : "Unnamed");
     }
 
     ZoneScoped; {

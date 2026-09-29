@@ -927,11 +927,38 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
         else {
+            static entt::entity stuckBodies[16];
+            static uint32_t stuckCount = 0;
             ImGui::BeginDisabled(!ctx->bGameLoaded);
             if (ImGui::Button("Play")) {
-                PlayStart(ctx, state);
+                stuckCount = FindStaticBodiesUnderMovers(state, stuckBodies);
+                if (stuckCount == 0) { PlayStart(ctx, state); }
+                else { ImGui::OpenPopup("Hierarchy Problems"); }
             }
             ImGui::EndDisabled();
+            if (ImGui::BeginPopupModal("Hierarchy Problems", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("%u static bodies are children of kinematic or dynamic bodies.", stuckCount);
+                ImGui::TextDisabled("They cannot follow their parent during play. Make them kinematic.");
+                const uint32_t shown = std::min(stuckCount, static_cast<uint32_t>(std::size(stuckBodies)));
+                for (uint32_t i = 0; i < shown; ++i) {
+                    if (!state->registry.valid(stuckBodies[i])) { continue; }
+                    const auto* name = state->registry.try_get<Component::NameComponent>(stuckBodies[i]);
+                    const auto label = Core::InlineString<160>::Format("%s##stuck%u", name ? name->name.c_str() : "Unnamed", i);
+                    if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups)) {
+                        state->editor.selectedFolders.Clear();
+                        state->editor.selectedEntities.Clear();
+                        state->editor.selectedEntities.PushBack(stuckBodies[i]);
+                    }
+                }
+                if (stuckCount > shown) { ImGui::TextDisabled("and %u more", stuckCount - shown); }
+                if (ImGui::Button("Play Anyway")) {
+                    ImGui::CloseCurrentPopup();
+                    PlayStart(ctx, state);
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) { ImGui::CloseCurrentPopup(); }
+                ImGui::EndPopup();
+            }
             if (!ctx->bGameLoaded) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "game.dll missing");
@@ -1108,19 +1135,28 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                 if (bUsing) {
                     state->editor.undo.Begin(state, Engine::TypeSID<Component::TransformComponent>(), Core::Span<const entt::entity>(&entity, 1));
                     const glm::mat4 localModel = glm::inverse(parentWorld) * model;
-                    float t[3], r[3], s[3];
-                    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localModel), t, r, s);
-                    glm::vec3 translation = glm::vec3(t[0], t[1], t[2]);
-                    if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid && state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
-                        const float g = state->editor.snapTranslation;
-                        translation = glm::round(translation / g) * g;
+                    const glm::vec3 scale{glm::length(glm::vec3(localModel[0])), glm::length(glm::vec3(localModel[1])), glm::length(glm::vec3(localModel[2]))};
+                    switch (state->editor.currentGizmoOperation) {
+                        case ImGuizmo::TRANSLATE: {
+                            glm::vec3 translation = glm::vec3(localModel[3]);
+                            if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid) {
+                                const float g = state->editor.snapTranslation;
+                                translation = glm::round(translation / g) * g;
+                            }
+                            transform->translation = translation;
+                            break;
+                        }
+                        case ImGuizmo::ROTATE: {
+                            const glm::mat3 basis(glm::vec3(localModel[0]) / scale.x, glm::vec3(localModel[1]) / scale.y, glm::vec3(localModel[2]) / scale.z);
+                            transform->rotation = glm::normalize(glm::quat_cast(basis));
+                            break;
+                        }
+                        case ImGuizmo::SCALE:
+                            transform->scale = state->editor.bUniformScaleMode ? glm::vec3((scale.x + scale.y + scale.z) / 3.0f) : scale;
+                            break;
+                        default:
+                            break;
                     }
-                    transform->translation = translation;
-                    transform->rotation = glm::quat(glm::radians(glm::vec3(r[0], r[1], r[2])));
-                    if (state->editor.bUniformScaleMode)
-                        transform->scale = glm::vec3((s[0] + s[1] + s[2]) / 3.0f);
-                    else
-                        transform->scale = glm::vec3(s[0], s[1], s[2]);
                     state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
                     if (auto* sc = state->registry.try_get<Component::SceneComponent>(entity)) {
                         MarkSceneModified(state, sc->sceneId);

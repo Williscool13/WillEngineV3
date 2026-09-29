@@ -68,6 +68,8 @@ static void PostUpdateCleanup(EngineContext* ctx, EngineState* state)
 
 void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph)
 {
+    graph.Add("PropagateDirtyTransforms", &PropagateDirtyTransforms);
+
 #if WILL_EDITOR
     graph.Add("UpdatePhysicsEditor", [](EngineContext* ctx, EngineState* state) {
         if (state->inputContext == InputContext::Editor) { UpdatePhysicsEditor(ctx, state); }

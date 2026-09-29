@@ -7,13 +7,14 @@
 
 #include <cassert>
 #include <cstddef>
+#include <type_traits>
 
 namespace Core
 {
 /**
  * Non-owning view over a contiguous sequence of T.
  *
- * Construct from a raw pointer + size, or from any contiguous container that exposes
+ * Construct from a raw pointer + size, a C array, or any contiguous container that exposes
  * Data() and Size() (Array, InlineVector, FixedVector, Vector).
  * Not applicable to map types.
  */
@@ -25,6 +26,11 @@ public:
 
     constexpr Span(T* data, size_t size)
         : data_(data), size_(size)
+    {}
+
+    template<typename U, size_t N> requires std::is_convertible_v<U(*)[], T(*)[]>
+    constexpr Span(U (&array)[N])
+        : data_(array), size_(N)
     {}
 
     // Constructs from any contiguous container with Data() and Size().

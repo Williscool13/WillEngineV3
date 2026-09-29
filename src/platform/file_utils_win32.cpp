@@ -8,6 +8,7 @@
 #include <iterator>
 #include <Windows.h>
 #include <shellapi.h>
+#include <spdlog/spdlog.h>
 
 #include "core/containers/inline_path.h"
 #include "core/containers/vector.h"
@@ -295,7 +296,9 @@ bool AppendFile(const Core::Path& path, std::string_view data)
 
 bool RenameFile(const char* src, const char* dst)
 {
-    return MoveFileExA(src, dst, MOVEFILE_REPLACE_EXISTING) != FALSE;
+    if (MoveFileExA(src, dst, MOVEFILE_REPLACE_EXISTING) != FALSE) { return true; }
+    SPDLOG_WARN("MoveFileEx '{}' -> '{}' failed, Windows error {}", src, dst, GetLastError());
+    return false;
 }
 
 bool RenameFile(const Core::Path& src, const Core::Path& dst)

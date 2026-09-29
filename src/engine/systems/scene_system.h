@@ -107,6 +107,15 @@ void ResolveHierarchyLinks(Engine::EngineState* state);
  */
 void EnsureHierarchyOrder(Engine::EngineState* state);
 
+/** Tags the descendants of every DirtyTransformTag entity so physics follows a moved parent; physics-owned dynamic children are left alone while playing. */
+void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/**
+ * Static bodies whose nearest ancestor with a body is kinematic or dynamic; they cannot follow it during play.
+ * @return the total count; up to out.Size() entities are written to out
+ */
+uint32_t FindStaticBodiesUnderMovers(Engine::EngineState* state, Core::Span<entt::entity> out);
+
 /**
  * Parents child under parent, preserving the child's world pose (rejects cycles).
  */

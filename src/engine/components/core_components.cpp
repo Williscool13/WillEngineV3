@@ -101,12 +101,16 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
     dirty |= drawXYZ("##tx", "##ty", "##tz", &component.translation.x, 0.1f);
 
     // Rotation
-    glm::vec3 eulerDegrees = glm::degrees(glm::eulerAngles(component.rotation));
+    const bool bHintValid = state->editor.rotationHintEntity == edit.Primary() && glm::abs(glm::dot(state->editor.rotationHint, component.rotation)) > 0.99999f;
+    glm::vec3 eulerDegrees = bHintValid ? state->editor.rotationHintDegrees : glm::degrees(glm::eulerAngles(component.rotation));
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Rotation");
     ImGui::SameLine(labelColW);
     if (drawXYZ("##rx", "##ry", "##rz", &eulerDegrees.x, 0.5f)) {
         component.rotation = glm::quat(glm::radians(eulerDegrees));
+        state->editor.rotationHintEntity = edit.Primary();
+        state->editor.rotationHint = component.rotation;
+        state->editor.rotationHintDegrees = eulerDegrees;
         dirty = true;
     }
 
