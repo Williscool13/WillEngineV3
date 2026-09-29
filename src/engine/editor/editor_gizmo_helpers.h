@@ -60,6 +60,12 @@ bool WorldToScreen(Vec3 worldPos, const Mat4& view, const Mat4& proj, Vec4 viewp
 Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 viewport);
 
 /**
+ * Pivot shortcut row: sets renderOffset so the picked point of the entity's loaded mesh bounds lands on the entity origin.
+ * @return true when a preset was picked
+ */
+bool MeshPivotPresets(Engine::EngineContext* ctx, const entt::registry& registry, entt::entity entity, const Quat& renderRotation, Vec3& renderOffset);
+
+/**
  * Draws a dot handle in world space; calls onMoved(hitPoint) while dragging.
  * Sets state->editor.bExclusiveGizmoActive when hovered or active to suppress viewport selection.
  * Drag plane normal for a single-axis constraint: normalize(cameraForward - dot(cameraForward, axis) * axis).

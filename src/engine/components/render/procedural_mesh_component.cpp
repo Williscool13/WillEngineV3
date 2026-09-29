@@ -212,13 +212,14 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 if (ImGui::Selectable("Wall")) selectShape(Engine::WallParams{});
                 if (ImGui::Selectable("Lattice")) selectShape(Engine::LatticeParams{});
                 if (ImGui::Selectable("Corrugated Panel")) selectShape(Engine::CorrugatedPanelParams{});
+                if (ImGui::Selectable("Terrace")) selectShape(Engine::TerraceParams{});
                 ImGui::EndCombo();
             }
         }
         else {
             static constexpr const char* shapeNames[] = {
                 "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel"
+                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace"
             };
             ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
             ImGui::SameLine();
@@ -705,8 +706,54 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Rib Width", &p.ribWidth, 0.005f, 0.0f, 10.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Rib Count", &p.ribCount, 1, 1, 128);
+                    ImGui::DragInt("Rib Count", &p.ribCount, 1, 1, 256);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Flank Angle", &p.flankAngle, 0.5f, 0.0f, 89.0f, "%.1f deg");
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Rib side angle from vertical; 0 = square fins"); }
+                    ImGui::DragInt("Alternate Every", &p.alternateEvery, 1, 0, 16);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Every Nth rib uses Alternate Depth; 0 or 1 = off"); }
+                    ImGui::BeginDisabled(p.alternateEvery < 2);
+                    ImGui::DragFloat("Alternate Depth", &p.alternateDepth, 0.005f, 0.0f, 5.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::EndDisabled();
+                }
+                else if constexpr (std::is_same_v<T, Engine::TerraceParams>) {
+                    int direction = static_cast<int>(p.direction);
+                    const char* directions[] = {"Up", "Down"};
+                    if (ImGui::Combo("Direction", &direction, directions, 2)) {
+                        p.direction = static_cast<Engine::TerraceDirection>(direction);
+                        dirty = true;
+                    }
+                    ImGui::TextUnformatted("Steps on");
+                    auto sideToggle = [&](const char* label, int32_t bit) {
+                        ImGui::SameLine();
+                        bool bOn = (p.sides & bit) != 0;
+                        if (ImGui::Checkbox(label, &bOn)) {
+                            p.sides = bOn ? (p.sides | bit) : (p.sides & ~bit);
+                            dirty = true;
+                        }
+                    };
+                    sideToggle("-X", Engine::TERRACE_SIDE_NEG_X);
+                    sideToggle("+X", Engine::TERRACE_SIDE_POS_X);
+                    sideToggle("-Z", Engine::TERRACE_SIDE_NEG_Z);
+                    sideToggle("+Z", Engine::TERRACE_SIDE_POS_Z);
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Step Count", &p.stepCount, 1, 1, Engine::TerraceParams::MAX_STEPS);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Step Rise", &p.stepRise, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Step Run", &p.stepRun, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Base Height", &p.baseHeight, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Solid under every step; 0 with Down leaves a hole through the middle"); }
+                    dirty |= ImGui::Checkbox("Bottom Face", &p.bBottom);
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Underside at y = 0; turn off when it sits on or in other geometry"); }
                 }
             }, component.params);
 
@@ -780,6 +827,10 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         if (drawXYZ("##rrx", "##rry", "##rrz", &renderEuler.x, 0.5f, bEditingOffset)) {
             component.renderRotation = glm::quat(glm::radians(renderEuler));
         }
+
+        ImGui::BeginDisabled(edit.IsMulti());
+        bCommit |= Editor::MeshPivotPresets(ctx, registry, entity, component.renderRotation, component.renderOffset);
+        ImGui::EndDisabled();
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditingOffset ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditingOffset));

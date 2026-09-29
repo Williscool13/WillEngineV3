@@ -221,7 +221,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     });
     graph.Add("GatherLights", &GatherLights, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenTag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::TransformComponent>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenTag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::WorldTransformComponent>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
         .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid},
     });
     graph.Add("GatherTextRenderables", &GatherTextRenderables, {

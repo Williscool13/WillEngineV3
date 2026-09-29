@@ -89,6 +89,49 @@ static void DrawFileMenu(EngineContext* ctx, EngineState* state)
         WriteProjectConfig(state->projectConfig, state->allocator);
     }
     ImGui::EndDisabled();
+
+    ImGui::Separator();
+    if (ImGui::MenuItem("Exit")) {
+        if (state->editor.modifiedScenes.IsEmpty()) { state->requests.bRequestedQuit = true; }
+        else { state->editor.bQuitPromptRequested = true; }
+    }
+}
+
+static void DrawQuitPrompt(EngineContext* ctx, EngineState* state)
+{
+    constexpr const char* QUIT_POPUP = "Unsaved Changes##quit";
+    if (state->editor.bQuitPromptRequested) {
+        state->editor.bQuitPromptRequested = false;
+        ImGui::OpenPopup(QUIT_POPUP);
+    }
+    if (!ImGui::BeginPopupModal(QUIT_POPUP, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) { return; }
+
+    ImGui::TextUnformatted("These scenes have unsaved changes:");
+    for (StringID sceneId : state->editor.modifiedScenes) {
+        const auto* meta = ctx->assetManager->GetSceneMetadata(sceneId);
+        ImGui::BulletText("%s", meta ? meta->sceneName.c_str() : "(unregistered)");
+    }
+
+    auto quit = [&]() {
+        state->editor.bQuitConfirmed = true;
+        state->requests.bRequestedQuit = true;
+        ImGui::CloseCurrentPopup();
+    };
+    const bool bCanSave = ctx->bGameLoaded && !IsPlaying(state);
+    ImGui::BeginDisabled(!bCanSave);
+    if (ImGui::Button("Save All and Quit")) {
+        SaveModifiedScenes(ctx, state);
+        quit();
+    }
+    ImGui::EndDisabled();
+    if (!bCanSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip(ctx->bGameLoaded ? "Stop play first" : "Saving disabled: game.dll missing");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Quit Without Saving")) { quit(); }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) { ImGui::CloseCurrentPopup(); }
+    ImGui::EndPopup();
 }
 
 static void DrawEditMenu(EngineState* state)
@@ -136,6 +179,7 @@ void DrawEditorMenuBar(EngineContext* ctx, EngineState* state)
         }
         ImGui::EndMainMenuBar();
     }
+    DrawQuitPrompt(ctx, state);
 
     if (memcmp(state->editor.windowOpen, state->editor.windowOpenSaved, sizeof(state->editor.windowOpenSaved)) != 0) {
         WriteEditorWindowConfig(state);

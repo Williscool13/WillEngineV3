@@ -171,6 +171,7 @@ private:
     bool GenerateLattice(const Engine::LatticeParams& p);
 
     bool GenerateCorrugatedPanel(const Engine::CorrugatedPanelParams& p);
+    bool GenerateTerrace(const Engine::TerraceParams& p);
 
     bool GenerateModule(const Engine::ModuleParams& p);
 

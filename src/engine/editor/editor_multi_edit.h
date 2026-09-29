@@ -28,14 +28,10 @@ struct FieldResult
  * relative delta; pressing Enter yields the raw expression to feed EvaluateFloatField. width is the total field width incl. strip.
  */
 FieldResult ScalarField(const char* id, ImU32 axisColor, float uniformValue, bool mixed, float dragSpeed, float width);
-/** True if the name template contains a `_S` or `_R(a,b)` token (so the caller expands per-entity instead of broadcasting a literal). */
+/** True if the name template contains a `{S}` or `{R(a,b)}` token. */
 bool ContainsNameToken(const char* s);
 
-/**
- * Expands `_S` (0-based selection index) and `_R(a,b)` (random int in [a,b)) tokens; the leading underscore is kept as a
- * separator, so `Crate_S` -> `Crate_0` and `Enemy_R(0,5)` -> `Enemy_3`. `_S` only counts when the S is standalone (followed
- * by end or a non-letter), so ordinary names like `weapon_Sword` are untouched. Result is written into dst (truncated to capacity).
- */
+/** Expands `{S}` to the 0-based selection index and `{R(a,b)}` to a random int in [a,b); anything else is copied as is. */
 void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, std::mt19937_64& rng);
 
 /**

@@ -501,10 +501,10 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         emissive.props.emissiveFactor = areaLight ? glm::vec4(areaLight->color, areaLight->intensity) : glm::vec4(sphereLight->color, sphereLight->intensity);
         const Engine::MaterialID materialID = ctx->materialManager->CreateSynthesizedMaterial(emissive);
 
-        const auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
         glm::mat4 m(1.0f);
-        if (transform) {
-            m = areaLight ? Component::ComputeAreaLightQuadMatrix(*transform, *areaLight) : Component::ComputeSphereLightMatrix(*transform, *sphereLight);
+        if (state->registry.all_of<Component::TransformComponent>(entity)) {
+            const Transform world = Component::ComputeWorldTransform(state->registry, entity);
+            m = areaLight ? Component::ComputeAreaLightQuadMatrix(world, *areaLight) : Component::ComputeSphereLightMatrix(world, *sphereLight);
         }
 
         state->registry.remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy

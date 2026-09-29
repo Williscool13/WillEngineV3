@@ -20,8 +20,8 @@ static constexpr float LIGHT_PI = 3.14159265358979f;
 
 static Vec3 EditorLightScale(entt::registry& registry, entt::entity entity)
 {
-    const auto* transform = registry.try_get<Component::TransformComponent>(entity);
-    return transform ? transform->scale : Vec3{1.0f, 1.0f, 1.0f};
+    const auto* world = registry.try_get<Component::WorldTransformComponent>(entity);
+    return world ? world->scale : Vec3{1.0f, 1.0f, 1.0f};
 }
 
 static float AreaLightLumensPerNit(const Component::AreaLightComponent& light, const Vec3& scale)
@@ -121,7 +121,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::PopStyleColor();
     }
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    const auto* transform = registry.try_get<WorldTransformComponent>(entity);
     if (transform && bEditing) {
         const auto& comp = edit.Get<AreaLightComponent>();
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -180,32 +180,32 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
     return {.bRequestRemoval = remove};
 }
 
-glm::mat4 Component::ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light)
+glm::mat4 Component::ComputeAreaLightQuadMatrix(const Transform& world, const AreaLightComponent& light)
 {
-    const glm::mat3 rot = glm::mat3_cast(transform.rotation);
+    const glm::mat3 rot = glm::mat3_cast(world.rotation);
     const glm::vec3 right = rot[0];
     const glm::vec3 up = rot[1];
     const glm::vec3 normal = rot[2];
-    const float halfWidth = light.halfWidth * transform.scale.x;
-    const float halfHeight = light.bDisk ? halfWidth : light.halfHeight * transform.scale.y;
+    const float halfWidth = light.halfWidth * world.scale.x;
+    const float halfHeight = light.bDisk ? halfWidth : light.halfHeight * world.scale.y;
 
     glm::mat4 m(1.0f);
     m[0] = glm::vec4(right * (2.0f * halfWidth), 0.0f);
     m[1] = glm::vec4(normal, 0.0f);
     m[2] = glm::vec4(up * (-2.0f * halfHeight), 0.0f);
-    m[3] = glm::vec4(transform.translation, 1.0f);
+    m[3] = glm::vec4(world.translation, 1.0f);
     return m;
 }
 
-LightInfo Component::ComputeAreaLightInfo(const TransformComponent& transform, const AreaLightComponent& light)
+LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLightComponent& light)
 {
-    const glm::mat3 rot = glm::mat3_cast(transform.rotation);
-    const float halfWidth = light.halfWidth * transform.scale.x;
+    const glm::mat3 rot = glm::mat3_cast(world.rotation);
+    const float halfWidth = light.halfWidth * world.scale.x;
     return LightInfo{
-        .position = {transform.translation, glm::cos(glm::radians(light.coneOuterDegrees))},
+        .position = {world.translation, glm::cos(glm::radians(light.coneOuterDegrees))},
         .normal = {rot[2], glm::cos(glm::radians(light.coneInnerDegrees))},
         .right = {rot[0], halfWidth},
-        .up = {rot[1], light.bDisk ? halfWidth : light.halfHeight * transform.scale.y},
+        .up = {rot[1], light.bDisk ? halfWidth : light.halfHeight * world.scale.y},
         .packedColor = Render::PackColorRGBA8(glm::vec4(light.color, light.drawEmissiveSurface ? 1.0f : 0.0f)),
         .intensity = light.intensity,
         .range = light.range,
@@ -216,6 +216,7 @@ LightInfo Component::ComputeAreaLightInfo(const TransformComponent& transform, c
 void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.get<AreaLightComponent>(entity).lightSlot = AnalyticLightStore::INVALID_SLOT;
     state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
@@ -254,23 +255,23 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
     return {.bRequestRemoval = remove};
 }
 
-glm::mat4 Component::ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light)
+glm::mat4 Component::ComputeSphereLightMatrix(const Transform& world, const SphereLightComponent& light)
 {
-    const float scale = 2.0f * light.radius * transform.scale.x; // unit sphere has radius 0.5
+    const float scale = 2.0f * light.radius * world.scale.x; // unit sphere has radius 0.5
     glm::mat4 m(1.0f);
     m[0] = glm::vec4(scale, 0.0f, 0.0f, 0.0f);
     m[1] = glm::vec4(0.0f, scale, 0.0f, 0.0f);
     m[2] = glm::vec4(0.0f, 0.0f, scale, 0.0f);
-    m[3] = glm::vec4(transform.translation, 1.0f);
+    m[3] = glm::vec4(world.translation, 1.0f);
     return m;
 }
 
-LightInfo Component::ComputeSphereLightInfo(const TransformComponent& transform, const SphereLightComponent& light)
+LightInfo Component::ComputeSphereLightInfo(const Transform& world, const SphereLightComponent& light)
 {
     return LightInfo{
-        .position = {transform.translation, 0.0f},
+        .position = {world.translation, 0.0f},
         .normal = {0.0f, 0.0f, 0.0f, 0.0f},
-        .right = {0.0f, 0.0f, 0.0f, light.radius * transform.scale.x},
+        .right = {0.0f, 0.0f, 0.0f, light.radius * world.scale.x},
         .up = {0.0f, 0.0f, 0.0f, 0.0f},
         .packedColor = Render::PackColorRGBA8(glm::vec4(light.color, light.drawEmissiveSurface ? 1.0f : 0.0f)),
         .intensity = light.intensity,
@@ -282,6 +283,7 @@ LightInfo Component::ComputeSphereLightInfo(const TransformComponent& transform,
 void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.get<SphereLightComponent>(entity).lightSlot = AnalyticLightStore::INVALID_SLOT;
     state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);

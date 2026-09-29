@@ -73,9 +73,9 @@ struct AreaLightComponent
  * @param light
  * @return
  */
-glm::mat4 ComputeAreaLightQuadMatrix(const TransformComponent& transform, const AreaLightComponent& light);
+glm::mat4 ComputeAreaLightQuadMatrix(const Transform& world, const AreaLightComponent& light);
 
-LightInfo ComputeAreaLightInfo(const TransformComponent& transform, const AreaLightComponent& light);
+LightInfo ComputeAreaLightInfo(const Transform& world, const AreaLightComponent& light);
 
 struct SphereLightComponent
 {
@@ -116,9 +116,9 @@ struct SphereLightComponent
  * @param light
  * @return
  */
-glm::mat4 ComputeSphereLightMatrix(const TransformComponent& transform, const SphereLightComponent& light);
+glm::mat4 ComputeSphereLightMatrix(const Transform& world, const SphereLightComponent& light);
 
-LightInfo ComputeSphereLightInfo(const TransformComponent& transform, const SphereLightComponent& light);
+LightInfo ComputeSphereLightInfo(const Transform& world, const SphereLightComponent& light);
 
 struct LightSurfaceRuntime
 {

@@ -16,6 +16,7 @@
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
 #include "engine/engine_api.h"
+#include "engine/editor/editor_gizmo_helpers.h"
 #include "engine/editor/editor_materials.h"
 #include "engine/components/component_editor.h"
 #include "engine/components/core_components.h"
@@ -193,6 +194,12 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
         edit.PreviewSet(&Text3DComponent::renderRotation, glm::quat(glm::radians(renderEuler)));
     }
     EditWidgets::CommitOnRelease<Text3DComponent>(edit, false);
+    ImGui::BeginDisabled(edit.IsMulti());
+    Vec3 pivotOffset = comp.renderOffset;
+    if (Editor::MeshPivotPresets(ctx, edit.Registry(), edit.Primary(), comp.renderRotation, pivotOffset)) {
+        edit.Set(&Text3DComponent::renderOffset, pivotOffset);
+    }
+    ImGui::EndDisabled();
 
     if (const Engine::AssetManager::CachedFontMetadata* meta = ctx->assetManager->GetFontMetadata(comp.fontId)) {
         if (meta->header.contourGlyphCount == 0) {

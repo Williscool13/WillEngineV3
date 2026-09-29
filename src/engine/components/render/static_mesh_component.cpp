@@ -430,6 +430,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             component.renderRotation = glm::quat(glm::radians(renderEuler));
         }
 
+        ImGui::BeginDisabled(edit.IsMulti());
+        bCommit |= Editor::MeshPivotPresets(ctx, registry, entity, component.renderRotation, component.renderOffset);
+        ImGui::EndDisabled();
+
         ImGui::PushStyleColor(ImGuiCol_Button, bEditingOffset ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditingOffset));
         if (ImGui::Button(bEditingOffset ? "Done##offsetedit" : "Edit##offsetedit")) {

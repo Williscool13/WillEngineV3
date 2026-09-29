@@ -113,6 +113,10 @@ struct EditorState
     bool windowOpen[EDITOR_WINDOW_COUNT]{};
     bool windowOpenSaved[EDITOR_WINDOW_COUNT]{};
 
+    /** Window close with unsaved scenes opens the quit prompt instead; confirmed lets the next quit through. */
+    bool bQuitPromptRequested{false};
+    bool bQuitConfirmed{false};
+
     // Scene browser filter + selection
     char sceneBrowserSearch[64]{};
     StringID sceneBrowserComponentFilter{};

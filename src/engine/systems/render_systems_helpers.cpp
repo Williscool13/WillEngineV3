@@ -26,7 +26,7 @@ void VerifyAnalyticLightStore(Engine::EngineState* state)
     uint32_t staleCount = 0;
     uint32_t firstStaleSlot = 0;
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
         if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         const LightInfo expected = Component::ComputeAreaLightInfo(transform, light);
         if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
@@ -34,7 +34,7 @@ void VerifyAnalyticLightStore(Engine::EngineState* state)
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
         if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         const LightInfo expected = Component::ComputeSphereLightInfo(transform, light);
         if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {

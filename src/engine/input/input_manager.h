@@ -34,6 +34,8 @@ public:
 
     [[nodiscard]] bool IsQuitRequested() const { return bRequestedQuit; }
 
+    void ClearQuitRequest() { bRequestedQuit = false; }
+
 private:
     void OpenFirstGamepad();
     void CloseGamepad();

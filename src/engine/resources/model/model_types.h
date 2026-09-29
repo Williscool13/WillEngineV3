@@ -510,8 +510,8 @@ struct LatticeParams
 /**
  * Corrugated sheet: flat back at z=0, web sizeZ thick, ribCount trapezoidal ribs protruding to
  * z = sizeZ + ribDepth, evenly pitched across X and running the full Y. Each rib is a plateau of
- * ribWidth with 45-degree flanks (flank run = ribDepth, steepened when the pitch cannot fit them).
- * Corner pivot like BoxParams.
+ * ribWidth with flanks flankAngle from vertical (0 = square fins), steepened when the pitch cannot fit them.
+ * When alternateEvery >= 2, every alternateEvery-th rib uses alternateDepth instead. Corner pivot like BoxParams.
  */
 struct CorrugatedPanelParams
 {
@@ -521,12 +521,129 @@ struct CorrugatedPanelParams
     float ribDepth{0.05f};
     float ribWidth{0.2f};
     int32_t ribCount{6};
+    float flankAngle{45.0f};
+    int32_t alternateEvery{0};
+    float alternateDepth{0.0f};
 
-    WILL_REFLECT(CorrugatedPanelParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(ribDepth), WILL_FIELD(ribWidth), WILL_FIELD(ribCount))
+    WILL_REFLECT(CorrugatedPanelParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(ribDepth), WILL_FIELD(ribWidth), WILL_FIELD(ribCount),
+                 WILL_FIELD(flankAngle), WILL_FIELD(alternateEvery), WILL_FIELD(alternateDepth))
 };
 
+struct CorrugatedRib
+{
+    float center;
+    float width;
+    float depth;
+    float flank;
+};
+
+/** Rib i's profile, shared by the mesh and collider generators. */
+inline CorrugatedRib CorrugatedPanelRib(const CorrugatedPanelParams& p, int32_t i)
+{
+    const int32_t ribs = glm::max(1, p.ribCount);
+    const float pitch = p.sizeX / static_cast<float>(ribs);
+    const float w = glm::clamp(p.ribWidth, 0.0f, glm::max(0.0f, pitch - 2e-3f));
+    const bool bAlternate = p.alternateEvery >= 2 && (i % p.alternateEvery) == p.alternateEvery - 1;
+    const float depth = glm::max(bAlternate ? p.alternateDepth : p.ribDepth, 0.0f);
+    const float slope = glm::tan(glm::radians(glm::clamp(p.flankAngle, 0.0f, 89.0f)));
+    const float flank = glm::min(depth * slope, (pitch - w) * 0.5f);
+    return {(static_cast<float>(i) + 0.5f) * pitch, w, depth, flank};
+}
+
+enum TerraceSide : int32_t
+{
+    TERRACE_SIDE_NEG_X = 1 << 0,
+    TERRACE_SIDE_POS_X = 1 << 1,
+    TERRACE_SIDE_NEG_Z = 1 << 2,
+    TERRACE_SIDE_POS_Z = 1 << 3,
+};
+
+enum class TerraceDirection : uint8_t
+{
+    Up,
+    Down,
+};
+
+/**
+ * Stepped block over a corner-pivot sizeX x sizeZ footprint, inset by stepRun on the enabled sides. Up climbs to a central
+ * landing; Down descends to a floor at baseHeight, and a baseHeight of 0 leaves a hole through.
+ */
+struct TerraceParams
+{
+    float sizeX{4.0f};
+    float sizeZ{4.0f};
+    int32_t stepCount{3};
+    float stepRise{0.2f};
+    float stepRun{0.3f};
+    float baseHeight{0.2f};
+    int32_t sides{TERRACE_SIDE_NEG_X | TERRACE_SIDE_POS_X | TERRACE_SIDE_NEG_Z | TERRACE_SIDE_POS_Z};
+    TerraceDirection direction{TerraceDirection::Down};
+    bool bBottom{true};
+
+    static constexpr int32_t MAX_STEPS = 64;
+
+    WILL_REFLECT(TerraceParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(stepCount), WILL_FIELD(stepRise), WILL_FIELD(stepRun), WILL_FIELD(baseHeight),
+                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bBottom))
+
+    static void Sanitize(TerraceParams& p)
+    {
+        p.sizeX = glm::max(p.sizeX, 0.001f);
+        p.sizeZ = glm::max(p.sizeZ, 0.001f);
+        p.stepCount = glm::clamp(p.stepCount, 1, MAX_STEPS);
+        p.stepRise = glm::max(p.stepRise, 0.0f);
+        p.stepRun = glm::max(p.stepRun, 0.0f);
+        p.baseHeight = glm::max(p.baseHeight, 0.0f);
+        p.sides &= TERRACE_SIDE_NEG_X | TERRACE_SIDE_POS_X | TERRACE_SIDE_NEG_Z | TERRACE_SIDE_POS_Z;
+    }
+};
+
+struct TerraceRect
+{
+    float x0, z0, x1, z1;
+};
+
+/** Levels run outermost (0) to innermost; Down adds a rim level. */
+inline int32_t TerraceLevelCount(const TerraceParams& p)
+{
+    return p.direction == TerraceDirection::Down ? p.stepCount + 1 : p.stepCount;
+}
+
+/** stepRun clamped so the innermost level's rect never inverts. */
+inline float TerraceRun(const TerraceParams& p)
+{
+    const int32_t insets = TerraceLevelCount(p) - 1;
+    float run = p.stepRun;
+    if (insets <= 0) { return run; }
+    const int32_t sidesX = ((p.sides & TERRACE_SIDE_NEG_X) ? 1 : 0) + ((p.sides & TERRACE_SIDE_POS_X) ? 1 : 0);
+    const int32_t sidesZ = ((p.sides & TERRACE_SIDE_NEG_Z) ? 1 : 0) + ((p.sides & TERRACE_SIDE_POS_Z) ? 1 : 0);
+    if (sidesX > 0) { run = glm::min(run, p.sizeX / static_cast<float>(sidesX * insets)); }
+    if (sidesZ > 0) { run = glm::min(run, p.sizeZ / static_cast<float>(sidesZ * insets)); }
+    return glm::max(run, 0.0f);
+}
+
+inline TerraceRect TerraceLevelRect(const TerraceParams& p, float run, int32_t level)
+{
+    const float d = run * static_cast<float>(level);
+    return {
+        (p.sides & TERRACE_SIDE_NEG_X) ? d : 0.0f,
+        (p.sides & TERRACE_SIDE_NEG_Z) ? d : 0.0f,
+        p.sizeX - ((p.sides & TERRACE_SIDE_POS_X) ? d : 0.0f),
+        p.sizeZ - ((p.sides & TERRACE_SIDE_POS_Z) ? d : 0.0f),
+    };
+}
+
+/** Top height of a level; 0 means empty. */
+inline float TerraceLevelHeight(const TerraceParams& p, int32_t level)
+{
+    if (p.direction == TerraceDirection::Down) {
+        return p.baseHeight + p.stepRise * static_cast<float>(p.stepCount - level);
+    }
+    return p.baseHeight + p.stepRise * static_cast<float>(level + 1);
+}
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
-    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams>;
+    , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams
+    , TerraceParams>;
 
 inline constexpr int32_t MAX_MODULE_PARTS = 32;
 inline constexpr int32_t MAX_MODULE_SLOTS = 8;

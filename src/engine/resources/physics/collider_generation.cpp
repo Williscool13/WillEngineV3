@@ -719,10 +719,6 @@ static void CompoundCorrugatedPanel(const CorrugatedPanelParams& p, Core::Vector
     if (sx <= 0.0f || sy <= 0.0f || base <= 0.0f) { return; }
     const int ribs = glm::max(1, p.ribCount);
     out.Reserve(out.Size() + 1 + ribs);
-    const float pitch = sx / static_cast<float>(ribs);
-    const float w = glm::clamp(p.ribWidth, 0.0f, glm::max(0.0f, pitch - 2e-3f));
-    const float flank = glm::min(glm::max(p.ribDepth, 0.0f), (pitch - w) * 0.5f);
-    const float depth = glm::max(p.ribDepth, 0.0f);
 
     SplineColliderPrimitive web{};
     web.type = SplineColliderPrimitiveType::Box;
@@ -730,15 +726,41 @@ static void CompoundCorrugatedPanel(const CorrugatedPanelParams& p, Core::Vector
     web.position = web.halfExtents;
     out.PushBack(web);
 
-    if (depth <= 0.0f || w <= 0.0f) { return; }
-    const float ribHalfX = w * 0.5f + flank * 0.5f;
     for (int i = 0; i < ribs; i++) {
-        const float c = (static_cast<float>(i) + 0.5f) * pitch;
+        const CorrugatedRib rib = CorrugatedPanelRib(p, i);
+        if (rib.depth <= 0.0f || rib.width <= 0.0f) { continue; }
         SplineColliderPrimitive prim{};
         prim.type = SplineColliderPrimitiveType::Box;
-        prim.halfExtents = Vec3(ribHalfX, sy * 0.5f, depth * 0.5f);
-        prim.position = Vec3(c, sy * 0.5f, base + depth * 0.5f);
+        prim.halfExtents = Vec3(rib.width * 0.5f + rib.flank * 0.5f, sy * 0.5f, rib.depth * 0.5f);
+        prim.position = Vec3(rib.center, sy * 0.5f, base + rib.depth * 0.5f);
         out.PushBack(prim);
+    }
+}
+
+static void CompoundTerrace(const TerraceParams& p, Core::Vector<SplineColliderPrimitive>& out)
+{
+    const int32_t levels = TerraceLevelCount(p);
+    const float run = TerraceRun(p);
+    auto addBox = [&](float x0, float z0, float x1, float z1, float h) {
+        if (x1 - x0 <= 1e-5f || z1 - z0 <= 1e-5f || h <= 0.0f) { return; }
+        SplineColliderPrimitive prim{};
+        prim.type = SplineColliderPrimitiveType::Box;
+        prim.halfExtents = Vec3((x1 - x0) * 0.5f, h * 0.5f, (z1 - z0) * 0.5f);
+        prim.position = Vec3((x0 + x1) * 0.5f, h * 0.5f, (z0 + z1) * 0.5f);
+        out.PushBack(prim);
+    };
+    for (int32_t k = 0; k < levels; ++k) {
+        const TerraceRect o = TerraceLevelRect(p, run, k);
+        const float h = TerraceLevelHeight(p, k);
+        if (k + 1 == levels) {
+            addBox(o.x0, o.z0, o.x1, o.z1, h);
+            continue;
+        }
+        const TerraceRect i = TerraceLevelRect(p, run, k + 1);
+        addBox(o.x0, o.z0, o.x1, i.z0, h);
+        addBox(o.x0, i.z1, o.x1, o.z1, h);
+        addBox(o.x0, i.z0, i.x0, i.z1, h);
+        addBox(i.x1, i.z0, o.x1, i.z1, h);
     }
 }
 
@@ -763,6 +785,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<WallParams>(params)
         || std::holds_alternative<LatticeParams>(params)
         || std::holds_alternative<CorrugatedPanelParams>(params)
+        || std::holds_alternative<TerraceParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -871,6 +894,11 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<CorrugatedPanelParams>(&params)) {
         outKind = PhysicsColliderKind::Compound;
         CompoundCorrugatedPanel(*p, outPrimitives);
+        return true;
+    }
+    if (const auto* p = std::get_if<TerraceParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundTerrace(*p, outPrimitives);
         return true;
     }
 

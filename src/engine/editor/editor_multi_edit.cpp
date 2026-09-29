@@ -165,18 +165,37 @@ bool EvaluateFloatField(const char* expr, float currentValue, int index, std::mt
     return true;
 }
 
-static bool IsWordChar(char c)
+/** Matches `{S}` or `{R(a,b)}` at p; end is set past the closing brace. */
+static bool MatchNameToken(const char* p, const char*& end, bool& bRandom, float& a, float& b)
 {
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    if (*p != '{') { return false; }
+    ++p;
+    SkipWs(p);
+    if (*p == 'S' || *p == 's') {
+        bRandom = false;
+        ++p;
+    }
+    else if (*p == 'R' || *p == 'r') {
+        bRandom = true;
+        ++p;
+        if (!ParseRandomArgs(p, a, b)) { return false; }
+    }
+    else {
+        return false;
+    }
+    SkipWs(p);
+    if (*p != '}') { return false; }
+    end = p + 1;
+    return true;
 }
 
 bool ContainsNameToken(const char* s)
 {
     for (const char* p = s; *p != '\0'; ++p) {
-        if (*p == '_') {
-            const char c = p[1];
-            if (c == 'S' || c == 's' || c == 'R' || c == 'r') { return true; }
-        }
+        const char* end;
+        bool bRandom;
+        float a, b;
+        if (MatchNameToken(p, end, bRandom, a, b)) { return true; }
     }
     return false;
 }
@@ -186,32 +205,16 @@ void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int ind
     dst.Clear();
     const char* p = templ;
     while (*p != '\0') {
-        if (*p == '_') {
-            const char c = p[1];
-            if ((c == 'S' || c == 's') && !IsWordChar(p[2])) {
-                dst.Append("_", 1);
-                dst.Append(index);
-                p += 2;
-                continue;
-            }
-            if (c == 'R' || c == 'r') {
-                const char* q = p + 2;
-                float a, b;
-                if (ParseRandomArgs(q, a, b)) {
-                    dst.Append("_", 1);
-                    dst.Append(RandomInt(static_cast<int>(a), static_cast<int>(b), rng));
-                    p = q;
-                    continue;
-                }
-            }
-            dst.Append("_", 1);
-            ++p;
+        const char* end;
+        bool bRandom;
+        float a, b;
+        if (MatchNameToken(p, end, bRandom, a, b)) {
+            dst.Append(bRandom ? RandomInt(static_cast<int>(a), static_cast<int>(b), rng) : index);
+            p = end;
             continue;
         }
-
-        const char* start = p;
-        while (*p != '\0' && *p != '_') { ++p; }
-        dst.Append(start, static_cast<size_t>(p - start));
+        dst.Append(p, 1);
+        ++p;
     }
 }
 }

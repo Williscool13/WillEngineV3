@@ -1491,6 +1491,12 @@ void WillEngine::Run()
             inputManager->ProcessEvent(e);
         }
 
+#if WILL_EDITOR
+        if (inputManager->IsQuitRequested() && !engineState->editor.bQuitConfirmed && !engineState->editor.modifiedScenes.IsEmpty()) {
+            inputManager->ClearQuitRequest();
+            engineState->editor.bQuitPromptRequested = true;
+        }
+#endif
         if (inputManager->IsQuitRequested() || renderThread->IsShutdownRequestedByRender() || engineState->requests.bRequestedQuit) {
 #if WILL_EDITOR
             bQuitPendingGeneration = PendingGenerationCount(assetGenerator, bForceQuitRequested) > 0 && !renderThread->IsShutdownRequestedByRender();

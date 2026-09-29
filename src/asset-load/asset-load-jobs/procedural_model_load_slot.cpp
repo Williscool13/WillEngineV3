@@ -14,6 +14,7 @@
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
 
+#include <algorithm>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
@@ -228,6 +229,7 @@ bool ProceduralModelLoadSlot::GenerateShapeVariant(Engine::ProceduralParams& par
                    [&](const Engine::WallParams& p) { bSuccess = GenerateWall(p); },
                    [&](const Engine::LatticeParams& p) { bSuccess = GenerateLattice(p); },
                    [&](const Engine::CorrugatedPanelParams& p) { bSuccess = GenerateCorrugatedPanel(p); },
+                   [&](const Engine::TerraceParams& p) { bSuccess = GenerateTerrace(p); },
                }, params);
     return bSuccess;
 }
@@ -1278,11 +1280,6 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
     const float sx = p.sizeX, sy = p.sizeY, base = p.sizeZ;
     if (sx <= 0.0f || sy <= 0.0f || base <= 0.0f) { return false; }
     const int ribs = glm::max(1, p.ribCount);
-    const float pitch = sx / static_cast<float>(ribs);
-    // Plateau capped just under the pitch so the profile always returns to base between ribs (ends stay plain valleys)
-    const float w = glm::clamp(p.ribWidth, 0.0f, glm::max(0.0f, pitch - 2e-3f));
-    const float flank = glm::min(glm::max(p.ribDepth, 0.0f), (pitch - w) * 0.5f);
-    const float depth = glm::max(p.ribDepth, 0.0f);
 
     // Front profile breakpoints (x, z), left to right; valleys at z=base, plateaus at base+depth
     Core::Vector<Vec2> prof(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1291,14 +1288,13 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
         prof.PushBack({x, z});
     };
     addPoint(0.0f, base);
-    if (depth > 0.0f && w > 0.0f) {
-        for (int i = 0; i < ribs; i++) {
-            const float c = (static_cast<float>(i) + 0.5f) * pitch;
-            addPoint(c - w * 0.5f - flank, base);
-            addPoint(c - w * 0.5f, base + depth);
-            addPoint(c + w * 0.5f, base + depth);
-            addPoint(c + w * 0.5f + flank, base);
-        }
+    for (int i = 0; i < ribs; i++) {
+        const Engine::CorrugatedRib rib = Engine::CorrugatedPanelRib(p, i);
+        if (rib.depth <= 0.0f || rib.width <= 0.0f) { continue; }
+        addPoint(rib.center - rib.width * 0.5f - rib.flank, base);
+        addPoint(rib.center - rib.width * 0.5f, base + rib.depth);
+        addPoint(rib.center + rib.width * 0.5f, base + rib.depth);
+        addPoint(rib.center + rib.width * 0.5f + rib.flank, base);
     }
     addPoint(sx, base);
 
@@ -1363,6 +1359,113 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
                 {a.x, 0}, {b.x, 0}, {b.x, b.y}, {a.x, a.y});
     }
 
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
+{
+    ZoneScopedN("GenerateTerrace");
+
+    const int32_t levels = Engine::TerraceLevelCount(p);
+    const float run = Engine::TerraceRun(p);
+
+    Core::Vector<float> xs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<float> zs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    for (int32_t k = 0; k < levels; ++k) {
+        const Engine::TerraceRect r = Engine::TerraceLevelRect(p, run, k);
+        xs.PushBack(r.x0);
+        xs.PushBack(r.x1);
+        zs.PushBack(r.z0);
+        zs.PushBack(r.z1);
+    }
+    auto uniqueSorted = [](Core::Vector<float>& v) {
+        std::ranges::sort(v);
+        size_t n = 0;
+        for (size_t i = 0; i < v.Size(); ++i) {
+            if (n == 0 || v[i] - v[n - 1] > 1e-5f) { v[n++] = v[i]; }
+        }
+        v.Resize(n);
+    };
+    uniqueSorted(xs);
+    uniqueSorted(zs);
+    if (xs.Size() < 2 || zs.Size() < 2) { return false; }
+
+    const size_t cellsX = xs.Size() - 1;
+    const size_t cellsZ = zs.Size() - 1;
+    Core::Vector<float> heights(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    heights.Resize(cellsX * cellsZ);
+    for (size_t j = 0; j < cellsZ; ++j) {
+        for (size_t i = 0; i < cellsX; ++i) {
+            const float cx = (xs[i] + xs[i + 1]) * 0.5f;
+            const float cz = (zs[j] + zs[j + 1]) * 0.5f;
+            int32_t level = 0;
+            while (level + 1 < levels) {
+                const Engine::TerraceRect r = Engine::TerraceLevelRect(p, run, level + 1);
+                if (cx < r.x0 || cx > r.x1 || cz < r.z0 || cz > r.z1) { break; }
+                ++level;
+            }
+            heights[j * cellsX + i] = Engine::TerraceLevelHeight(p, level);
+        }
+    }
+    auto heightAt = [&](int64_t i, int64_t j) -> float {
+        if (i < 0 || j < 0 || i >= static_cast<int64_t>(cellsX) || j >= static_cast<int64_t>(cellsZ)) { return 0.0f; }
+        return heights[static_cast<size_t>(j) * cellsX + static_cast<size_t>(i)];
+    };
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    auto addQuad = [&](Vec3 n, Vec3 t, const Vec3 (&v)[4], const Vec2 (&uv)[4]) {
+        const bool bFlip = glm::dot(glm::cross(v[1] - v[0], v[2] - v[0]), n) < 0.0f;
+        const auto vbase = static_cast<uint32_t>(vertices.Size());
+        for (int c = 0; c < 4; ++c) {
+            const int src = bFlip ? 3 - c : c;
+            Engine::FullVertex vert{};
+            vert.position = v[src];
+            vert.normal = n;
+            vert.uv = {uv[src].x, uv[src].y};
+            vert.tangent = {t.x, t.y, t.z, 1.0f};
+            vert.color = {1, 1, 1, 1};
+            vertices.PushBack(vert);
+        }
+        indices.PushBack(vbase); indices.PushBack(vbase + 1); indices.PushBack(vbase + 2);
+        indices.PushBack(vbase); indices.PushBack(vbase + 2); indices.PushBack(vbase + 3);
+    };
+
+    for (size_t j = 0; j < cellsZ; ++j) {
+        for (size_t i = 0; i < cellsX; ++i) {
+            const float h = heights[j * cellsX + i];
+            if (h <= 0.0f) { continue; }
+            const float x0 = xs[i], x1 = xs[i + 1], z0 = zs[j], z1 = zs[j + 1];
+            addQuad({0, 1, 0}, {1, 0, 0}, {{x0, h, z0}, {x1, h, z0}, {x1, h, z1}, {x0, h, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
+            if (p.bBottom) {
+                addQuad({0, -1, 0}, {1, 0, 0}, {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
+            }
+        }
+    }
+
+    for (size_t j = 0; j < cellsZ; ++j) {
+        for (size_t i = 0; i <= cellsX; ++i) {
+            const float hl = heightAt(static_cast<int64_t>(i) - 1, static_cast<int64_t>(j));
+            const float hr = heightAt(static_cast<int64_t>(i), static_cast<int64_t>(j));
+            if (glm::abs(hl - hr) < 1e-6f) { continue; }
+            const float x = xs[i], z0 = zs[j], z1 = zs[j + 1];
+            const float y0 = glm::min(hl, hr), y1 = glm::max(hl, hr);
+            addQuad({hl > hr ? 1.0f : -1.0f, 0, 0}, {0, 0, 1}, {{x, y0, z0}, {x, y0, z1}, {x, y1, z1}, {x, y1, z0}}, {{z0, y0}, {z1, y0}, {z1, y1}, {z0, y1}});
+        }
+    }
+    for (size_t j = 0; j <= cellsZ; ++j) {
+        for (size_t i = 0; i < cellsX; ++i) {
+            const float hb = heightAt(static_cast<int64_t>(i), static_cast<int64_t>(j) - 1);
+            const float hf = heightAt(static_cast<int64_t>(i), static_cast<int64_t>(j));
+            if (glm::abs(hb - hf) < 1e-6f) { continue; }
+            const float z = zs[j], x0 = xs[i], x1 = xs[i + 1];
+            const float y0 = glm::min(hb, hf), y1 = glm::max(hb, hf);
+            addQuad({0, 0, hb > hf ? 1.0f : -1.0f}, {1, 0, 0}, {{x0, y0, z}, {x1, y0, z}, {x1, y1, z}, {x0, y1, z}}, {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}});
+        }
+    }
+
+    if (indices.IsEmpty()) { return false; }
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 

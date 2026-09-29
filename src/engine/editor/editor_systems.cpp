@@ -151,6 +151,14 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
                     }
                 });
             }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Enter applies to every selected entity\n"
+                                  "{S} -> selection index from 0 (Crate {S} -> Crate 0, Crate 1, ...)\n"
+                                  "{R(a,b)} -> random int in [a,b) (Enemy_{R(0,5)} -> Enemy_3)\n"
+                                  "Without a token every entity gets the same literal name");
+            }
         }
         else {
             ImGui::TextDisabled("Not all entities have NameComponent");
@@ -158,7 +166,23 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     // Transform
-    if (transformCount > 0 && ImGui::CollapsingHeader("Transform##multi_transform", ImGuiTreeNodeFlags_DefaultOpen)) {
+    bool bTransformOpen = false;
+    if (transformCount > 0) {
+        bTransformOpen = ImGui::CollapsingHeader("Transform##multi_transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("(?)").x);
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Drag the colored strip to offset every entity\n"
+                              "Enter an expression to set each entity's axis:\n"
+                              "  5          set to 5\n"
+                              "  x+1        current value plus 1\n"
+                              "  *2  or  /2   scale the current value\n"
+                              "  S*1.5      spread by selection index (from 0)\n"
+                              "  x+R(-1,1)  random float in [a,b)\n"
+                              "Terms: number, x (current), S (index), R(a,b); at most one + - * /");
+        }
+    }
+    if (bTransformOpen) {
         glm::vec3 firstTrans{}, firstEuler{}, firstScale{};
         glm::quat firstRot{};
         glm::bvec3 sameTrans{true, true, true};

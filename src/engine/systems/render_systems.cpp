@@ -198,14 +198,14 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     // Area light emissive quads
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>().each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>().each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
         state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
     }
 
     // Sphere light emissive meshes
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
         state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
@@ -223,12 +223,12 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         const bool bAnyHidden = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
         auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && state->registry.all_of<Component::ProbeBakeHiddenTag>(entity); };
 
-        for (auto [entity, light, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
+        for (auto [entity, light, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
             lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeAreaLightInfo(transform, light));
         }
 
-        for (auto [entity, light, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent, Component::MultiframeDirtyComponent>().each()) {
+        for (auto [entity, light, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>().each()) {
             if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
             lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeSphereLightInfo(transform, light));
         }
@@ -751,7 +751,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         ZoneScopedN("DirectionalLight");
         int32_t bestPriority = INT32_MIN;
         bool found = false;
-        auto dirView = registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+        auto dirView = registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>();
         for (const auto& [entity, light, transform] : dirView.each()) {
             if (light.priority > bestPriority) {
                 bestPriority = light.priority;
@@ -863,7 +863,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (!state->editor.bShowLightSprites) { return; }
     Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
 
-    auto areaView = state->registry.view<Component::AreaLightComponent, Component::TransformComponent>();
+    auto areaView = state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>();
     for (auto [entity, light, transform] : areaView.each()) {
         uint64_t stableId = 0;
         if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -880,7 +880,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
         });
     }
 
-    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::TransformComponent>();
+    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>();
     for (auto [entity, light, transform] : sphereView.each()) {
         uint64_t stableId = 0;
         if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -897,7 +897,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
         });
     }
 
-    auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>();
+    auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>();
     for (auto [entity, light, transform] : dirView.each()) {
         uint64_t stableId = 0;
         if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
@@ -994,7 +994,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     };
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>().each()) {
         if (!shouldDraw(entity)) { continue; }
         const Vec3 center = transform.translation;
         const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
@@ -1018,23 +1018,35 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
         addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
         if (light.coneOuterDegrees < 90.0f) {
-            const float sinOuter = glm::sin(glm::radians(light.coneOuterDegrees));
-            const float cosOuter = glm::cos(glm::radians(light.coneOuterDegrees));
-            const Vec3 rimCenter = center + forward * (light.range * cosOuter);
-            const float rimRadius = light.range * sinOuter;
-            constexpr int kConeSegments = 24;
-            for (int i = 0; i < kConeSegments; ++i) {
-                const float a0 = (static_cast<float>(i) / kConeSegments) * 6.2831853f;
-                const float a1 = (static_cast<float>(i + 1) / kConeSegments) * 6.2831853f;
-                const Vec3 p0 = rimCenter + rimRadius * (glm::cos(a0) * right + glm::sin(a0) * up);
-                const Vec3 p1 = rimCenter + rimRadius * (glm::cos(a1) * right + glm::sin(a1) * up);
-                DEBUG_ADD_LINE(viewFamily.debugLines, {p0, p1, editColor, 0.02f});
-                if ((i % 6) == 0) { DEBUG_ADD_LINE(viewFamily.debugLines, {center, p0, editColor, 0.02f}); }
+            const float depth = light.range * glm::cos(glm::radians(light.coneOuterDegrees));
+            const float spread = light.range * glm::sin(glm::radians(light.coneOuterDegrees));
+            const Vec3 farCenter = center + forward * depth;
+            if (light.bDisk) {
+                const float radius = light.halfWidth * transform.scale.x;
+                constexpr int kConeSegments = 32;
+                for (int i = 0; i < kConeSegments; ++i) {
+                    const float a0 = (static_cast<float>(i) / kConeSegments) * 6.2831853f;
+                    const float a1 = (static_cast<float>(i + 1) / kConeSegments) * 6.2831853f;
+                    const Vec3 d0 = glm::cos(a0) * right + glm::sin(a0) * up;
+                    const Vec3 d1 = glm::cos(a1) * right + glm::sin(a1) * up;
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {farCenter + (radius + spread) * d0, farCenter + (radius + spread) * d1, editColor, 0.02f});
+                    if ((i % 8) == 0) { DEBUG_ADD_LINE(viewFamily.debugLines, {center + radius * d0, farCenter + (radius + spread) * d0, editColor, 0.02f}); }
+                }
+            }
+            else {
+                const float halfW = light.halfWidth * transform.scale.x;
+                const float halfH = light.halfHeight * transform.scale.y;
+                DEBUG_ADD_RECT(viewFamily.debugRects, {farCenter, halfW + spread, halfH + spread, right, up, editColor, 0.02f});
+                for (const Vec2 corner : {Vec2(-1.0f, -1.0f), Vec2(1.0f, -1.0f), Vec2(1.0f, 1.0f), Vec2(-1.0f, 1.0f)}) {
+                    const Vec3 nearCorner = center + right * (corner.x * halfW) + up * (corner.y * halfH);
+                    const Vec3 farCorner = farCenter + right * (corner.x * (halfW + spread)) + up * (corner.y * (halfH + spread));
+                    DEBUG_ADD_LINE(viewFamily.debugLines, {nearCorner, farCorner, editColor, 0.02f});
+                }
             }
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>().each()) {
         if (!shouldDraw(entity)) { continue; }
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
@@ -1044,7 +1056,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>().each()) {
         if (!shouldDraw(entity)) { continue; }
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
