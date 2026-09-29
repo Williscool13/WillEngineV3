@@ -148,6 +148,14 @@ void Component::ProceduralMeshComponent::OnEditCommit(entt::registry& registry, 
     RecreateProceduralMesh(registry.get<ProceduralMeshComponent>(entity), registry, entity);
 }
 
+template<size_t... I>
+static Engine::ProceduralParams DefaultProceduralParams(size_t index, std::index_sequence<I...>)
+{
+    Engine::ProceduralParams params;
+    ((I == index ? (params.emplace<I>(), 0) : 0), ...);
+    return params;
+}
+
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     entt::registry& registry = edit.Registry();
@@ -179,65 +187,58 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             edit.ForEachTarget<ProceduralMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ProceduralMeshLoadingTag>(e); });
         }
 
-        if (std::holds_alternative<std::monostate>(component.params)) {
-            if (ImGui::BeginCombo("Shape", "")) {
-                auto selectShape = [&](auto&& params) {
-                    component.params = std::move(params);
+        static constexpr const char* shapeNames[] = {
+            "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
+            "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace"
+        };
+        static_assert(std::size(shapeNames) == std::variant_size_v<Engine::ProceduralParams>);
+        const size_t shapeIndex = component.params.index();
+        if (ImGui::BeginCombo("Shape", shapeNames[shapeIndex])) {
+            for (size_t i = 1; i < std::size(shapeNames); ++i) {
+                if (ImGui::Selectable(shapeNames[i], i == shapeIndex) && i != shapeIndex) {
+                    component.params = DefaultProceduralParams(i, std::make_index_sequence<std::variant_size_v<Engine::ProceduralParams>>{});
                     bCommit = true;
-                };
-                if (ImGui::Selectable("Staircase")) selectShape(Engine::StaircaseParams{});
-                if (ImGui::Selectable("Box")) selectShape(Engine::BoxParams{});
-                if (ImGui::Selectable("Cylinder")) selectShape(Engine::CylinderParams{});
-                if (ImGui::Selectable("Capsule")) selectShape(Engine::CapsuleParams{});
-                if (ImGui::Selectable("Torus")) selectShape(Engine::TorusParams{});
-                if (ImGui::Selectable("Arch")) selectShape(Engine::ArchParams{});
-                if (ImGui::Selectable("Wedge")) selectShape(Engine::WedgeParams{});
-                if (ImGui::Selectable("Cone")) selectShape(Engine::ConeParams{});
-                if (ImGui::Selectable("Door")) selectShape(Engine::DoorParams{});
-                if (ImGui::Selectable("Plane")) selectShape(Engine::PlaneParams{});
-                if (ImGui::Selectable("Sphere")) selectShape(Engine::SphereParams{});
-                if (ImGui::Selectable("Subdivided Sphere")) selectShape(Engine::SubdividedSphereParams{});
-                if (ImGui::Selectable("Hemisphere")) selectShape(Engine::HemisphereParams{});
-                if (ImGui::Selectable("Pipe")) selectShape(Engine::PipeParams{});
-                if (ImGui::Selectable("Tetrahedron")) selectShape(Engine::TetrahedronParams{});
-                if (ImGui::Selectable("Octahedron")) selectShape(Engine::OctahedronParams{});
-                if (ImGui::Selectable("Icosahedron")) selectShape(Engine::IcosahedronParams{});
-                if (ImGui::Selectable("Dodecahedron")) selectShape(Engine::DodecahedronParams{});
-                if (ImGui::Selectable("Klein Bottle")) selectShape(Engine::KleinBottleParams{});
-                if (ImGui::Selectable("Trefoil Knot")) selectShape(Engine::TrefoilKnotParams{});
-                if (ImGui::Selectable("Curved Ramp")) selectShape(Engine::CurvedRampParams{});
-                if (ImGui::Selectable("Bowl")) selectShape(Engine::BowlParams{});
-                if (ImGui::Selectable("Spiral Staircase")) selectShape(Engine::SpiralStaircaseParams{});
-                if (ImGui::Selectable("Ring")) selectShape(Engine::RingParams{});
-                if (ImGui::Selectable("Wall")) selectShape(Engine::WallParams{});
-                if (ImGui::Selectable("Lattice")) selectShape(Engine::LatticeParams{});
-                if (ImGui::Selectable("Corrugated Panel")) selectShape(Engine::CorrugatedPanelParams{});
-                if (ImGui::Selectable("Terrace")) selectShape(Engine::TerraceParams{});
-                ImGui::EndCombo();
+                }
             }
+            ImGui::EndCombo();
         }
-        else {
-            static constexpr const char* shapeNames[] = {
-                "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-                "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace"
-            };
-            ImGui::Text("Shape: %s", shapeNames[component.params.index()]);
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            if (ImGui::SmallButton("X##deselect_shape")) {
-                component.params = std::monostate{};
-                bCommit = true;
-            }
-            ImGui::PopStyleColor();
 
+        if (!std::holds_alternative<std::monostate>(component.params)) {
             bool dirty = false;
             std::visit([&dirty, state, &registry, entity]<typename Shape>(Shape& p) {
                 using T = std::decay_t<Shape>;
                 if constexpr (std::is_same_v<T, Engine::StaircaseParams>) {
                     ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Total Depth", &p.totalDepth, 0.01f, 0.01f, 100.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (p.bSpecifyStepDepth) {
+                        float derivedDepth = Engine::StaircaseTotalDepth(p);
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Total Depth", &derivedDepth, 0.01f, 0.01f, 100.0f);
+                        ImGui::EndDisabled();
+                    }
+                    else {
+                        ImGui::DragFloat("Total Depth", &p.totalDepth, 0.01f, 0.01f, 100.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    }
+                    if (ImGui::Checkbox("Specify Step Depth", &p.bSpecifyStepDepth)) {
+                        if (p.bSpecifyStepDepth) {
+                            p.stepDepth = p.totalDepth / static_cast<float>(std::max(p.stepCount, 1));
+                        }
+                        else {
+                            p.totalDepth = p.stepDepth * static_cast<float>(std::max(p.stepCount, 1));
+                        }
+                        dirty = true;
+                    }
+                    if (p.bSpecifyStepDepth) {
+                        ImGui::DragFloat("Step Depth", &p.stepDepth, 0.001f, 0.001f, 10.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    }
+                    else {
+                        float derivedStepDepth = p.totalDepth / static_cast<float>(std::max(p.stepCount, 1));
+                        ImGui::BeginDisabled(true);
+                        ImGui::DragFloat("Step Depth", &derivedStepDepth, 0.001f, 0.001f, 10.0f);
+                        ImGui::EndDisabled();
+                    }
 
                     // Total Height — always editable; drives stepCount when bSpecifyStepHeight
                     ImGui::DragFloat("Total Height", &p.totalHeight, 0.01f, 0.01f, 100.0f);
@@ -726,6 +727,13 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                         p.direction = static_cast<Engine::TerraceDirection>(direction);
                         dirty = true;
                     }
+                    int profile = static_cast<int>(p.profile);
+                    const char* profiles[] = {"Steps", "Ramp"};
+                    if (ImGui::Combo("Profile", &profile, profiles, 2)) {
+                        p.profile = static_cast<Engine::TerraceProfile>(profile);
+                        dirty = true;
+                    }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Ramp slopes through the step nosings; the physics collider keeps its own profile"); }
                     ImGui::TextUnformatted("Steps on");
                     auto sideToggle = [&](const char* label, int32_t bit) {
                         ImGui::SameLine();
@@ -752,8 +760,8 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Base Height", &p.baseHeight, 0.005f, 0.0f, 10.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Solid under every step; 0 with Down leaves a hole through the middle"); }
-                    dirty |= ImGui::Checkbox("Bottom Face", &p.bBottom);
-                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Underside at y = 0; turn off when it sits on or in other geometry"); }
+                    dirty |= ImGui::Checkbox("Floor", &p.bFloor);
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Off removes the innermost level, leaving an open-ended tube"); }
                 }
             }, component.params);
 

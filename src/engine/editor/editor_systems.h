@@ -33,6 +33,18 @@ void SaveModifiedScenes(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities);
 
+/** Copies each source's subtree into the active scene, renames the top-level copies and selects them. */
+void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources);
+
+/** Destroys the selected entities and all their descendants. */
+void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/**
+ * Parents the top-level entities under a new group at their centroid, in the first one's folder and parent.
+ * @return the new group, or null if nothing could be grouped
+ */
+entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> entities);
+
 void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount);
 
 void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);

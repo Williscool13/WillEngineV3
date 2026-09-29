@@ -12,6 +12,7 @@
 
 #include "engine/components/component_editor.h"
 #include "engine/editor/editor_gizmo_helpers.h"
+#include "engine/editor/editor_multi_edit.h"
 #include "engine/components/render_components.h"
 
 
@@ -49,11 +50,26 @@ void Engine::Component::TransformComponent::OnEditCommit(entt::registry& registr
 
 namespace Engine
 {
+static ImGuiID gTransformExprField = 0;
+static bool bTransformExprFocus = false;
+static char gTransformExprBuf[64]{};
+
 Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     TransformComponent component = edit.Get<TransformComponent>();
     bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    const float headerAvail = ImGui::GetContentRegionAvail().x;
+    ImGui::SameLine(headerAvail - 10.f - ImGui::CalcTextSize("(?)").x - ImGui::GetStyle().ItemSpacing.x);
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Double-click or Ctrl+click a field to type an expression:\n"
+                          "  5          set to 5\n"
+                          "  x+1        current value plus 1\n"
+                          "  *2  or  /2   scale the current value\n"
+                          "  x+R(-1,1)  random float in [a,b)\n"
+                          "Terms: number, x (current), R(a,b); at most one + - * /");
+    }
+    ImGui::SameLine(headerAvail - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     bool remove = ImGui::SmallButton("X##deletetransform");
     ImGui::PopStyleColor();
@@ -79,8 +95,37 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
 
         auto drawField = [&](const char* id, float* val, ImU32 strip) -> bool {
             ImGui::SetNextItemWidth(fieldW);
-            bool changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.1f");
-            bReleased |= ImGui::IsItemDeactivatedAfterEdit();
+            const ImGuiID fieldId = ImGui::GetID(id);
+            bool changed = false;
+            if (gTransformExprField == fieldId) {
+                if (bTransformExprFocus) {
+                    ImGui::SetKeyboardFocusHere();
+                    bTransformExprFocus = false;
+                }
+                ImGui::PushID(id);
+                const bool bEnter = ImGui::InputText("##expr", gTransformExprBuf, sizeof(gTransformExprBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+                const bool bDone = bEnter || ImGui::IsItemDeactivated();
+                ImGui::PopID();
+                if (bDone) {
+                    float v;
+                    if (!ImGui::IsKeyPressed(ImGuiKey_Escape) && MultiEdit::EvaluateFloatField(gTransformExprBuf, *val, 0, state->rng, v) && v != *val) {
+                        *val = v;
+                        changed = true;
+                        bReleased = true;
+                    }
+                    gTransformExprField = 0;
+                }
+            }
+            else {
+                changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.1f", ImGuiSliderFlags_NoInput);
+                bReleased |= ImGui::IsItemDeactivatedAfterEdit();
+                if (ImGui::IsItemHovered() && (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) || (ImGui::GetIO().KeyCtrl && ImGui::IsItemClicked(ImGuiMouseButton_Left)))) {
+                    gTransformExprField = fieldId;
+                    bTransformExprFocus = true;
+                    const auto text = Core::InlineString<64>::Format("%g", *val);
+                    memcpy(gTransformExprBuf, text.c_str(), text.Size() + 1);
+                }
+            }
             ImVec2 p = ImGui::GetItemRectMin();
             dl->AddRectFilled(p, {p.x + stripW, p.y + fieldH}, strip, frameRounding, ImDrawFlags_RoundCornersLeft);
             return changed;

@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_MODEL_TYPES_H
 #define WILL_ENGINE_MODEL_TYPES_H
 
+#include <algorithm>
 #include <variant>
 
 #include <volk.h>
@@ -135,10 +136,19 @@ struct StaircaseParams
     float stepHeight{0.2f};
     bool bIsClosed{true};
     uint8_t _pad1[3]{};
+    bool bSpecifyStepDepth{false};
+    uint8_t _pad2[3]{};
+    float stepDepth{0.2f};
 
     WILL_REFLECT(StaircaseParams, WILL_FIELD(stepCount), WILL_FIELD(width), WILL_FIELD(totalDepth), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight),
-                 WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed))
+                 WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed), WILL_FIELD(bSpecifyStepDepth), WILL_FIELD(stepDepth))
 };
+
+/** totalDepth, or stepCount * stepDepth when the step depth is specified. */
+inline float StaircaseTotalDepth(const StaircaseParams& p)
+{
+    return p.bSpecifyStepDepth ? p.stepDepth * static_cast<float>(p.stepCount) : p.totalDepth;
+}
 
 struct BoxParams
 {
@@ -564,9 +574,16 @@ enum class TerraceDirection : uint8_t
     Down,
 };
 
+enum class TerraceProfile : uint8_t
+{
+    Steps,
+    Ramp,
+};
+
 /**
  * Stepped block over a corner-pivot sizeX x sizeZ footprint, inset by stepRun on the enabled sides. Up climbs to a central
- * landing; Down descends to a floor at baseHeight, and a baseHeight of 0 leaves a hole through.
+ * landing; Down descends to a floor at baseHeight, and a baseHeight of 0 leaves a hole through. bFloor off removes the innermost level,
+ * leaving an open-ended tube.
  */
 struct TerraceParams
 {
@@ -578,12 +595,14 @@ struct TerraceParams
     float baseHeight{0.2f};
     int32_t sides{TERRACE_SIDE_NEG_X | TERRACE_SIDE_POS_X | TERRACE_SIDE_NEG_Z | TERRACE_SIDE_POS_Z};
     TerraceDirection direction{TerraceDirection::Down};
-    bool bBottom{true};
+    bool bFloor{true};
+    TerraceProfile profile{TerraceProfile::Steps};
+    uint8_t _pad0[1]{};
 
     static constexpr int32_t MAX_STEPS = 64;
 
     WILL_REFLECT(TerraceParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(stepCount), WILL_FIELD(stepRise), WILL_FIELD(stepRun), WILL_FIELD(baseHeight),
-                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bBottom))
+                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bFloor), WILL_FIELD(profile))
 
     static void Sanitize(TerraceParams& p)
     {
@@ -639,6 +658,130 @@ inline float TerraceLevelHeight(const TerraceParams& p, int32_t level)
         return p.baseHeight + p.stepRise * static_cast<float>(p.stepCount - level);
     }
     return p.baseHeight + p.stepRise * static_cast<float>(level + 1);
+}
+
+inline constexpr float TERRACE_NO_INSET = 1e30f;
+
+/** Inset distance of the innermost level; with bFloor off everything deeper is a hole. */
+inline float TerraceHoleInset(const TerraceParams& p, float run)
+{
+    return run * static_cast<float>(TerraceLevelCount(p) - 1);
+}
+
+/** Distance from x to the nearest stepped X side, or TERRACE_NO_INSET if neither is stepped. */
+inline float TerraceInsetX(const TerraceParams& p, float x)
+{
+    float d = TERRACE_NO_INSET;
+    if (p.sides & TERRACE_SIDE_NEG_X) { d = glm::min(d, x); }
+    if (p.sides & TERRACE_SIDE_POS_X) { d = glm::min(d, p.sizeX - x); }
+    return d;
+}
+
+inline float TerraceInsetZ(const TerraceParams& p, float z)
+{
+    float d = TERRACE_NO_INSET;
+    if (p.sides & TERRACE_SIDE_NEG_Z) { d = glm::min(d, z); }
+    if (p.sides & TERRACE_SIDE_POS_Z) { d = glm::min(d, p.sizeZ - z); }
+    return d;
+}
+
+/** Ramp height at inset distance d; the slope runs through the step nosings. */
+inline float TerraceRampHeight(const TerraceParams& p, float run, float d)
+{
+    const float top = p.baseHeight + p.stepRise * static_cast<float>(p.stepCount);
+    if (p.direction == TerraceDirection::Down) {
+        if (run <= 1e-6f) { return p.baseHeight; }
+        return glm::clamp(top - p.stepRise * (d / run - 1.0f), p.baseHeight, top);
+    }
+    if (run <= 1e-6f) { return top; }
+    return glm::min(top, p.baseHeight + p.stepRise * (1.0f + d / run));
+}
+
+/** Calls emit(const Vec3* polygon, int count) for each planar piece of the ramp surface; the pieces tile the footprint. */
+template<typename Emit>
+void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
+{
+    const float run = TerraceRun(p);
+    const float n = static_cast<float>(p.stepCount);
+    const float hole = TerraceHoleInset(p, run);
+    float breaks[3];
+    int breakCount = 0;
+    if (p.direction == TerraceDirection::Down) {
+        breaks[breakCount++] = run;
+        breaks[breakCount++] = run * (n + 1.0f);
+    }
+    else {
+        breaks[breakCount++] = run * (n - 1.0f);
+    }
+    if (!p.bFloor) { breaks[breakCount++] = hole; }
+
+    auto axisLines = [&](float size, bool bNeg, bool bPos, float (&out)[10]) {
+        int c = 0;
+        out[c++] = 0.0f;
+        out[c++] = size;
+        if (bNeg && bPos) { out[c++] = size * 0.5f; }
+        for (int i = 0; i < breakCount; ++i) {
+            if (bNeg && breaks[i] > 0.0f && breaks[i] < size) { out[c++] = breaks[i]; }
+            if (bPos && breaks[i] > 0.0f && breaks[i] < size) { out[c++] = size - breaks[i]; }
+        }
+        std::sort(out, out + c);
+        int u = 0;
+        for (int i = 0; i < c; ++i) {
+            if (u == 0 || out[i] - out[u - 1] > 1e-5f) { out[u++] = out[i]; }
+        }
+        return u;
+    };
+    float xs[10];
+    float zs[10];
+    const int nx = axisLines(p.sizeX, (p.sides & TERRACE_SIDE_NEG_X) != 0, (p.sides & TERRACE_SIDE_POS_X) != 0, xs);
+    const int nz = axisLines(p.sizeZ, (p.sides & TERRACE_SIDE_NEG_Z) != 0, (p.sides & TERRACE_SIDE_POS_Z) != 0, zs);
+
+    auto lift = [&](const glm::vec2* poly, int count) {
+        if (!p.bFloor) {
+            glm::vec2 centroid{0.0f};
+            for (int i = 0; i < count; ++i) { centroid += poly[i]; }
+            centroid /= static_cast<float>(count);
+            if (glm::min(TerraceInsetX(p, centroid.x), TerraceInsetZ(p, centroid.y)) > hole) { return; }
+        }
+        glm::vec3 out[6];
+        for (int i = 0; i < count; ++i) {
+            const float d = glm::min(TerraceInsetX(p, poly[i].x), TerraceInsetZ(p, poly[i].y));
+            out[i] = glm::vec3(poly[i].x, TerraceRampHeight(p, run, d), poly[i].y);
+        }
+        emit(static_cast<const glm::vec3*>(out), count);
+    };
+
+    for (int j = 0; j + 1 < nz; ++j) {
+        for (int i = 0; i + 1 < nx; ++i) {
+            const glm::vec2 cell[4] = {{xs[i], zs[j]}, {xs[i + 1], zs[j]}, {xs[i + 1], zs[j + 1]}, {xs[i], zs[j + 1]}};
+            const glm::vec2 mid = (cell[0] + cell[2]) * 0.5f;
+            const bool bBothInset = TerraceInsetX(p, mid.x) < TERRACE_NO_INSET && TerraceInsetZ(p, mid.y) < TERRACE_NO_INSET;
+            float s[4];
+            bool bNeg = false;
+            bool bPos = false;
+            for (int c = 0; c < 4; ++c) {
+                s[c] = bBothInset ? TerraceInsetX(p, cell[c].x) - TerraceInsetZ(p, cell[c].y) : 0.0f;
+                bNeg |= s[c] < -1e-6f;
+                bPos |= s[c] > 1e-6f;
+            }
+            if (!bNeg || !bPos) {
+                lift(cell, 4);
+                continue;
+            }
+            for (const float sign : {1.0f, -1.0f}) {
+                glm::vec2 piece[6];
+                int count = 0;
+                for (int c = 0; c < 4; ++c) {
+                    const int nc = (c + 1) % 4;
+                    const float a = s[c] * sign;
+                    const float b = s[nc] * sign;
+                    if (a >= 0.0f) { piece[count++] = cell[c]; }
+                    if ((a > 0.0f && b < 0.0f) || (a < 0.0f && b > 0.0f)) { piece[count++] = glm::mix(cell[c], cell[nc], a / (a - b)); }
+                }
+                if (count >= 3) { lift(piece, count); }
+            }
+        }
+    }
 }
 
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams

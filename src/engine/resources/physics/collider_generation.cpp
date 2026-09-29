@@ -253,7 +253,7 @@ static void CompoundStaircase(const StaircaseParams& p, Core::Vector<SplineColli
 {
     const int steps = p.stepCount;
     if (steps < 1) { return; }
-    const float stepDepth = p.totalDepth / static_cast<float>(steps);
+    const float stepDepth = StaircaseTotalDepth(p) / static_cast<float>(steps);
     const float uniformH = p.totalHeight / static_cast<float>(steps);
     const float usedStepH = (p.bSpecifyStepHeight && p.stepHeight > 0.0f) ? p.stepHeight : uniformH;
     const float hw = p.width * 0.5f;
@@ -737,8 +737,99 @@ static void CompoundCorrugatedPanel(const CorrugatedPanelParams& p, Core::Vector
     }
 }
 
-static void CompoundTerrace(const TerraceParams& p, Core::Vector<SplineColliderPrimitive>& out)
+static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
 {
+    const float run = TerraceRun(p);
+    const float top = p.baseHeight + p.stepRise * static_cast<float>(p.stepCount);
+    if (top <= 1e-5f) { return; }
+
+    if (!p.bFloor) {
+        constexpr int32_t SIDES[4] = {TERRACE_SIDE_NEG_X, TERRACE_SIDE_POS_X, TERRACE_SIDE_NEG_Z, TERRACE_SIDE_POS_Z};
+        Core::InlineVector<Vec3, 256> points[4];
+        auto nearestSide = [&](const Vec3& c) {
+            const float d[4] = {c.x, p.sizeX - c.x, c.z, p.sizeZ - c.z};
+            int best = -1;
+            for (int i = 0; i < 4; ++i) {
+                if ((p.sides & SIDES[i]) && (best < 0 || d[i] < d[best])) { best = i; }
+            }
+            return best;
+        };
+        auto addPoint = [&](int side, const Vec3& q) {
+            for (const Vec3& e : points[side]) {
+                if (glm::distance(e, q) < 1e-5f) { return; }
+            }
+            if (points[side].Size() < points[side].GetCapacity()) { points[side].PushBack(q); }
+        };
+        TerraceRampPieces(p, [&](const Vec3* v, int count) {
+            Vec3 centroid{0.0f};
+            for (int c = 0; c < count; ++c) { centroid += v[c]; }
+            const int side = nearestSide(centroid / static_cast<float>(count));
+            if (side < 0) { return; }
+            for (int c = 0; c < count; ++c) {
+                addPoint(side, v[c]);
+                addPoint(side, Vec3(v[c].x, 0.0f, v[c].z));
+            }
+        });
+        for (const auto& hull : points) {
+            if (hull.Size() >= 4) { PushHullPrim(hull, out, outPositions); }
+        }
+        return;
+    }
+
+    if (p.direction == TerraceDirection::Up) {
+        Core::InlineVector<Vec3, 512> points;
+        auto addPoint = [&](const Vec3& v) {
+            for (const Vec3& q : points) {
+                if (glm::distance(q, v) < 1e-5f) { return; }
+            }
+            if (points.Size() < points.GetCapacity()) { points.PushBack(v); }
+        };
+        addPoint({0.0f, 0.0f, 0.0f});
+        addPoint({p.sizeX, 0.0f, 0.0f});
+        addPoint({p.sizeX, 0.0f, p.sizeZ});
+        addPoint({0.0f, 0.0f, p.sizeZ});
+        TerraceRampPieces(p, [&](const Vec3* v, int count) {
+            for (int c = 0; c < count; ++c) { addPoint(v[c]); }
+        });
+        PushHullPrim(points, out, outPositions);
+        return;
+    }
+
+    if (p.baseHeight > 0.0f) {
+        SplineColliderPrimitive slab{};
+        slab.type = SplineColliderPrimitiveType::Box;
+        slab.halfExtents = Vec3(p.sizeX * 0.5f, p.baseHeight * 0.5f, p.sizeZ * 0.5f);
+        slab.position = slab.halfExtents;
+        out.PushBack(slab);
+    }
+    if (run <= 1e-6f) { return; }
+
+    auto addWedge = [&](int32_t side) {
+        const bool bAlongX = side == TERRACE_SIDE_NEG_X || side == TERRACE_SIDE_POS_X;
+        const float extent = bAlongX ? p.sizeX : p.sizeZ;
+        const float width = bAlongX ? p.sizeZ : p.sizeX;
+        const float dLanding = glm::min(run, extent);
+        const float dFloor = glm::min(run * static_cast<float>(p.stepCount + 1), extent);
+        const Vec2 profile[5] = {{0.0f, 0.0f}, {0.0f, top}, {dLanding, top}, {dFloor, TerraceRampHeight(p, run, dFloor)}, {dFloor, 0.0f}};
+        Vec3 corners[10];
+        for (int i = 0; i < 5; ++i) {
+            const float d = (side == TERRACE_SIDE_POS_X || side == TERRACE_SIDE_POS_Z) ? extent - profile[i].x : profile[i].x;
+            corners[i] = bAlongX ? Vec3(d, profile[i].y, 0.0f) : Vec3(0.0f, profile[i].y, d);
+            corners[i + 5] = corners[i] + (bAlongX ? Vec3(0.0f, 0.0f, width) : Vec3(width, 0.0f, 0.0f));
+        }
+        PushHullPrim(Core::Span<const Vec3>(corners, 10), out, outPositions);
+    };
+    for (const int32_t side : {TERRACE_SIDE_NEG_X, TERRACE_SIDE_POS_X, TERRACE_SIDE_NEG_Z, TERRACE_SIDE_POS_Z}) {
+        if (p.sides & side) { addWedge(side); }
+    }
+}
+
+static void CompoundTerrace(const TerraceParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
+{
+    if (p.profile == TerraceProfile::Ramp) {
+        CompoundTerraceRamp(p, out, outPositions);
+        return;
+    }
     const int32_t levels = TerraceLevelCount(p);
     const float run = TerraceRun(p);
     auto addBox = [&](float x0, float z0, float x1, float z1, float h) {
@@ -753,7 +844,7 @@ static void CompoundTerrace(const TerraceParams& p, Core::Vector<SplineColliderP
         const TerraceRect o = TerraceLevelRect(p, run, k);
         const float h = TerraceLevelHeight(p, k);
         if (k + 1 == levels) {
-            addBox(o.x0, o.z0, o.x1, o.z1, h);
+            if (p.bFloor) { addBox(o.x0, o.z0, o.x1, o.z1, h); }
             continue;
         }
         const TerraceRect i = TerraceLevelRect(p, run, k + 1);
@@ -898,7 +989,7 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     }
     if (const auto* p = std::get_if<TerraceParams>(&params)) {
         outKind = PhysicsColliderKind::Compound;
-        CompoundTerrace(*p, outPrimitives);
+        CompoundTerrace(*p, outPrimitives, outPositions);
         return true;
     }
 

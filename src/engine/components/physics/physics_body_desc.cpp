@@ -341,6 +341,14 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 else if (idx > 0 && idx < kProceduralNames.Size()) {
                     ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
                     bHasAny = true;
+                    if (auto* terrace = std::get_if<Engine::TerraceParams>(&collider->proceduralParams)) {
+                        bool bRamp = terrace->profile == Engine::TerraceProfile::Ramp;
+                        if (ImGui::Checkbox("Ramp Collision", &bRamp)) {
+                            terrace->profile = bRamp ? Engine::TerraceProfile::Ramp : Engine::TerraceProfile::Steps;
+                            bAnyChange = true;
+                        }
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Collide with the slope through the step nosings, whatever the mesh draws; Auto-Fit copies the mesh's profile back"); }
+                    }
                 }
                 else if (!collider->splineParams.spline.points.IsEmpty()) {
                     ImGui::Text("Mesh Source: Procedural Spline");

@@ -255,7 +255,7 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
 
     if (p.stepCount <= 0) return false;
 
-    par_shapes_mesh* merged = par_shapes_create_staircase(p.stepCount, p.width, p.totalDepth, p.totalHeight, p.bSpecifyStepHeight ? p.stepHeight : 0.0f, p.bIsClosed ? 1 : 0);
+    par_shapes_mesh* merged = par_shapes_create_staircase(p.stepCount, p.width, Engine::StaircaseTotalDepth(p),p.totalHeight, p.bSpecifyStepHeight ? p.stepHeight : 0.0f, p.bIsClosed ? 1 : 0);
 
     if (!merged) { return false; }
 
@@ -1362,9 +1362,85 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
+static void AppendTerracePolygon(Core::Vector<Engine::FullVertex>& vertices, Core::Vector<uint32_t>& indices, Vec3 n, Vec3 t, const Vec3* v, const Vec2* uv, int count)
+{
+    Vec3 winding{0.0f};
+    for (int c = 0; c < count; ++c) { winding += glm::cross(v[c], v[(c + 1) % count]); }
+    const bool bFlip = glm::dot(winding, n) < 0.0f;
+    const auto vbase = static_cast<uint32_t>(vertices.Size());
+    for (int c = 0; c < count; ++c) {
+        const int src = bFlip ? count - 1 - c : c;
+        Engine::FullVertex vert{};
+        vert.position = v[src];
+        vert.normal = n;
+        vert.uv = {uv[src].x, uv[src].y};
+        vert.tangent = {t.x, t.y, t.z, 1.0f};
+        vert.color = {1, 1, 1, 1};
+        vertices.PushBack(vert);
+    }
+    for (int c = 1; c + 1 < count; ++c) {
+        indices.PushBack(vbase);
+        indices.PushBack(vbase + c);
+        indices.PushBack(vbase + c + 1);
+    }
+}
+
+bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p)
+{
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    const float hole = Engine::TerraceHoleInset(p, Engine::TerraceRun(p));
+    auto onHoleEdge = [&](const Vec3& a) {
+        return !p.bFloor && glm::abs(glm::min(Engine::TerraceInsetX(p, a.x), Engine::TerraceInsetZ(p, a.z)) - hole) < 1e-5f;
+    };
+
+    Engine::TerraceRampPieces(p, [&](const Vec3* v, int count) {
+        Vec2 uv[6];
+        Vec3 centroid{0.0f};
+        bool bSolid = false;
+        for (int c = 0; c < count; ++c) {
+            uv[c] = {v[c].x, v[c].z};
+            centroid += v[c];
+            bSolid |= v[c].y > 1e-6f;
+        }
+        centroid /= static_cast<float>(count);
+        if (bSolid) {
+            Vec3 normal{0.0f};
+            for (int c = 0; c < count; ++c) { normal += glm::cross(v[c], v[(c + 1) % count]); }
+            normal = glm::normalize(normal.y < 0.0f ? -normal : normal);
+            const Vec3 tangent = glm::normalize(Vec3(normal.y, -normal.x, 0.0f));
+            AppendTerracePolygon(vertices, indices, normal, tangent, v, uv, count);
+            Vec3 bottom[6];
+            for (int c = 0; c < count; ++c) { bottom[c] = {v[c].x, 0.0f, v[c].z}; }
+            AppendTerracePolygon(vertices, indices, {0, -1, 0}, {1, 0, 0}, bottom, uv, count);
+        }
+
+        for (int c = 0; c < count; ++c) {
+            const Vec3 a = v[c];
+            const Vec3 b = v[(c + 1) % count];
+            if (a.y <= 1e-6f && b.y <= 1e-6f) { continue; }
+            const bool bOuter = (a.x <= 1e-5f && b.x <= 1e-5f) || (a.x >= p.sizeX - 1e-5f && b.x >= p.sizeX - 1e-5f)
+                || (a.z <= 1e-5f && b.z <= 1e-5f) || (a.z >= p.sizeZ - 1e-5f && b.z >= p.sizeZ - 1e-5f);
+            if (!bOuter && !(onHoleEdge(a) && onHoleEdge(b))) { continue; }
+            const Vec3 away = (a + b) * 0.5f - centroid;
+            const Vec3 n = glm::abs(away.x) > glm::abs(away.z) ? Vec3(glm::sign(away.x), 0, 0) : Vec3(0, 0, glm::sign(away.z));
+            const bool bAlongZ = n.x != 0.0f;
+            const Vec3 wall[4] = {{a.x, 0.0f, a.z}, {b.x, 0.0f, b.z}, b, a};
+            Vec2 wallUv[4];
+            for (int k = 0; k < 4; ++k) { wallUv[k] = {bAlongZ ? wall[k].z : wall[k].x, wall[k].y}; }
+            AppendTerracePolygon(vertices, indices, n, bAlongZ ? Vec3(0, 0, 1) : Vec3(1, 0, 0), wall, wallUv, 4);
+        }
+    });
+
+    if (indices.IsEmpty()) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
 bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
 {
     ZoneScopedN("GenerateTerrace");
+    if (p.profile == Engine::TerraceProfile::Ramp) { return GenerateTerraceRamp(p); }
 
     const int32_t levels = Engine::TerraceLevelCount(p);
     const float run = Engine::TerraceRun(p);
@@ -1404,7 +1480,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
                 if (cx < r.x0 || cx > r.x1 || cz < r.z0 || cz > r.z1) { break; }
                 ++level;
             }
-            heights[j * cellsX + i] = Engine::TerraceLevelHeight(p, level);
+            heights[j * cellsX + i] = !p.bFloor && level + 1 == levels ? 0.0f : Engine::TerraceLevelHeight(p, level);
         }
     }
     auto heightAt = [&](int64_t i, int64_t j) -> float {
@@ -1416,20 +1492,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
 
     auto addQuad = [&](Vec3 n, Vec3 t, const Vec3 (&v)[4], const Vec2 (&uv)[4]) {
-        const bool bFlip = glm::dot(glm::cross(v[1] - v[0], v[2] - v[0]), n) < 0.0f;
-        const auto vbase = static_cast<uint32_t>(vertices.Size());
-        for (int c = 0; c < 4; ++c) {
-            const int src = bFlip ? 3 - c : c;
-            Engine::FullVertex vert{};
-            vert.position = v[src];
-            vert.normal = n;
-            vert.uv = {uv[src].x, uv[src].y};
-            vert.tangent = {t.x, t.y, t.z, 1.0f};
-            vert.color = {1, 1, 1, 1};
-            vertices.PushBack(vert);
-        }
-        indices.PushBack(vbase); indices.PushBack(vbase + 1); indices.PushBack(vbase + 2);
-        indices.PushBack(vbase); indices.PushBack(vbase + 2); indices.PushBack(vbase + 3);
+        AppendTerracePolygon(vertices, indices, n, t, v, uv, 4);
     };
 
     for (size_t j = 0; j < cellsZ; ++j) {
@@ -1438,9 +1501,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
             if (h <= 0.0f) { continue; }
             const float x0 = xs[i], x1 = xs[i + 1], z0 = zs[j], z1 = zs[j + 1];
             addQuad({0, 1, 0}, {1, 0, 0}, {{x0, h, z0}, {x1, h, z0}, {x1, h, z1}, {x0, h, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
-            if (p.bBottom) {
-                addQuad({0, -1, 0}, {1, 0, 0}, {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
-            }
+            addQuad({0, -1, 0}, {1, 0, 0}, {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
         }
     }
 

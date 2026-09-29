@@ -46,7 +46,7 @@ resolutionScale|0x3f400000
 reflectionProbeLineWidth|0x3dcccccd
 gameCameraFovDegrees|0x428cbb51
 gameCameraNearPlane|0x3dcccccd
-editorCameraFovDegrees|0x42af9c19
+editorCameraFovDegrees|0x428f6ca0
 editorCameraNearPlane|0x3dcccccd
 gameCameraLockAspect|0
 gameCameraAspect|0x41800000|0x41100000
@@ -100,9 +100,9 @@ t|0xc09af95a|0xc09fca21|0x41799f15
 r|0x3e20d4b7|0xbc09173b|0xbf7c74ae|0xbd5727b7
 ;
 p
-set|0
-t|0x00000000|0x00000000|0x00000000
-r|0x3f800000|0x00000000|0x00000000|0x00000000
+set|1
+t|0xc1288c73|0x4093bb85|0x41272951
+r|0x3f6b82a0|0xbd5fb079|0xbec666c8|0xbcbc736e
 ;
 sceneSlots|9
 s

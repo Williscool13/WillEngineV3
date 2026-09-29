@@ -178,6 +178,10 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         StringID newSubfolderParent{};
         entt::entity reparentFolderEntity = entt::null;
         StringID reparentFolderTo{};
+        enum class EntityMenuAction { None, Group, Rename, Copy, Paste, Duplicate, Delete };
+        EntityMenuAction entityAction = EntityMenuAction::None;
+        Core::ArenaVector<entt::entity> visibleRows{&ctx->editorArena.Get(), entries.Size() + 1};
+        entt::entity rangeTarget = entt::null;
 
         Core::ArenaVector<EntityEntry*> childIndex{&ctx->editorArena.Get(), entries.Size() + 1};
         for (auto& en : entries) {
@@ -212,8 +216,25 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             return false;
         };
 
+        auto topLevelOf = [&](entt::entity dragged, entt::entity exclude) {
+            Core::ArenaVector<entt::entity> out{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
+            auto& selection = state->editor.selectedEntities;
+            if (std::ranges::find(selection, dragged) == selection.end()) {
+                out.PushBack(dragged);
+                return out;
+            }
+            for (entt::entity e : selection) {
+                if (e == exclude || !state->registry.valid(e)) { continue; }
+                bool bNested = false;
+                for (entt::entity other : selection) { bNested |= other != e && isAncestorOf(other, e); }
+                if (!bNested) { out.PushBack(e); }
+            }
+            return out;
+        };
+
         // Entity row. Returns true if the row is an expanded parent (caller should recurse into children).
         auto drawEntityRow = [&](const EntityEntry& e, const EntityEntry* prev, const EntityEntry* next, bool hasChildren) -> bool {
+            visibleRows.PushBack(e.entity);
             ImGui::PushID(static_cast<int>(entt::to_integral(e.entity)));
             ImGui::BeginDisabled(prev == nullptr);
             if (ImGui::SmallButton("^")) {
@@ -254,6 +275,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
 
+            bool bRowSelectable = false;
             if (state->editor.renamingEntity == e.entity) {
                 if (state->editor.renameRequestFocus) {
                     ImGui::SetKeyboardFocusHere();
@@ -285,29 +307,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                     const bool ctrlHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down;
                     const bool shiftHeld = state->input.GetActionState(Actions::ACTION_MODIFIER_SHIFT).down;
                     if (shiftHeld && s_selectionAnchor != entt::null) {
-                        int anchorIdx = -1;
-                        int clickedIdx = -1;
-                        for (int i = 0; i < static_cast<int>(entries.Size()); ++i) {
-                            if (entries[i].entity == s_selectionAnchor) { anchorIdx = i; }
-                            if (entries[i].entity == e.entity) { clickedIdx = i; }
-                        }
-                        // Range-select stays within the anchor's peer group: same folder and hierarchy depth.
-                        const bool samePeerGroup = anchorIdx >= 0 && entries[anchorIdx].folderId == e.folderId && entries[anchorIdx].depth == e.depth;
-                        if (anchorIdx >= 0 && clickedIdx >= 0 && samePeerGroup) {
-                            if (anchorIdx > clickedIdx) { std::swap(anchorIdx, clickedIdx); }
-                            if (!ctrlHeld) { state->editor.selectedEntities.Clear(); }
-                            for (int i = anchorIdx; i <= clickedIdx; ++i) {
-                                if (entries[i].folderId != e.folderId || entries[i].depth != e.depth) { continue; }
-                                if (std::ranges::find(state->editor.selectedEntities, entries[i].entity) == state->editor.selectedEntities.end()) {
-                                    state->editor.selectedEntities.PushBack(entries[i].entity);
-                                }
-                            }
-                        }
-                        else {
-                            state->editor.selectedEntities.Clear();
-                            state->editor.selectedEntities.PushBack(e.entity);
-                            s_selectionAnchor = e.entity;
-                        }
+                        rangeTarget = e.entity;
                     }
                     else if (ctrlHeld) {
                         auto it = std::ranges::find(state->editor.selectedEntities, e.entity);
@@ -367,8 +367,27 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                     }
                     ImGui::EndDragDropTarget();
                 }
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && !selected) {
+                    state->editor.selectedFolders.Clear();
+                    state->editor.selectedEntities.Clear();
+                    state->editor.selectedEntities.PushBack(e.entity);
+                    s_selectionAnchor = e.entity;
+                }
+                bRowSelectable = true;
             }
             if (isPrefab) ImGui::PopStyleColor();
+            if (bRowSelectable && ImGui::BeginPopupContextItem("entity_ctx")) {
+                const size_t count = state->editor.selectedEntities.Size();
+                if (ImGui::MenuItem(count > 1 ? "Group Under New Entity" : "Parent Under New Entity")) { entityAction = EntityMenuAction::Group; }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Rename", "F2", false, count == 1)) { entityAction = EntityMenuAction::Rename; }
+                if (ImGui::MenuItem("Copy")) { entityAction = EntityMenuAction::Copy; }
+                if (ImGui::MenuItem("Paste", nullptr, false, !state->editor.clipboardEntities.IsEmpty())) { entityAction = EntityMenuAction::Paste; }
+                if (ImGui::MenuItem("Duplicate", "Ctrl+W")) { entityAction = EntityMenuAction::Duplicate; }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Delete", "Del")) { entityAction = EntityMenuAction::Delete; }
+                ImGui::EndPopup();
+            }
             ImGui::PopID();
             return hasChildren && open;
         };
@@ -642,15 +661,29 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::EndChild();
         state->editor.sceneBrowserFilterWasActive = filterActive;
 
-        // Apply deferred
-        if (moveToFolderEntity != entt::null) {
-            Core::ArenaVector<entt::entity> toMove{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
-            if (std::ranges::find(state->editor.selectedEntities, moveToFolderEntity) != state->editor.selectedEntities.end()) {
-                for (entt::entity e : state->editor.selectedEntities) { toMove.PushBack(e); }
+        if (rangeTarget != entt::null) {
+            const auto anchorIt = std::ranges::find(visibleRows, s_selectionAnchor);
+            const auto targetIt = std::ranges::find(visibleRows, rangeTarget);
+            if (!state->input.GetActionState(Actions::ACTION_MODIFIER_CTRL).down) { state->editor.selectedEntities.Clear(); }
+            if (anchorIt == visibleRows.end()) {
+                state->editor.selectedEntities.PushBack(rangeTarget);
+                s_selectionAnchor = rangeTarget;
             }
             else {
-                toMove.PushBack(moveToFolderEntity);
+                auto first = anchorIt;
+                auto last = targetIt;
+                if (first > last) { std::swap(first, last); }
+                for (auto it = first; it <= last; ++it) {
+                    if (std::ranges::find(state->editor.selectedEntities, *it) == state->editor.selectedEntities.end()) {
+                        state->editor.selectedEntities.PushBack(*it);
+                    }
+                }
             }
+        }
+
+        // Apply deferred
+        if (moveToFolderEntity != entt::null) {
+            Core::ArenaVector<entt::entity> toMove = topLevelOf(moveToFolderEntity, entt::null);
             std::ranges::sort(toMove, [&](entt::entity a, entt::entity b) {
                 const auto* sa = state->registry.try_get<Component::StableIdComponent>(a);
                 const auto* sb = state->registry.try_get<Component::StableIdComponent>(b);
@@ -685,16 +718,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 targetFolder = tf->folderId;
             }
 
-            Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
-            if (std::ranges::find(state->editor.selectedEntities, reorderDragged) != state->editor.selectedEntities.end()) {
-                for (entt::entity e : state->editor.selectedEntities) {
-                    if (e == reorderTarget) { continue; }
-                    moved.PushBack(e);
-                }
-            }
-            else {
-                moved.PushBack(reorderDragged);
-            }
+            Core::ArenaVector<entt::entity> moved = topLevelOf(reorderDragged, reorderTarget);
 
             for (entt::entity m : moved) {
                 if (targetParent == entt::null) {
@@ -734,16 +758,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (parentDragged != entt::null && parentTarget != entt::null) {
-            Core::ArenaVector<entt::entity> moved{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
-            if (std::ranges::find(state->editor.selectedEntities, parentDragged) != state->editor.selectedEntities.end()) {
-                for (entt::entity e : state->editor.selectedEntities) {
-                    if (e == parentTarget) { continue; }
-                    moved.PushBack(e);
-                }
-            }
-            else {
-                moved.PushBack(parentDragged);
-            }
+            Core::ArenaVector<entt::entity> moved = topLevelOf(parentDragged, parentTarget);
             for (entt::entity m : moved) {
                 SetParent(state, m, parentTarget); // keeps world pose, rejects cycles
             }
@@ -762,6 +777,34 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (folderToDelete != entt::null) {
             state->registry.destroy(folderToDelete);
             MarkSceneModified(state, state->scene.currentSceneId);
+        }
+        switch (entityAction) {
+            case EntityMenuAction::Group:
+                GroupEntities(ctx, state, state->editor.selectedEntities);
+                break;
+            case EntityMenuAction::Rename: {
+                const entt::entity target = state->editor.selectedEntities[0];
+                const auto* nc = state->registry.try_get<Component::NameComponent>(target);
+                state->editor.renamingEntity = target;
+                state->editor.renameRequestFocus = true;
+                strncpy_s(state->editor.renameBuffer, nc ? nc->name.c_str() : "", sizeof(state->editor.renameBuffer) - 1);
+                break;
+            }
+            case EntityMenuAction::Copy:
+                state->editor.clipboardEntities.Clear();
+                for (entt::entity en : state->editor.selectedEntities) { state->editor.clipboardEntities.PushBack(en); }
+                break;
+            case EntityMenuAction::Paste:
+                DuplicateEntities(ctx, state, state->editor.clipboardEntities);
+                break;
+            case EntityMenuAction::Duplicate:
+                DuplicateEntities(ctx, state, state->editor.selectedEntities);
+                break;
+            case EntityMenuAction::Delete:
+                DeleteSelectedEntities(ctx, state);
+                break;
+            case EntityMenuAction::None:
+                break;
         }
 
         ImGui::Separator();

@@ -105,6 +105,155 @@ void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> e
     }
 }
 
+static void SelectOnly(Engine::EngineState* state, Core::Span<const entt::entity> entities)
+{
+    state->editor.selectedFolders.Clear();
+    state->editor.selectedEntities.Clear();
+    for (entt::entity e : entities) { state->editor.selectedEntities.PushBack(e); }
+}
+
+void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources)
+{
+    const StringID sceneId = state->scene.currentSceneId;
+    if (!sceneId.IsValid()) { return; }
+    auto& registry = state->registry;
+
+    auto parentOf = [&](entt::entity e) {
+        const auto* h = registry.try_get<Component::HierarchyComponent>(e);
+        return h && registry.valid(h->parent) ? h->parent : entt::null;
+    };
+    auto hasListedAncestor = [&](entt::entity e) {
+        for (int guard = 0; guard < 1024; ++guard) {
+            e = parentOf(e);
+            if (e == entt::null) { return false; }
+            if (std::ranges::find(sources, e) != sources.end()) { return true; }
+        }
+        return false;
+    };
+
+    Core::ArenaVector<entt::entity> originals{&ctx->editorArena.Get(), sources.Size() + 1};
+    for (entt::entity e : sources) {
+        if (registry.valid(e) && !hasListedAncestor(e)) { originals.PushBack(e); }
+    }
+    const size_t rootCount = originals.Size();
+    if (rootCount == 0) { return; }
+    auto hierarchy = registry.view<Component::HierarchyComponent>();
+    for (size_t i = 0; i < originals.Size(); ++i) {
+        for (auto [child, node] : hierarchy.each()) {
+            if (node.parent == originals[i]) { originals.PushBack(child); }
+        }
+    }
+
+    auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), originals.Size() + 1);
+    for (entt::entity entity : originals) {
+        const entt::entity copy = CopySceneEntity(state, entity, sceneId);
+        if (auto* volume = registry.try_get<Component::LocalDDGIVolumeComponent>(copy)) {
+            volume->volumeId = state->rng();
+        }
+        if (auto* probe = registry.try_get<Component::ReflectionProbeComponent>(copy)) {
+            probe->probeId = state->rng();
+        }
+        copies.PushBack(copy);
+    }
+
+    for (size_t i = 0; i < copies.Size(); ++i) {
+        const entt::entity copy = copies[i];
+        if (auto* h = registry.try_get<Component::HierarchyComponent>(copy); h && registry.valid(h->parent)) {
+            const auto it = std::ranges::find(originals, h->parent);
+            if (it != originals.end()) {
+                const entt::entity parentCopy = copies[static_cast<size_t>(it - originals.begin())];
+                h->parent = parentCopy;
+                h->parentStableId = registry.get<Component::StableIdComponent>(parentCopy).id;
+                state->bHierarchyOrderDirty = true;
+            }
+            else {
+                const auto* parentScene = registry.try_get<Component::SceneComponent>(h->parent);
+                if (!parentScene || parentScene->sceneId != sceneId) { ClearParent(state, copy); }
+            }
+        }
+        if (i < rootCount) {
+            if (auto* nameComp = registry.try_get<Component::NameComponent>(copy)) {
+                nameComp->name = GenerateIncrementedName(registry, sceneId, nameComp->name);
+            }
+            registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(registry, sceneId) + 1;
+        }
+    }
+
+    SelectOnly(state, Core::Span<const entt::entity>(copies.Data(), rootCount));
+    MarkSceneModified(state, sceneId);
+}
+
+void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (state->editor.selectedEntities.IsEmpty()) { return; }
+    auto& registry = state->registry;
+    Core::ArenaVector<entt::entity> doomed{&ctx->editorArena.Get(), state->editor.selectedEntities.Size() + 1};
+    for (entt::entity entity : state->editor.selectedEntities) {
+        if (registry.valid(entity)) { doomed.PushBack(entity); }
+    }
+    auto hierarchy = registry.view<Component::HierarchyComponent>();
+    for (size_t i = 0; i < doomed.Size(); ++i) {
+        for (auto [child, node] : hierarchy.each()) {
+            if (node.parent == doomed[i] && std::ranges::find(doomed, child) == doomed.end()) { doomed.PushBack(child); }
+        }
+    }
+    for (size_t i = doomed.Size(); i-- > 0;) {
+        registry.destroy(doomed[i]);
+    }
+    state->editor.selectedEntities.Clear();
+    state->bHierarchyOrderDirty = true;
+    MarkSceneModified(state, state->scene.currentSceneId);
+}
+
+entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> entities)
+{
+    auto& registry = state->registry;
+    auto inSet = [&](entt::entity e) { return std::ranges::find(entities, e) != entities.end(); };
+    auto hasAncestorInSet = [&](entt::entity e) {
+        for (int guard = 0; guard < 1024; ++guard) {
+            const auto* h = registry.try_get<Component::HierarchyComponent>(e);
+            if (!h || !registry.valid(h->parent)) { return false; }
+            e = h->parent;
+            if (inSet(e)) { return true; }
+        }
+        return false;
+    };
+
+    auto roots = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), entities.Size() + 1);
+    for (entt::entity e : entities) {
+        if (registry.valid(e) && registry.all_of<Component::TransformComponent>(e) && !hasAncestorInSet(e)) { roots.PushBack(e); }
+    }
+    if (roots.IsEmpty() || !state->scene.currentSceneId.IsValid()) { return entt::null; }
+
+    std::ranges::sort(roots, [&](entt::entity a, entt::entity b) {
+        return registry.get<Component::StableIdComponent>(a).sortOrder < registry.get<Component::StableIdComponent>(b).sortOrder;
+    });
+    const entt::entity anchor = roots[0];
+
+    Vec3 center{0.0f};
+    for (entt::entity e : roots) { center += Component::ComputeWorldTransform(registry, e).translation; }
+    center /= static_cast<float>(roots.Size());
+
+    const entt::entity group = CreateSceneEntity(state);
+    registry.get<Component::NameComponent>(group).name = GenerateIncrementedName(registry, state->scene.currentSceneId, Core::InlineString<128>("Group_0"));
+    registry.get<Component::TransformComponent>(group).translation = center;
+    registry.get<Component::StableIdComponent>(group).sortOrder = registry.get<Component::StableIdComponent>(anchor).sortOrder;
+    if (const auto* folder = registry.try_get<Component::EntityFolderComponent>(anchor)) {
+        registry.get<Component::EntityFolderComponent>(group).folderId = folder->folderId;
+    }
+    if (const auto* h = registry.try_get<Component::HierarchyComponent>(anchor); h && registry.valid(h->parent)) {
+        SetParent(state, group, h->parent);
+    }
+    for (entt::entity e : roots) {
+        SetParent(state, e, group);
+    }
+
+    const entt::entity selection[] = {group};
+    SelectOnly(state, selection);
+    MarkSceneModified(state, state->scene.currentSceneId);
+    return group;
+}
+
 void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3&, int transformCount)
 {
     auto& entities = state->editor.selectedEntities;
@@ -445,25 +594,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 
         if (!rmbHeld) {
             if (!popupOpen && ctrlHeld && state->input.GetActionState(Actions::ACTION_DUPLICATE).pressed) {
-                auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), state->editor.selectedEntities.Size());
-                for (entt::entity entity : state->editor.selectedEntities) {
-                    if (!state->registry.valid(entity)) continue;
-                    entt::entity copy = CopySceneEntity(state, entity, state->scene.currentSceneId);
-                    if (auto* volume = state->registry.try_get<Component::LocalDDGIVolumeComponent>(copy)) {
-                        volume->volumeId = state->rng();
-                    }
-                    if (auto* probe = state->registry.try_get<Component::ReflectionProbeComponent>(copy)) {
-                        probe->probeId = state->rng();
-                    }
-                    if (auto* nameComp = state->registry.try_get<Component::NameComponent>(copy)) {
-                        nameComp->name = GenerateIncrementedName(state->registry, state->scene.currentSceneId, nameComp->name);
-                    }
-                    state->registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(state->registry, state->scene.currentSceneId) + 1;
-                    copies.PushBack(copy);
-                }
-                state->editor.selectedEntities.Clear();
-                for (auto copy : copies) { state->editor.selectedEntities.PushBack(copy); }
-                if (!copies.IsEmpty()) { MarkSceneModified(state, state->scene.currentSceneId); }
+                DuplicateEntities(ctx, state, state->editor.selectedEntities);
             }
 
             if (!popupOpen && ctrlHeld && !ImGui::IsAnyItemActive()) {
@@ -482,13 +613,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
             }
 
             if (!popupOpen && !state->editor.bMaterialListFocused && state->input.GetActionState(Actions::ACTION_DELETE_SELECTED).pressed) {
-                const bool hadSelection = !state->editor.selectedEntities.IsEmpty();
-                for (entt::entity entity : state->editor.selectedEntities) {
-                    if (!state->registry.valid(entity)) continue;
-                    state->registry.destroy(entity);
-                }
-                state->editor.selectedEntities.Clear();
-                if (hadSelection) { MarkSceneModified(state, state->scene.currentSceneId); }
+                DeleteSelectedEntities(ctx, state);
             }
 
             if (!popupOpen && !state->editor.bExclusiveGizmoActivePrev && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
@@ -1165,7 +1290,14 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                             glm::vec3 translation = glm::vec3(localModel[3]);
                             if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid) {
                                 const float g = state->editor.snapTranslation;
-                                translation = glm::round(translation / g) * g;
+                                for (int axis = 0; axis < 3; ++axis) {
+                                    if (glm::abs(translation[axis] - transform->translation[axis]) > 1e-4f) {
+                                        translation[axis] = glm::round(translation[axis] / g) * g;
+                                    }
+                                    else {
+                                        translation[axis] = transform->translation[axis];
+                                    }
+                                }
                             }
                             transform->translation = translation;
                             break;
@@ -1237,7 +1369,14 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     glm::vec3 newT = {t[0], t[1], t[2]};
                     if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid) {
                         const float g = state->editor.snapTranslation;
-                        newT = glm::round(newT / g) * g;
+                        for (int axis = 0; axis < 3; ++axis) {
+                            if (glm::abs(newT[axis] - s_prevTranslation[axis]) > 1e-4f) {
+                                newT[axis] = glm::round(newT[axis] / g) * g;
+                            }
+                            else {
+                                newT[axis] = s_prevTranslation[axis];
+                            }
+                        }
                     }
                     deltaTranslation = newT - s_prevTranslation;
                     s_prevTranslation = newT;
