@@ -499,6 +499,15 @@ public: // Scenes
 
     bool DeleteScene(StringID sceneId);
 
+    /**
+     * Renames or moves a scene's file (if it has one) and the runs beside it; the scene's name becomes the new stem.
+     * @return false if the destination exists or the move fails
+     */
+    bool MoveScene(StringID sceneId, const Core::Path& newSource);
+
+    /** Every directory under the scenes root, as of the last scene scan. */
+    Core::Span<const Core::Path> GetSceneFolders() const { return sceneFolders; }
+
 public: // Prefabs
     struct CachedPrefabMetadata
     {
@@ -550,6 +559,7 @@ private: // Asset Registry
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
     Core::FixedMap<StringID, CachedPlayMetadata> playCache;
     uint32_t sceneScanGeneration{0};
+    Core::InlineVector<Core::Path, 64> sceneFolders{};
 
     Core::InlineVector<ModelID, 16> changedModelIds{};
     Core::InlineVector<TextureID, 16> changedTextureIds{};

@@ -43,6 +43,12 @@ bool DeleteSingleFile(const char* path);
 bool DeleteSingleFile(const Core::Path& path);
 
 /**
+ * Sends a file or folder to the OS recycle bin. Returns true on success.
+ * @param path
+ */
+bool MoveToRecycleBin(const Core::Path& path);
+
+/**
  * Copies src to dst, overwriting dst if it exists. Returns true on success.
  * @param src
  * @param dst
@@ -111,6 +117,19 @@ struct ScopedFileMapping : FileMapping
 void RecursiveDirectoryIterator(const char* path, Core::Vector<Core::Path>& out);
 
 void RecursiveDirectoryIterator(const Core::Path& path, Core::Vector<Core::Path>& out);
+
+/**
+ * Recursively enumerates all directories under path and appends their paths to out.
+ * @param path
+ * @param out
+ */
+void RecursiveSubdirectories(const Core::Path& path, Core::Vector<Core::Path>& out);
+
+/**
+ * Removes path only if it is an empty directory. Returns true on success.
+ * @param path
+ */
+bool RemoveEmptyDirectory(const Core::Path& path);
 
 /**
  * Recursively finds all files with the given extension under dir.

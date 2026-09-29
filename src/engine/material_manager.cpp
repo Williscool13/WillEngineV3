@@ -464,8 +464,9 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
     if (it == nullptr) { return false; }
     if (it->bSynthesized) { return false; }
 
-    if (!it->sourcePath.IsEmpty()) {
-        Platform::DeleteSingleFile(it->sourcePath.c_str());
+    if (Platform::FileExists(it->sourcePath) && !Platform::MoveToRecycleBin(it->sourcePath)) {
+        LOG_ERROR(Asset, "Failed to delete material '{}'", it->sourcePath.c_str());
+        return false;
     }
 
     StringID sid(it->name.c_str(), it->name.Size());
@@ -671,8 +672,9 @@ bool MaterialManager::DeleteTextMaterial(TextMaterialID id)
     const TextMaterial* mat = textMaterials.Find(id);
     if (!mat) { return false; }
 
-    if (!mat->sourcePath.IsEmpty()) {
-        Platform::DeleteSingleFile(mat->sourcePath.c_str());
+    if (Platform::FileExists(mat->sourcePath) && !Platform::MoveToRecycleBin(mat->sourcePath)) {
+        LOG_ERROR(Asset, "Failed to delete text material '{}'", mat->sourcePath.c_str());
+        return false;
     }
 
     StringID sid(mat->name.c_str(), mat->name.Size());

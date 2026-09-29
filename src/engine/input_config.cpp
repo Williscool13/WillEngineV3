@@ -122,7 +122,7 @@ bool SaveInputProfile(const char* name, const InputConfig& config, Core::TlsfAll
 
 bool DeleteInputProfile(const char* name)
 {
-    return Platform::DeleteSingleFile(InputProfilePath(name));
+    return Platform::MoveToRecycleBin(InputProfilePath(name));
 }
 } // Profiles
 

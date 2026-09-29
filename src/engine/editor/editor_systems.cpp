@@ -16,7 +16,7 @@
 #include "engine/editor/settings/graphics_settings.h"
 #include "engine/editor/settings/input_settings.h"
 #include "engine/input/engine_actions.h"
-#include "engine/editor/editor_scene_browser.h"
+#include "engine/editor/editor_scene_panels.h"
 #include "engine/editor/editor_materials.h"
 #include "engine/editor/editor_multi_edit.h"
 #include "engine/editor/edit_context.h"
@@ -78,6 +78,21 @@ void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 {
     if (!state->editor.modifiedScenes.Contains(sceneId)) {
         state->editor.modifiedScenes.PushBack(sceneId);
+    }
+}
+
+void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId)
+{
+    if (!ctx->bGameLoaded || IsPlaying(state) || !ctx->assetManager->GetSceneCache().Contains(sceneId)) { return; }
+    SaveSceneToFile(sceneId, state, ctx->assetManager, ctx);
+    state->editor.modifiedScenes.RemoveFirst(sceneId);
+}
+
+void SaveModifiedScenes(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    Core::InlineVector<StringID, 8> modified = state->editor.modifiedScenes;
+    for (StringID sceneId : modified) {
+        SaveEditorScene(ctx, state, sceneId);
     }
 }
 
@@ -233,13 +248,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->editor.autoSaveTimer += state->timeFrame->deltaTime;
         if (state->editor.autoSaveTimer >= state->editor.autoSaveInterval) {
             state->editor.autoSaveTimer = 0.0f;
-            for (StringID sceneId : state->editor.modifiedScenes) {
-                const auto& sceneCache = ctx->assetManager->GetSceneCache();
-                if (sceneCache.Contains(sceneId)) {
-                    SaveSceneToFile(sceneId, state, ctx->assetManager, ctx);
-                }
-            }
-            state->editor.modifiedScenes.Clear();
+            SaveModifiedScenes(ctx, state);
         }
     }
 
@@ -285,6 +294,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     state->editor.undo.Tick(state, ImGui::IsAnyItemActive() || ImGuizmo::IsUsingAny() || state->editor.activeDotHandleId >= 0);
 
     const bool bJustSelected = HandleViewportSelection(ctx, state);
+    SyncActiveScene(ctx, state);
 
     DrawDebugViewWindow(ctx, state);
     DrawDiagnosticsWindow(ctx, state);
@@ -309,7 +319,9 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
 
     DrawToolbar(ctx, state);
-    DrawSceneBrowser(ctx, state, frameBuffer);
+    DrawScenesPanel(ctx, state);
+    DrawOutliner(ctx, state);
+    DrawSpawnPanel(ctx, state, frameBuffer);
 
     glm::vec3 multiGizmoCentroid{0.0f};
     int transformCount = 0;
@@ -438,6 +450,10 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 }
                 else if (state->input.GetActionState(Actions::ACTION_REDO).pressed) {
                     state->editor.undo.Redo(state);
+                }
+                else if (state->input.GetActionState(Actions::ACTION_SAVE).pressed) {
+                    if (shiftHeld) { SaveModifiedScenes(ctx, state); }
+                    else { SaveEditorScene(ctx, state, state->scene.currentSceneId); }
                 }
             }
 

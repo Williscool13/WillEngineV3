@@ -5,7 +5,9 @@
 #include "file_utils.h"
 
 #include <cstring>
+#include <iterator>
 #include <Windows.h>
+#include <shellapi.h>
 
 #include "core/containers/inline_path.h"
 #include "core/containers/vector.h"
@@ -95,6 +97,22 @@ bool DeleteSingleFile(const char* path)
 }
 
 bool DeleteSingleFile(const Core::Path& path) { return DeleteSingleFile(path.c_str()); }
+
+bool MoveToRecycleBin(const Core::Path& path)
+{
+    wchar_t from[1024]{};
+    const int len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), static_cast<int>(path.Size()), from, static_cast<int>(std::size(from)) - 2);
+    if (len <= 0) { return false; }
+    for (int i = 0; i < len; ++i) {
+        if (from[i] == L'/') { from[i] = L'\\'; }
+    }
+
+    SHFILEOPSTRUCTW op{};
+    op.wFunc = FO_DELETE;
+    op.pFrom = from;
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING | FOF_SILENT | FOF_NOERRORUI;
+    return SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted;
+}
 
 bool FileCopy(const char* src, const char* dst)
 {
@@ -193,6 +211,28 @@ void RecursiveDirectoryIterator(const Core::Path& dir, Core::Vector<Core::Path>&
 void RecursiveDirectoryIterator(const char* path, Core::Vector<Core::Path>& out)
 {
     RecursiveDirectoryIterator(Core::Path(path), out);
+}
+
+void RecursiveSubdirectories(const Core::Path& dir, Core::Vector<Core::Path>& out)
+{
+    Core::Path search = dir / "*";
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(search.c_str(), &ffd);
+    if (hFind == INVALID_HANDLE_VALUE) { return; }
+    do {
+        if (strcmp(ffd.cFileName, ".") == 0 || strcmp(ffd.cFileName, "..") == 0) { continue; }
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            Core::Path child = dir / ffd.cFileName;
+            out.PushBack(child);
+            RecursiveSubdirectories(child, out);
+        }
+    } while (FindNextFileA(hFind, &ffd));
+    FindClose(hFind);
+}
+
+bool RemoveEmptyDirectory(const Core::Path& path)
+{
+    return RemoveDirectoryA(path.c_str()) != FALSE;
 }
 
 static uint32_t FindFilesByExtensionImpl(const Core::Path& dir, const char* ext, Core::Path* out, uint32_t max, uint32_t count)

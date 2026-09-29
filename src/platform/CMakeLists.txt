@@ -26,6 +26,7 @@ if(WIN32)
             core
             dbghelp
             ws2_32
+            shell32
             fmt::fmt
             spdlog::spdlog
             SDL3::SDL3

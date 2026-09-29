@@ -143,6 +143,7 @@ void RegisterEngineInputActions(InputState& input)
     AddDefault(input, ORIGIN, Actions::ACTION_DELETE_SELECTED, InputContext::Editor, BindingSource::FromKey(Key::DEL));
     AddDefault(input, ORIGIN, Actions::ACTION_UNDO, InputContext::Editor, BindingSource::FromKey(Key::Z));
     AddDefault(input, ORIGIN, Actions::ACTION_REDO, InputContext::Editor, BindingSource::FromKey(Key::Y));
+    AddDefault(input, ORIGIN, Actions::ACTION_SAVE, InputContext::Editor, BindingSource::FromKey(Key::S));
     AddDefault(input, ORIGIN, Actions::ACTION_BEGIN_RENAME, InputContext::Editor, BindingSource::FromKey(Key::F2));
     AddDefault(input, ORIGIN, Actions::ACTION_FOCUS_SELECTION, InputContext::Editor, BindingSource::FromKey(Key::F));
     AddDefaultAllContexts(input, ORIGIN, Actions::ACTION_TOGGLE_CONSOLE, BindingSource::FromKey(Key::BACKTICK));

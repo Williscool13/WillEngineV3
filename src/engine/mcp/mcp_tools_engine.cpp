@@ -579,15 +579,29 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
     }
 
     const AssetManager::CachedPlayMetadata* found = nullptr;
+    uint32_t matchCount = 0;
+    bool bFoundCurrent = false;
     for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
         const Core::InlineString<128> stem{meta.source.Stem()};
-        if (stem == name || meta.name == name || meta.source == name) {
+        if (!(stem == name || meta.name == name || meta.source == name)) { continue; }
+        const bool bCurrent = meta.sceneId == state->scene.currentSceneId;
+        if (bCurrent && !bFoundCurrent) {
             found = &meta;
-            break;
+            matchCount = 1;
+            bFoundCurrent = true;
+        }
+        else if (bCurrent == bFoundCurrent) {
+            found = found ? found : &meta;
+            ++matchCount;
         }
     }
     if (!found) {
         call.SetError("No .wplay with that stem, name, or path is in the scan; check query_assets");
+        return ToolResult::Error;
+    }
+    if (matchCount > 1) {
+        call.SetError(Core::InlineString<256>::Format("%u .wplay files match '%s'%s; pass the absolute path", matchCount, name,
+                                                      bFoundCurrent ? " for the current scene" : "").c_str());
         return ToolResult::Error;
     }
     if (found->sceneId != state->scene.currentSceneId) {
@@ -611,7 +625,7 @@ void RegisterEngineTools(EngineState* state)
         .name = "run_play",
         .description = "Arms a .wplay run in the loaded scene, as the scene browser's Run button does. Returns immediately; poll get_engine_status.playtestActive until false, then read get_engine_status.playtestOutputDir for the captures.",
         .inputSchemaJson = R"({"type":"object","required":["name"],"properties":{
-            "name":{"type":"string","description":"The .wplay file stem, its header name, or an absolute path"}}})",
+            "name":{"type":"string","description":"The .wplay file stem, its header name, or an absolute path; a stem or name prefers runs bound to the current scene"}}})",
         .invoke = &RunPlay,
         .origin = Origin::Engine,
         .bNeedsDrain = true,

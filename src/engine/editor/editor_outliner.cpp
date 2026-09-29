@@ -2,24 +2,20 @@
 // Created by William on 2026-06-26.
 //
 
-#include "editor_scene_browser.h"
+#include "editor_scene_panels.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 
-#include <fmt/format.h>
-
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "engine/editor/editor_systems.h"
-#include "engine/editor/probe_bake_system.h"
 #include "engine/systems/scene_system.h"
 #include "engine/input/engine_actions.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/asset_manager.h"
-#include "engine/core/model_id.h"
 #include "engine/input/input_frame.h"
 #include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
@@ -27,15 +23,11 @@
 #include "engine/components/common_components.h"
 #include "engine/components/editor_components.h"
 #include "engine/components/scene_components.h"
-#include "platform/paths.h"
 
 namespace Engine
 {
-void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    const glm::vec3 cameraPos = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
-    const glm::vec3 cameraFwd = frameBuffer->mainViewFamily.mainView.currentViewData.cameraForward;
-
     if (state->editor.renamingEntity != entt::null && !state->registry.valid(state->editor.renamingEntity)) {
         state->editor.renamingEntity = entt::null;
     }
@@ -45,336 +37,29 @@ void DrawSceneBrowser(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         }
     }
 
-    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_SCENE_BROWSER];
+    bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_OUTLINER];
     if (!bOpen) { return; }
-    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_SCENE_BROWSER].title, &bOpen)) {
-        const auto& sceneCache = ctx->assetManager->GetSceneCache();
-
-        if (!sceneCache.IsEmpty() && !sceneCache.Contains(state->scene.currentSceneId)) {
-            for (const auto& [id, meta] : sceneCache) {
-                state->scene.currentSceneId = id;
-                state->scene.currentSceneName = meta.sceneName;
-                break;
-            }
-        }
-        if (sceneCache.IsEmpty()) {
-            state->scene.currentSceneId = {};
-            state->scene.currentSceneName.Clear();
-        }
-
-        const bool bIsLoaded = std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == state->scene.currentSceneId; });
-        const bool bIsModified = std::ranges::find(state->editor.modifiedScenes, state->scene.currentSceneId) != state->editor.modifiedScenes.end();
-        const bool bIsMaxLoaded = state->editor.loadedScenes.Size() > Engine::MAX_LOADED_SCENES;
-        const bool hasScene = sceneCache.Contains(state->scene.currentSceneId);
-
-        // Scene dropdown
+    if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_OUTLINER].title, &bOpen)) {
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##scene_list", state->scene.currentSceneName.c_str())) {
-            struct ScenePair
-            {
-                StringID sceneId;
-                Core::InlineString<128> name;
-            };
-            auto sceneList = Core::ArenaFixedVector<ScenePair>(&ctx->editorArena.Get(), sceneCache.Size());
-            for (const auto& [id, meta] : sceneCache) {
-                sceneList.EmplaceBack(id, meta.sceneName);
-            }
-            std::ranges::sort(sceneList, {}, &ScenePair::name);
-
-            for (auto& [id, name] : sceneList) {
-                const bool selected = (id == state->scene.currentSceneId);
-                if (ImGui::Selectable(name.c_str(), selected)) {
-                    state->scene.currentSceneId = id;
-                    state->scene.currentSceneName = name;
-                }
-                if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == id; })) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(loaded)");
+        if (ImGui::BeginCombo("##active_scene", state->scene.currentSceneId.IsValid() ? state->scene.currentSceneName.c_str() : "No scene loaded")) {
+            for (const RuntimeSceneMetadata& loaded : state->editor.loadedScenes) {
+                const auto* meta = ctx->assetManager->GetSceneMetadata(loaded.sceneId);
+                const bool bModified = state->editor.modifiedScenes.Contains(loaded.sceneId);
+                const Core::InlineString<160> label = Core::InlineString<160>::Format("%s%s##%llu", meta ? meta->sceneName.c_str() : "(unregistered)", bModified ? " *" : "",
+                                                                                      static_cast<unsigned long long>(loaded.sceneId.id));
+                if (ImGui::Selectable(label.c_str(), loaded.sceneId == state->scene.currentSceneId)) {
+                    state->scene.currentSceneId = loaded.sceneId;
+                    SyncActiveScene(ctx, state);
                 }
             }
             ImGui::EndCombo();
         }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Active scene: the outliner shows it, and new entities go into it"); }
 
-        ImGui::BeginDisabled(!hasScene || bIsLoaded || bIsMaxLoaded);
-        if (ImGui::Button("Load")) {
-            LoadSceneFromFile(state, ctx->assetManager, state->scene.currentSceneId);
-        }
+        ImGui::BeginDisabled(!state->scene.currentSceneId.IsValid());
+        const bool bNewFolder = ImGui::Button("New Folder");
         ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!bIsLoaded);
-        if (ImGui::Button("Unload")) { UnloadScene(state, state->scene.currentSceneId); }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!bIsLoaded || !ctx->bGameLoaded);
-        if (bIsModified) { ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f)); }
-        if (ImGui::Button(bIsModified ? "Save*" : "Save")) {
-            SaveSceneToFile(state->scene.currentSceneId, state, ctx->assetManager, ctx);
-            state->editor.modifiedScenes.RemoveFirst(state->scene.currentSceneId);
-        }
-        if (bIsModified) { ImGui::PopStyleColor(); }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!ctx->bGameLoaded);
-        if (ImGui::Checkbox("Auto", &state->editor.bAutoSave)) {
-            state->editor.autoSaveTimer = 0.0f;
-        }
-        ImGui::EndDisabled();
-        if (state->editor.bAutoSave && ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Auto-save in %.0fs", state->editor.autoSaveInterval - state->editor.autoSaveTimer);
-        }
-        if (!ctx->bGameLoaded) {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "saving disabled: game.dll missing");
-        }
-
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!hasScene || bIsLoaded);
-        if (ImGui::Button("Delete")) {
-            ctx->assetManager->DeleteScene(state->scene.currentSceneId);
-            state->scene.currentSceneId = {};
-            state->scene.currentSceneName.Clear();
-        }
-        ImGui::EndDisabled();
-        if (bIsLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("Unload scene before deleting");
-        }
-
-        ImGui::TextDisabled("ID: %llu", state->scene.currentSceneId.id);
-
-        ImGui::BeginDisabled(!hasScene);
-        if (ImGui::Button("Set Default")) {
-            state->projectConfig.defaultScene = state->scene.currentSceneId;
-            Engine::WriteProjectConfig(state->projectConfig, state->allocator);
-        }
-        ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && hasScene) {
-            ImGui::SetTooltip("Set '%s' as the scene loaded on startup (non-editor)", state->scene.currentSceneName.c_str());
-        }
-
-        ImGui::SeparatorText("Runs"); {
-            ImGui::Checkbox("Skip captures", &state->playtest.bSkipCaptures);
-            ImGui::SameLine();
-            if (ImGui::Button("Refresh")) {
-                ctx->rescan.bResources = true;
-            }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Rescan the assets and scenes roots on the next frame (picks up new .wplay files)"); }
-            const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty() || ProbeBakeActive(state);
-            uint32_t runCount = 0;
-            for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
-                if (meta.sceneId != state->scene.currentSceneId) { continue; }
-                ++runCount;
-                ImGui::PushID(static_cast<int>(id.id));
-                ImGui::BeginDisabled(bRunBusy || !bIsLoaded);
-                if (ImGui::Button("Run")) {
-                    state->playtest.Arm(meta.source.c_str());
-                }
-                ImGui::EndDisabled();
-                ImGui::SameLine();
-                ImGui::Text("%s", meta.name.c_str());
-                ImGui::SameLine();
-                ImGui::TextDisabled("(%u events)", meta.eventCount);
-                ImGui::PopID();
-            }
-            if (runCount == 0) {
-                ImGui::TextDisabled("No .wplay for this scene");
-            }
-        }
-
-        ImGui::SeparatorText("New Scene");
-        static char newSceneName[128] = "new_scene";
-        ImGui::InputText("##new_scene_name", newSceneName, sizeof(newSceneName), ImGuiInputTextFlags_CallbackCharFilter, [](ImGuiInputTextCallbackData* data) {
-            const ImWchar c = data->EventChar;
-            if (c >= 'A' && c <= 'Z') { data->EventChar = static_cast<ImWchar>(c - 'A' + 'a'); }
-            else if (c == ' ' || c == '-') { data->EventChar = '_'; }
-            return (data->EventChar >= 'a' && data->EventChar <= 'z') || (data->EventChar >= '0' && data->EventChar <= '9') || data->EventChar == '_' ? 0 : 1;
-        });
-        ImGui::SameLine();
-        const bool nameEmpty = newSceneName[0] == '\0';
-        bool nameInUse = false;
-        if (!nameEmpty) {
-            for (const auto& pair : sceneCache) {
-                if (pair.value.sceneName == newSceneName) {
-                    nameInUse = true;
-                    break;
-                }
-            }
-        }
-        ImGui::BeginDisabled(nameEmpty || nameInUse);
-        if (ImGui::Button("Create")) {
-            StringID newId{state->rng()};
-            ctx->assetManager->RegisterScene(newId, Platform::GetScenePath() / Core::InlineString<160>::Format("%s.wscene", newSceneName).c_str());
-            state->scene.currentSceneId = newId;
-            state->scene.currentSceneName = Core::InlineString<128>(newSceneName);
-            state->editor.loadedScenes.PushBack({newId});
-            state->editor.modifiedScenes.PushBack(newId);
-            newSceneName[0] = '\0';
-        }
-        ImGui::EndDisabled();
-        if (nameInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-            ImGui::SetTooltip("A scene with this name already exists");
-        }
-
-        ImGui::SeparatorText("Spawn Model");
-
-        const auto& modelCache = ctx->assetManager->GetModelCache();
-        static int selectedModel = 0;
-
-        struct ModelPair
-        {
-            Core::InlineString<128> name;
-            Engine::ModelID id;
-        };
-
-        if (modelCache.IsEmpty()) { ImGui::TextDisabled("No models loaded"); }
-        auto modelList = Core::ArenaFixedVector<ModelPair>(&ctx->editorArena.Get(), std::max(modelCache.Size(), size_t{1}));
-        for (const auto& [id, meta] : modelCache) {
-            modelList.EmplaceBack(meta.name, id);
-        }
-
-        if (!modelList.IsEmpty()) {
-            std::ranges::sort(modelList, {}, &ModelPair::name);
-            selectedModel = std::clamp(selectedModel, 0, static_cast<int>(modelList.Size()) - 1);
-        }
-
-        ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(modelList.IsEmpty());
-        if (ImGui::BeginCombo("##model_list", modelList.IsEmpty() ? "No models" : modelList[selectedModel].name.c_str())) {
-            for (int i = 0; i < static_cast<int>(modelList.Size()); ++i) {
-                bool sel = (i == selectedModel);
-                if (ImGui::Selectable(modelList[i].name.c_str(), sel)) {
-                    selectedModel = i;
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::EndDisabled();
-
-        ImGui::BeginDisabled(modelList.IsEmpty());
-        if (ImGui::Button("Spawn")) {
-            glm::vec3 offset = cameraPos + normalize(cameraFwd) * 5.0f;
-            auto spawned = SpawnModel(ctx, state, modelList[selectedModel].id, offset);
-            if (!spawned.IsEmpty()) {
-                state->editor.selectedFolders.Clear();
-                state->editor.selectedEntities.Clear();
-                for (auto entity : spawned) {
-                    state->editor.selectedEntities.PushBack(entity);
-                }
-                MarkSceneModified(state, state->scene.currentSceneId);
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SeparatorText("Prefabs");
-
-        const bool hasOneSelected = state->editor.selectedEntities.Size() == 1;
-        static char prefabName[128] = "New Prefab";
-
-        Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->editor.selectedEntities[0]) : nullptr;
-        const bool isExistingPrefab = prefabInst != nullptr;
-
-        const bool isMasterPrefab = isExistingPrefab && prefabInst->bMasterPrefab;
-
-        if (isExistingPrefab) {
-            const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
-            if (meta) {
-                strncpy_s(prefabName, meta->prefabName.c_str(), sizeof(prefabName) - 1);
-            }
-        }
-
-        ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(!hasOneSelected);
-        ImGui::BeginDisabled(isExistingPrefab);
-        ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
-        ImGui::EndDisabled();
-        ImGui::BeginDisabled((isExistingPrefab && !isMasterPrefab) || !ctx->bGameLoaded);
-        if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
-            SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->editor.selectedEntities[0], prefabName);
-        }
-        ImGui::EndDisabled();
-        ImGui::EndDisabled();
-
-        const auto& prefabCache = ctx->assetManager->GetPrefabCache();
-        static int selectedPrefab = 0;
-        struct PrefabPair
-        {
-            Core::InlineString<128> name;
-            StringID id;
-        };
-
-        auto prefabList = Core::ArenaFixedVector<PrefabPair>(&ctx->editorArena.Get(), prefabCache.Size());
-        for (const auto& [id, meta] : prefabCache) {
-            prefabList.EmplaceBack(meta.prefabName, id);
-        }
-
-        if (!prefabList.IsEmpty()) {
-            std::ranges::sort(prefabList, {}, &PrefabPair::name);
-            selectedPrefab = std::clamp(selectedPrefab, 0, static_cast<int>(prefabList.Size()) - 1);
-        }
-
-        ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(prefabList.IsEmpty());
-        if (ImGui::BeginCombo("##prefab_list", prefabList.IsEmpty() ? "No prefabs" : prefabList[selectedPrefab].name.c_str())) {
-            for (int i = 0; i < static_cast<int>(prefabList.Size()); ++i) {
-                bool sel = (i == selectedPrefab);
-                if (ImGui::Selectable(prefabList[i].name.c_str(), sel)) {
-                    selectedPrefab = i;
-                }
-            }
-            ImGui::EndCombo();
-        }
-
-        if (ImGui::Button("Spawn Prefab")) {
-            const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
-            glm::vec3 spawnPos = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].id, spawnPos);
-            if (spawned != entt::null) {
-                state->editor.selectedFolders.Clear();
-                state->editor.selectedEntities.Clear();
-                state->editor.selectedEntities.PushBack(spawned);
-                MarkSceneModified(state, state->scene.currentSceneId);
-            }
-        }
-        ImGui::SameLine(); {
-            const StringID selectedPrefabId = prefabList.IsEmpty() ? StringID{} : prefabList[selectedPrefab].id;
-            bool prefabInUse = false;
-            if (!prefabList.IsEmpty()) {
-                auto prefabView = state->registry.view<Component::PrefabInstanceComponent>();
-                for (auto entity : prefabView) {
-                    if (prefabView.get<Component::PrefabInstanceComponent>(entity).prefabId == selectedPrefabId) {
-                        prefabInUse = true;
-                        break;
-                    }
-                }
-            }
-            ImGui::BeginDisabled(prefabList.IsEmpty() || prefabInUse);
-            if (ImGui::Button("Delete Prefab")) {
-                ctx->assetManager->DeletePrefab(selectedPrefabId);
-                selectedPrefab = 0;
-            }
-            ImGui::EndDisabled();
-            if (prefabInUse && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Prefab is referenced by scene entities");
-            }
-        }
-        ImGui::EndDisabled();
-
-        ImGui::NewLine();
-
-        ImGui::SeparatorText("Entities");
-        if (ImGui::Button("Create Entity")) {
-            auto newEntity = CreateSceneEntity(state);
-            const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
-            state->registry.get<Component::TransformComponent>(newEntity).translation = viewData.cameraPos + viewData.cameraForward * 5.0f;
-            state->editor.selectedFolders.Clear();
-            state->editor.selectedEntities.Clear();
-            state->editor.selectedEntities.PushBack(newEntity);
-            MarkSceneModified(state, state->scene.currentSceneId);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("New Folder")) {
+        if (bNewFolder) {
             entt::entity f = state->registry.create();
             state->registry.emplace<Component::SceneComponent>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};

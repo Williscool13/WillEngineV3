@@ -137,7 +137,7 @@ bool SaveLightingProfile(const char* name, const LightingProfileBundle& bundle, 
 
 bool DeleteLightingProfile(const char* name)
 {
-    return Platform::DeleteSingleFile(ProfilePath("lighting", name));
+    return Platform::MoveToRecycleBin(ProfilePath("lighting", name));
 }
 
 uint32_t ListPostProcessProfiles(ProfileName* outNames, uint32_t maxNames)
@@ -168,6 +168,6 @@ bool SavePostProcessProfile(const char* name, const Core::PostProcessConfigurati
 
 bool DeletePostProcessProfile(const char* name)
 {
-    return Platform::DeleteSingleFile(ProfilePath("postprocess", name));
+    return Platform::MoveToRecycleBin(ProfilePath("postprocess", name));
 }
 }

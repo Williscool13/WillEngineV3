@@ -239,10 +239,49 @@ bool AssetManager::DeleteScene(StringID sceneId)
 {
     const CachedSceneMetadata* it = sceneCache.Find(sceneId);
     if (!it) { return false; }
-    if (!it->source.IsEmpty()) {
-        Platform::DeleteSingleFile(it->source.c_str());
+    if (!it->bUnsaved && !Platform::MoveToRecycleBin(it->source)) {
+        LOG_ERROR(Asset, "Failed to delete scene '{}'", it->source.c_str());
+        return false;
+    }
+    for (const auto& [id, run] : playCache) {
+        if (run.sceneId == sceneId && !Platform::MoveToRecycleBin(run.source)) {
+            LOG_WARN(Asset, "Failed to delete run '{}'", run.source.c_str());
+        }
     }
     sceneCache.Remove(sceneId);
+    ctx->rescan.bScenes = true;
+    return true;
+}
+
+bool AssetManager::MoveScene(StringID sceneId, const Core::Path& newSource)
+{
+    CachedSceneMetadata* meta = sceneCache.Find(sceneId);
+    if (!meta || Platform::FileExists(newSource)) { return false; }
+
+    const Core::Path oldSource = meta->source;
+    if (!meta->bUnsaved) {
+        Platform::CreateDirectories(newSource);
+        if (!Platform::RenameFile(oldSource, newSource)) {
+            LOG_ERROR(Asset, "Failed to move scene '{}' to '{}'", oldSource.c_str(), newSource.c_str());
+            return false;
+        }
+    }
+    meta->source = newSource;
+    meta->sceneName = Core::InlineString<128>(newSource.Stem());
+
+    const Core::Path oldFolder = oldSource.Parent();
+    const Core::Path newFolder = newSource.Parent();
+    if (oldFolder != newFolder) {
+        for (const auto& [id, run] : playCache) {
+            if (run.sceneId != sceneId || run.source.Parent() != oldFolder) { continue; }
+            const Core::Path runTarget = newFolder / run.source.Filename();
+            if (Platform::FileExists(runTarget) || !Platform::RenameFile(run.source, runTarget)) {
+                LOG_WARN(Asset, "Run '{}' stayed in '{}'", run.source.c_str(), oldFolder.c_str());
+            }
+        }
+    }
+
+    ctx->rescan.bScenes = true;
     return true;
 }
 
@@ -250,8 +289,9 @@ bool AssetManager::DeletePrefab(StringID prefabId)
 {
     const CachedPrefabMetadata* it = prefabCache.Find(prefabId);
     if (!it) { return false; }
-    if (!it->source.IsEmpty()) {
-        Platform::DeleteSingleFile(it->source.c_str());
+    if (Platform::FileExists(it->source) && !Platform::MoveToRecycleBin(it->source)) {
+        LOG_ERROR(Asset, "Failed to delete prefab '{}'", it->source.c_str());
+        return false;
     }
     prefabCache.Remove(prefabId);
     return true;
@@ -1654,6 +1694,19 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                         LOG_TRACE(Asset, "Run '{}' content changed on disk: v{} -> v{}", cached.name.c_str(), prevVersion, header->contentVersion);
                     }
                 }
+            }
+        }
+
+        sceneFolders.Clear();
+        if (Platform::FileExists(scenePath)) {
+            Core::Vector<Core::Path> folders(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+            Platform::RecursiveSubdirectories(scenePath, folders);
+            for (const Core::Path& folder : folders) {
+                if (sceneFolders.IsFull()) {
+                    LOG_WARN(Asset, "More than {} scene folders; the rest are hidden in the editor", sceneFolders.GetCapacity());
+                    break;
+                }
+                sceneFolders.PushBack(folder);
             }
         }
 

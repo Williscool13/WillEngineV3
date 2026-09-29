@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "imgui.h"
+#include "engine/editor/editor_systems.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/project_config.h"
@@ -67,18 +68,14 @@ static void DrawFileMenu(EngineContext* ctx, EngineState* state)
     const bool bCanSave = ctx->bGameLoaded && !IsPlaying(state);
 
     ImGui::BeginDisabled(!bCanSave || !IsSceneLoaded(state, current));
-    if (ImGui::MenuItem(Core::InlineString<160>::Format("Save '%s'", state->scene.currentSceneName.c_str()).c_str())) {
-        SaveSceneToFile(current, state, ctx->assetManager, ctx);
-        state->editor.modifiedScenes.RemoveFirst(current);
+    if (ImGui::MenuItem(Core::InlineString<160>::Format("Save '%s'", state->scene.currentSceneName.c_str()).c_str(), "Ctrl+S")) {
+        SaveEditorScene(ctx, state, current);
     }
     ImGui::EndDisabled();
 
     ImGui::BeginDisabled(!bCanSave || state->editor.modifiedScenes.IsEmpty());
-    if (ImGui::MenuItem("Save All")) {
-        for (StringID sceneId : state->editor.modifiedScenes) {
-            SaveSceneToFile(sceneId, state, ctx->assetManager, ctx);
-        }
-        state->editor.modifiedScenes.Clear();
+    if (ImGui::MenuItem("Save All", "Ctrl+Shift+S")) {
+        SaveModifiedScenes(ctx, state);
     }
     ImGui::EndDisabled();
     if (!ctx->bGameLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -100,10 +97,10 @@ static void DrawEditMenu(EngineState* state)
     const bool bEditing = state->inputContext == InputContext::Editor;
 
     ImGui::BeginDisabled(!bEditing || !undo.CanUndo());
-    if (ImGui::MenuItem("Undo")) { undo.Undo(state); }
+    if (ImGui::MenuItem("Undo", "Ctrl+Z")) { undo.Undo(state); }
     ImGui::EndDisabled();
     ImGui::BeginDisabled(!bEditing || !undo.CanRedo());
-    if (ImGui::MenuItem("Redo")) { undo.Redo(state); }
+    if (ImGui::MenuItem("Redo", "Ctrl+Y")) { undo.Redo(state); }
     ImGui::EndDisabled();
 
     ImGui::Separator();

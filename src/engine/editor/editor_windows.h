@@ -15,8 +15,10 @@ struct EngineState;
 enum EditorWindow : uint32_t
 {
     EDITOR_WINDOW_TOOLBAR,
-    EDITOR_WINDOW_SCENE_BROWSER,
+    EDITOR_WINDOW_SCENES,
+    EDITOR_WINDOW_OUTLINER,
     EDITOR_WINDOW_DETAILS,
+    EDITOR_WINDOW_SPAWN,
     EDITOR_WINDOW_SCENE_STATS,
     EDITOR_WINDOW_GAMEPLAY,
     EDITOR_WINDOW_LIGHTING,
@@ -42,8 +44,10 @@ struct EditorWindowInfo
 
 inline constexpr EditorWindowInfo EDITOR_WINDOWS[EDITOR_WINDOW_COUNT] = {
     {"Toolbar", "toolbar", "Scene", true},
-    {"Scene Browser", "scene_browser", "Scene", true},
+    {"Scenes", "scenes", "Scene", true},
+    {"Outliner", "outliner", "Scene", true},
     {"Details", "details", "Scene", true},
+    {"Spawn", "spawn", "Scene", true},
     {"Scene Stats", "scene_stats", "Scene", true},
     {"Gameplay", "gameplay", "Scene", true},
     {"Lighting", "lighting", "Rendering", true},

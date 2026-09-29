@@ -26,6 +26,11 @@ namespace Engine
 {
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId);
 
+/** Refused while playing or without game.dll. */
+void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId);
+
+void SaveModifiedScenes(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities);
 
 void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount);
