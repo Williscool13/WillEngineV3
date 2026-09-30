@@ -99,6 +99,7 @@ struct MeshRuntime
      */
     Engine::ModelStore::Range modelRange{};
     Engine::StaticModelHandle modelHandle{};
+    Engine::StaticModelHandle pendingModelHandle{};
 
     uint64_t stableId{StableIdComponent::NO_ID};
 

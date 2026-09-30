@@ -67,6 +67,9 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
                 if (release.modelHandle.IsValid()) {
                     ctx->assetManager->UnloadModel(release.modelHandle);
                 }
+                if (release.pendingModelHandle.IsValid()) {
+                    ctx->assetManager->UnloadModel(release.pendingModelHandle);
+                }
                 break;
             }
             case CommandType::AreaLightConstruct: {

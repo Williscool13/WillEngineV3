@@ -1391,6 +1391,7 @@ bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
 
     const float hole = Engine::TerraceHoleInset(p, Engine::TerraceRun(p));
+    const Engine::TerraceRect outer = Engine::TerraceLevelRect(p, Engine::TerraceRun(p), 0);
     auto onHoleEdge = [&](const Vec3& a) {
         return !p.bFloor && glm::abs(glm::min(Engine::TerraceInsetX(p, a.x), Engine::TerraceInsetZ(p, a.z)) - hole) < 1e-5f;
     };
@@ -1420,8 +1421,8 @@ bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p
             const Vec3 a = v[c];
             const Vec3 b = v[(c + 1) % count];
             if (a.y <= 1e-6f && b.y <= 1e-6f) { continue; }
-            const bool bOuter = (a.x <= 1e-5f && b.x <= 1e-5f) || (a.x >= p.sizeX - 1e-5f && b.x >= p.sizeX - 1e-5f)
-                || (a.z <= 1e-5f && b.z <= 1e-5f) || (a.z >= p.sizeZ - 1e-5f && b.z >= p.sizeZ - 1e-5f);
+            const bool bOuter = (a.x <= outer.x0 + 1e-5f && b.x <= outer.x0 + 1e-5f) || (a.x >= outer.x1 - 1e-5f && b.x >= outer.x1 - 1e-5f)
+                || (a.z <= outer.z0 + 1e-5f && b.z <= outer.z0 + 1e-5f) || (a.z >= outer.z1 - 1e-5f && b.z >= outer.z1 - 1e-5f);
             if (!bOuter && !(onHoleEdge(a) && onHoleEdge(b))) { continue; }
             const Vec3 away = (a + b) * 0.5f - centroid;
             const Vec3 n = glm::abs(away.x) > glm::abs(away.z) ? Vec3(glm::sign(away.x), 0, 0) : Vec3(0, 0, glm::sign(away.z));

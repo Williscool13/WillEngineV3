@@ -78,9 +78,10 @@ void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get<MeshRuntime>(entity);
 
-    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, runtime.modelHandle}}});
+    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, runtime.modelHandle, runtime.pendingModelHandle}}});
     runtime.range = {};
     runtime.modelRange = {};
     runtime.modelHandle = StaticModelHandle::INVALID;
+    runtime.pendingModelHandle = StaticModelHandle::INVALID;
 }
 }

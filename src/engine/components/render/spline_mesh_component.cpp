@@ -87,7 +87,6 @@ void Component::SplineMeshComponent::Sanitize(SplineMeshComponent& comp)
 
 void Component::SplineMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<MeshRuntime>(entity);
     registry.remove<SplineMeshLoadingTag>(entity);
     registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
 }

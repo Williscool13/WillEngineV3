@@ -742,6 +742,7 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
     const float run = TerraceRun(p);
     const float top = p.baseHeight + p.stepRise * static_cast<float>(p.stepCount);
     if (top <= 1e-5f) { return; }
+    const TerraceRect outer = TerraceLevelRect(p, run, 0);
 
     if (!p.bFloor) {
         constexpr int32_t SIDES[4] = {TERRACE_SIDE_NEG_X, TERRACE_SIDE_POS_X, TERRACE_SIDE_NEG_Z, TERRACE_SIDE_POS_Z};
@@ -784,10 +785,10 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
             }
             if (points.Size() < points.GetCapacity()) { points.PushBack(v); }
         };
-        addPoint({0.0f, 0.0f, 0.0f});
-        addPoint({p.sizeX, 0.0f, 0.0f});
-        addPoint({p.sizeX, 0.0f, p.sizeZ});
-        addPoint({0.0f, 0.0f, p.sizeZ});
+        addPoint({outer.x0, 0.0f, outer.z0});
+        addPoint({outer.x1, 0.0f, outer.z0});
+        addPoint({outer.x1, 0.0f, outer.z1});
+        addPoint({outer.x0, 0.0f, outer.z1});
         TerraceRampPieces(p, [&](const Vec3* v, int count) {
             for (int c = 0; c < count; ++c) { addPoint(v[c]); }
         });
@@ -798,8 +799,8 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
     if (p.baseHeight > 0.0f) {
         SplineColliderPrimitive slab{};
         slab.type = SplineColliderPrimitiveType::Box;
-        slab.halfExtents = Vec3(p.sizeX * 0.5f, p.baseHeight * 0.5f, p.sizeZ * 0.5f);
-        slab.position = slab.halfExtents;
+        slab.halfExtents = Vec3((outer.x1 - outer.x0) * 0.5f, p.baseHeight * 0.5f, (outer.z1 - outer.z0) * 0.5f);
+        slab.position = Vec3((outer.x0 + outer.x1) * 0.5f, p.baseHeight * 0.5f, (outer.z0 + outer.z1) * 0.5f);
         out.PushBack(slab);
     }
     if (run <= 1e-6f) { return; }
@@ -807,15 +808,16 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
     auto addWedge = [&](int32_t side) {
         const bool bAlongX = side == TERRACE_SIDE_NEG_X || side == TERRACE_SIDE_POS_X;
         const float extent = bAlongX ? p.sizeX : p.sizeZ;
-        const float width = bAlongX ? p.sizeZ : p.sizeX;
+        const float across0 = bAlongX ? outer.z0 : outer.x0;
+        const float across1 = bAlongX ? outer.z1 : outer.x1;
         const float dLanding = glm::min(run, extent);
         const float dFloor = glm::min(run * static_cast<float>(p.stepCount + 1), extent);
-        const Vec2 profile[5] = {{0.0f, 0.0f}, {0.0f, top}, {dLanding, top}, {dFloor, TerraceRampHeight(p, run, dFloor)}, {dFloor, 0.0f}};
+        const Vec2 profile[5] = {{-p.lipWidth, 0.0f}, {-p.lipWidth, top}, {dLanding, top}, {dFloor, TerraceRampHeight(p, run, dFloor)}, {dFloor, 0.0f}};
         Vec3 corners[10];
         for (int i = 0; i < 5; ++i) {
             const float d = (side == TERRACE_SIDE_POS_X || side == TERRACE_SIDE_POS_Z) ? extent - profile[i].x : profile[i].x;
-            corners[i] = bAlongX ? Vec3(d, profile[i].y, 0.0f) : Vec3(0.0f, profile[i].y, d);
-            corners[i + 5] = corners[i] + (bAlongX ? Vec3(0.0f, 0.0f, width) : Vec3(width, 0.0f, 0.0f));
+            corners[i] = bAlongX ? Vec3(d, profile[i].y, across0) : Vec3(across0, profile[i].y, d);
+            corners[i + 5] = bAlongX ? Vec3(d, profile[i].y, across1) : Vec3(across1, profile[i].y, d);
         }
         PushHullPrim(Core::Span<const Vec3>(corners, 10), out, outPositions);
     };

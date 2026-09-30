@@ -37,13 +37,12 @@ void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity e
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    registry.remove<MeshRuntime>(entity);
-
     registry.remove<ProceduralMeshLoadingTag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
         registry.emplace_or_replace<ProceduralMeshLoadPendingTag>(entity);
     }
     else {
+        registry.remove<MeshRuntime>(entity);
         registry.remove<ProceduralMeshLoadPendingTag>(entity);
     }
 
@@ -760,6 +759,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Base Height", &p.baseHeight, 0.005f, 0.0f, 10.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Solid under every step; 0 with Down leaves a hole through the middle"); }
+                    ImGui::DragFloat("Lip Width", &p.lipWidth, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extends the outermost level past the footprint on the stepped sides"); }
                     dirty |= ImGui::Checkbox("Floor", &p.bFloor);
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Off removes the innermost level, leaving an open-ended tube"); }
                 }

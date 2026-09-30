@@ -40,6 +40,7 @@ struct MeshReleasePayload
     uint32_t modelRangeOffset;
     uint32_t modelRangeCount;
     StaticModelHandle modelHandle;
+    StaticModelHandle pendingModelHandle;
 };
 
 struct Command

@@ -263,6 +263,35 @@ void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->assetLoad.pendingHotReloadEnvironmentMapIds.Clear();
 }
 
+static void StageModel(Engine::EngineContext* ctx, Component::MeshRuntime& runtime, Engine::StaticModelHandle handle)
+{
+    if (runtime.pendingModelHandle.IsValid()) { ctx->assetManager->UnloadModel(runtime.pendingModelHandle); }
+    runtime.pendingModelHandle = Engine::StaticModelHandle::INVALID;
+    if (runtime.modelHandle.IsValid()) { runtime.pendingModelHandle = handle; }
+    else { runtime.modelHandle = handle; }
+}
+
+static Engine::StaticModelHandle TargetModel(const Component::MeshRuntime& runtime)
+{
+    return runtime.pendingModelHandle.IsValid() ? runtime.pendingModelHandle : runtime.modelHandle;
+}
+
+static bool DropPendingModel(Engine::EngineContext* ctx, Component::MeshRuntime& runtime)
+{
+    if (!runtime.pendingModelHandle.IsValid()) { return false; }
+    ctx->assetManager->UnloadModel(runtime.pendingModelHandle);
+    runtime.pendingModelHandle = Engine::StaticModelHandle::INVALID;
+    return true;
+}
+
+static void PromotePendingModel(Engine::EngineContext* ctx, Component::MeshRuntime& runtime)
+{
+    if (!runtime.pendingModelHandle.IsValid()) { return; }
+    if (runtime.modelHandle.IsValid()) { ctx->assetManager->UnloadModel(runtime.modelHandle); }
+    runtime.modelHandle = runtime.pendingModelHandle;
+    runtime.pendingModelHandle = Engine::StaticModelHandle::INVALID;
+}
+
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadPendingTag>();
@@ -273,9 +302,10 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     for (const auto& [entity, meshComponent] : view.each()) {
         if (started.Size() >= budget) { break; }
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-        runtime.modelHandle = ctx->assetManager->LoadModel(meshComponent.modelId);
-        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadModel(meshComponent.modelId);
+        if (!handle.IsValid()) { continue; }
+        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
         state->registry.remove<Component::StaticMeshLoadPendingTag>(entity);
@@ -554,15 +584,10 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             state->modelStore.Free(runtime->modelRange);
         };
 
-        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
-        if (!model) {
-            LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", runtime->modelHandle.index);
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            releaseExisting();
+        auto model = ctx->assetManager->GetModel(TargetModel(*runtime));
+        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            if (!model) { LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", TargetModel(*runtime).index); }
+            if (!DropPendingModel(ctx, *runtime)) { releaseExisting(); }
             resolved.PushBack(entity);
             continue;
         }
@@ -570,6 +595,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             modelsWaitingThisTick++;
             continue;
         }
+        PromotePendingModel(ctx, *runtime);
 
         const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
         Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
@@ -716,9 +742,10 @@ void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::Engin
     for (const auto& [entity, meshComponent] : view.each()) {
         if (started.Size() >= budget) { break; }
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; }
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-        runtime.modelHandle = ctx->assetManager->LoadModel(meshComponent.modelId);
-        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadModel(meshComponent.modelId);
+        if (!handle.IsValid()) { continue; }
+        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
         state->registry.remove<Component::StaticMeshPrimitiveLoadPendingTag>(entity);
@@ -746,21 +773,17 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
             state->modelStore.Free(runtime->modelRange);
         };
 
-        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
-        if (!model) {
-            LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", runtime->modelHandle.index);
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            releaseExisting();
+        auto model = ctx->assetManager->GetModel(TargetModel(*runtime));
+        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            if (!model) { LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", TargetModel(*runtime).index); }
+            if (!DropPendingModel(ctx, *runtime)) { releaseExisting(); }
             resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             continue;
         }
+        PromotePendingModel(ctx, *runtime);
 
         const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
         Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
@@ -851,9 +874,10 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
         if (started.Size() >= budget) { break; }
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-        runtime.modelHandle = ctx->assetManager->LoadProceduralModel(meshComponent.params);
-        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadProceduralModel(meshComponent.params);
+        if (!handle.IsValid()) { continue; }
+        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
         state->registry.remove<Component::ProceduralMeshLoadPendingTag>(entity);
@@ -883,15 +907,10 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
             state->modelStore.Free(runtime->modelRange);
         };
 
-        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
-        if (!model) {
-            LOG_ERROR(Engine, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", runtime->modelHandle.index);
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            releaseExisting();
+        auto model = ctx->assetManager->GetModel(TargetModel(*runtime));
+        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            if (!model) { LOG_ERROR(Engine, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", TargetModel(*runtime).index); }
+            if (!DropPendingModel(ctx, *runtime)) { releaseExisting(); }
             resolved.PushBack(entity);
             continue;
         }
@@ -899,6 +918,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
             proceduralWaitingThisTick++;
             continue;
         }
+        PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
@@ -985,9 +1005,10 @@ void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     for (auto [entity, meshComponent] : view.each()) {
         if (started.Size() >= budget) { break; }
         if (meshComponent.params.parts.IsEmpty()) { continue; }
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-        runtime.modelHandle = ctx->assetManager->LoadModuleModel(meshComponent.params);
-        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadModuleModel(meshComponent.params);
+        if (!handle.IsValid()) { continue; }
+        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
         state->registry.remove<Component::ModuleMeshLoadPendingTag>(entity);
@@ -1014,21 +1035,17 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             state->modelStore.Free(runtime->modelRange);
         };
 
-        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
-        if (!model) {
-            LOG_ERROR(Engine, "Module model ({}) is not in the asset manager.", runtime->modelHandle.index);
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            releaseExisting();
+        auto model = ctx->assetManager->GetModel(TargetModel(*runtime));
+        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            if (!model) { LOG_ERROR(Engine, "Module model ({}) is not in the asset manager.", TargetModel(*runtime).index); }
+            if (!DropPendingModel(ctx, *runtime)) { releaseExisting(); }
             resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             continue;
         }
+        PromotePendingModel(ctx, *runtime);
 
         FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
         EvaluateInstanceRenderState(state, entity);
@@ -1051,9 +1068,10 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
         if (started.Size() >= budget) { break; }
-        auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-        runtime.modelHandle = ctx->assetManager->LoadSplineModel(Component::ToSplineParams(meshComponent));
-        if (runtime.modelHandle.IsValid()) { started.PushBack(entity); }
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadSplineModel(Component::ToSplineParams(meshComponent));
+        if (!handle.IsValid()) { continue; }
+        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
         state->registry.remove<Component::SplineMeshLoadPendingTag>(entity);
@@ -1080,21 +1098,17 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             state->modelStore.Free(runtime->modelRange);
         };
 
-        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
-        if (!model) {
-            LOG_ERROR(Engine, "Spline model ({}) is not in the asset manager.", runtime->modelHandle.index);
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            releaseExisting();
+        auto model = ctx->assetManager->GetModel(TargetModel(*runtime));
+        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            if (!model) { LOG_ERROR(Engine, "Spline model ({}) is not in the asset manager.", TargetModel(*runtime).index); }
+            if (!DropPendingModel(ctx, *runtime)) { releaseExisting(); }
             resolved.PushBack(entity);
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             continue;
         }
+        PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
         if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
@@ -1130,14 +1144,15 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
         // Stay pending while the font is missing or frozen (e.g. mid hot-reload drain). The generated mesh takes its own font ref, so we hold none here.
         if (!textComponent.fontId.IsValid() || ctx->assetManager->IsFontFrozen(textComponent.fontId)) { continue; }
 
-        state->registry.remove<Component::MeshRuntime>(entity);
-
-        if (textComponent.text.Size() > 0) {
-            auto& runtime = state->registry.get_or_emplace<Component::MeshRuntime>(entity);
-            runtime.modelHandle = ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius);
-            if (runtime.modelHandle.IsValid()) {
-                state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
-            }
+        const Engine::StaticModelHandle handle = textComponent.text.Size() > 0
+            ? ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius)
+            : Engine::StaticModelHandle::INVALID;
+        if (handle.IsValid()) {
+            StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+            state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
+        }
+        else {
+            state->registry.remove<Component::MeshRuntime>(entity);
         }
         done.PushBack(entity);
     }
@@ -1160,27 +1175,30 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
-        if (!runtime->modelHandle.IsValid()) {
+        if (!TargetModel(*runtime).IsValid()) {
             state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
             state->modelStore.Free(runtime->modelRange);
             resolved.PushBack(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
             continue;
         }
 
-        auto model = ctx->assetManager->GetModel(runtime->modelHandle);
+        auto model = ctx->assetManager->GetModel(TargetModel(*runtime));
         if (!model) {
-            LOG_ERROR(Engine, "Text3D model ({}) is not in the asset manager.", runtime->modelHandle.index);
+            LOG_ERROR(Engine, "Text3D model ({}) is not in the asset manager.", TargetModel(*runtime).index);
             continue;
         }
         if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
-            state->modelStore.Free(runtime->modelRange);
+            if (!DropPendingModel(ctx, *runtime)) {
+                state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
+                state->modelStore.Free(runtime->modelRange);
+            }
             resolved.PushBack(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
             continue;
         }
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             continue;
         }
+        PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
         if (textComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(textComponent.material)) {

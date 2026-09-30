@@ -583,7 +583,7 @@ enum class TerraceProfile : uint8_t
 /**
  * Stepped block over a corner-pivot sizeX x sizeZ footprint, inset by stepRun on the enabled sides. Up climbs to a central
  * landing; Down descends to a floor at baseHeight, and a baseHeight of 0 leaves a hole through. bFloor off removes the innermost level,
- * leaving an open-ended tube.
+ * leaving an open-ended tube. lipWidth extends the outermost level past the footprint on the stepped sides.
  */
 struct TerraceParams
 {
@@ -598,11 +598,12 @@ struct TerraceParams
     bool bFloor{true};
     TerraceProfile profile{TerraceProfile::Steps};
     uint8_t _pad0[1]{};
+    float lipWidth{0.0f};
 
     static constexpr int32_t MAX_STEPS = 64;
 
     WILL_REFLECT(TerraceParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(stepCount), WILL_FIELD(stepRise), WILL_FIELD(stepRun), WILL_FIELD(baseHeight),
-                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bFloor), WILL_FIELD(profile))
+                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bFloor), WILL_FIELD(profile), WILL_FIELD(lipWidth))
 
     static void Sanitize(TerraceParams& p)
     {
@@ -612,6 +613,7 @@ struct TerraceParams
         p.stepRise = glm::max(p.stepRise, 0.0f);
         p.stepRun = glm::max(p.stepRun, 0.0f);
         p.baseHeight = glm::max(p.baseHeight, 0.0f);
+        p.lipWidth = glm::max(p.lipWidth, 0.0f);
         p.sides &= TERRACE_SIDE_NEG_X | TERRACE_SIDE_POS_X | TERRACE_SIDE_NEG_Z | TERRACE_SIDE_POS_Z;
     }
 };
@@ -642,7 +644,7 @@ inline float TerraceRun(const TerraceParams& p)
 
 inline TerraceRect TerraceLevelRect(const TerraceParams& p, float run, int32_t level)
 {
-    const float d = run * static_cast<float>(level);
+    const float d = level == 0 ? -p.lipWidth : run * static_cast<float>(level);
     return {
         (p.sides & TERRACE_SIDE_NEG_X) ? d : 0.0f,
         (p.sides & TERRACE_SIDE_NEG_Z) ? d : 0.0f,
@@ -715,10 +717,12 @@ void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
     }
     if (!p.bFloor) { breaks[breakCount++] = hole; }
 
-    auto axisLines = [&](float size, bool bNeg, bool bPos, float (&out)[10]) {
+    auto axisLines = [&](float size, bool bNeg, bool bPos, float (&out)[12]) {
         int c = 0;
         out[c++] = 0.0f;
         out[c++] = size;
+        if (bNeg) { out[c++] = -p.lipWidth; }
+        if (bPos) { out[c++] = size + p.lipWidth; }
         if (bNeg && bPos) { out[c++] = size * 0.5f; }
         for (int i = 0; i < breakCount; ++i) {
             if (bNeg && breaks[i] > 0.0f && breaks[i] < size) { out[c++] = breaks[i]; }
@@ -731,8 +735,8 @@ void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
         }
         return u;
     };
-    float xs[10];
-    float zs[10];
+    float xs[12];
+    float zs[12];
     const int nx = axisLines(p.sizeX, (p.sides & TERRACE_SIDE_NEG_X) != 0, (p.sides & TERRACE_SIDE_POS_X) != 0, xs);
     const int nz = axisLines(p.sizeZ, (p.sides & TERRACE_SIDE_NEG_Z) != 0, (p.sides & TERRACE_SIDE_POS_Z) != 0, zs);
 
@@ -746,7 +750,7 @@ void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
         glm::vec3 out[6];
         for (int i = 0; i < count; ++i) {
             const float d = glm::min(TerraceInsetX(p, poly[i].x), TerraceInsetZ(p, poly[i].y));
-            out[i] = glm::vec3(poly[i].x, TerraceRampHeight(p, run, d), poly[i].y);
+            out[i] = glm::vec3(poly[i].x, TerraceRampHeight(p, run, glm::max(d, 0.0f)), poly[i].y);
         }
         emit(static_cast<const glm::vec3*>(out), count);
     };

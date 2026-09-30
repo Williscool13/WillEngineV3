@@ -136,7 +136,19 @@ void Component::StaticMeshComponent::OnEditCommit(entt::registry& registry, entt
         LoadStaticMesh(component, registry, entity);
         return;
     }
-    registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    const auto* runtime = registry.try_get<MeshRuntime>(entity);
+    const Engine::StaticModel* current = nullptr;
+    if (runtime) {
+        current = ctx->assetManager->GetModel(runtime->pendingModelHandle.IsValid() ? runtime->pendingModelHandle : runtime->modelHandle);
+    }
+    if (!current || current->modelId != component.modelId) {
+        registry.remove<StaticMeshLoadingTag>(entity);
+        registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);
+    }
+    else {
+        registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+    }
     OnEditPreview(registry, entity);
 }
 
@@ -186,26 +198,18 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);
 
-        if (!component.modelId.IsValid()) {
-            if (ImGui::BeginCombo("Select Model", "")) {
-                const auto& modelCache = ctx->assetManager->GetModelCache();
-                for (const auto& [key, meta] : modelCache) {
-                    if (ImGui::Selectable(meta.name.c_str(), false)) {
-                        component.modelId = key;
-                        bCommit = true;
-                    }
+        const auto* modelMeta = component.modelId.IsValid() ? ctx->assetManager->GetModelMetadata(component.modelId) : nullptr;
+        const char* modelPreview = edit.IsMixed(&StaticMeshComponent::modelId) ? "--" : modelMeta ? modelMeta->name.c_str() : "";
+        if (ImGui::BeginCombo("Model", modelPreview, ImGuiComboFlags_HeightLarge)) {
+            for (const auto& [key, meta] : ctx->assetManager->GetModelCache()) {
+                if (ImGui::Selectable(meta.name.c_str(), key == component.modelId) && key != component.modelId) {
+                    component.modelId = key;
+                    bCommit = true;
                 }
-                ImGui::EndCombo();
             }
-            return finish({.bRequestRemoval = remove});
+            ImGui::EndCombo();
         }
-
-        const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
-        ImGui::Text("Model: %s", edit.IsMixed(&StaticMeshComponent::modelId) ? "--" : modelMeta ? modelMeta->name.c_str() : "(invalid)");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("X##deselect_model")) {
-            component.modelId = Engine::ModelID::INVALID;
-            bCommit = true;
+        if (!component.modelId.IsValid() || bCommit) {
             return finish({.bRequestRemoval = remove});
         }
 
