@@ -8,12 +8,14 @@
 #include <cstdint>
 #include <atomic>
 #include <mutex>
+#include <string_view>
 #include <utility>
 #include <clay.h>
 
 #include "core/containers/inline_function.h"
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_path.h"
+#include "core/containers/vector.h"
 #include "core/memory/virtual_arena.h"
 #include "core/time/time_frame.h"
 #include "engine/resources/environment_map/probe_format.h"
@@ -229,6 +231,10 @@ struct EngineContext
     const char* (*resolveStringIdFn)(uint64_t);    // debug only
     Core::InlineFunction<void(bool)> setCursorHiddenFn;
     Core::InlineFunction<void(bool)> setTextInputActiveFn;
+    /** System clipboard (Platform/clipboard.h) bound to the engine window; privateFormat may be null. */
+    Core::InlineFunction<bool(std::string_view, const char*)> setClipboardTextFn;
+    Core::InlineFunction<bool(Core::Vector<char>&, const char*)> getClipboardTextFn;
+    Core::InlineFunction<bool(const char*)> hasClipboardTextFn;
     //   Defined by game called by engine
     Core::InlineFunction<void(EngineContext*, EngineState*)> playStartFn;
     Core::InlineFunction<void(EngineContext*, EngineState*)> playStopFn;

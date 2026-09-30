@@ -36,6 +36,14 @@ void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> e
 /** Copies each source's subtree into the active scene, renames the top-level copies and selects them. */
 void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources);
 
+/** Puts the sources' subtrees on the system clipboard as scene text. */
+void CopyEntitiesToClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources);
+
+/** Instantiates clipboard entities into the active scene and selects them; non-entity text is ignored. */
+void PasteEntitiesFromClipboard(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+bool CanPasteEntities(Engine::EngineContext* ctx);
+
 /** Destroys the selected entities and all their descendants. */
 void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* state);
 

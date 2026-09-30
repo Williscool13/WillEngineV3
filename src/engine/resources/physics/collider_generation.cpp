@@ -174,6 +174,15 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
     }
 }
 
+static void HullPyramid(const PyramidParams& p, Core::Vector<Vec3>& out)
+{
+    Vec3 c[8];
+    PyramidCorners(p, c);
+    const int count = p.topScale <= 1e-4f ? 5 : 8;
+    out.Reserve(out.Size() + count);
+    for (int i = 0; i < count; ++i) { out.PushBack(c[i]); }
+}
+
 static void HullWedge(const WedgeParams& p, Core::Vector<Vec3>& out)
 {
     // Corner pivot (matches GenerateWedge): bottom quad + top back edge.
@@ -879,6 +888,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<LatticeParams>(params)
         || std::holds_alternative<CorrugatedPanelParams>(params)
         || std::holds_alternative<TerraceParams>(params)
+        || std::holds_alternative<PyramidParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -999,6 +1009,11 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<WedgeParams>(&params)) {
         outKind = PhysicsColliderKind::ConvexHull;
         HullWedge(*p, outPositions);
+        return true;
+    }
+    if (const auto* p = std::get_if<PyramidParams>(&params)) {
+        outKind = PhysicsColliderKind::ConvexHull;
+        HullPyramid(*p, outPositions);
         return true;
     }
     if (const auto* p = std::get_if<ConeParams>(&params)) {

@@ -94,9 +94,35 @@ static bool ParseRandomArgs(const char*& p, float& a, float& b)
     return true;
 }
 
-static bool ParseTerm(const char*& p, float x, int index, std::mt19937_64& rng, float& out)
+struct ExprContext
+{
+    float x;
+    int index;
+    std::mt19937_64& rng;
+};
+
+static bool ParseSum(const char*& p, const ExprContext& c, float& out);
+
+static bool ParsePrimary(const char*& p, const ExprContext& c, float& out)
 {
     SkipWs(p);
+    if (*p == '(') {
+        ++p;
+        if (!ParseSum(p, c, out)) { return false; }
+        SkipWs(p);
+        if (*p != ')') { return false; }
+        ++p;
+        return true;
+    }
+    if (*p == '-' || *p == '+') {
+        const bool bNegate = *p++ == '-';
+        if (!ParsePrimary(p, c, out)) { return false; }
+        if (bNegate) { out = -out; }
+        return true;
+    }
+    const float x = c.x;
+    const int index = c.index;
+    std::mt19937_64& rng = c.rng;
     if (*p == 'x' || *p == 'X') {
         out = x;
         ++p;
@@ -122,46 +148,54 @@ static bool ParseTerm(const char*& p, float x, int index, std::mt19937_64& rng, 
     return true;
 }
 
-static bool ApplyOp(char op, float lhs, float rhs, float& out)
+static bool ParseProductTail(const char*& p, const ExprContext& c, float& value)
 {
-    switch (op) {
-        case '+': out = lhs + rhs; return true;
-        case '-': out = lhs - rhs; return true;
-        case '*': out = lhs * rhs; return true;
-        case '/':
+    for (;;) {
+        SkipWs(p);
+        if (*p != '*' && *p != '/') { return true; }
+        const char op = *p++;
+        float rhs;
+        if (!ParsePrimary(p, c, rhs)) { return false; }
+        if (op == '*') {
+            value *= rhs;
+        }
+        else {
             if (rhs == 0.0f) { return false; }
-            out = lhs / rhs;
-            return true;
-        default: return false;
+            value /= rhs;
+        }
     }
+}
+
+static bool ParseSumTail(const char*& p, const ExprContext& c, float& value)
+{
+    for (;;) {
+        SkipWs(p);
+        if (*p != '+' && *p != '-') { return true; }
+        const char op = *p++;
+        float rhs;
+        if (!ParsePrimary(p, c, rhs) || !ParseProductTail(p, c, rhs)) { return false; }
+        value = op == '+' ? value + rhs : value - rhs;
+    }
+}
+
+static bool ParseSum(const char*& p, const ExprContext& c, float& out)
+{
+    return ParsePrimary(p, c, out) && ParseProductTail(p, c, out) && ParseSumTail(p, c, out);
 }
 
 bool EvaluateFloatField(const char* expr, float currentValue, int index, std::mt19937_64& rng, float& out)
 {
+    const ExprContext c{currentValue, index, rng};
     const char* p = expr;
     SkipWs(p);
     if (*p == '\0') { return false; }
 
-    float lhs;
-    if (*p == '*' || *p == '/') {
-        lhs = currentValue;
-    }
-    else if (!ParseTerm(p, currentValue, index, rng, lhs)) {
-        return false;
-    }
-
+    float value = currentValue;
+    const bool bParsed = (*p == '*' || *p == '/') ? ParseProductTail(p, c, value) && ParseSumTail(p, c, value) : ParseSum(p, c, value);
     SkipWs(p);
-    if (*p == '+' || *p == '-' || *p == '*' || *p == '/') {
-        const char op = *p++;
-        float rhs;
-        if (!ParseTerm(p, currentValue, index, rng, rhs)) { return false; }
-        if (!ApplyOp(op, lhs, rhs, lhs)) { return false; }
-    }
+    if (!bParsed || *p != '\0' || !std::isfinite(value)) { return false; }
 
-    SkipWs(p);
-    if (*p != '\0') { return false; }
-
-    out = lhs;
+    out = value;
     return true;
 }
 

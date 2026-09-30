@@ -15,6 +15,7 @@
 #include "engine/systems/system_graph.h"
 #include "render/interface/render_interface.h"
 #include "core/containers/array.h"
+#include "core/containers/vector.h"
 #include "core/memory/memory_manager.h"
 #include "platform/crash_handler.h"
 #include "platform/directory_watcher.h"
@@ -117,6 +118,7 @@ private:
 
 private: // Windowing
     SDL_Window* window{};
+    Core::Vector<char> imguiClipboardText{};
     bool bRequireSwapchainRecreate{false};
     bool bRequireViewportRecreate{false};
     bool bMinimized{false};

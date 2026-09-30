@@ -230,6 +230,7 @@ bool ProceduralModelLoadSlot::GenerateShapeVariant(Engine::ProceduralParams& par
                    [&](const Engine::LatticeParams& p) { bSuccess = GenerateLattice(p); },
                    [&](const Engine::CorrugatedPanelParams& p) { bSuccess = GenerateCorrugatedPanel(p); },
                    [&](const Engine::TerraceParams& p) { bSuccess = GenerateTerrace(p); },
+                   [&](const Engine::PyramidParams& p) { bSuccess = GeneratePyramid(p); },
                }, params);
     return bSuccess;
 }
@@ -1435,6 +1436,44 @@ bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p
     });
 
     if (indices.IsEmpty()) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GeneratePyramid(const Engine::PyramidParams& p)
+{
+    ZoneScopedN("GeneratePyramid");
+
+    Vec3 c[8];
+    Engine::PyramidCorners(p, c);
+    const bool bPoint = p.topScale <= 1e-4f;
+    const Vec3 center{0.0f, glm::max(p.height, 0.001f) * 0.5f, 0.0f};
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    for (int i = 0; i < 4; ++i) {
+        const int j = (i + 1) % 4;
+        const Vec3 face[4] = {c[i], c[j], c[j + 4], c[i + 4]};
+        const int count = bPoint ? 3 : 4;
+        const Vec3 edge = glm::normalize(c[j] - c[i]);
+        Vec3 n = glm::normalize(glm::cross(edge, face[count - 1] - c[i]));
+        if (glm::dot(n, (c[i] + c[j]) * 0.5f - center) < 0.0f) { n = -n; }
+        const Vec3 up = glm::normalize(glm::cross(n, edge));
+        Vec2 uv[4];
+        for (int k = 0; k < count; ++k) {
+            uv[k] = {glm::dot(face[k] - c[i], edge), glm::dot(face[k] - c[i], up)};
+        }
+        AppendTerracePolygon(vertices, indices, n, edge, face, uv, count);
+    }
+
+    auto addCap = [&](int first, Vec3 n) {
+        const Vec3 cap[4] = {c[first], c[first + 1], c[first + 2], c[first + 3]};
+        const Vec2 uv[4] = {{cap[0].x, cap[0].z}, {cap[1].x, cap[1].z}, {cap[2].x, cap[2].z}, {cap[3].x, cap[3].z}};
+        AppendTerracePolygon(vertices, indices, n, {1, 0, 0}, cap, uv, 4);
+    };
+    if (p.bCapped) { addCap(0, {0, -1, 0}); }
+    if (!bPoint) { addCap(4, {0, 1, 0}); }
+
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 

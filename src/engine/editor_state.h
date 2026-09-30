@@ -107,7 +107,6 @@ struct EditorState
     // Entity selection
     Core::Vector<entt::entity> selectedEntities{};
     Core::Vector<entt::entity> prevSelectedEntities{};
-    Core::Vector<entt::entity> clipboardEntities{};
 
     UndoStack undo{};
 

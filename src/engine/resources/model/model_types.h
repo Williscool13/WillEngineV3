@@ -788,9 +788,36 @@ void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
     }
 }
 
+/** Rectangular pyramid on a base centred at the origin, rising to y = height. topScale 0 is a point; above 0 a flat top that fraction of the base. */
+struct PyramidParams
+{
+    float sizeX{2.0f};
+    float sizeZ{2.0f};
+    float height{2.0f};
+    float topScale{0.0f};
+    bool bCapped{true};
+    uint8_t _pad0[3]{};
+
+    WILL_REFLECT(PyramidParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(height), WILL_FIELD(topScale), WILL_FIELD(bCapped))
+};
+
+/** Base corners then top corners (the top collapses to the apex at topScale 0), counter-clockwise from -X -Z. */
+inline void PyramidCorners(const PyramidParams& p, glm::vec3 (&out)[8])
+{
+    const float hx = glm::max(p.sizeX, 0.001f) * 0.5f;
+    const float hz = glm::max(p.sizeZ, 0.001f) * 0.5f;
+    const float h = glm::max(p.height, 0.001f);
+    const float t = glm::clamp(p.topScale, 0.0f, 1.0f);
+    const glm::vec2 base[4] = {{-hx, -hz}, {-hx, hz}, {hx, hz}, {hx, -hz}};
+    for (int i = 0; i < 4; ++i) {
+        out[i] = glm::vec3(base[i].x, 0.0f, base[i].y);
+        out[i + 4] = glm::vec3(base[i].x * t, h, base[i].y * t);
+    }
+}
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
     , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams
-    , TerraceParams>;
+    , TerraceParams, PyramidParams>;
 
 inline constexpr int32_t MAX_MODULE_PARTS = 32;
 inline constexpr int32_t MAX_MODULE_SLOTS = 8;

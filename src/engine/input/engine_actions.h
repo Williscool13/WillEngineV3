@@ -32,6 +32,8 @@ inline const Engine::ActionHandle ACTION_DELETE_SELECTED{"DeleteSelected"_sid.id
 inline const Engine::ActionHandle ACTION_UNDO{"Undo"_sid.id};
 inline const Engine::ActionHandle ACTION_REDO{"Redo"_sid.id};
 inline const Engine::ActionHandle ACTION_SAVE{"Save"_sid.id};
+inline const Engine::ActionHandle ACTION_COPY{"Copy"_sid.id};
+inline const Engine::ActionHandle ACTION_PASTE{"Paste"_sid.id};
 inline const Engine::ActionHandle ACTION_ESCAPE{"Escape"_sid.id};
 inline const Engine::ActionHandle ACTION_BEGIN_RENAME{"BeginRename"_sid.id};
 inline const Engine::ActionHandle ACTION_FOCUS_SELECTION{"FocusSelection"_sid.id};

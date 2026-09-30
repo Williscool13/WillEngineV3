@@ -42,6 +42,7 @@
 #include "mcp/mcp_server.h"
 #include "mcp/mcp_tools_engine.h"
 #include "physics/physics_system.h"
+#include "platform/clipboard.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 #include "platform/thread_utils.h"
@@ -371,6 +372,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
         SDL_ShowWindow(window);
         w = rect.w;
         h = rect.h;
+#ifdef _WIN32
+        Platform::SetClipboardOwner(SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+#endif
     }
 
     //
@@ -556,6 +560,25 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             else {
                 SDL_StopTextInput(window);
             }
+        };
+        engineContext->setClipboardTextFn = [](std::string_view text, const char* privateFormat) {
+            return Platform::SetClipboardText(text, privateFormat);
+        };
+        engineContext->getClipboardTextFn = [](Core::Vector<char>& out, const char* privateFormat) {
+            return Platform::GetClipboardText(out, privateFormat);
+        };
+        engineContext->hasClipboardTextFn = [](const char* privateFormat) { return Platform::HasClipboardText(privateFormat); };
+
+        imguiClipboardText = Core::Vector<char>(&memoryManager.General(), Core::AllocTag::Editor);
+        ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
+        platformIo.Platform_ClipboardUserData = this;
+        platformIo.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { Platform::SetClipboardText(text); };
+        platformIo.Platform_GetClipboardTextFn = [](ImGuiContext*) -> const char* {
+            auto* self = static_cast<WillEngine*>(ImGui::GetPlatformIO().Platform_ClipboardUserData);
+            self->imguiClipboardText.Clear();
+            if (!Platform::GetClipboardText(self->imguiClipboardText)) { return nullptr; }
+            self->imguiClipboardText.PushBack('\0');
+            return self->imguiClipboardText.Data();
         };
 #if DEBUG
         engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };

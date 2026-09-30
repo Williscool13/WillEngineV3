@@ -5,6 +5,7 @@
 #include "editor_systems.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cassert>
 #include <cstring>
 
@@ -112,75 +113,150 @@ static void SelectOnly(Engine::EngineState* state, Core::Span<const entt::entity
     for (entt::entity e : entities) { state->editor.selectedEntities.PushBack(e); }
 }
 
-void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources)
-{
-    const StringID sceneId = state->scene.currentSceneId;
-    if (!sceneId.IsValid()) { return; }
-    auto& registry = state->registry;
+static constexpr const char* ENTITY_CLIPBOARD_FORMAT = "WillEngine.Entities";
+static constexpr uint32_t ENTITY_CLIPBOARD_VERSION = 1;
 
-    auto parentOf = [&](entt::entity e) {
-        const auto* h = registry.try_get<Component::HierarchyComponent>(e);
-        return h && registry.valid(h->parent) ? h->parent : entt::null;
-    };
+/** Sources without a listed ancestor come first, then every descendant; returns how many are top-level. */
+static size_t CollectSubtrees(Engine::EngineState* state, Core::Span<const entt::entity> sources, Core::ArenaVector<entt::entity>& out)
+{
+    auto& registry = state->registry;
     auto hasListedAncestor = [&](entt::entity e) {
         for (int guard = 0; guard < 1024; ++guard) {
-            e = parentOf(e);
-            if (e == entt::null) { return false; }
+            const auto* h = registry.try_get<Component::HierarchyComponent>(e);
+            if (!h || !registry.valid(h->parent)) { return false; }
+            e = h->parent;
             if (std::ranges::find(sources, e) != sources.end()) { return true; }
         }
         return false;
     };
-
-    Core::ArenaVector<entt::entity> originals{&ctx->editorArena.Get(), sources.Size() + 1};
     for (entt::entity e : sources) {
-        if (registry.valid(e) && !hasListedAncestor(e)) { originals.PushBack(e); }
+        if (registry.valid(e) && !registry.all_of<Component::DoNotSerializeTag>(e) && !hasListedAncestor(e)) { out.PushBack(e); }
     }
-    const size_t rootCount = originals.Size();
-    if (rootCount == 0) { return; }
+    const size_t rootCount = out.Size();
     auto hierarchy = registry.view<Component::HierarchyComponent>();
-    for (size_t i = 0; i < originals.Size(); ++i) {
+    for (size_t i = 0; i < out.Size(); ++i) {
         for (auto [child, node] : hierarchy.each()) {
-            if (node.parent == originals[i]) { originals.PushBack(child); }
+            if (node.parent == out[i] && !registry.all_of<Component::DoNotSerializeTag>(child)) { out.PushBack(child); }
         }
     }
+    return rootCount;
+}
 
-    auto copies = Core::ArenaFixedVector<entt::entity>(&ctx->editorArena.Get(), originals.Size() + 1);
-    for (entt::entity entity : originals) {
-        const entt::entity copy = CopySceneEntity(state, entity, sceneId);
-        if (auto* volume = registry.try_get<Component::LocalDDGIVolumeComponent>(copy)) {
+static void WriteEntities(Engine::EngineState* state, Core::Span<const entt::entity> entities, Core::Vector<std::byte>& out)
+{
+    Engine::TextWriter w(out);
+    w.Key("wentities", ENTITY_CLIPBOARD_VERSION);
+    w.Count("entities", static_cast<uint32_t>(entities.Size()));
+    for (entt::entity entity : entities) {
+        w.BeginBlock("entity");
+        for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
+            if (!entry.has(state->registry, entity)) { continue; }
+            w.BeginBlock(entry.typeId.id);
+            entry.serialize(state->registry, entity, w);
+            w.EndBlock();
+        }
+        w.EndBlock();
+    }
+}
+
+/** Creates the written entities in the active scene with fresh ids, keeping their hierarchy, then selects the top-level ones. */
+static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, const Engine::TextReader& reader)
+{
+    const StringID sceneId = state->scene.currentSceneId;
+    if (!sceneId.IsValid() || reader.U64("wentities") != ENTITY_CLIPBOARD_VERSION) { return; }
+    auto& registry = state->registry;
+    const auto stableKey = Core::ShortString::Format("%llu", Engine::TypeSID<Component::StableIdComponent>().id);
+
+    Core::ArenaVector<entt::entity> created{&ctx->editorArena.Get(), 64};
+    Core::ArenaVector<uint64_t> sourceIds{&ctx->editorArena.Get(), 64};
+    reader.ForEachRecord("entities", [&](const Engine::TextReader& entityReader) {
+        const entt::entity entity = registry.create();
+        entityReader.ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
+            uint64_t typeId = 0;
+            std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
+            if (const size_t* index = state->componentRegistry.registryMapping.Find(StringID{typeId})) {
+                state->componentRegistry.registry[*index].deserialize(registry, entity, compReader);
+            }
+        });
+        registry.emplace_or_replace<Component::SceneComponent>(entity, sceneId);
+        created.PushBack(entity);
+        sourceIds.PushBack(entityReader.Block(stableKey.c_str()).U64("id"));
+    });
+    if (created.IsEmpty()) { return; }
+
+    Core::ArenaVector<entt::entity> roots{&ctx->editorArena.Get(), created.Size()};
+    for (size_t i = 0; i < created.Size(); ++i) {
+        const entt::entity entity = created[i];
+        if (auto* volume = registry.try_get<Component::LocalDDGIVolumeComponent>(entity)) {
             volume->volumeId = state->rng();
         }
-        if (auto* probe = registry.try_get<Component::ReflectionProbeComponent>(copy)) {
+        if (auto* probe = registry.try_get<Component::ReflectionProbeComponent>(entity)) {
             probe->probeId = state->rng();
         }
-        copies.PushBack(copy);
-    }
 
-    for (size_t i = 0; i < copies.Size(); ++i) {
-        const entt::entity copy = copies[i];
-        if (auto* h = registry.try_get<Component::HierarchyComponent>(copy); h && registry.valid(h->parent)) {
-            const auto it = std::ranges::find(originals, h->parent);
-            if (it != originals.end()) {
-                const entt::entity parentCopy = copies[static_cast<size_t>(it - originals.begin())];
-                h->parent = parentCopy;
-                h->parentStableId = registry.get<Component::StableIdComponent>(parentCopy).id;
-                state->bHierarchyOrderDirty = true;
+        bool bRoot = true;
+        if (auto* node = registry.try_get<Component::HierarchyComponent>(entity)) {
+            const auto it = std::ranges::find(sourceIds, node->parentStableId.id);
+            const entt::entity* existing = state->stableIdToEntityMap.Find(node->parentStableId);
+            const auto* existingScene = existing && registry.valid(*existing) ? registry.try_get<Component::SceneComponent>(*existing) : nullptr;
+            if (it != sourceIds.end()) {
+                const entt::entity parent = created[static_cast<size_t>(it - sourceIds.begin())];
+                node->parent = parent;
+                node->parentStableId = registry.get<Component::StableIdComponent>(parent).id;
+                bRoot = false;
+            }
+            else if (existingScene && existingScene->sceneId == sceneId) {
+                node->parent = *existing;
             }
             else {
-                const auto* parentScene = registry.try_get<Component::SceneComponent>(h->parent);
-                if (!parentScene || parentScene->sceneId != sceneId) { ClearParent(state, copy); }
+                registry.remove<Component::HierarchyComponent>(entity);
             }
         }
-        if (i < rootCount) {
-            if (auto* nameComp = registry.try_get<Component::NameComponent>(copy)) {
-                nameComp->name = GenerateIncrementedName(registry, sceneId, nameComp->name);
-            }
-            registry.get<Component::StableIdComponent>(copy).sortOrder = HighestSortOrderInScene(registry, sceneId) + 1;
+        if (!bRoot) { continue; }
+        if (auto* nameComp = registry.try_get<Component::NameComponent>(entity)) {
+            nameComp->name = GenerateIncrementedName(registry, sceneId, nameComp->name);
         }
+        if (auto* stable = registry.try_get<Component::StableIdComponent>(entity)) {
+            stable->sortOrder = HighestSortOrderInScene(registry, sceneId) + 1;
+        }
+        roots.PushBack(entity);
     }
 
-    SelectOnly(state, Core::Span<const entt::entity>(copies.Data(), rootCount));
+    state->bHierarchyOrderDirty = true;
+    SelectOnly(state, roots);
     MarkSceneModified(state, sceneId);
+}
+
+void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources)
+{
+    Core::ArenaVector<entt::entity> subtree{&ctx->editorArena.Get(), sources.Size() + 1};
+    if (CollectSubtrees(state, sources, subtree) == 0) { return; }
+    Core::Vector<std::byte> text(&ctx->memoryManager->General(), Core::AllocTag::Editor);
+    WriteEntities(state, subtree, text);
+    InstantiateEntities(ctx, state, Engine::TextReader(text.Data(), text.Size()));
+}
+
+void CopyEntitiesToClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources)
+{
+    Core::ArenaVector<entt::entity> subtree{&ctx->editorArena.Get(), sources.Size() + 1};
+    if (CollectSubtrees(state, sources, subtree) == 0) { return; }
+    Core::Vector<std::byte> text(&ctx->memoryManager->General(), Core::AllocTag::Editor);
+    WriteEntities(state, subtree, text);
+    if (!ctx->setClipboardTextFn(std::string_view(reinterpret_cast<const char*>(text.Data()), text.Size()), ENTITY_CLIPBOARD_FORMAT)) {
+        LOG_WARN(Engine, "Copy: the clipboard could not be written");
+    }
+}
+
+void PasteEntitiesFromClipboard(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    Core::Vector<char> text(&ctx->memoryManager->General(), Core::AllocTag::Editor);
+    if (!ctx->getClipboardTextFn(text, ENTITY_CLIPBOARD_FORMAT)) { return; }
+    InstantiateEntities(ctx, state, Engine::TextReader(text.Data(), text.Size()));
+}
+
+bool CanPasteEntities(Engine::EngineContext* ctx)
+{
+    return ctx->hasClipboardTextFn(ENTITY_CLIPBOARD_FORMAT);
 }
 
 void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -327,8 +403,10 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
                               "  x+1        current value plus 1\n"
                               "  *2  or  /2   scale the current value\n"
                               "  S*1.5      spread by selection index (from 0)\n"
+                              "  x+S*1.5    spread from where each one is now\n"
+                              "  2*x+1      scale then offset\n"
                               "  x+R(-1,1)  random float in [a,b)\n"
-                              "Terms: number, x (current), S (index), R(a,b); at most one + - * /");
+                              "Terms: number, x (current), S (index), R(a,b); + - * / with precedence, ( ), unary -");
         }
     }
     if (bTransformOpen) {
@@ -609,6 +687,12 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 else if (state->input.GetActionState(Actions::ACTION_SAVE).pressed) {
                     if (shiftHeld) { SaveModifiedScenes(ctx, state); }
                     else { SaveEditorScene(ctx, state, state->scene.currentSceneId); }
+                }
+                else if (state->input.GetActionState(Actions::ACTION_COPY).pressed) {
+                    CopyEntitiesToClipboard(ctx, state, state->editor.selectedEntities);
+                }
+                else if (state->input.GetActionState(Actions::ACTION_PASTE).pressed) {
+                    PasteEntitiesFromClipboard(ctx, state);
                 }
             }
 

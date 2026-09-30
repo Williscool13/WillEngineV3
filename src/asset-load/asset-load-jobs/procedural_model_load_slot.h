@@ -173,6 +173,7 @@ private:
     bool GenerateCorrugatedPanel(const Engine::CorrugatedPanelParams& p);
     bool GenerateTerrace(const Engine::TerraceParams& p);
     bool GenerateTerraceRamp(const Engine::TerraceParams& p);
+    bool GeneratePyramid(const Engine::PyramidParams& p);
 
     bool GenerateModule(const Engine::ModuleParams& p);
 

@@ -8,6 +8,7 @@ add_library(platform STATIC
         directory_watcher.h
         virtual_memory.h
         tcp_socket.h
+        clipboard.h
 )
 
 if(WIN32)
@@ -20,6 +21,7 @@ if(WIN32)
             directory_watcher_win32.cpp
             virtual_memory_win32.cpp
             tcp_socket_win32.cpp
+            clipboard_win32.cpp
             paths.cpp
     )
     target_link_libraries(platform PUBLIC
@@ -29,7 +31,6 @@ if(WIN32)
             shell32
             fmt::fmt
             spdlog::spdlog
-            SDL3::SDL3
     )
 else()
     target_sources(platform PRIVATE
@@ -41,7 +42,6 @@ else()
             core
             fmt::fmt
             spdlog::spdlog
-            SDL3::SDL3
     )
 endif()
 

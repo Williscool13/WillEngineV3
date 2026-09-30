@@ -35,10 +35,9 @@ bool ContainsNameToken(const char* s);
 void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, std::mt19937_64& rng);
 
 /**
- * Evaluates a transform-field expression for one entity. Grammar: field := term [op term], op := + - * /,
- * term := number | x | S | R(a,b). A signed number is absolute; leading `*`/`/` imply x as lhs (relative);
- * `x` is the entity's current value, `S` its 0-based selection index, `R(a,b)` a random float in [a,b).
- * Returns false (leaving out untouched) on malformed input or division by zero.
+ * Evaluates a transform-field expression for one entity: + - * / with the usual precedence, parentheses and unary minus over
+ * number | x (current value) | S (0-based selection index) | R(a,b) (random float in [a,b)). A leading * or / applies to x.
+ * Returns false (leaving out untouched) on malformed input, division by zero or a non-finite result.
  */
 bool EvaluateFloatField(const char* expr, float currentValue, int index, std::mt19937_64& rng, float& out);
 }

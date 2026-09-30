@@ -381,8 +381,8 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (ImGui::MenuItem(count > 1 ? "Group Under New Entity" : "Parent Under New Entity")) { entityAction = EntityMenuAction::Group; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Rename", "F2", false, count == 1)) { entityAction = EntityMenuAction::Rename; }
-                if (ImGui::MenuItem("Copy")) { entityAction = EntityMenuAction::Copy; }
-                if (ImGui::MenuItem("Paste", nullptr, false, !state->editor.clipboardEntities.IsEmpty())) { entityAction = EntityMenuAction::Paste; }
+                if (ImGui::MenuItem("Copy", "Ctrl+C")) { entityAction = EntityMenuAction::Copy; }
+                if (ImGui::MenuItem("Paste", "Ctrl+V", false, CanPasteEntities(ctx))) { entityAction = EntityMenuAction::Paste; }
                 if (ImGui::MenuItem("Duplicate", "Ctrl+W")) { entityAction = EntityMenuAction::Duplicate; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Delete", "Del")) { entityAction = EntityMenuAction::Delete; }
@@ -791,11 +791,10 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 break;
             }
             case EntityMenuAction::Copy:
-                state->editor.clipboardEntities.Clear();
-                for (entt::entity en : state->editor.selectedEntities) { state->editor.clipboardEntities.PushBack(en); }
+                CopyEntitiesToClipboard(ctx, state, state->editor.selectedEntities);
                 break;
             case EntityMenuAction::Paste:
-                DuplicateEntities(ctx, state, state->editor.clipboardEntities);
+                PasteEntitiesFromClipboard(ctx, state);
                 break;
             case EntityMenuAction::Duplicate:
                 DuplicateEntities(ctx, state, state->editor.selectedEntities);

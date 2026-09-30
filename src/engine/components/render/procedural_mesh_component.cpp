@@ -188,7 +188,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
         static constexpr const char* shapeNames[] = {
             "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-            "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace"
+            "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid"
         };
         static_assert(std::size(shapeNames) == std::variant_size_v<Engine::ProceduralParams>);
         const size_t shapeIndex = component.params.index();
@@ -764,6 +764,18 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extends the outermost level past the footprint on the stepped sides"); }
                     dirty |= ImGui::Checkbox("Floor", &p.bFloor);
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Off removes the innermost level, leaving an open-ended tube"); }
+                }
+                else if constexpr (std::is_same_v<T, Engine::PyramidParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Top Scale", &p.topScale, 0.005f, 0.0f, 1.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 is a pointed apex; above 0 a flat top that fraction of the base"); }
+                    if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
                 }
             }, component.params);
 

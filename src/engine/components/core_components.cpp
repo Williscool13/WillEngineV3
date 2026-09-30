@@ -51,12 +51,16 @@ void Engine::Component::TransformComponent::OnEditCommit(entt::registry& registr
 namespace Engine
 {
 static ImGuiID gTransformExprField = 0;
-static bool bTransformExprFocus = false;
+static entt::entity gTransformExprEntity = entt::null;
+static bool gTransformExprFocus = false;
 static char gTransformExprBuf[64]{};
 
 Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     TransformComponent component = edit.Get<TransformComponent>();
+    if (gTransformExprField != 0 && (edit.IsMulti() || gTransformExprEntity != edit.Primary())) {
+        gTransformExprField = 0;
+    }
     bool open = ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     const float headerAvail = ImGui::GetContentRegionAvail().x;
     ImGui::SameLine(headerAvail - 10.f - ImGui::CalcTextSize("(?)").x - ImGui::GetStyle().ItemSpacing.x);
@@ -66,8 +70,9 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
                           "  5          set to 5\n"
                           "  x+1        current value plus 1\n"
                           "  *2  or  /2   scale the current value\n"
+                          "  2*x+1      scale then offset\n"
                           "  x+R(-1,1)  random float in [a,b)\n"
-                          "Terms: number, x (current), R(a,b); at most one + - * /");
+                          "Terms: number, x (current), R(a,b); + - * / with precedence, ( ), unary -");
     }
     ImGui::SameLine(headerAvail - 10.f);
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -98,9 +103,9 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
             const ImGuiID fieldId = ImGui::GetID(id);
             bool changed = false;
             if (gTransformExprField == fieldId) {
-                if (bTransformExprFocus) {
+                if (gTransformExprFocus) {
                     ImGui::SetKeyboardFocusHere();
-                    bTransformExprFocus = false;
+                    gTransformExprFocus = false;
                 }
                 ImGui::PushID(id);
                 const bool bEnter = ImGui::InputText("##expr", gTransformExprBuf, sizeof(gTransformExprBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
@@ -117,11 +122,12 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
                 }
             }
             else {
-                changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.1f", ImGuiSliderFlags_NoInput);
+                changed = ImGui::DragFloat(id, val, speed, 0, 0, "%.2f", ImGuiSliderFlags_NoInput);
                 bReleased |= ImGui::IsItemDeactivatedAfterEdit();
                 if (ImGui::IsItemHovered() && (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) || (ImGui::GetIO().KeyCtrl && ImGui::IsItemClicked(ImGuiMouseButton_Left)))) {
                     gTransformExprField = fieldId;
-                    bTransformExprFocus = true;
+                    gTransformExprEntity = edit.Primary();
+                    gTransformExprFocus = true;
                     const auto text = Core::InlineString<64>::Format("%g", *val);
                     memcpy(gTransformExprBuf, text.c_str(), text.Size() + 1);
                 }
