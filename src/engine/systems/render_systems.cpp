@@ -281,10 +281,10 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
     };
 
     for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::AreaLightComponent, Component::LightSurfaceRuntime>().each()) {
-        emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+        emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface && light.bEnabled);
     }
     for (auto [entity, light, surfaceRuntime] : state->registry.view<Component::SphereLightComponent, Component::LightSurfaceRuntime>(entt::exclude<Component::AreaLightComponent>).each()) {
-        emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface);
+        emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface && light.bEnabled);
     }
 }
 

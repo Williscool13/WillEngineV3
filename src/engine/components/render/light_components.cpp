@@ -92,6 +92,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
 
     if (open) {
         const auto& comp = edit.Get<AreaLightComponent>();
+        EditWidgets::Checkbox(edit, "Enabled##al", &AreaLightComponent::bEnabled);
         EditWidgets::ColorEdit3(edit, "Color##al", &AreaLightComponent::color);
         EditLightIntensity(edit, "Intensity##al", &AreaLightComponent::intensity, {.lumensPerNit = AreaLightLumensPerNit(comp, EditorLightScale(registry, entity))});
         EditWidgets::Checkbox(edit, "Disk##al", &AreaLightComponent::bDisk);
@@ -199,6 +200,7 @@ glm::mat4 Component::ComputeAreaLightQuadMatrix(const Transform& world, const Ar
 
 LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLightComponent& light)
 {
+    if (!light.bEnabled) { return LightInfo{}; }
     const glm::mat3 rot = glm::mat3_cast(world.rotation);
     const float halfWidth = light.halfWidth * world.scale.x;
     return LightInfo{
@@ -244,6 +246,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
 
     if (open) {
         const auto& comp = edit.Get<SphereLightComponent>();
+        EditWidgets::Checkbox(edit, "Enabled##sl", &SphereLightComponent::bEnabled);
         EditWidgets::ColorEdit3(edit, "Color##sl", &SphereLightComponent::color);
         EditLightIntensity(edit, "Intensity##sl", &SphereLightComponent::intensity, {.lumensPerNit = SphereLightLumensPerNit(comp, EditorLightScale(edit.Registry(), edit.Primary()))});
         EditWidgets::DragFloat(edit, "Radius##sl", &SphereLightComponent::radius, 0.05f, 0.01f, 100.0f);
@@ -268,6 +271,7 @@ glm::mat4 Component::ComputeSphereLightMatrix(const Transform& world, const Sphe
 
 LightInfo Component::ComputeSphereLightInfo(const Transform& world, const SphereLightComponent& light)
 {
+    if (!light.bEnabled) { return LightInfo{}; }
     return LightInfo{
         .position = {world.translation, 0.0f},
         .normal = {0.0f, 0.0f, 0.0f, 0.0f},

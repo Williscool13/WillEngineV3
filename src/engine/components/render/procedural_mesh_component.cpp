@@ -156,7 +156,6 @@ static Engine::ProceduralParams DefaultProceduralParams(size_t index, std::index
     return params;
 }
 
-/** Depth drag, edge presets and per-edge values for a box-layout chamfer set. */
 static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ)
 {
     bool dirty = false;
@@ -204,16 +203,129 @@ static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ)
     return dirty;
 }
 
+/**
+ * Dot handle per face of a corner-pivot shape's [0, size] extent; the opposite face stays put, so low faces move the entity (without undo, the caller records it on release).
+ * @param setSize called as setSize(axis, newSize)
+ * @return true when the size changed this frame
+ */
+template<typename SetSize>
+static bool DrawExtentFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const Component::ProceduralMeshComponent& component, Vec3 size, SetSize&& setSize,
+                                  bool& bOutMovedEntity)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    auto* state = edit.State();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* transform = registry.try_get<Component::TransformComponent>(entity);
+    if (!transform) { return false; }
+
+    const auto& vd = viewFamily.mainView.currentViewData;
+    const Vec4 viewport{
+        static_cast<float>(ctx->windowContext.viewportOffsetX),
+        static_cast<float>(ctx->windowContext.viewportOffsetY),
+        static_cast<float>(ctx->windowContext.viewportWidth),
+        static_cast<float>(ctx->windowContext.viewportHeight),
+    };
+
+    Mat4 parentWorld{1.0f};
+    if (auto* h = registry.try_get<Component::HierarchyComponent>(entity); h && registry.valid(h->parent)) {
+        parentWorld = Component::ComputeWorldTransform(registry, h->parent).GetMatrix();
+    }
+    const Mat4 meshToWorld = Component::ComputeWorldTransform(registry, entity).GetMatrix() * glm::translate(Mat4(1.0f), component.renderOffset) * glm::mat4_cast(component.renderRotation);
+
+    const ImU32 colors[3] = {Editor::COLOR_AXIS_X, Editor::COLOR_AXIS_Y, Editor::COLOR_AXIS_Z};
+    const bool bSnap = state->editor.bSnapEnabled && state->editor.snapTranslation > 0.0f;
+    bool bResized = false;
+    for (int i = 0; i < 3; ++i) {
+        Vec3 unit{0.0f};
+        unit[i] = 1.0f;
+        const Vec3 axisWorld = Vec3(meshToWorld * Vec4(unit, 0.0f));
+        const float axisScale = glm::length(axisWorld);
+        if (axisScale < 1e-6f) { continue; }
+        for (int s = 0; s < 2; ++s) {
+            const bool bHigh = s == 0;
+            const Vec3 outward = axisWorld / axisScale * (bHigh ? 1.0f : -1.0f);
+            Vec3 center = size * 0.5f;
+            center[i] = bHigh ? size[i] : 0.0f;
+            const Vec3 handlePos = Vec3(meshToWorld * Vec4(center, 1.0f));
+            Editor::AxisDotHandle(Editor::DotHandleId::PROCEDURAL_FACE_BASE + i * 2 + s, handlePos, outward, vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                  [&](Vec3 newPt) {
+                                      const Vec3 opposite = handlePos - outward * (size[i] * axisScale);
+                                      float newSize = glm::dot(newPt - opposite, outward) / axisScale;
+                                      if (bSnap) { newSize = glm::round(newSize / state->editor.snapTranslation) * state->editor.snapTranslation; }
+                                      newSize = glm::max(newSize, bSnap ? state->editor.snapTranslation : 0.01f);
+                                      const float delta = newSize - size[i];
+                                      if (glm::abs(delta) < 1e-6f) { return; }
+                                      setSize(i, newSize);
+                                      bResized = true;
+                                      if (!bHigh) {
+                                          transform->translation += Vec3(glm::inverse(parentWorld) * Vec4(-axisWorld * delta, 0.0f));
+                                          Component::TransformComponent::OnEditPreview(registry, entity);
+                                          bOutMovedEntity = true;
+                                      }
+                                  },
+                                  colors[i]);
+        }
+    }
+    return bResized;
+}
+
+static bool HasFaceHandles(const Engine::ProceduralParams& params)
+{
+    return std::holds_alternative<Engine::BoxParams>(params) || std::holds_alternative<Engine::StaircaseParams>(params) || std::holds_alternative<Engine::WedgeParams>(params);
+}
+
+static bool DrawShapeFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, Component::ProceduralMeshComponent& component, bool& bOutMovedEntity)
+{
+    if (auto* box = std::get_if<Engine::BoxParams>(&component.params)) {
+        float* sizes[3] = {&box->sizeX, &box->sizeY, &box->sizeZ};
+        return DrawExtentFaceHandles(viewFamily, edit, component, {box->sizeX, box->sizeY, box->sizeZ}, [&](int axis, float v) { *sizes[axis] = v; }, bOutMovedEntity);
+    }
+    if (auto* wedge = std::get_if<Engine::WedgeParams>(&component.params)) {
+        const float base = glm::max(wedge->baseHeight, 0.0f);
+        return DrawExtentFaceHandles(viewFamily, edit, component, {wedge->sizeX, base + wedge->sizeY, wedge->sizeZ}, [&](int axis, float v) {
+            if (axis == 0) { wedge->sizeX = v; }
+            else if (axis == 1) { wedge->sizeY = glm::max(v - base, 0.01f); }
+            else { wedge->sizeZ = v; }
+        }, bOutMovedEntity);
+    }
+    if (auto* stairs = std::get_if<Engine::StaircaseParams>(&component.params)) {
+        const int32_t steps = std::max(stairs->stepCount, 1);
+        return DrawExtentFaceHandles(viewFamily, edit, component, {stairs->width, stairs->totalHeight, Engine::StaircaseTotalDepth(*stairs)}, [&](int axis, float v) {
+            if (axis == 0) {
+                stairs->width = v;
+            }
+            else if (axis == 1) {
+                stairs->totalHeight = v;
+                if (stairs->bSpecifyStepHeight) { stairs->stepCount = std::max(1, static_cast<int32_t>(std::ceil(v / std::max(stairs->stepHeight, 0.001f)))); }
+            }
+            else if (stairs->bSpecifyStepDepth) {
+                stairs->stepDepth = v / static_cast<float>(steps);
+            }
+            else {
+                stairs->totalDepth = v;
+            }
+        }, bOutMovedEntity);
+    }
+    return false;
+}
+
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     entt::registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditingOffset = false;
+    static bool bFaceHandles = true;
+    static bool bFaceDragging = false;
+    static bool bFaceMovedEntity = false;
+    static glm::vec3 faceDragStartTranslation{0.0f};
 
     if (editEntity != entity || edit.IsMulti()) {
         editEntity = entity;
         bEditingOffset = false;
+        bFaceDragging = false;
+        bFaceMovedEntity = false;
     }
 
     const ProceduralMeshComponent before = edit.Get<ProceduralMeshComponent>();
@@ -331,7 +443,31 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                         ImGui::EndDisabled();
                     }
 
+                    ImGui::DragFloat("Underside Thickness", &p.slabThickness, 0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 fills solid to the floor; above 0 the stair is a slab this thick with a sloped underside"); }
+
+                    ImGui::DragFloat("Step Chamfer", &p.stepChamfer, 0.001f, 0.0f, 1.0f, "%.3f");
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bevel on each step's front edge; mesh only, the collider stays square"); }
+
                     if (ImGui::Checkbox("Closed", &p.bIsClosed)) { dirty = true; }
+
+                    ImGui::SeparatorText("Side Walls");
+                    ImGui::DragFloat("Wall Height", &p.sideWallHeight, 0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 is off. Measured above the line through the riser feet, so a flat railing of the same height meets the wall at the top and bottom"); }
+                    ImGui::DragFloat("Wall Thickness", &p.sideWallThickness, 0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Added outside the treads; Width stays the walkable width"); }
+                    ImGui::DragFloat("Wall Start", &p.sideWallStart, 0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Distance in from the first riser where the walls begin, to leave room for a newel or pillar"); }
+                    ImGui::TextUnformatted("Walls on");
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("-X##sidewall", &p.bSideWallNegX)) { dirty = true; }
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("+X##sidewall", &p.bSideWallPosX)) { dirty = true; }
                 }
                 else if constexpr (std::is_same_v<T, Engine::BoxParams>) {
                     const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -418,6 +554,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Base Height", &p.baseHeight, 0.005f, 0.0f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Block under the whole wedge; Size Y is the rise above it"); }
+                    ImGui::DragFloat("Underside Thickness", &p.slabThickness, 0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 fills solid to the floor; above 0 the wedge is a slab this thick with a sloped underside"); }
                     dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
                 }
                 else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
@@ -776,6 +915,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Lip Width", &p.lipWidth, 0.005f, 0.0f, 10.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Extends the outermost level past the footprint on the stepped sides"); }
+                    ImGui::DragFloat("Step Chamfer", &p.stepChamfer, 0.001f, 0.0f, 1.0f, "%.3f");
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bevel on each step's front edge (Steps profile only); mesh only, the collider stays square"); }
                     dirty |= ImGui::Checkbox("Floor", &p.bFloor);
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Off removes the innermost level, leaving an open-ended tube"); }
                 }
@@ -807,6 +949,10 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             }, component.params);
 
             bCommit |= dirty;
+            if (HasFaceHandles(component.params)) {
+                ImGui::Checkbox("Face Handles", &bFaceHandles);
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Drag the dots on the shape's faces in the viewport to resize; the opposite face stays put"); }
+            }
         }
 
         // Material selector
@@ -928,9 +1074,36 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         }
     }
 
+    bool bFaceResized = false;
+    bool bFaceReleased = false;
+    if (bFaceHandles && !bEditingOffset && !edit.IsMulti() && HasFaceHandles(component.params)) {
+        const auto* transform = registry.try_get<TransformComponent>(entity);
+        if (!bFaceDragging && transform) { faceDragStartTranslation = transform->translation; }
+        bFaceResized = DrawShapeFaceHandles(viewFamily, edit, component, bFaceMovedEntity);
+        bFaceDragging |= bFaceResized;
+        const int32_t activeDot = state->editor.activeDotHandleId;
+        const bool bFaceActive = activeDot >= Editor::DotHandleId::PROCEDURAL_FACE_BASE && activeDot < Editor::DotHandleId::PROCEDURAL_FACE_BASE + 6;
+        bFaceReleased = bFaceDragging && !bFaceActive;
+    }
+
     edit.PreviewDiff(before, component);
-    if (bCommit) {
+    // Only once the previous build has landed, so a fast drag cannot starve the mesh of updates.
+    if (bFaceResized && !registry.any_of<ProceduralMeshLoadPendingTag, ProceduralMeshLoadingTag>(entity)) {
+        registry.emplace<ProceduralMeshLoadPendingTag>(entity);
+    }
+    if (bCommit || bFaceReleased) {
         edit.Commit<ProceduralMeshComponent>();
+    }
+    if (bFaceReleased) {
+        if (bFaceMovedEntity) {
+            if (auto* transform = registry.try_get<TransformComponent>(entity)) {
+                const glm::vec3 moved = transform->translation;
+                transform->translation = faceDragStartTranslation;
+                edit.Modify<TransformComponent>([&moved](TransformComponent& t) { t.translation = moved; });
+            }
+        }
+        bFaceDragging = false;
+        bFaceMovedEntity = false;
     }
 
     return {.bRequestRemoval = remove};

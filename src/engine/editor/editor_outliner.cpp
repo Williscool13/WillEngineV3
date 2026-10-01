@@ -180,6 +180,27 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         StringID reparentFolderTo{};
         enum class EntityMenuAction { None, Group, Rename, Copy, Paste, Duplicate, Delete };
         EntityMenuAction entityAction = EntityMenuAction::None;
+        // Applied next frame to the picked folder, or with no folder to the selection.
+        static int32_t pendingExpandAll = -1;
+        static StringID pendingExpandFolder{};
+        const int32_t expandAll = pendingExpandAll;
+        const StringID expandFolder = pendingExpandFolder;
+        pendingExpandAll = -1;
+        auto entityOpenId = [](entt::entity e) { return ImHashData(&e, sizeof(e), ImHashStr("hierarchy_open")); };
+        auto drawExpandAllItems = [&](StringID folder) {
+            const bool bExpand = ImGui::MenuItem("Expand All");
+            const bool bCollapse = ImGui::MenuItem("Collapse All Children");
+            if (bExpand || bCollapse) {
+                pendingExpandAll = bExpand ? 1 : 0;
+                pendingExpandFolder = folder;
+            }
+        };
+        static entt::entity lastRevealed = entt::null;
+        const entt::entity newestSelected = state->editor.selectedEntities.IsEmpty() ? entt::null : state->editor.selectedEntities[state->editor.selectedEntities.Size() - 1];
+        const entt::entity revealEntity = newestSelected != lastRevealed ? newestSelected : entt::null;
+        lastRevealed = newestSelected;
+        StringID revealFolder{};
+        StringID revealFolderParent{};
         Core::ArenaVector<entt::entity> visibleRows{&ctx->editorArena.Get(), entries.Size() + 1};
         entt::entity rangeTarget = entt::null;
 
@@ -255,7 +276,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             // Expand/collapse arrow for entities with transform children (state persists per-entity via ImGui storage, default open).
             ImGuiStorage* storage = ImGui::GetStateStorage();
-            const ImGuiID openId = ImGui::GetID("hierarchy_open");
+            const ImGuiID openId = entityOpenId(e.entity);
             bool open = storage->GetInt(openId, 1) != 0;
             if (hasChildren) {
                 if (ImGui::ArrowButton("expand", open ? ImGuiDir_Down : ImGuiDir_Right)) {
@@ -325,6 +346,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                         s_selectionAnchor = e.entity;
                     }
                 }
+                if (e.entity == revealEntity && !ImGui::IsItemVisible()) { ImGui::SetScrollHereY(0.5f); }
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     ImGui::SetDragDropPayload("SCENE_ENTITY", &e.entity, sizeof(e.entity));
                     const bool inSelection = std::ranges::find(state->editor.selectedEntities, e.entity) != state->editor.selectedEntities.end();
@@ -386,6 +408,8 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (ImGui::MenuItem("Duplicate", "Ctrl+W")) { entityAction = EntityMenuAction::Duplicate; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Delete", "Del")) { entityAction = EntityMenuAction::Delete; }
+                ImGui::Separator();
+                drawExpandAllItems(StringID());
                 ImGui::EndPopup();
             }
             ImGui::PopID();
@@ -523,6 +547,12 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             if (expandFoldersForFilter) { ImGui::SetNextItemOpen(true, ImGuiCond_Always); }
+            else if (expandAll >= 0 && expandFolder.IsValid() && ((a.id == expandFolder && expandAll != 0) || a.parent == expandFolder)) {
+                ImGui::SetNextItemOpen(expandAll != 0, ImGuiCond_Always);
+            }
+            else if (revealFolder.IsValid() && (a.id == revealFolder || a.id == revealFolderParent)) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            }
             const ImGuiTreeNodeFlags folderFlags = ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
                                                    (folderSelected(a.entity) ? ImGuiTreeNodeFlags_Selected : 0);
             bool open = ImGui::TreeNodeEx(Core::InlineString<192>::Format("%s##%s%llu", a.name, idPrefix, static_cast<unsigned long long>(a.id.id)).c_str(), folderFlags);
@@ -573,6 +603,8 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (ImGui::MenuItem("Delete Folder")) { folderToDelete = a.entity; }
                 ImGui::EndDisabled();
                 if (!empty && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Folder must be empty to delete"); }
+                ImGui::Separator();
+                drawExpandAllItems(a.id);
                 ImGui::EndPopup();
             }
             return open;
@@ -591,6 +623,41 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         const float footerHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
         ImGui::BeginChild("##entity_list", ImVec2(0.0f, -footerHeight), ImGuiChildFlags_None);
+        if (expandAll >= 0) {
+            ImGuiStorage* storage = ImGui::GetStateStorage();
+            auto inScope = [&](const EntityEntry& en) {
+                if (expandFolder.IsValid()) {
+                    if (en.folderId == expandFolder) { return true; }
+                    for (const AnchorInfo& a : anchors) {
+                        if (a.id == en.folderId && a.parent == expandFolder) { return true; }
+                    }
+                    return false;
+                }
+                for (const entt::entity selected : state->editor.selectedEntities) {
+                    if ((selected == en.entity && expandAll != 0) || isAncestorOf(selected, en.entity)) { return true; }
+                }
+                return false;
+            };
+            for (const auto& en : entries) {
+                if (inScope(en)) { storage->SetInt(entityOpenId(en.entity), expandAll); }
+            }
+        }
+        if (revealEntity != entt::null && state->registry.valid(revealEntity)) {
+            ImGuiStorage* storage = ImGui::GetStateStorage();
+            entt::entity root = revealEntity;
+            for (int guard = 0; guard < 1024; ++guard) {
+                const auto* h = state->registry.try_get<Component::HierarchyComponent>(root);
+                if (!h || !state->registry.valid(h->parent)) { break; }
+                root = h->parent;
+                storage->SetInt(entityOpenId(root), 1);
+            }
+            for (const auto& en : entries) {
+                if (en.entity == root) { revealFolder = en.folderId; }
+            }
+            for (const AnchorInfo& a : anchors) {
+                if (a.id == revealFolder) { revealFolderParent = a.parent; }
+            }
+        }
 
         // Scene root
         {

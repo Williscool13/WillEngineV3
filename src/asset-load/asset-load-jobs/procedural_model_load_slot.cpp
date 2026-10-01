@@ -256,6 +256,7 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
     ZoneScopedN("GenerateStaircase");
 
     if (p.stepCount <= 0) return false;
+    if (Engine::StaircaseIsSlab(p) || Engine::StaircaseHasSideWalls(p) || p.stepChamfer > 0.0f) { return GenerateStaircaseDetailed(p); }
 
     par_shapes_mesh* merged = par_shapes_create_staircase(p.stepCount, p.width, Engine::StaircaseTotalDepth(p),p.totalHeight, p.bSpecifyStepHeight ? p.stepHeight : 0.0f, p.bIsClosed ? 1 : 0);
 
@@ -580,7 +581,7 @@ struct ConvexPlane
     Vec3 t;
     float uOffset;
 };
-constexpr int32_t MAX_CONVEX_PLANES = 18;
+constexpr int32_t MAX_CONVEX_PLANES = 24;
 
 /** Adds the plane through the shared edge moved depth along setbackA on face a and along setbackB on face b. axis picks the tangent's sign. */
 static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, Vec3 setbackA, Vec3 setbackB, float depth, int32_t axis)
@@ -595,11 +596,8 @@ static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const Co
     planes[planeCount++] = chamfer;
 }
 
-/**
- * planes[0..5] are the +X -X +Y -Y +Z -Z faces of a box sheared in Y; chamfers use BoxParams' edge layout. An absent face drops its edges.
- * Depth is measured along the box axes, so a cross-section matches a BoxParams chamfer of the same depth.
- */
-static void AppendBoxEdgeChamfers(ConvexPlane* planes, int32_t& planeCount, const bool* bPresent, const float* const* chamfers, Vec3 size)
+/** faces[0..5] are the +X -X +Y -Y +Z -Z faces of a box sheared in Y; chamfers use BoxParams' edge layout, depth measured along the box axes. */
+static void AppendBoxEdgeChamfers(const ConvexPlane* faces, ConvexPlane* planes, int32_t& planeCount, const bool* bPresent, const float* const* chamfers, Vec3 size)
 {
     auto setbackOn = [](const ConvexPlane& face, int32_t axis, bool bHigh) {
         Vec3 w{0.0f};
@@ -618,9 +616,9 @@ static void AppendBoxEdgeChamfers(ConvexPlane* planes, int32_t& planeCount, cons
             const int32_t faceA = a * 2 + (bHighA ? 0 : 1);
             const int32_t faceB = b * 2 + (bHighB ? 0 : 1);
             if (!bPresent[faceA] || !bPresent[faceB]) { continue; }
-            const Vec3 setbackA = setbackOn(planes[faceA], b, bHighB);
-            const Vec3 setbackB = setbackOn(planes[faceB], a, bHighA);
-            AppendEdgeChamfer(planes, planeCount, planes[faceA], planes[faceB], setbackA, setbackB, glm::clamp(chamfers[c][i], 0.0f, maxDepth), c);
+            const Vec3 setbackA = setbackOn(faces[faceA], b, bHighB);
+            const Vec3 setbackB = setbackOn(faces[faceB], a, bHighA);
+            AppendEdgeChamfer(planes, planeCount, faces[faceA], faces[faceB], setbackA, setbackB, glm::clamp(chamfers[c][i], 0.0f, maxDepth), c);
         }
     }
 }
@@ -1529,6 +1527,100 @@ bool ProceduralModelLoadSlot::GeneratePyramid(const Engine::PyramidParams& p)
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
+bool ProceduralModelLoadSlot::GenerateStaircaseDetailed(const Engine::StaircaseParams& p)
+{
+    ZoneScopedN("GenerateStaircaseDetailed");
+
+    const float width = p.width;
+    const float totalDepth = Engine::StaircaseTotalDepth(p);
+    const float stepDepth = totalDepth / static_cast<float>(p.stepCount);
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    constexpr int MAX_POLY = 8;
+    auto addPoly = [&](Vec3 n, const Vec3* v, int count) {
+        const Vec3 absN = glm::abs(n);
+        Vec2 uv[MAX_POLY];
+        for (int c = 0; c < count; ++c) {
+            if (absN.y >= absN.x && absN.y >= absN.z) { uv[c] = {n.y > 0.0f ? -v[c].x : v[c].x, v[c].z}; }
+            else if (absN.x >= absN.z) { uv[c] = {n.x > 0.0f ? -v[c].z : v[c].z, v[c].y}; }
+            else { uv[c] = {n.z < 0.0f ? -v[c].x : v[c].x, v[c].y}; }
+        }
+        AppendTerracePolygon(vertices, indices, n, {1, 0, 0}, v, uv, count);
+    };
+    auto addQuad = [&](Vec3 n, const Vec3 (&v)[4]) { addPoly(n, v, 4); };
+
+    for (int32_t i = 0; i < p.stepCount; ++i) {
+        const float z0 = static_cast<float>(i) * stepDepth;
+        const float z1 = z0 + stepDepth;
+        const float top = Engine::StaircaseStepTop(p, i);
+        const float riserFoot = i == 0 ? 0.0f : Engine::StaircaseStepTop(p, i - 1);
+        const float chamfer = glm::clamp(p.stepChamfer, 0.0f, 0.45f * glm::min(top - riserFoot, stepDepth));
+        addQuad({0, 1, 0}, {{0, top, z0 + chamfer}, {width, top, z0 + chamfer}, {width, top, z1}, {0, top, z1}});
+        addQuad({0, 0, -1}, {{0, riserFoot, z0}, {width, riserFoot, z0}, {width, top - chamfer, z0}, {0, top - chamfer, z0}});
+        if (chamfer > 0.0f) {
+            addQuad(glm::normalize(Vec3(0.0f, 1.0f, -1.0f)), {{0, top - chamfer, z0}, {width, top - chamfer, z0}, {width, top, z0 + chamfer}, {0, top, z0 + chamfer}});
+        }
+
+        float breaks[4];
+        const int32_t breakCount = Engine::StaircaseUndersideBreaks(p, z0, z1, breaks);
+        Vec2 side[MAX_POLY];
+        int sideCount = 0;
+        for (int32_t k = 0; k < breakCount; ++k) { side[sideCount++] = {breaks[k], Engine::StaircaseUndersideHeight(p, breaks[k])}; }
+        side[sideCount++] = {z1, top};
+        side[sideCount++] = {z0 + chamfer, top};
+        if (chamfer > 0.0f) { side[sideCount++] = {z0, top - chamfer}; }
+
+        for (int32_t k = 0; k + 1 < breakCount; ++k) {
+            addQuad(glm::normalize(Vec3(0.0f, -(side[k + 1].x - side[k].x), side[k + 1].y - side[k].y)),
+                    {{0, side[k].y, side[k].x}, {width, side[k].y, side[k].x}, {width, side[k + 1].y, side[k + 1].x}, {0, side[k + 1].y, side[k + 1].x}});
+        }
+        if (p.bIsClosed) {
+            for (const float x : {0.0f, width}) {
+                Vec3 cap[MAX_POLY];
+                for (int c = 0; c < sideCount; ++c) { cap[c] = {x, side[c].y, side[c].x}; }
+                addPoly({x > 0.0f ? 1.0f : -1.0f, 0, 0}, cap, sideCount);
+            }
+        }
+    }
+    if (p.bIsClosed) {
+        const float back = Engine::StaircaseUndersideHeight(p, totalDepth);
+        addQuad({0, 0, 1}, {{0, back, totalDepth}, {width, back, totalDepth}, {width, p.totalHeight, totalDepth}, {0, p.totalHeight, totalDepth}});
+    }
+
+    if (Engine::StaircaseHasSideWalls(p)) {
+        const float start = glm::max(p.sideWallStart, 0.0f);
+        auto wallTop = [&](float z) { return Engine::StaircaseLineHeight(p, z) + p.sideWallHeight; };
+        auto addWall = [&](float x0, float x1) {
+            float breaks[4];
+            const int32_t breakCount = Engine::StaircaseUndersideBreaks(p, start, totalDepth, breaks);
+            for (int32_t k = 0; k + 1 < breakCount; ++k) {
+                const float za = breaks[k];
+                const float zb = breaks[k + 1];
+                const float ya = Engine::StaircaseUndersideHeight(p, za);
+                const float yb = Engine::StaircaseUndersideHeight(p, zb);
+                const float ta = wallTop(za);
+                const float tb = wallTop(zb);
+                addQuad({-1, 0, 0}, {{x0, ya, za}, {x0, yb, zb}, {x0, tb, zb}, {x0, ta, za}});
+                addQuad({1, 0, 0}, {{x1, ya, za}, {x1, yb, zb}, {x1, tb, zb}, {x1, ta, za}});
+                addQuad(glm::normalize(Vec3(0.0f, -(zb - za), yb - ya)), {{x0, ya, za}, {x1, ya, za}, {x1, yb, zb}, {x0, yb, zb}});
+            }
+            const float topStart = wallTop(start);
+            const float topEnd = wallTop(totalDepth);
+            const float footStart = Engine::StaircaseUndersideHeight(p, start);
+            const float footEnd = Engine::StaircaseUndersideHeight(p, totalDepth);
+            addQuad(glm::normalize(Vec3(0.0f, totalDepth - start, topStart - topEnd)), {{x0, topStart, start}, {x1, topStart, start}, {x1, topEnd, totalDepth}, {x0, topEnd, totalDepth}});
+            addQuad({0, 0, -1}, {{x0, footStart, start}, {x1, footStart, start}, {x1, topStart, start}, {x0, topStart, start}});
+            addQuad({0, 0, 1}, {{x0, footEnd, totalDepth}, {x1, footEnd, totalDepth}, {x1, topEnd, totalDepth}, {x0, topEnd, totalDepth}});
+        };
+        if (p.bSideWallNegX) { addWall(-p.sideWallThickness, 0.0f); }
+        if (p.bSideWallPosX) { addWall(width, width + p.sideWallThickness); }
+    }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
 bool ProceduralModelLoadSlot::GenerateSlantedBeam(const Engine::SlantedBeamParams& p)
 {
     ZoneScopedN("GenerateSlantedBeam");
@@ -1549,7 +1641,8 @@ bool ProceduralModelLoadSlot::GenerateSlantedBeam(const Engine::SlantedBeamParam
 
     const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
     const bool bPresent[6] = {true, true, true, true, true, true};
-    AppendBoxEdgeChamfers(planes, planeCount, bPresent, chamfers, {sx, thickness, len});
+    const ConvexPlane faces[6] = {planes[0], planes[1], planes[2], planes[3], planes[4], planes[5]};
+    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, thickness, len});
 
     const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(thickness + glm::abs(p.rise), len)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1567,6 +1660,12 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
 
     const int32_t levels = Engine::TerraceLevelCount(p);
     const float run = Engine::TerraceRun(p);
+    const bool bUp = p.direction == Engine::TerraceDirection::Up;
+    const float chamfer = glm::clamp(p.stepChamfer, 0.0f, 0.45f * glm::min(run, p.stepRise));
+    const bool bNegX = (p.sides & Engine::TERRACE_SIDE_NEG_X) != 0;
+    const bool bPosX = (p.sides & Engine::TERRACE_SIDE_POS_X) != 0;
+    const bool bNegZ = (p.sides & Engine::TERRACE_SIDE_NEG_Z) != 0;
+    const bool bPosZ = (p.sides & Engine::TERRACE_SIDE_POS_Z) != 0;
 
     Core::Vector<float> xs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<float> zs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1576,6 +1675,14 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
         xs.PushBack(r.x1);
         zs.PushBack(r.z0);
         zs.PushBack(r.z1);
+        // A grid line one chamfer in from each nosing, on its high side: inside the level going up, outside the next level going down.
+        if (chamfer > 0.0f && (bUp || k > 0)) {
+            const float inset = bUp ? chamfer : -chamfer;
+            if (bNegX) { xs.PushBack(r.x0 + inset); }
+            if (bPosX) { xs.PushBack(r.x1 - inset); }
+            if (bNegZ) { zs.PushBack(r.z0 + inset); }
+            if (bPosZ) { zs.PushBack(r.z1 - inset); }
+        }
     }
     auto uniqueSorted = [](Core::Vector<float>& v) {
         std::ranges::sort(v);
@@ -1593,6 +1700,8 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
     const size_t cellsZ = zs.Size() - 1;
     Core::Vector<float> heights(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     heights.Resize(cellsX * cellsZ);
+    Core::Vector<int32_t> cellLevels(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    cellLevels.Resize(cellsX * cellsZ);
     for (size_t j = 0; j < cellsZ; ++j) {
         for (size_t i = 0; i < cellsX; ++i) {
             const float cx = (xs[i] + xs[i + 1]) * 0.5f;
@@ -1604,11 +1713,32 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
                 ++level;
             }
             heights[j * cellsX + i] = !p.bFloor && level + 1 == levels ? 0.0f : Engine::TerraceLevelHeight(p, level);
+            cellLevels[j * cellsX + i] = level;
         }
     }
-    auto heightAt = [&](int64_t i, int64_t j) -> float {
+
+    // Distance (largest axis) from a point on a level to the nearest lower ground past a nosing; the chamfer drops the top by what is left of it.
+    auto nosingDistance = [&](int32_t level, float x, float z) {
+        constexpr float NO_NOSING = 1e30f;
+        if (bUp) {
+            const Engine::TerraceRect r = Engine::TerraceLevelRect(p, run, level);
+            float s = NO_NOSING;
+            if (bNegX) { s = glm::min(s, x - r.x0); }
+            if (bPosX) { s = glm::min(s, r.x1 - x); }
+            if (bNegZ) { s = glm::min(s, z - r.z0); }
+            if (bPosZ) { s = glm::min(s, r.z1 - z); }
+            return s;
+        }
+        if (level + 1 >= levels) { return NO_NOSING; }
+        const Engine::TerraceRect r = Engine::TerraceLevelRect(p, run, level + 1);
+        return glm::max(glm::max(glm::max(r.x0 - x, x - r.x1), glm::max(r.z0 - z, z - r.z1)), 0.0f);
+    };
+    auto topAt = [&](int64_t i, int64_t j, size_t vi, size_t vj) -> float {
         if (i < 0 || j < 0 || i >= static_cast<int64_t>(cellsX) || j >= static_cast<int64_t>(cellsZ)) { return 0.0f; }
-        return heights[static_cast<size_t>(j) * cellsX + static_cast<size_t>(i)];
+        const size_t cell = static_cast<size_t>(j) * cellsX + static_cast<size_t>(i);
+        const float h = heights[cell];
+        if (h <= 0.0f || chamfer <= 0.0f) { return h; }
+        return h - glm::max(0.0f, chamfer - glm::max(nosingDistance(cellLevels[cell], xs[vi], zs[vj]), 0.0f));
     };
 
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1617,35 +1747,73 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
     auto addQuad = [&](Vec3 n, Vec3 t, const Vec3 (&v)[4], const Vec2 (&uv)[4]) {
         AppendTerracePolygon(vertices, indices, n, t, v, uv, 4);
     };
+    auto addTop = [&](const Vec3* v, int count) {
+        Vec3 n{0.0f};
+        Vec2 uv[4];
+        for (int c = 0; c < count; ++c) {
+            n += glm::cross(v[c], v[(c + 1) % count]);
+            uv[c] = {v[c].x, v[c].z};
+        }
+        if (glm::dot(n, n) < 1e-16f) { return; }
+        n = glm::normalize(n.y < 0.0f ? -n : n);
+        AppendTerracePolygon(vertices, indices, n, {1, 0, 0}, v, uv, count);
+    };
 
     for (size_t j = 0; j < cellsZ; ++j) {
         for (size_t i = 0; i < cellsX; ++i) {
-            const float h = heights[j * cellsX + i];
-            if (h <= 0.0f) { continue; }
+            if (heights[j * cellsX + i] <= 0.0f) { continue; }
             const float x0 = xs[i], x1 = xs[i + 1], z0 = zs[j], z1 = zs[j + 1];
-            addQuad({0, 1, 0}, {1, 0, 0}, {{x0, h, z0}, {x1, h, z0}, {x1, h, z1}, {x0, h, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
+            const auto ci = static_cast<int64_t>(i);
+            const auto cj = static_cast<int64_t>(j);
+            const Vec3 top[4] = {{x0, topAt(ci, cj, i, j), z0}, {x1, topAt(ci, cj, i + 1, j), z0}, {x1, topAt(ci, cj, i + 1, j + 1), z1}, {x0, topAt(ci, cj, i, j + 1), z1}};
+            if (glm::abs(top[0].y + top[2].y - top[1].y - top[3].y) < 1e-6f) {
+                addTop(top, 4);
+            }
+            else if (glm::abs(top[0].y - top[2].y) > glm::abs(top[1].y - top[3].y)) {
+                const Vec3 a[3] = {top[0], top[1], top[2]};
+                const Vec3 b[3] = {top[0], top[2], top[3]};
+                addTop(a, 3);
+                addTop(b, 3);
+            }
+            else {
+                const Vec3 a[3] = {top[0], top[1], top[3]};
+                const Vec3 b[3] = {top[1], top[2], top[3]};
+                addTop(a, 3);
+                addTop(b, 3);
+            }
             addQuad({0, -1, 0}, {1, 0, 0}, {{x0, 0, z0}, {x1, 0, z0}, {x1, 0, z1}, {x0, 0, z1}}, {{x0, z0}, {x1, z0}, {x1, z1}, {x0, z1}});
         }
     }
 
+    auto addWall = [&](Vec3 a, Vec3 b, float la, float lb, float ha, float hb, Vec3 n) {
+        if (glm::abs(ha - la) < 1e-6f && glm::abs(hb - lb) < 1e-6f) { return; }
+        const bool bAlongZ = n.x != 0.0f;
+        const Vec3 v[4] = {{a.x, la, a.z}, {b.x, lb, b.z}, {b.x, hb, b.z}, {a.x, ha, a.z}};
+        Vec2 uv[4];
+        for (int c = 0; c < 4; ++c) { uv[c] = {bAlongZ ? v[c].z : v[c].x, v[c].y}; }
+        AppendTerracePolygon(vertices, indices, n, bAlongZ ? Vec3(0, 0, 1) : Vec3(1, 0, 0), v, uv, 4);
+    };
+
     for (size_t j = 0; j < cellsZ; ++j) {
         for (size_t i = 0; i <= cellsX; ++i) {
-            const float hl = heightAt(static_cast<int64_t>(i) - 1, static_cast<int64_t>(j));
-            const float hr = heightAt(static_cast<int64_t>(i), static_cast<int64_t>(j));
-            if (glm::abs(hl - hr) < 1e-6f) { continue; }
-            const float x = xs[i], z0 = zs[j], z1 = zs[j + 1];
-            const float y0 = glm::min(hl, hr), y1 = glm::max(hl, hr);
-            addQuad({hl > hr ? 1.0f : -1.0f, 0, 0}, {0, 0, 1}, {{x, y0, z0}, {x, y0, z1}, {x, y1, z1}, {x, y1, z0}}, {{z0, y0}, {z1, y0}, {z1, y1}, {z0, y1}});
+            const auto li = static_cast<int64_t>(i) - 1;
+            const auto ri = static_cast<int64_t>(i);
+            const auto cj = static_cast<int64_t>(j);
+            const float l0 = topAt(li, cj, i, j), l1 = topAt(li, cj, i, j + 1);
+            const float r0 = topAt(ri, cj, i, j), r1 = topAt(ri, cj, i, j + 1);
+            const bool bLeftHigher = l0 + l1 > r0 + r1;
+            addWall({xs[i], 0, zs[j]}, {xs[i], 0, zs[j + 1]}, glm::min(l0, r0), glm::min(l1, r1), glm::max(l0, r0), glm::max(l1, r1), {bLeftHigher ? 1.0f : -1.0f, 0, 0});
         }
     }
     for (size_t j = 0; j <= cellsZ; ++j) {
         for (size_t i = 0; i < cellsX; ++i) {
-            const float hb = heightAt(static_cast<int64_t>(i), static_cast<int64_t>(j) - 1);
-            const float hf = heightAt(static_cast<int64_t>(i), static_cast<int64_t>(j));
-            if (glm::abs(hb - hf) < 1e-6f) { continue; }
-            const float z = zs[j], x0 = xs[i], x1 = xs[i + 1];
-            const float y0 = glm::min(hb, hf), y1 = glm::max(hb, hf);
-            addQuad({0, 0, hb > hf ? 1.0f : -1.0f}, {1, 0, 0}, {{x0, y0, z}, {x1, y0, z}, {x1, y1, z}, {x0, y1, z}}, {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}});
+            const auto bj = static_cast<int64_t>(j) - 1;
+            const auto fj = static_cast<int64_t>(j);
+            const auto ci = static_cast<int64_t>(i);
+            const float b0 = topAt(ci, bj, i, j), b1 = topAt(ci, bj, i + 1, j);
+            const float f0 = topAt(ci, fj, i, j), f1 = topAt(ci, fj, i + 1, j);
+            const bool bBackHigher = b0 + b1 > f0 + f1;
+            addWall({xs[i], 0, zs[j]}, {xs[i + 1], 0, zs[j]}, glm::min(b0, f0), glm::min(b1, f1), glm::max(b0, f0), glm::max(b1, f1), {0, 0, bBackHigher ? 1.0f : -1.0f});
         }
     }
 
@@ -1902,7 +2070,6 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
     const float slopeLen = glm::sqrt(sy * sy + sz * sz);
     const Vec3 slopeN = Vec3(0.0f, sz, -sy) / slopeLen;
 
-    // Corner pivot: the slope runs from (y = b, z = 0) up to (y = top, z = sz). The -Z face only has area with a base.
     ConvexPlane planes[MAX_CONVEX_PLANES];
     int32_t planeCount = 0;
     planes[planeCount++] = {{1, 0, 0}, sx, {0, 0, -1}, sz};
@@ -1913,10 +2080,22 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
     // Without a base the two front X edges are the one edge where the slope meets the bottom; chamfering it pulls the front face in.
     const float nose = bBase ? 0.0f : glm::clamp(glm::max(p.chamferX[0], p.chamferX[1]), 0.0f, 0.5f * sz);
     planes[planeCount++] = {{0, 0, -1}, -nose, {-1, 0, 0}, sx};
+    const bool bSlab = Engine::WedgeIsSlab(p);
+    const bool bFloating = bSlab && p.slabThickness < b;
+    const ConvexPlane underside{-slopeN, -slopeN.y * (b - p.slabThickness), {1, 0, 0}, 0.0f};
+    if (bSlab) { planes[planeCount++] = underside; }
 
     const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
-    const bool bPresent[6] = {true, true, true, true, true, bBase};
-    AppendBoxEdgeChamfers(planes, planeCount, bPresent, chamfers, {sx, top, sz});
+    const ConvexPlane faces[6] = {planes[0], planes[1], planes[2], planes[3], planes[4], planes[5]};
+    const bool bPresent[6] = {true, true, true, !bFloating, true, bBase};
+    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, top, sz});
+    if (bSlab) {
+        const ConvexPlane undersideFaces[6] = {faces[0], faces[1], faces[2], underside, faces[4], faces[5]};
+        const bool bUndersidePresent[6] = {true, true, false, true, true, bFloating};
+        const float noChamfer[4] = {};
+        const float* undersideChamfers[3] = {p.chamferX, noChamfer, p.chamferZ};
+        AppendBoxEdgeChamfers(undersideFaces, planes, planeCount, bUndersidePresent, undersideChamfers, {sx, top, sz});
+    }
 
     const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(top, sz)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);

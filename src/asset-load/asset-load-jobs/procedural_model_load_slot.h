@@ -120,6 +120,8 @@ private:
 
     bool GenerateStaircase(const Engine::StaircaseParams& p);
 
+    bool GenerateStaircaseDetailed(const Engine::StaircaseParams& p);
+
     bool GenerateBox(const Engine::BoxParams& p);
 
     bool GenerateCylinder(const Engine::CylinderParams& p);

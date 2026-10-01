@@ -37,11 +37,13 @@ struct AreaLightComponent
     bool bDisk{false};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
+    bool bEnabled{true};
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
 
     WILL_REFLECT(AreaLightComponent,
+        WILL_FIELD(bEnabled),
         WILL_FIELD(color),
         WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
         WILL_FIELD(halfWidth, .min = 0.001f, .speed = 0.01f),
@@ -87,11 +89,13 @@ struct SphereLightComponent
     float range{10.0f};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
+    bool bEnabled{true};
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
 
     WILL_REFLECT(SphereLightComponent,
+        WILL_FIELD(bEnabled),
         WILL_FIELD(color),
         WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
         WILL_FIELD(radius, .min = 0.001f, .speed = 0.01f),

@@ -53,6 +53,7 @@ namespace DotHandleId
     constexpr int32_t LIGHT_AREA_BASE = 20000; // +0..+1 (width / height)
     constexpr int32_t REFLECTION_PROBE_BOUNDS_BASE = 21000; // +0 (sphere radius) or +0..+5 (box faces, i*2+s)
     constexpr int32_t LOCAL_DDGI_BOUNDS_BASE = 22000; // +0..+5 (box faces, i*2+s)
+    constexpr int32_t PROCEDURAL_FACE_BASE = 23000; // +0..+5 (box faces, i*2+s)
 }
 
 bool WorldToScreen(Vec3 worldPos, const Mat4& view, const Mat4& proj, Vec4 viewport, ImVec2& outScreen);

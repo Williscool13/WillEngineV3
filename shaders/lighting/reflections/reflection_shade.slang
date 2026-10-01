@@ -28,8 +28,8 @@ import bindless_declarations;
 static void ResolveCutoutHit(ReflectionShadePushConstant pc, float3 rayOrigin, inout ReflectionHitDescriptor hit)
 {
     RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
-    float3 metricPosOS = MetricObjectPosition(pc.modelBuffer[pc.instanceBuffer[hit.instanceID].modelIndex].modelMatrix, rayOrigin + hit.rayDir * hit.hitT);
-    if (RTAlphaTestPasses(alphaBuffers, hit.instanceID, hit.primIndex, hit.bary, metricPosOS)) {
+    float4x4 modelMatrix = pc.modelBuffer[pc.instanceBuffer[hit.instanceID].modelIndex].modelMatrix;
+    if (RTAlphaTestPasses(alphaBuffers, hit.instanceID, hit.primIndex, hit.bary, modelMatrix, rayOrigin + hit.rayDir * hit.hitT)) {
         return;
     }
 

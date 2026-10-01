@@ -139,15 +139,78 @@ struct StaircaseParams
     bool bSpecifyStepDepth{false};
     uint8_t _pad2[3]{};
     float stepDepth{0.2f};
+    float slabThickness{0.0f};
+    float sideWallHeight{0.0f};
+    float sideWallThickness{0.2f};
+    float sideWallStart{0.0f};
+    bool bSideWallNegX{true};
+    bool bSideWallPosX{true};
+    uint8_t _pad3[2]{};
+    float stepChamfer{0.0f};
 
     WILL_REFLECT(StaircaseParams, WILL_FIELD(stepCount), WILL_FIELD(width), WILL_FIELD(totalDepth), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight),
-                 WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed), WILL_FIELD(bSpecifyStepDepth), WILL_FIELD(stepDepth))
+                 WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed), WILL_FIELD(bSpecifyStepDepth), WILL_FIELD(stepDepth), WILL_FIELD(slabThickness),
+                 WILL_FIELD(sideWallHeight), WILL_FIELD(sideWallThickness), WILL_FIELD(sideWallStart), WILL_FIELD(bSideWallNegX), WILL_FIELD(bSideWallPosX),
+                 WILL_FIELD(stepChamfer))
 };
 
 /** totalDepth, or stepCount * stepDepth when the step depth is specified. */
 inline float StaircaseTotalDepth(const StaircaseParams& p)
 {
     return p.bSpecifyStepDepth ? p.stepDepth * static_cast<float>(p.stepCount) : p.totalDepth;
+}
+
+inline float StaircaseStepHeight(const StaircaseParams& p)
+{
+    return (p.bSpecifyStepHeight && p.stepHeight > 0.0f) ? p.stepHeight : p.totalHeight / static_cast<float>(glm::max(p.stepCount, 1));
+}
+
+inline float StaircaseStepTop(const StaircaseParams& p, int32_t step)
+{
+    return step < p.stepCount - 1 ? static_cast<float>(step + 1) * StaircaseStepHeight(p) : p.totalHeight;
+}
+
+inline bool StaircaseIsSlab(const StaircaseParams& p)
+{
+    return p.slabThickness > 0.0f && p.slabThickness < p.totalHeight;
+}
+
+inline bool StaircaseHasSideWalls(const StaircaseParams& p)
+{
+    return p.sideWallHeight > 0.0f && p.sideWallThickness > 0.0f && (p.bSideWallNegX || p.bSideWallPosX) && p.sideWallStart < StaircaseTotalDepth(p);
+}
+
+/** Height of the line through the riser feet at depth z. */
+inline float StaircaseLineHeight(const StaircaseParams& p, float z)
+{
+    const float stepDepth = StaircaseTotalDepth(p) / static_cast<float>(glm::max(p.stepCount, 1));
+    return StaircaseStepHeight(p) * z / glm::max(stepDepth, 1e-6f);
+}
+
+/** Underside height at depth z: the floor, or for a slab slabThickness below the riser feet, stopping at the floor. */
+inline float StaircaseUndersideHeight(const StaircaseParams& p, float z)
+{
+    if (!StaircaseIsSlab(p)) { return 0.0f; }
+    return glm::clamp(StaircaseLineHeight(p, z) - p.slabThickness, 0.0f, p.totalHeight - p.slabThickness);
+}
+
+/**
+ * Depths where the underside changes slope inside [z0, z1], ends included, ascending.
+ * @return count written to out
+ */
+inline int32_t StaircaseUndersideBreaks(const StaircaseParams& p, float z0, float z1, float (&out)[4])
+{
+    int32_t count = 0;
+    out[count++] = z0;
+    if (StaircaseIsSlab(p)) {
+        const float run = StaircaseTotalDepth(p) / static_cast<float>(glm::max(p.stepCount, 1)) / glm::max(StaircaseStepHeight(p), 1e-6f);
+        const float kinks[2] = {p.slabThickness * run, p.totalHeight * run};
+        for (const float kink : kinks) {
+            if (kink > out[count - 1] + 1e-5f && kink < z1 - 1e-5f) { out[count++] = kink; }
+        }
+    }
+    out[count++] = z1;
+    return count;
 }
 
 struct BoxParams
@@ -213,9 +276,16 @@ struct WedgeParams
     float chamferX[4]{};
     float chamferY[4]{};
     float chamferZ[4]{};
+    float slabThickness{0.0f};
 
-    WILL_REFLECT(WedgeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(baseHeight), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ))
+    WILL_REFLECT(WedgeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(baseHeight), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ),
+                 WILL_FIELD(slabThickness))
 };
+
+inline bool WedgeIsSlab(const WedgeParams& p)
+{
+    return p.slabThickness > 0.0f && p.slabThickness < glm::max(p.baseHeight, 0.0f) + p.sizeY;
+}
 
 struct ConeParams
 {
@@ -603,11 +673,12 @@ struct TerraceParams
     TerraceProfile profile{TerraceProfile::Steps};
     uint8_t _pad0[1]{};
     float lipWidth{0.0f};
+    float stepChamfer{0.0f};
 
     static constexpr int32_t MAX_STEPS = 64;
 
     WILL_REFLECT(TerraceParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(stepCount), WILL_FIELD(stepRise), WILL_FIELD(stepRun), WILL_FIELD(baseHeight),
-                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bFloor), WILL_FIELD(profile), WILL_FIELD(lipWidth))
+                 WILL_FIELD(sides), WILL_FIELD(direction), WILL_FIELD(bFloor), WILL_FIELD(profile), WILL_FIELD(lipWidth), WILL_FIELD(stepChamfer))
 
     static void Sanitize(TerraceParams& p)
     {
@@ -618,6 +689,7 @@ struct TerraceParams
         p.stepRun = glm::max(p.stepRun, 0.0f);
         p.baseHeight = glm::max(p.baseHeight, 0.0f);
         p.lipWidth = glm::max(p.lipWidth, 0.0f);
+        p.stepChamfer = glm::max(p.stepChamfer, 0.0f);
         p.sides &= TERRACE_SIDE_NEG_X | TERRACE_SIDE_POS_X | TERRACE_SIDE_NEG_Z | TERRACE_SIDE_POS_Z;
     }
 };

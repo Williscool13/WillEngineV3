@@ -72,7 +72,7 @@ struct EditorState
     bool bUniformScaleMode{true};
     bool bSnapEnabled{true};
     bool bSnapWorldGrid{true};
-    float snapTranslation{0.25f};
+    float snapTranslation{0.05f};
     float snapRotation{15.0f};
     float snapScale{0.1f};
     bool bExclusiveGizmoActive{false};

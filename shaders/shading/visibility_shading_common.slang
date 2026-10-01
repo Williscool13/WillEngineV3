@@ -65,7 +65,6 @@ public SurfaceUVLayers BuildSurfaceUVLayers(MaterialProperties material, Shading
         return layers;
     }
 
-    // p, its derivatives and n share the projection space: metric object space, or world space.
     bool bWorld = material.uvMode == MATERIAL_UV_TRIPLANAR_WORLD;
     float3 scale = ModelScale(modelMatrix);
     float3x3 m3 = (float3x3)modelMatrix;

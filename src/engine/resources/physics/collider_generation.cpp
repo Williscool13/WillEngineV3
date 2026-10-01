@@ -193,20 +193,33 @@ static void HullSlantedBeam(const SlantedBeamParams& p, Core::Vector<Vec3>& out)
 
 static void HullWedge(const WedgeParams& p, Core::Vector<Vec3>& out)
 {
-    // Corner pivot (matches GenerateWedge): bottom quad + top back edge, plus the front edge of the base.
+    // Corner pivot (matches GenerateWedge): the side profile in (z, y), extruded along X.
     const float sx = p.sizeX, sz = p.sizeZ;
     const float b = glm::max(p.baseHeight, 0.0f);
     const float top = b + p.sizeY;
-    out.Reserve(out.Size() + 8);
-    out.PushBack(Vec3(0.0f, 0.0f, 0.0f));
-    out.PushBack(Vec3(sx, 0.0f, 0.0f));
-    out.PushBack(Vec3(sx, 0.0f, sz));
-    out.PushBack(Vec3(0.0f, 0.0f, sz));
-    out.PushBack(Vec3(0.0f, top, sz));
-    out.PushBack(Vec3(sx, top, sz));
-    if (b > 0.0f) {
-        out.PushBack(Vec3(0.0f, b, 0.0f));
-        out.PushBack(Vec3(sx, b, 0.0f));
+    Vec2 profile[5];
+    int count = 0;
+    profile[count++] = {0.0f, b};
+    profile[count++] = {sz, top};
+    if (WedgeIsSlab(p)) {
+        const float t = p.slabThickness;
+        profile[count++] = {sz, top - t};
+        if (t < b) {
+            profile[count++] = {0.0f, b - t};
+        }
+        else {
+            profile[count++] = {(t - b) * sz / p.sizeY, 0.0f};
+        }
+    }
+    else {
+        profile[count++] = {sz, 0.0f};
+    }
+    const bool bFloorFoot = !WedgeIsSlab(p) || p.slabThickness > b + 1e-6f;
+    if (bFloorFoot && b > 0.0f) { profile[count++] = {0.0f, 0.0f}; }
+    out.Reserve(out.Size() + static_cast<size_t>(count) * 2);
+    for (int i = 0; i < count; ++i) {
+        out.PushBack(Vec3(0.0f, profile[i].y, profile[i].x));
+        out.PushBack(Vec3(sx, profile[i].y, profile[i].x));
     }
 }
 
@@ -271,23 +284,6 @@ static void PushCapsulePrim(const Vec3& a, const Vec3& b, float radius, Core::Ve
     out.PushBack(prim);
 }
 
-// Box-per-step (X-extruded, corner pivot); mirrors par_shapes_create_staircase.
-static void CompoundStaircase(const StaircaseParams& p, Core::Vector<SplineColliderPrimitive>& out)
-{
-    const int steps = p.stepCount;
-    if (steps < 1) { return; }
-    const float stepDepth = StaircaseTotalDepth(p) / static_cast<float>(steps);
-    const float uniformH = p.totalHeight / static_cast<float>(steps);
-    const float usedStepH = (p.bSpecifyStepHeight && p.stepHeight > 0.0f) ? p.stepHeight : uniformH;
-    const float hw = p.width * 0.5f;
-    out.Reserve(out.Size() + steps);
-    for (int i = 0; i < steps; i++) {
-        const float yTop = (i < steps - 1) ? static_cast<float>(i + 1) * usedStepH : p.totalHeight;
-        const float zMin = static_cast<float>(i) * stepDepth;
-        PushBoxPrim(Vec3(hw, yTop * 0.5f, zMin + stepDepth * 0.5f), Vec3(hw, yTop * 0.5f, stepDepth * 0.5f), Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
-    }
-}
-
 static void PushHullPrim(Core::Span<const Vec3> verts, Core::Vector<SplineColliderPrimitive>& outPrims, Core::Vector<Vec3>& outPositions)
 {
     SplineColliderPrimitive prim{};
@@ -297,6 +293,55 @@ static void PushHullPrim(Core::Span<const Vec3> verts, Core::Vector<SplineCollid
     outPositions.Reserve(outPositions.Size() + verts.Size());
     for (size_t i = 0; i < verts.Size(); i++) { outPositions.PushBack(verts[i]); }
     outPrims.PushBack(prim);
+}
+
+// Box-per-step (X-extruded, corner pivot); mirrors par_shapes_create_staircase.
+static void CompoundStaircase(const StaircaseParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
+{
+    const int steps = p.stepCount;
+    if (steps < 1) { return; }
+    const float stepDepth = StaircaseTotalDepth(p) / static_cast<float>(steps);
+    const float hw = p.width * 0.5f;
+    const bool bSlab = StaircaseIsSlab(p);
+    out.Reserve(out.Size() + steps);
+    for (int i = 0; i < steps; i++) {
+        const float yTop = StaircaseStepTop(p, i);
+        const float zMin = static_cast<float>(i) * stepDepth;
+        if (!bSlab) {
+            PushBoxPrim(Vec3(hw, yTop * 0.5f, zMin + stepDepth * 0.5f), Vec3(hw, yTop * 0.5f, stepDepth * 0.5f), Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
+            continue;
+        }
+        float breaks[4];
+        const int32_t breakCount = StaircaseUndersideBreaks(p, zMin, zMin + stepDepth, breaks);
+        Vec3 points[12];
+        int count = 0;
+        for (const float x : {0.0f, p.width}) {
+            points[count++] = Vec3(x, yTop, zMin);
+            points[count++] = Vec3(x, yTop, zMin + stepDepth);
+            for (int32_t k = 0; k < breakCount; ++k) { points[count++] = Vec3(x, StaircaseUndersideHeight(p, breaks[k]), breaks[k]); }
+        }
+        PushHullPrim(Core::Span<const Vec3>(points, static_cast<size_t>(count)), out, outPositions);
+    }
+
+    if (!StaircaseHasSideWalls(p)) { return; }
+    const float start = glm::max(p.sideWallStart, 0.0f);
+    float breaks[4];
+    const int32_t breakCount = StaircaseUndersideBreaks(p, start, StaircaseTotalDepth(p), breaks);
+    auto addWall = [&](float x0, float x1) {
+        for (int32_t k = 0; k + 1 < breakCount; ++k) {
+            Vec3 points[8];
+            int count = 0;
+            for (const float z : {breaks[k], breaks[k + 1]}) {
+                for (const float x : {x0, x1}) {
+                    points[count++] = Vec3(x, StaircaseUndersideHeight(p, z), z);
+                    points[count++] = Vec3(x, StaircaseLineHeight(p, z) + p.sideWallHeight, z);
+                }
+            }
+            PushHullPrim(Core::Span<const Vec3>(points, 8), out, outPositions);
+        }
+    };
+    if (p.bSideWallNegX) { addWall(-p.sideWallThickness, 0.0f); }
+    if (p.bSideWallPosX) { addWall(p.width, p.width + p.sideWallThickness); }
 }
 
 // One ConvexHull per tread (an annular sector: narrow inner, wide outer); mirrors GenerateSpiralStaircase (center pivot, XZ helix around Y). Plus optional cylinder column.
@@ -971,7 +1016,7 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     // Swept / stepped shapes become a Compound of oriented primitives following the generator's layout.
     if (const auto* p = std::get_if<StaircaseParams>(&params)) {
         outKind = PhysicsColliderKind::Compound;
-        CompoundStaircase(*p, outPrimitives);
+        CompoundStaircase(*p, outPrimitives, outPositions);
         return true;
     }
     if (const auto* p = std::get_if<SpiralStaircaseParams>(&params)) {

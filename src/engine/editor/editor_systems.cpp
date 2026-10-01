@@ -1405,6 +1405,96 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                 }
             }
         }
+        else if (state->editor.currentGizmoOperation == ImGuizmo::TRANSLATE) {
+            static bool bWasDragging = false;
+
+            // With one shared parent the gizmo and the grid follow the parent's axes, and the first selected entity is the one that lands on the grid.
+            entt::entity reference = entt::null;
+            entt::entity commonParent = entt::null;
+            bool bCommonParent = true;
+            for (const entt::entity entity : state->editor.selectedEntities) {
+                if (!state->registry.all_of<Component::TransformComponent>(entity)) { continue; }
+                const auto* h = state->registry.try_get<Component::HierarchyComponent>(entity);
+                const entt::entity parent = h && state->registry.valid(h->parent) ? h->parent : entt::null;
+                if (reference == entt::null) {
+                    reference = entity;
+                    commonParent = parent;
+                }
+                else if (parent != commonParent) {
+                    bCommonParent = false;
+                }
+            }
+            if (reference == entt::null) { return; }
+            const bool bParentSpace = bCommonParent && commonParent != entt::null;
+            const Transform frame = bParentSpace ? Component::ComputeWorldTransform(state->registry, commonParent) : Transform::IDENTITY;
+            const glm::mat4 frameInverse = glm::inverse(frame.GetMatrix());
+
+            float snapArr[3] = {};
+            float* snap = nullptr;
+            if (state->editor.bSnapEnabled) {
+                snapArr[0] = snapArr[1] = snapArr[2] = state->editor.snapTranslation;
+                snap = snapArr;
+            }
+
+            glm::mat4 gizmoMatrix = glm::translate(glm::mat4(1.0f), multiGizmoCentroid) * glm::mat4_cast(frame.rotation);
+            ImGuizmo::PushID(Editor::GizmoId::MULTI_SELECT_TRANSFORM);
+            ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), ImGuizmo::TRANSLATE, bParentSpace ? ImGuizmo::LOCAL : ImGuizmo::WORLD, glm::value_ptr(gizmoMatrix), nullptr, snap);
+            const bool bUsing = ImGuizmo::IsUsing();
+            ImGuizmo::PopID();
+
+            if (bUsing) {
+                state->editor.undo.Begin(state, Engine::TypeSID<Component::TransformComponent>(),
+                                         Core::Span<const entt::entity>(state->editor.selectedEntities.Data(), state->editor.selectedEntities.Size()));
+                if (!bWasDragging) {
+                    bWasDragging = true;
+                    for (auto e : state->editor.selectedEntities) {
+                        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+                            MarkSceneModified(state, sc->sceneId);
+                        }
+                    }
+                }
+
+                glm::vec3 delta = glm::vec3(frameInverse * glm::vec4(glm::vec3(gizmoMatrix[3]) - multiGizmoCentroid, 0.0f));
+                const glm::vec3 referencePos = bParentSpace ? state->registry.get<Component::TransformComponent>(reference).translation
+                                                            : Component::ComputeWorldTransform(state->registry, reference).translation;
+                const bool bGrid = state->editor.bSnapEnabled && state->editor.bSnapWorldGrid && state->editor.snapTranslation > 0.0f;
+                for (int axis = 0; axis < 3; ++axis) {
+                    if (glm::abs(delta[axis]) <= 1e-4f) {
+                        delta[axis] = 0.0f;
+                    }
+                    else if (bGrid) {
+                        const float g = state->editor.snapTranslation;
+                        delta[axis] = glm::round((referencePos[axis] + delta[axis]) / g) * g - referencePos[axis];
+                    }
+                }
+
+                for (auto entity : state->editor.selectedEntities) {
+                    auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+                    if (!transform) continue;
+
+                    if (bParentSpace) {
+                        transform->translation += delta;
+                    }
+                    else {
+                        Transform world = Component::ComputeWorldTransform(state->registry, entity);
+                        world.translation += delta;
+                        Transform parentWorld = Transform::IDENTITY;
+                        if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
+                            parentWorld = Component::ComputeWorldTransform(state->registry, h->parent);
+                        }
+                        transform->translation = Component::ComposeLocalFromWorld(parentWorld, world).translation;
+                    }
+
+                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                    if (state->inputContext != Engine::InputContext::Editor) {
+                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                    }
+                }
+            }
+            else {
+                bWasDragging = false;
+            }
+        }
         else if (state->editor.currentGizmoOperation != ImGuizmo::SCALE) {
             static glm::vec3 s_prevTranslation{};
             static bool s_wasDragging = false;
