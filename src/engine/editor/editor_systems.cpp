@@ -33,6 +33,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/input/input_frame.h"
 #include "core/math/constants.h"
+#include "core/math/euler.h"
 #include "engine/engine_api.h"
 #include "engine/material_manager.h"
 #include "engine/asset_manager.h"
@@ -423,7 +424,7 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             if (first) {
                 firstTrans = tf->translation;
                 firstRot = tf->rotation;
-                firstEuler = glm::degrees(glm::eulerAngles(tf->rotation));
+                firstEuler = Core::Math::EulerDegrees(tf->rotation);
                 firstScale = tf->scale;
                 first = false;
             }
@@ -480,9 +481,9 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
         auto setT = [](Component::TransformComponent& tf, int a, float v) { tf.translation[a] = v; };
         auto getS = [](Component::TransformComponent& tf, int a) { return tf.scale[a]; };
         auto setS = [](Component::TransformComponent& tf, int a, float v) { tf.scale[a] = v; };
-        auto getR = [](Component::TransformComponent& tf, int a) { return glm::degrees(glm::eulerAngles(tf.rotation))[a]; };
+        auto getR = [](Component::TransformComponent& tf, int a) { return Core::Math::EulerDegrees(tf.rotation)[a]; };
         auto setR = [](Component::TransformComponent& tf, int a, float v) {
-            glm::vec3 e = glm::degrees(glm::eulerAngles(tf.rotation));
+            glm::vec3 e = Core::Math::EulerDegrees(tf.rotation);
             e[a] = v;
             tf.rotation = glm::quat(glm::radians(e));
         };

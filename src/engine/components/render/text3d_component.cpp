@@ -12,6 +12,7 @@
 #include "static_mesh_component.h"
 #include "spline_mesh_component.h"
 #include "procedural_mesh_component.h"
+#include "core/math/euler.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
@@ -189,7 +190,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
 
     ImGui::SeparatorText("Render Transform");
     EditWidgets::DragFloat3(edit, "Offset", &Text3DComponent::renderOffset, 0.01f);
-    glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(comp.renderRotation));
+    glm::vec3 renderEuler = Core::Math::EulerDegrees(comp.renderRotation);
     if (ImGui::DragFloat3("Rotation", glm::value_ptr(renderEuler), 0.5f)) {
         edit.PreviewSet(&Text3DComponent::renderRotation, glm::quat(glm::radians(renderEuler)));
     }

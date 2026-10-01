@@ -8,6 +8,7 @@
 #include "spline_mesh_component.h"
 #include "static_mesh_component.h"
 #include "text3d_component.h"
+#include "core/math/euler.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -868,7 +869,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset);
 
         // Rotation row
-        glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(component.renderRotation));
+        glm::vec3 renderEuler = Core::Math::EulerDegrees(component.renderRotation);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Rotation");
         ImGui::SameLine(labelColW);

@@ -21,6 +21,7 @@
 #include <ImGuizmo.h>
 
 #include "core/containers/arena_array.h"
+#include "core/math/euler.h"
 #include "engine/components/core_components.h"
 #include "engine/systems/scene_system.h"
 #include "engine/components/render/procedural_mesh_component.h"
@@ -426,7 +427,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         drawXYZ("##rox", "##roy", "##roz", &component.renderOffset.x, 0.1f, bEditingOffset);
 
         // Rotation row
-        glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(component.renderRotation));
+        glm::vec3 renderEuler = Core::Math::EulerDegrees(component.renderRotation);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Rotation");
         ImGui::SameLine(labelColW);

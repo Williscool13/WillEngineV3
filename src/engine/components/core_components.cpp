@@ -8,6 +8,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
+#include "core/math/euler.h"
 #include "engine/engine_api.h"
 
 #include "engine/components/component_editor.h"
@@ -153,7 +154,7 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
 
     // Rotation
     const bool bHintValid = state->editor.rotationHintEntity == edit.Primary() && glm::abs(glm::dot(state->editor.rotationHint, component.rotation)) > 0.99999f;
-    glm::vec3 eulerDegrees = bHintValid ? state->editor.rotationHintDegrees : glm::degrees(glm::eulerAngles(component.rotation));
+    glm::vec3 eulerDegrees = bHintValid ? state->editor.rotationHintDegrees : Core::Math::EulerDegrees(component.rotation);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Rotation");
     ImGui::SameLine(labelColW);

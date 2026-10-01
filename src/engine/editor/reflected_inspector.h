@@ -14,6 +14,7 @@
 #include "imgui.h"
 
 #include "core/containers/inline_string.h"
+#include "core/math/euler.h"
 #include "engine/component_registry.h"
 #include "engine/editor/edit_context.h"
 #include "engine/editor/edit_widgets.h"
@@ -48,7 +49,7 @@ void DrawReflectedFields(EditContext& edit)
         }
         else if constexpr (std::is_same_v<M, glm::quat>) {
             const glm::quat& current = edit.Get<C>().*f.member;
-            glm::vec3 euler = glm::degrees(glm::eulerAngles(current));
+            glm::vec3 euler = Core::Math::EulerDegrees(current);
             if (ImGui::DragFloat3(f.name, &euler.x, 0.5f, 0.0f, 0.0f, EditWidgets::MixedFormat(edit.IsMixed(f.member), "%.1f"))) {
                 edit.PreviewSet(f.member, glm::quat(glm::radians(euler)));
             }

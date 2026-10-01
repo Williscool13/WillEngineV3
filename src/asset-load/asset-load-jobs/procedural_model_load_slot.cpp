@@ -582,30 +582,45 @@ struct ConvexPlane
 };
 constexpr int32_t MAX_CONVEX_PLANES = 18;
 
-/** Adds the bisecting plane that cuts depth off both faces along their shared edge. axis picks the tangent's sign. */
-static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, float depth, int32_t axis)
+/** Adds the plane through the shared edge moved depth along setbackA on face a and along setbackB on face b. axis picks the tangent's sign. */
+static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, Vec3 setbackA, Vec3 setbackB, float depth, int32_t axis)
 {
     const float k = glm::dot(a.n, b.n);
     if (depth <= 1e-5f || glm::abs(k) > 0.9999f || planeCount >= MAX_CONVEX_PLANES) { return; }
-    const float invLen = 1.0f / glm::length(a.n + b.n);
-    Vec3 t = glm::normalize(glm::cross(a.n, b.n));
-    if (t[axis] < 0.0f) { t = -t; }
-    const ConvexPlane chamfer{(a.n + b.n) * invLen, (a.d + b.d) * invLen - depth * glm::sqrt((1.0f - k) * 0.5f), t, 0.0f};
+    const Vec3 edgeDir = glm::normalize(glm::cross(a.n, b.n));
+    const Vec3 edgePoint = ((a.d - k * b.d) * a.n + (b.d - k * a.d) * b.n) / (1.0f - k * k);
+    Vec3 n = glm::normalize(glm::cross(edgeDir, setbackA - setbackB));
+    if (glm::dot(n, a.n + b.n) < 0.0f) { n = -n; }
+    const ConvexPlane chamfer{n, glm::dot(n, edgePoint + setbackA * depth), edgeDir[axis] < 0.0f ? -edgeDir : edgeDir, 0.0f};
     planes[planeCount++] = chamfer;
 }
 
-/** planes[0..5] are the +X -X +Y -Y +Z -Z faces of a box-like solid; chamfers use BoxParams' edge layout. An absent face drops its edges. */
+/**
+ * planes[0..5] are the +X -X +Y -Y +Z -Z faces of a box sheared in Y; chamfers use BoxParams' edge layout. An absent face drops its edges.
+ * Depth is measured along the box axes, so a cross-section matches a BoxParams chamfer of the same depth.
+ */
 static void AppendBoxEdgeChamfers(ConvexPlane* planes, int32_t& planeCount, const bool* bPresent, const float* const* chamfers, Vec3 size)
 {
+    auto setbackOn = [](const ConvexPlane& face, int32_t axis, bool bHigh) {
+        Vec3 w{0.0f};
+        w[axis] = bHigh ? -1.0f : 1.0f;
+        const float off = glm::dot(face.n, w);
+        if (glm::abs(face.n.y) > 1e-6f && glm::abs(off) > 1e-6f) { w.y -= off / face.n.y; }
+        return w;
+    };
     for (int32_t c = 0; c < 3; c++) {
         const int32_t a = c == 0 ? 1 : 0;
         const int32_t b = c == 2 ? 1 : 2;
         const float maxDepth = 0.5f * glm::min(size[a], size[b]);
         for (int32_t i = 0; i < 4; i++) {
-            const int32_t faceA = a * 2 + ((i & 1) != 0 ? 0 : 1);
-            const int32_t faceB = b * 2 + ((i >> 1) != 0 ? 0 : 1);
+            const bool bHighA = (i & 1) != 0;
+            const bool bHighB = (i >> 1) != 0;
+            const int32_t faceA = a * 2 + (bHighA ? 0 : 1);
+            const int32_t faceB = b * 2 + (bHighB ? 0 : 1);
             if (!bPresent[faceA] || !bPresent[faceB]) { continue; }
-            AppendEdgeChamfer(planes, planeCount, planes[faceA], planes[faceB], glm::clamp(chamfers[c][i], 0.0f, maxDepth), c);
+            const Vec3 setbackA = setbackOn(planes[faceA], b, bHighB);
+            const Vec3 setbackB = setbackOn(planes[faceB], a, bHighA);
+            AppendEdgeChamfer(planes, planeCount, planes[faceA], planes[faceB], setbackA, setbackB, glm::clamp(chamfers[c][i], 0.0f, maxDepth), c);
         }
     }
 }
@@ -1895,16 +1910,13 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
     planes[planeCount++] = {slopeN, slopeN.y * b, {-1, 0, 0}, sx};
     planes[planeCount++] = {{0, -1, 0}, 0.0f, {1, 0, 0}, 0.0f};
     planes[planeCount++] = {{0, 0, 1}, sz, {1, 0, 0}, 0.0f};
-    planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, sx};
+    // Without a base the two front X edges are the one edge where the slope meets the bottom; chamfering it pulls the front face in.
+    const float nose = bBase ? 0.0f : glm::clamp(glm::max(p.chamferX[0], p.chamferX[1]), 0.0f, 0.5f * sz);
+    planes[planeCount++] = {{0, 0, -1}, -nose, {-1, 0, 0}, sx};
 
     const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
     const bool bPresent[6] = {true, true, true, true, true, bBase};
     AppendBoxEdgeChamfers(planes, planeCount, bPresent, chamfers, {sx, top, sz});
-    if (!bBase) {
-        // Without a base the two front X edges are the one edge where the slope meets the bottom.
-        const float nose = glm::clamp(glm::max(p.chamferX[0], p.chamferX[1]), 0.0f, 0.5f * glm::min(sy, sz));
-        AppendEdgeChamfer(planes, planeCount, planes[2], planes[3], nose, 0);
-    }
 
     const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(top, sz)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);

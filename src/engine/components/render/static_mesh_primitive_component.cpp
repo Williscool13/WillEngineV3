@@ -11,6 +11,7 @@
 
 #include "mesh_source_exclusion.h"
 #include "core/containers/arena_array.h"
+#include "core/math/euler.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -235,7 +236,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         ImGui::SeparatorText("Render Transform");
         {
             EditWidgets::DragFloat3(edit, "Offset", &StaticMeshPrimitiveComponent::renderOffset, 0.1f);
-            glm::vec3 renderEuler = glm::degrees(glm::eulerAngles(component.renderRotation));
+            glm::vec3 renderEuler = Core::Math::EulerDegrees(component.renderRotation);
             if (ImGui::DragFloat3("Rotation", &renderEuler.x, 0.5f)) {
                 edit.PreviewSet(&StaticMeshPrimitiveComponent::renderRotation, glm::quat(glm::radians(renderEuler)));
             }
