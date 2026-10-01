@@ -22,7 +22,7 @@ public uint TriplanarDominantAxis(float3 normalOS)
     return a.x >= a.y && a.x >= a.z ? 0u : (a.y >= a.z ? 1u : 2u);
 }
 
-/** Linear, so it also maps position derivatives. Matches the procedural box's per-face UV directions (not its offsets). */
+/** Linear, so it also maps position derivatives. Matches the procedural box's per-face UV directions (not its offsets). p and the normal share a space, object or world. */
 public float2 TriplanarAxis(float3 p, float3 normalOS, uint axis)
 {
     if (axis == 0u) {
@@ -61,14 +61,22 @@ public void TriplanarAxisFrame(float3 normalOS, uint axis, out float3 tangentOS,
     }
 }
 
-/**
- * UV before the per-texture transform. Single sample on the dominant axis; for RT hits and anything without a blend.
- * @param metricPosOS MetricObjectPosition, or object position times ModelScale.
- */
-public float2 MaterialBaseUV(MaterialProperties material, float2 meshUV, float3 metricPosOS, float3 normalOS)
+/** World-space direction of an object-space normal, not normalized. Assumes no shear. */
+public float3 WorldNormalDirection(float4x4 modelMatrix, float3 normalOS)
 {
-    if (material.uvMode != MATERIAL_UV_TRIPLANAR) {
+    float3 scale = ModelScale(modelMatrix);
+    return mul((float3x3)modelMatrix, normalOS / max(scale * scale, 1e-12));
+}
+
+/** UV before the per-texture transform. Single sample on the dominant axis; for RT hits and anything without a blend. */
+public float2 MaterialBaseUV(MaterialProperties material, float2 meshUV, float4x4 modelMatrix, float3 worldPosition, float3 normalOS)
+{
+    if (material.uvMode == MATERIAL_UV_MESH) {
         return meshUV;
     }
-    return TriplanarAxis(metricPosOS, normalOS, TriplanarDominantAxis(normalOS));
+    if (material.uvMode == MATERIAL_UV_TRIPLANAR_WORLD) {
+        float3 normalWS = WorldNormalDirection(modelMatrix, normalOS);
+        return TriplanarAxis(worldPosition, normalWS, TriplanarDominantAxis(normalWS));
+    }
+    return TriplanarAxis(MetricObjectPosition(modelMatrix, worldPosition), normalOS, TriplanarDominantAxis(normalOS));
 }

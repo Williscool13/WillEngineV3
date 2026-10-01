@@ -74,7 +74,7 @@ static GTSurface FetchHitSurface(RTGroundTruthGIPushConstant pc, Instance instan
     Model model = pc.modelBuffer[instance.modelIndex];
 
     MaterialProperties material = pc.materialBuffer[instance.materialIndex];
-    uv = MaterialBaseUV(material, uv, MetricObjectPosition(model.modelMatrix, worldPosition), normalOS);
+    uv = MaterialBaseUV(material, uv, model.modelMatrix, worldPosition, normalOS);
     float4 albedo = material.colorFactor * vertexColor;
     if (material.textureImageIndices.x >= 0) {
         float2 colorUV = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;

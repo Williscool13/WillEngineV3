@@ -17,9 +17,9 @@ public struct RTAlphaTestBuffers
 
 /**
  * Alpha test for a candidate/committed triangle on a cutout instance. Non-cutout surfaces always pass.
- * @param metricPosOS MetricObjectPosition of the hit; only read by triplanar materials.
+ * @param modelMatrix, worldPosition of the hit; only read by triplanar materials.
  */
-public bool RTAlphaTestPasses(RTAlphaTestBuffers b, uint instanceID, uint triangleIndex, float2 barycentrics, float3 metricPosOS)
+public bool RTAlphaTestPasses(RTAlphaTestBuffers b, uint instanceID, uint triangleIndex, float2 barycentrics, float4x4 modelMatrix, float3 worldPosition)
 {
     Instance instance = b.instances[instanceID];
     MaterialProperties material = b.materials[instance.materialIndex];
@@ -35,7 +35,7 @@ public bool RTAlphaTestPasses(RTAlphaTestBuffers b, uint instanceID, uint triang
     float3 bary = float3(1.0 - barycentrics.x - barycentrics.y, barycentrics.x, barycentrics.y);
 
     float3 normalOS = bary.x * DecodeNormal(a0) + bary.y * DecodeNormal(a1) + bary.z * DecodeNormal(a2);
-    float2 uv = MaterialBaseUV(material, bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2), metricPosOS, normalOS);
+    float2 uv = MaterialBaseUV(material, bary.x * DecodeUV(a0) + bary.y * DecodeUV(a1) + bary.z * DecodeUV(a2), modelMatrix, worldPosition, normalOS);
     uv = uv * material.colorUvTransform.xy + material.colorUvTransform.zw;
     float alpha = material.colorFactor.a * (bary.x * DecodeColor(a0).a + bary.y * DecodeColor(a1).a + bary.z * DecodeColor(a2).a);
     if (material.textureImageIndices.x >= 0) {
@@ -54,8 +54,8 @@ public void RTProceedAlphaTested<let FLAGS : uint>(inout RayQuery<FLAGS> q, RTAl
         }
         float3x4 objectToWorld = q.CandidateObjectToWorld3x4();
         float3 worldPosition = q.WorldRayOrigin() + q.WorldRayDirection() * q.CandidateTriangleRayT();
-        float3 metricPosOS = MetricObjectPosition(float4x4(objectToWorld[0], objectToWorld[1], objectToWorld[2], float4(0.0, 0.0, 0.0, 1.0)), worldPosition);
-        if (RTAlphaTestPasses(b, q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), metricPosOS)) {
+        float4x4 modelMatrix = float4x4(objectToWorld[0], objectToWorld[1], objectToWorld[2], float4(0.0, 0.0, 0.0, 1.0));
+        if (RTAlphaTestPasses(b, q.CandidateInstanceID(), q.CandidatePrimitiveIndex(), q.CandidateTriangleBarycentrics(), modelMatrix, worldPosition)) {
             q.CommitNonOpaqueTriangleHit();
         }
     }

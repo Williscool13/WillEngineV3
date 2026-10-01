@@ -83,7 +83,7 @@ void MeshGeometryVisibilityBufferCutout(
         vertices[i].position = clipPos;
         vertices[i].stableId = inst.stableId;
         vertices[i].visibility = uint2(meshletIndex, instanceIndex);
-        vertices[i].uv = MaterialBaseUV(material, DecodeUV(attr), vertexPos * ModelScale(m.modelMatrix), DecodeNormal(attr)) * material.colorUvTransform.xy + material.colorUvTransform.zw;
+        vertices[i].uv = MaterialBaseUV(material, DecodeUV(attr), m.modelMatrix, worldPos.xyz, DecodeNormal(attr)) * material.colorUvTransform.xy + material.colorUvTransform.zw;
         vertices[i].alphaScale = material.colorFactor.a * DecodeColor(attr).a;
         vertices[i].alphaTexture = uint2(alphaImageIndex, alphaSamplerIndex);
         vertices[i].alphaCutoff = material.alphaProperties.x;

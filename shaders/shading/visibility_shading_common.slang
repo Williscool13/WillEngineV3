@@ -54,7 +54,7 @@ public struct SurfaceUVLayers
 public SurfaceUVLayers BuildSurfaceUVLayers(MaterialProperties material, ShadingInputs si, float4x4 modelMatrix, float3 N, float3 T, float3 B)
 {
     SurfaceUVLayers layers;
-    if (material.uvMode != MATERIAL_UV_TRIPLANAR) {
+    if (material.uvMode == MATERIAL_UV_MESH) {
         layers.count = 1u;
         layers.weight[0] = 1.0;
         layers.uv[0] = si.interp.uv;
@@ -65,11 +65,15 @@ public SurfaceUVLayers BuildSurfaceUVLayers(MaterialProperties material, Shading
         return layers;
     }
 
+    // p, its derivatives and n share the projection space: metric object space, or world space.
+    bool bWorld = material.uvMode == MATERIAL_UV_TRIPLANAR_WORLD;
     float3 scale = ModelScale(modelMatrix);
-    float3 p = si.objPos * scale;
-    float3 dpdx = si.objPosDdx * scale;
-    float3 dpdy = si.objPosDdy * scale;
-    float3 w = TriplanarWeights(si.normalOS);
+    float3x3 m3 = (float3x3)modelMatrix;
+    float3 p = bWorld ? mul(modelMatrix, float4(si.objPos, 1.0)).xyz : si.objPos * scale;
+    float3 dpdx = bWorld ? mul(m3, si.objPosDdx) : si.objPosDdx * scale;
+    float3 dpdy = bWorld ? mul(m3, si.objPosDdy) : si.objPosDdy * scale;
+    float3 n = bWorld ? normalize(WorldNormalDirection(modelMatrix, si.normalOS)) : si.normalOS;
+    float3 w = TriplanarWeights(n);
     float3x3 mv3 = (float3x3)si.mv;
     layers.count = 0u;
     for (uint axis = 0u; axis < 3u; axis++) {
@@ -78,12 +82,18 @@ public SurfaceUVLayers BuildSurfaceUVLayers(MaterialProperties material, Shading
         }
         uint i = layers.count++;
         layers.weight[i] = w[axis];
-        layers.uv[i] = TriplanarAxis(p, si.normalOS, axis);
-        layers.ddx[i] = TriplanarAxis(dpdx, si.normalOS, axis);
-        layers.ddy[i] = TriplanarAxis(dpdy, si.normalOS, axis);
+        layers.uv[i] = TriplanarAxis(p, n, axis);
+        layers.ddx[i] = TriplanarAxis(dpdx, n, axis);
+        layers.ddy[i] = TriplanarAxis(dpdy, n, axis);
         float3 tangentOS;
         float3 bitangentOS;
-        TriplanarAxisFrame(si.normalOS, axis, tangentOS, bitangentOS);
+        TriplanarAxisFrame(n, axis, tangentOS, bitangentOS);
+        if (bWorld) {
+            // World directions back through the inverse model matrix, so mv3 below lands them in view space.
+            float3 invScaleSq = 1.0 / max(scale * scale, 1e-12);
+            tangentOS = mul(tangentOS, m3) * invScaleSq;
+            bitangentOS = mul(bitangentOS, m3) * invScaleSq;
+        }
         float3 t = mul(mv3, tangentOS);
         float3 b = mul(mv3, bitangentOS);
         layers.tangentVS[i] = normalize(t - N * dot(N, t));

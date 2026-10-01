@@ -560,7 +560,8 @@ public float EvalPHat(LightSample s, float3 V, float3 N, float3 albedo, float3 F
         float F = dot(F_SCHLICK(V, H, F0), lumWeights);
         spec = D * G * F / max(4.0 * max(dot(N, V), 0.0) * s.cosShade, 0.001);
     }
-    float brdf = (1.0 - metallic) * max(dot(albedo, lumWeights), RESTIR_PHAT_ALBEDO_FLOOR) / PI + spec;
+    float diffuse = Diffuse_OrenNayar(s.cosShade, max(dot(N, V), 0.0), s.L, V, roughness);
+    float brdf = (1.0 - metallic) * max(dot(albedo, lumWeights), RESTIR_PHAT_ALBEDO_FLOOR) * diffuse + spec;
     // Max-channel (not luminance): must match EvalCellLightTarget, avoids chromatic fireflies from saturated colors.
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     return brdf * s.cosShade * LightGeometryTerm(s) * lightIntensity * colorMax * s.attenuation;
