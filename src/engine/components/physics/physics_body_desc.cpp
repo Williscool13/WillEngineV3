@@ -318,12 +318,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             else if (auto* collider = std::get_if<ColliderShape>(&shape.geometry)) {
                 bool bHasAny = false;
                 const auto* meta = ctx->assetManager->GetModelMetadata(collider->meshSourceModelId);
-                static constexpr Core::Array<const char*, 30> kProceduralNames = {
+                static constexpr Core::Array<const char*, 31> kProceduralNames = {
                     nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                     "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                     "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
                     "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring",
-                    "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid",
+                    "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid", "Slanted Beam",
                 };
                 const size_t idx = collider->proceduralParams.index();
 

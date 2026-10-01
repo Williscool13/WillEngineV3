@@ -155,6 +155,54 @@ static Engine::ProceduralParams DefaultProceduralParams(size_t index, std::index
     return params;
 }
 
+/** Depth drag, edge presets and per-edge values for a box-layout chamfer set. */
+static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ)
+{
+    bool dirty = false;
+    float* edges[3] = {chamferX, chamferY, chamferZ};
+    float depth = 0.0f;
+    for (int32_t c = 0; c < 3; c++) {
+        for (int32_t i = 0; i < 4; i++) { depth = glm::max(depth, edges[c][i]); }
+    }
+    const bool bAnyChamfered = depth > 0.0f;
+    if (ImGui::DragFloat("Chamfer", &depth, 0.002f, 0.0f, 10.0f, "%.3f")) {
+        for (int32_t c = 0; c < 3; c++) {
+            for (int32_t i = 0; i < 4; i++) {
+                if (!bAnyChamfered || edges[c][i] > 0.0f) { edges[c][i] = depth; }
+            }
+        }
+    }
+    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+
+    auto applyPreset = [&](uint32_t mask) {
+        const float presetDepth = depth > 0.0f ? depth : 0.02f;
+        for (int32_t c = 0; c < 3; c++) {
+            for (int32_t i = 0; i < 4; i++) { edges[c][i] = (mask >> (c * 4 + i)) & 1u ? presetDepth : 0.0f; }
+        }
+        dirty = true;
+    };
+    if (ImGui::SmallButton("All")) { applyPreset(0xFFFu); }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Top")) { applyPreset(0xAu | (0xCu << 8)); }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Bottom")) { applyPreset(0x5u | (0x3u << 8)); }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Vertical")) { applyPreset(0xFu << 4); }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear")) { applyPreset(0u); }
+
+    if (ImGui::TreeNode("Chamfer Per Edge")) {
+        ImGui::DragFloat4("X Edges", chamferX, 0.002f, 0.0f, 10.0f, "%.3f");
+        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::DragFloat4("Y Edges", chamferY, 0.002f, 0.0f, 10.0f, "%.3f");
+        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::DragFloat4("Z Edges", chamferZ, 0.002f, 0.0f, 10.0f, "%.3f");
+        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::TreePop();
+    }
+    return dirty;
+}
+
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     entt::registry& registry = edit.Registry();
@@ -188,7 +236,8 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
         static constexpr const char* shapeNames[] = {
             "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
-            "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid"
+            "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid",
+            "Slanted Beam"
         };
         static_assert(std::size(shapeNames) == std::variant_size_v<Engine::ProceduralParams>);
         const size_t shapeIndex = component.params.index();
@@ -308,47 +357,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     drawSizeField("##bsy", &p.sizeY, Editor::COLOR_AXIS_Y); ImGui::SameLine(0, innerSpacing);
                     drawSizeField("##bsz", &p.sizeZ, Editor::COLOR_AXIS_Z);
 
-                    float* edges[3] = {p.chamferX, p.chamferY, p.chamferZ};
-                    float depth = 0.0f;
-                    for (int32_t c = 0; c < 3; c++) {
-                        for (int32_t i = 0; i < 4; i++) { depth = glm::max(depth, edges[c][i]); }
-                    }
-                    const bool bAnyChamfered = depth > 0.0f;
-                    if (ImGui::DragFloat("Chamfer", &depth, 0.002f, 0.0f, 10.0f, "%.3f")) {
-                        for (int32_t c = 0; c < 3; c++) {
-                            for (int32_t i = 0; i < 4; i++) {
-                                if (!bAnyChamfered || edges[c][i] > 0.0f) { edges[c][i] = depth; }
-                            }
-                        }
-                    }
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-
-                    auto applyPreset = [&](uint32_t mask) {
-                        const float presetDepth = depth > 0.0f ? depth : 0.02f;
-                        for (int32_t c = 0; c < 3; c++) {
-                            for (int32_t i = 0; i < 4; i++) { edges[c][i] = (mask >> (c * 4 + i)) & 1u ? presetDepth : 0.0f; }
-                        }
-                        dirty = true;
-                    };
-                    if (ImGui::SmallButton("All")) { applyPreset(0xFFFu); }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Top")) { applyPreset(0xAu | (0xCu << 8)); }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Bottom")) { applyPreset(0x5u | (0x3u << 8)); }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Vertical")) { applyPreset(0xFu << 4); }
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton("Clear")) { applyPreset(0u); }
-
-                    if (ImGui::TreeNode("Chamfer Per Edge")) {
-                        ImGui::DragFloat4("X Edges", p.chamferX, 0.002f, 0.0f, 10.0f, "%.3f");
-                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                        ImGui::DragFloat4("Y Edges", p.chamferY, 0.002f, 0.0f, 10.0f, "%.3f");
-                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                        ImGui::DragFloat4("Z Edges", p.chamferZ, 0.002f, 0.0f, 10.0f, "%.3f");
-                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                        ImGui::TreePop();
-                    }
+                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
                 }
                 else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
@@ -405,6 +414,10 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Base Height", &p.baseHeight, 0.005f, 0.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Block under the whole wedge; Size Y is the rise above it"); }
+                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
                 }
                 else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
@@ -776,6 +789,19 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 is a pointed apex; above 0 a flat top that fraction of the base"); }
                     if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
+                }
+                else if constexpr (std::is_same_v<T, Engine::SlantedBeamParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Length", &p.length, 0.01f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Horizontal run along Z"); }
+                    ImGui::DragFloat("Rise", &p.rise, 0.01f, -100.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Thickness", &p.thickness, 0.005f, 0.01f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Measured vertically; the end faces are this tall"); }
+                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
                 }
             }, component.params);
 

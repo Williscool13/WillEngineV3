@@ -183,17 +183,31 @@ static void HullPyramid(const PyramidParams& p, Core::Vector<Vec3>& out)
     for (int i = 0; i < count; ++i) { out.PushBack(c[i]); }
 }
 
+static void HullSlantedBeam(const SlantedBeamParams& p, Core::Vector<Vec3>& out)
+{
+    Vec3 c[8];
+    SlantedBeamCorners(p, c);
+    out.Reserve(out.Size() + 8);
+    for (const Vec3& v : c) { out.PushBack(v); }
+}
+
 static void HullWedge(const WedgeParams& p, Core::Vector<Vec3>& out)
 {
-    // Corner pivot (matches GenerateWedge): bottom quad + top back edge.
-    const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
-    out.Reserve(out.Size() + 6);
+    // Corner pivot (matches GenerateWedge): bottom quad + top back edge, plus the front edge of the base.
+    const float sx = p.sizeX, sz = p.sizeZ;
+    const float b = glm::max(p.baseHeight, 0.0f);
+    const float top = b + p.sizeY;
+    out.Reserve(out.Size() + 8);
     out.PushBack(Vec3(0.0f, 0.0f, 0.0f));
     out.PushBack(Vec3(sx, 0.0f, 0.0f));
     out.PushBack(Vec3(sx, 0.0f, sz));
     out.PushBack(Vec3(0.0f, 0.0f, sz));
-    out.PushBack(Vec3(0.0f, sy, sz));
-    out.PushBack(Vec3(sx, sy, sz));
+    out.PushBack(Vec3(0.0f, top, sz));
+    out.PushBack(Vec3(sx, top, sz));
+    if (b > 0.0f) {
+        out.PushBack(Vec3(0.0f, b, 0.0f));
+        out.PushBack(Vec3(sx, b, 0.0f));
+    }
 }
 
 static void HullRing(float y, float radius, int slices, Core::Vector<Vec3>& out)
@@ -889,6 +903,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<CorrugatedPanelParams>(params)
         || std::holds_alternative<TerraceParams>(params)
         || std::holds_alternative<PyramidParams>(params)
+        || std::holds_alternative<SlantedBeamParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -1014,6 +1029,11 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<PyramidParams>(&params)) {
         outKind = PhysicsColliderKind::ConvexHull;
         HullPyramid(*p, outPositions);
+        return true;
+    }
+    if (const auto* p = std::get_if<SlantedBeamParams>(&params)) {
+        outKind = PhysicsColliderKind::ConvexHull;
+        HullSlantedBeam(*p, outPositions);
         return true;
     }
     if (const auto* p = std::get_if<ConeParams>(&params)) {

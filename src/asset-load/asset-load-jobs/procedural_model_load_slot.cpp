@@ -231,6 +231,7 @@ bool ProceduralModelLoadSlot::GenerateShapeVariant(Engine::ProceduralParams& par
                    [&](const Engine::CorrugatedPanelParams& p) { bSuccess = GenerateCorrugatedPanel(p); },
                    [&](const Engine::TerraceParams& p) { bSuccess = GenerateTerrace(p); },
                    [&](const Engine::PyramidParams& p) { bSuccess = GeneratePyramid(p); },
+                   [&](const Engine::SlantedBeamParams& p) { bSuccess = GenerateSlantedBeam(p); },
                }, params);
     return bSuccess;
 }
@@ -572,56 +573,47 @@ bool ProceduralModelLoadSlot::FinalizeGeometryGroups(Core::Span<const Engine::Fu
     return true;
 }
 
-bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
+struct ConvexPlane
 {
-    ZoneScopedN("GenerateBox");
+    Vec3 n;
+    float d;
+    Vec3 t;
+    float uOffset;
+};
+constexpr int32_t MAX_CONVEX_PLANES = 18;
 
-    const Vec3 size{p.sizeX, p.sizeY, p.sizeZ};
-    if (size.x <= 0.0f || size.y <= 0.0f || size.z <= 0.0f) { return false; }
+/** Adds the bisecting plane that cuts depth off both faces along their shared edge. axis picks the tangent's sign. */
+static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, float depth, int32_t axis)
+{
+    const float k = glm::dot(a.n, b.n);
+    if (depth <= 1e-5f || glm::abs(k) > 0.9999f || planeCount >= MAX_CONVEX_PLANES) { return; }
+    const float invLen = 1.0f / glm::length(a.n + b.n);
+    Vec3 t = glm::normalize(glm::cross(a.n, b.n));
+    if (t[axis] < 0.0f) { t = -t; }
+    const ConvexPlane chamfer{(a.n + b.n) * invLen, (a.d + b.d) * invLen - depth * glm::sqrt((1.0f - k) * 0.5f), t, 0.0f};
+    planes[planeCount++] = chamfer;
+}
 
-    struct BoxPlane
-    {
-        Vec3 n;
-        float d;
-        Vec3 t;
-        float uOffset;
-    };
-    constexpr int32_t MAX_PLANES = 18;
-    BoxPlane planes[MAX_PLANES];
-    int32_t planeCount = 0;
-
-    planes[planeCount++] = {{1, 0, 0}, size.x, {0, 0, -1}, size.z};
-    planes[planeCount++] = {{-1, 0, 0}, 0.0f, {0, 0, 1}, 0.0f};
-    planes[planeCount++] = {{0, 1, 0}, size.y, {-1, 0, 0}, size.x};
-    planes[planeCount++] = {{0, -1, 0}, 0.0f, {1, 0, 0}, 0.0f};
-    planes[planeCount++] = {{0, 0, 1}, size.z, {1, 0, 0}, 0.0f};
-    planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, size.x};
-
-    const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
-    const float invSqrt2 = 1.0f / glm::sqrt(2.0f);
+/** planes[0..5] are the +X -X +Y -Y +Z -Z faces of a box-like solid; chamfers use BoxParams' edge layout. An absent face drops its edges. */
+static void AppendBoxEdgeChamfers(ConvexPlane* planes, int32_t& planeCount, const bool* bPresent, const float* const* chamfers, Vec3 size)
+{
     for (int32_t c = 0; c < 3; c++) {
         const int32_t a = c == 0 ? 1 : 0;
         const int32_t b = c == 2 ? 1 : 2;
         const float maxDepth = 0.5f * glm::min(size[a], size[b]);
         for (int32_t i = 0; i < 4; i++) {
-            const float depth = glm::clamp(chamfers[c][i], 0.0f, maxDepth);
-            if (depth <= 1e-5f) { continue; }
-            const bool highA = (i & 1) != 0;
-            const bool highB = (i >> 1) != 0;
-            Vec3 n{0.0f};
-            n[a] = highA ? invSqrt2 : -invSqrt2;
-            n[b] = highB ? invSqrt2 : -invSqrt2;
-            Vec3 edge{0.0f};
-            edge[a] = highA ? size[a] : 0.0f;
-            edge[b] = highB ? size[b] : 0.0f;
-            Vec3 t{0.0f};
-            t[c] = 1.0f;
-            planes[planeCount++] = {n, glm::dot(n, edge) - depth * invSqrt2, t, 0.0f};
+            const int32_t faceA = a * 2 + ((i & 1) != 0 ? 0 : 1);
+            const int32_t faceB = b * 2 + ((i >> 1) != 0 ? 0 : 1);
+            if (!bPresent[faceA] || !bPresent[faceB]) { continue; }
+            AppendEdgeChamfer(planes, planeCount, planes[faceA], planes[faceB], glm::clamp(chamfers[c][i], 0.0f, maxDepth), c);
         }
     }
+}
 
-    const float eps = 1e-5f * glm::max(1.0f, glm::max(size.x, glm::max(size.y, size.z)));
-    Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+/** Flat-shaded faces of the convex solid bounded by the planes. corners is scratch. */
+static void BuildConvexFaces(const ConvexPlane* planes, int32_t planeCount, float eps, Core::Vector<Vec3>& corners, Core::Vector<Engine::FullVertex>& vertices,
+                             Core::Vector<uint32_t>& indices)
+{
     for (int32_t i = 0; i < planeCount; i++) {
         for (int32_t j = i + 1; j < planeCount; j++) {
             const Vec3 nij = glm::cross(planes[i].n, planes[j].n);
@@ -645,11 +637,9 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
         }
     }
 
-    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
-    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     constexpr int32_t MAX_FACE_VERTS = 32;
     for (int32_t i = 0; i < planeCount; i++) {
-        const BoxPlane& plane = planes[i];
+        const ConvexPlane& plane = planes[i];
         const Vec3 bitangent = glm::cross(plane.n, plane.t);
 
         Vec3 face[MAX_FACE_VERTS];
@@ -701,6 +691,53 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
             indices.PushBack(base + m + 1);
         }
     }
+}
+
+bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
+{
+    ZoneScopedN("GenerateBox");
+
+    const Vec3 size{p.sizeX, p.sizeY, p.sizeZ};
+    if (size.x <= 0.0f || size.y <= 0.0f || size.z <= 0.0f) { return false; }
+
+    ConvexPlane planes[MAX_CONVEX_PLANES];
+    int32_t planeCount = 0;
+
+    planes[planeCount++] = {{1, 0, 0}, size.x, {0, 0, -1}, size.z};
+    planes[planeCount++] = {{-1, 0, 0}, 0.0f, {0, 0, 1}, 0.0f};
+    planes[planeCount++] = {{0, 1, 0}, size.y, {-1, 0, 0}, size.x};
+    planes[planeCount++] = {{0, -1, 0}, 0.0f, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, 1}, size.z, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, size.x};
+
+    const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
+    const float invSqrt2 = 1.0f / glm::sqrt(2.0f);
+    for (int32_t c = 0; c < 3; c++) {
+        const int32_t a = c == 0 ? 1 : 0;
+        const int32_t b = c == 2 ? 1 : 2;
+        const float maxDepth = 0.5f * glm::min(size[a], size[b]);
+        for (int32_t i = 0; i < 4; i++) {
+            const float depth = glm::clamp(chamfers[c][i], 0.0f, maxDepth);
+            if (depth <= 1e-5f) { continue; }
+            const bool highA = (i & 1) != 0;
+            const bool highB = (i >> 1) != 0;
+            Vec3 n{0.0f};
+            n[a] = highA ? invSqrt2 : -invSqrt2;
+            n[b] = highB ? invSqrt2 : -invSqrt2;
+            Vec3 edge{0.0f};
+            edge[a] = highA ? size[a] : 0.0f;
+            edge[b] = highB ? size[b] : 0.0f;
+            Vec3 t{0.0f};
+            t[c] = 1.0f;
+            planes[planeCount++] = {n, glm::dot(n, edge) - depth * invSqrt2, t, 0.0f};
+        }
+    }
+
+    const float eps = 1e-5f * glm::max(1.0f, glm::max(size.x, glm::max(size.y, size.z)));
+    Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    BuildConvexFaces(planes, planeCount, eps, corners, vertices, indices);
 
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
@@ -1477,6 +1514,37 @@ bool ProceduralModelLoadSlot::GeneratePyramid(const Engine::PyramidParams& p)
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
+bool ProceduralModelLoadSlot::GenerateSlantedBeam(const Engine::SlantedBeamParams& p)
+{
+    ZoneScopedN("GenerateSlantedBeam");
+
+    const float sx = glm::max(p.sizeX, 0.001f);
+    const float len = glm::max(p.length, 0.001f);
+    const float thickness = glm::max(p.thickness, 0.001f);
+    const Vec3 slopeN = glm::normalize(Vec3(0.0f, len, -p.rise));
+
+    ConvexPlane planes[MAX_CONVEX_PLANES];
+    int32_t planeCount = 0;
+    planes[planeCount++] = {{1, 0, 0}, sx, {0, 0, -1}, len};
+    planes[planeCount++] = {{-1, 0, 0}, 0.0f, {0, 0, 1}, 0.0f};
+    planes[planeCount++] = {slopeN, slopeN.y * thickness, {-1, 0, 0}, sx};
+    planes[planeCount++] = {-slopeN, 0.0f, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, 1}, len, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, sx};
+
+    const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
+    const bool bPresent[6] = {true, true, true, true, true, true};
+    AppendBoxEdgeChamfers(planes, planeCount, bPresent, chamfers, {sx, thickness, len});
+
+    const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(thickness + glm::abs(p.rise), len)));
+    Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    BuildConvexFaces(planes, planeCount, eps, corners, vertices, indices);
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
 bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
 {
     ZoneScopedN("GenerateTerrace");
@@ -1812,84 +1880,39 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
 
     const float sx = p.sizeX, sy = p.sizeY, sz = p.sizeZ;
     if (sx <= 0.0f || sy <= 0.0f || sz <= 0.0f) return false;
+    const float b = glm::max(p.baseHeight, 0.0f);
+    const bool bBase = b > 0.0f;
+    const float top = b + sy;
 
-    // 3 quads × 4 verts + 2 tris × 3 verts = 18; 3 × 6 + 2 × 3 = 24 indices
-    Core::HeapArray<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 18);
-    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 24);
-    size_t vi = 0, ii = 0;
+    const float slopeLen = glm::sqrt(sy * sy + sz * sz);
+    const Vec3 slopeN = Vec3(0.0f, sz, -sy) / slopeLen;
 
-    auto addQuad = [&](Vec3 n, Vec3 t,
-                       Vec3 v0, Vec3 v1, Vec3 v2, Vec3 v3,
-                       Vec2 uv0, Vec2 uv1, Vec2 uv2, Vec2 uv3) {
-        auto base = static_cast<uint32_t>(vi);
-        auto push = [&](Vec3 pos, Vec2 uv) {
-            Engine::FullVertex v{};
-            v.position = pos;
-            v.normal = n;
-            v.uv = uv;
-            v.tangent = {t.x, t.y, t.z, 1.0f};
-            v.color = {1, 1, 1, 1};
-            vertices[vi++] = v;
-        };
-        push(v0, uv0);
-        push(v1, uv1);
-        push(v2, uv2);
-        push(v3, uv3);
-        indices[ii++] = base; indices[ii++] = base + 1; indices[ii++] = base + 2;
-        indices[ii++] = base; indices[ii++] = base + 2; indices[ii++] = base + 3;
-    };
+    // Corner pivot: the slope runs from (y = b, z = 0) up to (y = top, z = sz). The -Z face only has area with a base.
+    ConvexPlane planes[MAX_CONVEX_PLANES];
+    int32_t planeCount = 0;
+    planes[planeCount++] = {{1, 0, 0}, sx, {0, 0, -1}, sz};
+    planes[planeCount++] = {{-1, 0, 0}, 0.0f, {0, 0, 1}, 0.0f};
+    planes[planeCount++] = {slopeN, slopeN.y * b, {-1, 0, 0}, sx};
+    planes[planeCount++] = {{0, -1, 0}, 0.0f, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, 1}, sz, {1, 0, 0}, 0.0f};
+    planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, sx};
 
-    auto addTri = [&](Vec3 n, Vec3 t,
-                      Vec3 v0, Vec3 v1, Vec3 v2,
-                      Vec2 uv0, Vec2 uv1, Vec2 uv2) {
-        auto base = static_cast<uint32_t>(vi);
-        auto push = [&](Vec3 pos, Vec2 uv) {
-            Engine::FullVertex v{};
-            v.position = pos;
-            v.normal = n;
-            v.uv = uv;
-            v.tangent = {t.x, t.y, t.z, 1.0f};
-            v.color = {1, 1, 1, 1};
-            vertices[vi++] = v;
-        };
-        push(v0, uv0);
-        push(v1, uv1);
-        push(v2, uv2);
-        indices[ii++] = base; indices[ii++] = base + 1; indices[ii++] = base + 2;
-    };
+    const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
+    const bool bPresent[6] = {true, true, true, true, true, bBase};
+    AppendBoxEdgeChamfers(planes, planeCount, bPresent, chamfers, {sx, top, sz});
+    if (!bBase) {
+        // Without a base the two front X edges are the one edge where the slope meets the bottom.
+        const float nose = glm::clamp(glm::max(p.chamferX[0], p.chamferX[1]), 0.0f, 0.5f * glm::min(sy, sz));
+        AppendEdgeChamfer(planes, planeCount, planes[2], planes[3], nose, 0);
+    }
 
-    // Corner pivot at (0,0,0): bottom-front edge at Z=0, back-top edge at (x, sy, sz).
-    // Winding: CCW from outside. Index pattern {0,1,2, 0,2,3} verified per face.
+    const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(top, sz)));
+    Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    BuildConvexFaces(planes, planeCount, eps, corners, vertices, indices);
 
-    // Bottom (-Y): (v1-v0)×(v2-v0) = (sx,0,0)×(sx,0,sz) → (0,-sx*sz,0) → -Y ✓
-    addQuad({0, -1, 0}, {1, 0, 0},
-            {0, 0, 0}, {sx, 0, 0}, {sx, 0, sz}, {0, 0, sz},
-            {0, 0}, {sx, 0}, {sx, sz}, {0, sz});
-
-    // Back (+Z): (v1-v0)×(v2-v0) = (sx,0,0)×(sx,sy,0) → (0,0,sx*sy) → +Z ✓
-    addQuad({0, 0, 1}, {1, 0, 0},
-            {0, 0, sz}, {sx, 0, sz}, {sx, sy, sz}, {0, sy, sz},
-            {0, 0}, {sx, 0}, {sx, sy}, {0, sy});
-
-    // Slope: outward normal = (0, sz, -sy)/len (away from wedge interior)
-    // (v1-v0)×(v2-v0) = (0,sy,sz)×(sx,sy,sz) → (0, sz*sx, -sy*sx) → (0,sz,-sy) ✓
-    const float slopeLen = sqrtf(sy * sy + sz * sz);
-    const Vec3 slopeN = glm::normalize(Vec3(0.0f, sz, -sy));
-    addQuad(slopeN, {1, 0, 0},
-            {0, 0, 0}, {0, sy, sz}, {sx, sy, sz}, {sx, 0, 0},
-            {sx, 0}, {sx, slopeLen}, {0, slopeLen}, {0, 0});
-
-    // Left cap (-X): (v1-v0)×(v2-v0) = (0,0,sz)×(0,sy,sz) → (-sz*sy,0,0) → -X ✓
-    addTri({-1, 0, 0}, {0, 0, 1},
-           {0, 0, 0}, {0, 0, sz}, {0, sy, sz},
-           {0, 0}, {sz, 0}, {sz, sy});
-
-    // Right cap (+X): (v1-v0)×(v2-v0) = (0,sy,sz)×(0,0,sz) → (sy*sz,0,0) → +X ✓
-    addTri({1, 0, 0}, {0, 0, 1},
-           {sx, 0, 0}, {sx, sy, sz}, {sx, 0, sz},
-           {sz, 0}, {0, sy}, {0, 0});
-
-    return FinalizeGeometry(vertices, indices);
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateCone(const Engine::ConeParams& p)

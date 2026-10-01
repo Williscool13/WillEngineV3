@@ -209,8 +209,12 @@ struct WedgeParams
     float sizeX{1.0f};
     float sizeY{1.0f};
     float sizeZ{1.0f};
+    float baseHeight{0.0f};
+    float chamferX[4]{};
+    float chamferY[4]{};
+    float chamferZ[4]{};
 
-    WILL_REFLECT(WedgeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ))
+    WILL_REFLECT(WedgeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(baseHeight), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ))
 };
 
 struct ConeParams
@@ -815,9 +819,36 @@ inline void PyramidCorners(const PyramidParams& p, glm::vec3 (&out)[8])
     }
 }
 
+/** Box sheared up by rise over its length: top and bottom follow the slope, the end faces stay vertical. thickness is vertical. Corner pivot at the low end. */
+struct SlantedBeamParams
+{
+    float sizeX{1.0f};
+    float length{2.0f};
+    float rise{1.0f};
+    float thickness{0.3f};
+    float chamferX[4]{};
+    float chamferY[4]{};
+    float chamferZ[4]{};
+
+    WILL_REFLECT(SlantedBeamParams, WILL_FIELD(sizeX), WILL_FIELD(length), WILL_FIELD(rise), WILL_FIELD(thickness), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ))
+};
+
+/** Low end corners then high end corners, each counter-clockwise from the pivot looking down +Z. */
+inline void SlantedBeamCorners(const SlantedBeamParams& p, glm::vec3 (&out)[8])
+{
+    const float sx = glm::max(p.sizeX, 0.001f);
+    const float len = glm::max(p.length, 0.001f);
+    const float t = glm::max(p.thickness, 0.001f);
+    const glm::vec2 end[4] = {{0.0f, 0.0f}, {sx, 0.0f}, {sx, t}, {0.0f, t}};
+    for (int i = 0; i < 4; ++i) {
+        out[i] = glm::vec3(end[i].x, end[i].y, 0.0f);
+        out[i + 4] = glm::vec3(end[i].x, end[i].y + p.rise, len);
+    }
+}
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
     , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams
-    , TerraceParams, PyramidParams>;
+    , TerraceParams, PyramidParams, SlantedBeamParams>;
 
 inline constexpr int32_t MAX_MODULE_PARTS = 32;
 inline constexpr int32_t MAX_MODULE_SLOTS = 8;
