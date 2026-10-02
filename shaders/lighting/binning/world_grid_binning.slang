@@ -74,7 +74,8 @@ static bool ReflectionProbeIntersectsCellAABB(ReflectionProbeGPU probe, float3 a
 
 static float WorldGridLightMass(LightInfo light, float3 aabbMin, float3 aabbMax)
 {
-    return WorldGridLightPower(light) / max(SqDistPointAABB(light.position.xyz, aabbMin, aabbMax), LIGHT_GEOM_MIN_DIST2);
+    float d2 = max(SqDistPointAABB(light.position.xyz, aabbMin, aabbMax), LIGHT_GEOM_MIN_DIST2);
+    return WorldGridLightPower(light) * LightFalloffScale(sqrt(d2), light.falloffBias) / d2;
 }
 
 static float WorldGridMeshletMass(EmissiveMeshlet meshlet, float3 aabbMin, float3 aabbMax)
@@ -118,7 +119,7 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         float d2 = SqDistPointAABB(light.position.xyz, aabbMin, aabbMax);
         if (d2 > radius * radius) { continue; }
 
-        float mass = WorldGridLightPower(light) / max(d2, LIGHT_GEOM_MIN_DIST2);
+        float mass = WorldGridLightMass(light, aabbMin, aabbMax);
         if (count < MAX_LIGHTS_PER_WORLD_GRID_CELL)
         {
             pc.worldGridIndexList[indexOffset + count] = uint(i);

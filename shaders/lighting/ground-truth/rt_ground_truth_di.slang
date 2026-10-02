@@ -56,7 +56,7 @@ static float3 EvalLightPoint(RTGroundTruthDIPushConstant pc, GTSurface sf, Light
     float cosLight = (al.type == LIGHT_TYPE_SPHERE)
         ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
         : max(dot(-al.normal.xyz, L), 0.0);
-    float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w);
+    float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(lightDist, al.falloffBias);
     if (cosShade <= 0.0 || cosLight <= 0.0 || atten <= 0.0) {
         return float3(0.0);
     }

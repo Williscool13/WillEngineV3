@@ -352,6 +352,8 @@ private:
     Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_UINT> transientSampledUIntHandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_MULTISAMPLED_IMAGE> transientMultisampledImageHandleAllocator;
     Core::HandleAllocator<TextureResource, RDG_MAX_MULTISAMPLED_UINT_IMAGE> transientMultisampledUIntImageHandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_SAMPLED_3D_FLOAT4> transientSampled3DFloat4HandleAllocator;
+    Core::HandleAllocator<TextureResource, RDG_MAX_STORAGE_3D_FLOAT4> transientStorage3DFloat4HandleAllocator;
     Core::HandleAllocator<BufferResource, RDG_MAX_TLAS> transientASHandleAllocator;
 
     Core::ArenaFixedVector<BufferResource> buffers;

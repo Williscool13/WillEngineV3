@@ -620,7 +620,7 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
             desiredDim.format = tex.textureInfo.format;
             desiredDim.width = tex.textureInfo.width;
             desiredDim.height = tex.textureInfo.height;
-            desiredDim.depth = 1;
+            desiredDim.depth = tex.textureInfo.depth;
             desiredDim.levels = tex.textureInfo.mipLevels;
             desiredDim.layers = 1;
             desiredDim.samples = 1;
@@ -823,6 +823,27 @@ void RenderGraph::AssignPhysicalResources(uint64_t currentFrame)
         if (phys.NeedsDescriptorWrite() && phys.imageView != VK_NULL_HANDLE) {
             if (allocFns.writeDescriptors) {
                 allocFns.writeDescriptors(phys);
+                phys.descriptorWritten = true;
+                continue;
+            }
+            if (phys.dimensions.Is3D()) {
+                if ((phys.dimensions.imageUsage & VK_IMAGE_USAGE_SAMPLED_BIT) == VK_IMAGE_USAGE_SAMPLED_BIT) {
+                    phys.sampledDescriptorHandle = transientSampled3DFloat4HandleAllocator.Add();
+                    ENGINE_ASSERT(Renderer, phys.sampledDescriptorHandle.IsValid(), "Sampled descriptor handle pool exhausted (3D Float4)");
+                    resourceManager->bindlessRDGTransientDescriptorBuffer.WriteSampled3DFloat4Descriptor(
+                        phys.sampledDescriptorHandle.index, {nullptr, phys.imageView, VK_IMAGE_LAYOUT_GENERAL}
+                    );
+                }
+                if ((phys.dimensions.imageUsage & VK_IMAGE_USAGE_STORAGE_BIT) == VK_IMAGE_USAGE_STORAGE_BIT) {
+                    for (uint32_t mip = 0; mip < phys.dimensions.levels; ++mip) {
+                        phys.storageMipDescriptorHandles[mip] = transientStorage3DFloat4HandleAllocator.Add();
+                        ENGINE_ASSERT(Renderer, phys.storageMipDescriptorHandles[mip].IsValid(), "Storage mip descriptor handle pool exhausted (3D Float4)");
+                        resourceManager->bindlessRDGTransientDescriptorBuffer.WriteStorage3DFloat4Descriptor(
+                            phys.storageMipDescriptorHandles[mip].index,
+                            {nullptr, phys.mipViews[mip], VK_IMAGE_LAYOUT_GENERAL}
+                        );
+                    }
+                }
                 phys.descriptorWritten = true;
                 continue;
             }
@@ -1933,7 +1954,7 @@ void RenderGraph::CreateVersionedTexture(StringID name, const TextureInfo& texIn
     else {
         ENGINE_ASSERT(Renderer, ring->bImage, "Versioned texture '{}' was declared as a buffer ring", name.ToString());
         const bool bSame = ring->depth == depth && ring->bViewportScaled == bIsViewportScaled && ring->bConcurrent == bConcurrent && ring->texInfo.format == texInfo.format && ring->texInfo.width == texInfo.width
-                           && ring->texInfo.height == texInfo.height && ring->texInfo.mipLevels == texInfo.mipLevels;
+                           && ring->texInfo.height == texInfo.height && ring->texInfo.mipLevels == texInfo.mipLevels && ring->texInfo.depth == texInfo.depth;
         if (!bSame) {
             LOG_WARN(Renderer, "[RDG] Versioned texture '{}' redeclared with a new description; history dropped", name.ToString());
             ResetRing(*ring);
@@ -2112,7 +2133,8 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
     TextureResource* tex = GetOrCreateTexture(textureId);
 
     if (tex->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        const bool bSameDescription = tex->textureInfo.format == texInfo.format && tex->textureInfo.width == texInfo.width && tex->textureInfo.height == texInfo.height && tex->textureInfo.mipLevels == texInfo.mipLevels;
+        const bool bSameDescription = tex->textureInfo.format == texInfo.format && tex->textureInfo.width == texInfo.width && tex->textureInfo.height == texInfo.height && tex->textureInfo.mipLevels == texInfo.mipLevels
+                                      && tex->textureInfo.depth == texInfo.depth;
         if (!bSameDescription) {
             ENGINE_ASSERT(Renderer, !tex->bDeclaredThisFrame, "Texture '{}' declared twice this frame with different descriptions", textureId.ToString());
             DetachTexture(*tex);
@@ -3221,6 +3243,10 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
                 allocFns.destroyImageView(context, resource.mipViews[mip]);
                 resource.mipViews[mip] = VK_NULL_HANDLE;
             }
+            if (resource.storageMipDescriptorHandles[mip].IsValid() && resource.dimensions.Is3D()) {
+                transientStorage3DFloat4HandleAllocator.Remove(resource.storageMipDescriptorHandles[mip]);
+                resource.storageMipDescriptorHandles[mip] = {};
+            }
             if (resource.storageMipDescriptorHandles[mip].IsValid()) {
                 ImageChannelType storageType = GetImageChannelType(resource.dimensions.format, resource.aspect);
                 switch (storageType) {
@@ -3250,6 +3276,10 @@ void RenderGraph::DestroyPhysicalResource(PhysicalResource& resource)
         if (resource.imageView != VK_NULL_HANDLE) {
             allocFns.destroyImageView(context, resource.imageView);
             resource.imageView = VK_NULL_HANDLE;
+        }
+        if (resource.sampledDescriptorHandle.IsValid() && resource.dimensions.Is3D()) {
+            transientSampled3DFloat4HandleAllocator.Remove(resource.sampledDescriptorHandle);
+            resource.sampledDescriptorHandle = {};
         }
         if (resource.sampledDescriptorHandle.IsValid()) {
             ImageChannelType sampledChannelType = GetImageChannelType(resource.dimensions.format, resource.aspect);
@@ -3330,6 +3360,10 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     imageInfo.mipLevels = dim.levels;
     imageInfo.arrayLayers = dim.layers;
     imageInfo.samples = static_cast<VkSampleCountFlagBits>(dim.samples);
+    if (dim.Is3D()) {
+        ENGINE_ASSERT(Renderer, GetImageChannelType(dim.format, VK_IMAGE_ASPECT_COLOR_BIT) == ImageChannelType::Float4, "[RDG] 3D texture '{}' must use an RGBA float format", dim.resourceId.ToString());
+        imageInfo.imageType = VK_IMAGE_TYPE_3D;
+    }
     if (dim.bConcurrent) {
         imageInfo = context->ApplyImageSharing(imageInfo, false);
     }
@@ -3361,6 +3395,9 @@ void RenderGraph::CreatePhysicalImage(PhysicalResource& resource, const Resource
     }
 
     VkImageViewCreateInfo viewInfo = VkHelpers::ImageViewCreateInfo(resource.image, dim.format, aspectFlags);
+    if (dim.Is3D()) {
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    }
 
     VkImageViewCreateInfo sampledViewInfo = viewInfo;
     sampledViewInfo.subresourceRange.levelCount = dim.levels;
@@ -3451,7 +3488,7 @@ VRAMReport RenderGraph::GenerateVramReport() const
 
     for (const auto& tex : textures) {
         if (tex.accumulatedUsage == 0) { continue; }
-        const VkDeviceSize rowBytes = static_cast<VkDeviceSize>(tex.textureInfo.width) * tex.textureInfo.height * 4;
+        const VkDeviceSize rowBytes = static_cast<VkDeviceSize>(tex.textureInfo.width) * tex.textureInfo.height * tex.textureInfo.depth * 4;
         AddLogicalBytes(tex.category, rowBytes);
         report.logicalTotal += rowBytes;
     }

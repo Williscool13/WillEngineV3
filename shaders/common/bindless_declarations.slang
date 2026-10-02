@@ -20,6 +20,9 @@ module bindless_declarations;
 [[vk::binding(11, 1)]] public Texture2D<uint4>   rdgTexturesUInt4[];
 [[vk::binding(12, 1)]] public Texture2D<uint2>   rdgTexturesUInt2[];
 [[vk::binding(13, 1)]] public Texture2D<uint>    rdgTexturesUInt[];
+// 14 and 15 are the multisampled arrays, declared on the C++ side only
+[[vk::binding(16, 1)]] public Texture3D<float4>   rdgTextures3DFloat4[];
+[[vk::binding(17, 1)]] public RWTexture3D<float4> rdgStorage3DFloat4[];
 
 // Descriptor buffer for RDG raytracing resources
 [[vk::binding(0, 2)]] public RaytracingAccelerationStructure rdgAccelerationStructures[];

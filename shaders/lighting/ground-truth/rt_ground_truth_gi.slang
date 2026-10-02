@@ -160,7 +160,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
         float cosLight = light.type == LIGHT_TYPE_SPHERE
             ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
             : max(dot(-light.normal.xyz, L), 0.0);
-        float atten = LightRangeCull(lightDist, light.range) * LightConeFalloff(cosLight, light.normal.w, light.position.w);
+        float atten = LightRangeCull(lightDist, light.range) * LightConeFalloff(cosLight, light.normal.w, light.position.w) * LightFalloffScale(lightDist, light.falloffBias);
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
             float3 rayOrigin = OffsetHitRayOrigin(worldPosition, N);
             float3 toLightShadow = lightSamplePos - rayOrigin;
@@ -270,7 +270,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
         float cosLight = al.type == LIGHT_TYPE_SPHERE
             ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
             : max(dot(-al.normal.xyz, L), 0.0);
-        float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w);
+        float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(lightDist, al.falloffBias);
 
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
             float3 toLightShadow = lightSamplePos - primaryOrigin;

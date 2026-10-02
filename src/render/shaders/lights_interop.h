@@ -80,6 +80,10 @@ SHADER_PUBLIC struct LightInfo
     SHADER_PUBLIC float intensity;
     SHADER_PUBLIC float range;
     SHADER_PUBLIC uint type; // LIGHT_TYPE_*
+    SHADER_PUBLIC float falloffBias; // 2 - distance exponent; 0 = inverse square
+    SHADER_PUBLIC float volumetricScale;
+    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float _pad1;
 };
 
 /** Sphere: radius in centerHalfWidth.w, area = 4*pi*r^2 in rightArea.w. Triangle: center = v0, right/up = edges e1/e2 (unnormalized), halfWidth/halfHeight = 0. */
@@ -91,7 +95,7 @@ SHADER_PUBLIC struct LightVSData
     SHADER_PUBLIC float4 upRange; // xyz view-space up axis (area), w range
     SHADER_PUBLIC uint packedColor; // RGBA8 unorm
     SHADER_PUBLIC float intensity;
-    SHADER_PUBLIC uint type;
+    SHADER_PUBLIC uint type; // LIGHT_TYPE_* (low 16), f16 falloff bias (high 16)
     SHADER_PUBLIC uint packedCone; // f16 pair: cos inner (low), cos outer (high); area only, 0 = hemisphere
 };
 

@@ -49,6 +49,13 @@ public float LightRangeCull(float dist, float range)
     return a * a;
 }
 
+/** Multiplies inverse square; bias = 2 - exponent, pivots at 1 m. */
+public float LightFalloffScale(float dist, float bias)
+{
+    if (bias == 0.0) { return 1.0; }
+    return pow(max(dist, 1e-3), bias);
+}
+
 /** cosInner == cosOuter == 0 is identity, so every light type can apply it unconditionally. */
 public float LightConeFalloff(float cosLight, float cosInner, float cosOuter)
 {

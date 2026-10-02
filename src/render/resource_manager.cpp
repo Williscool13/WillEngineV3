@@ -88,7 +88,9 @@ ResourceManager::ResourceManager(VulkanContext* context)
         RDG_MAX_SAMPLED_UINT2,
         RDG_MAX_SAMPLED_UINT,
         RDG_MAX_MULTISAMPLED_IMAGE,
-        RDG_MAX_MULTISAMPLED_UINT_IMAGE
+        RDG_MAX_MULTISAMPLED_UINT_IMAGE,
+        RDG_MAX_SAMPLED_3D_FLOAT4,
+        RDG_MAX_STORAGE_3D_FLOAT4
     >(context);
 
 #if WILL_EDITOR

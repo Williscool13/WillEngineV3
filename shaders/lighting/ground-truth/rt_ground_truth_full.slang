@@ -189,7 +189,7 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
         float cosLight = al.type == LIGHT_TYPE_SPHERE
             ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
             : max(dot(-al.normal.xyz, L), 0.0);
-        float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w);
+        float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(lightDist, al.falloffBias);
         if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
             float3 toLightShadow = lightSamplePos - rayOrigin;
             float shadowDist = length(toLightShadow);
@@ -307,7 +307,7 @@ static float3 CollectAnalyticLightHits(RTGroundTruthGIPushConstant pc, float3 ra
         }
 
         if (cosLight <= 0.0) { continue; }
-        float atten = LightRangeCull(t, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w);
+        float atten = LightRangeCull(t, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(t, al.falloffBias);
         if (atten <= 0.0) { continue; }
         float pdfLightArea = 1.0 / (float(analyticCount) * lightArea);
         float pdfBrdfArea = brdfPdf * cosLight / max(t * t, 1e-8);

@@ -101,6 +101,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         if (!comp.bDisk) { EditWidgets::DragFloat(edit, "Half Height##al", &AreaLightComponent::halfHeight, 0.05f, 0.01f, 100.0f); }
         ImGui::EndDisabled();
         EditWidgets::DragFloat(edit, "Range##al", &AreaLightComponent::range, 0.5f, 0.0f, 1000.0f);
+        EditWidgets::DragFloat(edit, "Falloff Exponent##al", &AreaLightComponent::falloffExponent, 0.01f, 0.0f, 4.0f);
         EditWidgets::DragFloat(edit, "Cone Outer##al", &AreaLightComponent::coneOuterDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg");
         float coneInner = comp.coneInnerDegrees;
         if (ImGui::DragFloat("Cone Inner##al", &coneInner, 0.5f, 0.0f, 90.0f, EditWidgets::MixedFormat(edit.IsMixed(&AreaLightComponent::coneInnerDegrees), "%.1f deg"))) {
@@ -212,6 +213,8 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
         .intensity = light.intensity,
         .range = light.range,
         .type = light.bDisk ? LIGHT_TYPE_DISK : LIGHT_TYPE_AREA,
+        .falloffBias = 2.0f - light.falloffExponent,
+        .volumetricScale = 1.0f,
     };
 }
 
@@ -251,6 +254,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         EditLightIntensity(edit, "Intensity##sl", &SphereLightComponent::intensity, {.lumensPerNit = SphereLightLumensPerNit(comp, EditorLightScale(edit.Registry(), edit.Primary()))});
         EditWidgets::DragFloat(edit, "Radius##sl", &SphereLightComponent::radius, 0.05f, 0.01f, 100.0f);
         EditWidgets::DragFloat(edit, "Range##sl", &SphereLightComponent::range, 0.5f, 0.0f, 1000.0f);
+        EditWidgets::DragFloat(edit, "Falloff Exponent##sl", &SphereLightComponent::falloffExponent, 0.01f, 0.0f, 4.0f);
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
     }
@@ -281,6 +285,8 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
         .intensity = light.intensity,
         .range = light.range,
         .type = LIGHT_TYPE_SPHERE,
+        .falloffBias = 2.0f - light.falloffExponent,
+        .volumetricScale = 1.0f,
     };
 }
 

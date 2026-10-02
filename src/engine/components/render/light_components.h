@@ -32,6 +32,7 @@ struct AreaLightComponent
     float halfWidth{1.0f};
     float halfHeight{1.0f};
     float range{10.0f};
+    float falloffExponent{2.0f}; // 2 = inverse square, 0 = none; pivots at 1 m
     float coneOuterDegrees{90.0f}; // half-angle from the normal; 90 = plain hemisphere emitter
     float coneInnerDegrees{90.0f}; // full intensity inside, smoothstep to zero at outer
     bool bDisk{false};
@@ -49,6 +50,7 @@ struct AreaLightComponent
         WILL_FIELD(halfWidth, .min = 0.001f, .speed = 0.01f),
         WILL_FIELD(halfHeight, .min = 0.001f, .speed = 0.01f),
         WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
+        WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
         WILL_FIELD(coneOuterDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
         WILL_FIELD(coneInnerDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
         WILL_FIELD(bDisk),
@@ -87,6 +89,7 @@ struct SphereLightComponent
     float intensity{65536.0f}; // nits
     float radius{0.5f};
     float range{10.0f};
+    float falloffExponent{2.0f}; // 2 = inverse square, 0 = none; pivots at 1 m
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
     bool bEnabled{true};
@@ -100,6 +103,7 @@ struct SphereLightComponent
         WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
         WILL_FIELD(radius, .min = 0.001f, .speed = 0.01f),
         WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
+        WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(bExcludeFromProbeBake))
 

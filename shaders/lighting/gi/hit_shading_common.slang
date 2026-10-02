@@ -130,7 +130,7 @@ static float3 ShadeSelectedLocalLight(LightInfo light, uint tlasIndex, float3 wo
     float cosLight = light.type == LIGHT_TYPE_SPHERE
         ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
         : max(dot(-light.normal.xyz, L), 0.0);
-    float atten = LightRangeCull(lightDist, light.range) * LightConeFalloff(cosLight, light.normal.w, light.position.w);
+    float atten = LightRangeCull(lightDist, light.range) * LightConeFalloff(cosLight, light.normal.w, light.position.w) * LightFalloffScale(lightDist, light.falloffBias);
     if (cosShade <= 0.0 || cosLight <= 0.0 || atten <= 0.0) {
         return float3(0.0);
     }

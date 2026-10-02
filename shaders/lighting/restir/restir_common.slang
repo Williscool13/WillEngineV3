@@ -98,6 +98,7 @@ public struct LightView
     public uint type;
     public float cosConeInner; // area only; 0/0 = hemisphere
     public float cosConeOuter;
+    public float falloffBias;
 }
 
 public LightView TransformLightToView(LightInfo al, float4x4 view)
@@ -108,6 +109,7 @@ public LightView TransformLightToView(LightInfo al, float4x4 view)
     vs.intensity = al.intensity;
     vs.packedColor = al.packedColor;
     vs.type = al.type;
+    vs.falloffBias = al.falloffBias;
     vs.cosConeInner = 0.0;
     vs.cosConeOuter = 0.0;
     if (al.type == LIGHT_TYPE_SPHERE)
@@ -153,7 +155,7 @@ public LightVSData PackLightVS(LightView vs)
     d.upRange = float4(vs.up, vs.range);
     d.packedColor = vs.packedColor;
     d.intensity = vs.intensity;
-    d.type = vs.type;
+    d.type = vs.type | (f32tof16(vs.falloffBias) << 16);
     d.packedCone = f32tof16(vs.cosConeInner) | (f32tof16(vs.cosConeOuter) << 16);
     return d;
 }
@@ -171,7 +173,8 @@ public LightView UnpackLightVS(LightVSData d)
     vs.range = d.upRange.w;
     vs.packedColor = d.packedColor;
     vs.intensity = d.intensity;
-    vs.type = d.type;
+    vs.type = d.type & 0xFFFF;
+    vs.falloffBias = f16tof32(d.type >> 16);
     vs.cosConeInner = f16tof32(d.packedCone & 0xFFFF);
     vs.cosConeOuter = f16tof32(d.packedCone >> 16);
     return vs;
@@ -205,7 +208,7 @@ public LightSample EvalLightSample(LightView vs, float3 samplePos, float3 shadin
         s.cosLight = max(dot(-vs.normal, s.L), 0.0);
     }
 
-    s.attenuation = LightRangeCull(s.dist, range) * LightConeFalloff(s.cosLight, vs.cosConeInner, vs.cosConeOuter);
+    s.attenuation = LightRangeCull(s.dist, range) * LightConeFalloff(s.cosLight, vs.cosConeInner, vs.cosConeOuter) * LightFalloffScale(s.dist, vs.falloffBias);
     return s;
 }
 
@@ -422,7 +425,7 @@ public float EvalCellLightTarget(LightView vs, float3 samplePos, float3 cellCent
     if (vs.type != LIGHT_TYPE_SPHERE && dot(vs.normal, toCellCenter) > cellHalfDiag) { return 0.0; }
     float3 toSample = vs.center - samplePos;
     float dist = max(length(toSample), 1e-5);
-    float atten = max(LightRangeCull(dist, vs.range), REGIR_TARGET_RANGE_FLOOR);
+    float atten = max(LightRangeCull(dist, vs.range), REGIR_TARGET_RANGE_FLOOR) * LightFalloffScale(dist, vs.falloffBias);
     float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : abs(dot(vs.normal, -toSample / dist));
     atten *= max(LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter), REGIR_TARGET_CONE_FLOOR);
     float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));

@@ -15,7 +15,8 @@ namespace Render
 template<size_t SamplerCount, size_t CompareSamplerCount, size_t SampledImageCount,
     size_t StorageFloat4Count, size_t StorageFloat2Count, size_t StorageFloatCount, size_t StorageUInt4Count, size_t StorageUInt2Count, size_t StorageUIntCount,
     size_t SampledFloat2Count, size_t SampledFloatCount, size_t SampledUInt4Count, size_t SampledUInt2Count, size_t SampledUIntCount,
-    size_t MultisampledImageCount, size_t MultisampledUIntImageCount>
+    size_t MultisampledImageCount, size_t MultisampledUIntImageCount,
+    size_t Sampled3DFloat4Count, size_t Storage3DFloat4Count>
 class BindlessTransientRDGResourcesDescriptorBuffer
 {
 public:
@@ -36,6 +37,8 @@ public:
     uint32_t GetSampledUIntCount() { return SampledUIntCount; }
     uint32_t GetMultisampledImageCount() { return MultisampledImageCount; }
     uint32_t GetMultisampledUIntImageCount() { return MultisampledUIntImageCount; }
+    uint32_t GetSampled3DFloat4Count() { return Sampled3DFloat4Count; }
+    uint32_t GetStorage3DFloat4Count() { return Storage3DFloat4Count; }
 
 public:
     BindlessTransientRDGResourcesDescriptorBuffer() = default;
@@ -60,6 +63,8 @@ public:
         layoutBuilder.AddBinding(13, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledUIntCount);
         layoutBuilder.AddBinding(14, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MultisampledImageCount);
         layoutBuilder.AddBinding(15, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MultisampledUIntImageCount);
+        layoutBuilder.AddBinding(16, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, Sampled3DFloat4Count);
+        layoutBuilder.AddBinding(17, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, Storage3DFloat4Count);
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
             static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -267,6 +272,26 @@ public:
         return WriteDescriptorHelper(15, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                                      VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
                                      [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
+    }
+
+    bool WriteSampled3DFloat4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= Sampled3DFloat4Count) {
+            SPDLOG_ERROR("Invalid sampled 3D float4 index: {}", index);
+            return false;
+        }
+        return WriteDescriptorHelper(16, index, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                     VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize,
+                                     [&](VkDescriptorGetInfoEXT& info) { info.data.pSampledImage = &imageInfo; });
+    }
+
+    bool WriteStorage3DFloat4Descriptor(uint32_t index, const VkDescriptorImageInfo& imageInfo)
+    {
+        if (index >= Storage3DFloat4Count) {
+            SPDLOG_ERROR("Invalid storage 3D float4 index: {}", index);
+            return false;
+        }
+        return WriteStorageImageHelper(17, index, imageInfo);
     }
 
     [[nodiscard]] VkDescriptorBufferBindingInfoEXT GetBindingInfo() const

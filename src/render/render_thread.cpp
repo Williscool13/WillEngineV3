@@ -1137,6 +1137,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                 debugVisPass.WriteStorageImage(targets.colorOutput);
                 debugVisPass.Execute([&, debugTargetName, colorOutput = targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
                     const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+                    if (dims.Is3D()) { return; }
                     VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
 
                     VkImageAspectFlags viewAspect = aspect;

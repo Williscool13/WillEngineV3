@@ -13,6 +13,7 @@ public struct PunctualLight
     public float3 color;
     public float effectiveIntensity; // radiance folded with source area (ReSTIR brightness parity)
     public float range; // attenuation cutoff / cluster bounding radius
+    public float falloffBias;
     public float sourceRadius; // 0 = delta; >0 drives representative-point specular
     public bool oneSided; // area lights fade to zero across the plane
     public bool bDisk;
@@ -32,6 +33,7 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
     pl.pos = mul(view, float4(light.position.xyz, 1.0)).xyz;
     pl.color = UnpackUnorm4x8(light.packedColor).rgb;
     pl.range = light.range;
+    pl.falloffBias = light.falloffBias;
     pl.rightAxis = float3(0.0);
     pl.upAxis = float3(0.0);
     pl.halfWidth = 0.0;
@@ -159,7 +161,7 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     float3 F = F_SCHLICK(V, Hs, F0);
     float3 specular = (NDF * G * F) / max(4.0 * nDotV * nDotLs, 0.001) * nDotLs * specNormalization;
 
-    float attenuation = LightDistanceFalloff(dist, pl.range);
+    float attenuation = LightDistanceFalloff(dist, pl.range) * LightFalloffScale(dist, pl.falloffBias);
     return (diffuse + specular) * attenuation * emitterCos * pl.effectiveIntensity * pl.color;
 }
 
@@ -189,6 +191,6 @@ public float3 ShadePunctualDiffuse(PunctualLight pl, float3 N, float3 V, float3 
     float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
     float3 diffuse = kD * albedo * orenNayar * nDotL;
 
-    float attenuation = LightDistanceFalloff(dist, pl.range);
+    float attenuation = LightDistanceFalloff(dist, pl.range) * LightFalloffScale(dist, pl.falloffBias);
     return diffuse * attenuation * emitterCos * pl.effectiveIntensity * pl.color;
 }

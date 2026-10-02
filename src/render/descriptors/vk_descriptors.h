@@ -15,7 +15,7 @@ struct DescriptorLayoutBuilder
 {
     explicit DescriptorLayoutBuilder();
 
-    Core::InlineVector<VkDescriptorSetLayoutBinding, 16> bindings;
+    Core::InlineVector<VkDescriptorSetLayoutBinding, 32> bindings;
 
     void AddBinding(uint32_t binding, VkDescriptorType type);
 

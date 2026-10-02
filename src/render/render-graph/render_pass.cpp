@@ -36,6 +36,7 @@ RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const Textur
             ENGINE_ASSERT(Renderer, resource->textureInfo.format == texInfo.format, "Format mismatch");
             ENGINE_ASSERT(Renderer, resource->textureInfo.width == texInfo.width, "Width mismatch");
             ENGINE_ASSERT(Renderer, resource->textureInfo.height == texInfo.height, "Height mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.depth == texInfo.depth, "Depth mismatch");
         }
     }
     else {
@@ -146,6 +147,7 @@ RenderPass& RenderPass::ReadWriteImage(const StringID textureId, const TextureIn
             ENGINE_ASSERT(Renderer, resource->textureInfo.format == texInfo.format, "Format mismatch");
             ENGINE_ASSERT(Renderer, resource->textureInfo.width == texInfo.width, "Width mismatch");
             ENGINE_ASSERT(Renderer, resource->textureInfo.height == texInfo.height, "Height mismatch");
+            ENGINE_ASSERT(Renderer, resource->textureInfo.depth == texInfo.depth, "Depth mismatch");
         }
     }
     else {

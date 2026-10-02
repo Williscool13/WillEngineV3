@@ -313,6 +313,7 @@ struct ResourceDimensions
 
     [[nodiscard]] bool IsBuffer() const { return type == Type::Buffer || type == Type::AccelerationStructure; }
     [[nodiscard]] bool IsImage() const { return type == Type::Image; }
+    [[nodiscard]] bool Is3D() const { return type == Type::Image && depth > 1; }
     // Basically a buffer that also additionally allocates an AS
     [[nodiscard]] bool IsAccelerationStructure() const { return type == Type::AccelerationStructure; }
 
@@ -399,6 +400,7 @@ struct TextureInfo
     uint32_t width{0};
     uint32_t height{0};
     uint32_t mipLevels{1};
+    uint32_t depth{1};
 };
 
 struct TextureResource
