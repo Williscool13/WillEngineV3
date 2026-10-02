@@ -8,6 +8,8 @@ Editor builds run an MCP server on `http://127.0.0.1:8787/mcp` (`--mcp-port <n>`
 - `get_frame_timings` - CPU and GPU frame timing, culling and pipeline counters. Safe to poll.
 - `query_assets`, `query_scene`, `get_entity`, `find_entities` - what the engine knows about, and what is in the live scene.
 - `spawn_entity` - a prefab, a model, or an empty entity, optionally parented.
+- `load_scene` - unloads everything and loads a scene by name or id; loading the current scene reloads its file. Run the console command `rescan` first for a file written since the last scan. Refuses when a loaded scene has unsaved edits unless `discardChanges` is true.
+- `get_camera`, `set_camera` - the editor camera pose; `set_camera` takes a position plus either a look-at target or a quaternion, and optionally the field of view.
 - `exec_console_command`, `list_console_commands` - the in-game developer console, with printed output returned.
 - `capture_screenshot` - returns a PNG path immediately; `frames` > 1 captures consecutive render frames as `<stem>_NNN.png`. Poll `get_engine_status.screenshotInFlight` until false, then read the files.
 - `pick_pixel` - what is under a viewport pixel. Arm it with `{u, v}` (0..1, top-left origin, the image `capture_screenshot` saves), then call it with no args for the entity, primitive, material and emissive-light state; `resolved` is false until the GPU answers.

@@ -427,6 +427,13 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int s
         LOG_WARN(Engine, "Scene slot {} points at {}, which is no longer registered", slotIndex + 1, slot.sceneId.ToString());
         return false;
     }
+    return LoadSceneExclusive(ctx, state, slot.sceneId);
+}
+
+bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId)
+{
+    ZoneScoped;
+    if (!ctx->assetManager->GetSceneCache().Find(sceneId)) { return false; }
 
     const bool bWasPlaying = IsPlaying(state);
     if (bWasPlaying) {
@@ -439,7 +446,7 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int s
     }
     UnloadScenes(state, scenesToUnload);
 
-    const LoadSceneResult result = LoadSceneFromFile(state, ctx->assetManager, slot.sceneId);
+    const LoadSceneResult result = LoadSceneFromFile(state, ctx->assetManager, sceneId);
     if (result.bSuccess) {
         state->scene.currentSceneId = result.sceneId;
         state->scene.currentSceneName = result.sceneName;

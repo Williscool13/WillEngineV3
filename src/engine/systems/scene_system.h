@@ -76,6 +76,15 @@ bool SaveSceneSlot(Engine::EngineState* state, int slotIndex);
  */
 bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int slotIndex);
 
+/**
+ * Unloads every loaded scene and loads this one from disk, ending and restarting play if a session is active.
+ * @param ctx
+ * @param state
+ * @param sceneId
+ * @return false if the scene is not registered or failed to load.
+ */
+bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId);
+
 void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName);
 
 entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, const glm::vec3& spawnPosition = {});

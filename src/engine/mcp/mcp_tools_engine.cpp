@@ -22,6 +22,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_logger.h"
 #include "engine/logging/log_category.h"
+#include "engine/systems/scene_system.h"
 #include "platform/paths.h"
 #include "render/renderer_statistics.h"
 #include "render/render-graph/render_graph_resources.h"
@@ -481,6 +482,92 @@ static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
     return ToolResult::Complete;
 }
 
+static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
+{
+    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
+    const entt::entity camEntity = camView.front();
+    if (camEntity == entt::null) {
+        call.SetError("No editor camera in the registry");
+        return ToolResult::Error;
+    }
+    auto [camera, transform] = camView.get<Component::CameraComponent, Component::TransformComponent>(camEntity);
+
+    const glm::vec3 translation{static_cast<float>(call.GetFloat("x", transform.translation.x)), static_cast<float>(call.GetFloat("y", transform.translation.y)),
+                                static_cast<float>(call.GetFloat("z", transform.translation.z))};
+    glm::quat rotation = transform.rotation;
+    if (call.HasArg("targetX") || call.HasArg("targetY") || call.HasArg("targetZ")) {
+        const glm::vec3 target{static_cast<float>(call.GetFloat("targetX", 0.0)), static_cast<float>(call.GetFloat("targetY", 0.0)), static_cast<float>(call.GetFloat("targetZ", 0.0))};
+        const glm::vec3 toTarget = target - translation;
+        if (glm::dot(toTarget, toTarget) < 1e-8f) {
+            call.SetError("target equals the camera position");
+            return ToolResult::Error;
+        }
+        const glm::vec3 direction = glm::normalize(toTarget);
+        rotation = glm::quatLookAt(direction, glm::abs(direction.y) > 0.999f ? glm::vec3(0.0f, 0.0f, -1.0f) : WORLD_UP);
+    }
+    else if (call.HasArg("qw")) {
+        const glm::quat q{static_cast<float>(call.GetFloat("qw", 1.0)), static_cast<float>(call.GetFloat("qx", 0.0)), static_cast<float>(call.GetFloat("qy", 0.0)),
+                          static_cast<float>(call.GetFloat("qz", 0.0))};
+        if (glm::dot(q, q) < 1e-8f) {
+            call.SetError("rotation quaternion is zero");
+            return ToolResult::Error;
+        }
+        rotation = glm::normalize(q);
+    }
+    if (call.HasArg("fovDegrees")) {
+        state->projectConfig.editorCameraFovDegrees = glm::clamp(static_cast<float>(call.GetFloat("fovDegrees", 60.0)), 5.0f, 150.0f);
+    }
+
+    transform.translation = translation;
+    transform.rotation = rotation;
+    camera.transition = Component::CameraTransition::Cut;
+    return GetCamera(nullptr, state, call);
+}
+
+static ToolResult LoadScene(EngineContext* ctx, EngineState* state, Call& call)
+{
+    const char* name = call.GetString("name", "");
+    if (!*name) {
+        call.SetError("Missing name: a scene name or its 16 hex digit id");
+        return ToolResult::Error;
+    }
+    if (!state->editor.modifiedScenes.IsEmpty() && !call.GetBool("discardChanges", false)) {
+        call.SetError("A loaded scene has unsaved changes; pass discardChanges true to drop them");
+        return ToolResult::Error;
+    }
+
+    StringID sceneId{};
+    uint64_t raw = 0;
+    if (ParseHexId(name, raw) && ctx->assetManager->GetSceneMetadata(StringID(raw))) {
+        sceneId = StringID(raw);
+    }
+    else {
+        uint32_t matchCount = 0;
+        for (const auto& kv : ctx->assetManager->GetSceneCache()) {
+            if (kv.value.sceneName == name) {
+                sceneId = kv.key;
+                ++matchCount;
+            }
+        }
+        if (matchCount == 0) {
+            call.SetError("No registered scene has that name or id; run the console command rescan after writing a new file, then check query_assets");
+            return ToolResult::Error;
+        }
+        if (matchCount > 1) {
+            call.SetError("More than one scene has that name; pass the hex id");
+            return ToolResult::Error;
+        }
+    }
+
+    if (!LoadSceneExclusive(ctx, state, sceneId)) {
+        call.SetError("Scene failed to load; see engine.log");
+        return ToolResult::Error;
+    }
+    call.SetString("sceneId", HexId(sceneId.id).c_str());
+    call.SetString("sceneName", state->scene.currentSceneName.c_str());
+    return ToolResult::Complete;
+}
+
 static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
 {
     PickPixelState& pick = state->debug.pick;
@@ -637,6 +724,32 @@ void RegisterEngineTools(EngineState* state)
         .description = "The editor camera's world translation, rotation (w, x, y, z, the .wplay order), forward vector and vertical field of view. Use it to author .wplay camera paths from the current view.",
         .inputSchemaJson = nullptr,
         .invoke = &GetCamera,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
+    RegisterTool(state, {
+        .id = "set_camera"_sid,
+        .name = "set_camera",
+        .description = "Moves the editor camera as a cut and returns the new pose. Omitted position components keep their current value. Aim with targetX/Y/Z (look at a world point, level horizon) or qw/qx/qy/qz; with neither, the rotation is kept. fovDegrees changes the editor camera's vertical field of view, which is a saved project setting.",
+        .inputSchemaJson = R"({"type":"object","properties":{
+            "x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"},
+            "targetX":{"type":"number"},"targetY":{"type":"number"},"targetZ":{"type":"number"},
+            "qw":{"type":"number"},"qx":{"type":"number"},"qy":{"type":"number"},"qz":{"type":"number"},
+            "fovDegrees":{"type":"number","minimum":5,"maximum":150}}})",
+        .invoke = &SetCamera,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
+    RegisterTool(state, {
+        .id = "load_scene"_sid,
+        .name = "load_scene",
+        .description = "Unloads every loaded scene and loads one from disk by name or hex id; loading the current scene again reloads its file. A file written since the last scan needs the console command rescan first. Poll get_engine_status.settled afterwards, and never issue loads back to back.",
+        .inputSchemaJson = R"({"type":"object","required":["name"],"properties":{
+            "name":{"type":"string","description":"Scene name (the file stem) or its 16 hex digit id"},
+            "discardChanges":{"type":"boolean","default":false,"description":"Proceed even if a loaded scene has unsaved edits, dropping them"}}})",
+        .invoke = &LoadScene,
         .origin = Origin::Engine,
         .bNeedsDrain = true,
     });
