@@ -463,6 +463,9 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Wall Start", &p.sideWallStart, 0.005f, 0.0f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Distance in from the first riser where the walls begin, to leave room for a newel or pillar"); }
+                    ImGui::DragFloat("Wall Chamfer", &p.sideWallChamfer, 0.001f, 0.0f, 1.0f, "%.3f");
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bevel on both top edges of each wall; mesh only"); }
                     ImGui::TextUnformatted("Walls on");
                     ImGui::SameLine();
                     if (ImGui::Checkbox("-X##sidewall", &p.bSideWallNegX)) { dirty = true; }

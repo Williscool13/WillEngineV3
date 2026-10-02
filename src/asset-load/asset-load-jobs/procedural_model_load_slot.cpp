@@ -1592,6 +1592,7 @@ bool ProceduralModelLoadSlot::GenerateStaircaseDetailed(const Engine::StaircaseP
     if (Engine::StaircaseHasSideWalls(p)) {
         const float start = glm::max(p.sideWallStart, 0.0f);
         auto wallTop = [&](float z) { return Engine::StaircaseLineHeight(p, z) + p.sideWallHeight; };
+        const float chamfer = glm::clamp(p.sideWallChamfer, 0.0f, 0.45f * glm::min(p.sideWallThickness, p.sideWallHeight));
         auto addWall = [&](float x0, float x1) {
             float breaks[4];
             const int32_t breakCount = Engine::StaircaseUndersideBreaks(p, start, totalDepth, breaks);
@@ -1600,8 +1601,8 @@ bool ProceduralModelLoadSlot::GenerateStaircaseDetailed(const Engine::StaircaseP
                 const float zb = breaks[k + 1];
                 const float ya = Engine::StaircaseUndersideHeight(p, za);
                 const float yb = Engine::StaircaseUndersideHeight(p, zb);
-                const float ta = wallTop(za);
-                const float tb = wallTop(zb);
+                const float ta = wallTop(za) - chamfer;
+                const float tb = wallTop(zb) - chamfer;
                 addQuad({-1, 0, 0}, {{x0, ya, za}, {x0, yb, zb}, {x0, tb, zb}, {x0, ta, za}});
                 addQuad({1, 0, 0}, {{x1, ya, za}, {x1, yb, zb}, {x1, tb, zb}, {x1, ta, za}});
                 addQuad(glm::normalize(Vec3(0.0f, -(zb - za), yb - ya)), {{x0, ya, za}, {x1, ya, za}, {x1, yb, zb}, {x0, yb, zb}});
@@ -1610,9 +1611,28 @@ bool ProceduralModelLoadSlot::GenerateStaircaseDetailed(const Engine::StaircaseP
             const float topEnd = wallTop(totalDepth);
             const float footStart = Engine::StaircaseUndersideHeight(p, start);
             const float footEnd = Engine::StaircaseUndersideHeight(p, totalDepth);
-            addQuad(glm::normalize(Vec3(0.0f, totalDepth - start, topStart - topEnd)), {{x0, topStart, start}, {x1, topStart, start}, {x1, topEnd, totalDepth}, {x0, topEnd, totalDepth}});
-            addQuad({0, 0, -1}, {{x0, footStart, start}, {x1, footStart, start}, {x1, topStart, start}, {x0, topStart, start}});
-            addQuad({0, 0, 1}, {{x0, footEnd, totalDepth}, {x1, footEnd, totalDepth}, {x1, topEnd, totalDepth}, {x0, topEnd, totalDepth}});
+            const float run = totalDepth - start;
+            const float drop = topStart - topEnd;
+            addQuad(glm::normalize(Vec3(0.0f, run, drop)),
+                    {{x0 + chamfer, topStart, start}, {x1 - chamfer, topStart, start}, {x1 - chamfer, topEnd, totalDepth}, {x0 + chamfer, topEnd, totalDepth}});
+            if (chamfer > 0.0f) {
+                addQuad(glm::normalize(Vec3(-run, run, drop)),
+                        {{x0, topStart - chamfer, start}, {x0 + chamfer, topStart, start}, {x0 + chamfer, topEnd, totalDepth}, {x0, topEnd - chamfer, totalDepth}});
+                addQuad(glm::normalize(Vec3(run, run, drop)),
+                        {{x1 - chamfer, topStart, start}, {x1, topStart - chamfer, start}, {x1, topEnd - chamfer, totalDepth}, {x1 - chamfer, topEnd, totalDepth}});
+            }
+            const Vec3 startCap[6] = {{x0, footStart, start}, {x1, footStart, start}, {x1, topStart - chamfer, start},
+                                      {x1 - chamfer, topStart, start}, {x0 + chamfer, topStart, start}, {x0, topStart - chamfer, start}};
+            const Vec3 endCap[6] = {{x0, footEnd, totalDepth}, {x1, footEnd, totalDepth}, {x1, topEnd - chamfer, totalDepth},
+                                    {x1 - chamfer, topEnd, totalDepth}, {x0 + chamfer, topEnd, totalDepth}, {x0, topEnd - chamfer, totalDepth}};
+            if (chamfer > 0.0f) {
+                addPoly({0, 0, -1}, startCap, 6);
+                addPoly({0, 0, 1}, endCap, 6);
+            }
+            else {
+                addQuad({0, 0, -1}, {startCap[0], startCap[1], startCap[2], startCap[5]});
+                addQuad({0, 0, 1}, {endCap[0], endCap[1], endCap[2], endCap[5]});
+            }
         };
         if (p.bSideWallNegX) { addWall(-p.sideWallThickness, 0.0f); }
         if (p.bSideWallPosX) { addWall(width, width + p.sideWallThickness); }
@@ -3254,18 +3274,69 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         return f.pos + off.x * f.rRight + off.y * f.rUp;
     };
 
+    // Linear corners are mitred: rings at a control point are projected onto the bisector plane, and sharp corners get one ring per side so each run keeps flat normals.
+    struct MeshRing
+    {
+        Frame frame;
+        Vec3 mitre;
+        bool bJoinNext;
+    };
+    constexpr float MITRE_SPLIT_COS = 0.866f;
+    const bool bLinear = p.spline.mode == Engine::SplineMode::Linear;
+    Core::Vector<MeshRing> meshRings(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    bool bWrap = bClosed;
+    {
+        MeshRing closing{};
+        bool bHasClosing = false;
+        for (int i = 0; i < totalRings; i++) {
+            MeshRing out{frames[i], Vec3(0.0f), true};
+            const bool bCorner = bLinear && i % segs == 0 && (bClosed || (i > 0 && i < totalRings - 1));
+            if (bCorner) {
+                const Frame& prev = frames[(i + totalRings - 1) % totalRings];
+                const Vec3 sum = prev.tangent + frames[i].tangent;
+                if (glm::length(sum) > 1e-3f) {
+                    out.mitre = glm::normalize(sum);
+                    if (glm::dot(prev.tangent, frames[i].tangent) < MITRE_SPLIT_COS) {
+                        const float roll = glm::radians(p.rollAngle + frames[i].roll);
+                        MeshRing in{frames[i], out.mitre, false};
+                        in.frame.tangent = prev.tangent;
+                        in.frame.rRight = glm::cos(roll) * prev.right + glm::sin(roll) * prev.up;
+                        in.frame.rUp = -glm::sin(roll) * prev.right + glm::cos(roll) * prev.up;
+                        if (i == 0) {
+                            closing = in;
+                            bHasClosing = true;
+                        }
+                        else {
+                            meshRings.PushBack(in);
+                        }
+                    }
+                }
+            }
+            meshRings.PushBack(out);
+        }
+        if (bHasClosing) {
+            meshRings.PushBack(closing);
+            bWrap = false;
+        }
+    }
+    const int meshRingCount = static_cast<int>(meshRings.Size());
+
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
         const Vec2 laneOff = laneOffsets[rail];
         const auto baseVertex = static_cast<uint32_t>(vertices.Size());
 
-        for (int i = 0; i < totalRings; i++) {
-            const Frame& f = frames[i];
-            const Vec3 center = laneCenter(f, laneOff);
-            const float vCoord = (totalRings > 1) ? static_cast<float>(i) / static_cast<float>(totalRings - 1) : 0.0f;
+        for (int i = 0; i < meshRingCount; i++) {
+            const Frame& f = meshRings[i].frame;
+            const Vec3 mitre = meshRings[i].mitre;
+            const float mitreFacing = glm::dot(f.tangent, mitre);
+            const Vec3 laneOffset = laneCenter(f, laneOff) - f.pos;
+            const float vCoord = (meshRingCount > 1) ? static_cast<float>(i) / static_cast<float>(meshRingCount - 1) : 0.0f;
             for (int j = 0; j < ringSize; j++) {
                 const SplineProfilePoint& pp = ring[j];
+                Vec3 offset = laneOffset + pp.pos.x * f.rRight + pp.pos.y * f.rUp;
+                if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
                 Engine::FullVertex v{};
-                v.position = center + pp.pos.x * f.rRight + pp.pos.y * f.rUp;
+                v.position = f.pos + offset;
                 v.normal = glm::normalize(pp.normal.x * f.rRight + pp.normal.y * f.rUp);
                 v.uv = {static_cast<float>(j) / static_cast<float>(ringSize), vCoord};
                 v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
@@ -3274,9 +3345,10 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             }
         }
 
-        const int stitchCount = bClosed ? totalRings : totalRings - 1;
-        for (int i = 0; i < stitchCount; i++) {
-            const int nextRing = bClosed ? (i + 1) % totalRings : i + 1;
+        for (int i = 0; i < meshRingCount; i++) {
+            if (!meshRings[i].bJoinNext) { continue; }
+            if (i == meshRingCount - 1 && !bWrap) { continue; }
+            const int nextRing = (i + 1) % meshRingCount;
             for (int j = 0; j < ringSize; j++) {
                 const int jn = (j + 1) % ringSize;
                 uint32_t a0 = baseVertex + i * ringSize + j, a1 = baseVertex + i * ringSize + jn;

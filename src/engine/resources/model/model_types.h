@@ -147,11 +147,12 @@ struct StaircaseParams
     bool bSideWallPosX{true};
     uint8_t _pad3[2]{};
     float stepChamfer{0.0f};
+    float sideWallChamfer{0.0f};
 
-    WILL_REFLECT(StaircaseParams, WILL_FIELD(stepCount), WILL_FIELD(width), WILL_FIELD(totalDepth), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight),
+    WILL_REFLECT(StaircaseParams,WILL_FIELD(stepCount), WILL_FIELD(width), WILL_FIELD(totalDepth), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight),
                  WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed), WILL_FIELD(bSpecifyStepDepth), WILL_FIELD(stepDepth), WILL_FIELD(slabThickness),
                  WILL_FIELD(sideWallHeight), WILL_FIELD(sideWallThickness), WILL_FIELD(sideWallStart), WILL_FIELD(bSideWallNegX), WILL_FIELD(bSideWallPosX),
-                 WILL_FIELD(stepChamfer))
+                 WILL_FIELD(stepChamfer), WILL_FIELD(sideWallChamfer))
 };
 
 /** totalDepth, or stepCount * stepDepth when the step depth is specified. */
