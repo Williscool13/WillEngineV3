@@ -1,11 +1,11 @@
 wscene
 version 2 1
 id 17128958053682175714
-content_version 121
-entity_count 542
+content_version 126
+entity_count 545
 end_header
 scene_id|17128958053682175714
-entities|542
+entities|545
 entity
 13819805800635272091
 name|[Delete] Working Light11
@@ -17,11 +17,11 @@ sortOrder|553
 5878230453007731534
 ;
 8357514868041474787
-translation|0x40c42206|0x415738e6|0x3f49e08e
-rotation|0x3d9cf808|0x3d8275e7|0x3f34d5ab|0x3f336614
+translation|0x40c42206|0x4169672c|0x3f49e08e
+rotation|0x3f008a95|0x3efdc455|0x3f01e0ab|0x3efd5784
 ;
 3578748455783499142
-intensity|0x48008312
+intensity|0x47400000
 halfWidth|0x3f0e8e69
 halfHeight|0x41007401
 range|0x41480000
@@ -38,11 +38,11 @@ sortOrder|552
 5878230453007731534
 ;
 8357514868041474787
-translation|0xc015baf6|0x4155938b|0xc0b13a83
-rotation|0xbeeb312d|0x3f0d4cd6|0x3f0ac53d|0x3edf7728
+translation|0xc015baf6|0x41610f82|0xc0b13a83
+rotation|0x3cccc71c|0x3f37b89d|0x3f31ee06|0xbd11671d
 ;
 3578748455783499142
-intensity|0x48400000
+intensity|0x47400000
 halfWidth|0x3f0e8e69
 halfHeight|0x40d4d021
 range|0x41480000
@@ -63,6 +63,7 @@ translation|0xc0cd9033|0x40cb3333|0xbff13fa3
 rotation|0x3f3f3285|0xbeb6df1e|0x3f0b3822|0x3e0cb027
 ;
 3578748455783499142
+bEnabled|0
 intensity|0x45f9db23
 halfWidth|0x3ff60227
 halfHeight|0x4018d7bc
@@ -210,6 +211,7 @@ translation|0x3fb33333|0x40cb3333|0x410a6667
 rotation|0xbdf74b28|0xbd4cdd2e|0x3f6a7c03|0x3ec240d4
 ;
 3578748455783499142
+bEnabled|0
 intensity|0x46fd70a4
 halfWidth|0x3ff60227
 halfHeight|0x4018d7bc
@@ -16520,6 +16522,7 @@ sortOrder|546
 translation|0xc09ab1bf|0x40a1f824|0xbfb0df3e
 ;
 6671021033936836464
+bEnabled|0
 intensity|0x48003127
 radius|0x3e99999a
 range|0x42c80000
@@ -16541,7 +16544,7 @@ translation|0xc110ceb2|0x4082f6f9|0x41133672
 rotation|0xbdb13482|0x3edea6f0|0x3f33a8bf|0x3f0ebd34
 ;
 3578748455783499142
-intensity|0x4731eb85
+intensity|0x46b1eb85
 halfWidth|0x3f0e8e69
 range|0x40a00000
 ;
@@ -16561,7 +16564,7 @@ translation|0x3e352471|0x4094cccd|0x4126ed58
 rotation|0xbddde9a9|0x3ed5a589|0x3f32e1a9|0x3f1223b3
 ;
 3578748455783499142
-intensity|0x473c6a7f
+intensity|0x46bc6a7f
 halfWidth|0x3f0e8e69
 range|0x40a00000
 ;
@@ -16581,12 +16584,84 @@ translation|0xc1203d93|0x4094cccd|0xbb676a80
 rotation|0xbddde9a9|0x3ed5a589|0x3f32e1a9|0x3f1223b3
 ;
 3578748455783499142
-intensity|0x473c6a7f
+intensity|0x46bc6a7f
 halfWidth|0x3f0e8e69
 range|0x40a00000
 ;
 ;
+entity
+13819805800635272091
+name|Pyramid Bounce
+;
+14478730078215061411
+id|11267233208665280530
+sortOrder|554
+;
+5878230453007731534
+;
+8357514868041474787
+translation|0xc0700000|0x402ccccd|0x3f400000
+rotation|0x3f3504f3|0xbf3504f3|0x00000000|0x00000000
+;
+3578748455783499142
+intensity|0x469c4000
+halfWidth|0x40800000
+halfHeight|0x40800000
+range|0x41f00000
+coneOuterDegrees|0x42340000
+coneInnerDegrees|0x41700000
+drawEmissiveSurface|0
+;
+;
+entity
+13819805800635272091
+name|Pit Fill -X
+;
+14478730078215061411
+id|15869531699520471467
+sortOrder|555
+;
+5878230453007731534
+;
+8357514868041474787
+translation|0xc10f3333|0x418a0000|0x3f400000
+rotation|0x3f31d7af|0x3f31d7af|0x3e070ece|0x3e070ece
+;
+3578748455783499142
+intensity|0x4a742400
+halfWidth|0x3e99999a
+halfHeight|0x40200000
+range|0x41f00000
+coneOuterDegrees|0x41600000
+coneInnerDegrees|0x40e00000
+drawEmissiveSurface|0
+;
+;
+entity
+13819805800635272091
+name|Pit Fill +Z
+;
+14478730078215061411
+id|597895806078652201
+sortOrder|556
+;
+5878230453007731534
+;
+8357514868041474787
+translation|0xbf400000|0x418a0000|0x410f3333
+rotation|0x3ecbc1d4|0x3f15a0f4|0x3f15a0f4|0xbecbc1d4
+;
+3578748455783499142
+intensity|0x4a742400
+halfWidth|0x3e99999a
+halfHeight|0x40200000
+range|0x41f00000
+coneOuterDegrees|0x41600000
+coneInnerDegrees|0x40e00000
+drawEmissiveSurface|0
+;
+;
 editor_camera
-translation|0xbfde54e2|0x40cc3ef0|0x4105831a
-rotation|0x3f4b4ca2|0x3e3a49df|0xbf10b2d1|0x3e049712
+translation|0xc12c6cc1|0x409fd54c|0x412dd115
+rotation|0x3f63f45b|0x3d68d6a6|0xbee6b5af|0x3ceba613
 ;

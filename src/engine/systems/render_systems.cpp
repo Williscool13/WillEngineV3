@@ -1016,8 +1016,10 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
             DEBUG_ADD_RECT(viewFamily.debugRects, {center, light.halfWidth * transform.scale.x, light.halfHeight * transform.scale.y, right, up, editColor, 0.03f});
         }
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {center, center + forward * 0.5f, 0.08f, 0.02f, editColor, 0.01f});
-        addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
-        if (light.coneOuterDegrees < 90.0f) {
+        if (light.coneOuterDegrees >= 90.0f) {
+            addHemisphereVolume(center, forward, right, up, light.range, rangeColor);
+        }
+        else {
             const float depth = light.range * glm::cos(glm::radians(light.coneOuterDegrees));
             const float spread = light.range * glm::sin(glm::radians(light.coneOuterDegrees));
             const Vec3 farCenter = center + forward * depth;
