@@ -783,6 +783,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
                 vf.directionalLight.color = light.color;
                 vf.directionalLight.intensity = light.intensity;
                 vf.directionalLight.angularRadiusDegrees = light.angularRadiusDegrees;
+                vf.directionalLight.volumetricScale = glm::max(light.volumetricScale, 0.0f);
                 vf.directionalLight.bEnabled = true;
                 found = true;
             }

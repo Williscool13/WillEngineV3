@@ -34,6 +34,7 @@ struct AreaLightComponent
     float halfHeight{1.0f};
     float range{10.0f};
     float falloffExponent{2.0f}; // 2 = inverse square, 0 = none; pivots at 1 m
+    float volumetricScale{1.0f}; // fog scattering multiplier; 0 = invisible to fog
     float coneOuterDegrees{90.0f}; // half-angle from the normal; 90 = plain hemisphere emitter
     float coneInnerDegrees{90.0f}; // full intensity inside, smoothstep to zero at outer
     bool bNormalizeCone{false}; // a surface in the beam is lit as if under an open emitter, whatever the cone
@@ -53,6 +54,7 @@ struct AreaLightComponent
         WILL_FIELD(halfHeight, .min = 0.001f, .speed = 0.01f),
         WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
         WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
+        WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f),
         WILL_FIELD(coneOuterDegrees, .min = MIN_CONE_OUTER_DEGREES, .max = 90.0f, .speed = 0.5f),
         WILL_FIELD(coneInnerDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
         WILL_FIELD(bNormalizeCone),
@@ -93,6 +95,7 @@ struct SphereLightComponent
     float radius{0.5f};
     float range{10.0f};
     float falloffExponent{2.0f}; // 2 = inverse square, 0 = none; pivots at 1 m
+    float volumetricScale{1.0f}; // fog scattering multiplier; 0 = invisible to fog
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
     bool bEnabled{true};
@@ -107,6 +110,7 @@ struct SphereLightComponent
         WILL_FIELD(radius, .min = 0.001f, .speed = 0.01f),
         WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
         WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
+        WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f),
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(bExcludeFromProbeBake))
 
@@ -153,12 +157,14 @@ struct DirectionalLightComponent
     float intensity{131072.0f}; // lux
     int32_t priority{0};
     float angularRadiusDegrees{1.0f}; // sun-disk half-angle for soft shadows; 0 = hard
+    float volumetricScale{1.0f}; // fog scattering multiplier; 0 = invisible to fog
 
     WILL_REFLECT(DirectionalLightComponent,
         WILL_FIELD(color),
         WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
         WILL_FIELD(priority),
-        WILL_FIELD(angularRadiusDegrees, .min = 0.0f, .max = 30.0f, .speed = 0.02f))
+        WILL_FIELD(angularRadiusDegrees, .min = 0.0f, .max = 30.0f, .speed = 0.02f),
+        WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f))
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
@@ -201,7 +207,7 @@ struct VolumetricFogComponent
     static constexpr const char* COMPONENT_NAME = "VolumetricFogComponent";
 
     Vec3 albedo{1.0f, 1.0f, 1.0f};
-    float density{0.02f}; // extinction per metre at baseHeight
+    float density{0.005f}; // extinction per metre at baseHeight
     float heightFalloff{0.1f}; // per metre above baseHeight
     float baseHeight{0.0f};
     float anisotropy{0.2f};

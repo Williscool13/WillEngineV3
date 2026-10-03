@@ -2416,6 +2416,9 @@ SHADER_PUBLIC struct VolumetricFogScatterPushConstant
 {
     SHADER_PUBLIC float4 albedoDensity; // rgb albedo, a extinction per metre at baseHeight
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(uint2) worldGridBuffer; // null = no local lights
+    SHADER_PUBLIC SHADER_PTR(uint) worldGridIndexList;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t scatterOutIndex;
     SHADER_PUBLIC uint2 renderExtent;
@@ -2426,6 +2429,10 @@ SHADER_PUBLIC struct VolumetricFogScatterPushConstant
     SHADER_PUBLIC float ambientScale;
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC int32_t skyboxIndex;
+    SHADER_PUBLIC float anisotropy;
+    SHADER_PUBLIC uint32_t tlasIndex; // ~0 = no TLAS, lights unshadowed
+    SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC uint32_t historyIndex; // last frame's scatter; ~0 = none
 };
 
 SHADER_PUBLIC struct VolumetricFogIntegratePushConstant

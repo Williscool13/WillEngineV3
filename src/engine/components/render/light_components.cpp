@@ -117,6 +117,8 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::EndDisabled();
         EditWidgets::DragFloat(edit, "Range##al", &AreaLightComponent::range, 0.5f, 0.0f, 1000.0f);
         EditWidgets::DragFloat(edit, "Falloff Exponent##al", &AreaLightComponent::falloffExponent, 0.01f, 0.0f, 4.0f);
+        EditWidgets::DragFloat(edit, "Volumetric##al", &AreaLightComponent::volumetricScale, 0.01f, 0.0f, 100.0f);
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly this light scatters in volumetric fog; 0 = fog ignores it (fill and cheat lights)"); }
         EditWidgets::DragFloat(edit, "Cone Outer##al", &AreaLightComponent::coneOuterDegrees, 0.5f, MIN_CONE_OUTER_DEGREES, 90.0f, "%.1f deg");
         float coneInner = comp.coneInnerDegrees;
         if (ImGui::DragFloat("Cone Inner##al", &coneInner, 0.5f, 0.0f, 90.0f, EditWidgets::MixedFormat(edit.IsMixed(&AreaLightComponent::coneInnerDegrees), "%.1f deg"))) {
@@ -192,6 +194,8 @@ Engine::ComponentEditorResult Component::DirectionalLightComponent::DrawEditor(C
         EditWidgets::ColorEdit3(edit, "Color##dl", &DirectionalLightComponent::color);
         EditLightIntensity(edit, "Intensity##dl", &DirectionalLightComponent::intensity, {.bIlluminance = true});
         EditWidgets::DragFloat(edit, "Angular Radius (deg)##dl", &DirectionalLightComponent::angularRadiusDegrees, 0.02f, 0.0f, 30.0f);
+        EditWidgets::DragFloat(edit, "Volumetric##dl", &DirectionalLightComponent::volumetricScale, 0.01f, 0.0f, 100.0f);
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly the sun scatters in volumetric fog; 0 = fog ignores it"); }
         EditWidgets::DragInt(edit, "Priority##dl", &DirectionalLightComponent::priority, 1.0f, -100, 100);
     }
 
@@ -233,7 +237,7 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
         .range = light.range,
         .type = light.bDisk ? LIGHT_TYPE_DISK : LIGHT_TYPE_AREA,
         .falloffBias = 2.0f - light.falloffExponent,
-        .volumetricScale = 1.0f,
+        .volumetricScale = glm::max(light.volumetricScale, 0.0f),
         .coneScale = light.bNormalizeCone ? AreaLightConeScale(cosInner, cosOuter) : 1.0f,
     };
 }
@@ -275,6 +279,8 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         EditWidgets::DragFloat(edit, "Radius##sl", &SphereLightComponent::radius, 0.05f, 0.01f, 100.0f);
         EditWidgets::DragFloat(edit, "Range##sl", &SphereLightComponent::range, 0.5f, 0.0f, 1000.0f);
         EditWidgets::DragFloat(edit, "Falloff Exponent##sl", &SphereLightComponent::falloffExponent, 0.01f, 0.0f, 4.0f);
+        EditWidgets::DragFloat(edit, "Volumetric##sl", &SphereLightComponent::volumetricScale, 0.01f, 0.0f, 100.0f);
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly this light scatters in volumetric fog; 0 = fog ignores it (fill and cheat lights)"); }
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
     }
@@ -306,7 +312,7 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
         .range = light.range,
         .type = LIGHT_TYPE_SPHERE,
         .falloffBias = 2.0f - light.falloffExponent,
-        .volumetricScale = 1.0f,
+        .volumetricScale = glm::max(light.volumetricScale, 0.0f),
         .coneScale = 1.0f,
     };
 }

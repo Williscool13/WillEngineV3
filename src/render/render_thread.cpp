@@ -937,7 +937,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         }
 
         if (bVolumetricFog) {
-            SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, bFoggedLitCopy);
+            SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, bFoggedLitCopy);
         }
 
 #if WILL_EDITOR
@@ -1839,6 +1839,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
         DirectionalLightData directional{};
         directional.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
         directional.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
+        directional.volumetricScale = viewFamily.directionalLight.volumetricScale;
         directional.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
         lightDst.Write(offsetof(LightData, directionalLight), &directional, sizeof(directional));
 

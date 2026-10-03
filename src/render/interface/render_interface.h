@@ -83,13 +83,14 @@ struct DirectionalLight
     float intensity{2.0f};
     glm::vec3 color{1.0f, 1.0f, 1.0f};
     float angularRadiusDegrees{1.0f}; // sun-disk half-angle; 0 = hard shadows
+    float volumetricScale{1.0f};
     bool bEnabled{false};
 };
 
 struct VolumetricFog
 {
     glm::vec3 albedo{1.0f, 1.0f, 1.0f};
-    float density{0.02f}; // extinction per metre at baseHeight
+    float density{0.005f}; // extinction per metre at baseHeight
     float heightFalloff{0.1f}; // per metre above baseHeight
     float baseHeight{0.0f};
     float anisotropy{0.2f};
