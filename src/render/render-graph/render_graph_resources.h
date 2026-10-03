@@ -60,9 +60,10 @@ enum class RenderCategory : uint64_t
     GeometryPhase2      = 1ull << 22,
     Upload              = 1ull << 23,
     RayTracing          = 1ull << 24,
+    VolumetricFog       = 1ull << 25,
 };
 
-inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 25;
+inline constexpr uint32_t RENDER_CATEGORY_BIT_COUNT = 26;
 inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = {
     "Geometry",
     "WorldGridBinning",
@@ -89,6 +90,7 @@ inline constexpr const char* RENDER_CATEGORY_NAMES[RENDER_CATEGORY_BIT_COUNT] = 
     "Geometry P2",
     "Upload",
     "Ray Tracing",
+    "VolumetricFog",
 };
 
 inline RenderCategory operator|(RenderCategory a, RenderCategory b)
@@ -163,6 +165,7 @@ inline constexpr RenderCategoryGroup RENDER_CATEGORY_GROUP_OF[RENDER_CATEGORY_BI
     /*GeometryPhase2*/ RenderCategoryGroup::Geometry,
     /*Upload*/ RenderCategoryGroup::Upload,
     /*RayTracing*/ RenderCategoryGroup::Lighting,
+    /*VolumetricFog*/ RenderCategoryGroup::Lighting,
 };
 
 struct VRAMReport

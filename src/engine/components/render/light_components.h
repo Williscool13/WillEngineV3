@@ -192,6 +192,37 @@ struct SkyboxComponent
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
+
+/**
+ * Scene-declared global height fog. Highest priority wins; no enabled component = fog fully off.
+ */
+struct VolumetricFogComponent
+{
+    static constexpr const char* COMPONENT_NAME = "VolumetricFogComponent";
+
+    Vec3 albedo{1.0f, 1.0f, 1.0f};
+    float density{0.02f}; // extinction per metre at baseHeight
+    float heightFalloff{0.1f}; // per metre above baseHeight
+    float baseHeight{0.0f};
+    float anisotropy{0.2f};
+    float ambientScale{1.0f};
+    float maxDistance{64.0f};
+    int32_t priority{0};
+    bool bEnabled{true};
+
+    WILL_REFLECT(VolumetricFogComponent,
+        WILL_FIELD(albedo),
+        WILL_FIELD(density, .min = 0.0f, .max = 10.0f, .speed = 0.001f),
+        WILL_FIELD(heightFalloff, .min = 0.0f, .max = 10.0f, .speed = 0.001f),
+        WILL_FIELD(baseHeight, .speed = 0.1f),
+        WILL_FIELD(anisotropy, .min = -0.95f, .max = 0.95f, .speed = 0.01f),
+        WILL_FIELD(ambientScale, .min = 0.0f, .max = 10.0f, .speed = 0.01f),
+        WILL_FIELD(maxDistance, .min = 1.0f, .max = 1000.0f, .speed = 0.5f),
+        WILL_FIELD(priority),
+        WILL_FIELD(bEnabled))
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+};
 }
 
 #endif //WILL_ENGINE_LIGHT_COMPONENTS_H

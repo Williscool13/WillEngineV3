@@ -62,6 +62,7 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::SphereLightComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::DirectionalLightComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::SkyboxComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::VolumetricFogComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::LocalDDGIVolumeComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, Origin::Engine, false, false);

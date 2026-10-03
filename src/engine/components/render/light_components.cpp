@@ -395,6 +395,29 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
     return {.bRequestRemoval = remove};
 }
 
+Engine::ComponentEditorResult Component::VolumetricFogComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
+{
+    bool open = ImGui::CollapsingHeader("Volumetric Fog", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deletefog");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        EditWidgets::Checkbox(edit, "Enabled##fog", &VolumetricFogComponent::bEnabled);
+        EditWidgets::ColorEdit3(edit, "Albedo##fog", &VolumetricFogComponent::albedo);
+        EditWidgets::DragFloat(edit, "Density##fog", &VolumetricFogComponent::density, 0.001f, 0.0f, 10.0f, "%.4f");
+        EditWidgets::DragFloat(edit, "Height Falloff##fog", &VolumetricFogComponent::heightFalloff, 0.001f, 0.0f, 10.0f, "%.4f");
+        EditWidgets::DragFloat(edit, "Base Height##fog", &VolumetricFogComponent::baseHeight, 0.1f);
+        EditWidgets::DragFloat(edit, "Anisotropy##fog", &VolumetricFogComponent::anisotropy, 0.01f, -0.95f, 0.95f);
+        EditWidgets::DragFloat(edit, "Ambient Scale##fog", &VolumetricFogComponent::ambientScale, 0.01f, 0.0f, 10.0f);
+        EditWidgets::DragFloat(edit, "Max Distance##fog", &VolumetricFogComponent::maxDistance, 0.5f, 1.0f, 1000.0f);
+        EditWidgets::DragInt(edit, "Priority##fog", &VolumetricFogComponent::priority, 1.0f, -100, 100);
+    }
+
+    return {.bRequestRemoval = remove};
+}
+
 void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     registry.get<SkyboxComponent>(entity).handle = Engine::CubemapHandle::INVALID;

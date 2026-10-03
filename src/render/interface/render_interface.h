@@ -86,6 +86,18 @@ struct DirectionalLight
     bool bEnabled{false};
 };
 
+struct VolumetricFog
+{
+    glm::vec3 albedo{1.0f, 1.0f, 1.0f};
+    float density{0.02f}; // extinction per metre at baseHeight
+    float heightFalloff{0.1f}; // per metre above baseHeight
+    float baseHeight{0.0f};
+    float anisotropy{0.2f};
+    float ambientScale{1.0f};
+    float maxDistance{64.0f};
+    bool bEnabled{false};
+};
+
 struct Sprite
 {
     glm::vec3 worldPosition{0.0f};
@@ -478,6 +490,7 @@ struct ViewFamily
     int32_t skyboxLOD{0};
 
     DirectionalLight directionalLight{};
+    VolumetricFog volumetricFog{};
     uint32_t analyticLightCount{0};
     /** Only the analytic slots that changed, concatenated in lightRuns order. */
     ArenaVector<LightInfo> lightPayload{};

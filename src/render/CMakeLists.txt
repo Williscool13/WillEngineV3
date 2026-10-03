@@ -104,6 +104,7 @@ add_library(render STATIC
         passes/radiance_cache_passes.cpp
         passes/radiance_cache_passes.h
         shaders/radiance_cache_interop.h
+        shaders/volumetric_fog_interop.h
         passes/final_gather_passes.cpp
         passes/final_gather_passes.h
         post-processing/post_processing.cpp

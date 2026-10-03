@@ -216,7 +216,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("ResolveSkyboxCubemaps", &ResolveSkyboxCubemaps);
     graph.Add("GatherRenderables", &GatherRenderables, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::SkyboxComponent>(), "assetManager"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::VolumetricFogComponent>(), "assetManager"_sid, "materialManager"_sid, "engineConfig"_sid},
         .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, "materialManager.uploadDirty"_sid, "viewFamily.renderables"_sid},
     });
     graph.Add("GatherLights", &GatherLights, {

@@ -395,6 +395,30 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
             frameBuffer->mainViewFamily.iblIntensity *= bestIntensity;
         }
     }
+
+    //
+    {
+        ZoneScopedN("Volumetric Fog Selection");
+        int32_t bestPriority = INT32_MIN;
+        const Component::VolumetricFogComponent* bestFog = nullptr;
+        for (const auto& [entity, fog] : registry.view<Component::VolumetricFogComponent>().each()) {
+            if (!fog.bEnabled || fog.priority <= bestPriority) { continue; }
+            bestPriority = fog.priority;
+            bestFog = &fog;
+        }
+        if (bestFog) {
+            frameBuffer->mainViewFamily.volumetricFog = {
+                .albedo = bestFog->albedo,
+                .density = bestFog->density,
+                .heightFalloff = bestFog->heightFalloff,
+                .baseHeight = bestFog->baseHeight,
+                .anisotropy = bestFog->anisotropy,
+                .ambientScale = bestFog->ambientScale,
+                .maxDistance = bestFog->maxDistance,
+                .bEnabled = true,
+            };
+        }
+    }
 }
 
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)

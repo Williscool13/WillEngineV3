@@ -25,6 +25,7 @@ import reflection_interop;
 import reflection_probe_interop;
 import world_grid_interop;
 import radiance_cache_interop;
+import volumetric_fog_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -42,6 +43,7 @@ import radiance_cache_interop;
 #include "reflection_probe_interop.h"
 #include "world_grid_interop.h"
 #include "radiance_cache_interop.h"
+#include "volumetric_fog_interop.h"
 
 using uint = uint32_t;
 using int32 = int32_t;
