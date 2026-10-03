@@ -636,6 +636,11 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && viewFamily.lightingMode != Core::LightingMode::PathTracing;
     const bool bFsr2Reactive = viewFamily.aaConfig.mode == Core::AntiAliasingMode::FSR2 && viewFamily.aaConfig.fsr2.bReactiveMask;
     const bool bSnapshotLitColor = viewFamily.groundTruthMode == Core::GroundTruthMode::None && ((bLitColorIsScene && (bReflectionScreenSpace || bGIGatherScreenSpace)) || bFsr2Reactive);
+    const bool bVolumetricFog = bGeometry && viewFamily.volumetricFog.bEnabled && viewFamily.groundTruthMode == Core::GroundTruthMode::None && viewFamily.lightingMode != Core::LightingMode::PathTracing;
+    const bool bFoggedLitCopy = bVolumetricFog && bSnapshotLitColor;
+    if (bFoggedLitCopy) {
+        renderGraph->CreateTexture(LIT_COLOR_FOGGED, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, std::nullopt, true);
+    }
     if (bSnapshotLitColor) {
         renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         if (bGIGatherScreenSpace && viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
@@ -676,7 +681,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                                          || (viewFamily.lightingMode == Core::LightingMode::ReSTIR && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin)
                                          || frameBuffer.ddgi.bEnabled
                                          || viewFamily.reflectionProbes.Size() > 0u
-                                         || viewFamily.volumetricFog.bEnabled;
+                                         || bVolumetricFog;
 
             const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, viewFamily.localDDGIVolumes.Data(), static_cast<uint32_t>(viewFamily.localDDGIVolumes.Size()), ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
 
@@ -929,6 +934,10 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
                     vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                     vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
                 });
+        }
+
+        if (bVolumetricFog) {
+            SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, bFoggedLitCopy);
         }
 
 #if WILL_EDITOR

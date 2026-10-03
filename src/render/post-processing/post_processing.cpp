@@ -14,6 +14,7 @@
 #include "render/render-graph/render_pass.h"
 #include "render/passes/final_gather_passes.h"
 #include "render/passes/reflection_passes.h"
+#include "render/passes/volumetric_fog_passes.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/push_constant_interop.h"
@@ -118,7 +119,10 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
 
     // Overlays (text/sprites/debug lines) composite pre-AA into the chain input; meter the clean snapshot when it exists
     StringID meteringSource = input;
-    if (graph.HasTexture("lit_color_preoverlay"_sid) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
+    if (graph.HasTexture(LIT_COLOR_FOGGED) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
+        meteringSource = LIT_COLOR_FOGGED;
+    }
+    else if (graph.HasTexture("lit_color_preoverlay"_sid) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
         meteringSource = "lit_color_preoverlay"_sid;
     }
 

@@ -78,6 +78,8 @@ add_library(render STATIC
         passes/occlusion_passes.h
         passes/lighting_passes.cpp
         passes/lighting_passes.h
+        passes/volumetric_fog_passes.cpp
+        passes/volumetric_fog_passes.h
         passes/restir_passes.cpp
         passes/restir_passes.h
         passes/reflection_passes.cpp

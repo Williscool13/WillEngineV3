@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include "reflection_passes.h"
+#include "volumetric_fog_passes.h"
 #include "render/render_utils.h"
 #include "render/render-view/render_view_helpers.h"
 #include "render/pipelines/pipeline_data.h"
@@ -441,6 +442,8 @@ StringID SetupFsr2(RenderGraph& graph,
     ZoneScoped;
     static constexpr uint32_t INVALID_INDEX = 0xFFFFFFFFu;
     const Core::Fsr2Configuration& config = viewFamily.aaConfig.fsr2;
+    // Fog lands after the snapshot; compare against the fogged copy so fog itself is not flagged reactive.
+    const StringID preOverlayColor = graph.HasTexture(LIT_COLOR_FOGGED) ? LIT_COLOR_FOGGED : "lit_color_preoverlay"_sid;
 
     const uint32_t renderW = renderExtent[0];
     const uint32_t renderH = renderExtent[1];
@@ -509,14 +512,14 @@ StringID SetupFsr2(RenderGraph& graph,
     if (bReactive) {
         RenderPass& reactivePass = graph.AddPass("FSR2 Reactive"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
         reactivePass.ReadSampledImage(targets.colorOutput);
-        reactivePass.ReadSampledImage("lit_color_preoverlay"_sid);
+        reactivePass.ReadSampledImage(preOverlayColor);
         reactivePass.WriteStorageImage("fsr2_reactive_mask"_sid);
-        reactivePass.Execute([pipelineManager, constants, colorOutput = targets.colorOutput, scale = config.reactiveScale, threshold = config.reactiveThreshold,
+        reactivePass.Execute([pipelineManager, constants, preOverlayColor, colorOutput = targets.colorOutput, scale = config.reactiveScale, threshold = config.reactiveThreshold,
                 renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 Fsr2ReactivePushConstant pushData{
                     .c = constants,
                     .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
-                    .preOverlayColorIndex = graph.GetSampledImageViewDescriptorIndex("lit_color_preoverlay"_sid),
+                    .preOverlayColorIndex = graph.GetSampledImageViewDescriptorIndex(preOverlayColor),
                     .reactiveOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_reactive_mask"_sid),
                     .scale = scale,
                     .threshold = threshold,
@@ -580,12 +583,12 @@ StringID SetupFsr2(RenderGraph& graph,
     if (bVirtualMotion) {
         depthClipPass.WriteStorageImage(REFLECTION_VIRTUAL_MOTION_TARGET);
         if (bHasPreOverlayColor) {
-            depthClipPass.ReadSampledImage("lit_color_preoverlay"_sid);
+            depthClipPass.ReadSampledImage(preOverlayColor);
         }
     }
     depthClipPass.WriteStorageImage("fsr2_prepared_color"_sid);
     depthClipPass.WriteStorageImage("fsr2_dilated_reactive"_sid);
-    depthClipPass.Execute([pipelineManager, constants, bReactive, bVirtualMotion, bHasPreOverlayColor, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+    depthClipPass.Execute([pipelineManager, constants, bReactive, bVirtualMotion, bHasPreOverlayColor, preOverlayColor, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
             reflectionReactive = config.reflectionReactive, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax, tracedRoughnessMax = reflectionConfig.tracedRoughnessMax,
             renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2DepthClipPushConstant pushData{
@@ -605,7 +608,7 @@ StringID SetupFsr2(RenderGraph& graph,
                 .mirrorRoughnessMax = mirrorRoughnessMax,
                 .tracedRoughnessMax = tracedRoughnessMax,
                 .virtualMotionIndex = bVirtualMotion ? graph.GetStorageImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : INVALID_INDEX,
-                .preOverlayColorIndex = bVirtualMotion && bHasPreOverlayColor ? graph.GetSampledImageViewDescriptorIndex("lit_color_preoverlay"_sid) : INVALID_INDEX,
+                .preOverlayColorIndex = bVirtualMotion && bHasPreOverlayColor ? graph.GetSampledImageViewDescriptorIndex(preOverlayColor) : INVALID_INDEX,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_depth_clip"_sid, &pushData, sizeof(pushData), renderGroupsX, renderGroupsY);
         });

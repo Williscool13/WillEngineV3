@@ -2412,4 +2412,44 @@ SHADER_PUBLIC struct SigmaTemporalPushConstant
     SHADER_PUBLIC uint32_t pixelScale;
 };
 
+SHADER_PUBLIC struct VolumetricFogScatterPushConstant
+{
+    SHADER_PUBLIC float4 albedoDensity; // rgb albedo, a extinction per metre at baseHeight
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t scatterOutIndex;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 gridSize;
+    SHADER_PUBLIC float heightFalloff;
+    SHADER_PUBLIC float baseHeight;
+    SHADER_PUBLIC float maxDistance;
+    SHADER_PUBLIC float ambientScale;
+    SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC int32_t skyboxIndex;
+};
+
+SHADER_PUBLIC struct VolumetricFogIntegratePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 gridSize;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t scatterIndex;
+    SHADER_PUBLIC uint32_t integratedOutIndex;
+    SHADER_PUBLIC float maxDistance;
+};
+
+SHADER_PUBLIC struct VolumetricFogApplyPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 gridSize;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t integratedIndex;
+    SHADER_PUBLIC uint32_t colorIndex;
+    SHADER_PUBLIC uint32_t foggedCopyIndex; // ~0 = none
+    SHADER_PUBLIC float maxDistance;
+};
+
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

@@ -524,6 +524,13 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("directional_light"_sid, src / "directional_light.spv", "ComputeDirectionalLight",
                             sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline("volumetric_fog_scatter"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogScatter",
+                            sizeof(VolumetricFogScatterPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("volumetric_fog_integrate"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogIntegrate",
+                            sizeof(VolumetricFogIntegratePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("volumetric_fog_apply"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogApply",
+                            sizeof(VolumetricFogApplyPushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline("frustum_binning"_sid, src / "frustum_binning.spv", "ComputeFrustumBinning",
                             sizeof(FrustumBinningPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("world_grid_binning"_sid, src / "world_grid_binning.spv", "ComputeWorldGridBinning",
