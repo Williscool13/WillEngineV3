@@ -75,11 +75,17 @@ void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3
                 float(seed2 & 0x00FFFFFFu) / float(0x01000000u),
                 float((seed2 >> 8) & 0x00FFFFFFu) / float(0x01000000u)
             );
-            float3 yStar = SampleLightPos(vs, xi.x, xi.y);
+            float3 yStar;
+            float invPdf = vs.area;
+            if (vs.type == LIGHT_TYPE_AREA || vs.type == LIGHT_TYPE_DISK) {
+                invPdf = SampleEmitterArea(vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, vs.type == LIGHT_TYPE_DISK, vs.cosConeOuter, viewPosition, xi.x, xi.y, yStar);
+            } else {
+                yStar = SampleLightPos(vs, xi.x, xi.y);
+            }
 
             LightSample ls = EvalLightSample(vs, yStar, viewPosition, N, al.range);
 
-            if (ls.cosShade > 0.0 && ls.cosLight > 0.0 && ls.attenuation > 0.0) {
+            if (ls.cosShade > 0.0 && ls.cosLight > 0.0 && ls.attenuation > 0.0 && invPdf > 0.0) {
                 float3 L = normalize(yStar - viewPosition);
                 float3 H = normalize(V + L);
 
@@ -97,9 +103,9 @@ void ComputeLightingGroundTruth(uniform VisibilityLightingPushConstant pc, uint3
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
                 //float3 f = (specular) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
                 // float3 f = (diffuse) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
-                float3 f = (diffuse + specular) * ls.cosShade * geomTerm * al.intensity * alColor * ls.attenuation;
+                float3 f = (diffuse + specular) * ls.cosShade * geomTerm * vs.intensity * alColor * ls.attenuation;
 
-                directLight = f * float(lightCount) * vs.area;
+                directLight = f * float(lightCount) * invPdf;
             }
         }
 

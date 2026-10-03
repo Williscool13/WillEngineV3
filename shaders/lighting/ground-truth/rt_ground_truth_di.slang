@@ -85,7 +85,7 @@ static float3 EvalLightPoint(RTGroundTruthDIPushConstant pc, GTSurface sf, Light
     float3 kD = (1.0 - F) * (1.0 - sf.metallic);
     float3 diff = kD * sf.albedo * Diffuse_OrenNayar(cosShade, sf.nDotV, L, sf.V, sf.roughness);
 
-    return (diff + spec) * cosShade * LightGeometryTerm(cosLight, lightDist) * al.intensity * UnpackUnorm4x8(al.packedColor).rgb * atten;
+    return (diff + spec) * cosShade * LightGeometryTerm(cosLight, lightDist) * al.intensity * al.coneScale * UnpackUnorm4x8(al.packedColor).rgb * atten;
 }
 
 static float EmissiveMeshletWeight(EmissiveMeshlet meshlet, float3 p)
@@ -217,18 +217,13 @@ void ComputeRTGroundTruthDI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
                 float3 dir = float3(rr * cos(phi), rr * sin(phi), z);
                 lightSamplePos = al.position.xyz + radius * dir;
                 lightArea = 4.0 * PI * radius * radius;
-            } else if (al.type == LIGHT_TYPE_DISK) {
-                float2 d = ConcentricSampleDisk(xi.x, xi.y) * al.right.w;
-                lightSamplePos = al.position.xyz + al.right.xyz * d.x + al.up.xyz * d.y;
-                lightArea = PI * al.right.w * al.right.w;
             } else {
-                lightSamplePos = al.position.xyz
-                    + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w
-                    + al.up.xyz    * (xi.y * 2.0 - 1.0) * al.up.w;
-                lightArea = 4.0 * al.right.w * al.up.w;
+                lightArea = SampleEmitterArea(al.position.xyz, al.normal.xyz, al.right.xyz, al.up.xyz, al.right.w, al.up.w, al.type == LIGHT_TYPE_DISK, al.position.w, worldPos, xi.x, xi.y, lightSamplePos);
             }
 
-            directLight = EvalLightPoint(pc, sf, al, lightSamplePos) * float(inRange) * lightArea;
+            if (lightArea > 0.0) {
+                directLight = EvalLightPoint(pc, sf, al, lightSamplePos) * float(inRange) * lightArea;
+            }
         }
     }
 

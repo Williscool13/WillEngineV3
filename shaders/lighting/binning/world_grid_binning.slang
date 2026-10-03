@@ -118,6 +118,7 @@ void ComputeWorldGridBinning(uniform WorldGridBinningPushConstant pc, uint3 thre
         float radius = light.range;
         float d2 = SqDistPointAABB(light.position.xyz, aabbMin, aabbMax);
         if (d2 > radius * radius) { continue; }
+        if (light.type != LIGHT_TYPE_SPHERE && !LightConeReaches(light.position.xyz, light.normal.xyz, light.right.xyz, light.up.xyz, light.right.w, light.up.w, light.type == LIGHT_TYPE_DISK, light.position.w, center, cellSize * 0.8661)) { continue; }
 
         float mass = WorldGridLightMass(light, aabbMin, aabbMax);
         if (count < MAX_LIGHTS_PER_WORLD_GRID_CELL)

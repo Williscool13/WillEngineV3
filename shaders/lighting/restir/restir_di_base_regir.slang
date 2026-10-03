@@ -110,7 +110,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     }
                     float3 Xi = SampleLightSurface(vs, viewPosition, xiLight.x, xiLight.y);
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
-                    float p_hat = EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity, pc.lightSpecularFromReflectionsMax);
+                    float p_hat = LightSampleOnEmitter(vs, Xi) ? EvalPHat(s, V, N, li.albedo.xyz, F0, li.metallic, roughness, lightColor, vs.intensity, pc.lightSpecularFromReflectionsMax) : 0.0;
                     float p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     float p_brdf_sa = GGXPdf(N, V, s.L, roughness);
                     float p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sa * s.cosLight / max(s.dist * s.dist, 1e-8)) : 0.0;

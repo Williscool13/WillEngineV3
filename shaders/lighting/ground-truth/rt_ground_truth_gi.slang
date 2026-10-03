@@ -144,13 +144,8 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             float phi = 2.0 * PI * xi.y;
             lightSamplePos = light.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
             lightArea = 4.0 * PI * radius * radius;
-        } else if (light.type == LIGHT_TYPE_DISK) {
-            float2 d = ConcentricSampleDisk(xi.x, xi.y) * light.right.w;
-            lightSamplePos = light.position.xyz + light.right.xyz * d.x + light.up.xyz * d.y;
-            lightArea = PI * light.right.w * light.right.w;
         } else {
-            lightSamplePos = light.position.xyz + light.right.xyz * (xi.x * 2.0 - 1.0) * light.right.w + light.up.xyz * (xi.y * 2.0 - 1.0) * light.up.w;
-            lightArea = 4.0 * light.right.w * light.up.w;
+            lightArea = SampleEmitterArea(light.position.xyz, light.normal.xyz, light.right.xyz, light.up.xyz, light.right.w, light.up.w, light.type == LIGHT_TYPE_DISK, light.position.w, worldPosition, xi.x, xi.y, lightSamplePos);
         }
 
         float3 toLight = lightSamplePos - worldPosition;
@@ -161,7 +156,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             ? max(dot(normalize(lightSamplePos - light.position.xyz), -L), 0.0)
             : max(dot(-light.normal.xyz, L), 0.0);
         float atten = LightRangeCull(lightDist, light.range) * LightConeFalloff(cosLight, light.normal.w, light.position.w) * LightFalloffScale(lightDist, light.falloffBias);
-        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
+        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0 && lightArea > 0.0) {
             float3 rayOrigin = OffsetHitRayOrigin(worldPosition, N);
             float3 toLightShadow = lightSamplePos - rayOrigin;
             float shadowDist = length(toLightShadow);
@@ -176,7 +171,7 @@ static float3 SampleDirectDiffuse(RTGroundTruthGIPushConstant pc, float3 worldPo
             shadow.TraceRayInline(tlas, 0, INSTANCE_MASK_OCCLUDER, shadowRay);
             RTProceedAlphaTested(shadow, GTAlphaBuffers(pc));
             if (shadow.CommittedStatus() == COMMITTED_NOTHING) {
-                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
+                radiance += diffuseColor * Diffuse_OrenNayar(cosShade, NoV, L, V, roughness) * cosShade * LightGeometryTerm(cosLight, lightDist) * light.intensity * light.coneScale * UnpackUnorm4x8(light.packedColor).rgb * atten * float(analyticCount) * lightArea;
             }
         }
     }
@@ -254,13 +249,8 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             float phi = 2.0 * PI * xi.y;
             lightSamplePos = al.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
             lightArea = 4.0 * PI * radius * radius;
-        } else if (al.type == LIGHT_TYPE_DISK) {
-            float2 d = ConcentricSampleDisk(xi.x, xi.y) * al.right.w;
-            lightSamplePos = al.position.xyz + al.right.xyz * d.x + al.up.xyz * d.y;
-            lightArea = PI * al.right.w * al.right.w;
         } else {
-            lightSamplePos = al.position.xyz + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w + al.up.xyz * (xi.y * 2.0 - 1.0) * al.up.w;
-            lightArea = 4.0 * al.right.w * al.up.w;
+            lightArea = SampleEmitterArea(al.position.xyz, al.normal.xyz, al.right.xyz, al.up.xyz, al.right.w, al.up.w, al.type == LIGHT_TYPE_DISK, al.position.w, worldPos, xi.x, xi.y, lightSamplePos);
         }
 
         float3 toLight = lightSamplePos - worldPos;
@@ -272,7 +262,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             : max(dot(-al.normal.xyz, L), 0.0);
         float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(lightDist, al.falloffBias);
 
-        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
+        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0 && lightArea > 0.0) {
             float3 toLightShadow = lightSamplePos - primaryOrigin;
             float shadowDist = length(toLightShadow);
             RayDesc shadowRay;
@@ -297,7 +287,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
 
                 float geomTerm = LightGeometryTerm(cosLight, lightDist);
                 float3 alColor = UnpackUnorm4x8(al.packedColor).rgb;
-                direct = (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(analyticCount) * lightArea;
+                direct = (diff + spec) * cosShade * geomTerm * al.intensity * al.coneScale * alColor * atten * float(analyticCount) * lightArea;
             }
         }
     }

@@ -49,8 +49,8 @@ static void WriteDeadMesh(EmissiveTriLightPushConstant pc, EmissiveTriLightWork 
     light.type = 0u;
     light.falloffBias = 0.0;
     light.volumetricScale = 0.0;
+    light.coneScale = 1.0;
     light._pad0 = 0.0;
-    light._pad1 = 0.0;
     for (uint t = lane; t < work.triangleCount; t += TRI_LIGHT_GROUP_SIZE) {
         pc.lightData->lights[work.firstLight + t] = light;
         pc.lightData->meshletOf[work.firstLight + t - uint(MAX_ANALYTIC_LIGHTS)] = ~0u;
@@ -154,8 +154,8 @@ void ComputeEmissiveTriLights(uniform EmissiveTriLightPushConstant pc, uint3 gid
             light.type = LIGHT_TYPE_TRIANGLE;
             light.falloffBias = 0.0;
             light.volumetricScale = 0.0;
+            light.coneScale = 1.0;
             light._pad0 = 0.0;
-            light._pad1 = 0.0;
             pc.lightData->lights[work.firstLight + tri] = light;
             pc.lightData->meshletOf[work.firstLight + tri - uint(MAX_ANALYTIC_LIGHTS)] = work.firstMeshlet + c;
         }

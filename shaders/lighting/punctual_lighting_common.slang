@@ -12,6 +12,8 @@ public struct PunctualLight
     public float3 dir; // emitter normal (area only)
     public float3 color;
     public float effectiveIntensity; // radiance folded with source area (ReSTIR brightness parity)
+    public float radiance;
+    public float area;
     public float range; // attenuation cutoff / cluster bounding radius
     public float falloffBias;
     public float sourceRadius; // 0 = delta; >0 drives representative-point specular
@@ -40,6 +42,8 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
     pl.halfHeight = 0.0;
     pl.dir = float3(0.0, 0.0, 1.0);
     pl.effectiveIntensity = 0.0;
+    pl.radiance = light.intensity * light.coneScale;
+    pl.area = 0.0;
     pl.sourceRadius = 0.0;
     pl.oneSided = false;
     pl.bDisk = false;
@@ -60,7 +64,8 @@ public PunctualLight DegenerateLight(LightInfo light, float4x4 view)
         float halfHeight = light.up.w;
         pl.bDisk = light.type == LIGHT_TYPE_DISK;
         pl.dir = normalize(mul((float3x3)view, light.normal.xyz));
-        pl.effectiveIntensity = light.intensity * (pl.bDisk ? PI * halfWidth * halfWidth : 4.0 * halfWidth * halfHeight);
+        pl.area = pl.bDisk ? PI * halfWidth * halfWidth : 4.0 * halfWidth * halfHeight;
+        pl.effectiveIntensity = pl.radiance * pl.area;
         pl.sourceRadius = pl.bDisk ? halfWidth : 0.5 * (halfWidth + halfHeight);
         pl.oneSided = true;
         pl.cosConeInner = light.normal.w;
@@ -114,29 +119,66 @@ float3 RepresentativePointL(PunctualLight pl, float3 N, float3 V, float3 viewPos
     return normalize(closestVec);
 }
 
-/** Shade a degenerated punctual light: Oren-Nayar diffuse + representative-point GGX specular. */
-public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
+/** Direction, distance and irradiance scale toward the light. bBeam: the cone footprint is smaller than the emitter, so it lights along its normal like a bounded directional light. */
+bool PunctualIncidence(PunctualLight pl, float3 viewPos, out float3 L, out float dist, out float irradiance, out bool bBeam)
 {
-    if (!pl.valid) { return float3(0.0); }
+    L = float3(0.0);
+    dist = 0.0;
+    irradiance = 0.0;
+    bBeam = false;
+
+    ConeClip clip;
+    if (pl.oneSided && LightConeClip(pl.pos, pl.dir, pl.rightAxis, pl.upAxis, pl.halfWidth, pl.halfHeight, pl.bDisk, pl.cosConeOuter, pl.area, viewPos, clip))
+    {
+        bBeam = true;
+        float coverage = LightConeClipCoverage(clip);
+        if (coverage <= 0.0) { return false; }
+        dist = dot(viewPos - pl.pos, pl.dir);
+        if (dist >= pl.range) { return false; }
+        L = -pl.dir;
+        irradiance = coverage * PI * LightConeIntegral(pl.cosConeInner, pl.cosConeOuter) * pl.radiance * LightRangeCull(dist, pl.range) * LightFalloffScale(dist, pl.falloffBias);
+        return true;
+    }
 
     float3 toLight = pl.pos - viewPos;
-    float dist = length(toLight);
-    if (dist >= pl.range) { return float3(0.0); }
-
-    float3 L = toLight / max(dist, 1e-5);
+    dist = length(toLight);
+    if (dist >= pl.range) { return false; }
+    L = toLight / max(dist, 1e-5);
 
     float emitterCos = 1.0;
     if (pl.oneSided)
     {
         emitterCos = max(dot(pl.dir, -L), 0.0);
-        if (emitterCos <= 0.0) { return float3(0.0); }
+        if (emitterCos <= 0.0) { return false; }
         emitterCos *= LightConeFalloff(emitterCos, pl.cosConeInner, pl.cosConeOuter);
     }
+    irradiance = LightDistanceFalloff(dist, pl.range) * LightFalloffScale(dist, pl.falloffBias) * emitterCos * pl.effectiveIntensity;
+    return true;
+}
+
+/** A beam gives every point the same L, so V == -L is routine (radiance cache cells shade with V = N). */
+float3 SafeHalfVector(float3 V, float3 L, float3 N)
+{
+    float3 H = V + L;
+    float lenSq = dot(H, H);
+    return lenSq > 1e-12 ? H * rsqrt(lenSq) : N;
+}
+
+/** Shade a degenerated punctual light: Oren-Nayar diffuse + representative-point GGX specular. */
+public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
+{
+    if (!pl.valid) { return float3(0.0); }
+
+    float3 L;
+    float dist;
+    float irradiance;
+    bool bBeam;
+    if (!PunctualIncidence(pl, viewPos, L, dist, irradiance, bBeam)) { return float3(0.0); }
 
     float nDotV = max(dot(N, V), 0.0);
     float nDotL = max(dot(N, L), 0.0);
 
-    float3 kD = (1.0 - F_SCHLICK(V, normalize(V + L), F0)) * (1.0 - metallic);
+    float3 kD = (1.0 - F_SCHLICK(V, SafeHalfVector(V, L, N), F0)) * (1.0 - metallic);
     float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
     float3 diffuse = kD * albedo * orenNayar * nDotL;
 
@@ -144,7 +186,7 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     float3 Ls = L;
     float specRoughness = roughness;
     float specNormalization = 1.0;
-    if (pl.sourceRadius > 0.0)
+    if (pl.sourceRadius > 0.0 && !bBeam)
     {
         Ls = RepresentativePointL(pl, N, V, viewPos, dist);
         float alpha = roughness * roughness;
@@ -154,15 +196,14 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
         specNormalization *= specNormalization;
     }
 
-    float3 Hs = normalize(V + Ls);
+    float3 Hs = SafeHalfVector(V, Ls, N);
     float nDotLs = max(dot(N, Ls), 0.0);
     float NDF = D_GGX(N, Hs, specRoughness);
     float G = G_SMITH_HEIGHT_CORRELATED(N, V, Ls, specRoughness);
     float3 F = F_SCHLICK(V, Hs, F0);
     float3 specular = (NDF * G * F) / max(4.0 * nDotV * nDotLs, 0.001) * nDotLs * specNormalization;
 
-    float attenuation = LightDistanceFalloff(dist, pl.range) * LightFalloffScale(dist, pl.falloffBias);
-    return (diffuse + specular) * attenuation * emitterCos * pl.effectiveIntensity * pl.color;
+    return (diffuse + specular) * irradiance * pl.color;
 }
 
 /** Diffuse-only punctual shade for view-independent sinks (radiance cache): identical to ShadePunctual minus the representative-point specular lobe, which is meaningless when V is forced to N. */
@@ -170,27 +211,18 @@ public float3 ShadePunctualDiffuse(PunctualLight pl, float3 N, float3 V, float3 
 {
     if (!pl.valid) { return float3(0.0); }
 
-    float3 toLight = pl.pos - viewPos;
-    float dist = length(toLight);
-    if (dist >= pl.range) { return float3(0.0); }
-
-    float3 L = toLight / max(dist, 1e-5);
-
-    float emitterCos = 1.0;
-    if (pl.oneSided)
-    {
-        emitterCos = max(dot(pl.dir, -L), 0.0);
-        if (emitterCos <= 0.0) { return float3(0.0); }
-        emitterCos *= LightConeFalloff(emitterCos, pl.cosConeInner, pl.cosConeOuter);
-    }
+    float3 L;
+    float dist;
+    float irradiance;
+    bool bBeam;
+    if (!PunctualIncidence(pl, viewPos, L, dist, irradiance, bBeam)) { return float3(0.0); }
 
     float nDotV = max(dot(N, V), 0.0);
     float nDotL = max(dot(N, L), 0.0);
 
-    float3 kD = (1.0 - F_SCHLICK(V, normalize(V + L), F0)) * (1.0 - metallic);
+    float3 kD = (1.0 - F_SCHLICK(V, SafeHalfVector(V, L, N), F0)) * (1.0 - metallic);
     float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
     float3 diffuse = kD * albedo * orenNayar * nDotL;
 
-    float attenuation = LightDistanceFalloff(dist, pl.range) * LightFalloffScale(dist, pl.falloffBias);
-    return diffuse * attenuation * emitterCos * pl.effectiveIntensity * pl.color;
+    return diffuse * irradiance * pl.color;
 }

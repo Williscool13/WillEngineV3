@@ -173,13 +173,8 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
             float phi = 2.0 * PI * xi.y;
             lightSamplePos = al.position.xyz + radius * float3(rr * cos(phi), rr * sin(phi), z);
             lightArea = 4.0 * PI * radius * radius;
-        } else if (al.type == LIGHT_TYPE_DISK) {
-            float2 d = ConcentricSampleDisk(xi.x, xi.y) * al.right.w;
-            lightSamplePos = al.position.xyz + al.right.xyz * d.x + al.up.xyz * d.y;
-            lightArea = PI * al.right.w * al.right.w;
         } else {
-            lightSamplePos = al.position.xyz + al.right.xyz * (xi.x * 2.0 - 1.0) * al.right.w + al.up.xyz * (xi.y * 2.0 - 1.0) * al.up.w;
-            lightArea = 4.0 * al.right.w * al.up.w;
+            lightArea = SampleEmitterArea(al.position.xyz, al.normal.xyz, al.right.xyz, al.up.xyz, al.right.w, al.up.w, al.type == LIGHT_TYPE_DISK, al.position.w, P, xi.x, xi.y, lightSamplePos);
         }
 
         float3 toLight = lightSamplePos - P;
@@ -190,7 +185,7 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
             ? max(dot(normalize(lightSamplePos - al.position.xyz), -L), 0.0)
             : max(dot(-al.normal.xyz, L), 0.0);
         float atten = LightRangeCull(lightDist, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(lightDist, al.falloffBias);
-        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0) {
+        if (cosShade > 0.0 && cosLight > 0.0 && atten > 0.0 && lightArea > 0.0) {
             float3 toLightShadow = lightSamplePos - rayOrigin;
             float shadowDist = length(toLightShadow);
             RayDesc shadowRay;
@@ -219,7 +214,7 @@ static float3 EvalDirectLighting(RTGroundTruthGIPushConstant pc, float3 P, float
                     float pdfBrdfArea = BrdfPdf(N, V, L, roughness, pSpec) * cosLight / max(lightDist * lightDist, 1e-8);
                     w = pdfLightArea / max(pdfLightArea + pdfBrdfArea, 1e-12);
                 }
-                radiance += (diff + spec) * cosShade * geomTerm * al.intensity * alColor * atten * float(analyticCount) * lightArea * w;
+                radiance += (diff + spec) * cosShade * geomTerm * al.intensity * al.coneScale * alColor * atten * float(analyticCount) * lightArea * w;
             }
         }
     }
@@ -309,10 +304,15 @@ static float3 CollectAnalyticLightHits(RTGroundTruthGIPushConstant pc, float3 ra
         if (cosLight <= 0.0) { continue; }
         float atten = LightRangeCull(t, al.range) * LightConeFalloff(cosLight, al.normal.w, al.position.w) * LightFalloffScale(t, al.falloffBias);
         if (atten <= 0.0) { continue; }
+        ConeClip clip;
+        if (al.type != LIGHT_TYPE_SPHERE && LightConeClip(al.position.xyz, al.normal.xyz, al.right.xyz, al.up.xyz, al.right.w, al.up.w, al.type == LIGHT_TYPE_DISK, al.position.w, lightArea, rayOrigin, clip)) {
+            lightArea = LightConeClipInvPdf(clip, al.position.xyz, al.right.xyz, al.up.xyz, rayOrigin + rayDir * t);
+            if (lightArea <= 0.0) { continue; }
+        }
         float pdfLightArea = 1.0 / (float(analyticCount) * lightArea);
         float pdfBrdfArea = brdfPdf * cosLight / max(t * t, 1e-8);
         float w = pdfBrdfArea / max(pdfBrdfArea + pdfLightArea, 1e-12);
-        radiance += UnpackUnorm4x8(al.packedColor).rgb * al.intensity * atten * w;
+        radiance += UnpackUnorm4x8(al.packedColor).rgb * al.intensity * al.coneScale * atten * w;
     }
     return radiance;
 }

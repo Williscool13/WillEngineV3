@@ -28,8 +28,23 @@ static float AreaLightLumensPerNit(const Component::AreaLightComponent& light, c
 {
     const float halfWidth = light.halfWidth * scale.x;
     const float area = light.bDisk ? LIGHT_PI * halfWidth * halfWidth : 4.0f * halfWidth * light.halfHeight * scale.y;
+    if (light.bNormalizeCone) { return LIGHT_PI * area; }
     const float sinOuter = glm::sin(glm::radians(light.coneOuterDegrees));
     return LIGHT_PI * area * sinOuter * sinOuter;
+}
+
+// A sharper beam edge frays under camera motion (ReSTIR has no reusable neighbour or history samples)
+static constexpr float AREA_LIGHT_MIN_CONE_DEGREES = Component::AreaLightComponent::MIN_CONE_OUTER_DEGREES;
+static constexpr double AREA_LIGHT_CONE_MIN_WIDTH = 1e-6; // LIGHT_CONE_MIN_WIDTH
+
+/** 1 / LightConeIntegral (pbr_functions.slang), from the same float cosines the shader compares against. */
+static float AreaLightConeScale(float cosInner, float cosOuter)
+{
+    const double cO = cosOuter;
+    const double w = glm::max(static_cast<double>(cosInner) - cO, AREA_LIGHT_CONE_MIN_WIDTH);
+    const double cI = glm::min(cO + w, 1.0);
+    const double integral = glm::max((1.0 - cI) * (1.0 + cI) + w * (cO + 0.7 * w), 1e-12);
+    return static_cast<float>(1.0 / integral);
 }
 
 static float SphereLightLumensPerNit(const Component::SphereLightComponent& light, const Vec3& scale)
@@ -102,7 +117,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         ImGui::EndDisabled();
         EditWidgets::DragFloat(edit, "Range##al", &AreaLightComponent::range, 0.5f, 0.0f, 1000.0f);
         EditWidgets::DragFloat(edit, "Falloff Exponent##al", &AreaLightComponent::falloffExponent, 0.01f, 0.0f, 4.0f);
-        EditWidgets::DragFloat(edit, "Cone Outer##al", &AreaLightComponent::coneOuterDegrees, 0.5f, 0.0f, 90.0f, "%.1f deg");
+        EditWidgets::DragFloat(edit, "Cone Outer##al", &AreaLightComponent::coneOuterDegrees, 0.5f, MIN_CONE_OUTER_DEGREES, 90.0f, "%.1f deg");
         float coneInner = comp.coneInnerDegrees;
         if (ImGui::DragFloat("Cone Inner##al", &coneInner, 0.5f, 0.0f, 90.0f, EditWidgets::MixedFormat(edit.IsMixed(&AreaLightComponent::coneInnerDegrees), "%.1f deg"))) {
             edit.Preview<AreaLightComponent>([coneInner](AreaLightComponent& c) {
@@ -111,6 +126,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
             });
         }
         EditWidgets::CommitOnRelease<AreaLightComponent>(edit, false);
+        EditWidgets::Checkbox(edit, "Normalize Cone##al", &AreaLightComponent::bNormalizeCone);
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##al", &AreaLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##al", &AreaLightComponent::bExcludeFromProbeBake);
 
@@ -160,7 +176,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
 
 void Component::AreaLightComponent::Sanitize(AreaLightComponent& comp)
 {
-    comp.coneOuterDegrees = glm::clamp(comp.coneOuterDegrees, 0.0f, 90.0f);
+    comp.coneOuterDegrees = glm::clamp(comp.coneOuterDegrees, MIN_CONE_OUTER_DEGREES, 90.0f);
     comp.coneInnerDegrees = glm::clamp(comp.coneInnerDegrees, 0.0f, comp.coneOuterDegrees);
 }
 
@@ -204,9 +220,12 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
     if (!light.bEnabled) { return LightInfo{}; }
     const glm::mat3 rot = glm::mat3_cast(world.rotation);
     const float halfWidth = light.halfWidth * world.scale.x;
+    const float outerDegrees = glm::max(light.coneOuterDegrees, AREA_LIGHT_MIN_CONE_DEGREES);
+    const float cosOuter = glm::cos(glm::radians(outerDegrees));
+    const float cosInner = glm::cos(glm::radians(glm::min(light.coneInnerDegrees, outerDegrees)));
     return LightInfo{
-        .position = {world.translation, glm::cos(glm::radians(light.coneOuterDegrees))},
-        .normal = {rot[2], glm::cos(glm::radians(light.coneInnerDegrees))},
+        .position = {world.translation, cosOuter},
+        .normal = {rot[2], cosInner},
         .right = {rot[0], halfWidth},
         .up = {rot[1], light.bDisk ? halfWidth : light.halfHeight * world.scale.y},
         .packedColor = Render::PackColorRGBA8(glm::vec4(light.color, light.drawEmissiveSurface ? 1.0f : 0.0f)),
@@ -215,6 +234,7 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
         .type = light.bDisk ? LIGHT_TYPE_DISK : LIGHT_TYPE_AREA,
         .falloffBias = 2.0f - light.falloffExponent,
         .volumetricScale = 1.0f,
+        .coneScale = light.bNormalizeCone ? AreaLightConeScale(cosInner, cosOuter) : 1.0f,
     };
 }
 
@@ -287,6 +307,7 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
         .type = LIGHT_TYPE_SPHERE,
         .falloffBias = 2.0f - light.falloffExponent,
         .volumetricScale = 1.0f,
+        .coneScale = 1.0f,
     };
 }
 

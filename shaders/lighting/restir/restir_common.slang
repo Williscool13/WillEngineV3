@@ -106,7 +106,7 @@ public LightView TransformLightToView(LightInfo al, float4x4 view)
     LightView vs;
     vs.center = mul(view, float4(al.position.xyz, 1.0)).xyz;
     vs.range = al.range;
-    vs.intensity = al.intensity;
+    vs.intensity = al.intensity * al.coneScale;
     vs.packedColor = al.packedColor;
     vs.type = al.type;
     vs.falloffBias = al.falloffBias;
@@ -155,8 +155,12 @@ public LightVSData PackLightVS(LightView vs)
     d.upRange = float4(vs.up, vs.range);
     d.packedColor = vs.packedColor;
     d.intensity = vs.intensity;
-    d.type = vs.type | (f32tof16(vs.falloffBias) << 16);
-    d.packedCone = f32tof16(vs.cosConeInner) | (f32tof16(vs.cosConeOuter) << 16);
+    d.type = vs.type;
+    d.falloffBias = vs.falloffBias;
+    d.cosConeInner = vs.cosConeInner;
+    d.cosConeOuter = vs.cosConeOuter;
+    d._pad0 = 0.0;
+    d._pad1 = 0.0;
     return d;
 }
 
@@ -173,10 +177,10 @@ public LightView UnpackLightVS(LightVSData d)
     vs.range = d.upRange.w;
     vs.packedColor = d.packedColor;
     vs.intensity = d.intensity;
-    vs.type = d.type & 0xFFFF;
-    vs.falloffBias = f16tof32(d.type >> 16);
-    vs.cosConeInner = f16tof32(d.packedCone & 0xFFFF);
-    vs.cosConeOuter = f16tof32(d.packedCone >> 16);
+    vs.type = d.type;
+    vs.falloffBias = d.falloffBias;
+    vs.cosConeInner = d.cosConeInner;
+    vs.cosConeOuter = d.cosConeOuter;
     return vs;
 }
 
@@ -365,6 +369,11 @@ public float3 SampleLightSurface(LightView vs, float3 shadingPos, float uU, floa
         float b2 = uV * su;
         return vs.center + b1 * vs.right + b2 * vs.up;
     }
+    ConeClip clip;
+    if (LightConeClip(vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, vs.type == LIGHT_TYPE_DISK, vs.cosConeOuter, vs.area, shadingPos, clip))
+    {
+        return LightConeClipPoint(clip, vs.center, vs.right, vs.up, uU, uV);
+    }
     if (vs.type == LIGHT_TYPE_DISK)
     {
         float2 d = ConcentricSampleDisk(uU, uV) * vs.halfWidth;
@@ -379,6 +388,13 @@ public float3 SampleLightSurface(LightView vs, float3 shadingPos, float uU, floa
         return vs.center + (uU * 2.0 - 1.0) * vs.halfWidth * vs.right + (uV * 2.0 - 1.0) * vs.halfHeight * vs.up;
     }
     return SphQuadSample(sq, uU, uV);
+}
+
+/** False for a cone-clip sample that landed off a disk emitter (the clip is square). */
+public bool LightSampleOnEmitter(LightView vs, float3 samplePos)
+{
+    if (vs.cosConeOuter <= 0.0 || vs.type != LIGHT_TYPE_DISK) { return true; }
+    return PointOnEmitter(vs.center, vs.right, vs.up, vs.halfWidth, vs.halfHeight, vs.type == LIGHT_TYPE_DISK, samplePos);
 }
 
 public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePos)
@@ -397,7 +413,17 @@ public float LightSamplePdfArea(LightView vs, float3 shadingPos, float3 samplePo
         float cosLight = max(dot(outwardN, -L), 0.0);
         return pdfSolidAngle * cosLight / dist2;
     }
-    if (vs.type == LIGHT_TYPE_TRIANGLE || vs.type == LIGHT_TYPE_DISK)
+    if (vs.type == LIGHT_TYPE_TRIANGLE)
+    {
+        return 1.0 / vs.area;
+    }
+    ConeClip clip;
+    if (LightConeClip(vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, vs.type == LIGHT_TYPE_DISK, vs.cosConeOuter, vs.area, shadingPos, clip))
+    {
+        float invPdf = LightConeClipInvPdf(clip, vs.center, vs.right, vs.up, samplePos);
+        return invPdf > 0.0 ? 1.0 / invPdf : 0.0;
+    }
+    if (vs.type == LIGHT_TYPE_DISK)
     {
         return 1.0 / vs.area;
     }
@@ -423,12 +449,23 @@ public float EvalCellLightTarget(LightView vs, float3 samplePos, float3 cellCent
     float3 toCellCenter = vs.center - cellCenter;
     if (length(toCellCenter) - cellHalfDiag >= vs.range) { return 0.0; }
     if (vs.type != LIGHT_TYPE_SPHERE && dot(vs.normal, toCellCenter) > cellHalfDiag) { return 0.0; }
+    float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
+    if (vs.cosConeOuter > 0.0)
+    {
+        if (!LightConeReaches(vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, vs.type == LIGHT_TYPE_DISK, vs.cosConeOuter, cellCenter, cellHalfDiag)) { return 0.0; }
+        ConeClip clip;
+        if (LightConeClip(vs.center, vs.normal, vs.right, vs.up, vs.halfWidth, vs.halfHeight, vs.type == LIGHT_TYPE_DISK, vs.cosConeOuter, vs.area, samplePos, clip))
+        {
+            float h = dot(samplePos - vs.center, vs.normal);
+            float beamAtten = max(LightRangeCull(h, vs.range), REGIR_TARGET_RANGE_FLOOR) * LightFalloffScale(h, vs.falloffBias);
+            return PI * LightConeIntegral(vs.cosConeInner, vs.cosConeOuter) * vs.intensity * colorMax * beamAtten;
+        }
+    }
     float3 toSample = vs.center - samplePos;
     float dist = max(length(toSample), 1e-5);
     float atten = max(LightRangeCull(dist, vs.range), REGIR_TARGET_RANGE_FLOOR) * LightFalloffScale(dist, vs.falloffBias);
     float cosFacing = (vs.type == LIGHT_TYPE_SPHERE) ? 1.0 : abs(dot(vs.normal, -toSample / dist));
     atten *= max(LightConeFalloff(cosFacing, vs.cosConeInner, vs.cosConeOuter), REGIR_TARGET_CONE_FLOOR);
-    float colorMax = max(lightColor.r, max(lightColor.g, lightColor.b));
     float geom = max(cosFacing, REGIR_TARGET_FACING_FLOOR) / max(dist * dist, max(minDist2, LIGHT_GEOM_MIN_DIST2));
     return geom * vs.area * vs.intensity * colorMax * atten;
 }

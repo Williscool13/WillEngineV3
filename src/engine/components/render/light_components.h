@@ -26,6 +26,7 @@ struct TransformComponent;
 struct AreaLightComponent
 {
     static constexpr const char* COMPONENT_NAME = "AreaLightComponent";
+    static constexpr float MIN_CONE_OUTER_DEGREES = 1.0f;
 
     Vec3 color{1.0f, 1.0f, 1.0f};
     float intensity{65536.0f}; // nits
@@ -35,6 +36,7 @@ struct AreaLightComponent
     float falloffExponent{2.0f}; // 2 = inverse square, 0 = none; pivots at 1 m
     float coneOuterDegrees{90.0f}; // half-angle from the normal; 90 = plain hemisphere emitter
     float coneInnerDegrees{90.0f}; // full intensity inside, smoothstep to zero at outer
+    bool bNormalizeCone{false}; // a surface in the beam is lit as if under an open emitter, whatever the cone
     bool bDisk{false};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
@@ -51,8 +53,9 @@ struct AreaLightComponent
         WILL_FIELD(halfHeight, .min = 0.001f, .speed = 0.01f),
         WILL_FIELD(range, .min = 0.0f, .speed = 0.1f),
         WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
-        WILL_FIELD(coneOuterDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
+        WILL_FIELD(coneOuterDegrees, .min = MIN_CONE_OUTER_DEGREES, .max = 90.0f, .speed = 0.5f),
         WILL_FIELD(coneInnerDegrees, .min = 0.0f, .max = 90.0f, .speed = 0.5f),
+        WILL_FIELD(bNormalizeCone),
         WILL_FIELD(bDisk),
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(bExcludeFromProbeBake))

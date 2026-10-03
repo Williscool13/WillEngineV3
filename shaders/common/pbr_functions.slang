@@ -8,6 +8,8 @@ module pbr_functions;
 
 public static const bool LIGHT_INVERSE_SQUARE = true;
 public static const float LIGHT_GEOM_MIN_DIST2 = 0.1;
+public static const float LIGHT_CONE_MIN_WIDTH = 1e-6;
+public static const float LIGHT_CONE_FOOTPRINT_PAD = 1.02;
 
 public void SampleMetalRoughLod(MaterialProperties material, float2 uv, float lod, out float metallic, out float roughness)
 {
@@ -59,8 +61,144 @@ public float LightFalloffScale(float dist, float bias)
 /** cosInner == cosOuter == 0 is identity, so every light type can apply it unconditionally. */
 public float LightConeFalloff(float cosLight, float cosInner, float cosOuter)
 {
-    float t = saturate((cosLight - cosOuter) / max(cosInner - cosOuter, 1e-4));
+    float t = saturate((cosLight - cosOuter) / max(cosInner - cosOuter, LIGHT_CONE_MIN_WIDTH));
     return t * t * (3.0 - 2.0 * t);
+}
+
+/** Hemisphere integral of LightConeFalloff * cos, over pi: irradiance under an emitter that fills its cone, relative to an open one. Mirrored on the CPU by AreaLightConeScale. */
+public float LightConeIntegral(float cosInner, float cosOuter)
+{
+    float w = max(cosInner - cosOuter, LIGHT_CONE_MIN_WIDTH);
+    float cI = min(cosOuter + w, 1.0);
+    return max((1.0 - cI) * (1.0 + cI) + w * (cosOuter + 0.7 * w), 1e-12);
+}
+
+public struct ConeClip
+{
+    public float4 rect; // u min, v min, u max, v max along right/up; empty when the receiver is outside the beam
+    public float2 centerUV; // point on the emitter plane straight above the receiver
+    public float footHalf; // h * tan(outer), padded
+    public bool bDisc; // the footprint disc lies wholly on the emitter: sample the disc, no waste in the square's corners
+}
+
+/**
+ * Where a coned emitter can light shadingPos from: the footprint disc when it fits on the emitter, otherwise the square around it clipped to the emitter's extents.
+ * @return true when sampling should use the clip: cone below 90 degrees, receiver in front of the plane, square smaller than the emitter
+ */
+public bool LightConeClip(float3 center, float3 normal, float3 right, float3 up, float halfWidth, float halfHeight, bool bDisk, float cosConeOuter, float area, float3 shadingPos, out ConeClip c)
+{
+    c.rect = float4(0.0);
+    c.centerUV = float2(0.0);
+    c.footHalf = 0.0;
+    c.bDisc = false;
+    if (cosConeOuter <= 0.0) { return false; }
+    float3 rel = shadingPos - center;
+    float h = dot(rel, normal);
+    if (h <= 0.0) { return false; }
+    float tanOuter = sqrt((1.0 - cosConeOuter) * (1.0 + cosConeOuter)) / cosConeOuter;
+    float r = h * tanOuter * LIGHT_CONE_FOOTPRINT_PAD;
+    if (4.0 * r * r >= area) { return false; }
+    float2 uv = float2(dot(rel, right), dot(rel, up));
+    float hh = bDisk ? halfWidth : halfHeight;
+    c.centerUV = uv;
+    c.footHalf = r;
+    c.bDisc = bDisk ? length(uv) + r <= halfWidth : (abs(uv.x) + r <= halfWidth && abs(uv.y) + r <= hh);
+    c.rect = float4(max(uv.x - r, -halfWidth), max(uv.y - r, -hh), min(uv.x + r, halfWidth), min(uv.y + r, hh));
+    return true;
+}
+
+public float LightConeClipArea(ConeClip c)
+{
+    if (c.bDisc) { return PI * c.footHalf * c.footHalf; }
+    return max(c.rect.z - c.rect.x, 0.0) * max(c.rect.w - c.rect.y, 0.0);
+}
+
+public float3 LightConeClipPoint(ConeClip c, float3 center, float3 right, float3 up, float u1, float u2)
+{
+    float2 uv;
+    if (c.bDisc) {
+        uv = c.centerUV + ConcentricSampleDisk(u1, u2) * c.footHalf;
+    } else {
+        uv = float2(lerp(c.rect.x, c.rect.z, u1), lerp(c.rect.y, c.rect.w, u2));
+    }
+    return center + right * uv.x + up * uv.y;
+}
+
+/** 1 / pdf of a LightConeClipPoint sample at p, 0 outside the sampled region. */
+public float LightConeClipInvPdf(ConeClip c, float3 center, float3 right, float3 up, float3 p)
+{
+    float3 rel = p - center;
+    float2 uv = float2(dot(rel, right), dot(rel, up));
+    bool bInside;
+    if (c.bDisc) {
+        float2 d = uv - c.centerUV;
+        bInside = dot(d, d) <= c.footHalf * c.footHalf;
+    } else {
+        bInside = uv.x >= c.rect.x && uv.x <= c.rect.z && uv.y >= c.rect.y && uv.y <= c.rect.w;
+    }
+    return bInside ? LightConeClipArea(c) : 0.0;
+}
+
+/** Fraction of the footprint square that lies on the emitter's extents; 1 when the disc fits. */
+public float LightConeClipCoverage(ConeClip c)
+{
+    if (c.bDisc) { return 1.0; }
+    return LightConeClipArea(c) / max(4.0 * c.footHalf * c.footHalf, 1e-12);
+}
+
+public bool PointOnEmitter(float3 center, float3 right, float3 up, float halfWidth, float halfHeight, bool bDisk, float3 p)
+{
+    float3 rel = p - center;
+    float u = dot(rel, right);
+    float v = dot(rel, up);
+    if (bDisk) { return u * u + v * v <= halfWidth * halfWidth; }
+    return abs(u) <= halfWidth && abs(v) <= halfHeight;
+}
+
+/**
+ * Uniform point on a rect/disk emitter, restricted to the cone clip when that is smaller than the emitter.
+ * @return 1 / pdf in area measure; 0 when the receiver is outside the beam or a disk sample lands off the disk
+ */
+public float SampleEmitterArea(float3 center, float3 normal, float3 right, float3 up, float halfWidth, float halfHeight, bool bDisk, float cosConeOuter, float3 shadingPos, float u1, float u2, out float3 samplePos)
+{
+    float area = bDisk ? PI * halfWidth * halfWidth : 4.0 * halfWidth * halfHeight;
+    ConeClip clip;
+    if (LightConeClip(center, normal, right, up, halfWidth, halfHeight, bDisk, cosConeOuter, area, shadingPos, clip)) {
+        samplePos = LightConeClipPoint(clip, center, right, up, u1, u2);
+        float clipArea = LightConeClipArea(clip);
+        if (clipArea <= 0.0 || (bDisk && !PointOnEmitter(center, right, up, halfWidth, halfWidth, true, samplePos))) { return 0.0; }
+        return clipArea;
+    }
+    if (bDisk) {
+        float2 d = ConcentricSampleDisk(u1, u2) * halfWidth;
+        samplePos = center + right * d.x + up * d.y;
+    } else {
+        samplePos = center + right * (u1 * 2.0 - 1.0) * halfWidth + up * (u2 * 2.0 - 1.0) * halfHeight;
+    }
+    return area;
+}
+
+/** Conservative: can any point within radius of p sit inside the emitter's cone. */
+public bool LightConeReaches(float3 center, float3 normal, float3 right, float3 up, float halfWidth, float halfHeight, bool bDisk, float cosConeOuter, float3 p, float radius)
+{
+    if (cosConeOuter <= 0.0) { return true; }
+    float3 rel = p - center;
+    float hFar = dot(rel, normal) + radius;
+    if (hFar <= 0.0) { return false; }
+    float tanOuter = sqrt((1.0 - cosConeOuter) * (1.0 + cosConeOuter)) / cosConeOuter;
+    float reach = hFar * tanOuter * LIGHT_CONE_FOOTPRINT_PAD + radius;
+    float u = dot(rel, right);
+    float v = dot(rel, up);
+    float gap2;
+    if (bDisk) {
+        float g = max(sqrt(u * u + v * v) - halfWidth, 0.0);
+        gap2 = g * g;
+    } else {
+        float gu = max(abs(u) - halfWidth, 0.0);
+        float gv = max(abs(v) - halfHeight, 0.0);
+        gap2 = gu * gu + gv * gv;
+    }
+    return gap2 <= reach * reach;
 }
 
 public float2 ConcentricSampleDisk(float u1, float u2)
