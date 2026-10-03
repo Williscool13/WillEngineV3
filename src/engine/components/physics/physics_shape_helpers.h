@@ -22,7 +22,7 @@ void FillSplineParams(Engine::SplineParams& out, const SplineMeshComponent& splm
  * Builds the default collider for a procedural mesh: a matching primitive (box/sphere/capsule) where one fits exactly,
  * otherwise a Collider reusing the procedural params (kind resolved later by the analyzer). Primitive dimensions are pre-scaled by `scale`.
  */
-PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const glm::vec3& scale);
+PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const Engine::ProceduralRepeat& repeat, const glm::vec3& scale);
 
 /**
  * Populates a Collider shape from the entity's attached mesh, resolving the source and baked

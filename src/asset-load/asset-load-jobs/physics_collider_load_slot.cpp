@@ -179,6 +179,7 @@ bool PhysicsColliderLoadSlot::Build()
         Core::Vector<Engine::SplineColliderPrimitive> prims(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         Core::Vector<Vec3> positions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         Engine::PhysicsColliderKind kind{};
+        const Engine::ProceduralRepeat& repeat = c->proceduralRepeat;
         if (!Engine::BuildProceduralCollider(c->proceduralParams.value(), kind, prims, positions)) {
             // Exotic type (Bowl / CurvedRamp / Klein / Trefoil)
             Core::Vector<Engine::FullVertex> genVerts(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
@@ -193,6 +194,23 @@ bool PhysicsColliderLoadSlot::Build()
             Core::Vector<uint32_t> simIndices(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
             SimplifyColliderMesh(Core::Span<const Vec3>(genPositions.Data(), genPositions.Size()), Core::Span<const uint32_t>(genIndices.Data(), genIndices.Size()), memoryManager, simPositions, simIndices);
             if (simPositions.IsEmpty()) { return false; }
+            if (repeat.IsActive()) {
+                const size_t baseVertexCount = simPositions.Size();
+                const size_t baseIndexCount = simIndices.Size();
+                const int32_t count = repeat.Total();
+                for (int32_t k = 1; k < count; ++k) {
+                    const Vec3 offset = repeat.Offset(k);
+                    const auto indexBase = static_cast<uint32_t>(baseVertexCount * k);
+                    for (size_t i = 0; i < baseVertexCount; ++i) {
+                        const Vec3 moved = simPositions[i] + offset;
+                        simPositions.PushBack(moved);
+                    }
+                    for (size_t i = 0; i < baseIndexCount; ++i) {
+                        const uint32_t index = simIndices[i] + indexBase;
+                        simIndices.PushBack(index);
+                    }
+                }
+            }
 
             c->positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::Physics, simPositions.Size());
             for (size_t i = 0; i < simPositions.Size(); ++i) { c->positions[i] = simPositions[i]; }
@@ -206,6 +224,7 @@ bool PhysicsColliderLoadSlot::Build()
             return true;
         }
 
+        Engine::ApplyProceduralRepeat(repeat, kind, prims, positions);
         c->kind = kind;
         if (kind == Engine::PhysicsColliderKind::Compound) {
             if (prims.IsEmpty()) { return false; }

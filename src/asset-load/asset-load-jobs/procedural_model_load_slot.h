@@ -181,6 +181,9 @@ private:
     bool GeneratePyramid(const Engine::PyramidParams& p);
 
     bool GenerateSlantedBeam(const Engine::SlantedBeamParams& p);
+    bool GeneratePilaster(const Engine::PilasterParams& p);
+    bool GenerateCofferedSlab(const Engine::CofferedSlabParams& p);
+    bool GenerateRepeated(Engine::ProceduralParams& params, const Engine::ProceduralRepeat& repeat);
 
     bool GenerateModule(const Engine::ModuleParams& p);
 

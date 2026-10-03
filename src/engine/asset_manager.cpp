@@ -344,7 +344,7 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
     return handle;
 }
 
-StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
+StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params, const ProceduralRepeat& repeat)
 {
     HashBuilder h;
     h.Add(params.index());
@@ -353,6 +353,9 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
             h.Add(&v, sizeof(v));
         }
     }, params);
+    if (repeat.IsActive()) {
+        h.Add(&repeat, sizeof(repeat));
+    }
 
     ModelID proceduralModelId{h.Finish()};
 
@@ -383,6 +386,7 @@ StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params)
     model.name = Core::InlineString<128>::Format("Procedural Mesh %d", proceduralCounter++);
     model.modelId = proceduralModelId;
     model.proceduralParams = params;
+    model.proceduralRepeat = repeat.IsActive() ? repeat : ProceduralRepeat{};
     model.refCount = 1;
     model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
 
@@ -739,7 +743,7 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
     return handle;
 }
 
-PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParams& params)
+PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParams& params, const ProceduralRepeat& repeat)
 {
     HashBuilder h;
     h.Add(params.index());
@@ -748,6 +752,9 @@ PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParam
             h.Add(&v, sizeof(v));
         }
     }, params);
+    if (repeat.IsActive()) {
+        h.Add(&repeat, sizeof(repeat));
+    }
     constexpr uint8_t domain = 1;
     h.Add(domain);
 
@@ -777,6 +784,7 @@ PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParam
     collider.name = Core::InlineString<128>::Format("Procedural Collider %d", proceduralColliderCounter++);
     collider.colliderId = colliderId;
     collider.proceduralParams = params;
+    collider.proceduralRepeat = repeat.IsActive() ? repeat : ProceduralRepeat{};
 
     // Analytics are either Compound or Convex Hull (determined in the load slot). Exotics are concave and must use triangle mesh (not allowed to be dynamic)
     const bool bAnalytic = CanBuildProceduralCollider(params);

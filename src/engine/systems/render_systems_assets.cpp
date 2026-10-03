@@ -874,7 +874,7 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
         if (started.Size() >= budget) { break; }
-        const Engine::StaticModelHandle handle = ctx->assetManager->LoadProceduralModel(meshComponent.params);
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadProceduralModel(meshComponent.params, meshComponent.repeat);
         if (!handle.IsValid()) { continue; }
         StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);

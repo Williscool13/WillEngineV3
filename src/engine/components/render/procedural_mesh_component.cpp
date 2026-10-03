@@ -350,7 +350,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
         static constexpr const char* shapeNames[] = {
             "", "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch", "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere", "Hemisphere", "Pipe", "Tetrahedron", "Octahedron",
             "Icosahedron", "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring", "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid",
-            "Slanted Beam"
+            "Slanted Beam", "Pilaster", "Coffered Slab"
         };
         static_assert(std::size(shapeNames) == std::variant_size_v<Engine::ProceduralParams>);
         const size_t shapeIndex = component.params.index();
@@ -949,7 +949,77 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Measured vertically; the end faces are this tall"); }
                     dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
                 }
+                else if constexpr (std::is_same_v<T, Engine::PilasterParams>) {
+                    ImGui::DragInt("Segments", &p.segmentCount, 0.05f, 1, Engine::MAX_PILASTER_SEGMENTS);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Loft", &p.bLoft)) { dirty = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Each segment tapers to the next one's size; end with a zero-height, zero-depth segment for a sliver"); }
+                    const int32_t segmentCount = glm::clamp(p.segmentCount, 1, Engine::MAX_PILASTER_SEGMENTS);
+                    for (int32_t i = 0; i < segmentCount; ++i) {
+                        ImGui::PushID(i);
+                        ImGui::SeparatorText(Core::InlineString<32>::Format("Segment %d", i + 1).c_str());
+                        ImGui::DragFloat("Height", &p.segments[i].height, 0.01f, 0.0f, 100.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragFloat("Width", &p.segments[i].width, 0.005f, 0.0f, 100.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragFloat("Depth", &p.segments[i].depth, 0.005f, 0.0f, 100.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How far it sticks out of the wall (+Z)"); }
+                        ImGui::PopID();
+                    }
+                }
+                else if constexpr (std::is_same_v<T, Engine::CofferedSlabParams>) {
+                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 200.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 200.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Cells X", &p.cellsX, 0.05f, 1, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Cells Z", &p.cellsZ, 0.05f, 1, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Slab Thickness", &p.slabThickness, 0.005f, 0.001f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Beam Depth", &p.beamDepth, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How far the beams hang below the slab; 0 = flat slab"); }
+                    ImGui::DragFloat("Beam Width", &p.beamWidth, 0.005f, 0.001f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Twin Gap", &p.twinGap, 0.005f, 0.0f, 10.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Splits every beam into two with a slot this wide; 0 = single beams"); }
+                    if (ImGui::Checkbox("Edge Beams", &p.bEdgeBeams)) { dirty = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Beams along the slab's outer edges; off leaves the outer coffers open"); }
+                    ImGui::DragFloat("Arc (deg)", &p.arcDegrees, 0.5f, 0.0f, 180.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bends the slab across X into a barrel vault, beams inside; 0 = flat, 180 = half cylinder. Springing edges stay on y = 0"); }
+                }
             }, component.params);
+
+            ImGui::SeparatorText("Repeat");
+            const struct
+            {
+                const char* countLabel;
+                const char* offsetLabel;
+                int32_t* count;
+                Vec3* offset;
+            } axes[3] = {
+                {"Count 1##repeat", "Offset 1##repeat", &component.repeat.count, &component.repeat.offset},
+                {"Count 2##repeat", "Offset 2##repeat", &component.repeat.count2, &component.repeat.offset2},
+                {"Count 3##repeat", "Offset 3##repeat", &component.repeat.count3, &component.repeat.offset3},
+            };
+            for (const auto& axis : axes) {
+                ImGui::DragInt(axis.countLabel, axis.count, 0.05f, 1, Engine::MAX_PROCEDURAL_REPEAT);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Copies along this axis, all in one mesh and one collider; 1 = off"); }
+                ImGui::BeginDisabled(*axis.count <= 1);
+                ImGui::DragFloat3(axis.offsetLabel, &axis.offset->x, 0.01f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Step from one copy to the next, in the shape's local space"); }
+                ImGui::EndDisabled();
+            }
+            if (component.repeat.IsActive()) {
+                ImGui::TextDisabled("%d copies (max %d)", component.repeat.Total(), Engine::MAX_PROCEDURAL_REPEAT_TOTAL);
+            }
 
             bCommit |= dirty;
             if (HasFaceHandles(component.params)) {

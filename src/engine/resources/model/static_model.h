@@ -102,6 +102,7 @@ public:
 
     // Populated by AssetManager, Only for (simple) procedural models
     ProceduralParams proceduralParams{};
+    ProceduralRepeat proceduralRepeat{};
 
     // Populated by AssetManager, sometimes changed
     uint32_t refCount = 0;

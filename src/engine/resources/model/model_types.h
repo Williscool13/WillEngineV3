@@ -919,9 +919,208 @@ inline void SlantedBeamCorners(const SlantedBeamParams& p, glm::vec3 (&out)[8])
     }
 }
 
+struct PilasterSegment
+{
+    float height{1.0f};
+    float width{0.4f};
+    float depth{0.2f};
+
+    WILL_REFLECT(PilasterSegment, WILL_FIELD(height), WILL_FIELD(width), WILL_FIELD(depth))
+};
+
+inline constexpr int32_t MAX_PILASTER_SEGMENTS = 8;
+
+/**
+ * Wall pier built from stacked segments, bottom first. Pivot at the base centre of the back face; the back face lies on z = 0 and the pier sticks out along +Z.
+ * Stepped: each segment is a box. Lofted: each segment tapers from its own size at the bottom to the next segment's size at the top (the last stays straight),
+ * so a final zero-height, zero-depth segment ends in a sliver.
+ */
+struct PilasterParams
+{
+    PilasterSegment segments[MAX_PILASTER_SEGMENTS]{{1.2f, 0.6f, 0.3f}, {1.2f, 0.45f, 0.2f}, {1.2f, 0.3f, 0.1f}};
+    int32_t segmentCount{3};
+    bool bLoft{false};
+    uint8_t _pad0[3]{};
+
+    WILL_REFLECT(PilasterParams, WILL_FIELD(segments), WILL_FIELD(segmentCount), WILL_FIELD(bLoft))
+
+    static void Sanitize(PilasterParams& p)
+    {
+        p.segmentCount = glm::clamp(p.segmentCount, 1, MAX_PILASTER_SEGMENTS);
+        for (PilasterSegment& s : p.segments) {
+            s.height = glm::max(s.height, 0.0f);
+            s.width = glm::max(s.width, 0.0f);
+            s.depth = glm::max(s.depth, 0.0f);
+        }
+    }
+};
+
+/** Bottom size (x = width, y = depth) and top size of a pilaster segment. */
+inline void PilasterSegmentSizes(const PilasterParams& p, int32_t i, glm::vec2& bottom, glm::vec2& top)
+{
+    const PilasterSegment& s = p.segments[i];
+    bottom = {s.width, s.depth};
+    top = bottom;
+    if (p.bLoft && i + 1 < p.segmentCount) {
+        top = {p.segments[i + 1].width, p.segments[i + 1].depth};
+    }
+}
+
+/**
+ * Waffle slab: a flat slab over a grid of downstand beams. Corner pivot like Box; the beam undersides lie on y = 0 and the slab top on y = beamDepth + slabThickness.
+ * twinGap > 0 splits every beam into two with a slot of that width up to the slab. arcDegrees > 0 bends it about Z into a barrel vault: the beam undersides keep
+ * their length sizeX, the crown stays at x = sizeX / 2 and both springing edges land on y = 0.
+ */
+struct CofferedSlabParams
+{
+    float sizeX{6.0f};
+    float sizeZ{6.0f};
+    float slabThickness{0.2f};
+    float beamDepth{0.4f};
+    float beamWidth{0.3f};
+    int32_t cellsX{4};
+    int32_t cellsZ{4};
+    float twinGap{0.0f};
+    bool bEdgeBeams{true};
+    uint8_t _pad0[3]{};
+    float arcDegrees{0.0f};
+
+    WILL_REFLECT(CofferedSlabParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(slabThickness), WILL_FIELD(beamDepth), WILL_FIELD(beamWidth), WILL_FIELD(cellsX), WILL_FIELD(cellsZ),
+                 WILL_FIELD(twinGap), WILL_FIELD(bEdgeBeams), WILL_FIELD(arcDegrees))
+
+    static void Sanitize(CofferedSlabParams& p)
+    {
+        p.sizeX = glm::max(p.sizeX, 0.01f);
+        p.sizeZ = glm::max(p.sizeZ, 0.01f);
+        p.slabThickness = glm::max(p.slabThickness, 0.001f);
+        p.beamDepth = glm::max(p.beamDepth, 0.0f);
+        p.beamWidth = glm::max(p.beamWidth, 0.001f);
+        p.cellsX = glm::clamp(p.cellsX, 1, 64);
+        p.cellsZ = glm::clamp(p.cellsZ, 1, 64);
+        p.twinGap = glm::clamp(p.twinGap, 0.0f, p.beamWidth * 0.9f);
+        p.arcDegrees = glm::clamp(p.arcDegrees, 0.0f, 180.0f);
+    }
+};
+
+/** Bend of a coffered slab: angle per metre along X (0 = flat) and the radius of the beam undersides. */
+struct CofferedSlabArc
+{
+    float anglePerMetre{0.0f};
+    float radius{0.0f};
+    float centreX{0.0f};
+    float springDrop{0.0f};
+
+    [[nodiscard]] bool IsBent() const { return anglePerMetre > 0.0f; }
+
+    [[nodiscard]] float Angle(float x) const { return (x - centreX) * anglePerMetre; }
+
+    /** Maps a point of the flat slab onto the vault. */
+    [[nodiscard]] glm::vec3 Point(const glm::vec3& p) const
+    {
+        if (!IsBent()) { return p; }
+        const float a = Angle(p.x);
+        const float r = radius + p.y;
+        return {centreX + r * glm::sin(a), r * glm::cos(a) - radius + springDrop, p.z};
+    }
+
+    /** Rotates a flat-slab direction at x onto the vault. */
+    [[nodiscard]] glm::vec3 Direction(float x, const glm::vec3& d) const
+    {
+        if (!IsBent()) { return d; }
+        const float a = Angle(x);
+        const float c = glm::cos(a);
+        const float s = glm::sin(a);
+        return {d.x * c + d.y * s, -d.x * s + d.y * c, d.z};
+    }
+};
+
+inline CofferedSlabArc CofferedSlabArcOf(const CofferedSlabParams& p)
+{
+    CofferedSlabArc arc{};
+    const float arcRadians = glm::radians(glm::clamp(p.arcDegrees, 0.0f, 180.0f));
+    if (arcRadians < 1e-4f) { return arc; }
+    const float sx = glm::max(p.sizeX, 0.01f);
+    arc.anglePerMetre = arcRadians / sx;
+    arc.radius = sx / arcRadians;
+    arc.centreX = 0.5f * sx;
+    arc.springDrop = arc.radius * (1.0f - glm::cos(0.5f * arcRadians));
+    return arc;
+}
+
+/** Flat-slab X subdivisions so no bent facet spans more than ~3 degrees. */
+inline int32_t CofferedSlabArcSegments(const CofferedSlabParams& p)
+{
+    return p.arcDegrees > 0.0f ? glm::max(1, static_cast<int32_t>(glm::ceil(glm::clamp(p.arcDegrees, 0.0f, 180.0f) / 3.0f))) : 1;
+}
+
+/** Beam bands along one axis as [start, end] pairs (twin beams give two per line), clipped to [0, size]. Returns the pair count. */
+inline int32_t CofferedSlabBeamBands(const CofferedSlabParams& p, float size, int32_t cells, glm::vec2* out, int32_t maxOut)
+{
+    const float halfW = p.beamWidth * 0.5f;
+    const float halfGap = glm::min(p.twinGap, p.beamWidth * 0.9f) * 0.5f;
+    int32_t count = 0;
+    for (int32_t i = 0; i <= cells && count + 2 <= maxOut; ++i) {
+        if (!p.bEdgeBeams && (i == 0 || i == cells)) { continue; }
+        const float c = size * static_cast<float>(i) / static_cast<float>(cells);
+        const glm::vec2 band{glm::max(c - halfW, 0.0f), glm::min(c + halfW, size)};
+        if (halfGap > 0.0f) {
+            if (c - halfGap > band.x) { out[count++] = {band.x, c - halfGap}; }
+            if (c + halfGap < band.y) { out[count++] = {c + halfGap, band.y}; }
+        }
+        else if (band.y > band.x) {
+            out[count++] = band;
+        }
+    }
+    return count;
+}
+
+inline constexpr int32_t MAX_COFFERED_BANDS = 2 * (64 + 1);
+
+inline constexpr int32_t MAX_PROCEDURAL_REPEAT = 256;
+inline constexpr int32_t MAX_PROCEDURAL_REPEAT_TOTAL = 1024;
+
+/** Repeats a procedural shape along up to three axes, each copy moved by that axis' offset from the last. Applies to the mesh and its collider; all counts 1 = off. */
+struct ProceduralRepeat
+{
+    int32_t count{1};
+    Vec3 offset{1.0f, 0.0f, 0.0f};
+    int32_t count2{1};
+    Vec3 offset2{0.0f, 0.0f, 1.0f};
+    int32_t count3{1};
+    Vec3 offset3{0.0f, 1.0f, 0.0f};
+
+    WILL_REFLECT(ProceduralRepeat, WILL_FIELD(count), WILL_FIELD(offset), WILL_FIELD(count2), WILL_FIELD(offset2), WILL_FIELD(count3), WILL_FIELD(offset3))
+
+    static void Sanitize(ProceduralRepeat& r)
+    {
+        r.count = glm::clamp(r.count, 1, MAX_PROCEDURAL_REPEAT);
+        r.count2 = glm::clamp(r.count2, 1, MAX_PROCEDURAL_REPEAT);
+        r.count3 = glm::clamp(r.count3, 1, MAX_PROCEDURAL_REPEAT);
+    }
+
+    [[nodiscard]] bool IsActive() const { return count > 1 || count2 > 1 || count3 > 1; }
+
+    /** Copy count, capped at MAX_PROCEDURAL_REPEAT_TOTAL (later copies along the third axis drop first). */
+    [[nodiscard]] int32_t Total() const
+    {
+        const int32_t a = glm::clamp(count, 1, MAX_PROCEDURAL_REPEAT);
+        const int32_t b = glm::clamp(count2, 1, MAX_PROCEDURAL_REPEAT);
+        const int32_t c = glm::clamp(count3, 1, MAX_PROCEDURAL_REPEAT);
+        return glm::min(a * b * c, MAX_PROCEDURAL_REPEAT_TOTAL);
+    }
+
+    /** Offset of copy k, 0 <= k < Total(); the first axis varies fastest. */
+    [[nodiscard]] Vec3 Offset(int32_t k) const
+    {
+        const int32_t a = glm::clamp(count, 1, MAX_PROCEDURAL_REPEAT);
+        const int32_t b = glm::clamp(count2, 1, MAX_PROCEDURAL_REPEAT);
+        return offset * static_cast<float>(k % a) + offset2 * static_cast<float>((k / a) % b) + offset3 * static_cast<float>(k / (a * b));
+    }
+};
+
 using ProceduralParams = std::variant<std::monostate, StaircaseParams, BoxParams, CylinderParams, CapsuleParams, TorusParams, ArchParams, WedgeParams, ConeParams, DoorParams, PlaneParams, SphereParams
     , SubdividedSphereParams, HemisphereParams, PipeParams, TetrahedronParams, OctahedronParams, IcosahedronParams, DodecahedronParams, KleinBottleParams, TrefoilKnotParams, CurvedRampParams, BowlParams, SpiralStaircaseParams, RingParams, WallParams, LatticeParams, CorrugatedPanelParams
-    , TerraceParams, PyramidParams, SlantedBeamParams>;
+    , TerraceParams, PyramidParams, SlantedBeamParams, PilasterParams, CofferedSlabParams>;
 
 inline constexpr int32_t MAX_MODULE_PARTS = 32;
 inline constexpr int32_t MAX_MODULE_SLOTS = 8;

@@ -31,10 +31,18 @@ void FillSplineParams(Engine::SplineParams& out, const SplineMeshComponent& splm
     out.railing = splm.railing;
 }
 
-PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const glm::vec3& scale)
+PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const Engine::ProceduralRepeat& repeat, const glm::vec3& scale)
 {
     const float maxScale = glm::max(scale.x, glm::max(scale.y, scale.z));
     PhysicsShapeDesc shape{};
+    if (repeat.IsActive()) {
+        ColliderShape collider{};
+        collider.proceduralParams = params;
+        collider.proceduralRepeat = repeat;
+        shape.geometry = collider;
+        shape.bakedScale = scale;
+        return shape;
+    }
     std::visit([&](const auto& p) {
         using T = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<T, Engine::BoxParams>) {
@@ -78,6 +86,7 @@ void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, Physics
     }
     else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
         collider.proceduralParams = pm->params;
+        collider.proceduralRepeat = pm->repeat;
         renderOffset = pm->renderOffset;
         renderRotation = pm->renderRotation;
     }

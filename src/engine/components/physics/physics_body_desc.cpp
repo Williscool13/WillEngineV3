@@ -94,7 +94,7 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
             component.shapes.PushBack(box);
         }
         else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
-            PhysicsShapeDesc shape = MakeProceduralShape(pm->params, scale);
+            PhysicsShapeDesc shape = MakeProceduralShape(pm->params, pm->repeat, scale);
             ApplyRenderTransform(shape, scale, pm->renderOffset, pm->renderRotation);
             component.shapes.PushBack(shape);
         }
@@ -318,12 +318,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             else if (auto* collider = std::get_if<ColliderShape>(&shape.geometry)) {
                 bool bHasAny = false;
                 const auto* meta = ctx->assetManager->GetModelMetadata(collider->meshSourceModelId);
-                static constexpr Core::Array<const char*, 31> kProceduralNames = {
+                static constexpr Core::Array<const char*, 33> kProceduralNames = {
                     nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                     "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",
                     "Hemisphere", "Pipe", "Tetrahedron", "Octahedron", "Icosahedron",
                     "Dodecahedron", "Klein Bottle", "Trefoil Knot", "Curved Ramp", "Bowl", "Spiral Staircase", "Ring",
-                    "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid", "Slanted Beam",
+                    "Wall", "Lattice", "Corrugated Panel", "Terrace", "Pyramid", "Slanted Beam", "Pilaster", "Coffered Slab",
                 };
                 const size_t idx = collider->proceduralParams.index();
 
@@ -339,7 +339,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     ImGui::EndDisabled();
                 }
                 else if (idx > 0 && idx < kProceduralNames.Size()) {
-                    ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
+                    if (collider->proceduralRepeat.IsActive()) {
+                        ImGui::Text("Mesh Source: Procedural %s x%d", kProceduralNames[idx], collider->proceduralRepeat.Total());
+                    }
+                    else {
+                        ImGui::Text("Mesh Source: Procedural %s", kProceduralNames[idx]);
+                    }
                     bHasAny = true;
                     if (auto* terrace = std::get_if<Engine::TerraceParams>(&collider->proceduralParams)) {
                         bool bRamp = terrace->profile == Engine::TerraceProfile::Ramp;
@@ -377,6 +382,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     if (bShouldClearMesh) {
                         collider->meshSourceModelId = Engine::ModelID::INVALID;
                         collider->proceduralParams = std::monostate{};
+                        collider->proceduralRepeat = {};
                         collider->splineParams.spline.points.Clear();
                         collider->text3DSource = {};
                         bAnyChange = true;

@@ -925,6 +925,71 @@ static void CompoundTerrace(const TerraceParams& p, Core::Vector<SplineColliderP
     }
 }
 
+static void CompoundPilaster(const PilasterParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
+{
+    const int32_t segmentCount = glm::clamp(p.segmentCount, 1, MAX_PILASTER_SEGMENTS);
+    float y0 = 0.0f;
+    for (int32_t i = 0; i < segmentCount; ++i) {
+        const float h = p.segments[i].height;
+        const float y1 = y0 + h;
+        glm::vec2 bottom, top;
+        PilasterSegmentSizes(p, i, bottom, top);
+        if (h > 1e-4f && glm::max(bottom.x, top.x) > 1e-4f && glm::max(bottom.y, top.y) > 1e-4f) {
+            if (!p.bLoft || bottom == top) {
+                PushBoxPrim(Vec3(0.0f, y0 + 0.5f * h, 0.5f * bottom.y), Vec3(0.5f * bottom.x, 0.5f * h, 0.5f * bottom.y), Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
+            }
+            else {
+                const Vec3 hull[8] = {
+                    {-0.5f * bottom.x, y0, 0.0f}, {0.5f * bottom.x, y0, 0.0f}, {0.5f * bottom.x, y0, bottom.y}, {-0.5f * bottom.x, y0, bottom.y},
+                    {-0.5f * top.x, y1, 0.0f}, {0.5f * top.x, y1, 0.0f}, {0.5f * top.x, y1, top.y}, {-0.5f * top.x, y1, top.y},
+                };
+                PushHullPrim(Core::Span<const Vec3>(hull, 8), out, outPositions);
+            }
+        }
+        y0 = y1;
+    }
+}
+
+static void CompoundCofferedSlab(const CofferedSlabParams& p, Core::Vector<SplineColliderPrimitive>& out)
+{
+    const float sx = glm::max(p.sizeX, 0.01f);
+    const float sz = glm::max(p.sizeZ, 0.01f);
+    const float beamDepth = glm::max(p.beamDepth, 0.0f);
+    const float thickness = glm::max(p.slabThickness, 0.001f);
+    const CofferedSlabArc arc = CofferedSlabArcOf(p);
+    const int32_t arcSegments = CofferedSlabArcSegments(p);
+
+    // Flat-slab box from x0 to x1; bent, it follows the vault at its midpoint and widens to cover the outer radius.
+    auto pushBox = [&](float x0, float x1, float y0, float y1, float z0, float z1) {
+        const Vec3 centre(0.5f * (x0 + x1), 0.5f * (y0 + y1), 0.5f * (z0 + z1));
+        Vec3 half(0.5f * (x1 - x0), 0.5f * (y1 - y0), 0.5f * (z1 - z0));
+        if (!arc.IsBent()) {
+            PushBoxPrim(centre, half, Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
+            return;
+        }
+        half.x *= (arc.radius + y1) / arc.radius;
+        PushBoxPrim(arc.Point(centre), half, glm::angleAxis(-arc.Angle(centre.x), Vec3(0.0f, 0.0f, 1.0f)), out);
+    };
+    auto pushSpan = [&](float y0, float y1, float z0, float z1) {
+        for (int32_t k = 0; k < arcSegments; ++k) {
+            pushBox(sx * static_cast<float>(k) / static_cast<float>(arcSegments), sx * static_cast<float>(k + 1) / static_cast<float>(arcSegments), y0, y1, z0, z1);
+        }
+    };
+
+    pushSpan(beamDepth, beamDepth + thickness, 0.0f, sz);
+    if (beamDepth <= 0.0f) { return; }
+
+    glm::vec2 bands[MAX_COFFERED_BANDS];
+    const int32_t bandCountX = CofferedSlabBeamBands(p, sx, glm::clamp(p.cellsX, 1, 64), bands, MAX_COFFERED_BANDS);
+    for (int32_t b = 0; b < bandCountX; ++b) {
+        pushBox(bands[b].x, bands[b].y, 0.0f, beamDepth, 0.0f, sz);
+    }
+    const int32_t bandCountZ = CofferedSlabBeamBands(p, sz, glm::clamp(p.cellsZ, 1, 64), bands, MAX_COFFERED_BANDS);
+    for (int32_t b = 0; b < bandCountZ; ++b) {
+        pushSpan(0.0f, beamDepth, bands[b].x, bands[b].y);
+    }
+}
+
 bool CanBuildProceduralCollider(const ProceduralParams& params)
 {
     return std::holds_alternative<BoxParams>(params)
@@ -949,6 +1014,8 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<TerraceParams>(params)
         || std::holds_alternative<PyramidParams>(params)
         || std::holds_alternative<SlantedBeamParams>(params)
+        || std::holds_alternative<PilasterParams>(params)
+        || std::holds_alternative<CofferedSlabParams>(params)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -1064,6 +1131,16 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
         CompoundTerrace(*p, outPrimitives, outPositions);
         return true;
     }
+    if (const auto* p = std::get_if<PilasterParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundPilaster(*p, outPrimitives, outPositions);
+        return true;
+    }
+    if (const auto* p = std::get_if<CofferedSlabParams>(&params)) {
+        outKind = PhysicsColliderKind::Compound;
+        CompoundCofferedSlab(*p, outPrimitives);
+        return true;
+    }
 
     // Shapes with no matching Jolt primitive fall back to a ConvexHull of analytic vertices.
     if (const auto* p = std::get_if<WedgeParams>(&params)) {
@@ -1117,6 +1194,44 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
         return true;
     }
     return false;
+}
+
+void ApplyProceduralRepeat(const ProceduralRepeat& repeat, PhysicsColliderKind& kind, Core::Vector<SplineColliderPrimitive>& primitives, Core::Vector<Vec3>& positions)
+{
+    if (!repeat.IsActive()) { return; }
+    if (kind == PhysicsColliderKind::ConvexHull) {
+        if (positions.IsEmpty()) { return; }
+        SplineColliderPrimitive hull{};
+        hull.type = SplineColliderPrimitiveType::ConvexHull;
+        hull.hullOffset = 0;
+        hull.hullCount = static_cast<uint32_t>(positions.Size());
+        primitives.Clear();
+        primitives.PushBack(hull);
+        kind = PhysicsColliderKind::Compound;
+    }
+    if (kind != PhysicsColliderKind::Compound) { return; }
+
+    const size_t basePrimitiveCount = primitives.Size();
+    const int32_t count = repeat.Total();
+    primitives.Reserve(basePrimitiveCount * count);
+    for (int32_t k = 1; k < count; ++k) {
+        const Vec3 offset = repeat.Offset(k);
+        for (size_t i = 0; i < basePrimitiveCount; ++i) {
+            SplineColliderPrimitive prim = primitives[i];
+            if (prim.type == SplineColliderPrimitiveType::ConvexHull) {
+                const auto hullOffset = static_cast<uint32_t>(positions.Size());
+                for (uint32_t v = 0; v < prim.hullCount; ++v) {
+                    const Vec3 moved = positions[prim.hullOffset + v] + offset;
+                    positions.PushBack(moved);
+                }
+                prim.hullOffset = hullOffset;
+            }
+            else {
+                prim.position += offset;
+            }
+            primitives.PushBack(prim);
+        }
+    }
 }
 
 bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params, Core::Vector<SplineColliderPrimitive>& out)

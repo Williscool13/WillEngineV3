@@ -194,7 +194,45 @@ bool ProceduralModelLoadSlot::GenerateGeometry()
         return GenerateModule(*outputModel->moduleParams);
     }
 
+    if (outputModel->proceduralRepeat.IsActive()) {
+        return GenerateRepeated(outputModel->proceduralParams, outputModel->proceduralRepeat);
+    }
+
     return GenerateShapeVariant(outputModel->proceduralParams);
+}
+
+bool ProceduralModelLoadSlot::GenerateRepeated(Engine::ProceduralParams& params, const Engine::ProceduralRepeat& repeat)
+{
+    ZoneScopedN("GenerateRepeated");
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    moduleSinkVertices = &vertices;
+    moduleSinkIndices = &indices;
+    const bool bOk = GenerateShapeVariant(params);
+    moduleSinkVertices = nullptr;
+    moduleSinkIndices = nullptr;
+    if (!bOk || vertices.IsEmpty()) { return false; }
+
+    const size_t baseVertexCount = vertices.Size();
+    const size_t baseIndexCount = indices.Size();
+    const int32_t count = repeat.Total();
+    vertices.Reserve(baseVertexCount * count);
+    indices.Reserve(baseIndexCount * count);
+    for (int32_t k = 1; k < count; ++k) {
+        const Vec3 offset = repeat.Offset(k);
+        const auto indexBase = static_cast<uint32_t>(baseVertexCount * k);
+        for (size_t i = 0; i < baseVertexCount; ++i) {
+            Engine::FullVertex v = vertices[i];
+            v.position += offset;
+            vertices.PushBack(v);
+        }
+        for (size_t i = 0; i < baseIndexCount; ++i) {
+            indices.PushBack(indices[i] + indexBase);
+        }
+    }
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }
 
 bool ProceduralModelLoadSlot::GenerateShapeVariant(Engine::ProceduralParams& params)
@@ -232,6 +270,8 @@ bool ProceduralModelLoadSlot::GenerateShapeVariant(Engine::ProceduralParams& par
                    [&](const Engine::TerraceParams& p) { bSuccess = GenerateTerrace(p); },
                    [&](const Engine::PyramidParams& p) { bSuccess = GeneratePyramid(p); },
                    [&](const Engine::SlantedBeamParams& p) { bSuccess = GenerateSlantedBeam(p); },
+                   [&](const Engine::PilasterParams& p) { bSuccess = GeneratePilaster(p); },
+                   [&](const Engine::CofferedSlabParams& p) { bSuccess = GenerateCofferedSlab(p); },
                }, params);
     return bSuccess;
 }
@@ -1669,6 +1709,184 @@ bool ProceduralModelLoadSlot::GenerateSlantedBeam(const Engine::SlantedBeamParam
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     BuildConvexFaces(planes, planeCount, eps, corners, vertices, indices);
+
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GeneratePilaster(const Engine::PilasterParams& p)
+{
+    ZoneScopedN("GeneratePilaster");
+
+    Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+
+    const int32_t segmentCount = glm::clamp(p.segmentCount, 1, Engine::MAX_PILASTER_SEGMENTS);
+    float y0 = 0.0f;
+    for (int32_t i = 0; i < segmentCount; ++i) {
+        const float h = p.segments[i].height;
+        const float y1 = y0 + h;
+        glm::vec2 bottom, top;
+        Engine::PilasterSegmentSizes(p, i, bottom, top);
+        const bool bEmpty = h <= 1e-4f || glm::max(bottom.x, top.x) <= 1e-4f || glm::max(bottom.y, top.y) <= 1e-4f;
+        if (!bEmpty) {
+            const Vec3 sideN = glm::normalize(Vec3(h, 0.5f * (bottom.x - top.x), 0.0f));
+            const Vec3 frontN = glm::normalize(Vec3(0.0f, bottom.y - top.y, h));
+            const float sideD = glm::dot(sideN, Vec3(0.5f * bottom.x, y0, 0.0f));
+            ConvexPlane planes[6];
+            planes[0] = {sideN, sideD, {0, 0, -1}, 0.0f};
+            planes[1] = {{-sideN.x, sideN.y, 0.0f}, sideD, {0, 0, 1}, 0.0f};
+            planes[2] = {{0, 1, 0}, y1, {-1, 0, 0}, 0.0f};
+            planes[3] = {{0, -1, 0}, -y0, {1, 0, 0}, 0.0f};
+            planes[4] = {frontN, glm::dot(frontN, Vec3(0.0f, y0, bottom.y)), {1, 0, 0}, 0.0f};
+            planes[5] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, 0.0f};
+
+            const float eps = 1e-5f * glm::max(1.0f, glm::max(y1, glm::max(bottom.x, bottom.y)));
+            corners.Clear();
+            BuildConvexFaces(planes, 6, eps, corners, vertices, indices);
+        }
+        y0 = y1;
+    }
+
+    if (indices.IsEmpty()) { return false; }
+    return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
+}
+
+bool ProceduralModelLoadSlot::GenerateCofferedSlab(const Engine::CofferedSlabParams& p)
+{
+    ZoneScopedN("GenerateCofferedSlab");
+
+    const float sx = glm::max(p.sizeX, 0.01f);
+    const float sz = glm::max(p.sizeZ, 0.01f);
+    const float beamDepth = glm::max(p.beamDepth, 0.0f);
+    const float top = beamDepth + glm::max(p.slabThickness, 0.001f);
+    const int32_t cellsX = glm::clamp(p.cellsX, 1, 64);
+    const int32_t cellsZ = glm::clamp(p.cellsZ, 1, 64);
+
+    glm::vec2 bandsX[Engine::MAX_COFFERED_BANDS];
+    glm::vec2 bandsZ[Engine::MAX_COFFERED_BANDS];
+    const int32_t bandCountX = beamDepth > 0.0f ? Engine::CofferedSlabBeamBands(p, sx, cellsX, bandsX, Engine::MAX_COFFERED_BANDS) : 0;
+    const int32_t bandCountZ = beamDepth > 0.0f ? Engine::CofferedSlabBeamBands(p, sz, cellsZ, bandsZ, Engine::MAX_COFFERED_BANDS) : 0;
+
+    Core::Vector<float> xs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<float> zs(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    auto addBreaks = [](Core::Vector<float>& out, float size, const glm::vec2* bands, int32_t bandCount) {
+        out.PushBack(0.0f);
+        out.PushBack(size);
+        for (int32_t b = 0; b < bandCount; ++b) {
+            out.PushBack(bands[b].x);
+            out.PushBack(bands[b].y);
+        }
+        std::sort(out.Data(), out.Data() + out.Size());
+        size_t unique = 1;
+        for (size_t i = 1; i < out.Size(); ++i) {
+            if (out[i] - out[unique - 1] > 1e-5f) { out[unique++] = out[i]; }
+        }
+        while (out.Size() > unique) { out.PopBack(); }
+    };
+    const Engine::CofferedSlabArc arc = Engine::CofferedSlabArcOf(p);
+    const int32_t arcSegments = Engine::CofferedSlabArcSegments(p);
+    for (int32_t k = 1; k < arcSegments; ++k) { xs.PushBack(sx * static_cast<float>(k) / static_cast<float>(arcSegments)); }
+    addBreaks(xs, sx, bandsX, bandCountX);
+    addBreaks(zs, sz, bandsZ, bandCountZ);
+
+    auto inBand = [](float v, const glm::vec2* bands, int32_t bandCount) {
+        for (int32_t b = 0; b < bandCount; ++b) {
+            if (v > bands[b].x && v < bands[b].y) { return true; }
+        }
+        return false;
+    };
+    const size_t nx = xs.Size() - 1;
+    const size_t nz = zs.Size() - 1;
+    Core::Vector<float> bottomY(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    bottomY.Reserve(nx * nz);
+    for (size_t j = 0; j < nz; ++j) {
+        const float cz = 0.5f * (zs[j] + zs[j + 1]);
+        for (size_t i = 0; i < nx; ++i) {
+            const float cx = 0.5f * (xs[i] + xs[i + 1]);
+            bottomY.PushBack(inBand(cx, bandsX, bandCountX) || inBand(cz, bandsZ, bandCountZ) ? 0.0f : beamDepth);
+        }
+    }
+    auto cellBottom = [&](size_t i, size_t j) { return bottomY[j * nx + i]; };
+
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    // Corners in cyclic order; flipped to wind counter-clockwise around n.
+    auto addQuad = [&](const Vec3& n, Vec3 q0, Vec3 q1, Vec3 q2, Vec3 q3) {
+        if (glm::dot(glm::cross(q1 - q0, q2 - q0), n) < 0.0f) { std::swap(q1, q3); }
+        Vec3 t;
+        if (glm::abs(n.y) > 0.5f) { t = {n.y > 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f}; }
+        else if (glm::abs(n.x) > 0.5f) { t = {0.0f, 0.0f, -n.x}; }
+        else { t = {n.z, 0.0f, 0.0f}; }
+        const Vec3 b = glm::cross(n, t);
+        const auto base = static_cast<uint32_t>(vertices.Size());
+        for (const Vec3& q : {q0, q1, q2, q3}) {
+            Engine::FullVertex v{};
+            v.position = q;
+            v.normal = n;
+            v.uv = {glm::dot(q, t), glm::dot(q, b)};
+            v.tangent = {t.x, t.y, t.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            vertices.PushBack(v);
+        }
+        for (const uint32_t k : {0u, 1u, 2u, 0u, 2u, 3u}) { indices.PushBack(base + k); }
+    };
+
+    for (size_t i = 0; i < nx; ++i) {
+        addQuad({0, 1, 0}, {xs[i], top, 0}, {xs[i + 1], top, 0}, {xs[i + 1], top, sz}, {xs[i], top, sz});
+    }
+    for (size_t j = 0; j < nz; ++j) {
+        for (size_t i = 0; i < nx; ++i) {
+            const float y = cellBottom(i, j);
+            addQuad({0, -1, 0}, {xs[i], y, zs[j]}, {xs[i + 1], y, zs[j]}, {xs[i + 1], y, zs[j + 1]}, {xs[i], y, zs[j + 1]});
+        }
+    }
+    // Beam sides face the coffer, whose underside is higher.
+    for (size_t j = 0; j < nz; ++j) {
+        for (size_t i = 1; i < nx; ++i) {
+            const float a = cellBottom(i - 1, j);
+            const float b = cellBottom(i, j);
+            if (a == b) { continue; }
+            const float x = xs[i];
+            const float lo = glm::min(a, b);
+            const float hi = glm::max(a, b);
+            addQuad({a > b ? -1.0f : 1.0f, 0, 0}, {x, lo, zs[j]}, {x, lo, zs[j + 1]}, {x, hi, zs[j + 1]}, {x, hi, zs[j]});
+        }
+    }
+    for (size_t j = 1; j < nz; ++j) {
+        for (size_t i = 0; i < nx; ++i) {
+            const float a = cellBottom(i, j - 1);
+            const float b = cellBottom(i, j);
+            if (a == b) { continue; }
+            const float z = zs[j];
+            const float lo = glm::min(a, b);
+            const float hi = glm::max(a, b);
+            addQuad({0, 0, a > b ? -1.0f : 1.0f}, {xs[i], lo, z}, {xs[i + 1], lo, z}, {xs[i + 1], hi, z}, {xs[i], hi, z});
+        }
+    }
+    for (size_t j = 0; j < nz; ++j) {
+        const float y0 = cellBottom(0, j);
+        const float y1 = cellBottom(nx - 1, j);
+        addQuad({-1, 0, 0}, {0, y0, zs[j]}, {0, y0, zs[j + 1]}, {0, top, zs[j + 1]}, {0, top, zs[j]});
+        addQuad({1, 0, 0}, {sx, y1, zs[j]}, {sx, y1, zs[j + 1]}, {sx, top, zs[j + 1]}, {sx, top, zs[j]});
+    }
+    for (size_t i = 0; i < nx; ++i) {
+        const float y0 = cellBottom(i, 0);
+        const float y1 = cellBottom(i, nz - 1);
+        addQuad({0, 0, -1}, {xs[i], y0, 0}, {xs[i + 1], y0, 0}, {xs[i + 1], top, 0}, {xs[i], top, 0});
+        addQuad({0, 0, 1}, {xs[i], y1, sz}, {xs[i + 1], y1, sz}, {xs[i + 1], top, sz}, {xs[i], top, sz});
+    }
+
+    if (arc.IsBent()) {
+        for (size_t i = 0; i < vertices.Size(); ++i) {
+            Engine::FullVertex& v = vertices[i];
+            const float x = v.position.x;
+            v.position = arc.Point(v.position);
+            v.normal = arc.Direction(x, v.normal);
+            const Vec3 t = arc.Direction(x, Vec3(v.tangent.x, v.tangent.y, v.tangent.z));
+            v.tangent = {t.x, t.y, t.z, v.tangent.w};
+        }
+    }
 
     return FinalizeGeometry(Core::Span<const Engine::FullVertex>(vertices.Data(), vertices.Size()), Core::Span<const uint32_t>(indices.Data(), indices.Size()));
 }

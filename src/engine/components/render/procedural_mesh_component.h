@@ -23,12 +23,14 @@ struct ProceduralMeshComponent
     static constexpr const char* COMPONENT_NAME = "ProceduralMeshComponent";
 
     Engine::ProceduralParams params;
+    Engine::ProceduralRepeat repeat{};
     Engine::MaterialID material{};
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
     WILL_REFLECT(ProceduralMeshComponent,
         WILL_FIELD(params, .key = "type"),
+        WILL_FIELD(repeat),
         WILL_FIELD(material),
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))

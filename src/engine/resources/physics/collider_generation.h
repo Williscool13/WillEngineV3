@@ -30,6 +30,9 @@ bool CanBuildProceduralCollider(const ProceduralParams& params);
  */
 bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind& outKind, Core::Vector<SplineColliderPrimitive>& outPrimitives, Core::Vector<Vec3>& outPositions);
 
+/** Copies a BuildProceduralCollider result along the repeat offset; a ConvexHull result becomes a Compound of hulls. */
+void ApplyProceduralRepeat(const ProceduralRepeat& repeat, PhysicsColliderKind& kind, Core::Vector<SplineColliderPrimitive>& primitives, Core::Vector<Vec3>& positions);
+
 /**
  * Builds a Compound collider for extruded 3D text: one axis-aligned Box per rendered glyph, sized from the glyph's plane bounds (in the same EM space the render geometry uses) and extruded by the text depth. Whitespace/empty glyphs contribute no box but still advance the pen. Appends to `out`; @p font must stay resident for the call.
  */

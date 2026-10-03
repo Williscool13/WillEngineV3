@@ -496,7 +496,7 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
                 handle = ctx->assetManager->LoadModelCollider(collider->meshSourceModelId, kind);
             }
             else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
-                handle = ctx->assetManager->LoadProceduralCollider(collider->proceduralParams);
+                handle = ctx->assetManager->LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
             }
             else if (!collider->splineParams.spline.points.IsEmpty()) {
                 handle = ctx->assetManager->LoadSplineCollider(collider->splineParams);

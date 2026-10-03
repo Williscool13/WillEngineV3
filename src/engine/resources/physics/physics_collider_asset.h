@@ -91,6 +91,7 @@ struct PhysicsColliderAsset
     Engine::ModelID sourceModelId{};
     Core::Path source{};
     std::optional<ProceduralParams> proceduralParams{};
+    ProceduralRepeat proceduralRepeat{};
     const SplineParams* splineParams{nullptr};
     const Text3DParams* text3DParams{nullptr};
     FontHandle text3DFontHandle{};

@@ -83,11 +83,12 @@ struct ColliderShape
     Engine::ModelID meshSourceModelId{};
     bool bMeshPrecise{false};
     Engine::ProceduralParams proceduralParams{};
+    Engine::ProceduralRepeat proceduralRepeat{};
     Engine::SplineParams splineParams{};
     Text3DShapeSource text3DSource{};
 
     WILL_REFLECT(ColliderShape, WILL_FIELD(meshSourceModelId), WILL_FIELD(bMeshPrecise, .key = "meshPrecise"),
-                 WILL_FIELD(proceduralParams, .key = "proceduralType"), WILL_FIELD(splineParams), WILL_FIELD(text3DSource))
+                 WILL_FIELD(proceduralParams, .key = "proceduralType"), WILL_FIELD(proceduralRepeat), WILL_FIELD(splineParams), WILL_FIELD(text3DSource))
 
     [[nodiscard]] bool HasSource() const
     {

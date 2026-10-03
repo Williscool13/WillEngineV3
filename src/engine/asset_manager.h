@@ -93,7 +93,7 @@ public: // Models
 
     StaticModelHandle LoadModel(ModelID modelId);
 
-    StaticModelHandle LoadProceduralModel(ProceduralParams& params);
+    StaticModelHandle LoadProceduralModel(ProceduralParams& params, const ProceduralRepeat& repeat = {});
 
     StaticModelHandle LoadSplineModel(const SplineParams& params);
 
@@ -141,7 +141,7 @@ public: // Physics colliders (CPU-only, analytic)
     /**
      * Loads (or dedups) a collider for a procedural shape. Analytic types (primitive/compound) pick their own kind; the non-analytic "exotic" types (Bowl/CurvedRamp/Klein/Trefoil) generate + simplify geometry into a concave TriangleMesh (they are Static/Kinematic-only, never dynamic). Keyed by hash(params).
      */
-    PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params);
+    PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params, const ProceduralRepeat& repeat = {});
 
     /**
      * Loads (or dedups) a collider read from an imported model's .wsmesh geometry (CPU-only, simplified). ConvexHull for dynamic bodies, TriangleMesh for static. Keyed by hash(modelId) x kind; freeze-gate on the source ModelID at the call site.
