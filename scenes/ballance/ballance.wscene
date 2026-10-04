@@ -1,7 +1,7 @@
 wscene
 version 2 1
 id 6680640857240007171
-content_version 31
+content_version 33
 entity_count 27
 end_header
 scene_id|6680640857240007171
@@ -27,8 +27,9 @@ parentStableId|3015734325103567098
 ;
 3252190671657260935
 type|2
-sizeX|0x42200000
-sizeZ|0x4209cccd
+sizeX|0x42626667
+sizeY|0x414d999a
+sizeZ|0x42600000
 material|4805580789092568935
 renderRotation|0x3f7746ea|0x3e8483ed|0x00000000|0x00000000
 ;
@@ -58,13 +59,14 @@ rotation|0x3f471c60|0x3f20e80b|0x00000000|0x00000000
 scale|0x3f7ffef4|0x3f7ffef4|0x3f7ffef4
 ;
 3578748455783499142
-intensity|0x48a00000
+intensity|0x49200000
 halfWidth|0x4023257d
 halfHeight|0x40326f94
 range|0x43958000
 falloffExponent|0x3fdd70a4
-coneOuterDegrees|0x41f40000
-coneInnerDegrees|0x00000000
+volumetricScale|0x40400000
+coneOuterDegrees|0x41b80000
+coneInnerDegrees|0x41b80000
 bDisk|1
 ;
 ;
@@ -930,6 +932,6 @@ rotation|0x3f7746ea|0x3e8483ed|0x00000000|0x00000000
 ;
 ;
 editor_camera
-translation|0x42b9cfcf|0x410a9729|0x424ed222
-rotation|0xbf04cfb6|0x3d2775bc|0x3f59ed9c|0x3d896266
+translation|0x42b91113|0x40fbc8d8|0x42274bda
+rotation|0x3ef6afa9|0xbc1863f6|0xbf6045b7|0xbc8a8597
 ;

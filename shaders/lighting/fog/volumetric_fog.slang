@@ -86,10 +86,10 @@ float FogLightTarget(LightInfo light, float3 p, float3 viewDir, float g)
 }
 
 /** One emitter sample of the light with a shadow ray: radiance scattered toward the camera per unit scattering coefficient. */
-float3 FogShadeLight(LightInfo light, uint tlasIndex, float3 p, float3 viewDir, float g, inout uint rng)
+float3 FogShadeLight(LightInfo light, uint tlasIndex, float3 p, float3 viewDir, float g, float2 u)
 {
-    float u1 = HashStep(rng);
-    float u2 = HashStep(rng);
+    float u1 = u.x;
+    float u2 = u.y;
     float3 samplePos;
     float lightArea;
     if (light.type == LIGHT_TYPE_SPHERE) {
@@ -119,7 +119,9 @@ float3 FogShadeLight(LightInfo light, uint tlasIndex, float3 p, float3 viewDir, 
     if (!FogVisible(tlasIndex, INSTANCE_MASK_OCCLUDER, p, L, dist - max(0.002, dist * 0.005))) {
         return float3(0.0);
     }
-    return UnpackUnorm4x8(light.packedColor).rgb * light.intensity * light.coneScale * atten * LightGeometryTerm(cosLight, dist) * lightArea
+
+    float softDist2 = 0.25 * (light.type == LIGHT_TYPE_SPHERE ? light.right.w * light.right.w : lightArea / PI);
+    return UnpackUnorm4x8(light.packedColor).rgb * light.intensity * light.coneScale * atten * cosLight / (dist * dist + softDist2) * lightArea
         * PhaseHG(dot(L, viewDir), g) * light.volumetricScale;
 }
 
@@ -135,7 +137,7 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
     uint rng = SeedRng(dtid.xy, pc.frameIndex, dtid.z * 0x9E3779B9u);
 
     // Shade a jittered point inside the froxel; the history converges to the froxel's average.
-    float3 jitter = float3(SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z), HashStep(rng));
+    float3 jitter = float3(SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z), SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 64u).x);
     float2 sampleUV = (float2(dtid.xy) + jitter.xy) * float(VOLUMETRIC_FOG_TILE_SIZE) / float2(pc.renderExtent);
     float3 viewPos = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, sampleUV, FogSliceDepth(float(dtid.z) + jitter.z, pc.maxDistance));
     float3 worldPos = mul(scene.invView, float4(viewPos, 1.0)).xyz;
@@ -179,7 +181,7 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
             }
         }
         if (selectedWeight > 0.0) {
-            radiance += FogShadeLight(pc.lightData->lights[selectedLight], pc.tlasIndex, worldPos, viewDir, pc.anisotropy, rng) * (wSum / selectedWeight);
+            radiance += FogShadeLight(pc.lightData->lights[selectedLight], pc.tlasIndex, worldPos, viewDir, pc.anisotropy, SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 96u)) * (wSum / selectedWeight);
         }
     }
 
@@ -203,6 +205,31 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
     }
 
     rdgStorage3DFloat4[pc.scatterOutIndex][dtid] = result;
+}
+
+/** 3x3 tent within each slice; runs after the history blend so the history itself never compounds the blur. */
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void ComputeVolumetricFogFilter(uniform VolumetricFogFilterPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+{
+    if (any(dtid.xy >= pc.gridSize) || dtid.z >= VOLUMETRIC_FOG_SLICES) {
+        return;
+    }
+
+    float4 sum = float4(0.0);
+    float weightSum = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            int2 p = int2(dtid.xy) + int2(x, y);
+            if (any(p < 0) || any(p >= int2(pc.gridSize))) {
+                continue;
+            }
+            float weight = float((2 - abs(x)) * (2 - abs(y)));
+            sum += rdgTextures3DFloat4[pc.scatterIndex].Load(int4(p, dtid.z, 0)) * weight;
+            weightSum += weight;
+        }
+    }
+    rdgStorage3DFloat4[pc.filteredOutIndex][dtid] = sum / weightSum;
 }
 
 [shader("compute")]
@@ -254,8 +281,11 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
     float slice = FogDepthToSlice(viewDepth, pc.maxDistance);
     if (slice > 0.0) {
         float3 uvw;
-        uvw.xy = (float2(pixel) + 0.5) / (float2(pc.gridSize) * float(VOLUMETRIC_FOG_TILE_SIZE));
-        uvw.z = (clamp(slice, 1.0, float(VOLUMETRIC_FOG_SLICES)) - 0.5) / float(VOLUMETRIC_FOG_SLICES);
+        // Jitter the lookup by up to half a froxel so its blocky edges become noise that TAA averages out.
+        float2 jitterXY = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 0u) - 0.5;
+        float jitterZ = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 64u).x - 0.5;
+        uvw.xy = (float2(pixel) + 0.5 + jitterXY * float(VOLUMETRIC_FOG_TILE_SIZE)) / (float2(pc.gridSize) * float(VOLUMETRIC_FOG_TILE_SIZE));
+        uvw.z = (clamp(slice + jitterZ, 1.0, float(VOLUMETRIC_FOG_SLICES)) - 0.5) / float(VOLUMETRIC_FOG_SLICES);
         float4 fog = rdgTextures3DFloat4[pc.integratedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvw, 0.0);
         fog = lerp(float4(0.0, 0.0, 0.0, 1.0), fog, saturate(slice));
         color.rgb = color.rgb * fog.a + fog.rgb;

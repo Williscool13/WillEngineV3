@@ -212,7 +212,7 @@ struct VolumetricFogComponent
     float baseHeight{0.0f};
     float anisotropy{0.2f};
     float ambientScale{1.0f};
-    float maxDistance{64.0f};
+    float maxDistance{128.0f};
     int32_t priority{0};
     bool bEnabled{true};
 

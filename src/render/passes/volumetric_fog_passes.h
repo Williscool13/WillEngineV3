@@ -14,6 +14,7 @@ namespace Render
 class PipelineManager;
 
 inline const StringID VOLUMETRIC_FOG_SCATTER = "fog_scatter"_sid;
+inline const StringID VOLUMETRIC_FOG_FILTERED = "fog_filtered"_sid;
 inline const StringID VOLUMETRIC_FOG_INTEGRATED = "fog_integrated"_sid;
 /** colorOutput right after fog, before overlays; stands in for lit_color_preoverlay wherever FSR2 and metering compare against the final image. */
 inline const StringID LIT_COLOR_FOGGED = "lit_color_fogged"_sid;

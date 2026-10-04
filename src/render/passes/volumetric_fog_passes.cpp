@@ -34,6 +34,7 @@ void SetupVolumetricFog(RenderGraph& graph,
     graph.CreateVersionedTexture(VOLUMETRIC_FOG_SCATTER, gridInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const bool bHistory = graph.ResourceHasVersion(VOLUMETRIC_FOG_SCATTER, 1);
     const StringID scatterHistory = graph.ResourceVersionID(VOLUMETRIC_FOG_SCATTER, 1);
+    graph.CreateTexture(VOLUMETRIC_FOG_FILTERED, gridInfo);
     graph.CreateTexture(VOLUMETRIC_FOG_INTEGRATED, gridInfo);
 
     const bool bTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
@@ -77,14 +78,31 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .anisotropy = glm::clamp(fog.anisotropy, -0.95f, 0.95f),
                 .tlasIndex = bTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u,
                 .frameIndex = static_cast<uint32_t>(frameIndex),
-                .historyIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(scatterHistory) : ~0u,            };
+                .historyIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(scatterHistory) : ~0u,
+            };
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (gridSize[0] + 7) / 8, (gridSize[1] + 7) / 8, VOLUMETRIC_FOG_SLICES);
+        });
+
+    RenderPass& filterPass = graph.AddPass("[Fog] Filter"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::VolumetricFog);
+    filterPass.ReadSampledImage(VOLUMETRIC_FOG_SCATTER);
+    filterPass.WriteStorageImage(VOLUMETRIC_FOG_FILTERED);
+    filterPass.Execute([pipelineManager, gridSize](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_filter"_sid);
+            if (!pipeline) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+            VolumetricFogFilterPushConstant pc{
+                .gridSize = {gridSize[0], gridSize[1]},
+                .scatterIndex = graph.GetSampledImageViewDescriptorIndex(VOLUMETRIC_FOG_SCATTER),
+                .filteredOutIndex = graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_FILTERED),
+            };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (gridSize[0] + 7) / 8, (gridSize[1] + 7) / 8, VOLUMETRIC_FOG_SLICES);
         });
 
     RenderPass& integratePass = graph.AddPass("[Fog] Integrate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::VolumetricFog);
     integratePass.ReadBuffer(SCENE_DATA_BUFFER);
-    integratePass.ReadSampledImage(VOLUMETRIC_FOG_SCATTER);
+    integratePass.ReadSampledImage(VOLUMETRIC_FOG_FILTERED);
     integratePass.WriteStorageImage(VOLUMETRIC_FOG_INTEGRATED);
     integratePass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_integrate"_sid);
@@ -95,7 +113,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .gridSize = {gridSize[0], gridSize[1]},
                 .sceneDataIndex = sceneIndex,
-                .scatterIndex = graph.GetSampledImageViewDescriptorIndex(VOLUMETRIC_FOG_SCATTER),
+                .scatterIndex = graph.GetSampledImageViewDescriptorIndex(VOLUMETRIC_FOG_FILTERED),
                 .integratedOutIndex = graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_INTEGRATED),
                 .maxDistance = maxDistance,
             };
@@ -111,7 +129,7 @@ void SetupVolumetricFog(RenderGraph& graph,
     if (bFoggedCopy) {
         applyPass.WriteStorageImage(LIT_COLOR_FOGGED);
     }
-    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, depth = targets.depthCopy, color = targets.colorOutput](
+    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, frameIndex, depth = targets.depthCopy, color = targets.colorOutput](
             VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_apply"_sid);
             if (!pipeline) { return; }
@@ -126,6 +144,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .colorIndex = graph.GetStorageImageViewDescriptorIndex(color),
                 .foggedCopyIndex = bFoggedCopy ? graph.GetStorageImageViewDescriptorIndex(LIT_COLOR_FOGGED) : ~0u,
                 .maxDistance = maxDistance,
+                .frameIndex = static_cast<uint32_t>(frameIndex),
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);

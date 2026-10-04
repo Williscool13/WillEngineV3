@@ -2435,6 +2435,13 @@ SHADER_PUBLIC struct VolumetricFogScatterPushConstant
     SHADER_PUBLIC uint32_t historyIndex; // last frame's scatter; ~0 = none
 };
 
+SHADER_PUBLIC struct VolumetricFogFilterPushConstant
+{
+    SHADER_PUBLIC uint2 gridSize;
+    SHADER_PUBLIC uint32_t scatterIndex;
+    SHADER_PUBLIC uint32_t filteredOutIndex;
+};
+
 SHADER_PUBLIC struct VolumetricFogIntegratePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -2457,6 +2464,7 @@ SHADER_PUBLIC struct VolumetricFogApplyPushConstant
     SHADER_PUBLIC uint32_t colorIndex;
     SHADER_PUBLIC uint32_t foggedCopyIndex; // ~0 = none
     SHADER_PUBLIC float maxDistance;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

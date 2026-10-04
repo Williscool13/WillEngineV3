@@ -526,6 +526,8 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline("volumetric_fog_scatter"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogScatter",
                             sizeof(VolumetricFogScatterPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("volumetric_fog_filter"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogFilter",
+                            sizeof(VolumetricFogFilterPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("volumetric_fog_integrate"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogIntegrate",
                             sizeof(VolumetricFogIntegratePushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("volumetric_fog_apply"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogApply",
