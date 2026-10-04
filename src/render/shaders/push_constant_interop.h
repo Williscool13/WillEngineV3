@@ -2455,7 +2455,9 @@ SHADER_PUBLIC struct VolumetricFogIntegratePushConstant
 
 SHADER_PUBLIC struct VolumetricFogApplyPushConstant
 {
+    SHADER_PUBLIC float4 albedoDensity;
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint2 gridSize;
     SHADER_PUBLIC uint32_t sceneDataIndex;
@@ -2465,6 +2467,12 @@ SHADER_PUBLIC struct VolumetricFogApplyPushConstant
     SHADER_PUBLIC uint32_t foggedCopyIndex; // ~0 = none
     SHADER_PUBLIC float maxDistance;
     SHADER_PUBLIC uint32_t frameIndex;
+    SHADER_PUBLIC float heightFalloff;
+    SHADER_PUBLIC float baseHeight;
+    SHADER_PUBLIC float ambientScale;
+    SHADER_PUBLIC float iblIntensity;
+    SHADER_PUBLIC int32_t skyboxIndex;
+    SHADER_PUBLIC float anisotropy;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

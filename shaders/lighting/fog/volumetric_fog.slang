@@ -36,6 +36,47 @@ float PhaseHG(float cosTheta, float g)
     return (1.0 - g2) / (4.0 * PI * pow(max(1.0 + g2 - 2.0 * g * cosTheta, 1e-4), 1.5));
 }
 
+/** Isotropic phase: the sphere's mean radiance, from the cosine-convolved sky above and below. */
+float3 FogAmbientRadiance(int skyboxIndex, float iblIntensity, float ambientScale)
+{
+    if (skyboxIndex < 0) {
+        return float3(0.0);
+    }
+    SamplerState linearSampler = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];
+    float3 up = DiffuseIrradiance(assetCubemaps[skyboxIndex], linearSampler, float3(0.0, 1.0, 0.0));
+    float3 down = DiffuseIrradiance(assetCubemaps[skyboxIndex], linearSampler, float3(0.0, -1.0, 0.0));
+    return 0.5 * (up + down) * iblIntensity * ambientScale;
+}
+
+/** Unshadowed sun radiance scattered along viewDir; zero when the sun is off or ignored by fog. */
+float3 FogSunRadiance(DirectionalLightData sun, float3 viewDir, float g)
+{
+    if (sun.directionIntensity.w <= 0.0 || sun.volumetricScale <= 0.0) {
+        return float3(0.0);
+    }
+    float3 L = normalize(-sun.directionIntensity.xyz);
+    return UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w * PhaseHG(dot(L, viewDir), g) * sun.volumetricScale;
+}
+
+/** Extinction integrated along the ray from tStart to tEnd; density is flat below baseHeight and falls off exponentially above. */
+float FogOpticalDepth(float originY, float dirY, float tStart, float tEnd, float density, float heightFalloff, float baseHeight)
+{
+    if (abs(heightFalloff * dirY) < 1e-3) {
+        float midHeight = originY + dirY * 0.5 * (tStart + tEnd) - baseHeight;
+        return density * exp(-heightFalloff * max(midHeight, 0.0)) * (tEnd - tStart);
+    }
+    float tCross = (baseHeight - originY) / dirY;
+    float2 below = dirY > 0.0 ? float2(tStart, min(tEnd, tCross)) : float2(max(tStart, tCross), tEnd);
+    float2 above = dirY > 0.0 ? float2(max(tStart, tCross), tEnd) : float2(tStart, min(tEnd, tCross));
+    float depth = density * max(below.y - below.x, 0.0);
+    if (above.y > above.x) {
+        float heightA = max(originY + dirY * above.x - baseHeight, 0.0);
+        float heightB = max(originY + dirY * above.y - baseHeight, 0.0);
+        depth += density * (exp(-heightFalloff * heightA) - exp(-heightFalloff * heightB)) / (heightFalloff * dirY);
+    }
+    return depth;
+}
+
 bool FogVisible(uint tlasIndex, uint instanceMask, float3 origin, float3 direction, float tMax)
 {
     if (tlasIndex == ~0u) {
@@ -145,21 +186,12 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
 
     float extinction = pc.albedoDensity.a * exp(-pc.heightFalloff * max(worldPos.y - pc.baseHeight, 0.0));
 
-    // Isotropic phase: the sphere's mean radiance, from the cosine-convolved sky above and below.
-    float3 radiance = float3(0.0);
-    if (pc.skyboxIndex >= 0) {
-        SamplerState linearSampler = assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX];
-        float3 up = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], linearSampler, float3(0.0, 1.0, 0.0));
-        float3 down = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], linearSampler, float3(0.0, -1.0, 0.0));
-        radiance = 0.5 * (up + down) * pc.iblIntensity * pc.ambientScale;
-    }
+    float3 radiance = FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale);
 
     DirectionalLightData sun = pc.lightData->directionalLight;
-    if (extinction > 0.0 && sun.directionIntensity.w > 0.0 && sun.volumetricScale > 0.0) {
-        float3 L = normalize(-sun.directionIntensity.xyz);
-        if (FogVisible(pc.tlasIndex, INSTANCE_MASK_SUN_OCCLUDER, worldPos, L, 10000.0)) {
-            radiance += UnpackUnorm4x8(sun.packedColor).rgb * sun.directionIntensity.w * PhaseHG(dot(L, viewDir), pc.anisotropy) * sun.volumetricScale;
-        }
+    float3 sunRadiance = FogSunRadiance(sun, viewDir, pc.anisotropy);
+    if (extinction > 0.0 && any(sunRadiance > 0.0) && FogVisible(pc.tlasIndex, INSTANCE_MASK_SUN_OCCLUDER, worldPos, normalize(-sun.directionIntensity.xyz), 10000.0)) {
+        radiance += sunRadiance;
     }
 
     if (extinction > 0.0 && pc.worldGridBuffer != nullptr) {
@@ -274,7 +306,8 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
 
     SceneData scene = pc.sceneData[pc.sceneDataIndex];
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
-    float viewDepth = depth <= 0.0 ? pc.maxDistance : ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+    bool bSky = depth <= 0.0;
+    float viewDepth = bSky ? pc.maxDistance : ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
     float4 color = rdgStorageFloat4[pc.colorIndex][pixel];
     // Texel s holds the fog from the near plane to the far edge of slice s.
@@ -288,6 +321,21 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
         uvw.z = (clamp(slice + jitterZ, 1.0, float(VOLUMETRIC_FOG_SLICES)) - 0.5) / float(VOLUMETRIC_FOG_SLICES);
         float4 fog = rdgTextures3DFloat4[pc.integratedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvw, 0.0);
         fog = lerp(float4(0.0, 0.0, 0.0, 1.0), fog, saturate(slice));
+
+        // Past the grid the fog continues analytically: unshadowed sun and sky ambient through closed-form height fog.
+        if (bSky || viewDepth > pc.maxDistance) {
+            float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
+            float3 viewRay = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, 1.0);
+            float rayScale = length(viewRay);
+            float3 viewDir = normalize(mul(scene.invView, float4(viewRay, 0.0)).xyz);
+            float tStart = pc.maxDistance * rayScale;
+            float tEnd = bSky ? max(VOLUMETRIC_FOG_SKY_DISTANCE, tStart) : viewDepth * rayScale;
+            float tailTransmittance = exp(-FogOpticalDepth(scene.cameraWorldPos.y, viewDir.y, tStart, tEnd, pc.albedoDensity.a, pc.heightFalloff, pc.baseHeight));
+            float3 radiance = FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale) + FogSunRadiance(pc.lightData->directionalLight, viewDir, pc.anisotropy);
+            fog.rgb += fog.a * pc.albedoDensity.rgb * radiance * scene.preExposure * (1.0 - tailTransmittance);
+            fog.a *= tailTransmittance;
+        }
+
         color.rgb = color.rgb * fog.a + fog.rgb;
         rdgStorageFloat4[pc.colorIndex][pixel] = color;
     }

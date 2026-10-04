@@ -123,19 +123,22 @@ void SetupVolumetricFog(RenderGraph& graph,
 
     RenderPass& applyPass = graph.AddPass("[Fog] Apply"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::VolumetricFog);
     applyPass.ReadBuffer(SCENE_DATA_BUFFER);
+    applyPass.ReadBuffer(LIGHT_DATA_BUFFER);
     applyPass.ReadSampledImage(targets.depthCopy);
     applyPass.ReadSampledImage(VOLUMETRIC_FOG_INTEGRATED);
     applyPass.ReadWriteImage(targets.colorOutput);
     if (bFoggedCopy) {
         applyPass.WriteStorageImage(LIT_COLOR_FOGGED);
     }
-    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, frameIndex, depth = targets.depthCopy, color = targets.colorOutput](
-            VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
+            skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_apply"_sid);
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             VolumetricFogApplyPushConstant pc{
+                .albedoDensity = {fog.albedo, glm::max(fog.density, 0.0f)},
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
                 .renderExtent = {renderExtent[0], renderExtent[1]},
                 .gridSize = {gridSize[0], gridSize[1]},
                 .sceneDataIndex = sceneIndex,
@@ -145,6 +148,12 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .foggedCopyIndex = bFoggedCopy ? graph.GetStorageImageViewDescriptorIndex(LIT_COLOR_FOGGED) : ~0u,
                 .maxDistance = maxDistance,
                 .frameIndex = static_cast<uint32_t>(frameIndex),
+                .heightFalloff = glm::max(fog.heightFalloff, 0.0f),
+                .baseHeight = fog.baseHeight,
+                .ambientScale = glm::max(fog.ambientScale, 0.0f),
+                .iblIntensity = iblIntensity,
+                .skyboxIndex = skyboxIndex,
+                .anisotropy = glm::clamp(fog.anisotropy, -0.95f, 0.95f),
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
