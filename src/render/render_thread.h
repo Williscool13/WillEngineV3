@@ -176,6 +176,7 @@ private:
     ResourceManager* resourceManager{};
     RenderExtents* renderExtents{};
     float lastResolutionScale{1.0f};
+    int32_t lastFogDebugMode{0};
     PipelineManager* pipelineManager{};
     NrdDenoiser* nrdDenoiser{};
 

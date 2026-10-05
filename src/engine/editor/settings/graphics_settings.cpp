@@ -1049,6 +1049,18 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::EndSection();
         }
 
+        if (Widgets::BeginSection("Volumetric Fog")) {
+            if (Widgets::PassFilter("Fog View")) {
+                const char* fogDebugLabels[] = {"Off", "Fog Only", "Ambient", "DDGI", "DDGI Coverage", "Sun", "Local Lights"};
+                ImGui::SetNextItemWidth(160.0f);
+                if (Widgets::Combo("Fog View##FogDebug", &render.fogDebugMode, fogDebugLabels, static_cast<int>(std::size(fogDebugLabels)),
+                                   "Fog in-scatter alone, scene removed. Fog Only = every term plus the analytic tail. Ambient = DDGI blended with sky fallback, as the fog uses it. DDGI = DDGI share only, no sky. DDGI Coverage = in-scatter-weighted coverage along the ray: white = DDGI, red = sky fallback. Sun / Local Lights = that term alone. The main image shows the selected term composited.")) {
+                    SetDebugViewTarget(state, "fog_debug_target", render.fogDebugMode != 0);
+                }
+            }
+            Widgets::EndSection();
+        }
+
         if (Widgets::BeginSection("Reflections")) {
             view("Raw Traced (Demodulated)", "reflection_spec_noisy");
             Widgets::SubHeader("Reflection Probes");

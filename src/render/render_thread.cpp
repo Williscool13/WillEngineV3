@@ -937,7 +937,9 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
         }
 
         if (bVolumetricFog) {
-            SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, bFoggedLitCopy);
+            SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, bFoggedLitCopy, frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting,
+                               frameBuffer.debug.fogDebugMode, frameBuffer.debug.fogDebugMode != lastFogDebugMode);
+            lastFogDebugMode = frameBuffer.debug.fogDebugMode;
         }
 
 #if WILL_EDITOR

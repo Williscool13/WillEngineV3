@@ -2433,6 +2433,8 @@ SHADER_PUBLIC struct VolumetricFogScatterPushConstant
     SHADER_PUBLIC uint32_t tlasIndex; // ~0 = no TLAS, lights unshadowed
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC uint32_t historyIndex; // last frame's scatter; ~0 = none
+    SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
+    SHADER_PUBLIC uint32_t debugMode;
 };
 
 SHADER_PUBLIC struct VolumetricFogFilterPushConstant
@@ -2473,6 +2475,8 @@ SHADER_PUBLIC struct VolumetricFogApplyPushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC int32_t skyboxIndex;
     SHADER_PUBLIC float anisotropy;
+    SHADER_PUBLIC uint32_t debugMode;
+    SHADER_PUBLIC uint32_t debugOutIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

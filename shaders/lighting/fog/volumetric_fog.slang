@@ -3,6 +3,8 @@ import push_constant_interop;
 import constants_interop;
 import lights_interop;
 import instance_mask_interop;
+import ddgi_interop;
+import ddgi_common;
 import volumetric_fog_interop;
 
 import shader_functions;
@@ -13,6 +15,13 @@ import random_common;
 import shader_constants;
 
 import bindless_declarations;
+
+static const uint FOG_DEBUG_FOG_ONLY = 1u;
+static const uint FOG_DEBUG_AMBIENT = 2u;
+static const uint FOG_DEBUG_DDGI = 3u;
+static const uint FOG_DEBUG_DDGI_COVERAGE = 4u;
+static const uint FOG_DEBUG_SUN = 5u;
+static const uint FOG_DEBUG_LOCAL_LIGHTS = 6u;
 
 float FogSliceDepth(float slice, float maxDistance)
 {
@@ -186,13 +195,29 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
 
     float extinction = pc.albedoDensity.a * exp(-pc.heightFalloff * max(worldPos.y - pc.baseHeight, 0.0));
 
-    float3 radiance = FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale);
+    float3 ambient = FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale);
+    float3 ddgi = float3(0.0);
+    float ddgiCoverage = 0.0;
+    if (extinction > 0.0 && pc.ddgiCascades != nullptr) {
+        // One random direction per frame; the history averages it over the sphere, which is what an isotropic phase sees.
+        float2 u = SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 32u);
+        float z = 1.0 - 2.0 * u.x;
+        float r = sqrt(max(1.0 - z * z, 0.0));
+        float3 direction = float3(r * cos(2.0 * PI * u.y), r * sin(2.0 * PI * u.y), z);
+        float edgeFade;
+        float4 gi = DDGISampleIrradianceCascaded(worldPos, direction, viewDir, pc.ddgiCascades, 0.0, edgeFade);
+        ddgi = gi.rgb * gi.w * pc.ambientScale;
+        ddgiCoverage = gi.w;
+        ambient = ddgi + ambient * (1.0 - max(gi.w, edgeFade));
+    }
 
     DirectionalLightData sun = pc.lightData->directionalLight;
     float3 sunRadiance = FogSunRadiance(sun, viewDir, pc.anisotropy);
-    if (extinction > 0.0 && any(sunRadiance > 0.0) && FogVisible(pc.tlasIndex, INSTANCE_MASK_SUN_OCCLUDER, worldPos, normalize(-sun.directionIntensity.xyz), 10000.0)) {
-        radiance += sunRadiance;
+    if (!(extinction > 0.0 && any(sunRadiance > 0.0) && FogVisible(pc.tlasIndex, INSTANCE_MASK_SUN_OCCLUDER, worldPos, normalize(-sun.directionIntensity.xyz), 10000.0))) {
+        sunRadiance = float3(0.0);
     }
+
+    float3 localRadiance = float3(0.0);
 
     if (extinction > 0.0 && pc.worldGridBuffer != nullptr) {
         WorldGridKey key = WorldGridResolveCell(worldPos, scene.cameraWorldPos.xyz);
@@ -213,11 +238,22 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
             }
         }
         if (selectedWeight > 0.0) {
-            radiance += FogShadeLight(pc.lightData->lights[selectedLight], pc.tlasIndex, worldPos, viewDir, pc.anisotropy, SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 96u)) * (wSum / selectedWeight);
+            localRadiance = FogShadeLight(pc.lightData->lights[selectedLight], pc.tlasIndex, worldPos, viewDir, pc.anisotropy, SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 96u)) * (wSum / selectedWeight);
         }
     }
 
+    float3 radiance = ambient + sunRadiance + localRadiance;
+    switch (pc.debugMode) {
+        case FOG_DEBUG_AMBIENT: radiance = ambient; break;
+        case FOG_DEBUG_DDGI: radiance = ddgi; break;
+        case FOG_DEBUG_SUN: radiance = sunRadiance; break;
+        case FOG_DEBUG_LOCAL_LIGHTS: radiance = localRadiance; break;
+        default: break;
+    }
     float4 result = float4(extinction * pc.albedoDensity.rgb * radiance * scene.preExposure, extinction);
+    if (pc.debugMode == FOG_DEBUG_DDGI_COVERAGE) {
+        result.rgb = extinction * float3(1.0, ddgiCoverage, ddgiCoverage);
+    }
 
     if (pc.historyIndex != ~0u) {
         float3 centreView = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, FogFroxelUV(dtid.xy, pc.renderExtent), FogSliceDepth(float(dtid.z) + 0.5, pc.maxDistance));
@@ -310,6 +346,7 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
     float viewDepth = bSky ? pc.maxDistance : ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
 
     float4 color = rdgStorageFloat4[pc.colorIndex][pixel];
+    float4 fog = float4(0.0, 0.0, 0.0, 1.0);
     // Texel s holds the fog from the near plane to the far edge of slice s.
     float slice = FogDepthToSlice(viewDepth, pc.maxDistance);
     if (slice > 0.0) {
@@ -319,11 +356,11 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
         float jitterZ = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 64u).x - 0.5;
         uvw.xy = (float2(pixel) + 0.5 + jitterXY * float(VOLUMETRIC_FOG_TILE_SIZE)) / (float2(pc.gridSize) * float(VOLUMETRIC_FOG_TILE_SIZE));
         uvw.z = (clamp(slice + jitterZ, 1.0, float(VOLUMETRIC_FOG_SLICES)) - 0.5) / float(VOLUMETRIC_FOG_SLICES);
-        float4 fog = rdgTextures3DFloat4[pc.integratedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvw, 0.0);
+        fog = rdgTextures3DFloat4[pc.integratedIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvw, 0.0);
         fog = lerp(float4(0.0, 0.0, 0.0, 1.0), fog, saturate(slice));
 
         // Past the grid the fog continues analytically: unshadowed sun and sky ambient through closed-form height fog.
-        if (bSky || viewDepth > pc.maxDistance) {
+        if ((bSky || viewDepth > pc.maxDistance) && pc.debugMode <= FOG_DEBUG_FOG_ONLY) {
             float2 uv = (float2(pixel) + 0.5) / float2(pc.renderExtent);
             float3 viewRay = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, 1.0);
             float rayScale = length(viewRay);
@@ -342,5 +379,9 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
 
     if (pc.foggedCopyIndex != ~0u) {
         rdgStorageFloat4[pc.foggedCopyIndex][pixel] = color;
+    }
+    if (pc.debugOutIndex != ~0u) {
+        float3 debug = pc.debugMode == FOG_DEBUG_DDGI_COVERAGE ? fog.rgb / max(1.0 - fog.a, 1e-4) : fog.rgb;
+        rdgStorageFloat4[pc.debugOutIndex][pixel] = float4(debug, 1.0);
     }
 }

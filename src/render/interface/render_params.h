@@ -568,6 +568,8 @@ struct DebugRenderParams
     int32_t giGatherDebugMode{0};
     // 0 = off, 1 = cache cell id, 2 = cache radiance, 3 = ddgi cheb gate, 4 = ddgi mean vs dist, 5 = ddgi coverage, 6 = ddgi irradiance, 7 = volume coverage, 8 = ddgi cascade
     int32_t giDeconstructMode{0};
+    // 0 = off, 1 = fog only, 2 = ambient, 3 = ddgi, 4 = ddgi coverage, 5 = sun, 6 = local lights
+    int32_t fogDebugMode{0};
     // -1 = off, otherwise pyramid mip shown in hiz_debug_target
     int32_t hizDebugMip{-1};
     bool bOcclusionCulling{true};

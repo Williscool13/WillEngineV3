@@ -3,6 +3,7 @@
 //
 
 #include "render/passes/volumetric_fog_passes.h"
+#include "render/passes/ddgi_passes.h"
 
 #include <tracy/Tracy.hpp>
 
@@ -22,7 +23,10 @@ void SetupVolumetricFog(RenderGraph& graph,
                         const RenderTargets& targets,
                         uint32_t sceneIndex,
                         uint64_t frameIndex,
-                        bool bFoggedCopy)
+                        bool bFoggedCopy,
+                        bool bDDGIApply,
+                        int32_t debugMode,
+                        bool bResetHistory)
 {
     ZoneScoped;
     const Core::VolumetricFog& fog = viewFamily.volumetricFog;
@@ -32,10 +36,14 @@ void SetupVolumetricFog(RenderGraph& graph,
     const float maxDistance = glm::max(fog.maxDistance, VOLUMETRIC_FOG_NEAR * 2.0f);
     const TextureInfo gridInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gridSize[0], gridSize[1], 1, VOLUMETRIC_FOG_SLICES};
     graph.CreateVersionedTexture(VOLUMETRIC_FOG_SCATTER, gridInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    const bool bHistory = graph.ResourceHasVersion(VOLUMETRIC_FOG_SCATTER, 1);
+    const bool bHistory = graph.ResourceHasVersion(VOLUMETRIC_FOG_SCATTER, 1) && !bResetHistory;
     const StringID scatterHistory = graph.ResourceVersionID(VOLUMETRIC_FOG_SCATTER, 1);
-    graph.CreateTexture(VOLUMETRIC_FOG_FILTERED, gridInfo);
-    graph.CreateTexture(VOLUMETRIC_FOG_INTEGRATED, gridInfo);
+    graph.CreateTexture(VOLUMETRIC_FOG_FILTERED, gridInfo, {std::nullopt}, true);
+    graph.CreateTexture(VOLUMETRIC_FOG_INTEGRATED, gridInfo, {std::nullopt}, true);
+    const bool bDebug = debugMode > 0;
+    if (bDebug) {
+        graph.CreateTexture(VOLUMETRIC_FOG_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    }
 
     const bool bTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
@@ -53,8 +61,9 @@ void SetupVolumetricFog(RenderGraph& graph,
     if (bHistory) {
         scatterPass.ReadSampledImage(scatterHistory);
     }
+    const bool bDDGI = bDDGIApply && AddDDGISampleDependencies(graph, scatterPass);
     scatterPass.WriteStorageImage(VOLUMETRIC_FOG_SCATTER);
-    scatterPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, frameIndex, skyboxIndex = viewFamily.skyboxIndex,
+    scatterPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, bDDGI, debugMode, frameIndex, skyboxIndex = viewFamily.skyboxIndex,
             iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_scatter"_sid);
             if (!pipeline) { return; }
@@ -79,6 +88,8 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .tlasIndex = bTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u,
                 .frameIndex = static_cast<uint32_t>(frameIndex),
                 .historyIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(scatterHistory) : ~0u,
+                .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
+                .debugMode = static_cast<uint32_t>(glm::max(debugMode, 0)),
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (gridSize[0] + 7) / 8, (gridSize[1] + 7) / 8, VOLUMETRIC_FOG_SLICES);
@@ -130,7 +141,10 @@ void SetupVolumetricFog(RenderGraph& graph,
     if (bFoggedCopy) {
         applyPass.WriteStorageImage(LIT_COLOR_FOGGED);
     }
-    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
+    if (bDebug) {
+        applyPass.WriteStorageImage(VOLUMETRIC_FOG_DEBUG_TARGET);
+    }
+    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, bDebug, debugMode, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_apply"_sid);
             if (!pipeline) { return; }
@@ -154,6 +168,8 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .iblIntensity = iblIntensity,
                 .skyboxIndex = skyboxIndex,
                 .anisotropy = glm::clamp(fog.anisotropy, -0.95f, 0.95f),
+                .debugMode = static_cast<uint32_t>(glm::max(debugMode, 0)),
+                .debugOutIndex = bDebug ? graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_DEBUG_TARGET) : ~0u,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
