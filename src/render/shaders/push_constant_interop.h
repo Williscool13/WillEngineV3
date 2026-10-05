@@ -2435,6 +2435,15 @@ SHADER_PUBLIC struct VolumetricFogScatterPushConstant
     SHADER_PUBLIC uint32_t historyIndex; // last frame's scatter; ~0 = none
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t debugMode;
+    SHADER_PUBLIC uint32_t tileDepthIndex;
+};
+
+SHADER_PUBLIC struct VolumetricFogTileDepthPushConstant
+{
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 gridSize;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t tileDepthOutIndex;
 };
 
 SHADER_PUBLIC struct VolumetricFogFilterPushConstant

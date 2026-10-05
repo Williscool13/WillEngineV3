@@ -38,6 +38,7 @@ void SetupVolumetricFog(RenderGraph& graph,
     graph.CreateVersionedTexture(VOLUMETRIC_FOG_SCATTER, gridInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const bool bHistory = graph.ResourceHasVersion(VOLUMETRIC_FOG_SCATTER, 1) && !bResetHistory;
     const StringID scatterHistory = graph.ResourceVersionID(VOLUMETRIC_FOG_SCATTER, 1);
+    graph.CreateTexture(VOLUMETRIC_FOG_TILE_DEPTH, TextureInfo{VK_FORMAT_R32_SFLOAT, gridSize[0], gridSize[1], 1}, {std::nullopt}, true);
     graph.CreateTexture(VOLUMETRIC_FOG_FILTERED, gridInfo, {std::nullopt}, true);
     graph.CreateTexture(VOLUMETRIC_FOG_INTEGRATED, gridInfo, {std::nullopt}, true);
     const bool bDebug = debugMode > 0;
@@ -47,6 +48,23 @@ void SetupVolumetricFog(RenderGraph& graph,
 
     const bool bTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
     const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
+
+    RenderPass& tileDepthPass = graph.AddPass("[Fog] Tile Depth"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::VolumetricFog);
+    tileDepthPass.ReadSampledImage(targets.depthCopy);
+    tileDepthPass.WriteStorageImage(VOLUMETRIC_FOG_TILE_DEPTH);
+    tileDepthPass.Execute([pipelineManager, renderExtent, gridSize, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_tile_depth"_sid);
+            if (!pipeline) { return; }
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+            VolumetricFogTileDepthPushConstant pc{
+                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .gridSize = {gridSize[0], gridSize[1]},
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .tileDepthOutIndex = graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_TILE_DEPTH),
+            };
+            vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, (gridSize[0] + 7) / 8, (gridSize[1] + 7) / 8, 1);
+        });
 
     RenderPass& scatterPass = graph.AddPass("[Fog] Scatter"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::VolumetricFog);
     scatterPass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -61,6 +79,7 @@ void SetupVolumetricFog(RenderGraph& graph,
     if (bHistory) {
         scatterPass.ReadSampledImage(scatterHistory);
     }
+    scatterPass.ReadSampledImage(VOLUMETRIC_FOG_TILE_DEPTH);
     const bool bDDGI = bDDGIApply && AddDDGISampleDependencies(graph, scatterPass);
     scatterPass.WriteStorageImage(VOLUMETRIC_FOG_SCATTER);
     scatterPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, bDDGI, debugMode, frameIndex, skyboxIndex = viewFamily.skyboxIndex,
@@ -90,6 +109,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .historyIndex = bHistory ? graph.GetSampledImageViewDescriptorIndex(scatterHistory) : ~0u,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .debugMode = static_cast<uint32_t>(glm::max(debugMode, 0)),
+                .tileDepthIndex = graph.GetSampledImageViewDescriptorIndex(VOLUMETRIC_FOG_TILE_DEPTH),
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (gridSize[0] + 7) / 8, (gridSize[1] + 7) / 8, VOLUMETRIC_FOG_SLICES);

@@ -194,11 +194,23 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
     float3 viewDir = normalize(worldPos - scene.cameraWorldPos.xyz);
 
     float extinction = pc.albedoDensity.a * exp(-pc.heightFalloff * max(worldPos.y - pc.baseHeight, 0.0));
+    if (!(extinction > 0.0)) {
+        rdgStorage3DFloat4[pc.scatterOutIndex][dtid] = float4(0.0);
+        return;
+    }
 
-    float3 ambient = FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale);
+    // No pixel in the tile sees past its farthest surface; the margin covers Apply's depth jitter and trilinear lookup.
+    bool bCulled = false;
+    float tileDepth = rdgTexturesFloat[pc.tileDepthIndex].Load(int3(dtid.xy, 0)).r;
+    if (tileDepth > 0.0) {
+        float farthest = ScreenToViewSpaceDepth(tileDepth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
+        bCulled = float(dtid.z) > FogDepthToSlice(farthest, pc.maxDistance) + 1.5;
+    }
+
+    float3 ambient = bCulled ? float3(0.0) : FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale);
     float3 ddgi = float3(0.0);
     float ddgiCoverage = 0.0;
-    if (extinction > 0.0 && pc.ddgiCascades != nullptr) {
+    if (!bCulled && pc.ddgiCascades != nullptr) {
         // One random direction per frame; the history averages it over the sphere, which is what an isotropic phase sees.
         float2 u = SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 32u);
         float z = 1.0 - 2.0 * u.x;
@@ -213,20 +225,24 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
 
     DirectionalLightData sun = pc.lightData->directionalLight;
     float3 sunRadiance = FogSunRadiance(sun, viewDir, pc.anisotropy);
-    if (!(extinction > 0.0 && any(sunRadiance > 0.0) && FogVisible(pc.tlasIndex, INSTANCE_MASK_SUN_OCCLUDER, worldPos, normalize(-sun.directionIntensity.xyz), 10000.0))) {
+    if (!(!bCulled && any(sunRadiance > 0.0) && FogVisible(pc.tlasIndex, INSTANCE_MASK_SUN_OCCLUDER, worldPos, normalize(-sun.directionIntensity.xyz), 10000.0))) {
         sunRadiance = float3(0.0);
     }
 
     float3 localRadiance = float3(0.0);
 
-    if (extinction > 0.0 && pc.worldGridBuffer != nullptr) {
+    if (!bCulled && pc.worldGridBuffer != nullptr) {
         WorldGridKey key = WorldGridResolveCell(worldPos, scene.cameraWorldPos.xyz);
         uint2 cell = key.bValid ? pc.worldGridBuffer[key.cellIndex] : uint2(0u);
+        // Crowded cells visit an evenly spaced subset from a random start; every light is visited with probability visitCount / count.
+        uint visitCount = min(cell.y, VOLUMETRIC_FOG_MAX_LIGHT_CANDIDATES);
+        uint stride = max(cell.y / max(visitCount, 1u), 1u);
+        uint start = min(uint(HashStep(rng) * float(cell.y)), max(cell.y, 1u) - 1u);
         float wSum = 0.0;
         float selectedWeight = 0.0;
         uint selectedLight = 0u;
-        for (uint i = 0u; i < cell.y; ++i) {
-            uint lightIndex = pc.worldGridIndexList[cell.x + i];
+        for (uint i = 0u; i < visitCount; ++i) {
+            uint lightIndex = pc.worldGridIndexList[cell.x + (start + i * stride) % cell.y];
             float weight = FogLightTarget(pc.lightData->lights[lightIndex], worldPos, viewDir, pc.anisotropy);
             if (!(weight > 0.0)) {
                 continue;
@@ -238,7 +254,8 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
             }
         }
         if (selectedWeight > 0.0) {
-            localRadiance = FogShadeLight(pc.lightData->lights[selectedLight], pc.tlasIndex, worldPos, viewDir, pc.anisotropy, SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 96u)) * (wSum / selectedWeight);
+            localRadiance = FogShadeLight(pc.lightData->lights[selectedLight], pc.tlasIndex, worldPos, viewDir, pc.anisotropy, SpatioTemporalBlueNoise2D(dtid.xy, pc.frameIndex, dtid.z + 96u))
+                * (wSum / selectedWeight * float(cell.y) / float(visitCount));
         }
     }
 
@@ -267,12 +284,35 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
             if (all(uvw >= 0.0) && all(uvw <= 1.0)) {
                 float4 history = rdgTextures3DFloat4[pc.historyIndex].SampleLevel(rdgSamplers[RDG_LINEAR_SAMPLER_INDEX], uvw, 0.0);
                 history.rgb *= scene.preExposure / max(scene.prevPreExposure, 1e-8);
-                result = lerp(history, result, VOLUMETRIC_FOG_HISTORY_ALPHA);
+                result = lerp(history, result, bCulled ? 0.0 : VOLUMETRIC_FOG_HISTORY_ALPHA);
             }
         }
     }
 
     rdgStorage3DFloat4[pc.scatterOutIndex][dtid] = result;
+}
+
+/** Farthest (smallest reverse-Z) depth per froxel tile; 0 where any pixel is sky. */
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void ComputeVolumetricFogTileDepth(uniform VolumetricFogTileDepthPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+{
+    if (any(dtid.xy >= pc.gridSize)) {
+        return;
+    }
+
+    uint2 base = dtid.xy * VOLUMETRIC_FOG_TILE_SIZE;
+    float farthest = 1.0;
+    for (uint y = 0u; y < VOLUMETRIC_FOG_TILE_SIZE; ++y) {
+        for (uint x = 0u; x < VOLUMETRIC_FOG_TILE_SIZE; ++x) {
+            uint2 pixel = base + uint2(x, y);
+            if (any(pixel >= pc.renderExtent)) {
+                continue;
+            }
+            farthest = min(farthest, rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r);
+        }
+    }
+    rdgStorageFloat[pc.tileDepthOutIndex][dtid.xy] = farthest;
 }
 
 /** 3x3 tent within each slice; runs after the history blend so the history itself never compounds the blur. */

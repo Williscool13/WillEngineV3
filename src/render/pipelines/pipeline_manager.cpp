@@ -524,6 +524,8 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("directional_light"_sid, src / "directional_light.spv", "ComputeDirectionalLight",
                             sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline("volumetric_fog_tile_depth"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogTileDepth",
+                            sizeof(VolumetricFogTileDepthPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("volumetric_fog_scatter"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogScatter",
                             sizeof(VolumetricFogScatterPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("volumetric_fog_filter"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogFilter",
