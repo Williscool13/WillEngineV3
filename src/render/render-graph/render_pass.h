@@ -15,6 +15,12 @@ struct TextureResource;
 class RenderPass
 {
 public:
+    struct ResourceReference
+    {
+        uint32_t holder;
+        uint32_t target;
+    };
+
     RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, RenderCategory category, Core::Arena* arena);
 
     // Textures
@@ -48,6 +54,10 @@ public:
     RenderPass& WriteScratchBuffer(RDGBuffer buffer);
     RenderPass& ReadASInputBuffer(RDGBuffer buffer);
 
+    // References: holder (written by this pass) stores the target's descriptor index or address; passes reading holder also read target
+    RenderPass& ReferenceSampledImage(RDGBuffer holder, RDGTexture texture);
+    RenderPass& ReferenceBuffer(RDGBuffer holder, RDGBuffer buffer);
+
     RenderPass& AsyncCompute()
     {
         bAsyncCompute = true;
@@ -64,6 +74,8 @@ public:
     /** Whether this pass declared any read/write on the given logical texture/buffer index*/
     [[nodiscard]] bool DeclaresTexture(uint32_t textureIndex) const;
     [[nodiscard]] bool DeclaresBuffer(uint32_t bufferIndex) const;
+    [[nodiscard]] bool ReferencesTexture(uint32_t textureIndex) const;
+    [[nodiscard]] bool ReferencesBuffer(uint32_t bufferIndex) const;
 
     StringID renderPassId;
     VkPipelineStageFlags2 stages;
@@ -110,6 +122,9 @@ private:
     Core::ArenaVector<uint32_t> bufferASInputReads;
 
     Core::ArenaVector<uint32_t> autoClearTextures;
+
+    Core::ArenaVector<ResourceReference> textureReferences;
+    Core::ArenaVector<ResourceReference> bufferReferences;
 
     Core::InlineFunction<void(VkCommandBuffer, VulkanContext*, RenderGraph&), 256> executeFunc;
 };

@@ -149,7 +149,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     if (bScreenDiffuse) {
         pass.ReadSampledImage(screenDiffuseHistory);
     }
-    const bool bCascades = AddDDGISampleDependencies(graph, pass, ddgi);
+    const bool bCascades = ddgi.IsValid();
+    if (bCascades) { pass.ReadBuffer(ddgi.cascades); }
     pass.ReadBuffer(gatherHits);
     pass.WriteStorageImage(gatherShR);
     pass.WriteStorageImage(gatherShG);
@@ -327,7 +328,8 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     if (bBentNormals) {
         upscale.ReadSampledImage(bentNormals);
     }
-    const bool bUpscaleCascades = AddDDGISampleDependencies(graph, upscale, ddgi);
+    const bool bUpscaleCascades = ddgi.IsValid();
+    if (bUpscaleCascades) { upscale.ReadBuffer(ddgi.cascades); }
     const RDGTexture historyOut = historyRing.Current();
     const RDGTexture fastOut = fastRing.Current();
     const RDGTexture skyVisOut = skyVisRing.Current();
@@ -437,7 +439,8 @@ void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Co
     pass.ReadBuffer(radianceCache.cells);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
-    const bool bCascades = AddDDGISampleDependencies(graph, pass, ddgi);
+    const bool bCascades = ddgi.IsValid();
+    if (bCascades) { pass.ReadBuffer(ddgi.cascades); }
     pass.WriteStorageImage(output);
     pass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, bCascades, mode, output, ddgiCascades = ddgi.cascades, cacheEntries = radianceCache.entries, cacheKeys = radianceCache.keys,
             cacheCells = radianceCache.cells, gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {

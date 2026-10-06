@@ -187,9 +187,6 @@ public:
 
     uint32_t GetStorageImageViewDescriptorIndex(RDGTexture texture, uint32_t mipLevel = 0);
 
-    /** No usage/aliasing validation; for passes that bake handles for downstream consumers without accessing the resource. */
-    uint32_t PeekSampledImageViewDescriptorIndex(RDGTexture texture);
-
     uint32_t GetDepthOnlySampledImageViewDescriptorIndex(RDGTexture texture);
 
     uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(RDGTexture texture);
@@ -200,8 +197,6 @@ public:
 
     /** 0 for an invalid handle or a buffer without a physical. */
     VkDeviceAddress TryGetBufferAddress(RDGBuffer buffer);
-
-    VkDeviceAddress PeekBufferAddress(RDGBuffer buffer);
 
     PipelineEvent GetBufferState(RDGBuffer buffer);
 
@@ -219,6 +214,9 @@ public:
     VRAMReport GenerateVramReport() const;
 
 public:
+    /** Passes reading a holder buffer also read what its producer referenced into it. */
+    void ExpandResourceReferences();
+
     void AccumulateUsage();
 
     void BuildDependencyEdges();

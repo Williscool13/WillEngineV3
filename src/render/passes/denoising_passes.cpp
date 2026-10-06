@@ -647,7 +647,7 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(shadows);
         }
         if (bDDGI) {
-            AddDDGISampleDependencies(graph, pass, ddgi);
+            pass.ReadBuffer(ddgi.cascades);
         }
         if (bReflection) {
             pass.ReadSampledImage(reflectionTarget);
@@ -1309,7 +1309,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
             pass.ReadSampledImage(shadows);
         }
         if (bDDGI) {
-            AddDDGISampleDependencies(graph, pass, ddgi);
+            pass.ReadBuffer(ddgi.cascades);
         }
         if (bReflection) {
             pass.ReadSampledImage(reflectionTarget);

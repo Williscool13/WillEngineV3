@@ -186,7 +186,7 @@ ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthCopy);
     if (bHasTLAS) { pass.ReadTLASBuffer(scene.tlas); }
-    if (bDDGI) { AddDDGISampleDependencies(graph, pass, ddgi); }
+    if (bDDGI) { pass.ReadBuffer(ddgi.cascades); }
     if (bWorldGrid) {
         pass.ReadBuffer(worldLightGrid);
         pass.ReadBuffer(worldIndexList);

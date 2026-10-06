@@ -107,16 +107,24 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
     RenderPass& bundlePass = graph.AddPass("Radiance Cache Buffers Upload"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::RadianceCache);
     bundlePass.AsyncCompute();
     bundlePass.WriteTransferBuffer(buffersCurrent);
+    bundlePass.ReferenceBuffer(buffersCurrent, entries);
+    bundlePass.ReferenceBuffer(buffersCurrent, keys);
+    bundlePass.ReferenceBuffer(buffersCurrent, cells);
+    bundlePass.ReferenceBuffer(buffersCurrent, active);
+    bundlePass.ReferenceBuffer(buffersCurrent, descriptors);
+    bundlePass.ReferenceBuffer(buffersCurrent, activeList);
+    bundlePass.ReferenceBuffer(buffersCurrent, activeCount);
+    if (GPU_STATS_ENABLED) { bundlePass.ReferenceBuffer(buffersCurrent, stats); }
     bundlePass.Execute([entries, keys, cells, active, descriptors, activeList, activeCount, stats, buffersCurrent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const RadianceCacheBuffers buffers{
-            .entries = graph.PeekBufferAddress(entries),
-            .keys = graph.PeekBufferAddress(keys),
-            .cells = graph.PeekBufferAddress(cells),
-            .active = graph.PeekBufferAddress(active),
-            .descriptors = graph.PeekBufferAddress(descriptors),
-            .activeList = graph.PeekBufferAddress(activeList),
-            .activeCount = graph.PeekBufferAddress(activeCount),
-            .stats = GPU_STATS_ENABLED ? graph.PeekBufferAddress(stats) : 0,
+            .entries = graph.GetBufferAddress(entries),
+            .keys = graph.GetBufferAddress(keys),
+            .cells = graph.GetBufferAddress(cells),
+            .active = graph.GetBufferAddress(active),
+            .descriptors = graph.GetBufferAddress(descriptors),
+            .activeList = graph.GetBufferAddress(activeList),
+            .activeCount = graph.GetBufferAddress(activeCount),
+            .stats = GPU_STATS_ENABLED ? graph.GetBufferAddress(stats) : 0,
         };
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(buffersCurrent), 0, sizeof(buffers), &buffers);
     });
@@ -207,7 +215,7 @@ void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManage
         pass.ReadBuffer(indexList);
     }
     if (bFeedback) {
-        AddDDGISampleDependencies(graph, pass, ddgi);
+        pass.ReadBuffer(ddgi.cascades);
     }
     pass.Execute([pipelineManager, &scene, sceneIndex, bFeedback, bWorldGrid, skyboxIndex, iblIntensity, maxRadiance, bounceIntensity, accumCap, reflectionProbeCount, bReflectionProbeBruteForce, activeList, activeCount, descriptors,
             cells, stats, shadeArgs, cascades, probeGrid, lightGrid, indexList](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {

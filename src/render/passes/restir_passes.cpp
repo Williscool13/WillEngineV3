@@ -717,7 +717,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
         pass.ReadSampledImage(targets.shadows);
     }
     if (bDDGI) {
-        AddDDGISampleDependencies(graph, pass, ddgi);
+        pass.ReadBuffer(ddgi.cascades);
     }
     if (bReflection) {
         pass.ReadSampledImage(reflectionTarget);

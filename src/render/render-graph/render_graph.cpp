@@ -116,8 +116,51 @@ RenderPass& RenderGraph::AddPass(StringID passId, VkPipelineStageFlags2 stages, 
     return *pass;
 }
 
+void RenderGraph::ExpandResourceReferences()
+{
+    Core::ArenaVector<RenderPass::ResourceReference> textureReferences(arena);
+    Core::ArenaVector<RenderPass::ResourceReference> bufferReferences(arena);
+    for (const auto& pass : passes) {
+        for (const RenderPass::ResourceReference& ref : pass->textureReferences) { textureReferences.PushBack(ref); }
+        for (const RenderPass::ResourceReference& ref : pass->bufferReferences) { bufferReferences.PushBack(ref); }
+    }
+    if (textureReferences.IsEmpty() && bufferReferences.IsEmpty()) {
+        return;
+    }
+
+    for (const RenderPass::ResourceReference& ref : bufferReferences) {
+        for (const RenderPass::ResourceReference& other : bufferReferences) {
+            ENGINE_ASSERT(Renderer, other.holder != ref.target, "[RDG] Buffer '{}' is referenced from '{}' and itself holds references; references are one level deep", buffers[ref.target].bufferId.ToString(), buffers[ref.holder].bufferId.ToString());
+        }
+    }
+
+    auto expand = [&](RenderPass& pass, uint32_t holder) {
+        for (const RenderPass::ResourceReference& ref : textureReferences) {
+            if (ref.holder == holder && !pass.DeclaresTexture(ref.target)) { pass.sampledImageReads.PushBack(ref.target); }
+        }
+        for (const RenderPass::ResourceReference& ref : bufferReferences) {
+            if (ref.holder == holder && !pass.DeclaresBuffer(ref.target)) { pass.bufferReads.PushBack(ref.target); }
+        }
+    };
+    for (const auto& pass : passes) {
+        const size_t readCount = pass->bufferReads.Size();
+        for (size_t i = 0; i < readCount; ++i) { expand(*pass, pass->bufferReads[i]); }
+        for (const uint32_t holder : pass->bufferReadWrite) { expand(*pass, holder); }
+    }
+}
+
 void RenderGraph::AccumulateUsage()
 {
+    for (auto& pass : passes) {
+        for (const RenderPass::ResourceReference& ref : pass->textureReferences) {
+            textures[ref.target].accumulatedUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+
+        for (const RenderPass::ResourceReference& ref : pass->bufferReferences) {
+            buffers[ref.target].accumulatedUsage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        }
+    }
+
     for (auto& pass : passes) {
         for (const uint32_t texIndex : pass->storageImageWrites) {
             auto& tex = textures[texIndex];
@@ -1475,6 +1518,8 @@ void RenderGraph::PrecomputeBarriers(uint64_t currentFrame)
 
 void RenderGraph::Compile(uint64_t currentFrame)
 {
+    ExpandResourceReferences();
+
     AccumulateUsage();
 
     BuildDependencyEdges();
@@ -2491,7 +2536,7 @@ VkImageAspectFlags RenderGraph::GetImageAspect(RDGTexture texture)
 void RenderGraph::ValidatePassDeclaresTexture(uint32_t textureIndex)
 {
 #ifdef WDEBUG
-    if (currentRecordingPass == nullptr || currentRecordingPass->DeclaresTexture(textureIndex)) {
+    if (currentRecordingPass == nullptr || currentRecordingPass->DeclaresTexture(textureIndex) || currentRecordingPass->ReferencesTexture(textureIndex)) {
         return;
     }
     LOG_ERROR(Renderer, "[RDG] Pass '{}' fetched texture '{}' without declaring it (lifetimes/aliasing/barriers are wrong); frame marked corrupted", currentRecordingPass->renderPassId.ToString(), textures[textureIndex].textureId.ToString());
@@ -2502,7 +2547,7 @@ void RenderGraph::ValidatePassDeclaresTexture(uint32_t textureIndex)
 void RenderGraph::ValidatePassDeclaresBuffer(uint32_t bufferIndex)
 {
 #ifdef WDEBUG
-    if (currentRecordingPass == nullptr || currentRecordingPass->DeclaresBuffer(bufferIndex)) {
+    if (currentRecordingPass == nullptr || currentRecordingPass->DeclaresBuffer(bufferIndex) || currentRecordingPass->ReferencesBuffer(bufferIndex)) {
         return;
     }
     LOG_ERROR(Renderer, "[RDG] Pass '{}' fetched buffer '{}' without declaring it (lifetimes/aliasing/barriers are wrong); frame marked corrupted", currentRecordingPass->renderPassId.ToString(), buffers[bufferIndex].bufferId.ToString());
@@ -2514,13 +2559,6 @@ uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(RDGTexture texture)
 {
     const TextureResource& tex = ResolveTexture(texture);
     ValidatePassDeclaresTexture(texture.index);
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
-    return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
-}
-
-uint32_t RenderGraph::PeekSampledImageViewDescriptorIndex(RDGTexture texture)
-{
-    const TextureResource& tex = ResolveTexture(texture);
     ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
 }
@@ -2575,22 +2613,6 @@ VkDeviceAddress RenderGraph::GetBufferAddress(RDGBuffer buffer)
 
     PhysicalResource& phys = physicalResources[buf.physicalIndex];
     ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0, "[RDG] Pass '{}' fetched the address of buffer '{}' but its physical '{}' was created without device-address usage ({:#x})",
-                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", buf.bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
-
-    if (!phys.addressRetrieved) {
-        phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
-        phys.addressRetrieved = true;
-    }
-    return phys.bufferAddress;
-}
-
-VkDeviceAddress RenderGraph::PeekBufferAddress(RDGBuffer buffer)
-{
-    const BufferResource& buf = ResolveBuffer(buffer);
-    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer '{}' has no physical resource", buf.bufferId.ToString());
-
-    PhysicalResource& phys = physicalResources[buf.physicalIndex];
-    ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0, "[RDG] Pass '{}' peeked the address of buffer '{}' but its physical '{}' was created without device-address usage ({:#x})",
                   currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", buf.bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
 
     if (!phys.addressRetrieved) {

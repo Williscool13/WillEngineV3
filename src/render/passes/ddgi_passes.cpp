@@ -259,7 +259,7 @@ struct DDGICascadeDescSources
     uint32_t localCount{0};
 };
 
-/** Resolves descriptor indices at execute time; sources must outlive execution. */
+/** Resolves descriptor indices at execute time; sources must be filled before the call and outlive execution. */
 static RDGBuffer AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID passName, StringID bufferId, const DDGICascadeDescSources* sources, RDGBuffer volumeGrid, RDGBuffer volumeIndexList, const glm::vec3& gridCamPos, bool bGridCull)
 {
     const RDGBuffer buffer = graph.CreateBuffer(bufferId, sizeof(DDGICascadeSetGPU), false);
@@ -267,13 +267,26 @@ static RDGBuffer AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID pas
     pass.AsyncCompute();
     pass.WriteTransferBuffer(buffer);
     const bool bVolumeGrid = bGridCull && volumeGrid.IsValid() && volumeIndexList.IsValid();
+    if (bVolumeGrid) {
+        pass.ReferenceBuffer(buffer, volumeGrid);
+        pass.ReferenceBuffer(buffer, volumeIndexList);
+    }
+    for (uint32_t k = 0; k < sources->count + sources->localCount; ++k) {
+        const DDGICascadeDescSource& source = sources->entries[k];
+        if (!source.bValid) {
+            continue;
+        }
+        pass.ReferenceSampledImage(buffer, source.irradiance);
+        pass.ReferenceSampledImage(buffer, source.visibility);
+        if (source.offsets.IsValid()) { pass.ReferenceBuffer(buffer, source.offsets); }
+    }
     pass.Execute([sources, buffer, bVolumeGrid, volumeGrid, volumeIndexList, gridCamPos](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         DDGICascadeSetGPU set{};
         set.cascadeCount = sources->count;
         set.localCount = sources->localCount;
         if (bVolumeGrid) {
-            set.volumeGrid = graph.PeekBufferAddress(volumeGrid);
-            set.volumeIndexList = graph.PeekBufferAddress(volumeIndexList);
+            set.volumeGrid = graph.GetBufferAddress(volumeGrid);
+            set.volumeIndexList = graph.GetBufferAddress(volumeIndexList);
             set.gridCamPos = glm::vec4(gridCamPos, 0.0f);
             set.bVolumeGridValid = 1u;
         }
@@ -284,9 +297,9 @@ static RDGBuffer AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID pas
             if (!source.bValid) {
                 continue;
             }
-            desc.irradianceIndex = graph.PeekSampledImageViewDescriptorIndex(source.irradiance);
-            desc.visibilityIndex = graph.PeekSampledImageViewDescriptorIndex(source.visibility);
-            desc.probeOffsets = source.offsets.IsValid() ? graph.PeekBufferAddress(source.offsets) + source.offsetsByteOffset : 0;
+            desc.irradianceIndex = graph.GetSampledImageViewDescriptorIndex(source.irradiance);
+            desc.visibilityIndex = graph.GetSampledImageViewDescriptorIndex(source.visibility);
+            desc.probeOffsets = source.offsets.IsValid() ? graph.GetBufferAddress(source.offsets) + source.offsetsByteOffset : 0;
             desc.bOffsetsValid = source.offsets.IsValid() ? 1u : 0u;
             desc.bValid = 1u;
             desc.framesSinceUpdate = source.framesSinceUpdate;
@@ -294,12 +307,6 @@ static RDGBuffer AddDDGICascadeDescriptorUpload(RenderGraph& graph, StringID pas
         vkCmdUpdateBuffer(cmd, graph.GetBufferHandle(buffer), 0, sizeof(set), &set);
     });
     return buffer;
-}
-
-void DeclareDDGIVolumeGridReads(RenderPass& pass, const DDGIFrame& ddgi)
-{
-    if (ddgi.ddgiGrid.IsValid()) { pass.ReadBuffer(ddgi.ddgiGrid); }
-    if (ddgi.ddgiIndexList.IsValid()) { pass.ReadBuffer(ddgi.ddgiIndexList); }
 }
 
 DDGIFrame SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const SceneResources& scene, const WorldGridFrame& worldGrid, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale)
@@ -495,13 +502,6 @@ DDGIFrame SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineMana
         }
         if (bFeedback) {
             tracePass.ReadBuffer(cascadesPrev);
-            DeclareDDGIVolumeGridReads(tracePass, frame);
-            for (uint32_t j = 0; j < total; ++j) {
-                if (bHistoryValid[j]) {
-                    tracePass.ReadSampledImage(irradianceRings[j].Version(prevAge[j]));
-                    tracePass.ReadSampledImage(visibilityRings[j].Version(prevAge[j]));
-                }
-            }
         }
         if (probeOffsets.IsValid()) { tracePass.ReadBuffer(probeOffsets); }
         if (probeActive.IsValid()) { tracePass.ReadBuffer(probeActive); }
@@ -698,25 +698,6 @@ DDGIFrame SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineMana
         frame.visibility[k] = visibilityRings[k].Current();
     }
     return frame;
-}
-
-bool AddDDGISampleDependencies(RenderGraph&, RenderPass& pass, const DDGIFrame& ddgi)
-{
-    if (!ddgi.IsValid()) {
-        return false;
-    }
-    pass.ReadBuffer(ddgi.cascades);
-    DeclareDDGIVolumeGridReads(pass, ddgi);
-
-    for (uint32_t k = 0; k < DDGI_MAX_VOLUME_SLOTS; ++k) {
-        if (!ddgi.irradiance[k].IsValid() || !ddgi.visibility[k].IsValid()) { continue; }
-        pass.ReadSampledImage(ddgi.irradiance[k]);
-        pass.ReadSampledImage(ddgi.visibility[k]);
-    }
-    if (ddgi.probeOffsets.IsValid()) {
-        pass.ReadBuffer(ddgi.probeOffsets);
-    }
-    return true;
 }
 
 /** Packs unorm RGBA, low byte = red. */

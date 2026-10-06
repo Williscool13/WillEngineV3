@@ -384,7 +384,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
         lightingResolve.ReadSampledImage(targets.shadows);
     }
     if (bDDGI) {
-        AddDDGISampleDependencies(graph, lightingResolve, ddgi);
+        lightingResolve.ReadBuffer(ddgi.cascades);
     }
     if (bGIGather) {
         lightingResolve.ReadSampledImage(gather.resolved);

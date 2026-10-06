@@ -21,7 +21,8 @@ RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStag
       bufferTransferReads(arena, 2), bufferTransferWrites(arena, 2),
       bufferIndexRead(arena, 2), bufferIndirectReads(arena, 2), bufferIndirectCountReads(arena, 2),
       bufferTLASWrites(arena, 2), bufferTLASReads(arena, 2), bufferScratchWrites(arena, 2), bufferASInputReads(arena, 2),
-      autoClearTextures(arena, 2)
+      autoClearTextures(arena, 2),
+      textureReferences(arena), bufferReferences(arena)
 {}
 
 RenderPass& RenderPass::WriteStorageImage(RDGTexture texture)
@@ -232,10 +233,38 @@ RenderPass& RenderPass::ReadASInputBuffer(RDGBuffer buffer)
     return *this;
 }
 
+RenderPass& RenderPass::ReferenceSampledImage(RDGBuffer holder, RDGTexture texture)
+{
+    const BufferResource& holderResource = graph.ResolveBuffer(holder);
+    const TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, DeclaresBuffer(holderResource.index), "[RDG] Pass '{}' references texture '{}' from buffer '{}' without declaring the buffer", renderPassId.ToString(), resource.textureId.ToString(), holderResource.bufferId.ToString());
+    textureReferences.PushBack({holderResource.index, resource.index});
+    return *this;
+}
+
+RenderPass& RenderPass::ReferenceBuffer(RDGBuffer holder, RDGBuffer buffer)
+{
+    const BufferResource& holderResource = graph.ResolveBuffer(holder);
+    const BufferResource& resource = graph.ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, DeclaresBuffer(holderResource.index), "[RDG] Pass '{}' references buffer '{}' from buffer '{}' without declaring the holder", renderPassId.ToString(), resource.bufferId.ToString(), holderResource.bufferId.ToString());
+    bufferReferences.PushBack({holderResource.index, resource.index});
+    return *this;
+}
+
 static bool ListContains(const Core::ArenaVector<uint32_t>& list, uint32_t value)
 {
     for (uint32_t entry : list) {
         if (entry == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool ReferenceListContains(const Core::ArenaVector<RenderPass::ResourceReference>& list, uint32_t target)
+{
+    for (const RenderPass::ResourceReference& entry : list) {
+        if (entry.target == target) {
             return true;
         }
     }
@@ -274,5 +303,15 @@ bool RenderPass::DeclaresBuffer(uint32_t bufferIndex) const
            || ListContains(bufferTLASReads, bufferIndex)
            || ListContains(bufferScratchWrites, bufferIndex)
            || ListContains(bufferASInputReads, bufferIndex);
+}
+
+bool RenderPass::ReferencesTexture(uint32_t textureIndex) const
+{
+    return ReferenceListContains(textureReferences, textureIndex);
+}
+
+bool RenderPass::ReferencesBuffer(uint32_t bufferIndex) const
+{
+    return ReferenceListContains(bufferReferences, bufferIndex);
 }
 } // Render

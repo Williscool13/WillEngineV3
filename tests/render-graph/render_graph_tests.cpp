@@ -833,6 +833,33 @@ TEST_CASE_METHOD(RdgFixture, "RDG: buffer lifetime tracked across passes", "[rdg
     CHECK(inspector.BufferLastPass(buf) == 1);
 }
 
+TEST_CASE_METHOD(RdgFixture, "RDG: reading a holder buffer reads what it references", "[rdg][reference]")
+{
+    const RDGTexture tex = rdg.CreateTexture("tex"_sid, TexInfo());
+    const RDGBuffer holder = rdg.CreateBuffer("holder"_sid, 256);
+    rdg.AddPass("write"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(tex);
+    rdg.AddPass("upload"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Untagged).WriteTransferBuffer(holder).ReferenceSampledImage(holder, tex);
+    rdg.AddPass("consume"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadBuffer(holder);
+    Compile();
+    CHECK(inspector.HasEdge("write"_sid, "consume"_sid));
+    CHECK(inspector.HasEdge("upload"_sid, "consume"_sid));
+    CHECK_FALSE(inspector.HasEdge("write"_sid, "upload"_sid));
+    CHECK(inspector.TextureLastPass(tex) == 2);
+    CHECK((inspector.TextureAccumulatedUsage(tex) & VK_IMAGE_USAGE_SAMPLED_BIT) != 0);
+}
+
+TEST_CASE_METHOD(RdgFixture, "RDG: an explicit write of a referenced buffer wins over the implied read", "[rdg][reference]")
+{
+    const RDGBuffer target = rdg.CreateBuffer("target"_sid, 1024);
+    const RDGBuffer holder = rdg.CreateBuffer("holder"_sid, 256);
+    rdg.AddPass("upload"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Untagged).WriteTransferBuffer(holder).ReferenceBuffer(holder, target);
+    rdg.AddPass("consume"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadBuffer(holder).ReadWriteBuffer(target);
+    rdg.AddPass("after"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).ReadBuffer(target);
+    Compile();
+    CHECK(inspector.HasEdge("upload"_sid, "consume"_sid));
+    CHECK(inspector.HasEdge("consume"_sid, "after"_sid));
+}
+
 // ================================================================================
 // Section 5: Auto-clear (into the barrier stream)
 // ================================================================================

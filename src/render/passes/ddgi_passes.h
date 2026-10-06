@@ -76,16 +76,6 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  */
 DDGIFrame SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const SceneResources& scene, const WorldGridFrame& worldGrid, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale);
 
-void DeclareDDGIVolumeGridReads(RenderPass& pass, const DDGIFrame& ddgi);
-
-/**
- * Declares the pass dependencies for sampling the cascade chain. Returns false when the chain doesn't exist this frame.
- * @param graph
- * @param pass
- * @param ddgi
- */
-bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass, const DDGIFrame& ddgi);
-
 /**
  * debugCascade: -1 all entries tinted, -2 locals only, >= 0 that entry untinted. probeDebugMode: 0 irradiance, 1 visibility, 2 flat volume tint.
  * @param graph

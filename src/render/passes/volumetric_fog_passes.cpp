@@ -87,7 +87,8 @@ void SetupVolumetricFog(RenderGraph& graph,
         scatterPass.ReadSampledImage(scatterHistory);
     }
     scatterPass.ReadSampledImage(tileDepth);
-    const bool bDDGI = bDDGIApply && AddDDGISampleDependencies(graph, scatterPass, ddgi);
+    const bool bDDGI = bDDGIApply && ddgi.IsValid();
+    if (bDDGI) { scatterPass.ReadBuffer(ddgi.cascades); }
     scatterPass.WriteStorageImage(scatter);
     scatterPass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, bDDGI, debugMode, frameIndex, skyboxIndex = viewFamily.skyboxIndex,
             iblIntensity = viewFamily.iblIntensity, worldGridLights, worldGridIndices, ddgiCascades = ddgi.cascades, scatter, tileDepth](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
