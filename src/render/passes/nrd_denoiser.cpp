@@ -418,10 +418,10 @@ void NrdDenoiser::ReleaseRetired(uint64_t frameNumber, bool bForce)
     }
 }
 
-void NrdDenoiser::EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber)
+void NrdDenoiser::EnsureResources(Core::Extent2D renderExtent, uint64_t frameNumber)
 {
     ZoneScoped;
-    if (currentWidth == renderExtent[0] && currentHeight == renderExtent[1] && !poolTextures.IsEmpty()) {
+    if (currentWidth == renderExtent.width && currentHeight == renderExtent.height && !poolTextures.IsEmpty()) {
         return;
     }
 
@@ -434,8 +434,8 @@ void NrdDenoiser::EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_
     for (uint32_t i = 0; i < poolSize; i++) {
         const bool bPermanent = i < desc.permanentPoolSize;
         const nrd::TextureDesc& textureDesc = bPermanent ? desc.permanentPool[i] : desc.transientPool[i - desc.permanentPoolSize];
-        const uint32_t w = glm::max(DivideUp(renderExtent[0], textureDesc.downsampleFactor), 1u);
-        const uint32_t h = glm::max(DivideUp(renderExtent[1], textureDesc.downsampleFactor), 1u);
+        const uint32_t w = glm::max(DivideUp(renderExtent.width, textureDesc.downsampleFactor), 1u);
+        const uint32_t h = glm::max(DivideUp(renderExtent.height, textureDesc.downsampleFactor), 1u);
         const Core::InlineString<32> name = Core::InlineString<32>::Format(bPermanent ? "nrd_perm_%u" : "nrd_trans_%u", bPermanent ? i : i - desc.permanentPoolSize);
         TrackedTexture tex{};
         if (!CreateTrackedTexture(tex, GetVkFormat(textureDesc.format), w, h, name.c_str())) {
@@ -446,20 +446,20 @@ void NrdDenoiser::EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_
     }
 
     for (uint32_t i = 0; i < IO_COUNT; i++) {
-        if (!CreateTrackedTexture(ioTextures[i], NRD_IO_FORMATS[i], renderExtent[0], renderExtent[1], NRD_IO_NAMES[i])) {
+        if (!CreateTrackedTexture(ioTextures[i], NRD_IO_FORMATS[i], renderExtent.width, renderExtent.height, NRD_IO_NAMES[i])) {
             bInitFailed = true;
             return;
         }
     }
 
-    currentWidth = renderExtent[0];
-    currentHeight = renderExtent[1];
-    prevRectWidth = renderExtent[0];
-    prevRectHeight = renderExtent[1];
+    currentWidth = renderExtent.width;
+    currentHeight = renderExtent.height;
+    prevRectWidth = renderExtent.width;
+    prevRectHeight = renderExtent.height;
     bPendingHistoryClear = true;
 }
 
-void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset)
+void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset)
 {
     ZoneScoped;
     const Core::RELAXParams& params = relaxParams;
@@ -495,12 +495,12 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
     stagedCommon.cameraJitterPrev[0] = prevJitter.x;
     stagedCommon.cameraJitterPrev[1] = prevJitter.y;
 
-    stagedCommon.resourceSize[0] = static_cast<uint16_t>(renderExtent[0]);
-    stagedCommon.resourceSize[1] = static_cast<uint16_t>(renderExtent[1]);
+    stagedCommon.resourceSize[0] = static_cast<uint16_t>(renderExtent.width);
+    stagedCommon.resourceSize[1] = static_cast<uint16_t>(renderExtent.height);
     stagedCommon.resourceSizePrev[0] = static_cast<uint16_t>(prevRectWidth);
     stagedCommon.resourceSizePrev[1] = static_cast<uint16_t>(prevRectHeight);
-    stagedCommon.rectSize[0] = static_cast<uint16_t>(renderExtent[0]);
-    stagedCommon.rectSize[1] = static_cast<uint16_t>(renderExtent[1]);
+    stagedCommon.rectSize[0] = static_cast<uint16_t>(renderExtent.width);
+    stagedCommon.rectSize[1] = static_cast<uint16_t>(renderExtent.height);
     stagedCommon.rectSizePrev[0] = static_cast<uint16_t>(prevRectWidth);
     stagedCommon.rectSizePrev[1] = static_cast<uint16_t>(prevRectHeight);
 
@@ -588,7 +588,7 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Array<
 
 bool NrdDenoiser::Prepare(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
+                          Core::Extent2D renderExtent,
                           NrdBackend backend,
                           const Core::RELAXParams& relaxParams,
                           const Core::ReBLURParams& reblurParams,
@@ -626,8 +626,8 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
     }
 
     lastRecordedFrame = frameNumber;
-    prevRectWidth = renderExtent[0];
-    prevRectHeight = renderExtent[1];
+    prevRectWidth = renderExtent.width;
+    prevRectHeight = renderExtent.height;
     return true;
 }
 
@@ -875,11 +875,11 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
     RebindEngineDescriptorBuffers(cmd, resourceManager, pipelineManager);
 }
 
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure)
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure)
 {
     ZoneScoped;
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
+    const uint32_t width = renderExtent.width;
+    const uint32_t height = renderExtent.height;
     const float radianceScale = NRD_RADIANCE_UNIT_SCALE / preExposure;
     const StringID gbufferOne = targets.gbufferOne;
     const StringID depth = targets.depthCopy;
@@ -963,11 +963,11 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
     }
 }
 
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure)
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure)
 {
     ZoneScoped;
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
+    const uint32_t width = renderExtent.width;
+    const uint32_t height = renderExtent.height;
     const float radianceScale = preExposure / NRD_RADIANCE_UNIT_SCALE;
     const StringID diffOutput = targets.intermediateOne;
     const StringID specOutput = targets.intermediateTwo;

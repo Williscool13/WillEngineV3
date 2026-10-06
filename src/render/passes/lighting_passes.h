@@ -9,6 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 #include "render/shaders/ddgi_interop.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -42,7 +43,7 @@ void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
                                        PipelineManager* pipelineManager,
                                        uint32_t sceneIndex,
                                        StringID depthTexture,
-                                       Core::Array<uint32_t, 2> renderExtent,
+                                       Core::Extent2D renderExtent,
                                        Core::Array<uint32_t, 2> cursorPixel);
 
 /** cursorPixel is in render-extent coordinates. */
@@ -50,7 +51,7 @@ void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    uint32_t sceneIndex,
                                    StringID depthTexture,
-                                   Core::Array<uint32_t, 2> renderExtent,
+                                   Core::Extent2D renderExtent,
                                    Core::Array<uint32_t, 2> cursorPixel);
 
 void SetupDebugPickPixelPass(RenderGraph& graph,
@@ -58,14 +59,14 @@ void SetupDebugPickPixelPass(RenderGraph& graph,
                              uint32_t sceneIndex,
                              StringID visibilityTexture,
                              StringID depthTexture,
-                             Core::Array<uint32_t, 2> renderExtent,
+                             Core::Extent2D renderExtent,
                              Core::Array<uint32_t, 2> pickPixel,
                              uint32_t requestId);
 
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> renderExtent,
+                                        Core::Extent2D renderExtent,
                                         const RenderTargets& targets,
                                         uint32_t sceneIndex,
                                         uint64_t frameNumber,
@@ -76,7 +77,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
+                                  Core::Extent2D renderExtent,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   bool bReset,
@@ -86,8 +87,8 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
 void SetupDirectionalLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
-                                  Core::Array<uint32_t, 2> shadowExtent,
+                                  Core::Extent2D renderExtent,
+                                  Core::Extent2D shadowExtent,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   uint32_t pixelScale);

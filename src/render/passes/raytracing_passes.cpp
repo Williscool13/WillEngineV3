@@ -2,7 +2,7 @@
 // Created by William on 2026-06-10.
 //
 
-#include "raytracing_passes.h"
+#include "render/passes/raytracing_passes.h"
 
 #include <tracy/Tracy.hpp>
 
@@ -28,7 +28,7 @@ void SetupTLASBuild(RenderGraph& graph,
                     VulkanContext* context,
                     PipelineManager* pipelineManager,
                     const Core::ViewFamily& viewFamily,
-                    Core::Array<uint32_t, 2> renderExtent,
+                    Core::Extent2D renderExtent,
                     const FrameResourceLimits& limits)
 {
     ZoneScoped;
@@ -118,7 +118,7 @@ void SetupRTShadowTest(RenderGraph& graph,
                        VulkanContext* context,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        StringID outputTarget,
                        uint32_t sceneIndex)
@@ -142,12 +142,12 @@ void SetupRTShadowTest(RenderGraph& graph,
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .sceneDataIndex = sceneIndex,
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        const uint32_t groupsX = (renderExtent.width + 7) / 8;
+        const uint32_t groupsY = (renderExtent.height + 7) / 8;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 }
@@ -155,8 +155,8 @@ void SetupRTShadowTest(RenderGraph& graph,
 void SetupRTSunShadow(RenderGraph& graph,
                       PipelineManager* pipelineManager,
                       const Core::ViewFamily& viewFamily,
-                      Core::Array<uint32_t, 2> shadowExtent,
-                      Core::Array<uint32_t, 2> fullExtent,
+                      Core::Extent2D shadowExtent,
+                      Core::Extent2D fullExtent,
                       const RenderTargets& targets,
                       uint32_t sceneIndex,
                       uint64_t frameNumber,
@@ -168,10 +168,10 @@ void SetupRTSunShadow(RenderGraph& graph,
     const bool bHalfRes = pixelScale > 1u;
 
     // R = binary visibility (1 lit, 0 occluded), G = closest-occluder distance (penumbra input for SIGMA)
-    graph.CreateTexture("rt_sun_shadow"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture("rt_sun_shadow"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, shadowExtent.width, shadowExtent.height, 1}, {std::nullopt}, true);
     if (bHalfRes) {
-        graph.CreateTexture("rt_sun_depth"_sid, TextureInfo{VK_FORMAT_R32_SFLOAT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
-        graph.CreateTexture("rt_sun_gbuffer"_sid, TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent[0], shadowExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture("rt_sun_depth"_sid, TextureInfo{VK_FORMAT_R32_SFLOAT, shadowExtent.width, shadowExtent.height, 1}, {std::nullopt}, true);
+        graph.CreateTexture("rt_sun_gbuffer"_sid, TextureInfo{VK_FORMAT_R32G32B32A32_UINT, shadowExtent.width, shadowExtent.height, 1}, {std::nullopt}, true);
     }
 
     RenderPass& pass = graph.AddPass("[SIGMA] RT Sun Shadow"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::DirectionalLighting);
@@ -204,14 +204,14 @@ void SetupRTSunShadow(RenderGraph& graph,
             .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
             .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
             .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-            .renderExtent = {shadowExtent[0], shadowExtent[1]},
+            .renderExtent = {shadowExtent.width, shadowExtent.height},
             .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
             .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex("rt_sun_shadow"_sid),
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
-            .fullExtent = {fullExtent[0], fullExtent[1]},
+            .fullExtent = {fullExtent.width, fullExtent.height},
             .pixelScale = pixelScale,
             .outputDepthIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex("rt_sun_depth"_sid) : ~0x0u,
             .outputGbufferIndex = bHalfRes ? graph.GetStorageImageViewDescriptorIndex("rt_sun_gbuffer"_sid) : ~0x0u,
@@ -219,8 +219,8 @@ void SetupRTSunShadow(RenderGraph& graph,
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (shadowExtent[0] + 7) / 8;
-        const uint32_t groupsY = (shadowExtent[1] + 7) / 8;
+        const uint32_t groupsX = (shadowExtent.width + 7) / 8;
+        const uint32_t groupsY = (shadowExtent.height + 7) / 8;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 }
@@ -228,7 +228,7 @@ void SetupRTSunShadow(RenderGraph& graph,
 bool SetupRTGroundTruthDI(RenderGraph& graph,
                            PipelineManager* pipelineManager,
                            const Core::ViewFamily& viewFamily,
-                           Core::Array<uint32_t, 2> renderExtent,
+                           Core::Extent2D renderExtent,
                            const RenderTargets& targets,
                            uint32_t sceneIndex,
                            bool bReset,
@@ -239,7 +239,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
     if (!graph.HasBuffer(RT_TLAS_BUFFER)) { return false; }
     if (!pipelineManager->GetPipelineEntry("rt_ground_truth_di"_sid)) { return false; }
 
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const uint32_t pixelCount = renderExtent.width * renderExtent.height;
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
     const bool bHistory = graph.ResourceHasBufferVersion("rt_gt_di_accum"_sid, bufferSize);
@@ -294,12 +294,12 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .accumulationCount = accumulationCount,
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        const uint32_t groupsX = (renderExtent.width + 7) / 8;
+        const uint32_t groupsY = (renderExtent.height + 7) / 8;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
@@ -309,7 +309,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
 bool SetupRTGroundTruthGI(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
+                          Core::Extent2D renderExtent,
                           const RenderTargets& targets,
                           uint32_t sceneIndex,
                           bool bReset,
@@ -320,7 +320,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
     if (!pipelineManager->GetPipelineEntry("rt_ground_truth_gi"_sid)) { return false; }
 
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const uint32_t pixelCount = renderExtent.width * renderExtent.height;
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
     const bool bHistory = graph.ResourceHasBufferVersion("rt_gt_gi_accum"_sid, bufferSize);
@@ -378,12 +378,12 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
             .frameIndex = static_cast<uint32_t>(frameNumber),
             .accumulationCount = accumulationCount,
             .iblIntensity = iblIntensity,
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        const uint32_t groupsX = (renderExtent.width + 7) / 8;
+        const uint32_t groupsY = (renderExtent.height + 7) / 8;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 
@@ -393,7 +393,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
 bool SetupRTGroundTruthFull(RenderGraph& graph,
                             PipelineManager* pipelineManager,
                             const Core::ViewFamily& viewFamily,
-                            Core::Array<uint32_t, 2> renderExtent,
+                            Core::Extent2D renderExtent,
                             const RenderTargets& targets,
                             uint32_t sceneIndex,
                             bool bReset,
@@ -405,7 +405,7 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
     if (!graph.HasBuffer(RT_TLAS_BUFFER) || !graph.HasBuffer(GEOMETRY_INSTANCE_BUFFER) || !graph.HasBuffer(GEOMETRY_MODEL_BUFFER) || !graph.HasBuffer(GEOMETRY_MATERIAL_BUFFER)) { return false; }
     if (!pipelineManager->GetPipelineEntry("rt_ground_truth_full"_sid)) { return false; }
 
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const uint32_t pixelCount = renderExtent.width * renderExtent.height;
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
     const bool bHistory = graph.ResourceHasBufferVersion("rt_gt_full_accum"_sid, bufferSize);
@@ -467,12 +467,12 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
             .iblIntensity = iblIntensity,
             .samplesPerFrame = samplesPerFrame,
             .dofPackedApertureFocus = dofPacked,
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-        const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-        const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+        const uint32_t groupsX = (renderExtent.width + 7) / 8;
+        const uint32_t groupsY = (renderExtent.height + 7) / 8;
         vkCmdDispatch(cmd, groupsX, groupsY, 1);
     });
 

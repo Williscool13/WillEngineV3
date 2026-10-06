@@ -2,7 +2,7 @@
 // Created by William on 2026-04-19.
 //
 
-#include "post_processing.h"
+#include "render/post-processing/post_processing.h"
 
 #include <algorithm>
 #include <cmath>
@@ -117,8 +117,8 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     // Overlays (text/sprites/debug lines) composite pre-AA into the chain input
     const bool bPreOverlay = static_cast<bool>(ctx.targets.preOverlayColor);
     const StringID meteringSource = bPreOverlay ? ctx.targets.preOverlayColor : input;
-    const uint32_t width = bPreOverlay ? ctx.preAaExtent[0] : ctx.extent[0];
-    const uint32_t height = bPreOverlay ? ctx.preAaExtent[1] : ctx.extent[1];
+    const uint32_t width = bPreOverlay ? ctx.preAaExtent.width : ctx.extent.width;
+    const uint32_t height = bPreOverlay ? ctx.preAaExtent.height : ctx.extent.height;
 
     graph.CreateBuffer("luminance_histogram"_sid, POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
 
@@ -204,13 +204,13 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
     return input;
 }
 
-StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Core::PostProcessConfiguration& config, const RenderTargets& targets, Core::Array<uint32_t, 2> extent, uint64_t frameNumber, StringID input)
+StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Core::PostProcessConfiguration& config, const RenderTargets& targets, Core::Extent2D extent, uint64_t frameNumber, StringID input)
 {
     if (!config.bDepthOfFieldEnabled) { return input; }
-    const uint32_t width = extent[0];
-    const uint32_t height = extent[1];
-    const uint32_t renderWidth = extent[0];
-    const uint32_t renderHeight = extent[1];
+    const uint32_t width = extent.width;
+    const uint32_t height = extent.height;
+    const uint32_t renderWidth = extent.width;
+    const uint32_t renderHeight = extent.height;
     StringID depthStencil = targets.depthCopy;
 
     const uint32_t halfWidth = std::max(1u, (width + 1) / 2);
@@ -452,10 +452,10 @@ StringID PPMotionBlur(PostProcessContext& ctx, StringID input)
 {
     if (!ctx.config.bMotionBlurEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
-    const uint32_t width = ctx.extent[0];
-    const uint32_t height = ctx.extent[1];
-    const uint32_t renderWidth = ctx.preAaExtent[0];
-    const uint32_t renderHeight = ctx.preAaExtent[1];
+    const uint32_t width = ctx.extent.width;
+    const uint32_t height = ctx.extent.height;
+    const uint32_t renderWidth = ctx.preAaExtent.width;
+    const uint32_t renderHeight = ctx.preAaExtent.height;
     PipelineManager* pipelines = ctx.pipelines;
     StringID velocity = ctx.targets.gbufferOne;
     StringID depthStencil = ctx.targets.depthCopy;
@@ -632,8 +632,8 @@ StringID PPBloom(PostProcessContext& ctx, StringID input)
 {
     if (!ctx.config.bBloomEnabled) { return input; }
     RenderGraph& graph = ctx.graph;
-    const uint32_t width = ctx.extent[0];
-    const uint32_t height = ctx.extent[1];
+    const uint32_t width = ctx.extent.width;
+    const uint32_t height = ctx.extent.height;
     PipelineManager* pipelines = ctx.pipelines;
     float bloomThreshold = ctx.config.bloomThreshold;
     float bloomSoftThreshold = ctx.config.bloomSoftThreshold;
@@ -775,8 +775,8 @@ bool PaniniDisplayToSourceUv(const PaniniParams& panini, float aspect, float& u,
 StringID PPFinalize(PostProcessContext& ctx, StringID input)
 {
     RenderGraph& graph = ctx.graph;
-    const uint32_t width = ctx.extent[0];
-    const uint32_t height = ctx.extent[1];
+    const uint32_t width = ctx.extent.width;
+    const uint32_t height = ctx.extent.height;
     PipelineManager* pipelines = ctx.pipelines;
     const Core::PostProcessConfiguration& config = ctx.config;
 
@@ -858,13 +858,13 @@ StringID PPCompose(PostProcessContext& ctx, StringID input)
     const Core::PostProcessConfiguration& config = ctx.config;
     const float sharpenStrength = config.bSharpeningEnabled ? std::max(config.sharpeningStrength, 0.0f) : 0.0f;
     const float grainStrength = config.bFilmGrainEnabled ? std::max(config.grainStrength, 0.0f) : 0.0f;
-    const bool bDisplayResolution = ctx.extent[0] == ctx.displayExtent[0] && ctx.extent[1] == ctx.displayExtent[1];
+    const bool bDisplayResolution = ctx.extent.width == ctx.displayExtent.width && ctx.extent.height == ctx.displayExtent.height;
     const float ditherStrength = (config.bDitherEnabled && bDisplayResolution) ? std::max(config.ditherStrength, 0.0f) : 0.0f;
     if (sharpenStrength <= 0.0f && grainStrength <= 0.0f && ditherStrength <= 0.0f) { return input; }
 
     RenderGraph& graph = ctx.graph;
-    const uint32_t width = ctx.extent[0];
-    const uint32_t height = ctx.extent[1];
+    const uint32_t width = ctx.extent.width;
+    const uint32_t height = ctx.extent.height;
     PipelineManager* pipelines = ctx.pipelines;
     const float grainSize = std::max(config.grainSize, 1.0f);
     const float grainResponse = std::clamp(config.grainResponse, 0.0f, 1.0f);
@@ -898,12 +898,12 @@ StringID PPCompose(PostProcessContext& ctx, StringID input)
     return "post_process_output"_sid;
 }
 
-StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Array<uint32_t, 2> extent, StringID input)
+StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Extent2D extent, StringID input)
 {
     if (fade.mode == Core::ScreenFadeMode::None || fade.progress <= 0.0f) { return input; }
 
-    const uint32_t width = extent[0];
-    const uint32_t height = extent[1];
+    const uint32_t width = extent.width;
+    const uint32_t height = extent.height;
 
     ScreenFadePushConstant constants{};
     constants.outputExtent = {width, height};

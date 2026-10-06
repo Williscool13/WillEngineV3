@@ -9,6 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 #include "render/shaders/ddgi_interop.h"
+#include "core/types/extent.h"
 
 namespace Core { struct ViewFamily; struct ReflectionConfiguration; }
 
@@ -19,7 +20,7 @@ class PipelineManager;
 void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
-                        Core::Array<uint32_t, 2> renderExtent,
+                        Core::Extent2D renderExtent,
                         const RenderTargets& targets,
                         const Core::RELAXParams& params,
                         uint64_t frameNumber,
@@ -35,7 +36,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
-                         Core::Array<uint32_t, 2> renderExtent,
+                         Core::Extent2D renderExtent,
                          const RenderTargets& targets,
                          const Core::ReBLURParams& params,
                          uint64_t frameNumber,

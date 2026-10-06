@@ -9,6 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 #include "core/string_id.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -17,12 +18,12 @@ class PipelineManager;
 void SetupUIRender(RenderGraph& graph,
                    PipelineManager* pipelineManager,
                    const Core::ViewFamily& viewFamily,
-                   Core::Array<uint32_t, 2> renderExtent,
+                   Core::Extent2D renderExtent,
                    StringID targetImage);
 
 void SetupSelectionOutlinePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
-                               Core::Array<uint32_t, 2> renderExtent,
+                               Core::Extent2D renderExtent,
                                const RenderTargets& targets,
                                uint64_t selectedStableId);
 } // Render

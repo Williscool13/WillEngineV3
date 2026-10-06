@@ -19,7 +19,7 @@ namespace Render
 void SetupVolumetricFog(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
-                        Core::Array<uint32_t, 2> renderExtent,
+                        Core::Extent2D renderExtent,
                         const RenderTargets& targets,
                         uint32_t sceneIndex,
                         uint64_t frameIndex,
@@ -32,7 +32,7 @@ void SetupVolumetricFog(RenderGraph& graph,
     const Core::VolumetricFog& fog = viewFamily.volumetricFog;
     if (!fog.bEnabled) { return; }
 
-    const Core::Array<uint32_t, 2> gridSize{(renderExtent[0] + VOLUMETRIC_FOG_TILE_SIZE - 1) / VOLUMETRIC_FOG_TILE_SIZE, (renderExtent[1] + VOLUMETRIC_FOG_TILE_SIZE - 1) / VOLUMETRIC_FOG_TILE_SIZE};
+    const Core::Array<uint32_t, 2> gridSize{(renderExtent.width + VOLUMETRIC_FOG_TILE_SIZE - 1) / VOLUMETRIC_FOG_TILE_SIZE, (renderExtent.height + VOLUMETRIC_FOG_TILE_SIZE - 1) / VOLUMETRIC_FOG_TILE_SIZE};
     const float maxDistance = glm::max(fog.maxDistance, VOLUMETRIC_FOG_NEAR * 2.0f);
     const TextureInfo gridInfo{VK_FORMAT_R16G16B16A16_SFLOAT, gridSize[0], gridSize[1], 1, VOLUMETRIC_FOG_SLICES};
     graph.CreateVersionedTexture(VOLUMETRIC_FOG_SCATTER, gridInfo, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -43,7 +43,7 @@ void SetupVolumetricFog(RenderGraph& graph,
     graph.CreateTexture(VOLUMETRIC_FOG_INTEGRATED, gridInfo, {std::nullopt}, true);
     const bool bDebug = debugMode > 0;
     if (bDebug) {
-        graph.CreateTexture(VOLUMETRIC_FOG_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture(VOLUMETRIC_FOG_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
     }
 
     const bool bTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
@@ -57,7 +57,7 @@ void SetupVolumetricFog(RenderGraph& graph,
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             VolumetricFogTileDepthPushConstant pc{
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .gridSize = {gridSize[0], gridSize[1]},
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .tileDepthOutIndex = graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_TILE_DEPTH),
@@ -95,7 +95,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
                 .sceneDataIndex = sceneIndex,
                 .scatterOutIndex = graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_SCATTER),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .gridSize = {gridSize[0], gridSize[1]},
                 .heightFalloff = glm::max(fog.heightFalloff, 0.0f),
                 .baseHeight = fog.baseHeight,
@@ -141,7 +141,7 @@ void SetupVolumetricFog(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             VolumetricFogIntegratePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .gridSize = {gridSize[0], gridSize[1]},
                 .sceneDataIndex = sceneIndex,
                 .scatterIndex = graph.GetSampledImageViewDescriptorIndex(VOLUMETRIC_FOG_FILTERED),
@@ -173,7 +173,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .albedoDensity = {fog.albedo, glm::max(fog.density, 0.0f)},
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .gridSize = {gridSize[0], gridSize[1]},
                 .sceneDataIndex = sceneIndex,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -192,7 +192,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .debugOutIndex = bDebug ? graph.GetStorageImageViewDescriptorIndex(VOLUMETRIC_FOG_DEBUG_TARGET) : ~0u,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+            vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
 }
 } // Render

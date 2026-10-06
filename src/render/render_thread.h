@@ -9,24 +9,25 @@
 #include <chrono>
 
 #include "core/containers/vector.h"
-#include "frame_resources.h"
+#include "render/frame_resources.h"
 #include "asset-load/async_asset_load_manager.h"
 #include "core/containers/array.h"
-#include "interface/render_interface.h"
+#include "render/interface/render_interface.h"
 #include "render/renderer_statistics.h"
 #include "render/render-graph/render_graph_resources.h"
 #include "render/vulkan/vk_pipeline_stats.h"
 #include "render/vulkan/vk_resources.h"
 #include "render/vulkan/vk_synchronization.h"
-#include "systems/render_screen_capture.h"
-#include "types/render_types.h"
-#include "post-processing/post_processing.h"
+#include "render/systems/render_screen_capture.h"
+#include "render/types/render_types.h"
+#include "render/post-processing/post_processing.h"
 #include "render/shaders/ddgi_interop.h"
 
 #include <imgui.h>
 #include <imgui_threaded_rendering.h>
 
-#include "passes/ddgi_passes.h"
+#include "render/passes/ddgi_passes.h"
+#include "core/types/extent.h"
 
 namespace AssetLoad
 {
@@ -139,7 +140,7 @@ public:
     void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
 
 private:
-    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
+    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, float renderDeltaTime) const;
 
     void UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
 
@@ -149,7 +150,7 @@ private:
 
     void UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const;
 
-    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
+    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 
     // RecordFrame phases, in record_frame.cpp. Pass declaration order is the order they are called.
     void ApplyRenderReset(Core::RenderReset reset);

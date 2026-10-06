@@ -15,7 +15,7 @@
 
 namespace Render
 {
-void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID targetImage)
+void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, StringID targetImage)
 {
     ZoneScoped;
     if (viewFamily.uiDrawList.IsEmpty()) { return; }
@@ -28,17 +28,17 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         uiPass.ReadBuffer(FONT_CURVE_BUFFER);
     }
     uiPass.WriteColorAttachment(targetImage);
-    uiPass.Execute([&, width = renderExtent[0], height = renderExtent[1], targetImage, pipelineManager, bHasText](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    uiPass.Execute([&, renderExtent, targetImage, pipelineManager, bHasText](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         // Y-flipped viewport: blit to swapchain inverts Y, so pre-invert here to cancel it out
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
-        viewport.y = static_cast<float>(height);
-        viewport.height = -static_cast<float>(height);
+        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
+        viewport.y = static_cast<float>(renderExtent.height);
+        viewport.height = -static_cast<float>(renderExtent.height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
-        const VkRect2D fullScissor = VkHelpers::GenerateScissor(width, height);
+        const VkRect2D fullScissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
         vkCmdSetScissor(cmd, 0, 1, &fullScissor);
 
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, nullptr, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
         const VkDeviceAddress glyphQuadsAddr = bHasText ? graph.GetBufferAddress(UI_GLYPH_QUAD_BUFFER) : 0;
@@ -58,13 +58,13 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                 {
                     const Core::UIScissorCommand& s = drawCmd.scissor;
                     int32_t x = s.x;
-                    int32_t y = static_cast<int32_t>(height) - s.y - static_cast<int32_t>(s.height);
+                    int32_t y = static_cast<int32_t>(renderExtent.height) - s.y - static_cast<int32_t>(s.height);
                     int32_t w = static_cast<int32_t>(s.width);
                     int32_t h = static_cast<int32_t>(s.height);
                     if (x < 0) { w += x; x = 0; }
                     if (y < 0) { h += y; y = 0; }
-                    if (x + w > static_cast<int32_t>(width)) { w = static_cast<int32_t>(width) - x; }
-                    if (y + h > static_cast<int32_t>(height)) { h = static_cast<int32_t>(height) - y; }
+                    if (x + w > static_cast<int32_t>(renderExtent.width)) { w = static_cast<int32_t>(renderExtent.width) - x; }
+                    if (y + h > static_cast<int32_t>(renderExtent.height)) { h = static_cast<int32_t>(renderExtent.height) - y; }
                     w = w > 0 ? w : 0;
                     h = h > 0 ? h : 0;
                     const VkRect2D scissor{{x, y}, {static_cast<uint32_t>(w), static_cast<uint32_t>(h)}};
@@ -94,8 +94,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                         boundPipeline = Core::UICommandType::Rect;
                     }
                     const Core::UIRectDrawCall& r = drawCmd.rect;
-                    const float fw = static_cast<float>(width);
-                    const float fh = static_cast<float>(height);
+                    const float fw = static_cast<float>(renderExtent.width);
+                    const float fh = static_cast<float>(renderExtent.height);
                     UIRectRenderPushConstant pc{
                         .color = {r.color.x * overlayColor.x, r.color.y * overlayColor.y, r.color.z * overlayColor.z, r.color.w * overlayColor.w},
                         .ndcMin = {r.pxMin.x / fw * 2.0f - 1.0f, r.pxMin.y / fh * 2.0f - 1.0f},
@@ -115,8 +115,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                         boundPipeline = Core::UICommandType::Image;
                     }
                     const Core::UIRenderCommandImage& uiCmd = drawCmd.image;
-                    const float fw = static_cast<float>(width);
-                    const float fh = static_cast<float>(height);
+                    const float fw = static_cast<float>(renderExtent.width);
+                    const float fh = static_cast<float>(renderExtent.height);
                     UIImagePushConstant pc{
                         .ndcMin = {uiCmd.pxMin.x / fw * 2.0f - 1.0f, uiCmd.pxMin.y / fh * 2.0f - 1.0f},
                         .ndcMax = {uiCmd.pxMax.x / fw * 2.0f - 1.0f, uiCmd.pxMax.y / fh * 2.0f - 1.0f},
@@ -139,8 +139,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
                         boundPipeline = Core::UICommandType::Border;
                     }
                     const Core::UIBorderDrawCall& b = drawCmd.border;
-                    const float fw = static_cast<float>(width);
-                    const float fh = static_cast<float>(height);
+                    const float fw = static_cast<float>(renderExtent.width);
+                    const float fh = static_cast<float>(renderExtent.height);
                     UIBorderPushConstant pc{
                         .ndcMin = {b.pxMin.x / fw * 2.0f - 1.0f, b.pxMin.y / fh * 2.0f - 1.0f},
                         .ndcMax = {b.pxMax.x / fw * 2.0f - 1.0f, b.pxMax.y / fh * 2.0f - 1.0f},
@@ -179,7 +179,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
     });
 }
 
-void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, uint64_t selectedStableId)
+void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, uint64_t selectedStableId)
 {
     ZoneScoped;
     RenderPass& outlinePass = graph.AddPass("Selection Outline"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::UI);
@@ -192,12 +192,12 @@ void SetupSelectionOutlinePass(RenderGraph& graph, PipelineManager* pipelineMana
         SelectionOutlinePushConstant pc{
             .selectedStableIdLo = static_cast<uint32_t>(selectedStableId & 0xFFFFFFFFu),
             .selectedStableIdHi = static_cast<uint32_t>(selectedStableId >> 32u),
-            .extents = {renderExtent[0], renderExtent[1]},
+            .extents = {renderExtent.width, renderExtent.height},
             .stableIdIndex = graph.GetStorageImageViewDescriptorIndex(stableId),
             .outputColorIndex = graph.GetStorageImageViewDescriptorIndex(outputColor),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+        vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
     });
 }
 } // Render

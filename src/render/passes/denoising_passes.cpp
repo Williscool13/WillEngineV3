@@ -6,10 +6,10 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "ddgi_passes.h"
-#include "final_gather_passes.h"
-#include "reflection_passes.h"
-#include "shadow_passes.h"
+#include "render/passes/ddgi_passes.h"
+#include "render/passes/final_gather_passes.h"
+#include "render/passes/reflection_passes.h"
+#include "render/passes/shadow_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -28,7 +28,7 @@ static constexpr float REBLUR_MAX_ACCUM_FRAME_NUM = 63.0f;
 void SetupRELAXDenoiser(RenderGraph& graph,
                         PipelineManager* pipelineManager,
                         const Core::ViewFamily& viewFamily,
-                        Core::Array<uint32_t, 2> renderExtent,
+                        Core::Extent2D renderExtent,
                         const RenderTargets& targets,
                         const Core::RELAXParams& params,
                         uint64_t frameNumber,
@@ -45,8 +45,8 @@ void SetupRELAXDenoiser(RenderGraph& graph,
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD RELAX resolves checkerboard inside the prepass
     const bool bPrepass = params.enablePrepass || bCheckerboard;
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
+    const uint32_t width = renderExtent.width;
+    const uint32_t height = renderExtent.height;
     const uint32_t tilesW = (width + 15) / 16;
     const uint32_t tilesH = (height + 15) / 16;
 
@@ -677,7 +677,7 @@ void SetupRELAXDenoiser(RenderGraph& graph,
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
-                         Core::Array<uint32_t, 2> renderExtent,
+                         Core::Extent2D renderExtent,
                          const RenderTargets& targets,
                          const Core::ReBLURParams& params,
                          uint64_t frameNumber,
@@ -694,8 +694,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
     const bool bCheckerboard = activeCheckerboardField != 0u;
     // NRD resolves checkerboard inside the prepass; radius 0 when the user disabled it.
     const bool bPrepass = params.enablePrepass || bCheckerboard;
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
+    const uint32_t width = renderExtent.width;
+    const uint32_t height = renderExtent.height;
     const uint32_t tilesW = (width + 15) / 16;
     const uint32_t tilesH = (height + 15) / 16;
 

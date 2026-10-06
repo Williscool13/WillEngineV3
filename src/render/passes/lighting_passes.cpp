@@ -6,10 +6,10 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "ddgi_passes.h"
-#include "final_gather_passes.h"
-#include "reflection_passes.h"
-#include "shadow_passes.h"
+#include "render/passes/ddgi_passes.h"
+#include "render/passes/final_gather_passes.h"
+#include "render/passes/reflection_passes.h"
+#include "render/passes/shadow_passes.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -195,7 +195,7 @@ void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
                                        PipelineManager* pipelineManager,
                                        uint32_t sceneIndex,
                                        StringID depthTexture,
-                                       Core::Array<uint32_t, 2> renderExtent,
+                                       Core::Extent2D renderExtent,
                                        Core::Array<uint32_t, 2> cursorPixel)
 {
     ZoneScoped;
@@ -226,7 +226,7 @@ void SetupDebugWorldGridCursorCellPass(RenderGraph& graph,
             .worldGridCellPower = graph.GetBufferAddress("world_grid_cell_power"_sid),
             .readback = graph.GetBufferAddress("readback_buffer"_sid),
             .cursorPixel = {cursorPixel[0], cursorPixel[1]},
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
             .sceneDataIndex = sceneIndex,
             .depthTextureIndex = graph.GetSampledImageViewDescriptorIndex(depthTexture),
         };
@@ -239,7 +239,7 @@ void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    uint32_t sceneIndex,
                                    StringID depthTexture,
-                                   Core::Array<uint32_t, 2> renderExtent,
+                                   Core::Extent2D renderExtent,
                                    Core::Array<uint32_t, 2> cursorPixel)
 {
     ZoneScoped;
@@ -269,7 +269,7 @@ void SetupDebugReGIRCursorCellPass(RenderGraph& graph,
             .regirCellData = graph.GetBufferAddress("regir_cell_data"_sid),
             .readback = graph.GetBufferAddress("readback_buffer"_sid),
             .cursorPixel = {cursorPixel[0], cursorPixel[1]},
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
             .sceneDataIndex = sceneIndex,
             .depthTextureIndex = graph.GetSampledImageViewDescriptorIndex(depthTexture),
         };
@@ -283,7 +283,7 @@ void SetupDebugPickPixelPass(RenderGraph& graph,
                              uint32_t sceneIndex,
                              StringID visibilityTexture,
                              StringID depthTexture,
-                             Core::Array<uint32_t, 2> renderExtent,
+                             Core::Extent2D renderExtent,
                              Core::Array<uint32_t, 2> pickPixel,
                              uint32_t requestId)
 {
@@ -304,7 +304,7 @@ void SetupDebugPickPixelPass(RenderGraph& graph,
             .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
             .readback = graph.GetBufferAddress("readback_buffer"_sid),
             .pickPixel = {pickPixel[0], pickPixel[1]},
-            .renderExtent = {renderExtent[0], renderExtent[1]},
+            .renderExtent = {renderExtent.width, renderExtent.height},
             .sceneDataIndex = sceneIndex,
             .visibilityTextureIndex = graph.GetSampledImageViewDescriptorIndex(visibilityTexture),
             .depthTextureIndex = graph.GetSampledImageViewDescriptorIndex(depthTexture),
@@ -318,7 +318,7 @@ void SetupDebugPickPixelPass(RenderGraph& graph,
 void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> renderExtent,
+                                        Core::Extent2D renderExtent,
                                         const RenderTargets& targets,
                                         uint32_t sceneIndex,
                                         uint64_t frameNumber,
@@ -410,7 +410,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .secondaryOutputImageIndex = ~0x0u,
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.index,
-                    .renderExtent = {renderExtent[0], renderExtent[1]},
+                    .renderExtent = {renderExtent.width, renderExtent.height},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .iblIntensity = iblIntensity,
                     .reflectionIndex = bReflection ? graph.GetSampledImageViewDescriptorIndex(reflectionTarget) : ~0x0u,
@@ -427,7 +427,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
                     .diffuseRatioIndex = ~0x0u,
                     .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
-                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
+                    .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
                     .indirectIntensity = viewFamily.indirectIntensity,
                     .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(GI_GATHER_SKY_VIS_HISTORY) : ~0x0u,
                 };
@@ -440,7 +440,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
 void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
+                                  Core::Extent2D renderExtent,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   bool bReset,
@@ -448,7 +448,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   uint64_t frameNumber)
 {
     ZoneScoped;
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const uint32_t pixelCount = renderExtent.width * renderExtent.height;
     const VkDeviceSize bufferSize = static_cast<VkDeviceSize>(pixelCount) * sizeof(float[4]);
 
     const bool bHistory = graph.ResourceHasBufferVersion("gt_accum"_sid, bufferSize);
@@ -504,14 +504,14 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                 .primaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .secondaryOutputImageIndex = ~0x0u,
                 .sceneDataIndex = sceneIndex,
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .accumulationCount = accumulationCount,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
-            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            const uint32_t groupsX = (renderExtent.width + 15) / 16;
+            const uint32_t groupsY = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 }
@@ -519,8 +519,8 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
 void SetupDirectionalLightingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
-                                  Core::Array<uint32_t, 2> shadowExtent,
+                                  Core::Extent2D renderExtent,
+                                  Core::Extent2D shadowExtent,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   uint32_t pixelScale)
@@ -562,16 +562,16 @@ void SetupDirectionalLightingPass(RenderGraph& graph,
                 .shadowIndex = graph.GetSampledImageViewDescriptorIndex(shadowTex),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
                 .sceneDataIndex = sceneIndex,
-                .renderExtent = {renderExtent[0], renderExtent[1]},
-                .shadowExtent = {shadowExtent[0], shadowExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
+                .shadowExtent = {shadowExtent.width, shadowExtent.height},
                 .pixelScale = pixelScale,
                 .shadowDepthIndex = bHalfRes ? graph.GetSampledImageViewDescriptorIndex("rt_sun_depth"_sid) : ~0x0u,
                 .shadowNormalIndex = bHalfRes ? graph.GetSampledImageViewDescriptorIndex("rt_sun_gbuffer"_sid) : ~0x0u,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 15) / 16;
-            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            const uint32_t groupsX = (renderExtent.width + 15) / 16;
+            const uint32_t groupsY = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 }

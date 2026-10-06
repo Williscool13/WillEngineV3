@@ -10,6 +10,7 @@
 #include "render/render_config.h"
 #include "render/shaders/common_interop.h"
 #include "render/types/render_types.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -25,7 +26,7 @@ struct FrameResourceLimits;
  * @param deltaTime
  * @return
  */
-SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasingConfiguration& aaConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale);
+SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasingConfiguration& aaConfig, Core::Extent2D renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale);
 
 uint32_t ComputeJitterPhaseCount(Core::AntiAliasingMode aaMode, float resolutionScale);
 

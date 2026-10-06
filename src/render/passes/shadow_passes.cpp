@@ -18,12 +18,12 @@ namespace Render
 void SetupShadowsResolve(RenderGraph& graph,
                          PipelineManager* pipelineManager,
                          const Core::ViewFamily& viewFamily,
-                         Core::Array<uint32_t, 2> renderExtent,
+                         Core::Extent2D renderExtent,
                          const RenderTargets& targets,
                          uint32_t sceneIndex)
 {
     ZoneScoped;
-    graph.CreateTexture("shadows_resolve_target"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture("shadows_resolve_target"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
     RenderPass& shadowsResolvePass = graph.AddPass("Shadows Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AmbientOcclusion);
 
     bool bHasGTAO = graph.HasTexture("gtao_filtered"_sid);
@@ -35,7 +35,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     const float temporalClampScale = viewFamily.gtaoConfig.temporalClampScale;
     const bool bTemporal = bHasGTAO && temporalMaxAccum > 0.0f;
     if (bTemporal) {
-        graph.CreateVersionedTexture("gtao_temporal"_sid, TextureInfo{VK_FORMAT_R16G16_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        graph.CreateVersionedTexture("gtao_temporal"_sid, TextureInfo{VK_FORMAT_R16G16_UNORM, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     }
     const bool bHistoryValid = bTemporal && graph.ResourceHasVersion("gtao_temporal"_sid, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const StringID gtaoTemporalPrev = bHistoryValid ? graph.ResourceVersionID("gtao_temporal"_sid, 1) : StringID{};
@@ -56,7 +56,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     shadowsResolvePass.WriteStorageImage("shadows_resolve_target"_sid);
     shadowsResolvePass.Execute([&, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, gtaoTemporalPrev, depthHistory, gbufferOneHistory, temporalMaxAccum, temporalClampScale,
             depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
-            width = renderExtent[0], height = renderExtent[1], sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            renderExtent, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadows_resolve"_sid);
 
             int32_t gtaoIndex = bHasGTAO ? static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex("gtao_filtered"_sid)) : -1;
@@ -79,8 +79,8 @@ void SetupShadowsResolve(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 }
@@ -88,7 +88,7 @@ void SetupShadowsResolve(RenderGraph& graph,
 static void AddSigmaBlurPass(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::SIGMAParams& sigma,
-                             Core::Array<uint32_t, 2> renderExtent,
+                             Core::Extent2D renderExtent,
                              uint32_t sceneIndex,
                              uint64_t frameNumber,
                              StringID passName,
@@ -117,7 +117,7 @@ static void AddSigmaBlurPass(RenderGraph& graph,
             SigmaBlurPushConstant pc{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
                 .lightData = graph.GetBufferAddress("light_data"_sid),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .shadowIndex = graph.GetSampledImageViewDescriptorIndex(inputTex),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -131,8 +131,8 @@ static void AddSigmaBlurPass(RenderGraph& graph,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-            const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+            const uint32_t groupsX = (renderExtent.width + 7) / 8;
+            const uint32_t groupsY = (renderExtent.height + 7) / 8;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 }
@@ -140,7 +140,7 @@ static void AddSigmaBlurPass(RenderGraph& graph,
 void SetupSigmaShadowDenoise(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
-                             Core::Array<uint32_t, 2> renderExtent,
+                             Core::Extent2D renderExtent,
                              const RenderTargets& targets,
                              uint32_t sceneIndex,
                              uint64_t frameNumber)
@@ -154,10 +154,10 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
     const StringID sigmaGbuffer = sigma.bHalfRes ? "rt_sun_gbuffer"_sid : targets.gbufferOne;
 
     // R = denoised visibility, G = penumbra (world units)
-    graph.CreateTexture("sigma_shadow"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    graph.CreateTexture("sigma_shadow"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
 
-    const uint32_t tilesX = (renderExtent[0] + 15) / 16;
-    const uint32_t tilesY = (renderExtent[1] + 15) / 16;
+    const uint32_t tilesX = (renderExtent.width + 15) / 16;
+    const uint32_t tilesY = (renderExtent.height + 15) / 16;
     graph.CreateTexture("sigma_tiles"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, tilesX, tilesY, 1}, {std::nullopt}, true);
     graph.CreateTexture("sigma_tiles_smoothed"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, tilesX, tilesY, 1}, {std::nullopt}, true);
 
@@ -173,7 +173,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
 
             SigmaClassifyPushConstant pc{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .shadowIndex = graph.GetSampledImageViewDescriptorIndex("rt_sun_shadow"_sid),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(sigmaDepth),
                 .outputIndex = graph.GetStorageImageViewDescriptorIndex("sigma_tiles"_sid),
@@ -206,7 +206,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
         sigmaDepth, sigmaGbuffer);
 
     if (sigma.enablePostBlur) {
-        graph.CreateTexture("sigma_shadow_2"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+        graph.CreateTexture("sigma_shadow_2"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
         AddSigmaBlurPass(graph, pipelineManager, sigma, renderExtent, sceneIndex, frameNumber,
             "[SIGMA] Shadow Post-Blur"_sid, "sigma_shadow"_sid, "sigma_shadow_2"_sid, "sigma_tiles_smoothed"_sid, 1u,
             sigmaDepth, sigmaGbuffer);
@@ -216,7 +216,7 @@ void SetupSigmaShadowDenoise(RenderGraph& graph,
 void SetupSigmaShadowTemporal(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
+                              Core::Extent2D renderExtent,
                               const RenderTargets& targets,
                               uint32_t sceneIndex)
 {
@@ -228,8 +228,8 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
     const StringID sigmaDepth = sigma.bHalfRes ? "rt_sun_depth"_sid : targets.depthCopy;
     const StringID sigmaGbuffer = sigma.bHalfRes ? "rt_sun_gbuffer"_sid : targets.gbufferOne;
 
-    graph.CreateVersionedTexture("sigma_stabilized"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture("sigma_history_length"_sid, TextureInfo{VK_FORMAT_R32_UINT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("sigma_stabilized"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    graph.CreateVersionedTexture("sigma_history_length"_sid, TextureInfo{VK_FORMAT_R32_UINT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
 
     const bool bHasHistory = graph.ResourceHasVersion("sigma_stabilized"_sid, 1) && graph.ResourceHasVersion("sigma_history_length"_sid, 1);
     const StringID prevStabilized = bHasHistory ? graph.ResourceVersionID("sigma_stabilized"_sid, 1) : StringID{};
@@ -255,7 +255,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
 
             SigmaTemporalPushConstant pc{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .shadowIndex = graph.GetSampledImageViewDescriptorIndex(shadowTex),
                 .historyIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(prevStabilized) : ~0x0u,
                 .historyLengthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(prevHistoryLength) : ~0x0u,
@@ -270,8 +270,8 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t groupsX = (renderExtent[0] + 7) / 8;
-            const uint32_t groupsY = (renderExtent[1] + 7) / 8;
+            const uint32_t groupsX = (renderExtent.width + 7) / 8;
+            const uint32_t groupsY = (renderExtent.height + 7) / 8;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 }

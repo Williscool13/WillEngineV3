@@ -6,7 +6,7 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "ddgi_passes.h"
+#include "render/passes/ddgi_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
 #include "render/pipelines/pipeline_data.h"
@@ -19,7 +19,7 @@ namespace Render
 {
 void SetupReflectionTracePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
-                              Core::Array<uint32_t, 2> renderExtent,
+                              Core::Extent2D renderExtent,
                               const RenderTargets& targets,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
@@ -31,7 +31,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
         return;
     }
 
-    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent[0] * renderExtent[1], true);
+    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
 
     RenderPass& pass = graph.AddPass("[Reflection] Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -45,7 +45,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
             ReflectionTracePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -57,7 +57,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("reflection_trace"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+            vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
 }
 
@@ -65,7 +65,7 @@ static constexpr float SSR_EDGE_FADE = 0.1f;
 
 void SetupSSRTracePass(RenderGraph& graph,
                        PipelineManager* pipelineManager,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex,
                        uint64_t frameNumber,
@@ -78,7 +78,7 @@ void SetupSSRTracePass(RenderGraph& graph,
         return;
     }
 
-    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent[0] * renderExtent[1], true);
+    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
 
     RenderPass& pass = graph.AddPass("[Reflection] SSR Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
@@ -91,7 +91,7 @@ void SetupSSRTracePass(RenderGraph& graph,
             SSRTracePushConstant pc{
                 .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
                 .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -106,14 +106,14 @@ void SetupSSRTracePass(RenderGraph& graph,
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("ssr_trace"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+            vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
 }
 
 void SetupReflectionShadePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
+                              Core::Extent2D renderExtent,
                               const RenderTargets& targets,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
@@ -139,10 +139,10 @@ void SetupReflectionShadePass(RenderGraph& graph,
     const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion(LIT_COLOR_HISTORY, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
-    graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
+    graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
     const bool bHitDelta = reflectionConfig.bMergedDenoise && bHasTLAS;
     if (bHitDelta) {
-        graph.CreateVersionedTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}});
+        graph.CreateVersionedTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}});
     }
 
     RenderPass& pass = graph.AddPass("[Reflection] Shade"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
@@ -200,7 +200,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
                 .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress("world_grid_light_grid"_sid) : 0,
                 .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
@@ -232,7 +232,7 @@ void SetupReflectionShadePass(RenderGraph& graph,
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("reflection_shade"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-            vkCmdDispatch(cmd, (renderExtent[0] + 15) / 16, (renderExtent[1] + 15) / 16, 1);
+            vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
 }
 } // Render

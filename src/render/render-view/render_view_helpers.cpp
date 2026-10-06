@@ -2,7 +2,7 @@
 // Created by William on 2026-01-21.
 //
 
-#include "render_view_helpers.h"
+#include "render/render-view/render_view_helpers.h"
 
 #include <cmath>
 
@@ -57,7 +57,7 @@ HaltonSample ComputeJitterSample(Core::AntiAliasingMode aaMode, uint64_t frameNu
     }
 }
 
-SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasingConfiguration& aaConfig, Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale)
+SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasingConfiguration& aaConfig, Core::Extent2D renderExtent, uint64_t frameNumber, float deltaTime, float resolutionScale)
 {
     const Core::AntiAliasingMode aaMode = aaConfig.mode;
     const glm::mat4 viewMatrix = view.currentViewData.view;
@@ -74,10 +74,10 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasi
     const HaltonSample currSample = ComputeJitterSample(aaMode, frameNumber, jitterPhaseCount);
     const HaltonSample prevSample = ComputeJitterSample(aaMode, frameNumber - 1, jitterPhaseCount);
 
-    const float jitterX = currSample.x * 2.0f / static_cast<float>(renderExtent[0]);
-    const float jitterY = currSample.y * 2.0f / static_cast<float>(renderExtent[1]);
-    const float prevJitterX = prevSample.x * 2.0f / static_cast<float>(renderExtent[0]);
-    const float prevJitterY = prevSample.y * 2.0f / static_cast<float>(renderExtent[1]);
+    const float jitterX = currSample.x * 2.0f / static_cast<float>(renderExtent.width);
+    const float jitterY = currSample.y * 2.0f / static_cast<float>(renderExtent.height);
+    const float prevJitterX = prevSample.x * 2.0f / static_cast<float>(renderExtent.width);
+    const float prevJitterY = prevSample.y * 2.0f / static_cast<float>(renderExtent.height);
 
     glm::mat4 jitteredProj = projMatrix;
     jitteredProj[2][0] += jitterX;
@@ -106,8 +106,8 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasi
 
     sceneData.cameraWorldPos = glm::vec4(view.currentViewData.cameraPos, 1.0f);
 
-    sceneData.texelSize = glm::vec2(1.0f, 1.0f) / glm::vec2(renderExtent[0], renderExtent[1]);
-    sceneData.mainRenderTargetSize = glm::vec2(renderExtent[0], renderExtent[1]);
+    sceneData.texelSize = glm::vec2(1.0f, 1.0f) / glm::vec2(renderExtent.width, renderExtent.height);
+    sceneData.mainRenderTargetSize = glm::vec2(renderExtent.width, renderExtent.height);
 
     sceneData.depthLinearizeMult = -sceneData.proj[3][2];
     sceneData.depthLinearizeAdd = sceneData.proj[2][2];
@@ -119,13 +119,13 @@ SceneData GenerateSceneData(const Core::RenderView& view, const Core::AntiAliasi
     glm::vec2 cameraTanHalfFOV{tanHalfFOVX, tanHalfFOVY};
     sceneData.ndcToViewMul = {cameraTanHalfFOV.x * 2.0f, cameraTanHalfFOV.y * -2.0f};
     sceneData.ndcToViewAdd = {cameraTanHalfFOV.x * -1.0f, cameraTanHalfFOV.y * 1.0f};
-    const glm::vec2 texelSize = {1.0f / static_cast<float>(renderExtent[0]), 1.0f / static_cast<float>(renderExtent[1])};
+    const glm::vec2 texelSize = {1.0f / static_cast<float>(renderExtent.width), 1.0f / static_cast<float>(renderExtent.height)};
     sceneData.ndcToViewMulXPixelSize = {sceneData.ndcToViewMul.x * texelSize.x, sceneData.ndcToViewMul.y * texelSize.y};
 
     sceneData.frustum = CreateFrustum(sceneData.viewProj);
     sceneData.deltaTime = deltaTime;
     float verticalFOV = view.currentViewData.fovRadians;
-    sceneData.lodScreenSizeScale = (static_cast<float>(renderExtent[1]) * 0.5f) / tanf(verticalFOV * 0.5f);
+    sceneData.lodScreenSizeScale = (static_cast<float>(renderExtent.height) * 0.5f) / tanf(verticalFOV * 0.5f);
     sceneData.clipPlane = {0.0f, 0.0f, 0.0f, 1.0f};
 
     return sceneData;

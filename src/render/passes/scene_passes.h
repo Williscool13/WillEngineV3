@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -16,7 +17,7 @@ class PipelineManager;
 void SetupSkyboxRendering(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
+                          Core::Extent2D renderExtent,
                           const RenderTargets& targets,
                           uint32_t sceneIndex);
 
@@ -32,13 +33,13 @@ void SetupSkyboxRendering(RenderGraph& graph,
 void SetupTextForwardPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
+                          Core::Extent2D renderExtent,
                           const RenderTargets& targets);
 
 void SetupSpritesPass(RenderGraph& graph,
                       PipelineManager* pipelineManager,
                       const Core::ViewFamily& viewFamily,
-                      Core::Array<uint32_t, 2> renderExtent,
+                      Core::Extent2D renderExtent,
                       const RenderTargets& targets);
 } // Render
 

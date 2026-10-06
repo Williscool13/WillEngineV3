@@ -9,6 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 #include "core/string_id.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -17,27 +18,27 @@ class PipelineManager;
 StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph,
                                                 PipelineManager* pipelineManager,
                                                 const Core::ViewFamily& viewFamily,
-                                                Core::Array<uint32_t, 2> renderExtent,
+                                                Core::Extent2D renderExtent,
                                                 const RenderTargets& targets);
 
 StringID SetupSMAA_T2X(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets);
 
 StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    const Core::ViewFamily& viewFamily,
-                                   Core::Array<uint32_t, 2> renderExtent,
+                                   Core::Extent2D renderExtent,
                                    const RenderTargets& targets,
                                    StringID pipelineSID);
 
 StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> inputExtent,
-                                        Core::Array<uint32_t, 2> outputExtent,
+                                        Core::Extent2D inputExtent,
+                                        Core::Extent2D outputExtent,
                                         const RenderTargets& targets);
 
 /**
@@ -51,8 +52,8 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
 StringID SetupFsr2(RenderGraph& graph,
                    PipelineManager* pipelineManager,
                    const Core::ViewFamily& viewFamily,
-                   Core::Array<uint32_t, 2> renderExtent,
-                   Core::Array<uint32_t, 2> outputExtent,
+                   Core::Extent2D renderExtent,
+                   Core::Extent2D outputExtent,
                    const RenderTargets& targets,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,

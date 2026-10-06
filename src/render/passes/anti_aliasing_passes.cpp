@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "reflection_passes.h"
+#include "render/passes/reflection_passes.h"
 #include "render/render_utils.h"
 #include "render/render-view/render_view_helpers.h"
 #include "render/pipelines/pipeline_data.h"
@@ -20,13 +20,13 @@
 
 namespace Render
 {
-StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent,
+StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent,
                                                 const RenderTargets& targets)
 {
     ZoneScoped;
-    graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("smaa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture("smaa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
@@ -36,7 +36,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     edgePass.ReadSampledImage(targets.colorOutput);
     edgePass.ReadSampledImage(targets.depthCopy);
     edgePass.WriteStorageImage("smaa_edges"_sid);
-    edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    edgePass.Execute([&, pipelineManager, renderExtent,
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaEdgeDetectionPushConstant pushData{
@@ -62,8 +62,8 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaEdgeDetectionPushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -72,7 +72,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     blendPass.ReadBuffer("scene_data"_sid);
     blendPass.ReadSampledImage("smaa_edges"_sid);
     blendPass.WriteStorageImage("smaa_blend"_sid);
-    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    blendPass.Execute([&, pipelineManager, renderExtent, smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SmaaBlendWeightPushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"_sid),
             .edgeIndex = graph.GetSampledImageViewDescriptorIndex("smaa_edges"_sid),
@@ -85,8 +85,8 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaBlendWeightPushConstant), &pushData);
 
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
+        uint32_t xDispatch = (renderExtent.width + 15) / 16;
+        uint32_t yDispatch = (renderExtent.height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
@@ -96,7 +96,7 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
     neighborhoodPass.ReadSampledImage(targets.colorOutput);
     neighborhoodPass.ReadSampledImage("smaa_blend"_sid);
     neighborhoodPass.WriteStorageImage("smaa_output"_sid);
-    neighborhoodPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    neighborhoodPass.Execute([&, pipelineManager, renderExtent,
             outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaNeighborhoodBlendPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
@@ -109,8 +109,8 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaNeighborhoodBlendPushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -120,13 +120,13 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
 StringID SetupSMAA_T2X(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets)
 {
     ZoneScoped;
-    graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateVersionedTexture("smaa_t2x_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateVersionedTexture("smaa_t2x_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
 
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
@@ -136,7 +136,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     edgePass.ReadSampledImage(targets.colorOutput);
     edgePass.ReadSampledImage(targets.depthCopy);
     edgePass.WriteStorageImage("smaa_edges"_sid);
-    edgePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    edgePass.Execute([&, pipelineManager, renderExtent,
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaEdgeDetectionPushConstant pushData{
@@ -162,8 +162,8 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaEdgeDetectionPushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -172,7 +172,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     blendPass.ReadBuffer("scene_data"_sid);
     blendPass.ReadSampledImage("smaa_edges"_sid);
     blendPass.WriteStorageImage("smaa_blend"_sid);
-    blendPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    blendPass.Execute([&, pipelineManager, renderExtent, smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SmaaBlendWeightPushConstant pushData{
             .sceneData = graph.GetBufferAddress("scene_data"_sid),
             .edgeIndex = graph.GetSampledImageViewDescriptorIndex("smaa_edges"_sid),
@@ -185,8 +185,8 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaBlendWeightPushConstant), &pushData);
 
-        uint32_t xDispatch = (width + 15) / 16;
-        uint32_t yDispatch = (height + 15) / 16;
+        uint32_t xDispatch = (renderExtent.width + 15) / 16;
+        uint32_t yDispatch = (renderExtent.height + 15) / 16;
         vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
     });
 
@@ -196,7 +196,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     neighborhoodPass.ReadSampledImage(targets.colorOutput);
     neighborhoodPass.ReadSampledImage("smaa_blend"_sid);
     neighborhoodPass.WriteStorageImage("smaa_t2x_current"_sid);
-    neighborhoodPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    neighborhoodPass.Execute([&, pipelineManager, renderExtent,
             outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaNeighborhoodBlendPushConstant pushData{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
@@ -209,8 +209,8 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaNeighborhoodBlendPushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -219,7 +219,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     }
 
     // Pass 4: Temporal Resolve
-    graph.CreateTexture("smaa_t2x_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture("smaa_t2x_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     RenderPass& resolvePass = graph.AddPass("SMAA T2X Temporal Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     resolvePass.ReadBuffer("scene_data"_sid);
@@ -227,7 +227,7 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
     resolvePass.ReadSampledImage(graph.ResourceVersionID("smaa_t2x_current"_sid, 1));
     resolvePass.ReadSampledImage(targets.gbufferOne);
     resolvePass.WriteStorageImage("smaa_t2x_output"_sid);
-    resolvePass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    resolvePass.Execute([&, pipelineManager, renderExtent,
             gbufferOne = targets.gbufferOne, historyId = graph.ResourceVersionID("smaa_t2x_current"_sid, 1)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaTemporalResolvePushConstant pushData{
                 .sceneData = graph.GetBufferAddress("scene_data"_sid),
@@ -241,8 +241,8 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SmaaTemporalResolvePushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -252,12 +252,12 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
 StringID SetupTemporalAntiAliasing(RenderGraph& graph,
                                    PipelineManager* pipelineManager,
                                    const Core::ViewFamily& viewFamily,
-                                   Core::Array<uint32_t, 2> renderExtent,
+                                   Core::Extent2D renderExtent,
                                    const RenderTargets& targets,
                                    StringID pipelineSID)
 {
     ZoneScoped;
-    graph.CreateVersionedTexture("taa_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    graph.CreateVersionedTexture("taa_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
 
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
     const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
@@ -266,7 +266,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
         RenderPass& taaPass = graph.AddPass("TAA Copy Deferred"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::AntiAliasing);
         taaPass.ReadCopyImage(targets.colorOutput);
         taaPass.WriteCopyImage("taa_current"_sid);
-        taaPass.Execute([&, width = renderExtent[0], height = renderExtent[1], outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        taaPass.Execute([&, renderExtent, outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkImage drawImage = graph.GetImageHandle(outputColor);
             VkImage taaImage = graph.GetImageHandle("taa_current"_sid);
 
@@ -276,7 +276,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
             copyRegion.srcSubresource.layerCount = 1;
             copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             copyRegion.dstSubresource.layerCount = 1;
-            copyRegion.extent = {width, height, 1};
+            copyRegion.extent = {renderExtent.width, renderExtent.height, 1};
 
             VkCopyImageInfo2 copyInfo{};
             copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
@@ -293,7 +293,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     }
 
     // taa_current doubles as next frame's history, so downstream passes get their own copy written by the same dispatch
-    graph.CreateTexture("taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateTexture("taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
 
@@ -307,7 +307,7 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.ReadSampledImage(gbufferOneHistory);
     taaPass.WriteStorageImage("taa_current"_sid);
     taaPass.WriteStorageImage("taa_output"_sid);
-    taaPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1],
+    taaPass.Execute([&, pipelineManager, renderExtent,
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             gbufferOne = targets.gbufferOne, pipelineSID, taaConfig,
             depthHistory, gbufferOneHistory,
@@ -336,8 +336,8 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(TemporalAntialiasingPushConstant), &pushData);
 
-            uint32_t xDispatch = (width + 15) / 16;
-            uint32_t yDispatch = (height + 15) / 16;
+            uint32_t xDispatch = (renderExtent.width + 15) / 16;
+            uint32_t yDispatch = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -347,13 +347,13 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
 StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
                                         PipelineManager* pipelineManager,
                                         const Core::ViewFamily& viewFamily,
-                                        Core::Array<uint32_t, 2> inputExtent,
-                                        Core::Array<uint32_t, 2> outputExtent,
+                                        Core::Extent2D inputExtent,
+                                        Core::Extent2D outputExtent,
                                         const RenderTargets& targets)
 {
     ZoneScoped;
-    graph.CreateVersionedTexture("donut_taa_feedback"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
-    graph.CreateTexture("donut_taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent[0], outputExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    graph.CreateVersionedTexture("donut_taa_feedback"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    graph.CreateTexture("donut_taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     const bool bHasHistory = graph.ResourceHasVersion("donut_taa_feedback"_sid, 1);
     const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
@@ -369,9 +369,9 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     taaPass.WriteStorageImage("donut_taa_feedback"_sid);
     taaPass.WriteStorageImage("donut_taa_output"_sid);
     taaPass.Execute([&, pipelineManager, bHasHistory,
-            inWidth = static_cast<float>(inputExtent[0]), inHeight = static_cast<float>(inputExtent[1]),
-            outWidth = static_cast<float>(outputExtent[0]), outHeight = static_cast<float>(outputExtent[1]),
-            dispatchW = outputExtent[0], dispatchH = outputExtent[1],
+            inWidth = static_cast<float>(inputExtent.width), inHeight = static_cast<float>(inputExtent.height),
+            outWidth = static_cast<float>(outputExtent.width), outHeight = static_cast<float>(outputExtent.height),
+            outputExtent,
             outputColor = targets.colorOutput, gbufferOne = targets.gbufferOne, depthStencil = targets.depthCopy, donutConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             float pqC = donutConfig.maxRadiance;
             if (pqC < 1e-4f) { pqC = 1e-4f; }
@@ -408,8 +408,8 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DonutTaaPushConstant), &pushData);
 
-            uint32_t xDispatch = (dispatchW + 15) / 16;
-            uint32_t yDispatch = (dispatchH + 15) / 16;
+            uint32_t xDispatch = (outputExtent.width + 15) / 16;
+            uint32_t yDispatch = (outputExtent.height + 15) / 16;
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
@@ -427,8 +427,8 @@ static void DispatchFsr2Pass(PipelineManager* pipelineManager, VkCommandBuffer c
 StringID SetupFsr2(RenderGraph& graph,
                    PipelineManager* pipelineManager,
                    const Core::ViewFamily& viewFamily,
-                   Core::Array<uint32_t, 2> renderExtent,
-                   Core::Array<uint32_t, 2> outputExtent,
+                   Core::Extent2D renderExtent,
+                   Core::Extent2D outputExtent,
                    const RenderTargets& targets,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
@@ -443,10 +443,10 @@ StringID SetupFsr2(RenderGraph& graph,
     const StringID preOverlayColor = targets.preOverlayColor;
     const bool bHasPreOverlayColor = static_cast<bool>(preOverlayColor);
 
-    const uint32_t renderW = renderExtent[0];
-    const uint32_t renderH = renderExtent[1];
-    const uint32_t displayW = outputExtent[0];
-    const uint32_t displayH = outputExtent[1];
+    const uint32_t renderW = renderExtent.width;
+    const uint32_t renderH = renderExtent.height;
+    const uint32_t displayW = outputExtent.width;
+    const uint32_t displayH = outputExtent.height;
     const uint32_t mip4W = (renderW + 31) / 32;
     const uint32_t mip4H = (renderH + 31) / 32;
     const uint32_t mip5W = (renderW + 63) / 64;

@@ -65,7 +65,7 @@ void SetupGPUDebugBegin(RenderGraph& graph, const bool bLocked)
 #endif
 }
 
-void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, const Core::Array<uint32_t, 2> renderExtent, const StringID depthTarget, const StringID targetImage, const bool bLocked)
+void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, const Core::Extent2D renderExtent, const StringID depthTarget, const StringID targetImage, const bool bLocked)
 {
     ZoneScoped;
 #ifdef WDEBUG
@@ -108,7 +108,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
     drawPass.ReadIndirectBuffer(GPU_DEBUG_SPHERE_ARGS_BUFFER);
     drawPass.ReadBuffer(GPU_DEBUG_CUBE_INSTANCE_BUFFER);
     drawPass.ReadIndirectBuffer(GPU_DEBUG_CUBE_ARGS_BUFFER);
-    drawPass.Execute([pipelineManager, width = renderExtent[0], height = renderExtent[1], bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    drawPass.Execute([pipelineManager, renderExtent, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* linePipeline = pipelineManager->GetPipelineEntry("debug_render_gpu"_sid);
         const PipelineEntry* spherePipeline = pipelineManager->GetPipelineEntry("debug_sphere"_sid);
         const PipelineEntry* cubePipeline = pipelineManager->GetPipelineEntry("debug_cube"_sid);
@@ -116,19 +116,19 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
             return;
         }
 
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingInfo renderInfo;
         if (bHasDepth) {
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+            renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, &depthAttachment, nullptr);
         }
         else {
-            renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
+            renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, nullptr, nullptr);
         }
 
         vkCmdBeginRendering(cmd, &renderInfo);
@@ -178,7 +178,7 @@ void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, con
 #endif
 }
 
-void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily)
+void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily)
 {
     ZoneScoped;
     const Core::ProbePreviewSettings settings = viewFamily.probePreviewSettings;
@@ -191,20 +191,20 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
     pass.ReadWriteDepthAttachment(depthTarget);
     pass.ReadBuffer(SCENE_DATA_BUFFER);
     // Arena-backed span; the frame's view family outlives graph execution
-    pass.Execute([pipelineManager, settings, spheres = viewFamily.probePreviews.Data(), sphereCount = viewFamily.probePreviews.Size(), width = renderExtent[0], height = renderExtent[1], depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([pipelineManager, settings, spheres = viewFamily.probePreviews.Data(), sphereCount = viewFamily.probePreviews.Size(), renderExtent, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("probe_preview_sphere"_sid);
         if (!pipelineEntry) {
             return;
         }
 
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+        VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, &depthAttachment, nullptr);
 
         vkCmdBeginRendering(cmd, &renderInfo);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);

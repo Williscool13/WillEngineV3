@@ -9,6 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 #include "render/shaders/ddgi_interop.h"
+#include "core/types/extent.h"
 
 namespace Core
 {
@@ -24,7 +25,7 @@ class PipelineManager;
 void SetupReSTIRPasses(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
@@ -39,7 +40,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,
                                     const Core::ViewFamily& viewFamily,
-                                    Core::Array<uint32_t, 2> renderExtent,
+                                    Core::Extent2D renderExtent,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     uint64_t frameNumber,
@@ -51,7 +52,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
                                const Core::ViewFamily& viewFamily,
-                               Core::Array<uint32_t, 2> renderExtent,
+                               Core::Extent2D renderExtent,
                                const RenderTargets& targets,
                                uint32_t sceneIndex,
                                uint32_t outputMode,

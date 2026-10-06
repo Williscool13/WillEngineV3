@@ -10,6 +10,7 @@
 #include "core/containers/array.h"
 #include "core/string_id.h"
 #include "render/renderer_types.h"
+#include "core/types/extent.h"
 
 namespace Core
 {
@@ -29,9 +30,9 @@ struct PostProcessContext
     const Core::PostProcessConfiguration& config;
     const RenderTargets& targets;
     const Core::ViewFamily& view;
-    Core::Array<uint32_t, 2> extent;
-    Core::Array<uint32_t, 2> preAaExtent;
-    Core::Array<uint32_t, 2> displayExtent;
+    Core::Extent2D extent;
+    Core::Extent2D preAaExtent;
+    Core::Extent2D displayExtent;
     float deltaTime;
     float preExposure;
     uint64_t frameNumber;
@@ -72,8 +73,8 @@ StringID PPFinalize(PostProcessContext& ctx, StringID input);
 StringID PPCompose(PostProcessContext& ctx, StringID input);
 // Gameplay screen cover (fade/iris/wipe/dissolve/letterbox); skipped entirely when inactive.
 // Outside the chain above because ScreenFadeState::bDrawOverUI decides whether it runs before or after UI compositing.
-StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Array<uint32_t, 2> extent, StringID input);
-StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Core::PostProcessConfiguration& config, const RenderTargets& targets, Core::Array<uint32_t, 2> extent, uint64_t frameNumber, StringID input);
+StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Extent2D extent, StringID input);
+StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Core::PostProcessConfiguration& config, const RenderTargets& targets, Core::Extent2D extent, uint64_t frameNumber, StringID input);
 } // Render
 
 #endif //WILLENGINEV3_POST_PROCESSING_H

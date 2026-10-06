@@ -12,6 +12,7 @@
 #include "render/types/render_types.h"
 #include "render/shaders/restir_interop.h"
 #include "render/interface/render_interface.h"
+#include "core/types/extent.h"
 
 namespace Core
 {
@@ -42,7 +43,7 @@ inline float ComputeLightSpecularFromReflectionsMax(const Core::ReflectionConfig
 
 void SetupReflectionTracePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
-                              Core::Array<uint32_t, 2> renderExtent,
+                              Core::Extent2D renderExtent,
                               const RenderTargets& targets,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,
@@ -51,7 +52,7 @@ void SetupReflectionTracePass(RenderGraph& graph,
 /** Hits carry the REFLECTION_INSTANCE_NONE sentinel. */
 void SetupSSRTracePass(RenderGraph& graph,
                        PipelineManager* pipelineManager,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex,
                        uint64_t frameNumber,
@@ -62,7 +63,7 @@ void SetupSSRTracePass(RenderGraph& graph,
 void SetupReflectionShadePass(RenderGraph& graph,
                               PipelineManager* pipelineManager,
                               const Core::ViewFamily& viewFamily,
-                              Core::Array<uint32_t, 2> renderExtent,
+                              Core::Extent2D renderExtent,
                               const RenderTargets& targets,
                               uint32_t sceneIndex,
                               uint64_t frameNumber,

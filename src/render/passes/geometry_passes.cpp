@@ -23,7 +23,7 @@ void SetupGeometryPass(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        const SceneBufferSizes& bufferSizes,
                        const Core::DebugRenderParams& debug,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex)
 {
@@ -580,12 +580,12 @@ void SetupGeometryPass(RenderGraph& graph,
         instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
         instancedMeshShading.ReadBuffer(visibleMeshlets);
         instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
-        instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
+        instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, renderExtent,
                 bWireframe = debug.bWireframe,
                 visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+                VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
-                VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+                VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
                 vkCmdSetPolygonModeEXT(cmd, bWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL);
 
@@ -596,9 +596,9 @@ void SetupGeometryPass(RenderGraph& graph,
 #if WILL_EDITOR
                 auto stableIdAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(stableId), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
                 const VkRenderingAttachmentInfo colorAttachments[] = {visibilityAttachment, stableIdAttachment};
-                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
+                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, colorAttachments, 2, &depthAttachment, &stencilAttachment);
 #else
-                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({width, height}, &visibilityAttachment, 1, &depthAttachment, &stencilAttachment);
+                const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &visibilityAttachment, 1, &depthAttachment, &stencilAttachment);
 #endif
 
                 vkCmdBeginRendering(cmd, &renderInfo);
@@ -666,7 +666,7 @@ void SetupGeometryPass(RenderGraph& graph,
 void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
+                                  Core::Extent2D renderExtent,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   Core::BucketDebugMode bucketDebugMode)
@@ -675,9 +675,9 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
     if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
 
-    const uint32_t tilesX = (renderExtent[0] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
-    const uint32_t tilesY = (renderExtent[1] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
-    const uint32_t tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]);
+    const uint32_t tilesX = (renderExtent.width + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
+    const uint32_t tilesY = (renderExtent.height + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
+    const uint32_t tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height);
     const uint32_t lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size());
     graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialCount) * tileCapacity * sizeof(uint32_t));
     graph.CreateBuffer(LIGHTING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(lightingCount) * tileCapacity * sizeof(uint32_t));
@@ -700,7 +700,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
     if (bShadeDebug || bLightDebug) {
         boundsPass.WriteBuffer(BUCKET_TILE_BITS_BUFFER);
     }
-    boundsPass.Execute([&, pipelineManager, width = renderExtent[0], height = renderExtent[1], tilesX, tilesY, tileCapacity, bShadeDebug, bLightDebug,
+    boundsPass.Execute([&, pipelineManager, renderExtent, tilesX, tilesY, tileCapacity, bShadeDebug, bLightDebug,
             visibility = targets.visibility](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ShadeBucketingPushConstant pc{
                 .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
@@ -711,7 +711,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
                 .lightTileListBuffer = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER),
                 .shadeTileBitsBuffer = bShadeDebug ? graph.GetBufferAddress(BUCKET_TILE_BITS_BUFFER) : 0,
                 .lightTileBitsBuffer = bLightDebug ? graph.GetBufferAddress(BUCKET_TILE_BITS_BUFFER) : 0,
-                .extents = {width, height},
+                .extents = {renderExtent.width, renderExtent.height},
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                 .tileCapacity = tileCapacity,
             };
@@ -750,7 +750,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 const Core::ViewFamily& viewFamily,
-                                Core::Array<uint32_t, 2> renderExtent,
+                                Core::Extent2D renderExtent,
                                 const RenderTargets& targets,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena)
@@ -823,8 +823,8 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
                     .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                     .tileListBuffer = tileListAddress,
-                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
-                    .extents = {renderExtent[0], renderExtent[1]},
+                    .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
+                    .extents = {renderExtent.width, renderExtent.height},
                     .materialIndex = entry.materialIndex,
                     .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                     .gbufferOneIndex = graph.GetStorageImageViewDescriptorIndex(gbufferOne),
@@ -840,7 +840,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 void SetupBucketDebugPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
+                          Core::Extent2D renderExtent,
                           const RenderTargets& targets,
                           Core::BucketDebugMode bucketDebugMode)
 {
@@ -853,9 +853,9 @@ void SetupBucketDebugPass(RenderGraph& graph,
     }
     const bool bLighting = bucketDebugMode == Core::BucketDebugMode::LightBuckets || bucketDebugMode == Core::BucketDebugMode::LightHeat;
     const bool bHeat = bucketDebugMode == Core::BucketDebugMode::ShadeHeat || bucketDebugMode == Core::BucketDebugMode::LightHeat;
-    const uint32_t tilesX = (renderExtent[0] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
-    const uint32_t tilesY = (renderExtent[1] + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
-    graph.CreateTexture(BUCKET_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+    const uint32_t tilesX = (renderExtent.width + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
+    const uint32_t tilesY = (renderExtent.height + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
+    graph.CreateTexture(BUCKET_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
 
     RenderPass& pass = graph.AddPass("Bucket Debug"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
     pass.ReadSampledImage(targets.visibility);
@@ -870,7 +870,7 @@ void SetupBucketDebugPass(RenderGraph& graph,
             .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
             .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
             .tileBitsBuffer = graph.GetBufferAddress(BUCKET_TILE_BITS_BUFFER),
-            .extents = {renderExtent[0], renderExtent[1]},
+            .extents = {renderExtent.width, renderExtent.height},
             .tilesX = tilesX,
             .bLighting = bLighting ? 1u : 0u,
             .bHeat = bHeat ? 1u : 0u,

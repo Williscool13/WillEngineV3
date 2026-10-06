@@ -75,6 +75,7 @@ add_library(core STATIC
         memory/concurrent_queue_traits.cpp
         memory/concurrent_queue_traits.h
 
+        types/extent.h
         types/math.h
         types/transform.h
 

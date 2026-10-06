@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -19,12 +20,12 @@ inline const StringID HIZ_DEBUG_TARGET = "hiz_debug_target"_sid;
 /**
  * Min-reduce depth pyramid from the depth attachment (call after the phase-1 draw). Mip 0 is pow2-down of half render extent.
  */
-void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets);
+void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets);
 
 /**
  * Writes the chosen pyramid mip nearest-upscaled to hiz_debug_target for the debug visualizer.
  */
-void SetupHiZDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, int32_t mip);
+void SetupHiZDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, int32_t mip);
 } // Render
 
 #endif //WILL_ENGINE_OCCLUSION_PASSES_H

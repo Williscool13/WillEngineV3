@@ -9,6 +9,7 @@
 #include "render/interface/render_interface.h"
 #include "render/post-processing/post_processing.h"
 #include "render/types/render_types.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -61,10 +62,10 @@ struct FrameContext
     Core::ViewFamily& viewFamily;
     uint32_t frameIndex{0};
 
-    Core::Array<uint32_t, 2> renderExtent{};
-    Core::Array<uint32_t, 2> outputExtent{};
+    Core::Extent2D renderExtent{};
+    Core::Extent2D outputExtent{};
     // Extent after AA. Differs from renderExtent only for upscaling AA
-    Core::Array<uint32_t, 2> postAaExtent{};
+    Core::Extent2D postAaExtent{};
     float displayAspect{1.0f};
     PaniniParams displayPanini{};
 

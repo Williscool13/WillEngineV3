@@ -9,6 +9,7 @@
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
 #include "render/interface/render_params.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -19,14 +20,14 @@ void SetupGeometryPass(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        const SceneBufferSizes& bufferSizes,
                        const Core::DebugRenderParams& debug,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex);
 
 void SetupVisibilityBucketingPass(RenderGraph& graph,
                                   PipelineManager* pipelineManager,
                                   const Core::ViewFamily& viewFamily,
-                                  Core::Array<uint32_t, 2> renderExtent,
+                                  Core::Extent2D renderExtent,
                                   const RenderTargets& targets,
                                   uint32_t sceneIndex,
                                   Core::BucketDebugMode bucketDebugMode);
@@ -34,7 +35,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 const Core::ViewFamily& viewFamily,
-                                Core::Array<uint32_t, 2> renderExtent,
+                                Core::Extent2D renderExtent,
                                 const RenderTargets& targets,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena);
@@ -46,7 +47,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 void SetupBucketDebugPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
-                          Core::Array<uint32_t, 2> renderExtent,
+                          Core::Extent2D renderExtent,
                           const RenderTargets& targets,
                           Core::BucketDebugMode bucketDebugMode);
 } // Render

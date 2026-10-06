@@ -26,6 +26,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "core/types/extent.h"
 
 namespace Render
 {
@@ -34,9 +35,9 @@ class PipelineManager;
 StringID SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
-                             Core::Array<uint32_t, 2> renderExtent,
-                             Core::Array<uint32_t, 2> preAaExtent,
-                             Core::Array<uint32_t, 2> displayExtent,
+                             Core::Extent2D renderExtent,
+                             Core::Extent2D preAaExtent,
+                             Core::Extent2D displayExtent,
                              const RenderTargets& targets,
                              float deltaTime,
                              uint64_t frameNumber,

@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "core/types/extent.h"
 
 namespace Core
 {
@@ -31,10 +32,10 @@ void SetupGPUDebugBegin(RenderGraph& graph, bool bLocked);
  * @param targetImage
  * @param bLocked
  */
-void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, bool bLocked);
+void SetupGPUDebugDraw(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, bool bLocked);
 
 /** Draws a cubemap-shaded preview sphere (roughness-mip or irradiance) at every gathered reflection probe's capture position, into the lit target with depth test. No-op when the request is inactive. */
-void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily);
+void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, const Core::ViewFamily& viewFamily);
 
 /**
  * Emits the froxel cluster grid (FrustumBinning) AABBs as world-space wireframe boxes into the GPU debug segment buffer, colored by depth slice.

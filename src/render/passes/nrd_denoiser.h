@@ -15,6 +15,7 @@
 #include "render/renderer_types.h"
 #include "render/interface/render_interface.h"
 #include "render/vulkan/vk_resources.h"
+#include "core/types/extent.h"
 
 namespace Core { struct ViewFamily; }
 
@@ -47,7 +48,7 @@ public:
      */
     bool Prepare(RenderGraph& graph,
                  const Core::ViewFamily& viewFamily,
-                 Core::Array<uint32_t, 2> renderExtent,
+                 Core::Extent2D renderExtent,
                  NrdBackend backend,
                  const Core::RELAXParams& relaxParams,
                  const Core::ReBLURParams& reblurParams,
@@ -102,11 +103,11 @@ private:
 
     bool EnsureInstance();
 
-    void EnsureResources(Core::Array<uint32_t, 2> renderExtent, uint64_t frameNumber);
+    void EnsureResources(Core::Extent2D renderExtent, uint64_t frameNumber);
 
     void ReleaseRetired(uint64_t frameNumber, bool bForce);
 
-    void StageSettings(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset);
+    void StageSettings(const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const Core::RELAXParams& relaxParams, const Core::ReBLURParams& reblurParams, uint64_t frameNumber, float renderFps, bool bHistoryReset);
 
     void RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex);
 
@@ -158,10 +159,10 @@ private:
 };
 
 /** ReBLUR backend packs YCoCg + normalized hitT. */
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure);
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure);
 
 /** ReBLUR backend converts YCoCg back to linear. */
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure);
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure);
 } // Render
 
 #endif //WILL_ENGINE_NRD_DENOISER_H

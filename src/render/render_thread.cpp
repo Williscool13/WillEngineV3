@@ -2,7 +2,7 @@
 // Created by William on 2025-12-09.
 //
 
-#include "render_thread.h"
+#include "render/render_thread.h"
 
 #include <cstring>
 #include <chrono>
@@ -12,25 +12,25 @@
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
-#include "renderer.h"
-#include "render_utils.h"
-#include "gpu_dispatcher.h"
+#include "render/renderer.h"
+#include "render/render_utils.h"
+#include "render/gpu_dispatcher.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
-#include "resource_manager.h"
+#include "render/resource_manager.h"
 #include "render/vulkan/vk_swapchain.h"
 #include "render/vulkan/vk_utils.h"
 #include "engine/will_engine.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
-#include "render-graph/render_graph.h"
-#include "render-graph/render_pass.h"
-#include "shaders/constants_interop.h"
-#include "shaders/push_constant_interop.h"
-#include "shaders/flags_interop.h"
+#include "render/render-graph/render_graph.h"
+#include "render/render-graph/render_pass.h"
+#include "render/shaders/constants_interop.h"
+#include "render/shaders/push_constant_interop.h"
+#include "render/shaders/flags_interop.h"
 
-#include "types/render_types.h"
+#include "render/types/render_types.h"
 #include "render/vulkan/vk_imgui_wrapper.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "core/containers/inline_string.h"
@@ -40,13 +40,13 @@
 #include "core/time/frame_stamp.h"
 #include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
-#include "pipelines/pipeline_manager.h"
-#include "render-view/render_view_helpers.h"
-#include "post-processing/post_processing.h"
+#include "render/pipelines/pipeline_manager.h"
+#include "render/render-view/render_view_helpers.h"
+#include "render/post-processing/post_processing.h"
 
 #if WILL_EDITOR
 #include "editor/renderer/debug_readback_buffer.h"
-#include "shaders/instancing_interop.h"
+#include "render/shaders/instancing_interop.h"
 #endif
 
 
@@ -442,7 +442,7 @@ void RenderThread::RecordPresent(VkCommandBuffer cmd, uint32_t swapchainImageInd
 
     const ResourceDimensions& srcDims = renderGraph->GetImageDimensions(presentSourceTexture);
     const Core::Array<uint32_t, 2> vpOffset = renderExtents->GetViewportOffset();
-    const Core::Array<uint32_t, 2> vpExtent = renderExtents->GetViewportExtent();
+    const Core::Extent2D vpExtent = renderExtents->GetViewportExtent();
 
     VkImageBlit2 blitRegion{};
     blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
@@ -452,8 +452,8 @@ void RenderThread::RecordPresent(VkCommandBuffer cmd, uint32_t swapchainImageInd
     blitRegion.dstSubresource.layerCount = 1;
     blitRegion.srcOffsets[0] = {0, 0, 0};
     blitRegion.srcOffsets[1] = {static_cast<int32_t>(srcDims.width), static_cast<int32_t>(srcDims.height), 1};
-    blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent[1]), 0};
-    blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent[0]), static_cast<int32_t>(vpOffset[1]), 1};
+    blitRegion.dstOffsets[0] = {static_cast<int32_t>(vpOffset[0]), static_cast<int32_t>(vpOffset[1] + vpExtent.height), 0};
+    blitRegion.dstOffsets[1] = {static_cast<int32_t>(vpOffset[0] + vpExtent.width), static_cast<int32_t>(vpOffset[1]), 1};
 
     VkBlitImageInfo2 blitInfo{};
     blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
@@ -820,7 +820,7 @@ void RenderThread::RegisterDebugReadbacks()
 }
 #endif
 
-void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const
+void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Extent2D renderExtent, float renderDeltaTime) const
 {
     ZoneScoped;
     // Scene Data
@@ -1013,7 +1013,7 @@ static const DebugCircleTable& GetDebugCircleTable()
 }
 #endif
 
-void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const
+void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const
 {
 #ifdef WDEBUG
     // Worst-case segment counts for buffer allocation
@@ -1225,20 +1225,20 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     }
     debugDrawPass.ReadBuffer(SCENE_DATA_BUFFER);
     debugDrawPass.ReadBuffer("debug_segment_buffer"_sid);
-    debugDrawPass.Execute([&, width = renderExtent[0], height = renderExtent[1], totalLineSegments, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        VkViewport viewport = VkHelpers::GenerateViewport(width, height);
+    debugDrawPass.Execute([&, renderExtent, totalLineSegments, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(width, height);
+        VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(targetImage), nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         VkRenderingInfo renderInfo;
         if (bHasDepth) {
             const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(depthTarget), nullptr, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-            renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, &depthAttachment, nullptr);
+            renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, &depthAttachment, nullptr);
         }
         else {
-            renderInfo = VkHelpers::RenderingInfo({width, height}, &colorAttachment, 1, nullptr, nullptr);
+            renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, nullptr, nullptr);
         }
 
         vkCmdBeginRendering(cmd, &renderInfo);

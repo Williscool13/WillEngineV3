@@ -2,7 +2,7 @@
 // Created by William on 2026-10-05.
 //
 
-#include "render_thread.h"
+#include "render/render_thread.h"
 
 #include <cstring>
 #include <chrono>
@@ -10,63 +10,63 @@
 #include <glm/gtc/packing.hpp>
 #include <tracy/Tracy.hpp>
 
-#include "record_frame_context.h"
-#include "renderer.h"
-#include "render_utils.h"
-#include "gpu_dispatcher.h"
+#include "render/record_frame_context.h"
+#include "render/renderer.h"
+#include "render/render_utils.h"
+#include "render/gpu_dispatcher.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_render_extents.h"
 #include "render/vulkan/vk_utils.h"
-#include "resource_manager.h"
+#include "render/resource_manager.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
-#include "render-graph/render_graph.h"
-#include "render-graph/render_pass.h"
-#include "shaders/constants_interop.h"
-#include "shaders/push_constant_interop.h"
-#include "shaders/flags_interop.h"
-#include "types/render_types.h"
+#include "render/render-graph/render_graph.h"
+#include "render/render-graph/render_pass.h"
+#include "render/shaders/constants_interop.h"
+#include "render/shaders/push_constant_interop.h"
+#include "render/shaders/flags_interop.h"
+#include "render/types/render_types.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/span.h"
 #include "core/string_id.h"
 #include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
-#include "pipelines/pipeline_manager.h"
-#include "render-view/render_view_helpers.h"
-#include "post-processing/post_processing.h"
-#include "vulkan/vk_config.h"
+#include "render/pipelines/pipeline_manager.h"
+#include "render/render-view/render_view_helpers.h"
+#include "render/post-processing/post_processing.h"
+#include "render/vulkan/vk_config.h"
 
 #if WILL_EDITOR
 #include "editor/renderer/debug_readback_buffer.h"
-#include "shaders/instancing_interop.h"
+#include "render/shaders/instancing_interop.h"
 #endif
 
 namespace Render
 {
-static bool DisplayUvToRenderPixel(float u, float v, const PaniniParams& panini, float aspect, Core::Array<uint32_t, 2> renderExtent, Core::Array<uint32_t, 2>& outPixel)
+static bool DisplayUvToRenderPixel(float u, float v, const PaniniParams& panini, float aspect, Core::Extent2D renderExtent, Core::Array<uint32_t, 2>& outPixel)
 {
     if (!PaniniDisplayToSourceUv(panini, aspect, u, v)) { return false; }
-    outPixel[0] = std::min(renderExtent[0] - 1, static_cast<uint32_t>(u * static_cast<float>(renderExtent[0])));
-    outPixel[1] = std::min(renderExtent[1] - 1, static_cast<uint32_t>(v * static_cast<float>(renderExtent[1])));
+    outPixel[0] = std::min(renderExtent.width - 1, static_cast<uint32_t>(u * static_cast<float>(renderExtent.width)));
+    outPixel[1] = std::min(renderExtent.height - 1, static_cast<uint32_t>(v * static_cast<float>(renderExtent.height)));
     return true;
 }
 
-static void AddColorCopyPass(RenderGraph& graph, PipelineManager* pipelineManager, StringID passName, StringID src, StringID dst, Core::Array<uint32_t, 2> extent)
+static void AddColorCopyPass(RenderGraph& graph, PipelineManager* pipelineManager, StringID passName, StringID src, StringID dst, Core::Extent2D extent)
 {
     auto& copyPass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
     copyPass.ReadSampledImage(src);
     copyPass.WriteStorageImage(dst);
-    copyPass.Execute([src, dst, w = extent[0], h = extent[1], pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    copyPass.Execute([src, dst, extent, pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("color_copy"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
         ColorCopyPushConstant pc{
             .srcIndex = graph.GetSampledImageViewDescriptorIndex(src),
             .dstIndex = graph.GetStorageImageViewDescriptorIndex(dst),
-            .extents = {w, h},
+            .extents = {extent.width, extent.height},
         };
         vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+        vkCmdDispatch(cmd, (extent.width + 7) / 8, (extent.height + 7) / 8, 1);
     });
 }
 
@@ -225,7 +225,7 @@ FrameContext RenderThread::BeginFrame(uint32_t frameIndex, Core::FrameBuffer& fr
         .outputExtent = renderExtents->GetViewportExtent(),
     };
     ctx.postAaExtent = ctx.renderExtent;
-    ctx.displayAspect = static_cast<float>(ctx.outputExtent[0]) / static_cast<float>(ctx.outputExtent[1]);
+    ctx.displayAspect = static_cast<float>(ctx.outputExtent.width) / static_cast<float>(ctx.outputExtent.height);
     ctx.displayPanini = viewFamily.debugResourceName.IsEmpty()
         ? ComputePaniniParams(viewFamily.postProcessConfig, viewFamily.mainView.currentViewData.fovRadians, ctx.displayAspect)
         : PaniniParams{};
@@ -295,7 +295,7 @@ FrameContext RenderThread::BeginFrame(uint32_t frameIndex, Core::FrameBuffer& fr
 void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCommandBuffer asyncCmd)
 {
     Core::ViewFamily& viewFamily = ctx.viewFamily;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
 
     //
     {
@@ -382,37 +382,37 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
     };
     const RenderTargets& targets = ctx.targets;
 
-    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_VISIBILITY_EMPTY, true);
+    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_VISIBILITY_EMPTY, true);
     const bool bGeometry = ctx.bHasScene;
     auto declareGeometryTarget = [&](StringID name, const TextureInfo& info, std::optional<VkClearValue> clear) {
         if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, clear); }
         else if (renderGraph->ResourceHasVersion(name, 0)) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::NoShiftReadOnly, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
         else { renderGraph->CreateTexture(name, info, clear, true); }
     };
-    declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY);
-    renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.shadowOriginOffset, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_DEPTH_FAR, true);
-    declareGeometryTarget(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent[0], renderExtent[1], 1}, std::nullopt);
+    declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY);
+    renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.shadowOriginOffset, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_DEPTH_FAR, true);
+    declareGeometryTarget(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent.width, renderExtent.height, 1}, std::nullopt);
 #if WILL_EDITOR
-    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 #endif
 
     if (ctx.needs.bLitHistory) {
-        renderGraph->CreateVersionedTexture(LIT_COLOR_HISTORY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        renderGraph->CreateVersionedTexture(LIT_COLOR_HISTORY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         if (ctx.features.bGIGather && ctx.path == FrameRenderingPath::ReSTIR) {
-            renderGraph->CreateTexture(RESTIR_DIFFUSE_RATIO, TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-            renderGraph->CreateVersionedTexture(GI_SCREEN_DIFFUSE, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            renderGraph->CreateTexture(RESTIR_DIFFUSE_RATIO, TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
+            renderGraph->CreateVersionedTexture(GI_SCREEN_DIFFUSE, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         }
     }
     // Without fog the lit history already holds the pre-overlay color
     if (ctx.needs.bPreOverlayColor) {
         ctx.targets.preOverlayColor = ctx.needs.bLitHistory && !ctx.features.bVolumetricFog ? LIT_COLOR_HISTORY : LIT_COLOR_PREOVERLAY;
         if (ctx.targets.preOverlayColor == LIT_COLOR_PREOVERLAY) {
-            renderGraph->CreateTexture(LIT_COLOR_PREOVERLAY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, std::nullopt, true);
+            renderGraph->CreateTexture(LIT_COLOR_PREOVERLAY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, std::nullopt, true);
         }
     }
 
@@ -429,7 +429,7 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     const RenderTargets& targets = ctx.targets;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
 
     if (frameBuffer.debug.bEnableGPUDebug) {
         SetupGPUDebugBegin(*renderGraph, frameBuffer.debug.bLockGPUDebug);
@@ -472,16 +472,16 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
         copyPass.ReadSampledImage(targets.depthStencil);
         copyPass.WriteStorageImage(targets.depthCopy);
         copyPass.Execute([depth = targets.depthStencil, depthCopy = targets.depthCopy,
-                w = renderExtent[0], h = renderExtent[1], &pipelineManager = pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                renderExtent, &pipelineManager = pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("depth_copy"_sid);
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
                 DepthCopyPushConstant pc{
                     .depthIndex = graph.GetDepthOnlySampledImageViewDescriptorIndex(depth),
                     .outputIndex = graph.GetStorageImageViewDescriptorIndex(depthCopy),
-                    .extents = {w, h},
+                    .extents = {renderExtent.width, renderExtent.height},
                 };
                 vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+                vkCmdDispatch(cmd, (renderExtent.width + 7) / 8, (renderExtent.height + 7) / 8, 1);
             });
     }
 
@@ -615,7 +615,7 @@ void RenderThread::RecordLightingDefault(FrameContext& ctx)
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     const RenderTargets& targets = ctx.targets;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
 
     if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bClusterGridDebug && !frameBuffer.debug.bLockGPUDebug) {
         constexpr float kDebugClusterZFar = 500.0f;
@@ -637,7 +637,7 @@ void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     const RenderTargets& targets = ctx.targets;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
     const bool bDDGIApply = ctx.features.DDGIApplied();
     const uint32_t giGatherMode = ctx.giGatherMode;
 
@@ -703,9 +703,9 @@ void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
 void RenderThread::RecordSunShadows(FrameContext& ctx)
 {
     Core::ViewFamily& viewFamily = ctx.viewFamily;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
     const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
-    const Core::Array<uint32_t, 2> sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Array<uint32_t, 2>{renderExtent[0] / 2, renderExtent[1] / 2} : renderExtent;
+    const Core::Extent2D sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Extent2D{renderExtent.width / 2, renderExtent.height / 2} : renderExtent;
     SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, ctx.targets, 0, frameNumber, sunShadowPixelScale);
     SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, 0, frameNumber);
     SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, 0);
@@ -717,7 +717,7 @@ void RenderThread::RecordPostLighting(FrameContext& ctx)
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     const RenderTargets& targets = ctx.targets;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
 
     if (ctx.needs.bLitHistory) {
         AddColorCopyPass(*renderGraph, pipelineManager, "Lit Color Snapshot"_sid, targets.colorOutput, LIT_COLOR_HISTORY, renderExtent);
@@ -760,8 +760,8 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     RenderTargets& targets = ctx.targets;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
-    const Core::Array<uint32_t, 2> outputExtent = ctx.outputExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
+    const Core::Extent2D outputExtent = ctx.outputExtent;
 
     if (ctx.path != FrameRenderingPath::GroundTruth) {
         targets.colorOutput = PPDepthOfField(*renderGraph, pipelineManager, viewFamily.postProcessConfig, targets, renderExtent, frameNumber, targets.colorOutput);
@@ -796,7 +796,7 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
         RecordProbeCapture(ctx);
     }
 
-    const Core::Array<uint32_t, 2> postAaExtent = ctx.postAaExtent;
+    const Core::Extent2D postAaExtent = ctx.postAaExtent;
     targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber, preExposure);
 
     if (!viewFamily.screenFade.bDrawOverUI) {
@@ -812,8 +812,8 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
 
 void RenderThread::RecordProbeCapture(FrameContext& ctx)
 {
-    const Core::Array<uint32_t, 2> postAaExtent = ctx.postAaExtent;
-    const uint32_t minSquare = std::min(postAaExtent[0], postAaExtent[1]) & ~1u;
+    const Core::Extent2D postAaExtent = ctx.postAaExtent;
+    const uint32_t minSquare = std::min(postAaExtent.width, postAaExtent.height) & ~1u;
     uint32_t captureSquare = ctx.frameBuffer.probeCaptureCropSize > 0 ? std::min(ctx.frameBuffer.probeCaptureCropSize, minSquare) : minSquare;
     if (captureSquare < 2) {
         return;
@@ -825,13 +825,13 @@ void RenderThread::RecordProbeCapture(FrameContext& ctx)
     auto& probeCaptureBlitPass = renderGraph->AddPass("Probe Capture Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
     probeCaptureBlitPass.ReadBlitImage(ctx.targets.colorOutput);
     probeCaptureBlitPass.WriteBlitImage("probe_capture_intermediate"_sid);
-    probeCaptureBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, s = captureSquare, w = postAaExtent[0], h = postAaExtent[1]](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    probeCaptureBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, s = captureSquare, postAaExtent](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkImageBlit2 blitRegion{};
         blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
         blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        blitRegion.srcOffsets[0] = {static_cast<int32_t>((w - s) / 2), static_cast<int32_t>((h - s) / 2), 0};
-        blitRegion.srcOffsets[1] = {static_cast<int32_t>((w + s) / 2), static_cast<int32_t>((h + s) / 2), 1};
+        blitRegion.srcOffsets[0] = {static_cast<int32_t>((postAaExtent.width - s) / 2), static_cast<int32_t>((postAaExtent.height - s) / 2), 0};
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>((postAaExtent.width + s) / 2), static_cast<int32_t>((postAaExtent.height + s) / 2), 1};
         blitRegion.dstOffsets[0] = {0, 0, 0};
         blitRegion.dstOffsets[1] = {static_cast<int32_t>(s), static_cast<int32_t>(s), 1};
 
@@ -875,14 +875,14 @@ void RenderThread::RecordDiagnostics(FrameContext& ctx)
 {
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     const RenderTargets& targets = ctx.targets;
-    const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
-    const Core::Array<uint32_t, 2> outputExtent = ctx.outputExtent;
+    const Core::Extent2D renderExtent = ctx.renderExtent;
+    const Core::Extent2D outputExtent = ctx.outputExtent;
 
     Core::Array<uint32_t, 2> cursorPixel{};
-    if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent[0] &&
-        frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1] &&
-        DisplayUvToRenderPixel((static_cast<float>(frameBuffer.currentMousePosition[0]) + 0.5f) / static_cast<float>(outputExtent[0]),
-                               (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent[1]),
+    if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent.width &&
+        frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent.height &&
+        DisplayUvToRenderPixel((static_cast<float>(frameBuffer.currentMousePosition[0]) + 0.5f) / static_cast<float>(outputExtent.width),
+                               (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent.height),
                                ctx.displayPanini, ctx.displayAspect, renderExtent, cursorPixel)) {
         debugCursorReadback.pixel[0] = cursorPixel[0];
         debugCursorReadback.pixel[1] = cursorPixel[1];
@@ -900,7 +900,7 @@ void RenderThread::RecordDiagnostics(FrameContext& ctx)
     }
 
     if (frameBuffer.debug.pickRequestId != 0u) {
-        Core::Array<uint32_t, 2> pickPixel = renderExtent;
+        Core::Array<uint32_t, 2> pickPixel{renderExtent.width, renderExtent.height};
         DisplayUvToRenderPixel(std::clamp(frameBuffer.debug.pickU, 0.0f, 1.0f), 1.0f - std::clamp(frameBuffer.debug.pickV, 0.0f, 1.0f), ctx.displayPanini, ctx.displayAspect, renderExtent, pickPixel);
         SetupDebugPickPixelPass(*renderGraph, pipelineManager, 0, targets.visibility, targets.depthCopy, renderExtent, pickPixel, frameBuffer.debug.pickRequestId);
     }
@@ -1041,8 +1041,8 @@ void RenderThread::RecordDebugVisualize(FrameContext& ctx)
             .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_temporal"_sid),
             .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_spatial"_sid),
             .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(renderGraph->ResourceVersionID("restir_reservoir_history"_sid, 1)),
-            .srcExtent = {ctx.renderExtent[0], ctx.renderExtent[1]},
-            .dstExtent = {ctx.postAaExtent[0], ctx.postAaExtent[1]},
+            .srcExtent = {ctx.renderExtent.width, ctx.renderExtent.height},
+            .dstExtent = {ctx.postAaExtent.width, ctx.postAaExtent.height},
             .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
             .textureArrayIndex = textureArrayIndex,
             .textureIndexInArray = textureIndexInArray,
@@ -1062,8 +1062,8 @@ void RenderThread::RecordDebugVisualize(FrameContext& ctx)
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize"_sid);
         vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(_cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-        uint32_t xDispatch = (ctx.postAaExtent[0] + 15) / 16;
-        uint32_t yDispatch = (ctx.postAaExtent[1] + 15) / 16;
+        uint32_t xDispatch = (ctx.postAaExtent.width + 15) / 16;
+        uint32_t yDispatch = (ctx.postAaExtent.height + 15) / 16;
         vkCmdDispatch(_cmd, xDispatch, yDispatch, 1);
     });
 }
@@ -1084,12 +1084,12 @@ void RenderThread::RecordFrameExport(FrameContext& ctx)
     }
 
 #if WILL_EDITOR
-    const Core::Array<uint32_t, 2> outputExtent = ctx.outputExtent;
-    if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent[0] &&
-        frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent[1]) {
+    const Core::Extent2D outputExtent = ctx.outputExtent;
+    if (frameBuffer.currentMousePosition[0] > 0 && frameBuffer.currentMousePosition[0] < outputExtent.width &&
+        frameBuffer.currentMousePosition[1] > 0 && frameBuffer.currentMousePosition[1] < outputExtent.height) {
         Core::Array<uint32_t, 2> mousePixel{};
-        const bool bMouseOnSource = DisplayUvToRenderPixel((static_cast<float>(frameBuffer.currentMousePosition[0]) + 0.5f) / static_cast<float>(outputExtent[0]),
-                                                           (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent[1]),
+        const bool bMouseOnSource = DisplayUvToRenderPixel((static_cast<float>(frameBuffer.currentMousePosition[0]) + 0.5f) / static_cast<float>(outputExtent.width),
+                                                           (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent.height),
                                                            ctx.displayPanini, ctx.displayAspect, ctx.renderExtent, mousePixel);
         RenderPass& copyStableId = renderGraph->AddPass("Copy Stable ID"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
         copyStableId.ReadCopyImage("stable_id"_sid);
@@ -1142,24 +1142,24 @@ void RenderThread::RecordFrameExport(FrameContext& ctx)
 
 void RenderThread::RecordScreenshot(FrameContext& ctx)
 {
-    const Core::Array<uint32_t, 2> postAaExtent = ctx.postAaExtent;
-    screenCapture->PrepareScreenshotResources(postAaExtent[0], postAaExtent[1]);
+    const Core::Extent2D postAaExtent = ctx.postAaExtent;
+    screenCapture->PrepareScreenshotResources(postAaExtent.width, postAaExtent.height);
     const uint32_t screenshotSlot = screenCapture->AcquireScreenshotSlot();
     RenderScreenCapture::ScreenshotSlot& slot = screenCapture->screenshotSlots[screenshotSlot];
-    renderGraph->CreateTexture("screenshot_intermediate"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent[0], postAaExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
+    renderGraph->CreateTexture("screenshot_intermediate"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent.width, postAaExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     auto& screenshotBlitPass = renderGraph->AddPass("Screenshot Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
     screenshotBlitPass.ReadBlitImage(ctx.targets.colorOutput);
     screenshotBlitPass.WriteBlitImage("screenshot_intermediate"_sid);
-    screenshotBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, w = postAaExtent[0], h = postAaExtent[1]](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    screenshotBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, postAaExtent](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkImageBlit2 blitRegion{};
         blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
         blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         blitRegion.srcOffsets[0] = {0, 0, 0};
-        blitRegion.srcOffsets[1] = {static_cast<int32_t>(w), static_cast<int32_t>(h), 1};
+        blitRegion.srcOffsets[1] = {static_cast<int32_t>(postAaExtent.width), static_cast<int32_t>(postAaExtent.height), 1};
         blitRegion.dstOffsets[0] = {0, 0, 0};
-        blitRegion.dstOffsets[1] = {static_cast<int32_t>(w), static_cast<int32_t>(h), 1};
+        blitRegion.dstOffsets[1] = {static_cast<int32_t>(postAaExtent.width), static_cast<int32_t>(postAaExtent.height), 1};
 
         VkBlitImageInfo2 blitInfo{};
         blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;

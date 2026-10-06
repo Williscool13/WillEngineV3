@@ -6,10 +6,10 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "ddgi_passes.h"
-#include "final_gather_passes.h"
-#include "reflection_passes.h"
-#include "shadow_passes.h"
+#include "render/passes/ddgi_passes.h"
+#include "render/passes/final_gather_passes.h"
+#include "render/passes/reflection_passes.h"
+#include "render/passes/shadow_passes.h"
 #include "render/render_config.h"
 #include "render/render_utils.h"
 #include "core/math/math_helpers.h"
@@ -25,7 +25,7 @@ namespace Render
 void SetupReSTIRPasses(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       Core::Array<uint32_t, 2> renderExtent,
+                       Core::Extent2D renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex,
                        Core::Arena& arena,
@@ -38,7 +38,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                        float preExposure)
 {
     ZoneScoped;
-    const uint32_t pixelCount = renderExtent[0] * renderExtent[1];
+    const uint32_t pixelCount = renderExtent.width * renderExtent.height;
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
     const float reflectionRoughnessMax = bSkipReflectionPiggyback ? -1.0f : ComputeReflectionRoughnessMax(reflectionConfig);
     const uint32_t reflectionBufferSize = pixelCount * static_cast<uint32_t>(sizeof(ReflectionHitDescriptor));
@@ -55,7 +55,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
     const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
 
     const uint32_t GRAD_FACTOR = 3u;
-    const Core::Array<uint32_t, 2> gradientExtent = {(renderExtent[0] + GRAD_FACTOR - 1u) / GRAD_FACTOR, (renderExtent[1] + GRAD_FACTOR - 1u) / GRAD_FACTOR};
+    const Core::Extent2D gradientExtent = {(renderExtent.width + GRAD_FACTOR - 1u) / GRAD_FACTOR, (renderExtent.height + GRAD_FACTOR - 1u) / GRAD_FACTOR};
 
     graph.CreateBuffer("restir_lights_vs"_sid, MAX_LIGHTS * sizeof(LightVSData), false);
 
@@ -82,8 +82,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
 
     if (bReGIRProposal)
     {
-        const uint32_t fullW = renderExtent[0];
-        const uint32_t fullH = renderExtent[1];
+        const uint32_t fullW = renderExtent.width;
+        const uint32_t fullH = renderExtent.height;
         const uint32_t hashEntriesSize = REGIR_HASH_CAPACITY * static_cast<uint32_t>(sizeof(uint32_t));
         const uint32_t entriesSize = REGIR_HASH_CAPACITY * REGIR_ENTRIES_PER_CELL * static_cast<uint32_t>(sizeof(ReGIREntry));
         const uint32_t activeCellsSize = REGIR_HASH_CAPACITY * 4u * static_cast<uint32_t>(sizeof(int32_t));
@@ -195,13 +195,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
         const StringID gbufferOneHistory = bHasHistory ? graph.ResourceVersionID(targets.gbufferOne, 1) : StringID{};
         const StringID depthHistory = bHasHistory ? graph.ResourceVersionID(targets.depthCopy, 1) : StringID{};
         if (bShadowVis) {
-            graph.CreateVersionedTexture("restir_shadow_vis"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            graph.CreateVersionedTexture("restir_shadow_vis"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         }
         const bool bHasPrevVis = bShadowVis && graph.ResourceHasVersion("restir_shadow_vis"_sid, 1);
         const StringID prevShadowVis = bHasPrevVis ? graph.ResourceVersionID("restir_shadow_vis"_sid, 1) : StringID{};
         if (bConfidence) {
-            graph.CreateTexture("restir_signal"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
-            graph.CreateTexture("restir_gradient"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gradientExtent[0], gradientExtent[1], 1}, {std::nullopt}, true);
+            graph.CreateTexture("restir_signal"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
+            graph.CreateTexture("restir_gradient"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, gradientExtent.width, gradientExtent.height, 1}, {std::nullopt}, true);
         }
 
         // Last frame's TLAS re-shades the winner against last frame's occluders; the TLAS ring is one frame deep (BLAS lifetime).
@@ -273,7 +273,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .prevGbufferOneIndex = ~0u,
                 .prevDepthIndex = ~0u,
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .mCap = 0u,
@@ -293,9 +293,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+            const uint32_t strideX = (field != 0u) ? ((renderExtent.width + 1u) >> 1u) : renderExtent.width;
             const uint32_t groupsX = (strideX + 15) / 16;
-            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            const uint32_t groupsY = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 
@@ -337,7 +337,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                     .prevGbufferOneIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
                     .prevDepthIndex = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0u,
-                    .renderExtent = {renderExtent[0], renderExtent[1]},
+                    .renderExtent = {renderExtent.width, renderExtent.height},
                     .sceneDataIndex = sceneIndex,
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .mCap = restirParams.temporalMCap,
@@ -359,9 +359,9 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-                const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+                const uint32_t strideX = (field != 0u) ? ((renderExtent.width + 1u) >> 1u) : renderExtent.width;
                 const uint32_t groupsX = (strideX + 15) / 16;
-                const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+                const uint32_t groupsY = (renderExtent.height + 15) / 16;
                 vkCmdDispatch(cmd, groupsX, groupsY, 1);
             });
         }
@@ -370,12 +370,12 @@ void SetupReSTIRPasses(RenderGraph& graph,
     if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f && bHasTLAS) {
         const uint32_t sunField = restirParams.bCheckerboardFullRateResolve ? 0u : activeCheckerboardField;
         // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
-        const uint32_t sunVisWidth = (sunField != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
-        graph.CreateTexture("restir_sun_vis"_sid, TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent[1], 1}, {std::nullopt}, true);
+        const uint32_t sunVisWidth = (sunField != 0u) ? ((renderExtent.width + 1u) >> 1u) : renderExtent.width;
+        graph.CreateTexture("restir_sun_vis"_sid, TextureInfo{VK_FORMAT_R32_UINT, sunVisWidth, renderExtent.height, 1}, {std::nullopt}, true);
         const bool bHasPrevTlas = bSunFlip && graph.ResourceHasVersion(RT_TLAS_BUFFER, 1);
         const StringID prevTlas = bHasPrevTlas ? graph.ResourceVersionID(RT_TLAS_BUFFER, 1) : StringID{};
         if (bSunFlip) {
-            graph.CreateTexture("restir_sun_flip"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
+            graph.CreateTexture("restir_sun_flip"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
         }
 
         RenderPass& sunPass = graph.AddPass("[ReSTIR DI] Sun"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
@@ -406,7 +406,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
                 .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
                 .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -423,16 +423,16 @@ void SetupReSTIRPasses(RenderGraph& graph,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+            const uint32_t strideX = (field != 0u) ? ((renderExtent.width + 1u) >> 1u) : renderExtent.width;
             const uint32_t groupsX = (strideX + 15) / 16;
-            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            const uint32_t groupsY = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
     }
 
     const bool bSunFlipReady = bSunFlip && graph.HasTexture("restir_sun_flip"_sid);
     if (bConfidence || bSunFlipReady) {
-        graph.CreateVersionedTexture("restir_confidence"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        graph.CreateVersionedTexture("restir_confidence"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
         const bool bHasPrevConfidence = graph.ResourceHasVersion("restir_confidence"_sid, 1);
         const StringID prevConfidence = bHasPrevConfidence ? graph.ResourceVersionID("restir_confidence"_sid, 1) : StringID{};
 
@@ -445,13 +445,13 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 ReSTIRConfidenceGradientPushConstant pc{
-                    .renderExtent = {renderExtent[0], renderExtent[1]},
-                    .gradientExtent = {gradientExtent[0], gradientExtent[1]},
+                    .renderExtent = {renderExtent.width, renderExtent.height},
+                    .gradientExtent = {gradientExtent.width, gradientExtent.height},
                     .signalIndex = graph.GetSampledImageViewDescriptorIndex("restir_signal"_sid),
                     .gradientIndex = graph.GetStorageImageViewDescriptorIndex("restir_gradient"_sid),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatch(cmd, (gradientExtent[0] + 7) / 8, (gradientExtent[1] + 7) / 8, 1);
+                vkCmdDispatch(cmd, (gradientExtent.width + 7) / 8, (gradientExtent.height + 7) / 8, 1);
             });
         }
 
@@ -468,8 +468,8 @@ void SetupReSTIRPasses(RenderGraph& graph,
                 vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
 
                 ReSTIRConfidenceResolvePushConstant pc{
-                    .renderExtent = {renderExtent[0], renderExtent[1]},
-                    .gradientExtent = {gradientExtent[0], gradientExtent[1]},
+                    .renderExtent = {renderExtent.width, renderExtent.height},
+                    .gradientExtent = {gradientExtent.width, gradientExtent.height},
                     .gradientIndex = bConfidence ? graph.GetSampledImageViewDescriptorIndex("restir_gradient"_sid) : ~0u,
                     .prevConfidenceIndex = bHasPrevConfidence ? graph.GetSampledImageViewDescriptorIndex(prevConfidence) : ~0u,
                     .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -482,7 +482,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
                     .blurRadius = blurRadius,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatch(cmd, (renderExtent[0] + 7) / 8, (renderExtent[1] + 7) / 8, 1);
+                vkCmdDispatch(cmd, (renderExtent.width + 7) / 8, (renderExtent.height + 7) / 8, 1);
             });
     }
 
@@ -501,15 +501,15 @@ void SetupReSTIRPasses(RenderGraph& graph,
             ReSTIRBoilingFilterPushConstant pc{
                 .inputBuffer = graph.GetBufferAddress(inBuffer),
                 .outputBuffer = graph.GetBufferAddress("restir_reservoir_boiled"_sid),
-                .renderExtent = {renderExtent[0], renderExtent[1]},
+                .renderExtent = {renderExtent.width, renderExtent.height},
                 .strength = strength,
                 .activeCheckerboardField = field,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
-            const uint32_t strideX = (field != 0u) ? ((renderExtent[0] + 1u) >> 1u) : renderExtent[0];
+            const uint32_t strideX = (field != 0u) ? ((renderExtent.width + 1u) >> 1u) : renderExtent.width;
             const uint32_t groupsX = (strideX + 15) / 16;
-            const uint32_t groupsY = (renderExtent[1] + 15) / 16;
+            const uint32_t groupsY = (renderExtent.height + 15) / 16;
             vkCmdDispatch(cmd, groupsX, groupsY, 1);
         });
 
@@ -524,7 +524,7 @@ void SetupReSTIRPasses(RenderGraph& graph,
 void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                                     PipelineManager* pipelineManager,
                                     const Core::ViewFamily& viewFamily,
-                                    Core::Array<uint32_t, 2> renderExtent,
+                                    Core::Extent2D renderExtent,
                                     const RenderTargets& targets,
                                     uint32_t sceneIndex,
                                     uint64_t frameNumber,
@@ -605,7 +605,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .secondaryOutputImageIndex = graph.GetStorageImageViewDescriptorIndex(specularOut),
                     .sceneDataIndex = sceneIndex,
                     .lightingIndex = entry.index,
-                    .renderExtent = {renderExtent[0], renderExtent[1]},
+                    .renderExtent = {renderExtent.width, renderExtent.height},
                     .frameIndex = static_cast<uint32_t>(frameNumber),
                     .activeCheckerboardField = field,
                     .bCheckerboardPacked = packed,
@@ -614,7 +614,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
                     .lightSpecularFromReflectionsMax = ComputeLightSpecularFromReflectionsMax(reflectionConfig),
                     .diffuseRatioIndex = bDiffuseRatio ? graph.GetStorageImageViewDescriptorIndex(RESTIR_DIFFUSE_RATIO) : ~0x0u,
                     .sunVisIndex = graph.HasTexture("restir_sun_vis"_sid) ? graph.GetSampledImageViewDescriptorIndex("restir_sun_vis"_sid) : ~0x0u,
-                    .tileCapacity = BucketTileCapacity(renderExtent[0], renderExtent[1]),
+                    .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), entry.index * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
@@ -625,7 +625,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
 void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                PipelineManager* pipelineManager,
                                const Core::ViewFamily& viewFamily,
-                               Core::Array<uint32_t, 2> renderExtent,
+                               Core::Extent2D renderExtent,
                                const RenderTargets& targets,
                                uint32_t sceneIndex,
                                uint32_t outputMode,
@@ -636,8 +636,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint32_t giGatherMode)
 {
     ZoneScoped;
-    const uint32_t width = renderExtent[0];
-    const uint32_t height = renderExtent[1];
+    const uint32_t width = renderExtent.width;
+    const uint32_t height = renderExtent.height;
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bGIGather = giGatherMode != 0u && graph.HasTexture(GI_GATHER_RESOLVED);
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
