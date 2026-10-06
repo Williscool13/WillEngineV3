@@ -17,7 +17,7 @@ namespace Render
 {
 enum class FrameRenderingPath : uint8_t
 {
-    Default,
+    Analytic,
     ReSTIR,
     PathTracing,
     GroundTruth,
@@ -73,7 +73,7 @@ struct FrameContext
 
     bool bCanRender{false};
     bool bHasScene{false};
-    FrameRenderingPath path{FrameRenderingPath::Default};
+    FrameRenderingPath path{FrameRenderingPath::Analytic};
     FrameFeatures features{};
     FrameNeeds needs{};
 

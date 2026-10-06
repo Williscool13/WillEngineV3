@@ -13,14 +13,13 @@ import ddgi_common;
 import gi_gather_common;
 import reflection_probe_interop;
 import reflection_probe_common;
+import indirect_lighting_common;
 
 static const float BILATERAL_DEPTH_SIGMA = 0.01;
 static const float BILATERAL_NORMAL_POWER = 32.0;
 static const float BILATERAL_MATERIAL_SIGMA = 0.1;
 static const float BILATERAL_SPATIAL_SIGMA = 1.0;
 static const float BILATERAL_MIN_WEIGHT = 1e-6;
-
-#define GI_SKY_SPECULAR_OCCLUSION 1
 
 static void EvalSunContribution(DirectionalLightData sun, float3 N, float3 V, float3 L, float nDotV, float3 F0,
                                 float metallic, float roughness, float3 specReflectance, out float3 diffuseTerm, out float3 specularTerm)
@@ -87,78 +86,43 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
 
-    float3 indirectDiffuse = float3(0.0);
-    float3 ibl = float3(0.0);
-    float3 reflectionSpecular = float3(0.0);
-    {
-        float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
-        float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
-        float3 worldN = normalize(mul(float3x3(scene.invView), N));
-
-        float3 skyIrradiance = float3(0.0);
-        if (pc.skyboxIndex >= 0) {
-            skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-        }
-
-        if (pc.giGatherMode != 0u) {
-            // Upscaled gather; already contains the skybox and probe fallbacks.
-            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
-        } else {
-            indirectDiffuse = skyIrradiance;
-            float giW = 0.0;
-            if (pc.bDDGIApply != 0) {
-                float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-                float3 cameraDirection = normalize(mul(float3x3(scene.invView), viewPosition));
-                float edgeFade;
-                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
-                indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
-                giW = gi.w;
-            }
-            if (pc.reflectionProbeCount > 0u) {
-                float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
-                if (probeBlend.indexA >= 0) {
-                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
-                    indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
-                }
-            }
-        }
-
-        if (pc.skyboxIndex >= 0) {
-            reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, scene.invView, roughness, F_ibl, envBRDF) * pc.iblIntensity;
-#if GI_SKY_SPECULAR_OCCLUSION
-            float skyOcclusion = saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
-            if (pc.skyVisIndex != ~0x0u) {
-                skyOcclusion = rdgTexturesFloat2[pc.skyVisIndex].Load(int3(pixel, 0)).x;
-            }
-            reflectionSpecular *= skyOcclusion;
-#endif
-        }
-
-        if (pc.reflectionProbeCount > 0u) {
-            float3 worldPosition = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-            ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, scene.cameraWorldPos.xyz);
-            if (probeBlend.indexA >= 0) {
-                float3 worldR = normalize(mul((float3x3)scene.invView, reflect(-V, N)));
-                float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPosition, worldR, roughness);
-                float3 probeTerm = probeRadiance * (F_ibl * envBRDF.x + envBRDF.y);
-                reflectionSpecular = lerp(reflectionSpecular, probeTerm, probeBlend.coverage);
-            }
-        }
-
-        if (pc.bReflectionMerged != 0u && roughness <= pc.reflectionRoughnessMax) {
-            reflectionSpecular = float3(0.0);
-        } else if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
-            float3 tracedReflection = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
-            reflectionSpecular = tracedReflection * specReflectance;
-        }
-
-        float gtao = 1.0;
-        if (pc.shadowsIndex != ~0x0u) {
-            gtao = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).y;
-        }
-        ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * albedo * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + reflectionSpecular;
+    float gtao = 1.0;
+    if (pc.shadowsIndex != ~0x0u) {
+        gtao = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).y;
     }
+
+    float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
+    const bool bReflectionEligible = roughness <= pc.reflectionRoughnessMax;
+    IndirectLightingInputs indirectInputs;
+    indirectInputs.pixel = pixel;
+    indirectInputs.viewPosition = viewPosition;
+    indirectInputs.viewN = N;
+    indirectInputs.viewV = V;
+    indirectInputs.roughness = roughness;
+    indirectInputs.F0 = F0;
+    indirectInputs.F_ibl = F_ibl;
+    indirectInputs.envBRDF = envBRDF;
+    indirectInputs.gtao = gtao;
+    indirectInputs.preExposure = scene.preExposure;
+    indirectInputs.invView = scene.invView;
+    indirectInputs.cameraWorldPos = scene.cameraWorldPos.xyz;
+    indirectInputs.skyboxIndex = pc.skyboxIndex;
+    indirectInputs.iblIntensity = pc.iblIntensity;
+    indirectInputs.giResolvedIndex = pc.giGatherMode != 0u ? pc.giResolvedIndex : ~0x0u;
+    indirectInputs.skyVisIndex = pc.skyVisIndex;
+    indirectInputs.reflectionIndex = bReflectionEligible ? pc.reflectionIndex : ~0x0u;
+    indirectInputs.bDDGI = pc.bDDGIApply != 0;
+    indirectInputs.ddgiCascades = pc.ddgiCascades;
+    indirectInputs.reflectionProbeCount = pc.reflectionProbeCount;
+    indirectInputs.reflectionProbes = pc.reflectionProbes;
+    indirectInputs.worldGridProbeGrid = pc.worldGridProbeGrid;
+    IndirectLighting indirect = ResolveIndirectLighting(indirectInputs);
+
+    // Merged reflections are already in the denoised specular.
+    const float3 indirectDiffuse = indirect.diffuse;
+    const float3 reflectionSpecular = pc.bReflectionMerged != 0u && bReflectionEligible ? float3(0.0) : indirect.specular;
+    float3 kD_ibl = (1.0 - F_ibl) * (1.0 - metallic);
+    float3 ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * albedo * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + reflectionSpecular;
 
     if (pc.screenDiffuseOutIndex != ~0x0u) {
         float ratio = rdgTexturesFloat[pc.diffuseRatioIndex].Load(int3(pixel, 0)).r;

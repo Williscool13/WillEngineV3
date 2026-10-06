@@ -77,7 +77,7 @@ struct PhysicsState
 
 struct LightingState
 {
-    Core::LightingMode lightingMode{Core::LightingMode::Default};
+    Core::LightingMode lightingMode{Core::LightingMode::Analytic};
     Core::GroundTruthMode groundTruthMode{Core::GroundTruthMode::None};
     bool bResetGroundTruth{false};
     int32_t groundTruthSpp{1};

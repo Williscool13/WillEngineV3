@@ -76,11 +76,11 @@ static FrameRenderingPath ResolveFrameRenderingPath(const Core::ViewFamily& view
         return FrameRenderingPath::GroundTruth;
     }
     switch (viewFamily.lightingMode) {
-        case Core::LightingMode::Default: return FrameRenderingPath::Default;
+        case Core::LightingMode::Analytic: return FrameRenderingPath::Analytic;
         case Core::LightingMode::ReSTIR: return FrameRenderingPath::ReSTIR;
         case Core::LightingMode::PathTracing: return FrameRenderingPath::PathTracing;
     }
-    return FrameRenderingPath::Default;
+    return FrameRenderingPath::Analytic;
 }
 
 static FrameFeatures ComputeFrameFeatures(const Core::FrameBuffer& frameBuffer, const Core::ViewFamily& viewFamily, FrameRenderingPath path, bool bHasScene)
@@ -116,7 +116,7 @@ static FrameNeeds ComputeFrameNeeds(const Core::FrameBuffer& frameBuffer, const 
     }
     const bool bReSTIR = path == FrameRenderingPath::ReSTIR;
     if (bHasScene && path != FrameRenderingPath::GroundTruth) {
-        n.bWorldGrid = path == FrameRenderingPath::Default
+        n.bWorldGrid = path == FrameRenderingPath::Analytic
                        || (bReSTIR && (frameBuffer.reflection.bEnabled || frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin))
                        || features.ddgi != DDGIUsage::Off
                        || viewFamily.reflectionProbes.Size() > 0u
@@ -124,7 +124,7 @@ static FrameNeeds ComputeFrameNeeds(const Core::FrameBuffer& frameBuffer, const 
     }
 
     // A remodulate debug output is not the lit scene, so it must not feed back as history
-    const bool bLitColorIsScene = (path == FrameRenderingPath::Default || bReSTIR) && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both;
+    const bool bLitColorIsScene = (path == FrameRenderingPath::Analytic || bReSTIR) && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both;
     const bool bReflectionScreenSpace = bReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
     n.bLitHistory = bHasScene && bLitColorIsScene && (bReflectionScreenSpace || features.bGIGather);
 
@@ -566,8 +566,8 @@ void RenderThread::RecordLighting(FrameContext& ctx)
     }
 
     switch (ctx.path) {
-        case FrameRenderingPath::Default:
-            RecordLightingDefault(ctx);
+        case FrameRenderingPath::Analytic:
+            RecordLightingAnalytic(ctx);
             break;
         case FrameRenderingPath::ReSTIR:
             RecordLightingReSTIR(ctx);
@@ -618,7 +618,7 @@ void RenderThread::RecordGroundTruth(FrameContext& ctx)
     }
 }
 
-void RenderThread::RecordLightingDefault(FrameContext& ctx)
+void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
 {
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;

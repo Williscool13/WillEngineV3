@@ -227,7 +227,7 @@ struct GTAOConfiguration
 
 enum class LightingMode : uint8_t
 {
-    Default = 0,
+    Analytic = 0,
     ReSTIR,
     PathTracing,
 };

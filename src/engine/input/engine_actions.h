@@ -12,7 +12,7 @@ namespace Engine::Actions
 {
 inline const Engine::ActionHandle ACTION_SCREENSHOT{"Screenshot"_sid.id};
 inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_RESTIR{"LoadLightingProfile_ReSTIR"_sid.id};
-inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_STANDARD{"LoadLightingProfile_Standard"_sid.id};
+inline const Engine::ActionHandle ACTION_LOAD_LIGHTING_PROFILE_ANALYTIC{"LoadLightingProfile_Analytic"_sid.id};
 
 inline const Engine::ActionHandle ACTION_EDITOR_CAM_LOOK_MODIFIER{"EditorCam_LookModifier"_sid.id};
 inline const Engine::ActionHandle ACTION_EDITOR_CAM_PAN_MODIFIER{"EditorCam_PanModifier"_sid.id};

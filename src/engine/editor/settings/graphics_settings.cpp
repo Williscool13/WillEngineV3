@@ -718,7 +718,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         Core::DebugRenderParams& render = state->debug.render;
         const Core::ReSTIRParams& restir = state->debug.restir;
         const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
-        const bool bSigmaActive = state->lighting.lightingMode == Core::LightingMode::Default || (bReSTIRMode && !restir.bSunLight);
+        const bool bSigmaActive = state->lighting.lightingMode == Core::LightingMode::Analytic || (bReSTIRMode && !restir.bSunLight);
         const Core::AntiAliasingMode aaMode = state->lighting.aaConfig.mode;
 
         auto view = [&](const char* label, const char* resourceName, DebugTransformationType transform = DebugTransformationType::None, Core::DebugViewAspect aspect = Core::DebugViewAspect::None) {
@@ -1608,7 +1608,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         ImGui::Separator();
 
-        const char* lightingModeLabels[] = {"Default", "ReSTIR", "Path Tracing"};
+        const char* lightingModeLabels[] = {"Analytic", "ReSTIR", "Path Tracing"};
         int32_t lightingModeIndex = static_cast<int32_t>(state->lighting.lightingMode);
         if (ImGui::Combo("Lighting Mode", &lightingModeIndex, lightingModeLabels, IM_ARRAYSIZE(lightingModeLabels))) {
             state->lighting.lightingMode = static_cast<Core::LightingMode>(lightingModeIndex);
@@ -1642,7 +1642,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Separator();
 
         const bool bIsGroundTruth = state->lighting.groundTruthMode != Core::GroundTruthMode::None;
-        const bool bDefaultMode = state->lighting.lightingMode == Core::LightingMode::Default;
+        const bool bAnalyticMode = state->lighting.lightingMode == Core::LightingMode::Analytic;
         const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
 
         RefreshLightingBaseline(state);
@@ -1762,7 +1762,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         HandleLightingSectionAction(state, directHeader, CopyDirectLightingSection);
 
         Widgets::SectionHeader sigmaHeader = MakeLightingSectionHeader(liveLighting, nullptr);
-        if ((bDefaultMode || (bReSTIRMode && !state->debug.restir.bSunLight)) && Widgets::BeginSection("Sun Shadow (SIGMA)", &sigmaHeader)) {
+        if ((bAnalyticMode || (bReSTIRMode && !state->debug.restir.bSunLight)) && Widgets::BeginSection("Sun Shadow (SIGMA)", &sigmaHeader)) {
             Core::SIGMAParams& sigma = state->lighting.sigmaParams;
             static const Core::SIGMAParams sigmaDefaults{};
 
@@ -2036,7 +2036,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (Widgets::Checkbox("Screen-Space Hit Lighting", &reflection.bScreenSpaceLighting,
                                   "Reproject the reflection hit into last frame's lit image and reuse that fully shadowed color; falls back to unshadowed analytic hit shading when the hit is off-screen or occluded.")) { changed = true; }
-            if (bDefaultMode) {
+            if (bAnalyticMode) {
                 if (Widgets::Checkbox("Screen-Space Trace", &reflection.bScreenSpaceTrace,
                                       "March the reflection ray against the depth buffer instead of the TLAS. Off-screen and occluded rays fall back to reflection probes then the skybox.")) { changed = true; }
             }
@@ -2061,7 +2061,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             reflF("Mirror Roughness Max##reflection", &reflection.mirrorRoughnessMax, reflectionDefaults.mirrorRoughnessMax, 0.0f, 0.3f, "%.3f", "At/below this roughness the reflection ray is the exact mirror direction instead of a GGX sample (no lobe-tail grain, no emitter fireflies) and the ReSTIR BRDF technique is skipped for the pixel. Default 0.08.");
             reflF("Intensity##reflection", &reflection.intensity, reflectionDefaults.intensity, 0.0f, 2.0f, "%.2f", "Multiplier on the traced reflection radiance before compositing. Default 1.0.");
             reflF("Max Ray Intensity##reflection", &reflection.maxRayIntensity, reflectionDefaults.maxRayIntensity, 0.0f, 65536000.0f, "%.0f", "Luminance clamp on a single reflection ray's radiance (before demodulation). Bounds what one emitter hit can inject into the denoiser; biased darker on bright emitters. 0 = off. Default 0.");
-            if (bDefaultMode && reflection.bScreenSpaceTrace) {
+            if (bAnalyticMode && reflection.bScreenSpaceTrace) {
                 reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "View-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
                 if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
             }

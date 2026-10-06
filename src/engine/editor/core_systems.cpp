@@ -47,8 +47,8 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (state->input.GetActionState(Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR).pressed) {
         LoadLightingProfile(state, "ReSTIR");
     }
-    if (state->input.GetActionState(Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD).pressed) {
-        LoadLightingProfile(state, "Standard");
+    if (state->input.GetActionState(Actions::ACTION_LOAD_LIGHTING_PROFILE_ANALYTIC).pressed) {
+        LoadLightingProfile(state, "Analytic");
     }
 
     for (int i = 0; i < Engine::MAX_SCENE_SLOTS; ++i) {

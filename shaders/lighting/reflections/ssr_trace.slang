@@ -15,7 +15,7 @@ static const float SSR_STRIDE_START = 2.0;
 static const float SSR_STRIDE_GROWTH = 1.15;
 static const uint SSR_REFINE_STEPS = 4u;
 
-// Screen-space producer for the Default path: same GGX ray as reflection_trace, marched on depth_copy instead of the TLAS.
+// Screen-space producer for the Analytic path: same GGX ray as reflection_trace, marched on depth_copy instead of the TLAS.
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeSSRTrace(uniform SSRTracePushConstant pc, uint3 threadID : SV_DispatchThreadID) {

@@ -169,7 +169,7 @@ private:
 
     void RecordGroundTruth(FrameContext& ctx);
 
-    void RecordLightingDefault(FrameContext& ctx);
+    void RecordLightingAnalytic(FrameContext& ctx);
 
     void RecordLightingReSTIR(FrameContext& ctx);
 

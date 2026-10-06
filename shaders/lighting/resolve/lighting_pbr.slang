@@ -16,11 +16,10 @@ import visibility_lighting_common;
 import gi_gather_common;
 import reflection_probe_interop;
 import reflection_probe_common;
+import indirect_lighting_common;
 
 import bindless_declarations;
 import bucket_dispatch_common;
-
-#define GI_SKY_SPECULAR_OCCLUSION 1
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -79,70 +78,35 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         }
     }
 
-    // DDGI probe diffuse
-    float3 ibl = 0.0;
-    float3 indirectDiffuse = float3(0.0);
-    {
-        float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
-        float3 kD_ibl = (1.0 - F_ibl) * (1.0 - li.metallic);
-        float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
+    float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
+    float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
+    IndirectLightingInputs indirectInputs;
+    indirectInputs.pixel = pixel;
+    indirectInputs.viewPosition = viewPosition;
+    indirectInputs.viewN = N;
+    indirectInputs.viewV = V;
+    indirectInputs.roughness = roughness;
+    indirectInputs.F0 = F0;
+    indirectInputs.F_ibl = F_ibl;
+    indirectInputs.envBRDF = envBRDF;
+    indirectInputs.gtao = gtao;
+    indirectInputs.preExposure = pc.sceneData[pc.sceneDataIndex].preExposure;
+    indirectInputs.invView = pc.sceneData[pc.sceneDataIndex].invView;
+    indirectInputs.cameraWorldPos = pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz;
+    indirectInputs.skyboxIndex = pc.skyboxIndex;
+    indirectInputs.iblIntensity = pc.iblIntensity;
+    indirectInputs.giResolvedIndex = pc.giGatherMode != 0u ? pc.giResolvedIndex : ~0x0u;
+    indirectInputs.skyVisIndex = pc.skyVisIndex;
+    indirectInputs.reflectionIndex = roughness <= pc.reflectionRoughnessMax ? pc.reflectionIndex : ~0x0u;
+    indirectInputs.bDDGI = pc.bDDGIApply != 0;
+    indirectInputs.ddgiCascades = pc.ddgiCascades;
+    indirectInputs.reflectionProbeCount = pc.reflectionProbeCount;
+    indirectInputs.reflectionProbes = pc.reflectionProbes;
+    indirectInputs.worldGridProbeGrid = pc.worldGridProbeGrid;
+    IndirectLighting indirect = ResolveIndirectLighting(indirectInputs);
 
-        if (pc.giGatherMode != 0u) {
-            indirectDiffuse = rdgTexturesFloat4[pc.giResolvedIndex].Load(int3(pixel, 0)).rgb / pc.sceneData[pc.sceneDataIndex].preExposure;
-        } else {
-            if (pc.skyboxIndex >= 0) {
-                indirectDiffuse = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-            }
-            float giW = 0.0;
-            if (pc.bDDGIApply != 0) {
-                float3 cameraDirection = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, viewPosition));
-                float edgeFade;
-                float4 gi = DDGISampleIrradianceCascaded(worldPosition, worldN, cameraDirection, pc.ddgiCascades, length(viewPosition), edgeFade);
-                indirectDiffuse = gi.rgb * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
-                giW = gi.w;
-            }
-            if (pc.reflectionProbeCount > 0u) {
-                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
-                if (probeBlend.indexA >= 0) {
-                    float3 probeIrr = SampleReflectionProbeIrradianceBlended(probeBlend, pc.reflectionProbes, worldN);
-                    indirectDiffuse = lerp(indirectDiffuse, probeIrr, probeBlend.coverage * (1.0 - giW));
-                }
-            }
-        }
-
-        // Select, don't lerp: a traced ray already resolves sky visibility and occlusion, so it replaces the probe specular outright and skips GTAO.
-        float3 reflectionSpecular = float3(0.0);
-        if (pc.reflectionIndex != ~0x0u && roughness <= pc.reflectionRoughnessMax) {
-            float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
-            reflectionSpecular = rdgTexturesFloat4[pc.reflectionIndex].Load(int3(pixel, 0)).rgb / pc.sceneData[pc.sceneDataIndex].preExposure * (F0 * envBRDF.x + envBRDF.y);
-        } else {
-            if (pc.skyboxIndex >= 0) {
-                reflectionSpecular = SpecularReflection(assetCubemaps[pc.skyboxIndex], assetTextures[BRDF_LUT_BINDLESS_INDEX], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], V, N, pc.sceneData[pc.sceneDataIndex].invView, roughness, F_ibl) * pc.iblIntensity;
-#if GI_SKY_SPECULAR_OCCLUSION
-                float skyOcclusion = 1.0;
-                if (pc.skyVisIndex != ~0x0u) {
-                    skyOcclusion = rdgTexturesFloat2[pc.skyVisIndex].Load(int3(pixel, 0)).x;
-                } else {
-                    float3 skyIrradiance = DiffuseIrradiance(assetCubemaps[pc.skyboxIndex], assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], worldN) * pc.iblIntensity;
-                    skyOcclusion = saturate(Luma(indirectDiffuse) / max(Luma(skyIrradiance), 1e-4));
-                }
-                reflectionSpecular *= skyOcclusion;
-#endif
-            }
-            if (pc.reflectionProbeCount > 0u) {
-                ReflectionProbeBlend probeBlend = PickReflectionProbeBinned(worldPosition, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz);
-                if (probeBlend.indexA >= 0) {
-                    float3 worldR = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, reflect(-V, N)));
-                    float2 envBRDF = assetTextures[BRDF_LUT_BINDLESS_INDEX].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], float2(nDotV, roughness), 0).rg;
-                    float3 probeRadiance = SampleReflectionProbeSpecularBlended(probeBlend, pc.reflectionProbes, worldPosition, worldR, roughness);
-                    float3 probeTerm = probeRadiance * (F_ibl * envBRDF.x + envBRDF.y);
-                    reflectionSpecular = lerp(reflectionSpecular, probeTerm, probeBlend.coverage);
-                }
-            }
-            reflectionSpecular *= gtao;
-        }
-        ibl = kD_ibl * indirectDiffuse * pc.indirectIntensity * li.albedo.xyz * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + reflectionSpecular;
-    }
+    float3 kD_ibl = (1.0 - F_ibl) * (1.0 - li.metallic);
+    float3 ibl = kD_ibl * indirect.diffuse * pc.indirectIntensity * li.albedo.xyz * OrenNayarDirectionalAlbedo(nDotV, roughness) * gtao + indirect.specular;
 
     float3 finalColor = directLight + ibl + li.emissiveRGB;
     rdgStorageFloat4[pc.primaryOutputImageIndex][pixel] = float4(finalColor * pc.sceneData[pc.sceneDataIndex].preExposure, 1.0);

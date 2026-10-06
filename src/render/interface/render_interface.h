@@ -520,7 +520,7 @@ struct ViewFamily
     ArenaVector<UIGlyphQuad> uiGlyphQuads{};
 
     // Lighting
-    LightingMode lightingMode{LightingMode::Default};
+    LightingMode lightingMode{LightingMode::Analytic};
     GroundTruthMode groundTruthMode{GroundTruthMode::None};
     bool bResetGroundTruth{false};
     uint32_t groundTruthSpp{1};

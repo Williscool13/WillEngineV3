@@ -111,8 +111,8 @@ void RegisterEngineInputActions(InputState& input)
 
     AddDefault(input, ORIGIN, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, InputContext::Gameplay, BindingSource::FromKey(Key::F1));
     AddDefault(input, ORIGIN, Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR, InputContext::Menu, BindingSource::FromKey(Key::F1));
-    AddDefault(input, ORIGIN, Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, InputContext::Gameplay, BindingSource::FromKey(Key::F2));
-    AddDefault(input, ORIGIN, Actions::ACTION_LOAD_LIGHTING_PROFILE_STANDARD, InputContext::Menu, BindingSource::FromKey(Key::F2));
+    AddDefault(input, ORIGIN, Actions::ACTION_LOAD_LIGHTING_PROFILE_ANALYTIC, InputContext::Gameplay, BindingSource::FromKey(Key::F2));
+    AddDefault(input, ORIGIN, Actions::ACTION_LOAD_LIGHTING_PROFILE_ANALYTIC, InputContext::Menu, BindingSource::FromKey(Key::F2));
 
     // Editor + "Eject out of Gameplay"
     AddDefaultEditorAndMenu(input, ORIGIN, Actions::ACTION_VIEWPORT_SELECT, BindingSource::FromMouse(MouseButton::LMB));

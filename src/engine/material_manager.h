@@ -159,7 +159,7 @@ private:
     Core::FixedMap<MaterialID, uint32_t> idToEntryMap;
     Core::DirtyBits uploadDirty;
     Core::DirtyBits changedDirty;
-    Core::LightingMode uploadedLightingMode{Core::LightingMode::Default};
+    Core::LightingMode uploadedLightingMode{Core::LightingMode::Analytic};
 
     /**
      * Contains:
