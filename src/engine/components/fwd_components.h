@@ -11,6 +11,5 @@
 #include "engine/components/render/static_mesh_component.h"
 #include "engine/components/camera_components.h"
 #include "engine/components/physics/physics_components.h"
-#include "engine/components/portal_components.h"
 
 #endif //WILL_ENGINE_FWD_COMPONENTS_H

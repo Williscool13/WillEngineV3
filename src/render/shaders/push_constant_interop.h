@@ -1546,13 +1546,6 @@ SHADER_PUBLIC struct GTAODenoisePushConstant
     SHADER_PUBLIC uint32_t isFinalDenoisePass;
 };
 
-SHADER_PUBLIC struct PortalCompositePushConstant
-{
-    SHADER_PUBLIC uint32_t portalColorIndex;
-    SHADER_PUBLIC uint32_t portalVelocityIndex;
-    SHADER_PUBLIC uint32_t portalDepthIndex;
-};
-
 SHADER_PUBLIC struct SelectionOutlinePushConstant
 {
     SHADER_PUBLIC uint32_t selectedStableIdLo;

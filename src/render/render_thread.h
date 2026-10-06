@@ -71,6 +71,8 @@ struct ImguiWrapper;
 
 namespace Render
 {
+struct FrameContext;
+
 /**
  * The main render thread
  */
@@ -147,10 +149,45 @@ private:
 
     void UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const;
 
-    /*void SetupPortalComposite(RenderGraph& graph, const Core::ViewFamily& renderViewFamily, Core::Array<uint32_t, 2> renderExtent, const RenderTargets& targets,
-                              const MainRenderTargets& portalTargets) const;*/
-
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
+
+    // RecordFrame phases, in record_frame.cpp. Pass declaration order is the order they are called.
+    void ApplyRenderReset(Core::RenderCacheReset reset);
+
+    FrameContext BeginFrame(uint32_t frameIndex, Core::FrameBuffer& frameBuffer);
+
+    void RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCommandBuffer asyncCmd);
+
+    void RecordSceneServices(FrameContext& ctx);
+
+    void RecordDDGI(FrameContext& ctx, const DDGICascades& ddgiCascades);
+
+    /** Every lighting path ends with composited HDR in ctx.targets.colorOutput; demodulated buffers stay inside the ReSTIR path. */
+    void RecordLighting(FrameContext& ctx);
+
+    void RecordGroundTruth(FrameContext& ctx);
+
+    void RecordLightingDefault(FrameContext& ctx);
+
+    void RecordLightingReSTIR(FrameContext& ctx);
+
+    void RecordSunShadows(FrameContext& ctx);
+
+    void RecordPostLighting(FrameContext& ctx);
+
+    void RecordPresentation(FrameContext& ctx);
+
+    void RecordProbeCapture(FrameContext& ctx);
+
+#if WILL_EDITOR
+    void RecordDiagnostics(FrameContext& ctx);
+
+    void RecordDebugVisualize(FrameContext& ctx);
+#endif
+
+    void RecordFrameExport(FrameContext& ctx);
+
+    void RecordScreenshot(FrameContext& ctx);
 
 #if WILL_EDITOR
     void RegisterDebugReadbacks();

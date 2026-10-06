@@ -843,53 +843,6 @@ void PipelineManager::RegisterPipelines()
         builder.Clear();
     }
 
-    // Portal Graphics Pipeline
-    {
-        builder.AddShaderStage(src / "geometry_visibility_buffer.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshGeometryVisibilityBuffer");
-        builder.AddShaderStage(src / "geometry_visibility_buffer.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentGeometryVisibilityBuffer");
-        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_REPLACE, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
-        builder.SetupRenderer(graphicsColorFormats.Data(), graphicsColorFormats.Size(), DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
-        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
-
-        RegisterGraphicsPipeline(
-            "portal_rendering"_sid,
-            builder,
-            sizeof(VisibilityBufferAccumulatePushConstant),
-            VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::Critical
-        );
-        builder.Clear();
-    }
-
-    // Portal Composite
-    {
-        builder.AddShaderStage(src / "fullscreen_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");
-        builder.AddShaderStage(src / "portal_rendering.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentPortalComposite");
-        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_ALWAYS);
-        builder.SetupStencilState(VK_TRUE, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_EQUAL);
-
-        VkFormat colorFormats[2] = {
-            COLOR_ATTACHMENT_FORMAT,
-            GBUFFER_TARGET_TWO
-        };
-        builder.SetupRenderer(colorFormats, 2, DEPTH_ATTACHMENT_FORMAT, DEPTH_ATTACHMENT_FORMAT);
-        builder.AddDynamicState(VK_DYNAMIC_STATE_STENCIL_REFERENCE);
-
-        RegisterGraphicsPipeline(
-            "portal_composite"_sid,
-            builder,
-            sizeof(PortalCompositePushConstant),
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            PipelineCategory::Critical
-        );
-        builder.Clear();
-    }
-
     // Skybox Rendering
     {
         builder.AddShaderStage(src / "fullscreen_vertex.spv", VK_SHADER_STAGE_VERTEX_BIT, "FullscreenPassVertexMain");

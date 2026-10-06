@@ -100,7 +100,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         auto& camera = cameraView.get<Component::CameraComponent>(camEntity);
         auto& transform = cameraView.get<Component::TransformComponent>(camEntity);
         camera.currentViewData = viewData;
-        // Mirror the pose into the transform (portals / editor eject read it)
+        // Mirror the pose into the transform (editor eject reads it)
         transform.translation = viewData.cameraPos;
         const glm::vec3 f = glm::normalize(viewData.cameraForward);
         glm::vec3 right = glm::cross(f, WORLD_UP);

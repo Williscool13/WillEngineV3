@@ -187,9 +187,6 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
     frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
     frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
-    if (state->debug.bEnablePortal) {
-        BuildPortalViewFamily(state, frameBuffer->mainViewFamily);
-    }
 }
 
 void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph)

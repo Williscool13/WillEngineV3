@@ -13,8 +13,6 @@ namespace Core
 {
 ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 {
-    portalViews = ArenaFixedVector<PortalView>(&arena, Render::VIEW_COUNT - 1);
-
     modelPayload = ArenaVector<Model>(&arena, wm.modelPayload);
     modelRuns = ArenaVector<DirtyRun>(&arena, wm.modelRuns);
     lightPayload = ArenaVector<LightInfo>(&arena, wm.lightPayload);

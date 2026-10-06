@@ -394,7 +394,7 @@ struct RdgFixture : AllocBase
         : rdg(&fakeContextHolder.ctx, nullptr, alloc, arena, MakeStubAllocFns()),
           inspector(rdg)
     {
-        rdg.Reset(0, 0, 100);
+        rdg.FrameStartReset(0, 0, 100);
     }
 
     /**
@@ -414,7 +414,7 @@ struct RdgFixture : AllocBase
     }
 
     void Compile(int64_t frame = 0) { rdg.Compile(frame); }
-    void NextFrame(uint32_t frameIdx = 0, uint64_t frame = 1, uint64_t maxUnused = 100) { rdg.Reset(frameIdx, frame, maxUnused); }
+    void NextFrame(uint32_t frameIdx = 0, uint64_t frame = 1, uint64_t maxUnused = 100) { rdg.FrameStartReset(frameIdx, frame, maxUnused); }
 };
 
 using namespace Render;
@@ -1400,9 +1400,9 @@ TEST_CASE_METHOD(RdgFixture, "RDG: a physical unused beyond maxFramesUnused is e
     Compile(0);
     CHECK(inspector.PhysicalCount() >= 1);
 
-    rdg.Reset(0, 1, 1); // frame 1, maxUnused=1: nothing uses the texture this frame
+    rdg.FrameStartReset(0, 1, 1); // frame 1, maxUnused=1: nothing uses the texture this frame
     Compile(1);
-    rdg.Reset(0, 2, 1); // frame 2: unused for one full frame -> evicted
+    rdg.FrameStartReset(0, 2, 1); // frame 2: unused for one full frame -> evicted
     CHECK(inspector.PhysicalCount() == 0);
 }
 
@@ -1522,7 +1522,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: viewport-scaled physical is evicted on Invali
     Compile(0);
     CHECK(inspector.PhysicalCount() == 1);
     rdg.InvalidateAllViewportAssociated();
-    rdg.Reset(0, 1, 100);
+    rdg.FrameStartReset(0, 1, 100);
     CHECK(inspector.PhysicalCount() == 0);
 }
 
@@ -1534,7 +1534,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: non-viewport physical survives InvalidateAllV
     rdg.AddPass(SID("p1"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged).WriteStorageImage(SID("static"));
     Compile(0);
     rdg.InvalidateAllViewportAssociated();
-    rdg.Reset(0, 1, 100);
+    rdg.FrameStartReset(0, 1, 100);
     CHECK(inspector.PhysicalCount() == 1);
     CHECK_FALSE(inspector.PhysicalIsViewportScaled(0));
 }
@@ -1549,7 +1549,7 @@ TEST_CASE_METHOD(RdgFixture, "RDG: swapchain physical is removed on InvalidateAl
     Compile(0);
     CHECK(inspector.PhysicalCount() == 1);
     rdg.InvalidateAllSwapchainAssociated();
-    rdg.Reset(0, 1, 100);
+    rdg.FrameStartReset(0, 1, 100);
     CHECK(inspector.PhysicalCount() == 0);
 }
 

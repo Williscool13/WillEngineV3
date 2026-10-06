@@ -172,7 +172,6 @@ struct DebugState
     bool bGIFreeze{false};
 
     bool bEnableUI{false};
-    bool bEnablePortal{true};
     bool bProbePreview{false};
     bool bProbePreviewIrradiance{false};
     float probePreviewRoughness{0.0f};

@@ -1,5 +1,7 @@
 add_library(render STATIC
         render_thread.cpp
+        record_frame.cpp
+        record_frame_context.h
         render_thread.h
         gpu_dispatcher.cpp
         gpu_dispatcher.h

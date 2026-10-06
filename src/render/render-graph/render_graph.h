@@ -78,7 +78,7 @@ public:
      * @param currentFrame
      * @param maxFramesUnused physical resources unused for this many frames are evicted
      */
-    void Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused);
+    void FrameStartReset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused);
 
     void SetDebugLogging(bool enable)
     {

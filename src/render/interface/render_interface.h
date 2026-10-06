@@ -62,21 +62,6 @@ struct RenderView
     // render target depth
 };
 
-struct PortalView
-{
-    RenderView view;
-
-    Transform entryPortalTransform;
-    glm::vec3 entryPortalNormal;
-    glm::vec3 entryPortalRight;
-    glm::vec3 entryPortalUp;
-
-    Transform exitPortalTransform;
-    glm::vec3 exitPortalNormal;
-    glm::vec3 exitPortalRight;
-    glm::vec3 exitPortalUp;
-};
-
 struct DirectionalLight
 {
     glm::vec3 direction{0.577f, -0.577f, 0.577f};
@@ -463,7 +448,6 @@ struct ViewFamily
     ViewFamily& operator=(ViewFamily&&) = default;
 
     RenderView mainView{};
-    ArenaFixedVector<PortalView> portalViews{};
 
     uint32_t instanceCount{0};
     ArenaVector<Instance> instancePayload{};

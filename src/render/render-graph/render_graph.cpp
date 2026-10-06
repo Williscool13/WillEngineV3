@@ -1652,7 +1652,7 @@ void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
     allocFns.cmdPipelineBarrier2(cmd, &depInfo);
 }
 
-void RenderGraph::Reset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused)
+void RenderGraph::FrameStartReset(uint32_t _currentFrameIndex, uint64_t currentFrame, uint64_t maxFramesUnused)
 {
     ZoneScoped;
 

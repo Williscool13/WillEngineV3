@@ -145,8 +145,6 @@ add_library(engine STATIC
         components/debug_gizmo_component.h
         components/editor_components.cpp
         components/editor_components.h
-        components/portal_components.cpp
-        components/portal_components.h
         components/render_components.cpp
         components/render_components.h
         components/scene_components.cpp
