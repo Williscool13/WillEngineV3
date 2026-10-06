@@ -21,6 +21,7 @@
 #include "render/systems/render_screen_capture.h"
 #include "render/types/render_types.h"
 #include "render/post-processing/post_processing.h"
+#include "render/frame_outputs.h"
 #include "render/shaders/ddgi_interop.h"
 
 #include <imgui.h>
@@ -140,17 +141,17 @@ public:
     void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
 
 private:
-    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, float renderDeltaTime) const;
+    void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, float renderDeltaTime, SceneResources& scene) const;
 
-    void UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
+    void UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes, SceneResources& scene) const;
 
-    void UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
+    void UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes, SceneResources& scene) const;
 
-    void UploadUIUniforms(const Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
+    void UploadUIUniforms(const Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes, SceneResources& scene) const;
 
-    void UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const;
+    void UploadSpriteUniforms(const Core::ViewFamily& viewFamily, SceneResources& scene) const;
 
-    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
+    void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, const SceneResources& scene, Core::Extent2D renderExtent, RDGTexture depthTarget, RDGTexture targetImage, FrameResourceLimits& limits) const;
 
     // RecordFrame phases, in record_frame.cpp. Pass declaration order is the order they are called.
     void ApplyRenderReset(Core::RenderReset reset);
@@ -250,12 +251,12 @@ private:
     FrameResourceLimits frameResourceLimits{};
     bool bEngineRequestsRecreate{false};
     bool bRenderRequestsRecreate{false};
-    StringID presentSourceTexture{};
+    RDGTexture presentSourceTexture{};
 
 #if WILL_EDITOR
     struct DebugCursorReadback
     {
-        StringID litTexture{};
+        RDGTexture litTexture{};
         uint32_t pixel[2]{};
     };
     DebugCursorReadback debugCursorReadback{};

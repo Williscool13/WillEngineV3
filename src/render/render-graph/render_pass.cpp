@@ -24,297 +24,211 @@ RenderPass::RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStag
       autoClearTextures(arena, 2)
 {}
 
-RenderPass& RenderPass::WriteStorageImage(const StringID textureId, const TextureInfo texInfo)
+RenderPass& RenderPass::WriteStorageImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-        else {
-            ENGINE_ASSERT(Renderer, resource->textureInfo.format == texInfo.format, "Format mismatch");
-            ENGINE_ASSERT(Renderer, resource->textureInfo.width == texInfo.width, "Width mismatch");
-            ENGINE_ASSERT(Renderer, resource->textureInfo.height == texInfo.height, "Height mismatch");
-            ENGINE_ASSERT(Renderer, resource->textureInfo.depth == texInfo.depth, "Depth mismatch");
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-
-    resource->bWrittenThisFrame = true;
-    storageImageWrites.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
+    resource.bWrittenThisFrame = true;
+    storageImageWrites.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteClearImage(const StringID textureId, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteClearImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-    resource->bWrittenThisFrame = true;
-    clearImageWrites.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
+    resource.bWrittenThisFrame = true;
+    clearImageWrites.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteBlitImage(const StringID textureId, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteBlitImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-    resource->bWrittenThisFrame = true;
-    blitImageWrites.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
+    resource.bWrittenThisFrame = true;
+    blitImageWrites.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteCopyImage(const StringID textureId, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteCopyImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-    resource->bWrittenThisFrame = true;
-    copyImageWrites.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
+    resource.bWrittenThisFrame = true;
+    copyImageWrites.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteColorAttachment(const StringID textureId, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteColorAttachment(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-
-    resource->bWrittenThisFrame = true;
-    colorAttachments.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
+    resource.bWrittenThisFrame = true;
+    colorAttachments.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteDepthAttachment(const StringID textureId, const TextureInfo& texInfo)
+RenderPass& RenderPass::WriteDepthAttachment(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
     ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
-
-    resource->bWrittenThisFrame = true;
-    depthStencilAttachment = resource->index;
+    resource.bWrittenThisFrame = true;
+    depthStencilAttachment = resource.index;
     depthAccessType |= DepthAccessType::Write;
     return *this;
 }
 
-RenderPass& RenderPass::ReadWriteImage(const StringID textureId, const TextureInfo& texInfo)
+RenderPass& RenderPass::ReadWriteImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-        else {
-            ENGINE_ASSERT(Renderer, resource->textureInfo.format == texInfo.format, "Format mismatch");
-            ENGINE_ASSERT(Renderer, resource->textureInfo.width == texInfo.width, "Width mismatch");
-            ENGINE_ASSERT(Renderer, resource->textureInfo.height == texInfo.height, "Height mismatch");
-            ENGINE_ASSERT(Renderer, resource->textureInfo.depth == texInfo.depth, "Depth mismatch");
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-
-    resource->bWrittenThisFrame = true;
-    imageReadWrite.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
+    resource.bWrittenThisFrame = true;
+    imageReadWrite.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadDepthAttachment(const StringID textureId)
+RenderPass& RenderPass::ReadDepthAttachment(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-
-    if (resource->textureInfo.format != VK_FORMAT_UNDEFINED) {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
     ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
-
-    depthStencilAttachment = resource->index;
+    depthStencilAttachment = resource.index;
     depthAccessType = DepthAccessType::Read;
     return *this;
 }
 
-RenderPass& RenderPass::ReadStorageImage(const StringID textureId)
+RenderPass& RenderPass::ReadStorageImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    storageImageReads.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    storageImageReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadSampledImage(const StringID textureId)
+RenderPass& RenderPass::ReadSampledImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    sampledImageReads.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    sampledImageReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadBlitImage(const StringID textureId)
+RenderPass& RenderPass::ReadBlitImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    blitImageReads.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    blitImageReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadCopyImage(const StringID textureId)
+RenderPass& RenderPass::ReadCopyImage(RDGTexture texture)
 {
-    TextureResource* resource = graph.GetOrCreateTexture(textureId);
-    copyImageReads.PushBack(resource->index);
+    TextureResource& resource = graph.ResolveTexture(texture);
+    copyImageReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadWriteDepthAttachment(RDGTexture texture)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->bWrittenThisFrame = true;
-    bufferWrites.PushBack(resource->index);
-    return *this;
-}
-
-RenderPass& RenderPass::WriteTransferBuffer(const StringID bufferId)
-{
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->bWrittenThisFrame = true;
-    bufferTransferWrites.PushBack(resource->index);
-    return *this;
-}
-
-RenderPass& RenderPass::ReadWriteDepthAttachment(const StringID bufferId, const TextureInfo& texInfo)
-{
-    TextureResource* resource = graph.GetOrCreateTexture(bufferId);
-
-    if (texInfo.format != VK_FORMAT_UNDEFINED) {
-        if (resource->textureInfo.format == VK_FORMAT_UNDEFINED) {
-            resource->textureInfo = texInfo;
-        }
-    }
-    else {
-        ENGINE_ASSERT(Renderer, resource->textureInfo.format != VK_FORMAT_UNDEFINED, "Texture not defined - provide TextureInfo on first use");
-    }
-
+    TextureResource& resource = graph.ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, resource.textureInfo.format != VK_FORMAT_UNDEFINED, "[RDG] Texture '{}' declared on a pass before CreateTexture", resource.textureId.ToString());
     ENGINE_ASSERT(Renderer, depthStencilAttachment == UINT_MAX, "Only one depth attachment per pass");
-
-    resource->bWrittenThisFrame = true;
-    depthStencilAttachment = resource->index;
+    resource.bWrittenThisFrame = true;
+    depthStencilAttachment = resource.index;
     depthAccessType = DepthAccessType::Read | DepthAccessType::Write;
     return *this;
 }
 
-RenderPass& RenderPass::ReadWriteBuffer(const StringID bufferId)
+RenderPass& RenderPass::WriteBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->bWrittenThisFrame = true;
-    bufferReadWrite.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    resource.bWrittenThisFrame = true;
+    bufferWrites.PushBack(resource.index);
     return *this;
 }
 
-
-RenderPass& RenderPass::ReadBuffer(const StringID bufferId)
+RenderPass& RenderPass::WriteTransferBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
-    bufferReads.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    resource.bWrittenThisFrame = true;
+    bufferTransferWrites.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndexBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadWriteBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
-    bufferIndexRead.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    resource.bWrittenThisFrame = true;
+    bufferReadWrite.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadTransferBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
-    bufferTransferReads.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, resource.bufferInfo.size > 0, "[RDG] Buffer '{}' declared on a pass before it was created or imported", resource.bufferId.ToString());
+    bufferReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndirectBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadIndexBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    bufferIndirectReads.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, resource.bufferInfo.size > 0, "[RDG] Buffer '{}' declared on a pass before it was created or imported", resource.bufferId.ToString());
+    bufferIndexRead.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadIndirectCountBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadTransferBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    bufferIndirectCountReads.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, resource.bufferInfo.size > 0, "[RDG] Buffer '{}' declared on a pass before it was created or imported", resource.bufferId.ToString());
+    bufferTransferReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteTLASBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadIndirectBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->bWrittenThisFrame = true;
-    bufferTLASWrites.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    bufferIndirectReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadTLASBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadIndirectCountBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
-    bufferTLASReads.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    bufferIndirectCountReads.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::WriteScratchBuffer(const StringID bufferId)
+RenderPass& RenderPass::WriteTLASBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    resource->bWrittenThisFrame = true;
-    bufferScratchWrites.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    resource.bWrittenThisFrame = true;
+    bufferTLASWrites.PushBack(resource.index);
     return *this;
 }
 
-RenderPass& RenderPass::ReadASInputBuffer(const StringID bufferId)
+RenderPass& RenderPass::ReadTLASBuffer(RDGBuffer buffer)
 {
-    BufferResource* resource = graph.GetOrCreateBuffer(bufferId);
-    ENGINE_ASSERT(Renderer, resource->bufferInfo.size > 0, "Buffer not defined - import or create buffer first");
-    bufferASInputReads.PushBack(resource->index);
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, resource.bufferInfo.size > 0, "[RDG] Buffer '{}' declared on a pass before it was created or imported", resource.bufferId.ToString());
+    bufferTLASReads.PushBack(resource.index);
+    return *this;
+}
+
+RenderPass& RenderPass::WriteScratchBuffer(RDGBuffer buffer)
+{
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    resource.bWrittenThisFrame = true;
+    bufferScratchWrites.PushBack(resource.index);
+    return *this;
+}
+
+RenderPass& RenderPass::ReadASInputBuffer(RDGBuffer buffer)
+{
+    BufferResource& resource = graph.ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, resource.bufferInfo.size > 0, "[RDG] Buffer '{}' declared on a pass before it was created or imported", resource.bufferId.ToString());
+    bufferASInputReads.PushBack(resource.index);
     return *this;
 }
 

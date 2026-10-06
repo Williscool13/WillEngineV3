@@ -20,30 +20,30 @@
 
 namespace Render
 {
-StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent,
-                                                const RenderTargets& targets)
+RDGTexture SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent,
+                                                  const RenderTargets& targets, const SceneResources& scene)
 {
     ZoneScoped;
-    graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("smaa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture smaaEdges = graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture smaaBlend = graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture smaaOutput = graph.CreateTexture("smaa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass("SMAA Edge Detection"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    edgePass.ReadBuffer("scene_data"_sid);
+    edgePass.ReadBuffer(scene.sceneData);
     edgePass.ReadSampledImage(targets.colorOutput);
     edgePass.ReadSampledImage(targets.depthCopy);
-    edgePass.WriteStorageImage("smaa_edges"_sid);
-    edgePass.Execute([&, pipelineManager, renderExtent,
-            outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
+    edgePass.WriteStorageImage(smaaEdges);
+    edgePass.Execute([&scene, pipelineManager, renderExtent,
+            outputColor = targets.colorOutput, depthStencil = targets.depthCopy, smaaEdges,
             smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaEdgeDetectionPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
-                .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex("smaa_edges"_sid),
+                .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex(smaaEdges),
                 .threshold = smaaConfig.threshold,
                 .localContrastAdaptation = smaaConfig.localContrastAdaptation,
             };
@@ -69,14 +69,14 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
 
     // Pass 2: Blend Weight Calculation
     RenderPass& blendPass = graph.AddPass("SMAA Blend Weight"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    blendPass.ReadBuffer("scene_data"_sid);
-    blendPass.ReadSampledImage("smaa_edges"_sid);
-    blendPass.WriteStorageImage("smaa_blend"_sid);
-    blendPass.Execute([&, pipelineManager, renderExtent, smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    blendPass.ReadBuffer(scene.sceneData);
+    blendPass.ReadSampledImage(smaaEdges);
+    blendPass.WriteStorageImage(smaaBlend);
+    blendPass.Execute([&scene, pipelineManager, renderExtent, smaaConfig, smaaEdges, smaaBlend](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SmaaBlendWeightPushConstant pushData{
-            .sceneData = graph.GetBufferAddress("scene_data"_sid),
-            .edgeIndex = graph.GetSampledImageViewDescriptorIndex("smaa_edges"_sid),
-            .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex("smaa_blend"_sid),
+            .sceneData = graph.GetBufferAddress(scene.sceneData),
+            .edgeIndex = graph.GetSampledImageViewDescriptorIndex(smaaEdges),
+            .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex(smaaBlend),
             .maxSearchSteps = smaaConfig.maxSearchSteps,
             .maxSearchStepsDiag = smaaConfig.maxSearchStepsDiag,
         };
@@ -92,17 +92,17 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
 
     // Pass 3: Neighborhood Blending
     RenderPass& neighborhoodPass = graph.AddPass("SMAA Neighborhood Blend"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    neighborhoodPass.ReadBuffer("scene_data"_sid);
+    neighborhoodPass.ReadBuffer(scene.sceneData);
     neighborhoodPass.ReadSampledImage(targets.colorOutput);
-    neighborhoodPass.ReadSampledImage("smaa_blend"_sid);
-    neighborhoodPass.WriteStorageImage("smaa_output"_sid);
-    neighborhoodPass.Execute([&, pipelineManager, renderExtent,
-            outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    neighborhoodPass.ReadSampledImage(smaaBlend);
+    neighborhoodPass.WriteStorageImage(smaaOutput);
+    neighborhoodPass.Execute([&scene, pipelineManager, renderExtent,
+            outputColor = targets.colorOutput, smaaBlend, smaaOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaNeighborhoodBlendPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
-                .blendWeightIndex = graph.GetSampledImageViewDescriptorIndex("smaa_blend"_sid),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("smaa_output"_sid),
+                .blendWeightIndex = graph.GetSampledImageViewDescriptorIndex(smaaBlend),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(smaaOutput),
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("smaa_neighborhood_blend"_sid);
@@ -114,36 +114,40 @@ StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMana
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    return "smaa_output"_sid;
+    return smaaOutput;
 }
 
-StringID SetupSMAA_T2X(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       Core::Extent2D renderExtent,
-                       const RenderTargets& targets)
+RDGTexture SetupSMAA_T2X(RenderGraph& graph,
+                         PipelineManager* pipelineManager,
+                         const Core::ViewFamily& viewFamily,
+                         Core::Extent2D renderExtent,
+                         const RenderTargets& targets,
+                         const SceneResources& scene)
 {
     ZoneScoped;
-    graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateVersionedTexture("smaa_t2x_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    const RDGTexture smaaEdges = graph.CreateTexture("smaa_edges"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture smaaBlend = graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTextureRing currentRing = graph.CreateVersionedTexture("smaa_t2x_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true,
+                                                                    VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    const RDGTexture current = currentRing.Current();
+    const RDGTexture history = currentRing.Version(1);
 
     const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
 
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass("SMAA T2X Edge Detection"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    edgePass.ReadBuffer("scene_data"_sid);
+    edgePass.ReadBuffer(scene.sceneData);
     edgePass.ReadSampledImage(targets.colorOutput);
     edgePass.ReadSampledImage(targets.depthCopy);
-    edgePass.WriteStorageImage("smaa_edges"_sid);
-    edgePass.Execute([&, pipelineManager, renderExtent,
-            outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
+    edgePass.WriteStorageImage(smaaEdges);
+    edgePass.Execute([&scene, pipelineManager, renderExtent,
+            outputColor = targets.colorOutput, depthStencil = targets.depthCopy, smaaEdges,
             smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaEdgeDetectionPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
-                .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex("smaa_edges"_sid),
+                .outputEdgeIndex = graph.GetStorageImageViewDescriptorIndex(smaaEdges),
                 .threshold = smaaConfig.threshold,
                 .localContrastAdaptation = smaaConfig.localContrastAdaptation,
             };
@@ -169,14 +173,14 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
 
     // Pass 2: Blend Weight Calculation
     RenderPass& blendPass = graph.AddPass("SMAA T2X Blend Weight"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    blendPass.ReadBuffer("scene_data"_sid);
-    blendPass.ReadSampledImage("smaa_edges"_sid);
-    blendPass.WriteStorageImage("smaa_blend"_sid);
-    blendPass.Execute([&, pipelineManager, renderExtent, smaaConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    blendPass.ReadBuffer(scene.sceneData);
+    blendPass.ReadSampledImage(smaaEdges);
+    blendPass.WriteStorageImage(smaaBlend);
+    blendPass.Execute([&scene, pipelineManager, renderExtent, smaaConfig, smaaEdges, smaaBlend](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         SmaaBlendWeightPushConstant pushData{
-            .sceneData = graph.GetBufferAddress("scene_data"_sid),
-            .edgeIndex = graph.GetSampledImageViewDescriptorIndex("smaa_edges"_sid),
-            .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex("smaa_blend"_sid),
+            .sceneData = graph.GetBufferAddress(scene.sceneData),
+            .edgeIndex = graph.GetSampledImageViewDescriptorIndex(smaaEdges),
+            .outputBlendIndex = graph.GetStorageImageViewDescriptorIndex(smaaBlend),
             .maxSearchSteps = smaaConfig.maxSearchSteps,
             .maxSearchStepsDiag = smaaConfig.maxSearchStepsDiag,
         };
@@ -192,17 +196,17 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
 
     // Pass 3: Neighborhood Blending
     RenderPass& neighborhoodPass = graph.AddPass("SMAA T2X Neighborhood Blend"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    neighborhoodPass.ReadBuffer("scene_data"_sid);
+    neighborhoodPass.ReadBuffer(scene.sceneData);
     neighborhoodPass.ReadSampledImage(targets.colorOutput);
-    neighborhoodPass.ReadSampledImage("smaa_blend"_sid);
-    neighborhoodPass.WriteStorageImage("smaa_t2x_current"_sid);
-    neighborhoodPass.Execute([&, pipelineManager, renderExtent,
-            outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    neighborhoodPass.ReadSampledImage(smaaBlend);
+    neighborhoodPass.WriteStorageImage(current);
+    neighborhoodPass.Execute([&scene, pipelineManager, renderExtent,
+            outputColor = targets.colorOutput, smaaBlend, current](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaNeighborhoodBlendPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
-                .blendWeightIndex = graph.GetSampledImageViewDescriptorIndex("smaa_blend"_sid),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("smaa_t2x_current"_sid),
+                .blendWeightIndex = graph.GetSampledImageViewDescriptorIndex(smaaBlend),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(current),
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("smaa_neighborhood_blend"_sid);
@@ -214,27 +218,27 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    if (!graph.ResourceHasVersion("smaa_t2x_current"_sid, 1)) {
-        return "smaa_t2x_current"_sid;
+    if (!history.IsValid()) {
+        return current;
     }
 
     // Pass 4: Temporal Resolve
-    graph.CreateTexture("smaa_t2x_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture t2xOutput = graph.CreateTexture("smaa_t2x_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     RenderPass& resolvePass = graph.AddPass("SMAA T2X Temporal Resolve"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    resolvePass.ReadBuffer("scene_data"_sid);
-    resolvePass.ReadSampledImage("smaa_t2x_current"_sid);
-    resolvePass.ReadSampledImage(graph.ResourceVersionID("smaa_t2x_current"_sid, 1));
+    resolvePass.ReadBuffer(scene.sceneData);
+    resolvePass.ReadSampledImage(current);
+    resolvePass.ReadSampledImage(history);
     resolvePass.ReadSampledImage(targets.gbufferOne);
-    resolvePass.WriteStorageImage("smaa_t2x_output"_sid);
-    resolvePass.Execute([&, pipelineManager, renderExtent,
-            gbufferOne = targets.gbufferOne, historyId = graph.ResourceVersionID("smaa_t2x_current"_sid, 1)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    resolvePass.WriteStorageImage(t2xOutput);
+    resolvePass.Execute([&scene, pipelineManager, renderExtent,
+            gbufferOne = targets.gbufferOne, current, history, t2xOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SmaaTemporalResolvePushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
-                .currentColorIndex = graph.GetSampledImageViewDescriptorIndex("smaa_t2x_current"_sid),
-                .previousColorIndex = graph.GetSampledImageViewDescriptorIndex(historyId),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
+                .currentColorIndex = graph.GetSampledImageViewDescriptorIndex(current),
+                .previousColorIndex = graph.GetSampledImageViewDescriptorIndex(history),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("smaa_t2x_output"_sid),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(t2xOutput),
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("smaa_temporal_resolve"_sid);
@@ -246,29 +250,33 @@ StringID SetupSMAA_T2X(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    return "smaa_t2x_output"_sid;
+    return t2xOutput;
 }
 
-StringID SetupTemporalAntiAliasing(RenderGraph& graph,
-                                   PipelineManager* pipelineManager,
-                                   const Core::ViewFamily& viewFamily,
-                                   Core::Extent2D renderExtent,
-                                   const RenderTargets& targets,
-                                   StringID pipelineSID)
+RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
+                                     PipelineManager* pipelineManager,
+                                     const Core::ViewFamily& viewFamily,
+                                     Core::Extent2D renderExtent,
+                                     const RenderTargets& targets,
+                                     const SceneResources& scene,
+                                     StringID pipelineSID)
 {
     ZoneScoped;
-    graph.CreateVersionedTexture("taa_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    const RDGTextureRing taaRing = graph.CreateVersionedTexture("taa_current"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true,
+                                                                VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    const RDGTexture taaCurrent = taaRing.Current();
+    const RDGTexture taaHistory = taaRing.Version(1);
 
-    const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
-    const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
+    const RDGTexture depthHistory = targets.depthCopyHistory;
+    const RDGTexture gbufferOneHistory = targets.gbufferOneHistory;
 
-    if (!graph.ResourceHasVersion("taa_current"_sid, 1) || !graph.ResourceHasVersion(targets.gbufferOne, 1) || !graph.ResourceHasVersion(targets.depthCopy, 1)) {
+    if (!taaHistory.IsValid() || !gbufferOneHistory.IsValid() || !depthHistory.IsValid()) {
         RenderPass& taaPass = graph.AddPass("TAA Copy Deferred"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::AntiAliasing);
         taaPass.ReadCopyImage(targets.colorOutput);
-        taaPass.WriteCopyImage("taa_current"_sid);
-        taaPass.Execute([&, renderExtent, outputColor = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        taaPass.WriteCopyImage(taaCurrent);
+        taaPass.Execute([renderExtent, outputColor = targets.colorOutput, taaCurrent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkImage drawImage = graph.GetImageHandle(outputColor);
-            VkImage taaImage = graph.GetImageHandle("taa_current"_sid);
+            VkImage taaImage = graph.GetImageHandle(taaCurrent);
 
             VkImageCopy2 copyRegion{};
             copyRegion.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
@@ -293,35 +301,34 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
     }
 
     // taa_current doubles as next frame's history, so downstream passes get their own copy written by the same dispatch
-    graph.CreateTexture("taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture taaOutput = graph.CreateTexture("taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
 
     RenderPass& taaPass = graph.AddPass("TAA Main"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    taaPass.ReadBuffer("scene_data"_sid);
+    taaPass.ReadBuffer(scene.sceneData);
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.depthCopy);
     taaPass.ReadSampledImage(depthHistory);
-    taaPass.ReadSampledImage(graph.ResourceVersionID("taa_current"_sid, 1));
+    taaPass.ReadSampledImage(taaHistory);
     taaPass.ReadSampledImage(targets.gbufferOne);
     taaPass.ReadSampledImage(gbufferOneHistory);
-    taaPass.WriteStorageImage("taa_current"_sid);
-    taaPass.WriteStorageImage("taa_output"_sid);
-    taaPass.Execute([&, pipelineManager, renderExtent,
+    taaPass.WriteStorageImage(taaCurrent);
+    taaPass.WriteStorageImage(taaOutput);
+    taaPass.Execute([&scene, pipelineManager, renderExtent,
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             gbufferOne = targets.gbufferOne, pipelineSID, taaConfig,
-            depthHistory, gbufferOneHistory,
-            historyId = graph.ResourceVersionID("taa_current"_sid, 1)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            depthHistory, gbufferOneHistory, taaHistory, taaCurrent, taaOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             TemporalAntialiasingPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .colorResolvedIndex = graph.GetSampledImageViewDescriptorIndex(outputColor),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
                 .depthHistoryIndex = graph.GetSampledImageViewDescriptorIndex(depthHistory),
-                .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(historyId),
+                .colorHistoryIndex = graph.GetSampledImageViewDescriptorIndex(taaHistory),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferOneHistoryIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory),
-                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex("taa_current"_sid),
-                .outputCopyIndex = graph.GetStorageImageViewDescriptorIndex("taa_output"_sid),
+                .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(taaCurrent),
+                .outputCopyIndex = graph.GetStorageImageViewDescriptorIndex(taaOutput),
                 .baseBlendAlpha = taaConfig.baseBlendAlpha,
                 .disocclusionThreshold = taaConfig.disocclusionThreshold,
                 .varianceGammaLuma = taaConfig.varianceGammaLuma,
@@ -341,37 +348,41 @@ StringID SetupTemporalAntiAliasing(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    return "taa_output"_sid;
+    return taaOutput;
 }
 
-StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
-                                        PipelineManager* pipelineManager,
-                                        const Core::ViewFamily& viewFamily,
-                                        Core::Extent2D inputExtent,
-                                        Core::Extent2D outputExtent,
-                                        const RenderTargets& targets)
+RDGTexture SetupDonutTemporalAntiAliasing(RenderGraph& graph,
+                                          PipelineManager* pipelineManager,
+                                          const Core::ViewFamily& viewFamily,
+                                          Core::Extent2D inputExtent,
+                                          Core::Extent2D outputExtent,
+                                          const RenderTargets& targets,
+                                          const SceneResources& scene)
 {
     ZoneScoped;
-    graph.CreateVersionedTexture("donut_taa_feedback"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
-    graph.CreateTexture("donut_taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTextureRing feedbackRing = graph.CreateVersionedTexture("donut_taa_feedback"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, 1, VersionSource::Fresh, true,
+                                                                     VK_IMAGE_USAGE_SAMPLED_BIT, false, CLEAR_COLOR_EMPTY);
+    const RDGTexture feedback = feedbackRing.Current();
+    const RDGTexture feedbackHistory = feedbackRing.Version(1);
+    const RDGTexture donutOutput = graph.CreateTexture("donut_taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
-    const bool bHasHistory = graph.ResourceHasVersion("donut_taa_feedback"_sid, 1);
+    const bool bHasHistory = feedbackHistory.IsValid();
     const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
 
     RenderPass& taaPass = graph.AddPass("Donut TAA Main"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    taaPass.ReadBuffer("scene_data"_sid);
+    taaPass.ReadBuffer(scene.sceneData);
     taaPass.ReadSampledImage(targets.colorOutput);
     taaPass.ReadSampledImage(targets.gbufferOne);
     taaPass.ReadSampledImage(targets.depthCopy);
     if (bHasHistory) {
-        taaPass.ReadSampledImage(graph.ResourceVersionID("donut_taa_feedback"_sid, 1));
+        taaPass.ReadSampledImage(feedbackHistory);
     }
-    taaPass.WriteStorageImage("donut_taa_feedback"_sid);
-    taaPass.WriteStorageImage("donut_taa_output"_sid);
-    taaPass.Execute([&, pipelineManager, bHasHistory,
+    taaPass.WriteStorageImage(feedback);
+    taaPass.WriteStorageImage(donutOutput);
+    taaPass.Execute([&scene, pipelineManager, bHasHistory,
             inWidth = static_cast<float>(inputExtent.width), inHeight = static_cast<float>(inputExtent.height),
             outWidth = static_cast<float>(outputExtent.width), outHeight = static_cast<float>(outputExtent.height),
-            outputExtent,
+            outputExtent, feedback, feedbackHistory, donutOutput,
             outputColor = targets.colorOutput, gbufferOne = targets.gbufferOne, depthStencil = targets.depthCopy, donutConfig](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             float pqC = donutConfig.maxRadiance;
             if (pqC < 1e-4f) { pqC = 1e-4f; }
@@ -380,16 +391,16 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
             const uint32_t colorInputIdx = graph.GetSampledImageViewDescriptorIndex(outputColor);
 
             const float newFrameWeight = bHasHistory ? donutConfig.newFrameWeight : 1.0f;
-            const uint32_t feedbackInputIdx = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(graph.ResourceVersionID("donut_taa_feedback"_sid, 1)) : colorInputIdx;
+            const uint32_t feedbackInputIdx = bHasHistory ? graph.GetSampledImageViewDescriptorIndex(feedbackHistory) : colorInputIdx;
 
             DonutTaaPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .colorInputIndex = colorInputIdx,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .feedbackInputIndex = feedbackInputIdx,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthStencil),
-                .colorOutputIndex = graph.GetStorageImageViewDescriptorIndex("donut_taa_output"_sid),
-                .feedbackOutputIndex = graph.GetStorageImageViewDescriptorIndex("donut_taa_feedback"_sid),
+                .colorOutputIndex = graph.GetStorageImageViewDescriptorIndex(donutOutput),
+                .feedbackOutputIndex = graph.GetStorageImageViewDescriptorIndex(feedback),
                 .clampingFactor = donutConfig.clampingFactor,
                 .newFrameWeight = newFrameWeight,
                 .pqC = pqC,
@@ -413,7 +424,7 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
             vkCmdDispatch(cmd, xDispatch, yDispatch, 1);
         });
 
-    return "donut_taa_output"_sid;
+    return donutOutput;
 }
 
 static void DispatchFsr2Pass(PipelineManager* pipelineManager, VkCommandBuffer cmd, StringID pipelineId, const void* pushData, uint32_t pushSize, uint32_t groupsX, uint32_t groupsY)
@@ -424,24 +435,25 @@ static void DispatchFsr2Pass(PipelineManager* pipelineManager, VkCommandBuffer c
     vkCmdDispatch(cmd, groupsX, groupsY, 1);
 }
 
-StringID SetupFsr2(RenderGraph& graph,
-                   PipelineManager* pipelineManager,
-                   const Core::ViewFamily& viewFamily,
-                   Core::Extent2D renderExtent,
-                   Core::Extent2D outputExtent,
-                   const RenderTargets& targets,
-                   const Core::ReflectionConfiguration& reflectionConfig,
-                   float deltaTime,
-                   float framerateScale,
-                   uint64_t frameNumber,
-                   float preExposure,
-                   float prevPreExposure)
+RDGTexture SetupFsr2(RenderGraph& graph,
+                     PipelineManager* pipelineManager,
+                     const Core::ViewFamily& viewFamily,
+                     Core::Extent2D renderExtent,
+                     Core::Extent2D outputExtent,
+                     const RenderTargets& targets,
+                     const SceneResources& scene,
+                     const Core::ReflectionConfiguration& reflectionConfig,
+                     float deltaTime,
+                     float framerateScale,
+                     uint64_t frameNumber,
+                     float preExposure,
+                     float prevPreExposure)
 {
     ZoneScoped;
     static constexpr uint32_t INVALID_INDEX = 0xFFFFFFFFu;
     const Core::Fsr2Configuration& config = viewFamily.aaConfig.fsr2;
-    const StringID preOverlayColor = targets.preOverlayColor;
-    const bool bHasPreOverlayColor = static_cast<bool>(preOverlayColor);
+    const RDGTexture preOverlayColor = targets.preOverlayColor;
+    const bool bHasPreOverlayColor = preOverlayColor.IsValid();
 
     const uint32_t renderW = renderExtent.width;
     const uint32_t renderH = renderExtent.height;
@@ -458,33 +470,39 @@ StringID SetupFsr2(RenderGraph& graph,
 
     const bool bSharpen = config.bSharpen;
     const bool bReactive = config.bReactiveMask && bHasPreOverlayColor;
-    const bool bVirtualMotion = graph.HasTexture(REFLECTION_VIRTUAL_MOTION_TARGET);
+    const RDGTexture virtualMotion = targets.reflectionVirtualMotion;
+    const bool bVirtualMotion = virtualMotion.IsValid();
 
-    graph.CreateVersionedTexture("fsr2_history_color"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture("fsr2_lock_status"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture("fsr2_dilated_motion"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderW, renderH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-    graph.CreateVersionedTexture("fsr2_luma_history"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    const RDGTextureRing historyColorRing = graph.CreateVersionedTexture("fsr2_history_color"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    const RDGTextureRing lockStatusRing = graph.CreateVersionedTexture("fsr2_lock_status"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    const RDGTextureRing dilatedMotionRing = graph.CreateVersionedTexture("fsr2_dilated_motion"_sid, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderW, renderH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    const RDGTextureRing lumaHistoryRing = graph.CreateVersionedTexture("fsr2_luma_history"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_UNORM, displayW, displayH, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+    const RDGTexture historyColor = historyColorRing.Current();
+    const RDGTexture lockStatus = lockStatusRing.Current();
+    const RDGTexture dilatedMotion = dilatedMotionRing.Current();
+    const RDGTexture lumaHistory = lumaHistoryRing.Current();
 
-    graph.CreateTexture("fsr2_luma_mip4"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, mip4W, mip4H, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("fsr2_dilated_depth"_sid, TextureInfo{VK_FORMAT_R32_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture lumaMip4 = graph.CreateTexture("fsr2_luma_mip4"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, mip4W, mip4H, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture dilatedDepth = graph.CreateTexture("fsr2_dilated_depth"_sid, TextureInfo{VK_FORMAT_R32_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
     // Scatter target for InterlockedMax; must be zero before the reconstruct pass
-    graph.CreateTexture("fsr2_reconstructed_depth"_sid, TextureInfo{VK_FORMAT_R32_UINT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("fsr2_lock_input_luma"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("fsr2_prepared_color"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
-    graph.CreateTexture("fsr2_dilated_reactive"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture reconstructedDepth = graph.CreateTexture("fsr2_reconstructed_depth"_sid, TextureInfo{VK_FORMAT_R32_UINT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture lockInputLuma = graph.CreateTexture("fsr2_lock_input_luma"_sid, TextureInfo{VK_FORMAT_R16_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture preparedColor = graph.CreateTexture("fsr2_prepared_color"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture dilatedReactive = graph.CreateTexture("fsr2_dilated_reactive"_sid, TextureInfo{VK_FORMAT_R8G8_UNORM, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
     // Lock pass sets, accumulate reads and clears; must be zero before the lock pass
-    graph.CreateTexture("fsr2_new_locks"_sid, TextureInfo{VK_FORMAT_R8_UNORM, displayW, displayH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture newLocks = graph.CreateTexture("fsr2_new_locks"_sid, TextureInfo{VK_FORMAT_R8_UNORM, displayW, displayH, 1}, CLEAR_COLOR_EMPTY, true);
+    RDGTexture reactiveMask{};
     if (bReactive) {
-        graph.CreateTexture("fsr2_reactive_mask"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
+        reactiveMask = graph.CreateTexture("fsr2_reactive_mask"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
     }
-    graph.CreateTexture("fsr2_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, displayW, displayH, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture fsr2Output = graph.CreateTexture("fsr2_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, displayW, displayH, 1}, CLEAR_COLOR_EMPTY, true);
 
-    const bool bHasHistory = graph.ResourceHasVersion("fsr2_history_color"_sid, 1);
-    const bool bHasPrevMotion = graph.ResourceHasVersion("fsr2_dilated_motion"_sid, 1);
-    const StringID prevHistoryColorId = bHasHistory ? graph.ResourceVersionID("fsr2_history_color"_sid, 1) : "fsr2_prepared_color"_sid;
-    const StringID prevLockStatusId = bHasHistory ? graph.ResourceVersionID("fsr2_lock_status"_sid, 1) : "fsr2_dilated_reactive"_sid;
-    const StringID prevLumaHistoryId = bHasHistory ? graph.ResourceVersionID("fsr2_luma_history"_sid, 1) : "fsr2_prepared_color"_sid;
-    const StringID prevDilatedMotionId = bHasPrevMotion ? graph.ResourceVersionID("fsr2_dilated_motion"_sid, 1) : "fsr2_dilated_motion"_sid;
+    const bool bHasHistory = historyColorRing.Version(1).IsValid();
+    const bool bHasPrevMotion = dilatedMotionRing.Version(1).IsValid();
+    const RDGTexture prevHistoryColor = bHasHistory ? historyColorRing.Version(1) : preparedColor;
+    const RDGTexture prevLockStatus = bHasHistory ? lockStatusRing.Version(1) : dilatedReactive;
+    const RDGTexture prevLumaHistory = bHasHistory ? lumaHistoryRing.Version(1) : preparedColor;
+    const RDGTexture prevDilatedMotion = bHasPrevMotion ? dilatedMotionRing.Version(1) : dilatedMotion;
 
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
     const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(Core::AntiAliasingMode::FSR2, viewFamily.resolutionScale);
@@ -511,14 +529,14 @@ StringID SetupFsr2(RenderGraph& graph,
         RenderPass& reactivePass = graph.AddPass("FSR2 Reactive"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
         reactivePass.ReadSampledImage(targets.colorOutput);
         reactivePass.ReadSampledImage(preOverlayColor);
-        reactivePass.WriteStorageImage("fsr2_reactive_mask"_sid);
-        reactivePass.Execute([pipelineManager, constants, preOverlayColor, colorOutput = targets.colorOutput, scale = config.reactiveScale, threshold = config.reactiveThreshold,
+        reactivePass.WriteStorageImage(reactiveMask);
+        reactivePass.Execute([pipelineManager, constants, preOverlayColor, reactiveMask, colorOutput = targets.colorOutput, scale = config.reactiveScale, threshold = config.reactiveThreshold,
                 renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 Fsr2ReactivePushConstant pushData{
                     .c = constants,
                     .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
                     .preOverlayColorIndex = graph.GetSampledImageViewDescriptorIndex(preOverlayColor),
-                    .reactiveOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_reactive_mask"_sid),
+                    .reactiveOutIndex = graph.GetStorageImageViewDescriptorIndex(reactiveMask),
                     .scale = scale,
                     .threshold = threshold,
                     .binaryValue = 0.9f,
@@ -529,137 +547,138 @@ StringID SetupFsr2(RenderGraph& graph,
 
     RenderPass& luminancePass = graph.AddPass("FSR2 Luminance"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     luminancePass.ReadSampledImage(targets.colorOutput);
-    luminancePass.WriteStorageImage("fsr2_luma_mip4"_sid);
-    luminancePass.Execute([pipelineManager, constants, colorOutput = targets.colorOutput, mip5W, mip5H](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    luminancePass.WriteStorageImage(lumaMip4);
+    luminancePass.Execute([pipelineManager, constants, colorOutput = targets.colorOutput, lumaMip4, mip5W, mip5H](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         Fsr2LuminancePushConstant pushData{
             .c = constants,
             .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
-            .lumaMip4OutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_luma_mip4"_sid),
+            .lumaMip4OutIndex = graph.GetStorageImageViewDescriptorIndex(lumaMip4),
         };
         DispatchFsr2Pass(pipelineManager, cmd, "fsr2_luminance"_sid, &pushData, sizeof(pushData), mip5W, mip5H);
     });
 
     RenderPass& reconstructPass = graph.AddPass("FSR2 Reconstruct"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    reconstructPass.ReadBuffer("scene_data"_sid);
+    reconstructPass.ReadBuffer(scene.sceneData);
     reconstructPass.ReadSampledImage(targets.depthCopy);
     reconstructPass.ReadSampledImage(targets.gbufferOne);
     reconstructPass.ReadSampledImage(targets.colorOutput);
-    reconstructPass.WriteStorageImage("fsr2_dilated_depth"_sid);
-    reconstructPass.WriteStorageImage("fsr2_dilated_motion"_sid);
-    reconstructPass.WriteStorageImage("fsr2_reconstructed_depth"_sid);
-    reconstructPass.WriteStorageImage("fsr2_lock_input_luma"_sid);
-    reconstructPass.Execute([pipelineManager, constants, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
-            renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    reconstructPass.WriteStorageImage(dilatedDepth);
+    reconstructPass.WriteStorageImage(dilatedMotion);
+    reconstructPass.WriteStorageImage(reconstructedDepth);
+    reconstructPass.WriteStorageImage(lockInputLuma);
+    reconstructPass.Execute([&scene, pipelineManager, constants, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+            dilatedDepth, dilatedMotion, reconstructedDepth, lockInputLuma, renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2ReconstructPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .c = constants,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthCopy),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
-                .dilatedDepthOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_dilated_depth"_sid),
-                .dilatedMotionOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_dilated_motion"_sid),
-                .reconstructedDepthOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_reconstructed_depth"_sid),
-                .lockInputLumaOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_lock_input_luma"_sid),
+                .dilatedDepthOutIndex = graph.GetStorageImageViewDescriptorIndex(dilatedDepth),
+                .dilatedMotionOutIndex = graph.GetStorageImageViewDescriptorIndex(dilatedMotion),
+                .reconstructedDepthOutIndex = graph.GetStorageImageViewDescriptorIndex(reconstructedDepth),
+                .lockInputLumaOutIndex = graph.GetStorageImageViewDescriptorIndex(lockInputLuma),
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_reconstruct"_sid, &pushData, sizeof(pushData), renderGroupsX, renderGroupsY);
         });
 
     RenderPass& depthClipPass = graph.AddPass("FSR2 Depth Clip"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    depthClipPass.ReadBuffer("scene_data"_sid);
+    depthClipPass.ReadBuffer(scene.sceneData);
     depthClipPass.ReadSampledImage(targets.depthCopy);
     depthClipPass.ReadSampledImage(targets.gbufferOne);
     depthClipPass.ReadSampledImage(targets.colorOutput);
     if (bReactive) {
-        depthClipPass.ReadSampledImage("fsr2_reactive_mask"_sid);
+        depthClipPass.ReadSampledImage(reactiveMask);
     }
-    depthClipPass.ReadSampledImage("fsr2_dilated_depth"_sid);
-    depthClipPass.ReadSampledImage("fsr2_dilated_motion"_sid);
+    depthClipPass.ReadSampledImage(dilatedDepth);
+    depthClipPass.ReadSampledImage(dilatedMotion);
     if (bHasPrevMotion) {
-        depthClipPass.ReadSampledImage(prevDilatedMotionId);
+        depthClipPass.ReadSampledImage(prevDilatedMotion);
     }
-    depthClipPass.ReadSampledImage("fsr2_reconstructed_depth"_sid);
+    depthClipPass.ReadSampledImage(reconstructedDepth);
     if (bVirtualMotion) {
-        depthClipPass.WriteStorageImage(REFLECTION_VIRTUAL_MOTION_TARGET);
+        depthClipPass.WriteStorageImage(virtualMotion);
         if (bHasPreOverlayColor) {
             depthClipPass.ReadSampledImage(preOverlayColor);
         }
     }
-    depthClipPass.WriteStorageImage("fsr2_prepared_color"_sid);
-    depthClipPass.WriteStorageImage("fsr2_dilated_reactive"_sid);
-    depthClipPass.Execute([pipelineManager, constants, bReactive, bVirtualMotion, bHasPreOverlayColor, preOverlayColor, prevDilatedMotionId, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne, colorOutput = targets.colorOutput,
+    depthClipPass.WriteStorageImage(preparedColor);
+    depthClipPass.WriteStorageImage(dilatedReactive);
+    depthClipPass.Execute([&scene, pipelineManager, constants, bReactive, bVirtualMotion, bHasPreOverlayColor, preOverlayColor, prevDilatedMotion, depthCopy = targets.depthCopy, gbufferOne = targets.gbufferOne,
+            colorOutput = targets.colorOutput, reactiveMask, dilatedDepth, dilatedMotion, reconstructedDepth, preparedColor, dilatedReactive, virtualMotion,
             reflectionReactive = config.reflectionReactive, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax, tracedRoughnessMax = reflectionConfig.tracedRoughnessMax,
             renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2DepthClipPushConstant pushData{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .c = constants,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depthCopy),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .colorIndex = graph.GetSampledImageViewDescriptorIndex(colorOutput),
-                .reactiveMaskIndex = bReactive ? graph.GetSampledImageViewDescriptorIndex("fsr2_reactive_mask"_sid) : INVALID_INDEX,
-                .dilatedDepthIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_depth"_sid),
-                .dilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_motion"_sid),
-                .previousDilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex(prevDilatedMotionId),
-                .reconstructedDepthIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_reconstructed_depth"_sid),
-                .preparedColorOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_prepared_color"_sid),
-                .dilatedReactiveOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_dilated_reactive"_sid),
+                .reactiveMaskIndex = bReactive ? graph.GetSampledImageViewDescriptorIndex(reactiveMask) : INVALID_INDEX,
+                .dilatedDepthIndex = graph.GetSampledImageViewDescriptorIndex(dilatedDepth),
+                .dilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex(dilatedMotion),
+                .previousDilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex(prevDilatedMotion),
+                .reconstructedDepthIndex = graph.GetSampledImageViewDescriptorIndex(reconstructedDepth),
+                .preparedColorOutIndex = graph.GetStorageImageViewDescriptorIndex(preparedColor),
+                .dilatedReactiveOutIndex = graph.GetStorageImageViewDescriptorIndex(dilatedReactive),
                 .reflectionReactive = reflectionReactive,
                 .mirrorRoughnessMax = mirrorRoughnessMax,
                 .tracedRoughnessMax = tracedRoughnessMax,
-                .virtualMotionIndex = bVirtualMotion ? graph.GetStorageImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : INVALID_INDEX,
+                .virtualMotionIndex = bVirtualMotion ? graph.GetStorageImageViewDescriptorIndex(virtualMotion) : INVALID_INDEX,
                 .preOverlayColorIndex = bVirtualMotion && bHasPreOverlayColor ? graph.GetSampledImageViewDescriptorIndex(preOverlayColor) : INVALID_INDEX,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_depth_clip"_sid, &pushData, sizeof(pushData), renderGroupsX, renderGroupsY);
         });
 
     RenderPass& lockPass = graph.AddPass("FSR2 Lock"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    lockPass.ReadSampledImage("fsr2_lock_input_luma"_sid);
-    lockPass.WriteStorageImage("fsr2_new_locks"_sid);
-    lockPass.Execute([pipelineManager, constants, renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    lockPass.ReadSampledImage(lockInputLuma);
+    lockPass.WriteStorageImage(newLocks);
+    lockPass.Execute([pipelineManager, constants, lockInputLuma, newLocks, renderGroupsX, renderGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         Fsr2LockPushConstant pushData{
             .c = constants,
-            .lockInputLumaIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_lock_input_luma"_sid),
-            .newLocksOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_new_locks"_sid),
+            .lockInputLumaIndex = graph.GetSampledImageViewDescriptorIndex(lockInputLuma),
+            .newLocksOutIndex = graph.GetStorageImageViewDescriptorIndex(newLocks),
         };
         DispatchFsr2Pass(pipelineManager, cmd, "fsr2_lock"_sid, &pushData, sizeof(pushData), renderGroupsX, renderGroupsY);
     });
 
     RenderPass& accumulatePass = graph.AddPass("FSR2 Accumulate"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-    accumulatePass.ReadSampledImage("fsr2_dilated_reactive"_sid);
-    accumulatePass.ReadSampledImage("fsr2_dilated_motion"_sid);
-    accumulatePass.ReadSampledImage("fsr2_prepared_color"_sid);
-    accumulatePass.ReadSampledImage("fsr2_luma_mip4"_sid);
+    accumulatePass.ReadSampledImage(dilatedReactive);
+    accumulatePass.ReadSampledImage(dilatedMotion);
+    accumulatePass.ReadSampledImage(preparedColor);
+    accumulatePass.ReadSampledImage(lumaMip4);
     if (bVirtualMotion) {
-        accumulatePass.ReadSampledImage(REFLECTION_VIRTUAL_MOTION_TARGET);
+        accumulatePass.ReadSampledImage(virtualMotion);
     }
     if (bHasHistory) {
-        accumulatePass.ReadSampledImage(prevHistoryColorId);
-        accumulatePass.ReadSampledImage(prevLockStatusId);
-        accumulatePass.ReadSampledImage(prevLumaHistoryId);
+        accumulatePass.ReadSampledImage(prevHistoryColor);
+        accumulatePass.ReadSampledImage(prevLockStatus);
+        accumulatePass.ReadSampledImage(prevLumaHistory);
     }
-    accumulatePass.WriteStorageImage("fsr2_new_locks"_sid);
-    accumulatePass.WriteStorageImage("fsr2_history_color"_sid);
-    accumulatePass.WriteStorageImage("fsr2_lock_status"_sid);
-    accumulatePass.WriteStorageImage("fsr2_luma_history"_sid);
+    accumulatePass.WriteStorageImage(newLocks);
+    accumulatePass.WriteStorageImage(historyColor);
+    accumulatePass.WriteStorageImage(lockStatus);
+    accumulatePass.WriteStorageImage(lumaHistory);
     if (!bSharpen) {
-        accumulatePass.WriteStorageImage("fsr2_output"_sid);
+        accumulatePass.WriteStorageImage(fsr2Output);
     }
-    accumulatePass.Execute([pipelineManager, constants, bSharpen, bVirtualMotion, prevHistoryColorId, prevLockStatusId, prevLumaHistoryId,
-            displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    accumulatePass.Execute([pipelineManager, constants, bSharpen, bVirtualMotion, prevHistoryColor, prevLockStatus, prevLumaHistory, dilatedReactive, dilatedMotion, preparedColor, lumaMip4, newLocks,
+            historyColor, lockStatus, lumaHistory, fsr2Output, virtualMotion, displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2AccumulatePushConstant pushData{
                 .c = constants,
-                .dilatedReactiveIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_reactive"_sid),
-                .dilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_dilated_motion"_sid),
-                .historyColorIndex = graph.GetSampledImageViewDescriptorIndex(prevHistoryColorId),
-                .lockStatusIndex = graph.GetSampledImageViewDescriptorIndex(prevLockStatusId),
-                .preparedColorIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_prepared_color"_sid),
-                .lumaMip4Index = graph.GetSampledImageViewDescriptorIndex("fsr2_luma_mip4"_sid),
-                .lumaHistoryIndex = graph.GetSampledImageViewDescriptorIndex(prevLumaHistoryId),
-                .newLocksIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_new_locks"_sid),
-                .historyColorOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_history_color"_sid),
-                .lockStatusOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_lock_status"_sid),
-                .lumaHistoryOutIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_luma_history"_sid),
-                .outputIndex = bSharpen ? INVALID_INDEX : graph.GetStorageImageViewDescriptorIndex("fsr2_output"_sid),
-                .virtualMotionIndex = bVirtualMotion ? graph.GetSampledImageViewDescriptorIndex(REFLECTION_VIRTUAL_MOTION_TARGET) : INVALID_INDEX,
+                .dilatedReactiveIndex = graph.GetSampledImageViewDescriptorIndex(dilatedReactive),
+                .dilatedMotionIndex = graph.GetSampledImageViewDescriptorIndex(dilatedMotion),
+                .historyColorIndex = graph.GetSampledImageViewDescriptorIndex(prevHistoryColor),
+                .lockStatusIndex = graph.GetSampledImageViewDescriptorIndex(prevLockStatus),
+                .preparedColorIndex = graph.GetSampledImageViewDescriptorIndex(preparedColor),
+                .lumaMip4Index = graph.GetSampledImageViewDescriptorIndex(lumaMip4),
+                .lumaHistoryIndex = graph.GetSampledImageViewDescriptorIndex(prevLumaHistory),
+                .newLocksIndex = graph.GetStorageImageViewDescriptorIndex(newLocks),
+                .historyColorOutIndex = graph.GetStorageImageViewDescriptorIndex(historyColor),
+                .lockStatusOutIndex = graph.GetStorageImageViewDescriptorIndex(lockStatus),
+                .lumaHistoryOutIndex = graph.GetStorageImageViewDescriptorIndex(lumaHistory),
+                .outputIndex = bSharpen ? INVALID_INDEX : graph.GetStorageImageViewDescriptorIndex(fsr2Output),
+                .virtualMotionIndex = bVirtualMotion ? graph.GetSampledImageViewDescriptorIndex(virtualMotion) : INVALID_INDEX,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_accumulate"_sid, &pushData, sizeof(pushData), displayGroupsX, displayGroupsY);
         });
@@ -668,19 +687,19 @@ StringID SetupFsr2(RenderGraph& graph,
         // FSR2 maps sharpness [0, 1] to 2 - 2 * sharpness stops of attenuation
         const float sharpnessLinear = std::exp2(-(2.0f - 2.0f * glm::clamp(config.sharpness, 0.0f, 1.0f)));
         RenderPass& rcasPass = graph.AddPass("FSR2 RCAS"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
-        rcasPass.ReadSampledImage("fsr2_history_color"_sid);
-        rcasPass.WriteStorageImage("fsr2_output"_sid);
-        rcasPass.Execute([pipelineManager, constants, sharpnessLinear, displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        rcasPass.ReadSampledImage(historyColor);
+        rcasPass.WriteStorageImage(fsr2Output);
+        rcasPass.Execute([pipelineManager, constants, sharpnessLinear, historyColor, fsr2Output, displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2RcasPushConstant pushData{
                 .c = constants,
-                .inputIndex = graph.GetSampledImageViewDescriptorIndex("fsr2_history_color"_sid),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex("fsr2_output"_sid),
+                .inputIndex = graph.GetSampledImageViewDescriptorIndex(historyColor),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(fsr2Output),
                 .sharpness = sharpnessLinear,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_rcas"_sid, &pushData, sizeof(pushData), displayGroupsX, displayGroupsY);
         });
     }
 
-    return "fsr2_output"_sid;
+    return fsr2Output;
 }
 } // Render

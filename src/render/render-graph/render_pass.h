@@ -17,69 +17,36 @@ class RenderPass
 public:
     RenderPass(RenderGraph& renderGraph, StringID passId, VkPipelineStageFlags2 stages, RenderCategory category, Core::Arena* arena);
 
-    // Write
-    RenderPass& WriteStorageImage(StringID textureId, TextureInfo texInfo = {});
-
-    RenderPass& WriteClearImage(StringID textureId, const TextureInfo& texInfo = {});
-
-    RenderPass& WriteBlitImage(StringID textureId, const TextureInfo& texInfo = {});
-
-    RenderPass& WriteCopyImage(StringID textureId, const TextureInfo& texInfo = {});
-
-    /**
-     * Color attachments have hard coded stage masks, so the pass does not need to specify stages for it.
-     * @param textureId
-     * @param texInfo
-     * @return
-     */
-    RenderPass& WriteColorAttachment(StringID textureId, const TextureInfo& texInfo = {});
-
-    /**
-     * Depth attachments have hard coded stage masks, so the pass does not need to specify stages for it.
-     * @param textureId
-     * @param texInfo
-     * @return
-     */
-    RenderPass& WriteDepthAttachment(StringID textureId, const TextureInfo& texInfo = {});
-
-    RenderPass& ReadWriteImage(StringID name, const TextureInfo& texInfo = {});
-
-    RenderPass& ReadDepthAttachment(StringID textureId);
-
-    RenderPass& ReadStorageImage(StringID textureId);
-
-    RenderPass& ReadSampledImage(StringID textureId);
-
-    RenderPass& ReadBlitImage(StringID textureId);
-
-    RenderPass& ReadCopyImage(StringID textureId);
+    // Textures
+    RenderPass& WriteStorageImage(RDGTexture texture);
+    RenderPass& WriteClearImage(RDGTexture texture);
+    RenderPass& WriteBlitImage(RDGTexture texture);
+    RenderPass& WriteCopyImage(RDGTexture texture);
+    /** Color attachments have hard coded stage masks, so the pass does not need to specify stages for it. */
+    RenderPass& WriteColorAttachment(RDGTexture texture);
+    /** Depth attachments have hard coded stage masks, so the pass does not need to specify stages for it. */
+    RenderPass& WriteDepthAttachment(RDGTexture texture);
+    RenderPass& ReadWriteImage(RDGTexture texture);
+    RenderPass& ReadDepthAttachment(RDGTexture texture);
+    RenderPass& ReadStorageImage(RDGTexture texture);
+    RenderPass& ReadSampledImage(RDGTexture texture);
+    RenderPass& ReadBlitImage(RDGTexture texture);
+    RenderPass& ReadCopyImage(RDGTexture texture);
+    RenderPass& ReadWriteDepthAttachment(RDGTexture texture);
 
     // Buffers
-    RenderPass& WriteBuffer(StringID bufferId);
-
-    RenderPass& WriteTransferBuffer(StringID bufferId);
-
-    RenderPass& ReadWriteDepthAttachment(StringID bufferId, const TextureInfo& texInfo = {});
-
-    RenderPass& ReadWriteBuffer(StringID bufferId);
-
-    RenderPass& ReadBuffer(StringID bufferId);
-
-    RenderPass& ReadIndexBuffer(StringID bufferId);
-
-    RenderPass& ReadTransferBuffer(StringID bufferId);
-
-    RenderPass& ReadIndirectBuffer(StringID bufferId);
-
-    RenderPass& ReadIndirectCountBuffer(StringID bufferId);
-
-    RenderPass& WriteTLASBuffer(StringID bufferId);
-
-    RenderPass& ReadTLASBuffer(StringID bufferId);
-
-    RenderPass& WriteScratchBuffer(StringID bufferId);
-
-    RenderPass& ReadASInputBuffer(StringID bufferId);
+    RenderPass& WriteBuffer(RDGBuffer buffer);
+    RenderPass& WriteTransferBuffer(RDGBuffer buffer);
+    RenderPass& ReadWriteBuffer(RDGBuffer buffer);
+    RenderPass& ReadBuffer(RDGBuffer buffer);
+    RenderPass& ReadIndexBuffer(RDGBuffer buffer);
+    RenderPass& ReadTransferBuffer(RDGBuffer buffer);
+    RenderPass& ReadIndirectBuffer(RDGBuffer buffer);
+    RenderPass& ReadIndirectCountBuffer(RDGBuffer buffer);
+    RenderPass& WriteTLASBuffer(RDGBuffer buffer);
+    RenderPass& ReadTLASBuffer(RDGBuffer buffer);
+    RenderPass& WriteScratchBuffer(RDGBuffer buffer);
+    RenderPass& ReadASInputBuffer(RDGBuffer buffer);
 
     RenderPass& AsyncCompute()
     {

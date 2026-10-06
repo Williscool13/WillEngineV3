@@ -6,6 +6,7 @@
 
 #include <utility>
 #include <bit>
+#include <type_traits>
 #include <cstring>
 
 #include "render_graph_config.h"
@@ -1630,15 +1631,14 @@ void RenderGraph::Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd)
     }
 }
 
-void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, StringID textureId)
+void RenderGraph::PrepareSwapchain(VkCommandBuffer cmd, RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    if (!idx) {
+    if (!texture.IsValid()) {
         LOG_ERROR(Renderer, "[RenderGraph::PrepareSwapchain] Prepare swapchain failed.");
         return;
     }
 
-    TextureResource& swapchainTexture = textures[*idx];
+    TextureResource& swapchainTexture = ResolveTexture(texture);
     auto& phys = physicalResources[swapchainTexture.physicalIndex];
 
     VkImageMemoryBarrier2 presentBarrier = VkHelpers::ImageMemoryBarrier(
@@ -1676,7 +1676,7 @@ void RenderGraph::FrameStartReset(uint32_t _currentFrameIndex, uint64_t currentF
             HostBuffer& slot = entry.slots[currentFrameIndex];
             if (slot.buffer == VK_NULL_HANDLE) { continue; }
             if (const BufferResource* buf = GetBuffer(entry.name)) {
-                slot.lastState = GetBufferState(entry.name);
+                slot.lastState = GetBufferState(RDGBuffer{buf->index});
             }
         }
     }
@@ -1947,7 +1947,19 @@ void RenderGraph::      CaptureRingVersions()
     }
 }
 
-void RenderGraph::CreateVersionedTexture(StringID name, const TextureInfo& texInfo, uint32_t depth, VersionSource source, bool bIsViewportScaled, VkImageUsageFlags extraUsage, bool bConcurrent, std::optional<VkClearValue> clearValue)
+template<typename T>
+RDGRing<T> RenderGraph::MakeRingHandle(const ResourceRing& ring)
+{
+    RDGRing<T> handle{};
+    handle.ringIndex = static_cast<uint32_t>(&ring - rings.Data());
+    for (uint32_t d = 0; d <= ring.depth; ++d) {
+        if constexpr (std::is_same_v<T, RDGTexture>) { handle.versions[d] = FindTexture(ring.versionNames[d]); }
+        else { handle.versions[d] = FindBuffer(ring.versionNames[d]); }
+    }
+    return handle;
+}
+
+RDGTextureRing RenderGraph::CreateVersionedTexture(StringID name, const TextureInfo& texInfo, uint32_t depth, VersionSource source, bool bIsViewportScaled, VkImageUsageFlags extraUsage, bool bConcurrent, std::optional<VkClearValue> clearValue)
 {
     ENGINE_ASSERT(Renderer, depth <= RDG_MAX_RING_DEPTH, "Versioned texture '{}' depth {} exceeds RDG_MAX_RING_DEPTH", name.ToString(), depth);
     ENGINE_ASSERT(Renderer, texInfo.format != VK_FORMAT_UNDEFINED, "Texture info uses undefined format");
@@ -1980,9 +1992,10 @@ void RenderGraph::CreateVersionedTexture(StringID name, const TextureInfo& texIn
     ring->source = source;
     ring->emplaceSource = {};
     BindRingLogicals(*ring);
+    return MakeRingHandle<RDGTexture>(*ring);
 }
 
-void RenderGraph::CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32_t depth, VersionSource source, VkDeviceSize minAlignment, VkBufferUsageFlags extraUsage)
+RDGBufferRing RenderGraph::CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32_t depth, VersionSource source, VkDeviceSize minAlignment, VkBufferUsageFlags extraUsage)
 {
     ENGINE_ASSERT(Renderer, depth <= RDG_MAX_RING_DEPTH, "Versioned buffer '{}' depth {} exceeds RDG_MAX_RING_DEPTH", name.ToString(), depth);
     ENGINE_ASSERT(Renderer, size > 0, "Versioned buffer '{}' requested with zero size", name.ToString());
@@ -2010,9 +2023,10 @@ void RenderGraph::CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32
     ring->source = source;
     ring->emplaceSource = {};
     BindRingLogicals(*ring);
+    return MakeRingHandle<RDGBuffer>(*ring);
 }
 
-void RenderGraph::CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category)
+RDGBufferRing RenderGraph::CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category)
 {
     ENGINE_ASSERT(Renderer, bufferNameToIndex.Find(name) == nullptr, "Versioned TLAS '{}' collides with a buffer already declared this frame", name.ToString());
 
@@ -2038,6 +2052,7 @@ void RenderGraph::CreateVersionedTLAS(StringID name, VkDeviceSize asSize, Render
     ring->source = VersionSource::Fresh;
     ring->emplaceSource = {};
     BindRingLogicals(*ring);
+    return MakeRingHandle<RDGBuffer>(*ring);
 }
 
 void RenderGraph::EmplaceVersion(StringID resourceDst, StringID resourceSrc)
@@ -2062,10 +2077,16 @@ void RenderGraph::EmplaceVersion(StringID resourceDst, StringID resourceSrc)
     ring->emplaceSource = resourceSrc;
 }
 
-StringID RenderGraph::ResourceVersionID(StringID name, uint32_t age)
+void RenderGraph::EmplaceVersion(const RDGTextureRing& ring, RDGTexture source)
 {
-    ENGINE_ASSERT(Renderer, age <= RDG_MAX_RING_DEPTH, "Version: age {} exceeds RDG_MAX_RING_DEPTH", age);
-    return RingVersionName(name, age);
+    ENGINE_ASSERT(Renderer, ring.ringIndex < rings.Size(), "EmplaceVersion: invalid ring handle");
+    EmplaceVersion(rings[ring.ringIndex].name, ResolveTexture(source).textureId);
+}
+
+void RenderGraph::EmplaceVersion(const RDGBufferRing& ring, RDGBuffer source)
+{
+    ENGINE_ASSERT(Renderer, ring.ringIndex < rings.Size(), "EmplaceVersion: invalid ring handle");
+    EmplaceVersion(rings[ring.ringIndex].name, ResolveBuffer(source).bufferId);
 }
 
 bool RenderGraph::ResourceHasVersion(StringID name, uint32_t age)
@@ -2137,7 +2158,7 @@ void RenderGraph::ValidateAsyncHazards(uint64_t currentFrame)
 #endif
 }
 
-void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue, bool bIsViewportScaled)
+RDGTexture RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue, bool bIsViewportScaled)
 {
     TextureResource* tex = GetOrCreateTexture(textureId);
 
@@ -2155,6 +2176,7 @@ void RenderGraph::CreateTexture(const StringID textureId, const TextureInfo& tex
     tex->bIsViewportScaled = bIsViewportScaled;
     tex->clear = clearValue;
     tex->bDeclaredThisFrame = true;
+    return RDGTexture{tex->index};
 }
 
 void RenderGraph::DetachTexture(TextureResource& tex) const
@@ -2195,21 +2217,7 @@ void RenderGraph::ReconcileDetachedPhysicals()
     }
 }
 
-void RenderGraph::AliasTexture(const StringID aliasId, const StringID existingId)
-{
-    uint32_t* idx = textureNameToIndex.Find(existingId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Aliasing texture failed because existing texture doesn't exist");
-    textureNameToIndex[aliasId] = *idx;
-}
-
-void RenderGraph::AliasBuffer(const StringID aliasId, const StringID existingId)
-{
-    uint32_t* idx = bufferNameToIndex.Find(existingId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Aliasing buffer failed because existing buffer doesn't exist");
-    bufferNameToIndex[aliasId] = *idx;
-}
-
-void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled, bool bCanAlias)
+RDGBuffer RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled, bool bCanAlias)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
@@ -2222,9 +2230,10 @@ void RenderGraph::CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsVie
     buf->bCanUseAliasedBuffer = bCanAlias;
     buf->bIsViewportScaled = bIsViewportScaled;
     buf->bDeclaredThisFrame = true;
+    return RDGBuffer{buf->index};
 }
 
-void RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled, bool bCanAlias)
+RDGBuffer RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled, bool bCanAlias)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
 
@@ -2238,9 +2247,10 @@ void RenderGraph::CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDe
     buf->bCanUseAliasedBuffer = bCanAlias;
     buf->bIsViewportScaled = bIsViewportScaled;
     buf->bDeclaredThisFrame = true;
+    return RDGBuffer{buf->index};
 }
 
-void RenderGraph::ImportTexture(StringID textureId,
+RDGTexture RenderGraph::ImportTexture(StringID textureId,
                                 VkImage image,
                                 VkImageView view,
                                 const TextureInfo& info,
@@ -2303,9 +2313,10 @@ void RenderGraph::ImportTexture(StringID textureId,
     phys.dimensions.resourceId = textureId;
     phys.usageChain.Clear();
     tex->finalLayout = finalLayout;
+    return RDGTexture{tex->index};
 }
 
-void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info)
+RDGBuffer RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
     buf->bufferInfo = info;
@@ -2345,9 +2356,10 @@ void RenderGraph::ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDe
     phys.dimensions.resourceId = bufferId;
     phys.usageChain.Clear();
     phys.bDisableBarriers = true;
+    return RDGBuffer{buf->index};
 }
 
-void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState)
+RDGBuffer RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState)
 {
     BufferResource* buf = GetOrCreateBuffer(bufferId);
     buf->bufferInfo = info;
@@ -2389,107 +2401,90 @@ void RenderGraph::ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddre
     phys.dimensions.resourceId = bufferId;
     phys.usageChain.Clear();
     phys.bDisableBarriers = false;
+    return RDGBuffer{buf->index};
 }
 
-bool RenderGraph::HasTexture(StringID textureId)
+RDGTexture RenderGraph::FindTexture(StringID textureId)
 {
-    return textureNameToIndex.Find(textureId) != nullptr;
+    const uint32_t* idx = textureNameToIndex.Find(textureId);
+    return idx ? RDGTexture{*idx} : RDGTexture{};
 }
 
-bool RenderGraph::HasBuffer(StringID bufferId)
+RDGBuffer RenderGraph::FindBuffer(StringID bufferId)
 {
-    return bufferNameToIndex.Find(bufferId) != nullptr;
+    const uint32_t* idx = bufferNameToIndex.Find(bufferId);
+    return idx ? RDGBuffer{*idx} : RDGBuffer{};
 }
 
-VkImage RenderGraph::GetImageHandle(StringID textureId)
+TextureResource& RenderGraph::ResolveTexture(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
+    ENGINE_ASSERT(Renderer, texture.index < textures.Size(), "[RDG] Invalid texture handle {} ({} textures this frame)", texture.index, textures.Size());
+    return textures[texture.index];
+}
 
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
+BufferResource& RenderGraph::ResolveBuffer(RDGBuffer buffer)
+{
+    ENGINE_ASSERT(Renderer, buffer.index < buffers.Size(), "[RDG] Invalid buffer handle {} ({} buffers this frame)", buffer.index, buffers.Size());
+    return buffers[buffer.index];
+}
 
+VkImage RenderGraph::GetImageHandle(RDGTexture texture)
+{
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].image;
 }
 
-VkImageView RenderGraph::GetImageViewHandle(StringID textureId)
+VkImageView RenderGraph::GetImageViewHandle(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].imageView;
 }
 
-VkImageView RenderGraph::GetImageViewMipHandle(StringID textureId, uint32_t mipLevel)
+VkImageView RenderGraph::GetImageViewMipHandle(RDGTexture texture, uint32_t mipLevel)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
     ENGINE_ASSERT(Renderer, mipLevel < RDG_MAX_MIP_LEVELS, "Mip level out of range");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].mipViews[mipLevel];
 }
 
-VkImageView RenderGraph::GetDepthOnlyImageViewHandle(StringID textureId)
+VkImageView RenderGraph::GetDepthOnlyImageViewHandle(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
-    auto& phys = physicalResources[tex.physicalIndex];
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
+    const PhysicalResource& phys = physicalResources[tex.physicalIndex];
     if (phys.aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
         return phys.imageView;
     }
-
     ENGINE_ASSERT(Renderer, phys.depthOnlyView != VK_NULL_HANDLE, "Texture has no depth only view");
     return phys.depthOnlyView;
 }
 
-VkImageView RenderGraph::GetStencilOnlyImageViewHandle(StringID textureId)
+VkImageView RenderGraph::GetStencilOnlyImageViewHandle(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
-    auto& phys = physicalResources[tex.physicalIndex];
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
+    const PhysicalResource& phys = physicalResources[tex.physicalIndex];
     if (phys.aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
         return phys.imageView;
     }
-
     ENGINE_ASSERT(Renderer, phys.stencilOnlyView != VK_NULL_HANDLE, "Texture has no stencil only view");
     return phys.stencilOnlyView;
 }
 
-const ResourceDimensions& RenderGraph::GetImageDimensions(StringID textureId)
+const ResourceDimensions& RenderGraph::GetImageDimensions(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].dimensions;
 }
 
-const VkImageAspectFlags RenderGraph::GetImageAspect(StringID textureId)
+VkImageAspectFlags RenderGraph::GetImageAspect(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].aspect;
 }
 
@@ -2515,121 +2510,88 @@ void RenderGraph::ValidatePassDeclaresBuffer(uint32_t bufferIndex)
 #endif
 }
 
-uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(StringID textureId)
+uint32_t RenderGraph::GetSampledImageViewDescriptorIndex(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-    ValidatePassDeclaresTexture(*idx);
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ValidatePassDeclaresTexture(texture.index);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
 }
 
-uint32_t RenderGraph::PeekSampledImageViewDescriptorIndex(StringID textureId)
+uint32_t RenderGraph::PeekSampledImageViewDescriptorIndex(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].sampledDescriptorHandle.index;
 }
 
-uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel)
+uint32_t RenderGraph::GetStorageImageViewDescriptorIndex(RDGTexture texture, uint32_t mipLevel)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-    ValidatePassDeclaresTexture(*idx);
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ValidatePassDeclaresTexture(texture.index);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
     return physicalResources[tex.physicalIndex].storageMipDescriptorHandles[mipLevel].index;
 }
 
-uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId)
+uint32_t RenderGraph::GetDepthOnlySampledImageViewDescriptorIndex(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-    ValidatePassDeclaresTexture(*idx);
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-    auto& phys = physicalResources[tex.physicalIndex];
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ValidatePassDeclaresTexture(texture.index);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
+    const PhysicalResource& phys = physicalResources[tex.physicalIndex];
     if (phys.aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
         return phys.sampledDescriptorHandle.index;
     }
-
     ENGINE_ASSERT(Renderer, phys.depthOnlyDescriptorHandle.IsValid(), "Texture has no depth only descriptor");
     return phys.depthOnlyDescriptorHandle.index;
 }
 
-uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId)
+uint32_t RenderGraph::GetStencilOnlyStorageImageViewDescriptorIndex(RDGTexture texture)
 {
-    uint32_t* idx = textureNameToIndex.Find(textureId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Texture not found");
-    ValidatePassDeclaresTexture(*idx);
-
-    auto& tex = textures[*idx];
-    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture has no physical resource");
-    auto& phys = physicalResources[tex.physicalIndex];
-
+    const TextureResource& tex = ResolveTexture(texture);
+    ValidatePassDeclaresTexture(texture.index);
+    ENGINE_ASSERT(Renderer, tex.HasPhysical(), "Texture '{}' has no physical resource", tex.textureId.ToString());
+    const PhysicalResource& phys = physicalResources[tex.physicalIndex];
     if (phys.aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
         return phys.sampledDescriptorHandle.index;
     }
-
     ENGINE_ASSERT(Renderer, phys.stencilOnlyDescriptorHandle.IsValid(), "Texture has no stencil only descriptor");
     return phys.stencilOnlyDescriptorHandle.index;
 }
 
-VkBuffer RenderGraph::GetBufferHandle(StringID bufferId)
+VkBuffer RenderGraph::GetBufferHandle(RDGBuffer buffer)
 {
-    uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
-    ValidatePassDeclaresBuffer(*idx);
-
-    auto& buf = buffers[*idx];
-    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
-
+    const BufferResource& buf = ResolveBuffer(buffer);
+    ValidatePassDeclaresBuffer(buffer.index);
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer '{}' has no physical resource", buf.bufferId.ToString());
     return physicalResources[buf.physicalIndex].buffer;
 }
 
-VkDeviceAddress RenderGraph::GetBufferAddress(StringID bufferId)
+VkDeviceAddress RenderGraph::GetBufferAddress(RDGBuffer buffer)
 {
-    uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
-    ValidatePassDeclaresBuffer(*idx);
+    const BufferResource& buf = ResolveBuffer(buffer);
+    ValidatePassDeclaresBuffer(buffer.index);
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer '{}' has no physical resource", buf.bufferId.ToString());
 
-    auto& buf = buffers[*idx];
-    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
-
-    auto& phys = physicalResources[buf.physicalIndex];
+    PhysicalResource& phys = physicalResources[buf.physicalIndex];
     ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0, "[RDG] Pass '{}' fetched the address of buffer '{}' but its physical '{}' was created without device-address usage ({:#x})",
-                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
+                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", buf.bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
 
     if (!phys.addressRetrieved) {
         phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
         phys.addressRetrieved = true;
     }
-
     return phys.bufferAddress;
 }
 
-VkDeviceAddress RenderGraph::PeekBufferAddress(StringID bufferId)
+VkDeviceAddress RenderGraph::PeekBufferAddress(RDGBuffer buffer)
 {
-    uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
+    const BufferResource& buf = ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer '{}' has no physical resource", buf.bufferId.ToString());
 
-    auto& buf = buffers[*idx];
-    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
-
-    auto& phys = physicalResources[buf.physicalIndex];
+    PhysicalResource& phys = physicalResources[buf.physicalIndex];
     ENGINE_ASSERT(Renderer, (phys.dimensions.bufferUsage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0, "[RDG] Pass '{}' peeked the address of buffer '{}' but its physical '{}' was created without device-address usage ({:#x})",
-                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
+                  currentRecordingPass ? currentRecordingPass->renderPassId.ToString() : "<none>", buf.bufferId.ToString(), phys.debugName.c_str(), static_cast<uint32_t>(phys.dimensions.bufferUsage));
 
     if (!phys.addressRetrieved) {
         phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
@@ -2638,35 +2600,28 @@ VkDeviceAddress RenderGraph::PeekBufferAddress(StringID bufferId)
     return phys.bufferAddress;
 }
 
-VkDeviceAddress RenderGraph::TryGetBufferAddress(StringID bufferId)
+VkDeviceAddress RenderGraph::TryGetBufferAddress(RDGBuffer buffer)
 {
-    uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    if (idx == nullptr) { return 0; }
-
-    auto& buf = buffers[*idx];
+    if (!buffer.IsValid()) { return 0; }
+    const BufferResource& buf = ResolveBuffer(buffer);
     if (!buf.HasPhysical()) { return 0; }
-    ValidatePassDeclaresBuffer(*idx);
+    ValidatePassDeclaresBuffer(buffer.index);
 
-    auto& phys = physicalResources[buf.physicalIndex];
-
+    PhysicalResource& phys = physicalResources[buf.physicalIndex];
     if (!phys.addressRetrieved) {
         phys.bufferAddress = allocFns.getBufferDeviceAddress(context, phys.buffer);
         phys.addressRetrieved = true;
     }
-
     return phys.bufferAddress;
 }
 
-PipelineEvent RenderGraph::GetBufferState(StringID bufferId)
+PipelineEvent RenderGraph::GetBufferState(RDGBuffer buffer)
 {
-    uint32_t* idx = bufferNameToIndex.Find(bufferId);
-    ENGINE_ASSERT(Renderer, idx != nullptr, "Buffer not found");
-
-    auto& buf = buffers[*idx];
-    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer has no physical resource");
-
+    const BufferResource& buf = ResolveBuffer(buffer);
+    ENGINE_ASSERT(Renderer, buf.HasPhysical(), "Buffer '{}' has no physical resource", buf.bufferId.ToString());
     return physicalResources[buf.physicalIndex].event;
 }
+
 
 UploadAllocation RenderGraph::AllocateTransient(size_t size)
 {
@@ -2834,11 +2789,12 @@ HostBufferWrite RenderGraph::OpenHostBufferMirrored(StringID name, VkDeviceSize 
     HostBuffer& slot = entry.slots[currentFrameIndex];
     slot.bContentsValid = true;
     if (slot.mappedData != nullptr) {
-        return {.mapped = slot.mappedData, .mirror = entry.mirror.IsEmpty() ? nullptr : entry.mirror.Data()};
+        return {.buffer = FindBuffer(name), .mapped = slot.mappedData, .mirror = entry.mirror.IsEmpty() ? nullptr : entry.mirror.Data()};
     }
 
     const VkDeviceSize stagingBase = QueueHostBufferStagingCopy(name, size, bReallocated);
     return {
+        .buffer = FindBuffer(name),
         .mapped = nullptr,
         .mirror = entry.mirror.Data(),
         .regions = bReallocated ? nullptr : &entry.stagingRegions,
@@ -2846,7 +2802,7 @@ HostBufferWrite RenderGraph::OpenHostBufferMirrored(StringID name, VkDeviceSize 
     };
 }
 
-void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage)
+HostBufferMapping RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage)
 {
     ENGINE_ASSERT(Renderer, size > 0, "OpenHostBuffer: buffer '{}' requested with zero size", name.ToString());
 
@@ -2858,12 +2814,12 @@ void* RenderGraph::OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsag
     HostBuffer& slot = entry.slots[currentFrameIndex];
     slot.bContentsValid = true;
     if (slot.mappedData != nullptr) {
-        return slot.mappedData;
+        return {.buffer = FindBuffer(name), .data = slot.mappedData};
     }
 
     // No REBAR, so the write lands in the mirror and a copy carries it into the slot.
     QueueHostBufferStagingCopy(name, size, true);
-    return entry.mirror.Data();
+    return {.buffer = FindBuffer(name), .data = entry.mirror.Data()};
 }
 
 VkDeviceSize RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize size, bool bFullCopy)
@@ -2877,8 +2833,9 @@ VkDeviceSize RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize
     auto passName = Core::InlineString<64>("Upload ");
     passName.Append(name.ToString());
     RenderPass& pass = AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COPY_BIT, RenderCategory::Upload);
-    pass.WriteTransferBuffer(name);
-    pass.Execute([name, srcOffset = upload.offset, size](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    const RDGBuffer target = FindBuffer(name);
+    pass.WriteTransferBuffer(target);
+    pass.Execute([name, target, srcOffset = upload.offset, size](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         HostBufferSlots& slots = graph.GetHostBufferSlots(name);
         const auto* mirror = slots.mirror.Data();
         auto* dst = static_cast<uint8_t*>(graph.GetTransientUploadMapped()) + srcOffset;
@@ -2894,7 +2851,7 @@ VkDeviceSize RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize
             VkCopyBufferInfo2 copyInfo{
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = graph.GetTransientUploadBuffer(),
-                .dstBuffer = graph.GetBufferHandle(name),
+                .dstBuffer = graph.GetBufferHandle(target),
                 .regionCount = 1,
                 .pRegions = &copy,
             };
@@ -2909,7 +2866,7 @@ VkDeviceSize RenderGraph::QueueHostBufferStagingCopy(StringID name, VkDeviceSize
         VkCopyBufferInfo2 copyInfo{
             .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
             .srcBuffer = graph.GetTransientUploadBuffer(),
-            .dstBuffer = graph.GetBufferHandle(name),
+            .dstBuffer = graph.GetBufferHandle(target),
             .regionCount = static_cast<uint32_t>(slots.stagingRegions.Size()),
             .pRegions = slots.stagingRegions.Data(),
         };
@@ -2955,21 +2912,25 @@ void RenderGraph::ImportHostBuffer(StringID name)
     ENGINE_ASSERT(Renderer, false, "ImportHostBuffer: buffer '{}' not registered", name.ToString());
 }
 
-VkAccelerationStructureKHR RenderGraph::GetAccelerationStructureHandle(StringID name)
+VkAccelerationStructureKHR RenderGraph::GetAccelerationStructureHandle(RDGBuffer tlas)
 {
-    const BufferResource* buf = GetBuffer(name);
-    if (!buf || !buf->HasPhysical()) { return VK_NULL_HANDLE; }
-    return physicalResources[buf->physicalIndex].accelerationStructure;
+    if (!tlas.IsValid()) { return VK_NULL_HANDLE; }
+    const BufferResource& buf = ResolveBuffer(tlas);
+    if (!buf.HasPhysical()) { return VK_NULL_HANDLE; }
+    return physicalResources[buf.physicalIndex].accelerationStructure;
 }
 
-uint32_t RenderGraph::GetAccelerationStructureDescriptorIndex(StringID name)
+uint32_t RenderGraph::GetAccelerationStructureDescriptorIndex(RDGBuffer tlas)
 {
-    const BufferResource* buf = GetBuffer(name);
-    if (!buf || !buf->HasPhysical()) { return ~0u; }
-    ValidatePassDeclaresBuffer(buf->index);
-    const PhysicalResource& phys = physicalResources[buf->physicalIndex];
+    if (!tlas.IsValid()) { return ~0u; }
+    const BufferResource& buf = ResolveBuffer(tlas);
+    if (!buf.HasPhysical()) { return ~0u; }
+    ValidatePassDeclaresBuffer(buf.index);
+    const PhysicalResource& phys = physicalResources[buf.physicalIndex];
     return phys.asDescriptorHandle.IsValid() ? phys.asDescriptorHandle.index : ~0u;
 }
+
+
 
 void RenderGraph::ExportGraphviz()
 {

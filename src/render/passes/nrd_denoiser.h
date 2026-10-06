@@ -12,6 +12,7 @@
 #include "core/containers/array.h"
 #include "core/containers/vector.h"
 #include "core/string_id.h"
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "render/interface/render_interface.h"
 #include "render/vulkan/vk_resources.h"
@@ -31,6 +32,20 @@ inline constexpr uint32_t NRD_REBLUR_IDENTIFIER = 2;
 
 enum class NrdBackend : uint32_t { Relax = 0, Reblur = 1 };
 
+/** NRD's imported IO textures for this frame; invalid when Prepare failed. */
+struct NrdFrame
+{
+    RDGTexture inMv;
+    RDGTexture inNormalRoughness;
+    RDGTexture inViewZ;
+    RDGTexture inDiff;
+    RDGTexture inSpec;
+    RDGTexture outDiff;
+    RDGTexture outSpec;
+
+    [[nodiscard]] bool IsValid() const { return inMv.IsValid(); }
+};
+
 class NrdDenoiser
 {
 public:
@@ -43,12 +58,14 @@ public:
     NrdDenoiser& operator=(const NrdDenoiser&) = delete;
 
     /**
-     * Call before the prep passes, AddDispatchPass after them. On false, skip prep/dispatch/writeback.
-     * @return false if NRD initialization failed; callers must skip the prep/dispatch/writeback passes then.
+     * Call before the prep passes, AddDispatchPass after them. On an invalid frame, skip prep/dispatch/writeback.
+     * @param restir its confidence, when valid, feeds NRD's history confidence input
+     * @return the imported IO textures; invalid if NRD initialization failed, and callers must skip the prep/dispatch/writeback passes then.
      */
-    bool Prepare(RenderGraph& graph,
+    NrdFrame Prepare(RenderGraph& graph,
                  const Core::ViewFamily& viewFamily,
                  Core::Extent2D renderExtent,
+                 const ReSTIRFrame& restir,
                  NrdBackend backend,
                  const Core::RELAXParams& relaxParams,
                  const Core::ReBLURParams& reblurParams,
@@ -150,6 +167,8 @@ private:
     bool bPendingHistoryClear{false};
     bool bHasConfidence{false};
     TrackedTexture confidenceTexture{};
+    NrdFrame frame{};
+    RDGTexture confidence{};
     NrdBackend activeBackend{NrdBackend::Relax};
     NrdBackend lastBackend{NrdBackend::Relax};
 
@@ -159,10 +178,11 @@ private:
 };
 
 /** ReBLUR backend packs YCoCg + normalized hitT. */
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure);
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, const SceneResources& scene, const NrdFrame& nrd, NrdBackend backend,
+                        const Core::ReBLURParams& reblurParams, float preExposure);
 
 /** ReBLUR backend converts YCoCg back to linear. */
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure);
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, const NrdFrame& nrd, NrdBackend backend, float preExposure);
 } // Render
 
 #endif //WILL_ENGINE_NRD_DENOISER_H

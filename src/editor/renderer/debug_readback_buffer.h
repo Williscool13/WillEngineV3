@@ -39,7 +39,7 @@ struct DebugReadbackBuffer
     template<typename T>
     void Register(
         const char* label,
-        Core::InlineFunction<void(Render::RenderGraph&, StringID, size_t)> copyFn,
+        Core::InlineFunction<void(Render::RenderGraph&, Render::RDGBuffer, size_t)> copyFn,
         Core::InlineFunction<void(const T&)> presentFn
     )
     {
@@ -62,7 +62,7 @@ struct DebugReadbackBuffer
      * @param graph
      * @param name The imported debug readback buffer name in the RDG.
      */
-    void ScheduleCopies(Render::RenderGraph& graph, StringID name);
+    void ScheduleCopies(Render::RenderGraph& graph, Render::RDGBuffer target);
 
     /**
      * Engine thread. Renders an ImGui collapser per registered entry.
@@ -81,7 +81,7 @@ private:
         const char* label;
         size_t offset;
         size_t size;
-        Core::InlineFunction<void(Render::RenderGraph&, StringID, size_t)> copyFn;
+        Core::InlineFunction<void(Render::RenderGraph&, Render::RDGBuffer, size_t)> copyFn;
         Core::InlineFunction<void(const void*), 128> presentFn;
     };
 

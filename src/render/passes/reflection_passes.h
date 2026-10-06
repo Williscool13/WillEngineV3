@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
@@ -41,37 +42,54 @@ inline float ComputeLightSpecularFromReflectionsMax(const Core::ReflectionConfig
     return config.lightSpecularFromReflectionsMax < config.tracedRoughnessMax ? config.lightSpecularFromReflectionsMax : config.tracedRoughnessMax;
 }
 
-void SetupReflectionTracePass(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              Core::Extent2D renderExtent,
-                              const RenderTargets& targets,
-                              uint32_t sceneIndex,
-                              uint64_t frameNumber,
-                              const Core::ReflectionConfiguration& reflectionConfig);
+/**
+ * RT trace of the reflection BRDF ray, used when ReSTIR does not piggyback it.
+ * @return the frame with hitDescriptors; invalid hitDescriptors when reflections are off or there is no TLAS
+ */
+ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
+                                         PipelineManager* pipelineManager,
+                                         Core::Extent2D renderExtent,
+                                         const RenderTargets& targets,
+                                         const SceneResources& scene,
+                                         uint32_t sceneIndex,
+                                         uint64_t frameNumber,
+                                         const Core::ReflectionConfiguration& reflectionConfig);
 
-/** Hits carry the REFLECTION_INSTANCE_NONE sentinel. */
-void SetupSSRTracePass(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       Core::Extent2D renderExtent,
-                       const RenderTargets& targets,
-                       uint32_t sceneIndex,
-                       uint64_t frameNumber,
-                       uint32_t activeCheckerboardField,
-                       const Core::ReflectionConfiguration& reflectionConfig);
+/**
+ * Hits carry the REFLECTION_INSTANCE_NONE sentinel.
+ * @return the frame with hitDescriptors; invalid hitDescriptors when reflections are off
+ */
+ReflectionFrame SetupSSRTracePass(RenderGraph& graph,
+                                  PipelineManager* pipelineManager,
+                                  Core::Extent2D renderExtent,
+                                  const RenderTargets& targets,
+                                  const SceneResources& scene,
+                                  uint32_t sceneIndex,
+                                  uint64_t frameNumber,
+                                  uint32_t activeCheckerboardField,
+                                  const Core::ReflectionConfiguration& reflectionConfig);
 
-/** ReSTIR-owned hits contribute nothing. Output is demodulated. */
-void SetupReflectionShadePass(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              const Core::ViewFamily& viewFamily,
-                              Core::Extent2D renderExtent,
-                              const RenderTargets& targets,
-                              uint32_t sceneIndex,
-                              uint64_t frameNumber,
-                              uint32_t activeCheckerboardField,
-                              const Core::ReflectionConfiguration& reflectionConfig,
-                              bool bDDGIApply,
-                              bool bCheckerboardPacked,
-                              bool bDisableScreenTier);
+/**
+ * ReSTIR-owned hits contribute nothing. Output is demodulated.
+ * @param trace the trace output (SetupReflectionTracePass, SetupSSRTracePass, or SetupReSTIRPasses' piggyback); nothing is recorded without hitDescriptors
+ * @return trace completed with specNoisy and, under merged denoise with a TLAS, hitDelta/hitDeltaHistory
+ */
+ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
+                                         PipelineManager* pipelineManager,
+                                         const Core::ViewFamily& viewFamily,
+                                         Core::Extent2D renderExtent,
+                                         const RenderTargets& targets,
+                                         const SceneResources& scene,
+                                         const ReflectionFrame& trace,
+                                         const DDGIFrame& ddgi,
+                                         const WorldGridFrame& worldGrid,
+                                         uint32_t sceneIndex,
+                                         uint64_t frameNumber,
+                                         uint32_t activeCheckerboardField,
+                                         const Core::ReflectionConfiguration& reflectionConfig,
+                                         bool bDDGIApply,
+                                         bool bCheckerboardPacked,
+                                         bool bDisableScreenTier);
 } // Render
 
 #endif //WILL_ENGINE_REFLECTION_PASSES_H

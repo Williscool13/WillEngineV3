@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_GEOMETRY_PASSES_H
 #define WILL_ENGINE_GEOMETRY_PASSES_H
 
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
@@ -15,40 +16,64 @@ namespace Render
 {
 class PipelineManager;
 
-void SetupGeometryPass(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       const SceneBufferSizes& bufferSizes,
-                       const Core::DebugRenderParams& debug,
-                       Core::Extent2D renderExtent,
-                       const RenderTargets& targets,
-                       uint32_t sceneIndex);
+/** SetupVisibilityBucketingPass's tile lists consumed by the shading and bucket debug passes. tileBits is valid only in a bucket debug mode. */
+struct VisibilityBucketTiles
+{
+    RDGBuffer shadingTileList;
+    RDGBuffer tileBits;
+};
 
-void SetupVisibilityBucketingPass(RenderGraph& graph,
-                                  PipelineManager* pipelineManager,
-                                  const Core::ViewFamily& viewFamily,
-                                  Core::Extent2D renderExtent,
-                                  const RenderTargets& targets,
-                                  uint32_t sceneIndex,
-                                  Core::BucketDebugMode bucketDebugMode);
+/**
+ * Two-phase meshlet cull and visibility buffer draw.
+ * @return the Hi-Z pyramid, invalid when phase 2 did not run
+ */
+RDGTexture SetupGeometryPass(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             const SceneBufferSizes& bufferSizes,
+                             const Core::DebugRenderParams& debug,
+                             Core::Extent2D renderExtent,
+                             const RenderTargets& targets,
+                             const SceneResources& scene,
+                             uint32_t sceneIndex);
+
+/**
+ * Per-tile shade and lighting bucketing.
+ * @param outTiles filled for the shading and bucket debug passes
+ * @return invalid when the scene has no bucketing buffers
+ */
+GeometryFrame SetupVisibilityBucketingPass(RenderGraph& graph,
+                                           PipelineManager* pipelineManager,
+                                           const Core::ViewFamily& viewFamily,
+                                           Core::Extent2D renderExtent,
+                                           const RenderTargets& targets,
+                                           const SceneResources& scene,
+                                           uint32_t sceneIndex,
+                                           Core::BucketDebugMode bucketDebugMode,
+                                           VisibilityBucketTiles& outTiles);
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
                                 PipelineManager* pipelineManager,
                                 const Core::ViewFamily& viewFamily,
                                 Core::Extent2D renderExtent,
                                 const RenderTargets& targets,
+                                const SceneResources& scene,
+                                const VisibilityBucketTiles& tiles,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena);
 
 /**
  * Bucket debug views written to bucket_debug_target for the debug visualizer, one group per tile off the bounds pass's per-tile bucket bitset.
  * Buckets modes: fill = the pixel's own bucket, concentric ring n = the n-th bucket dispatched to the tile; Heat modes: tile color by bucket count.
+ * @param tiles SetupVisibilityBucketingPass's output
  */
 void SetupBucketDebugPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
                           const RenderTargets& targets,
+                          const SceneResources& scene,
+                          const VisibilityBucketTiles& tiles,
                           Core::BucketDebugMode bucketDebugMode);
 } // Render
 

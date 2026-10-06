@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_ANTI_ALIASING_PASSES_H
 #define WILL_ENGINE_ANTI_ALIASING_PASSES_H
 
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
@@ -15,31 +16,35 @@ namespace Render
 {
 class PipelineManager;
 
-StringID SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph,
-                                                PipelineManager* pipelineManager,
-                                                const Core::ViewFamily& viewFamily,
-                                                Core::Extent2D renderExtent,
-                                                const RenderTargets& targets);
+RDGTexture SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph,
+                                                  PipelineManager* pipelineManager,
+                                                  const Core::ViewFamily& viewFamily,
+                                                  Core::Extent2D renderExtent,
+                                                  const RenderTargets& targets,
+                                                  const SceneResources& scene);
 
-StringID SetupSMAA_T2X(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       Core::Extent2D renderExtent,
-                       const RenderTargets& targets);
+RDGTexture SetupSMAA_T2X(RenderGraph& graph,
+                         PipelineManager* pipelineManager,
+                         const Core::ViewFamily& viewFamily,
+                         Core::Extent2D renderExtent,
+                         const RenderTargets& targets,
+                         const SceneResources& scene);
 
-StringID SetupTemporalAntiAliasing(RenderGraph& graph,
-                                   PipelineManager* pipelineManager,
-                                   const Core::ViewFamily& viewFamily,
-                                   Core::Extent2D renderExtent,
-                                   const RenderTargets& targets,
-                                   StringID pipelineSID);
+RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
+                                     PipelineManager* pipelineManager,
+                                     const Core::ViewFamily& viewFamily,
+                                     Core::Extent2D renderExtent,
+                                     const RenderTargets& targets,
+                                     const SceneResources& scene,
+                                     StringID pipelineSID);
 
-StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
-                                        PipelineManager* pipelineManager,
-                                        const Core::ViewFamily& viewFamily,
-                                        Core::Extent2D inputExtent,
-                                        Core::Extent2D outputExtent,
-                                        const RenderTargets& targets);
+RDGTexture SetupDonutTemporalAntiAliasing(RenderGraph& graph,
+                                          PipelineManager* pipelineManager,
+                                          const Core::ViewFamily& viewFamily,
+                                          Core::Extent2D inputExtent,
+                                          Core::Extent2D outputExtent,
+                                          const RenderTargets& targets,
+                                          const SceneResources& scene);
 
 /**
  * In-house FSR 2.2.1 (extern/fsr2). Upscales colorOutput from renderExtent to outputExtent and replaces the AA stage.
@@ -49,18 +54,19 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
  * @param preExposure scale colorOutput was written with this frame
  * @param prevPreExposure scale the history was written with
  */
-StringID SetupFsr2(RenderGraph& graph,
-                   PipelineManager* pipelineManager,
-                   const Core::ViewFamily& viewFamily,
-                   Core::Extent2D renderExtent,
-                   Core::Extent2D outputExtent,
-                   const RenderTargets& targets,
-                   const Core::ReflectionConfiguration& reflectionConfig,
-                   float deltaTime,
-                   float framerateScale,
-                   uint64_t frameNumber,
-                   float preExposure,
-                   float prevPreExposure);
+RDGTexture SetupFsr2(RenderGraph& graph,
+                     PipelineManager* pipelineManager,
+                     const Core::ViewFamily& viewFamily,
+                     Core::Extent2D renderExtent,
+                     Core::Extent2D outputExtent,
+                     const RenderTargets& targets,
+                     const SceneResources& scene,
+                     const Core::ReflectionConfiguration& reflectionConfig,
+                     float deltaTime,
+                     float framerateScale,
+                     uint64_t frameNumber,
+                     float preExposure,
+                     float prevPreExposure);
 } // Render
 
 #endif //WILL_ENGINE_ANTI_ALIASING_PASSES_H

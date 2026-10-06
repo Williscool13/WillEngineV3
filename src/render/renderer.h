@@ -32,13 +32,14 @@ namespace Render
 {
 class PipelineManager;
 
-StringID SetupPostProcessing(RenderGraph& graph,
+RDGTexture SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
                              Core::Extent2D renderExtent,
                              Core::Extent2D preAaExtent,
                              Core::Extent2D displayExtent,
                              const RenderTargets& targets,
+                             const SceneResources& scene,
                              float deltaTime,
                              uint64_t frameNumber,
                              float preExposure);

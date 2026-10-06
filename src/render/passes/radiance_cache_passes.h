@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_RADIANCE_CACHE_PASSES_H
 #define WILL_ENGINE_RADIANCE_CACHE_PASSES_H
 
+#include "render/frame_outputs.h"
 #include "render/render-graph/render_graph.h"
 #include "render/shaders/radiance_cache_interop.h"
 
@@ -32,12 +33,6 @@ inline constexpr VkDeviceSize RADIANCE_CACHE_DESCRIPTORS_BYTES = static_cast<VkD
 inline constexpr VkDeviceSize RADIANCE_CACHE_ACTIVE_LIST_BYTES = static_cast<VkDeviceSize>(RADIANCE_CACHE_SHADE_BUDGET) * sizeof(uint32_t);
 inline constexpr VkDeviceSize RADIANCE_CACHE_SHADE_ARGS_BYTES = 3u * sizeof(uint32_t);
 
-struct RadianceCacheFrame
-{
-    bool bValid{false};
-};
-
-
 /**
  * Cells unshaded for 4 shadeIntervals are evicted even if touched. bFreeze suspends eviction and pins cell ages.
  * @param graph
@@ -54,6 +49,9 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
  * skyboxIndex -1 disables the sky fallback; maxRadiance 0 disables the firefly clamp. bounceIntensity stays below 1 to bound the cache/DDGI loop gain.
  * @param graph
  * @param pipelineManager
+ * @param scene
+ * @param worldGrid
+ * @param ddgi cascade chain sampled for the feedback term
  * @param frame
  * @param sceneIndex
  * @param bDDGIFeedbackValid
@@ -65,17 +63,18 @@ RadianceCacheFrame SetupRadianceCacheBegin(RenderGraph& graph, PipelineManager* 
  * @param reflectionProbeCount baked probes this frame; inside a probe volume the cell's ambient term uses probe irradiance ahead of the skybox fallback
  * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the ambient's probe pick
  */
-void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
+void SetupRadianceCacheShade(RenderGraph& graph, PipelineManager* pipelineManager, const SceneResources& scene, const WorldGridFrame& worldGrid, const DDGIFrame& ddgi, const RadianceCacheFrame& frame, uint32_t sceneIndex, bool bDDGIFeedbackValid, int32_t skyboxIndex, float iblIntensity, float maxRadiance, float bounceIntensity, uint32_t accumCap, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce);
 
 /**
  * normalBucket: -1 all, 0-5 = +X, -X, +Y, -Y, +Z, -Z.
  * @param graph
  * @param pipelineManager
+ * @param gpuDebug
  * @param frame
  * @param debugExposure
  * @param normalBucket -1 draws every bucket; 0-5 draws only that normal bucket (+X,-X,+Y,-Y,+Z,-Z)
  */
-void SetupRadianceCacheDebug(RenderGraph& graph, PipelineManager* pipelineManager, const RadianceCacheFrame& frame, float debugExposure, int32_t normalBucket);
+void SetupRadianceCacheDebug(RenderGraph& graph, PipelineManager* pipelineManager, const GPUDebugFrame& gpuDebug, const RadianceCacheFrame& frame, float debugExposure, int32_t normalBucket);
 } // Render
 
 #endif //WILL_ENGINE_RADIANCE_CACHE_PASSES_H

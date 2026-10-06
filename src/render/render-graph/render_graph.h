@@ -103,22 +103,13 @@ public:
     void InvalidateAllSwapchainAssociated() { bRemoveSwapchainPhysicals = true; }
 
 public:
-    void CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue = std::nullopt, bool bIsViewportScaled = false);
+    RDGTexture CreateTexture(StringID textureId, const TextureInfo& texInfo, std::optional<VkClearValue> clearValue = std::nullopt, bool bIsViewportScaled = false);
 
-    /**
-     * Makes aliasId refer to the same logical resource as existingId
-     * @param aliasId
-     * @param existingId
-     */
-    void AliasTexture(StringID aliasId, StringID existingId);
+    RDGBuffer CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
+    RDGBuffer CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled = false, bool bCanAlias = true);
 
-    void AliasBuffer(StringID aliasId, StringID existingId);
-
-    void CreateBuffer(StringID bufferId, VkDeviceSize size, bool bIsViewportScaled = false, bool bCanAlias = true);
-    void CreateBufferAligned(StringID bufferId, VkDeviceSize size, VkDeviceSize minAlignment, bool bIsViewportScaled = false, bool bCanAlias = true);
-
-    void ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
-                       VkImageLayout finalLayout, bool bIsSwapchain = false);
+    RDGTexture ImportTexture(StringID textureId, VkImage image, VkImageView view, const TextureInfo& info, VkImageUsageFlags usage, VkImageLayout initialLayout, VkPipelineStageFlags2 initialStage,
+                             VkImageLayout finalLayout, bool bIsSwapchain = false);
 
 
     /**
@@ -128,9 +119,14 @@ public:
      * @param address
      * @param info
      */
-    void ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
+    RDGBuffer ImportBufferNoBarrier(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info);
 
-    void ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
+    RDGBuffer ImportBuffer(StringID bufferId, VkBuffer buffer, VkDeviceAddress address, const BufferInfo& info, PipelineEvent initialState);
+
+    /** Debug lookup by name, e.g. a resource picked in a visualizer. Invalid when nothing by that name was declared this frame. */
+    [[nodiscard]] RDGTexture FindTexture(StringID textureId);
+
+    [[nodiscard]] RDGBuffer FindBuffer(StringID bufferId);
 
 public:
     /**
@@ -144,24 +140,16 @@ public:
      * @param bConcurrent an async pass touches some version of this ring; every physical is created CONCURRENT and pinned GENERAL. Asserted if an undeclared ring is touched by async.
      * @param clearValue auto-clear for the bare name on frames it is produced
      */
-    void CreateVersionedTexture(StringID name, const TextureInfo& texInfo, uint32_t depth, VersionSource source, bool bIsViewportScaled = false, VkImageUsageFlags extraUsage = 0, bool bConcurrent = false, std::optional<VkClearValue> clearValue = std::nullopt);
+    RDGTextureRing CreateVersionedTexture(StringID name, const TextureInfo& texInfo, uint32_t depth, VersionSource source, bool bIsViewportScaled = false, VkImageUsageFlags extraUsage = 0, bool bConcurrent = false,
+                                          std::optional<VkClearValue> clearValue = std::nullopt);
 
-    void CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32_t depth, VersionSource source, VkDeviceSize minAlignment = 0, VkBufferUsageFlags extraUsage = 0);
+    RDGBufferRing CreateVersionedBuffer(StringID name, VkDeviceSize size, uint32_t depth, VersionSource source, VkDeviceSize minAlignment = 0, VkBufferUsageFlags extraUsage = 0);
 
-    void CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
+    RDGBufferRing CreateVersionedTLAS(StringID name, VkDeviceSize asSize, RenderCategory category = RenderCategory::Untagged);
 
-    /**
-     * Emplaced ring source; the ring takes resourceSrc's description, so the next declaration must match it or the history resets.
-     * @param resourceDst
-     * @param resourceSrc
-     */
-    void EmplaceVersion(StringID resourceDst, StringID resourceSrc);
+    void EmplaceVersion(const RDGTextureRing& ring, RDGTexture source);
 
-    /**
-     * Pure naming, no lookup; the version need not exist.
-     * @returns the logical name of the version from age frames ago; age 0 is the bare name. Pure naming, no lookup: the version need not exist (see HasVersion)
-     */
-    [[nodiscard]] StringID ResourceVersionID(StringID name, uint32_t age);
+    void EmplaceVersion(const RDGBufferRing& ring, RDGBuffer source);
 
     /**
      * Age 0 stays pending on a shifting source until frame end, so it only means "produced before" on no-shift sources.
@@ -179,45 +167,47 @@ public:
     RenderPass& AddPass(StringID passId, VkPipelineStageFlags2 stages, RenderCategory category);
 
 public:
-    bool HasTexture(StringID textureId);
-
-    bool HasBuffer(StringID bufferId);
-
-    VkImage GetImageHandle(StringID textureId);
-
-    VkImageView GetImageViewHandle(StringID textureId);
-
-    VkImageView GetImageViewMipHandle(StringID textureId, uint32_t mipLevel);
-
-    VkImageView GetDepthOnlyImageViewHandle(StringID textureId);
-
-    VkImageView GetStencilOnlyImageViewHandle(StringID textureId);
-
-    const ResourceDimensions& GetImageDimensions(StringID textureId);
-
-    const VkImageAspectFlags GetImageAspect(StringID textureId);
-
-    uint32_t GetSampledImageViewDescriptorIndex(StringID textureId);
-
-    uint32_t GetStorageImageViewDescriptorIndex(StringID textureId, uint32_t mipLevel = 0);
-
-    /** No usage/aliasing validation; for passes that bake handles for downstream consumers without accessing the resource. */
-    uint32_t PeekSampledImageViewDescriptorIndex(StringID textureId);
-
-    VkDeviceAddress PeekBufferAddress(StringID bufferId);
-
-    uint32_t GetDepthOnlySampledImageViewDescriptorIndex(StringID textureId);
-
-    uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(StringID textureId);
-
-    VkBuffer GetBufferHandle(StringID bufferId);
-
-    VkDeviceAddress GetBufferAddress(StringID bufferId);
-    VkDeviceAddress TryGetBufferAddress(StringID bufferId);
-
     [[nodiscard]] ResourceManager* GetResourceManager() const { return resourceManager; }
 
-    PipelineEvent GetBufferState(StringID bufferId);
+    VkImage GetImageHandle(RDGTexture texture);
+
+    VkImageView GetImageViewHandle(RDGTexture texture);
+
+    VkImageView GetImageViewMipHandle(RDGTexture texture, uint32_t mipLevel);
+
+    VkImageView GetDepthOnlyImageViewHandle(RDGTexture texture);
+
+    VkImageView GetStencilOnlyImageViewHandle(RDGTexture texture);
+
+    const ResourceDimensions& GetImageDimensions(RDGTexture texture);
+
+    VkImageAspectFlags GetImageAspect(RDGTexture texture);
+
+    uint32_t GetSampledImageViewDescriptorIndex(RDGTexture texture);
+
+    uint32_t GetStorageImageViewDescriptorIndex(RDGTexture texture, uint32_t mipLevel = 0);
+
+    /** No usage/aliasing validation; for passes that bake handles for downstream consumers without accessing the resource. */
+    uint32_t PeekSampledImageViewDescriptorIndex(RDGTexture texture);
+
+    uint32_t GetDepthOnlySampledImageViewDescriptorIndex(RDGTexture texture);
+
+    uint32_t GetStencilOnlyStorageImageViewDescriptorIndex(RDGTexture texture);
+
+    VkBuffer GetBufferHandle(RDGBuffer buffer);
+
+    VkDeviceAddress GetBufferAddress(RDGBuffer buffer);
+
+    /** 0 for an invalid handle or a buffer without a physical. */
+    VkDeviceAddress TryGetBufferAddress(RDGBuffer buffer);
+
+    VkDeviceAddress PeekBufferAddress(RDGBuffer buffer);
+
+    PipelineEvent GetBufferState(RDGBuffer buffer);
+
+    VkAccelerationStructureKHR GetAccelerationStructureHandle(RDGBuffer tlas);
+
+    uint32_t GetAccelerationStructureDescriptorIndex(RDGBuffer tlas);
 
     /**
      * When true the graph will not execute and the application is asked to shut down.
@@ -268,7 +258,7 @@ public:
      * @param cmd
      * @param textureId
      */
-    void PrepareSwapchain(VkCommandBuffer cmd, StringID textureId);
+    void PrepareSwapchain(VkCommandBuffer cmd, RDGTexture texture);
 
 public:
     /**
@@ -277,14 +267,11 @@ public:
      * @param size
      * @param extraUsage usage beyond storage/device address/transfer, needed because a persistent slot cannot pick usage up from pass declarations
      */
-    void* OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
+    HostBufferMapping OpenHostBuffer(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
     /** Only for buffers whose unwritten bytes must persist; a buffer rewritten in full every frame stays on OpenHostBuffer. */
     HostBufferWrite OpenHostBufferMirrored(StringID name, VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);
 
-    VkAccelerationStructureKHR GetAccelerationStructureHandle(StringID name);
-
-    uint32_t GetAccelerationStructureDescriptorIndex(StringID name);
 
 public:
     UploadAllocation AllocateTransient(size_t size);
@@ -406,7 +393,13 @@ private:
     uint32_t debugNameCounter{0};
 
 private:
+    TextureResource& ResolveTexture(RDGTexture texture);
+
+    BufferResource& ResolveBuffer(RDGBuffer buffer);
+
     TextureResource* GetTexture(StringID imageId);
+
+    void EmplaceVersion(StringID resourceDst, StringID resourceSrc);
 
     TextureResource* GetOrCreateTexture(StringID textureId);
 
@@ -430,6 +423,9 @@ private:
     void ResetRing(ResourceRing& ring);
 
     void BindRingLogicals(ResourceRing& ring);
+
+    template<typename T>
+    RDGRing<T> MakeRingHandle(const ResourceRing& ring);
 
     /** Frame end: drops undeclared rings, refreshes image layouts, and captures the physical of a pending slot 0. */
     void CaptureRingVersions();

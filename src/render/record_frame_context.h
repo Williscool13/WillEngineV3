@@ -6,6 +6,8 @@
 #define WILL_ENGINE_RECORD_FRAME_CONTEXT_H
 
 #include "render/renderer_types.h"
+#include "render/frame_outputs.h"
+#include "render/passes/debug_passes.h"
 #include "render/interface/render_interface.h"
 #include "render/post-processing/post_processing.h"
 #include "render/types/render_types.h"
@@ -76,7 +78,21 @@ struct FrameContext
     FrameNeeds needs{};
 
     SceneBufferSizes bufferSizes{};
+    SceneResources scene{};
     RenderTargets targets{};
+
+    // System outputs, each invalid until (and unless) its system records this frame
+    GeometryFrame geometry{};
+    WorldGridFrame worldGrid{};
+    GPUDebugFrame gpuDebug{};
+    GPUDebugLines gpuDebugLines{};
+    RadianceCacheFrame radianceCache{};
+    DDGIFrame ddgi{};
+    GTAOFrame gtao{};
+    FinalGatherFrame gather{};
+    ReflectionFrame reflection{};
+    ReSTIRFrame restir{};
+    SunShadowFrame sunShadow{};
 
     // Set while recording lighting
     uint32_t restirCheckerboardField{0};

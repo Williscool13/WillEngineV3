@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_RAYTRACING_PASSES_H
 #define WILL_ENGINE_RAYTRACING_PASSES_H
 
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "core/types/extent.h"
@@ -19,12 +20,13 @@ namespace Render
 class PipelineManager;
 struct FrameResourceLimits;
 
-void SetupTLASBuild(RenderGraph& graph,
-                    VulkanContext* context,
-                    PipelineManager* pipelineManager,
-                    const Core::ViewFamily& viewFamily,
-                    Core::Extent2D renderExtent,
-                    const FrameResourceLimits& limits);
+RDGBufferRing SetupTLASBuild(RenderGraph& graph,
+                             VulkanContext* context,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             Core::Extent2D renderExtent,
+                             const FrameResourceLimits& limits,
+                             const SceneResources& scene);
 
 void SetupRTShadowTest(RenderGraph& graph,
                        VulkanContext* context,
@@ -32,18 +34,20 @@ void SetupRTShadowTest(RenderGraph& graph,
                        const Core::ViewFamily& viewFamily,
                        Core::Extent2D renderExtent,
                        const RenderTargets& targets,
-                       StringID outputTarget,
+                       const SceneResources& scene,
+                       RDGTexture outputTarget,
                        uint32_t sceneIndex);
 
-void SetupRTSunShadow(RenderGraph& graph,
-                      PipelineManager* pipelineManager,
-                      const Core::ViewFamily& viewFamily,
-                      Core::Extent2D shadowExtent,
-                      Core::Extent2D fullExtent,
-                      const RenderTargets& targets,
-                      uint32_t sceneIndex,
-                      uint64_t frameNumber,
-                      uint32_t pixelScale);
+SunShadowFrame SetupRTSunShadow(RenderGraph& graph,
+                                PipelineManager* pipelineManager,
+                                const Core::ViewFamily& viewFamily,
+                                Core::Extent2D shadowExtent,
+                                Core::Extent2D fullExtent,
+                                const RenderTargets& targets,
+                                const SceneResources& scene,
+                                uint32_t sceneIndex,
+                                uint64_t frameNumber,
+                                uint32_t pixelScale);
 
 /** Advance the accumulation count only on true, or skipped frames average in as zeros. */
 bool SetupRTGroundTruthDI(RenderGraph& graph,
@@ -51,6 +55,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
                            const Core::ViewFamily& viewFamily,
                            Core::Extent2D renderExtent,
                            const RenderTargets& targets,
+                           const SceneResources& scene,
                            uint32_t sceneIndex,
                            bool bReset,
                            uint32_t& accumulationCount,
@@ -62,6 +67,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
                           const RenderTargets& targets,
+                          const SceneResources& scene,
                           uint32_t sceneIndex,
                           bool bReset,
                           uint32_t& accumulationCount,
@@ -73,6 +79,7 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
                             const Core::ViewFamily& viewFamily,
                             Core::Extent2D renderExtent,
                             const RenderTargets& targets,
+                            const SceneResources& scene,
                             uint32_t sceneIndex,
                             bool bReset,
                             uint32_t& accumulationCount,

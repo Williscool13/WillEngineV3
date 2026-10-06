@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_FINAL_GATHER_PASSES_H
 #define WILL_ENGINE_FINAL_GATHER_PASSES_H
 
+#include "render/frame_outputs.h"
 #include "render/render-graph/render_graph.h"
 #include "render/renderer_types.h"
 #include "core/types/extent.h"
@@ -46,13 +47,8 @@ inline const StringID GI_GATHER_DEBUG_TARGET = "gi_gather_debug_target"_sid;
 
 inline constexpr uint32_t GI_GATHER_MAX_RAYS_PER_PIXEL = 8u;
 
-struct FinalGatherFrame
-{
-    bool bValid{false};
-};
-
-/** RGBA16F: xy = gbuffer MV minus camera-static reprojection, z = linear viewZ, w = motion blur mask. Idempotent, the first caller adds the pass. */
-void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, uint32_t sceneIndex);
+/** RGBA16F: xy = gbuffer MV minus camera-static reprojection, z = linear viewZ, w = motion blur mask. */
+RDGTexture SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const SceneResources& scene, const RenderTargets& targets, uint32_t sceneIndex);
 
 /**
  * bDebugView disables the screen tier so debug color is not fed back as radiance. maxRayRadiance 0 = off.
@@ -60,7 +56,12 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
  * @param pipelineManager
  * @param viewFamily
  * @param renderExtent
+ * @param scene
  * @param targets
+ * @param radianceCache
+ * @param ddgi
+ * @param worldGrid probeGrid is optional; invalid passes a null grid address
+ * @param gtao bent normals for the upscale; invalid when GTAO is off
  * @param sceneIndex
  * @param frameNumber
  * @param bDenoise
@@ -71,9 +72,10 @@ void SetupObjectMotion(RenderGraph& graph, PipelineManager* pipelineManager, Cor
  * @param bQuarterRes Gather at quarter render resolution instead of half: 1/4 the rays and denoise work; the upscale footprint spans 4x4 full-res pixels per gather texel, so sub-footprint detail leans harder on the guides and history.
  * @param bounceIntensity The radiance cache's DDGI bounce scale; the probe tier uses the same scale so cache and probes agree at a hit.
  * @param maxRayRadiance DDGI ray firefly cap, shared by gather samples; 0 = off
- * @return
+ * @return invalid when a required input is missing
  */
-FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const RenderTargets& targets, uint32_t sceneIndex, uint64_t frameNumber,
+FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const SceneResources& scene, const RenderTargets& targets,
+    const RadianceCacheFrame& radianceCache, const DDGIFrame& ddgi, const WorldGridFrame& worldGrid, const GTAOFrame& gtao, uint32_t sceneIndex, uint64_t frameNumber,
     bool bDenoise, bool bTemporalFilter, uint32_t raysPerPixel, bool bDebugView, bool bDisableScreenTier, bool bQuarterRes, float bounceIntensity, float maxRayRadiance);
 
 /**
@@ -81,21 +83,26 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
  * @param graph
  * @param pipelineManager
  * @param renderExtent
+ * @param scene
  * @param targets
+ * @param radianceCache
+ * @param ddgi
  * @param sceneIndex
  * @param mode 1 cache cell identity hash, 2 cache radiance/servability, 3 DDGI Chebyshev-gate weight fractions, 4 dominant-probe mean-vs-distance margin, 5 coverage/confidence/serving cascade, 6 raw DDGI irradiance
  */
-void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, uint32_t sceneIndex, int32_t mode);
+void SetupGIDeconstruct(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const SceneResources& scene, const RenderTargets& targets, const RadianceCacheFrame& radianceCache,
+    const DDGIFrame& ddgi, uint32_t sceneIndex, int32_t mode);
 
 /**
  * bQuarterRes must match this frame's SetupFinalGather.
  * @param graph
  * @param pipelineManager
  * @param renderExtent
+ * @param gather this frame's SetupFinalGather output
  * @param mode UI mode: 1 resolved irradiance, 2 fallback tier, 3 hit distance, 4 accumulation, 5 first-ray escape
  * @param bQuarterRes Must match the SetupFinalGather that produced this frame's gather targets.
  */
-void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, int32_t mode, bool bQuarterRes);
+void SetupGIGatherDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const FinalGatherFrame& gather, int32_t mode, bool bQuarterRes);
 } // Render
 
 #endif //WILL_ENGINE_FINAL_GATHER_PASSES_H

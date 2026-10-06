@@ -569,9 +569,9 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<CursorLitPixel>(
         "Cursor Lit HDR",
-        [this](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            const StringID lit = debugCursorReadback.litTexture;
-            if (lit == StringID{} || !graph.HasTexture(lit)) { return; }
+        [this](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGTexture lit = debugCursorReadback.litTexture;
+            if (!lit.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Cursor Lit"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
             pass.ReadCopyImage(lit);
             pass.WriteTransferBuffer(dst);
@@ -597,14 +597,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<ShadeDispatchReadback>(
         "Shade Dispatch Parameters",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Shade Dispatch"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(ShadeDispatchReadback)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const ShadeDispatchReadback& d) {
@@ -630,14 +631,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<LightDispatchReadback>(
         "Light Dispatch Parameters",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Light Dispatch"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(LightDispatchReadback)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(LIGHTING_DISPATCH_BUCKETING_BUFFER), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const LightDispatchReadback& d) {
@@ -663,14 +665,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<InstanceMeshletOffsets>(
         "Instance Meshlet Offsets",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer("instance_meshlet_offsets"_sid)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer("instance_meshlet_offsets"_sid);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Instance Meshlet Offsets"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer("instance_meshlet_offsets"_sid);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(InstanceMeshletOffsets)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("instance_meshlet_offsets"_sid), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const InstanceMeshletOffsets& d) {
@@ -702,14 +705,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<InstancingMeshletDispatchIndirect>(
         "Meshlet Dispatch Args",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer("meshlet_count_dispatch_args"_sid)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer("meshlet_count_dispatch_args"_sid);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Meshlet Dispatch Args"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer("meshlet_count_dispatch_args"_sid);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(InstancingMeshletDispatchIndirect)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("meshlet_count_dispatch_args"_sid), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const InstancingMeshletDispatchIndirect& d) {
@@ -720,14 +724,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<IntermediateMeshlets>(
         "Intermediate Meshlets",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer("intermediate_meshlets"_sid)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer("intermediate_meshlets"_sid);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Intermediate Meshlets"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer("intermediate_meshlets"_sid);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(IntermediateMeshlets)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("intermediate_meshlets"_sid), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const IntermediateMeshlets& d) {
@@ -762,14 +767,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<VisibleMeshlets>(
         "Visible Meshlets",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer("visible_meshlets"_sid)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer("visible_meshlets"_sid);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Visible Meshlets"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer("visible_meshlets"_sid);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(VisibleMeshlets)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("visible_meshlets"_sid), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const VisibleMeshlets& d) {
@@ -799,14 +805,15 @@ void RenderThread::RegisterDebugReadbacks()
 
     resourceManager->debugReadback.Register<InstancingCompactedMeshletDispatchIndirect>(
         "Compacted Dispatch Args",
-        [](RenderGraph& graph, StringID dst, size_t dstOffset) {
-            if (!graph.HasBuffer("compacted_meshlet_dispatch_args"_sid)) { return; }
+        [](RenderGraph& graph, RDGBuffer dst, size_t dstOffset) {
+            const RDGBuffer src = graph.FindBuffer("compacted_meshlet_dispatch_args"_sid);
+            if (!src.IsValid()) { return; }
             RenderPass& pass = graph.AddPass("[Debug] Readback Compacted Dispatch Args"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Debug);
-            pass.ReadTransferBuffer("compacted_meshlet_dispatch_args"_sid);
+            pass.ReadTransferBuffer(src);
             pass.WriteTransferBuffer(dst);
-            pass.Execute([dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            pass.Execute([src, dst, dstOffset](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkBufferCopy copy{0, dstOffset, sizeof(InstancingCompactedMeshletDispatchIndirect)};
-                vkCmdCopyBuffer(cmd, graph.GetBufferHandle("compacted_meshlet_dispatch_args"_sid), graph.GetBufferHandle(dst), 1, &copy);
+                vkCmdCopyBuffer(cmd, graph.GetBufferHandle(src), graph.GetBufferHandle(dst), 1, &copy);
             });
         },
         [](const InstancingCompactedMeshletDispatchIndirect& d) {
@@ -820,11 +827,13 @@ void RenderThread::RegisterDebugReadbacks()
 }
 #endif
 
-void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Extent2D renderExtent, float renderDeltaTime) const
+void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const Core::Extent2D renderExtent, float renderDeltaTime, SceneResources& scene) const
 {
     ZoneScoped;
     // Scene Data
-    auto* sceneData = static_cast<SceneData*>(renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE));
+    const HostBufferMapping sceneMapping = renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE);
+    scene.sceneData = sceneMapping.buffer;
+    auto* sceneData = static_cast<SceneData*>(sceneMapping.data);
     sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
     sceneData[0].preExposure = preExposure;
     sceneData[0].prevPreExposure = prevPreExposure;
@@ -836,6 +845,7 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     const size_t emissiveWorkCount = viewFamily.emissiveTriWork.Size();
 
     const HostBufferWrite lightDst = renderGraph->OpenHostBufferMirrored(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE);
+    scene.lightData = lightDst.buffer;
     {
         ZoneScopedN("Lights");
         const glm::vec3& dir = viewFamily.directionalLight.direction;
@@ -858,26 +868,29 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     }
 
     if (emissiveWorkCount > 0) {
-        auto* work = static_cast<EmissiveTriLightWork*>(renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveWorkCount * sizeof(EmissiveTriLightWork)));
-        memcpy(work, viewFamily.emissiveTriWork.Data(), emissiveWorkCount * sizeof(EmissiveTriLightWork));
+        const HostBufferMapping work = renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveWorkCount * sizeof(EmissiveTriLightWork));
+        scene.emissiveTriWork = work.buffer;
+        memcpy(work.data, viewFamily.emissiveTriWork.Data(), emissiveWorkCount * sizeof(EmissiveTriLightWork));
     }
 
     // Reflection probes
     const auto probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    void* probeDst = renderGraph->OpenHostBuffer(REFLECTION_PROBE_BUFFER, REFLECTION_PROBE_BUFFER_SIZE);
+    const HostBufferMapping probes = renderGraph->OpenHostBuffer(REFLECTION_PROBE_BUFFER, REFLECTION_PROBE_BUFFER_SIZE);
+    scene.reflectionProbes = probes.buffer;
     if (probeCount > 0) {
-        memcpy(probeDst, viewFamily.reflectionProbes.Data(), probeCount * sizeof(ReflectionProbeGPU));
+        memcpy(probes.data, viewFamily.reflectionProbes.Data(), probeCount * sizeof(ReflectionProbeGPU));
     }
 
 }
 
-void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const
+void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes, SceneResources& scene) const
 {
     ZoneScoped;
 
     if (viewFamily.instanceCount > 0) {
         ZoneScopedN("Instances");
         const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_INSTANCE_BUFFER, bufferSizes.instanceBufferSize);
+        scene.instances = dst.buffer;
         const Instance* payload = viewFamily.instancePayload.Data();
         size_t cursor = 0;
         for (const Core::DirtyRun& run : viewFamily.instanceRuns) {
@@ -889,6 +902,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Scene
     if (viewFamily.modelCount > 0) {
         ZoneScopedN("Models");
         const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MODEL_BUFFER, bufferSizes.modelBufferSize);
+        scene.models = dst.buffer;
         const Model* payload = viewFamily.modelPayload.Data();
         size_t cursor = 0;
         for (const Core::DirtyRun& run : viewFamily.modelRuns) {
@@ -901,6 +915,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Scene
         {
             ZoneScopedN("Materials");
             const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MATERIAL_BUFFER, bufferSizes.materialBufferSize);
+            scene.materials = dst.buffer;
             const MaterialProperties* payload = viewFamily.materialPayload.Data();
             size_t cursor = 0;
             for (const Core::DirtyRun& run : viewFamily.materialRuns) {
@@ -910,29 +925,36 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Scene
         }
 
         ZoneScopedN("Dispatch Resets");
-        auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, bufferSizes.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+        const HostBufferMapping shadeDispatch = renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, bufferSizes.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+        scene.shadingBucketingDispatches = shadeDispatch.buffer;
+        auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(shadeDispatch.data);
         for (uint32_t i = 0; i < viewFamily.materialCount; ++i) {
             shadeDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = i};
         }
 
-        auto* lightDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, bufferSizes.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+        const HostBufferMapping lightDispatch = renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, bufferSizes.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+        scene.lightingBucketingDispatches = lightDispatch.buffer;
+        auto* lightDispatchBuffer = static_cast<BucketDispatchParameters*>(lightDispatch.data);
         for (size_t i = 0; i < pipelineManager->GetLightingPipelines().Size(); ++i) {
             lightDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = static_cast<uint32_t>(i)};
         }
     }
 }
 
-void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const
+void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes, SceneResources& scene) const
 {
     ZoneScoped;
 
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
 
-    void* glyphDst = renderGraph->OpenHostBuffer(TEXT_GLYPH_QUAD_BUFFER, bufferSizes.glyphQuadBufferSize);
-    memcpy(glyphDst, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
+    const HostBufferMapping glyphs = renderGraph->OpenHostBuffer(TEXT_GLYPH_QUAD_BUFFER, bufferSizes.glyphQuadBufferSize);
+    scene.textGlyphQuads = glyphs.buffer;
+    memcpy(glyphs.data, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
 
     const uint32_t instCount = viewFamily.textInstances.Size();
-    auto* instDst = static_cast<TextInstanceData*>(renderGraph->OpenHostBuffer(TEXT_INSTANCE_BUFFER, bufferSizes.textInstanceBufferSize));
+    const HostBufferMapping textInstances = renderGraph->OpenHostBuffer(TEXT_INSTANCE_BUFFER, bufferSizes.textInstanceBufferSize);
+    scene.textInstances = textInstances.buffer;
+    auto* instDst = static_cast<TextInstanceData*>(textInstances.data);
     for (uint32_t i = 0; i < instCount; ++i) {
         const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
         instDst[i] = {
@@ -942,11 +964,12 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneB
         };
     }
 
-    void* matDst = renderGraph->OpenHostBuffer(TEXT_MATERIAL_BUFFER, bufferSizes.textMaterialBufferSize);
-    memcpy(matDst, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
+    const HostBufferMapping textMaterials = renderGraph->OpenHostBuffer(TEXT_MATERIAL_BUFFER, bufferSizes.textMaterialBufferSize);
+    scene.textMaterials = textMaterials.buffer;
+    memcpy(textMaterials.data, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
 }
 
-void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const
+void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily, SceneResources& scene) const
 {
     ZoneScoped;
 
@@ -957,7 +980,9 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
     const uint32_t spriteCount = static_cast<uint32_t>(viewFamily.sprites.Size());
     const size_t uploadSize = spriteCount * sizeof(SpriteData);
 
-    auto* dst = static_cast<SpriteData*>(renderGraph->OpenHostBuffer(SPRITE_BUFFER, uploadSize));
+    const HostBufferMapping sprites = renderGraph->OpenHostBuffer(SPRITE_BUFFER, uploadSize);
+    scene.sprites = sprites.buffer;
+    auto* dst = static_cast<SpriteData*>(sprites.data);
 
     for (uint32_t i = 0; i < spriteCount; i++) {
         const Core::Sprite& s = viewFamily.sprites[i];
@@ -973,14 +998,15 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
 
 }
 
-void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const
+void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes, SceneResources& scene) const
 {
     ZoneScoped;
 
     if (!viewFamily.uiGlyphQuads.IsEmpty()) {
         const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
-        void* quadDst = renderGraph->OpenHostBuffer(UI_GLYPH_QUAD_BUFFER, bufferSizes.uiGlyphQuadBufferSize);
-        memcpy(quadDst, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
+        const HostBufferMapping quads = renderGraph->OpenHostBuffer(UI_GLYPH_QUAD_BUFFER, bufferSizes.uiGlyphQuadBufferSize);
+        scene.uiGlyphQuads = quads.buffer;
+        memcpy(quads.data, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
     }
 }
 
@@ -1013,7 +1039,7 @@ static const DebugCircleTable& GetDebugCircleTable()
 }
 #endif
 
-void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const
+void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, const SceneResources& scene, Core::Extent2D renderExtent, RDGTexture depthTarget, RDGTexture targetImage, FrameResourceLimits& limits) const
 {
 #ifdef WDEBUG
     // Worst-case segment counts for buffer allocation
@@ -1032,7 +1058,9 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     limits.highestDebugSegmentCount = std::max(limits.highestDebugSegmentCount, NextPowerOfTwo(totalSegments));
 
-    auto* segments = static_cast<DebugLineSegment*>(graph.OpenHostBuffer("debug_segment_buffer"_sid, limits.highestDebugSegmentCount * sizeof(DebugLineSegment)));
+    const HostBufferMapping segmentMapping = graph.OpenHostBuffer("debug_segment_buffer"_sid, limits.highestDebugSegmentCount * sizeof(DebugLineSegment));
+    const RDGBuffer segmentBuffer = segmentMapping.buffer;
+    auto* segments = static_cast<DebugLineSegment*>(segmentMapping.data);
 
     uint32_t segmentOffset = 0;
 
@@ -1219,13 +1247,13 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 
     RenderPass& debugDrawPass = graph.AddPass("Debug Draw"_sid, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::Debug);
     debugDrawPass.WriteColorAttachment(targetImage);
-    bool bHasDepth = graph.HasTexture(depthTarget);
+    bool bHasDepth = depthTarget.IsValid();
     if (bHasDepth) {
         debugDrawPass.ReadWriteDepthAttachment(depthTarget);
     }
-    debugDrawPass.ReadBuffer(SCENE_DATA_BUFFER);
-    debugDrawPass.ReadBuffer("debug_segment_buffer"_sid);
-    debugDrawPass.Execute([&, renderExtent, totalLineSegments, bHasDepth, depthTarget, targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    debugDrawPass.ReadBuffer(scene.sceneData);
+    debugDrawPass.ReadBuffer(segmentBuffer);
+    debugDrawPass.Execute([&, renderExtent, totalLineSegments, bHasDepth, depthTarget, targetImage, segmentBuffer](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
@@ -1244,8 +1272,8 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         vkCmdBeginRendering(cmd, &renderInfo);
 
         DebugDrawPushConstant pushConstants{
-            .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-            .segmentBuffer = graph.GetBufferAddress("debug_segment_buffer"_sid),
+            .sceneData = graph.GetBufferAddress(scene.sceneData),
+            .segmentBuffer = graph.GetBufferAddress(segmentBuffer),
             .sceneDataIndex = 0,
             .totalLineSegments = totalLineSegments,
         };

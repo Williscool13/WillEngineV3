@@ -65,7 +65,7 @@ TEST_CASE("Hash matches the pinned cross-language vectors", "[hash]")
     CHECK(Hash("default_pbr", 11) == 14720002576866434405ULL);
     CHECK(Hash("default_pbr_restir", 18) == 6423489698308471953ULL);
     CHECK(Hash("Jump", 4) == 8077407883072430183ULL);
-    CHECK(SID("gbuffer").id == 17000617961446832639ULL);
+    CHECK("gbuffer"_sid.id == 17000617961446832639ULL);
 }
 
 TEST_CASE("HashBuilder is deterministic and order-sensitive", "[hash]")

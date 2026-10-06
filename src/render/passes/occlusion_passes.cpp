@@ -19,7 +19,7 @@ static uint32_t PreviousPow2(uint32_t v)
     return p;
 }
 
-void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets)
+RDGTexture SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets)
 {
     ZoneScoped;
     const uint32_t mip0W = PreviousPow2(renderExtent.width > 1u ? renderExtent.width / 2u : 1u);
@@ -27,7 +27,7 @@ void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core:
     uint32_t mipCount = 1;
     while ((mip0W >> mipCount) > 0u || (mip0H >> mipCount) > 0u) { mipCount++; }
 
-    graph.CreateTexture(HIZ_PYRAMID, TextureInfo{VK_FORMAT_R32_SFLOAT, mip0W, mip0H, mipCount}, {std::nullopt}, true);
+    const RDGTexture hiz = graph.CreateTexture(HIZ_PYRAMID, TextureInfo{VK_FORMAT_R32_SFLOAT, mip0W, mip0H, mipCount}, {std::nullopt}, true);
 
     constexpr uint32_t MIPS_PER_DISPATCH = 5;
     for (uint32_t chunkStart = 0; chunkStart < mipCount; chunkStart += MIPS_PER_DISPATCH) {
@@ -41,52 +41,53 @@ void SetupHiZPyramid(RenderGraph& graph, PipelineManager* pipelineManager, Core:
         RenderPass& pass = graph.AddPass(StringID(passName.c_str(), passName.Size()), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::GeometryPhase2);
         if (chunkStart == 0) {
             pass.ReadSampledImage(targets.depthStencil);
-            pass.WriteStorageImage(HIZ_PYRAMID);
+            pass.WriteStorageImage(hiz);
         }
         else {
-            pass.ReadWriteImage(HIZ_PYRAMID);
+            pass.ReadWriteImage(hiz);
         }
-        pass.Execute([pipelineManager, chunkStart, chunkMips, srcW, srcH, dstW, dstH, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.Execute([pipelineManager, chunkStart, chunkMips, srcW, srcH, dstW, dstH, hiz, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("hiz_build"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
             HiZBuildPushConstant pc{
                 .srcExtent = {srcW, srcH},
                 .dstExtent = {dstW, dstH},
-                .srcIndex = chunkStart == 0 ? graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil) : graph.GetStorageImageViewDescriptorIndex(HIZ_PYRAMID, chunkStart - 1),
+                .srcIndex = chunkStart == 0 ? graph.GetDepthOnlySampledImageViewDescriptorIndex(depthStencil) : graph.GetStorageImageViewDescriptorIndex(hiz, chunkStart - 1),
                 .dstMipCount = chunkMips,
                 .bSampledSrc = chunkStart == 0 ? 1u : 0u,
             };
             for (uint32_t i = 0; i < chunkMips; i++) {
-                pc.dstIndex[i] = graph.GetStorageImageViewDescriptorIndex(HIZ_PYRAMID, chunkStart + i);
+                pc.dstIndex[i] = graph.GetStorageImageViewDescriptorIndex(hiz, chunkStart + i);
             }
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (dstW + 15u) / 16u, (dstH + 15u) / 16u, 1);
         });
     }
+    return hiz;
 }
 
-void SetupHiZDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, int32_t mip)
+void SetupHiZDebug(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, RDGTexture hizPyramid, int32_t mip)
 {
     ZoneScoped;
-    if (mip < 0 || !graph.HasTexture(HIZ_PYRAMID)) {
+    if (mip < 0 || !hizPyramid.IsValid()) {
         return;
     }
 
-    graph.CreateTexture(HIZ_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
+    const RDGTexture debugTarget = graph.CreateTexture(HIZ_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
 
     RenderPass& pass = graph.AddPass("HiZ Debug"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
-    pass.ReadSampledImage(HIZ_PYRAMID);
-    pass.WriteStorageImage(HIZ_DEBUG_TARGET);
-    pass.Execute([pipelineManager, renderExtent, mip](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.ReadSampledImage(hizPyramid);
+    pass.WriteStorageImage(debugTarget);
+    pass.Execute([pipelineManager, renderExtent, mip, hizPyramid, debugTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("hiz_debug"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-        const ResourceDimensions& dims = graph.GetImageDimensions(HIZ_PYRAMID);
+        const ResourceDimensions& dims = graph.GetImageDimensions(hizPyramid);
         const uint32_t clampedMip = static_cast<uint32_t>(mip) < dims.levels ? static_cast<uint32_t>(mip) : dims.levels - 1u;
         const uint32_t mipW = dims.width >> clampedMip;
         const uint32_t mipH = dims.height >> clampedMip;
         HiZDebugPushConstant pc{
-            .hizIndex = graph.GetSampledImageViewDescriptorIndex(HIZ_PYRAMID),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(HIZ_DEBUG_TARGET),
+            .hizIndex = graph.GetSampledImageViewDescriptorIndex(hizPyramid),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(debugTarget),
             .outExtent = {renderExtent.width, renderExtent.height},
             .mipExtent = {mipW > 0u ? mipW : 1u, mipH > 0u ? mipH : 1u},
             .mip = clampedMip,

@@ -12,6 +12,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include "core/containers/array.h"
+#include "render/render-graph/render_graph_handles.h"
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_function.h"
 #include "core/containers/inline_string.h"
@@ -491,8 +492,6 @@ struct TransientReadback
     void* mappedData{nullptr};
 };
 
-inline constexpr uint32_t RDG_MAX_RING_DEPTH = 4;
-
 enum class VersionSource : uint8_t
 {
     // Ages shift. Produces a new physical for a pass to write into.
@@ -557,6 +556,7 @@ struct HostBuffer
 /** Both destinations a host buffer write has to reach. Absent ones are skipped, so a caller never branches on REBAR or on whether a mirror exists. */
 struct HostBufferWrite
 {
+    RDGBuffer buffer{};
     void* mapped{nullptr};
     void* mirror{nullptr};
     Core::Vector<VkBufferCopy2>* regions{nullptr};
@@ -575,6 +575,13 @@ struct HostBufferWrite
             });
         }
     }
+};
+
+/** A host buffer opened for a full rewrite this frame. */
+struct HostBufferMapping
+{
+    RDGBuffer buffer{};
+    void* data{nullptr};
 };
 
 struct HostBufferSlots

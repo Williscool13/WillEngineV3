@@ -52,7 +52,7 @@ static bool DisplayUvToRenderPixel(float u, float v, const PaniniParams& panini,
     return true;
 }
 
-static void AddColorCopyPass(RenderGraph& graph, PipelineManager* pipelineManager, StringID passName, StringID src, StringID dst, Core::Extent2D extent)
+static void AddColorCopyPass(RenderGraph& graph, PipelineManager* pipelineManager, StringID passName, RDGTexture src, RDGTexture dst, Core::Extent2D extent)
 {
     auto& copyPass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
     copyPass.ReadSampledImage(src);
@@ -185,7 +185,7 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     }
 
 #if WILL_EDITOR
-    resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState("debug_readback_buffer"_sid));
+    resourceManager->debugReadback.SetLastKnownState(renderGraph->GetBufferState(ctx.scene.debugReadback));
 #endif
     return bRenderRequestsRecreate ? RENDER_REQUESTED_RECREATE : SUCCESS;
 }
@@ -316,112 +316,109 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
     //
     {
         ZoneScopedN("SetupUniforms");
-        UploadFrameUniforms(viewFamily, renderExtent, ctx.frameBuffer.timeFrame.renderDeltaTime);
-        UploadModelUniforms(viewFamily, ctx.bufferSizes);
-        UploadTextUniforms(viewFamily, ctx.bufferSizes);
-        UploadUIUniforms(viewFamily, ctx.bufferSizes);
-        UploadSpriteUniforms(viewFamily);
+        UploadFrameUniforms(viewFamily, renderExtent, ctx.frameBuffer.timeFrame.renderDeltaTime, ctx.scene);
+        UploadModelUniforms(viewFamily, ctx.bufferSizes, ctx.scene);
+        UploadTextUniforms(viewFamily, ctx.bufferSizes, ctx.scene);
+        UploadUIUniforms(viewFamily, ctx.bufferSizes, ctx.scene);
+        UploadSpriteUniforms(viewFamily, ctx.scene);
     }
     //
     {
         ZoneScopedN("ImportBuffers");
-        renderGraph->ImportBufferNoBarrier(GEOMETRY_VERTEX_POSITION_BUFFER, resourceManager->megaVertexPositionBuffer.handle, resourceManager->megaVertexPositionBuffer.address,
-                                           {resourceManager->megaVertexPositionBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER, resourceManager->megaVertexAttributeBuffer.handle, resourceManager->megaVertexAttributeBuffer.address,
-                                           {resourceManager->megaVertexAttributeBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(GEOMETRY_INDEX_BUFFER, resourceManager->megaIndexBuffer.handle, resourceManager->megaIndexBuffer.address,
-                                           {resourceManager->megaIndexBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier("meshlet_vertex_buffer"_sid, resourceManager->megaMeshletVerticesBuffer.handle, resourceManager->megaMeshletVerticesBuffer.address,
-                                           {resourceManager->megaMeshletVerticesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier("meshlet_triangle_buffer"_sid, resourceManager->megaMeshletTrianglesBuffer.handle, resourceManager->megaMeshletTrianglesBuffer.address,
-                                           {resourceManager->megaMeshletTrianglesBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier("meshlet_buffer"_sid, resourceManager->megaMeshletBuffer.handle, resourceManager->megaMeshletBuffer.address,
-                                           {resourceManager->megaMeshletBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier("primitive_buffer"_sid, resourceManager->primitiveBuffer.handle, resourceManager->primitiveBuffer.address,
-                                           {resourceManager->primitiveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
-        renderGraph->ImportBufferNoBarrier(FONT_CURVE_BUFFER, resourceManager->megaFontCurveBuffer.handle, resourceManager->megaFontCurveBuffer.address,
-                                           {resourceManager->megaFontCurveBuffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        SceneResources& scene = ctx.scene;
+        auto importMega = [&](StringID name, const AllocatedBuffer& buffer) {
+            return renderGraph->ImportBufferNoBarrier(name, buffer.handle, buffer.address, {buffer.allocationInfo.size, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT});
+        };
+        scene.vertexPositions = importMega(GEOMETRY_VERTEX_POSITION_BUFFER, resourceManager->megaVertexPositionBuffer);
+        scene.vertexAttributes = importMega(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER, resourceManager->megaVertexAttributeBuffer);
+        scene.indices = importMega(GEOMETRY_INDEX_BUFFER, resourceManager->megaIndexBuffer);
+        scene.meshletVertices = importMega(GEOMETRY_MESHLET_VERTEX_BUFFER, resourceManager->megaMeshletVerticesBuffer);
+        scene.meshletTriangles = importMega(GEOMETRY_MESHLET_TRIANGLE_BUFFER, resourceManager->megaMeshletTrianglesBuffer);
+        scene.meshlets = importMega(GEOMETRY_MESHLET_BUFFER, resourceManager->megaMeshletBuffer);
+        scene.primitives = importMega(GEOMETRY_PRIMITIVE_BUFFER, resourceManager->primitiveBuffer);
+        scene.fontCurves = importMega(FONT_CURVE_BUFFER, resourceManager->megaFontCurveBuffer);
 #if WILL_EDITOR
-        renderGraph->ImportBuffer("debug_readback_buffer"_sid,
-                                  resourceManager->debugReadback.GetHandle(),
-                                  resourceManager->debugReadback.GetAddress(),
-                                  {resourceManager->debugReadback.GetSize(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT},
-                                  resourceManager->debugReadback.GetLastKnownState());
+        scene.debugReadback = renderGraph->ImportBuffer("debug_readback_buffer"_sid,
+                                                        resourceManager->debugReadback.GetHandle(),
+                                                        resourceManager->debugReadback.GetAddress(),
+                                                        {resourceManager->debugReadback.GetSize(), VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT},
+                                                        resourceManager->debugReadback.GetLastKnownState());
 #endif
     }
 
-    renderGraph->ImportTexture("dummy_black_rg32"_sid,
-                               resourceManager->blackDummyRG32Image.handle,
-                               resourceManager->blackDummyRG32ImageView.handle,
-                               TextureInfo{GBUFFER_STABLE_ID_FORMAT, 1, 1, 1},
-                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                               VK_IMAGE_LAYOUT_GENERAL,
-                               VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                               VK_IMAGE_LAYOUT_GENERAL);
+    ctx.scene.dummyBlackRG32 = renderGraph->ImportTexture("dummy_black_rg32"_sid,
+                                                          resourceManager->blackDummyRG32Image.handle,
+                                                          resourceManager->blackDummyRG32ImageView.handle,
+                                                          TextureInfo{GBUFFER_STABLE_ID_FORMAT, 1, 1, 1},
+                                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                                          VK_IMAGE_LAYOUT_GENERAL,
+                                                          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                          VK_IMAGE_LAYOUT_GENERAL);
 
     // Readback that will be copied into the FIF host memory at the end of the frame (to be read on frame N+3)
-    renderGraph->CreateBuffer("readback_buffer"_sid, sizeof(ReadbackStruct), false);
+    const RDGBuffer readback = renderGraph->CreateBuffer("readback_buffer"_sid, sizeof(ReadbackStruct), false);
+    ctx.scene.readback = readback;
     RenderPass& clearReadbackBuffer = renderGraph->AddPass("Clear Readback Buffer"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, Render::RenderCategory::Untagged);
-    clearReadbackBuffer.WriteTransferBuffer("readback_buffer"_sid);
-    clearReadbackBuffer.Execute([this](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle("readback_buffer"_sid), 0, VK_WHOLE_SIZE, 0);
+    clearReadbackBuffer.WriteTransferBuffer(readback);
+    clearReadbackBuffer.Execute([readback](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        vkCmdFillBuffer(cmd, graph.GetBufferHandle(readback), 0, VK_WHOLE_SIZE, 0);
     });
 
-    ctx.targets = RenderTargets{
-        .visibility = "visibility_target"_sid,
-        .gbufferOne = "gbuffer_one"_sid,
-        .gbufferTwo = "gbuffer_two"_sid,
-        .shadowOriginOffset = "shadow_origin_offset"_sid,
-        .shadows = "shadows_resolve_target"_sid,
-        .intermediateOne = "intermediate_one"_sid,
-        .intermediateTwo = "intermediate_two"_sid,
-        .colorOutput = "shading_output"_sid,
-        .depthStencil = "depth_target"_sid,
-        .depthCopy = "depth_copy"_sid,
-        .stableId = "stable_id"_sid,
-    };
-    const RenderTargets& targets = ctx.targets;
-
-    renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_VISIBILITY_EMPTY, true);
+    RenderTargets& targets = ctx.targets;
+    auto texture2D = [&](VkFormat format) { return TextureInfo{format, renderExtent.width, renderExtent.height, 1}; };
+    targets.visibility = renderGraph->CreateTexture("visibility_target"_sid, texture2D(VISIBILITY_BUFFER_FORMAT), CLEAR_VISIBILITY_EMPTY, true);
     const bool bGeometry = ctx.bHasScene;
-    auto declareGeometryTarget = [&](StringID name, const TextureInfo& info, std::optional<VkClearValue> clear) {
-        if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, clear); }
-        else if (renderGraph->ResourceHasVersion(name, 0)) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::NoShiftReadOnly, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
-        else { renderGraph->CreateTexture(name, info, clear, true); }
+    // Geometry targets keep last frame's version for history readers; without a scene they hold on to whatever was produced before
+    auto declareGeometryTarget = [&](StringID name, const TextureInfo& info, std::optional<VkClearValue> clear, RDGTexture& current, RDGTexture& history) {
+        if (bGeometry || renderGraph->ResourceHasVersion(name, 0)) {
+            const RDGTextureRing ring = bGeometry ? renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, clear)
+                                                  : renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::NoShiftReadOnly, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            current = ring.Current();
+            history = ring.Version(1);
+        }
+        else {
+            current = renderGraph->CreateTexture(name, info, clear, true);
+        }
     };
-    declareGeometryTarget(targets.gbufferOne, TextureInfo{GBUFFER_TARGET_ONE, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY);
-    renderGraph->CreateTexture(targets.gbufferTwo, TextureInfo{GBUFFER_TARGET_TWO, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.shadowOriginOffset, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.intermediateOne, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.intermediateTwo, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.colorOutput, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
-    renderGraph->CreateTexture(targets.depthStencil, TextureInfo{DEPTH_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_DEPTH_FAR, true);
-    declareGeometryTarget(targets.depthCopy, TextureInfo{VK_FORMAT_R32_SFLOAT, renderExtent.width, renderExtent.height, 1}, std::nullopt);
+    declareGeometryTarget("gbuffer_one"_sid, texture2D(GBUFFER_TARGET_ONE), CLEAR_COLOR_EMPTY, targets.gbufferOne, targets.gbufferOneHistory);
+    targets.gbufferTwo = renderGraph->CreateTexture("gbuffer_two"_sid, texture2D(GBUFFER_TARGET_TWO), CLEAR_COLOR_EMPTY, true);
+    targets.shadowOriginOffset = renderGraph->CreateTexture("shadow_origin_offset"_sid, texture2D(VK_FORMAT_R16G16B16A16_SFLOAT), CLEAR_COLOR_EMPTY, true);
+    targets.intermediateOne = renderGraph->CreateTexture("intermediate_one"_sid, texture2D(COLOR_ATTACHMENT_FORMAT), CLEAR_COLOR_EMPTY, true);
+    targets.intermediateTwo = renderGraph->CreateTexture("intermediate_two"_sid, texture2D(COLOR_ATTACHMENT_FORMAT), CLEAR_COLOR_EMPTY, true);
+    targets.colorOutput = renderGraph->CreateTexture("shading_output"_sid, texture2D(COLOR_ATTACHMENT_FORMAT), CLEAR_COLOR_EMPTY, true);
+    targets.depthStencil = renderGraph->CreateTexture("depth_target"_sid, texture2D(DEPTH_ATTACHMENT_FORMAT), CLEAR_DEPTH_FAR, true);
+    declareGeometryTarget("depth_copy"_sid, texture2D(VK_FORMAT_R32_SFLOAT), std::nullopt, targets.depthCopy, targets.depthCopyHistory);
 #if WILL_EDITOR
-    renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    targets.stableId = renderGraph->CreateTexture("stable_id"_sid, texture2D(GBUFFER_STABLE_ID_FORMAT), CLEAR_COLOR_EMPTY, true);
 #endif
 
     if (ctx.needs.bLitHistory) {
-        renderGraph->CreateVersionedTexture(LIT_COLOR_HISTORY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        const RDGTextureRing lit = renderGraph->CreateVersionedTexture(LIT_COLOR_HISTORY, texture2D(COLOR_ATTACHMENT_FORMAT), 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        targets.litSnapshot = lit.Current();
+        targets.litSnapshotHistory = lit.Version(1);
         if (ctx.features.bGIGather && ctx.path == FrameRenderingPath::ReSTIR) {
-            renderGraph->CreateTexture(RESTIR_DIFFUSE_RATIO, TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
-            renderGraph->CreateVersionedTexture(GI_SCREEN_DIFFUSE, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            targets.restirDiffuseRatio = renderGraph->CreateTexture(RESTIR_DIFFUSE_RATIO, texture2D(VK_FORMAT_R16_SFLOAT), {std::nullopt}, true);
+            const RDGTextureRing screenDiffuse = renderGraph->CreateVersionedTexture(GI_SCREEN_DIFFUSE, texture2D(VK_FORMAT_R16G16B16A16_SFLOAT), 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+            targets.giScreenDiffuse = screenDiffuse.Current();
+            targets.giScreenDiffuseHistory = screenDiffuse.Version(1);
         }
     }
-    // Without fog the lit history already holds the pre-overlay color
+    // Without fog the lit snapshot already holds the pre-overlay color
     if (ctx.needs.bPreOverlayColor) {
-        ctx.targets.preOverlayColor = ctx.needs.bLitHistory && !ctx.features.bVolumetricFog ? LIT_COLOR_HISTORY : LIT_COLOR_PREOVERLAY;
-        if (ctx.targets.preOverlayColor == LIT_COLOR_PREOVERLAY) {
-            renderGraph->CreateTexture(LIT_COLOR_PREOVERLAY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, std::nullopt, true);
-        }
+        targets.preOverlayColor = ctx.needs.bLitHistory && !ctx.features.bVolumetricFog
+                                      ? targets.litSnapshot
+                                      : renderGraph->CreateTexture(LIT_COLOR_PREOVERLAY, texture2D(COLOR_ATTACHMENT_FORMAT), std::nullopt, true);
     }
 
-    renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh, 0,
-                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+    const VersionSource luminanceSource = renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh;
+    ctx.scene.luminance = renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, luminanceSource, 0,
+                                                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT).Current();
 
-    SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+    targets.shadows = renderGraph->CreateTexture("shadows_resolve_target"_sid, texture2D(VK_FORMAT_R8G8_UNORM), {std::nullopt}, true);
 
-    SetupEmissiveTriLightPass(*renderGraph, pipelineManager, viewFamily, ctx.frameBuffer.restir.emissiveTriRangeMultiplier);
+    SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, 0);
+
+    SetupEmissiveTriLightPass(*renderGraph, pipelineManager, viewFamily, ctx.scene, ctx.frameBuffer.restir.emissiveTriRangeMultiplier);
 }
 
 void RenderThread::RecordSceneServices(FrameContext& ctx)
@@ -431,31 +428,36 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
     const RenderTargets& targets = ctx.targets;
     const Core::Extent2D renderExtent = ctx.renderExtent;
 
+    const SceneResources& scene = ctx.scene;
+
     if (frameBuffer.debug.bEnableGPUDebug) {
-        SetupGPUDebugBegin(*renderGraph, frameBuffer.debug.bLockGPUDebug);
+        ctx.gpuDebug = SetupGPUDebugBegin(*renderGraph, frameBuffer.debug.bLockGPUDebug, ctx.gpuDebugLines);
     }
 
     if (viewFamily.instanceCount == 0) {
         return;
     }
 
-    SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, frameBuffer.debug, renderExtent, targets, 0);
+    const RDGTexture hizPyramid = SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, frameBuffer.debug, renderExtent, targets, scene, 0);
 
-    SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameBuffer.debug.bucketDebugMode);
+    VisibilityBucketTiles bucketTiles{};
+    ctx.geometry = SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, 0, frameBuffer.debug.bucketDebugMode, bucketTiles);
 
-    SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get());
+    SetupVisibilityShadingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, bucketTiles, 0, renderArena.Get());
 
-    SetupBucketDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameBuffer.debug.bucketDebugMode);
+    SetupBucketDebugPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, bucketTiles, frameBuffer.debug.bucketDebugMode);
 
-    SetupTLASBuild(*renderGraph, context, pipelineManager, viewFamily, renderExtent, frameResourceLimits);
+    const RDGBufferRing tlas = SetupTLASBuild(*renderGraph, context, pipelineManager, viewFamily, renderExtent, frameResourceLimits, scene);
+    ctx.scene.tlas = tlas.Current();
+    ctx.scene.tlasHistory = tlas.Version(1);
 
     const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, viewFamily.localDDGIVolumes.Data(),
                                                           static_cast<uint32_t>(viewFamily.localDDGIVolumes.Size()), ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
 
     if (ctx.needs.bWorldGrid) {
-        SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0, renderArena.Get(), ddgiCascades);
+        ctx.worldGrid = SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, scene, 0, renderArena.Get(), ddgiCascades);
         if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bWorldGridDebug && !frameBuffer.debug.bLockGPUDebug) {
-            SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.debug.worldGridDebugLevel);
+            SetupWorldGridDebug(*renderGraph, pipelineManager, scene, ctx.gpuDebugLines, 0, frameBuffer.debug.worldGridDebugLevel);
         }
     }
 
@@ -486,19 +488,22 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
     }
 
     if (frameBuffer.debug.hizDebugMip >= 0) {
-        SetupHiZDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.hizDebugMip);
+        SetupHiZDebug(*renderGraph, pipelineManager, renderExtent, hizPyramid, frameBuffer.debug.hizDebugMip);
     }
 
     if (ctx.features.ddgi != DDGIUsage::Off && frameBuffer.debug.giDeconstructMode != 0) {
-        SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, targets, 0, frameBuffer.debug.giDeconstructMode);
+        SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, scene, targets, ctx.radianceCache, ctx.ddgi, 0, frameBuffer.debug.giDeconstructMode);
+    }
+
+    if (ctx.features.bGIGather || viewFamily.postProcessConfig.bMotionBlurEnabled) {
+        ctx.targets.objectMotion = SetupObjectMotion(*renderGraph, pipelineManager, renderExtent, scene, targets, 0);
     }
 
     if (ctx.features.bGTAO) {
-        SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameNumber, 0);
+        ctx.gtao = SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, scene, targets, frameNumber, 0);
     }
 
-    // Outputs "shadows_resolve_target"
-    SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0);
+    SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.gtao, 0);
 }
 
 void RenderThread::RecordDDGI(FrameContext& ctx, const DDGICascades& ddgiCascades)
@@ -506,36 +511,38 @@ void RenderThread::RecordDDGI(FrameContext& ctx, const DDGICascades& ddgiCascade
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
 
-    const RadianceCacheFrame radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField,
-                                                                     frameBuffer.ddgi.radianceCacheShadeInterval);
-    const bool bDDGIRecorded = SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex, viewFamily.iblIntensity,
-                                                    frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
-                                                    viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos, framerateScale);
-    ddgiPreviousCascades = bDDGIRecorded ? ddgiCascades : DDGICascades{};
+    const SceneResources& scene = ctx.scene;
+    ctx.radianceCache = SetupRadianceCacheBegin(*renderGraph, pipelineManager, frameNumber, viewFamily.mainView.currentViewData.cameraPos, frameBuffer.debug.bFreezeGIField,
+                                                frameBuffer.ddgi.radianceCacheShadeInterval);
+    const RadianceCacheFrame& radianceCache = ctx.radianceCache;
+    ctx.ddgi = SetupDDGIProbeUpdate(*renderGraph, pipelineManager, renderArena.Get(), scene, ctx.worldGrid, frameBuffer.ddgi, ddgiCascades, ddgiPreviousCascades, viewFamily.skyboxIndex,
+                                    viewFamily.iblIntensity, frameNumber, frameBuffer.debug.bDDGIBounceOnly, radianceCache, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
+                                    viewFamily.bReflectionProbeBruteForce, viewFamily.mainView.currentViewData.cameraPos, framerateScale);
+    ddgiPreviousCascades = ctx.ddgi.IsValid() ? ddgiCascades : DDGICascades{};
     const bool bRadianceCacheFeedback = frameBuffer.ddgi.bInfiniteBounce && !frameBuffer.debug.bDDGIBounceOnly;
     // Never below the configured cap: at low fps the cell responds slower instead of getting noisier.
     const auto radianceCacheAccumCap = glm::max(static_cast<uint32_t>(static_cast<float>(frameBuffer.ddgi.radianceCacheAccumCap) * framerateScale + 0.5f), frameBuffer.ddgi.radianceCacheAccumCap);
-    SetupRadianceCacheShade(*renderGraph, pipelineManager, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance,
+    SetupRadianceCacheShade(*renderGraph, pipelineManager, scene, ctx.worldGrid, ctx.ddgi, radianceCache, 0, bRadianceCacheFeedback, viewFamily.skyboxIndex, viewFamily.iblIntensity, frameBuffer.ddgi.maxRayRadiance,
                             frameBuffer.ddgi.bounceIntensity, radianceCacheAccumCap, static_cast<uint32_t>(viewFamily.reflectionProbes.Size()), viewFamily.bReflectionProbeBruteForce);
-    if (GPU_STATS_ENABLED && radianceCache.bValid && renderGraph->HasBuffer("readback_buffer"_sid)) {
+    if (GPU_STATS_ENABLED && radianceCache.IsValid() && scene.readback.IsValid()) {
         RenderPass& wcStatsReadback = renderGraph->AddPass("Radiance Cache Stats Readback"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::RadianceCache);
-        wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_STATS);
-        wcStatsReadback.ReadTransferBuffer(RADIANCE_CACHE_ACTIVE_COUNT);
-        wcStatsReadback.WriteTransferBuffer("readback_buffer"_sid);
-        wcStatsReadback.Execute([](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const VkBuffer dst = graph.GetBufferHandle("readback_buffer"_sid);
+        wcStatsReadback.ReadTransferBuffer(radianceCache.stats);
+        wcStatsReadback.ReadTransferBuffer(radianceCache.activeCount);
+        wcStatsReadback.WriteTransferBuffer(scene.readback);
+        wcStatsReadback.Execute([stats = radianceCache.stats, activeCount = radianceCache.activeCount, readback = scene.readback](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const VkBuffer dst = graph.GetBufferHandle(readback);
             const VkBufferCopy statsCopy{0, offsetof(ReadbackStruct, wcOccupied), sizeof(RadianceCacheStats)};
-            vkCmdCopyBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_STATS), dst, 1, &statsCopy);
+            vkCmdCopyBuffer(cmd, graph.GetBufferHandle(stats), dst, 1, &statsCopy);
             const VkBufferCopy shadedCopy{0, offsetof(ReadbackStruct, wcShaded), sizeof(uint32_t)};
-            vkCmdCopyBuffer(cmd, graph.GetBufferHandle(RADIANCE_CACHE_ACTIVE_COUNT), dst, 1, &shadedCopy);
+            vkCmdCopyBuffer(cmd, graph.GetBufferHandle(activeCount), dst, 1, &shadedCopy);
         });
     }
     if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bDDGIProbeDebug && !frameBuffer.debug.bLockGPUDebug) {
-        SetupDDGIProbeDebug(*renderGraph, pipelineManager, ddgiCascades, frameBuffer.debug.ddgiProbeDebugExposure, frameBuffer.debug.ddgiProbeDebugCascade, frameBuffer.debug.bDDGIHideInactiveProbes,
+        SetupDDGIProbeDebug(*renderGraph, pipelineManager, ctx.ddgi, ctx.gpuDebug, ddgiCascades, frameBuffer.debug.ddgiProbeDebugExposure, frameBuffer.debug.ddgiProbeDebugCascade, frameBuffer.debug.bDDGIHideInactiveProbes,
                             frameBuffer.debug.ddgiProbeDebugMode);
     }
     if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bRadianceCacheDebug && !frameBuffer.debug.bLockGPUDebug) {
-        SetupRadianceCacheDebug(*renderGraph, pipelineManager, radianceCache, frameBuffer.debug.radianceCacheDebugExposure, frameBuffer.debug.radianceCacheDebugBucket);
+        SetupRadianceCacheDebug(*renderGraph, pipelineManager, ctx.gpuDebug, radianceCache, frameBuffer.debug.radianceCacheDebugExposure, frameBuffer.debug.radianceCacheDebugBucket);
     }
 }
 
@@ -548,12 +555,13 @@ void RenderThread::RecordLighting(FrameContext& ctx)
 
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     if (ctx.features.bGIGather) {
-        const FinalGatherFrame giGather = SetupFinalGather(*renderGraph, pipelineManager, ctx.viewFamily, ctx.renderExtent, ctx.targets, 0, frameNumber, frameBuffer.ddgi.bFinalGatherDenoise,
+        ctx.gather = SetupFinalGather(*renderGraph, pipelineManager, ctx.viewFamily, ctx.renderExtent, ctx.scene, ctx.targets, ctx.radianceCache, ctx.ddgi, ctx.worldGrid, ctx.gtao, 0, frameNumber,
+                                      frameBuffer.ddgi.bFinalGatherDenoise,
                                                            frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback,
                                                            frameBuffer.ddgi.bFinalGatherQuarterRes, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.maxRayRadiance);
-        if (giGather.bValid) {
+        if (ctx.gather.IsValid()) {
             ctx.giGatherMode = (frameBuffer.ddgi.bFinalGather && ctx.features.DDGIApplied()) ? 1u : 0u;
-            SetupGIGatherDebug(*renderGraph, pipelineManager, ctx.renderExtent, frameBuffer.debug.giGatherDebugMode, frameBuffer.ddgi.bFinalGatherQuarterRes);
+            SetupGIGatherDebug(*renderGraph, pipelineManager, ctx.renderExtent, ctx.gather, frameBuffer.debug.giGatherDebugMode, frameBuffer.ddgi.bFinalGatherQuarterRes);
         }
     }
 
@@ -565,7 +573,7 @@ void RenderThread::RecordLighting(FrameContext& ctx)
             RecordLightingReSTIR(ctx);
             break;
         case FrameRenderingPath::PathTracing:
-            SetupRTShadowTest(*renderGraph, context, pipelineManager, ctx.viewFamily, ctx.renderExtent, ctx.targets, ctx.targets.colorOutput, 0);
+            SetupRTShadowTest(*renderGraph, context, pipelineManager, ctx.viewFamily, ctx.renderExtent, ctx.targets, ctx.scene, ctx.targets.colorOutput, 0);
             break;
         case FrameRenderingPath::GroundTruth:
             break;
@@ -583,7 +591,7 @@ void RenderThread::RecordGroundTruth(FrameContext& ctx)
         case Core::GroundTruthMode::DI:
         {
             if (viewFamily.bResetGroundTruth) { rtGroundTruthDIAccumCount = 0; }
-            if (SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, ctx.renderExtent, ctx.targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber)) {
+            if (SetupRTGroundTruthDI(*renderGraph, pipelineManager, viewFamily, ctx.renderExtent, ctx.targets, ctx.scene, 0, viewFamily.bResetGroundTruth, rtGroundTruthDIAccumCount, frameNumber)) {
                 rtGroundTruthDIAccumCount += 1;
             }
             break;
@@ -591,7 +599,7 @@ void RenderThread::RecordGroundTruth(FrameContext& ctx)
         case Core::GroundTruthMode::GI:
         {
             if (viewFamily.bResetGroundTruth) { rtGroundTruthGIAccumCount = 0; }
-            if (SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, ctx.renderExtent, ctx.targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber)) {
+            if (SetupRTGroundTruthGI(*renderGraph, pipelineManager, viewFamily, ctx.renderExtent, ctx.targets, ctx.scene, 0, viewFamily.bResetGroundTruth, rtGroundTruthGIAccumCount, frameNumber)) {
                 rtGroundTruthGIAccumCount += 1;
             }
             break;
@@ -600,7 +608,7 @@ void RenderThread::RecordGroundTruth(FrameContext& ctx)
         {
             if (viewFamily.bResetGroundTruth) { rtGroundTruthFullAccumCount = 0; }
             const uint32_t gtSpp = glm::max(1u, viewFamily.groundTruthSpp);
-            if (SetupRTGroundTruthFull(*renderGraph, pipelineManager, viewFamily, ctx.renderExtent, ctx.targets, 0, viewFamily.bResetGroundTruth, rtGroundTruthFullAccumCount, frameNumber, gtSpp)) {
+            if (SetupRTGroundTruthFull(*renderGraph, pipelineManager, viewFamily, ctx.renderExtent, ctx.targets, ctx.scene, 0, viewFamily.bResetGroundTruth, rtGroundTruthFullAccumCount, frameNumber, gtSpp)) {
                 rtGroundTruthFullAccumCount += gtSpp;
             }
             break;
@@ -619,17 +627,16 @@ void RenderThread::RecordLightingDefault(FrameContext& ctx)
 
     if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bClusterGridDebug && !frameBuffer.debug.bLockGPUDebug) {
         constexpr float kDebugClusterZFar = 500.0f;
-        SetupClusterGridDebug(*renderGraph, pipelineManager, 0, viewFamily.mainView.currentViewData.nearPlane, kDebugClusterZFar);
+        SetupClusterGridDebug(*renderGraph, pipelineManager, ctx.scene, ctx.gpuDebugLines, 0, viewFamily.mainView.currentViewData.nearPlane, kDebugClusterZFar);
     }
     // No ReSTIR BRDF ray to piggyback on here, so reflections trace their own.
-    if (frameBuffer.reflection.bScreenSpaceTrace) {
-        SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection);
-    }
-    else {
-        SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
-    }
-    SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
-    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, ctx.features.DDGIApplied(), ctx.giGatherMode, frameBuffer.reflection);
+    const ReflectionFrame trace = frameBuffer.reflection.bScreenSpaceTrace
+                                      ? SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, ctx.scene, 0, frameNumber, 0u, frameBuffer.reflection)
+                                      : SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, ctx.scene, 0, frameNumber, frameBuffer.reflection);
+    ctx.reflection = SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, trace, ctx.ddgi, ctx.worldGrid, 0, frameNumber, 0u, frameBuffer.reflection,
+                                              ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
+    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, ctx.geometry, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, ctx.restir, 0,
+                                       frameNumber, ctx.features.DDGIApplied(), ctx.giGatherMode, frameBuffer.reflection);
 }
 
 void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
@@ -661,42 +668,46 @@ void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
     previousRestirCheckerboardField = restirCheckerboardField;
     previousRestirFullRateResolve = bRestirFullRateResolve;
     const bool bScreenSpaceTrace = frameBuffer.reflection.bScreenSpaceTrace;
-    SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField, frameBuffer.reflection, bResetReSTIRHistory,
-                      bScreenSpaceTrace, preExposure);
+    const SceneResources& scene = ctx.scene;
+    ReflectionFrame trace{};
+    ctx.restir = SetupReSTIRPasses(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.worldGrid, 0, renderArena.Get(), frameNumber, restir, restirCheckerboardField,
+                                   frameBuffer.reflection, bResetReSTIRHistory, bScreenSpaceTrace, preExposure, trace);
     if (bScreenSpaceTrace) {
-        SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection);
+        trace = SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, scene, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection);
     }
     const bool bMergedReflections = frameBuffer.reflection.bMergedDenoise;
     const bool bReflectionCheckerboardPacked = bMergedReflections && restirCheckerboardPacked != 0u;
-    SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked,
-                             frameBuffer.debug.bFreezeScreenFeedback);
-    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, restirCheckerboardField, restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u,
-                                   frameBuffer.reflection);
+    ctx.reflection = SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, trace, ctx.ddgi, ctx.worldGrid, 0, frameNumber, restirCheckerboardField,
+                                              frameBuffer.reflection, bDDGIApply, bReflectionCheckerboardPacked, frameBuffer.debug.bFreezeScreenFeedback);
+    SetupReSTIRLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.geometry, ctx.restir, ctx.reflection, 0, frameNumber, restirCheckerboardField,
+                                   restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u, frameBuffer.reflection);
 
     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
 
     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
-        SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField,
+        ctx.targets.reflectionVirtualMotion = SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.restir, ctx.reflection, ctx.gather, ctx.ddgi,
+                                                                 ctx.worldGrid, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField,
                            denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure);
     }
     else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
-        SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField,
+        SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.restir, ctx.reflection, ctx.gather, ctx.ddgi, ctx.worldGrid, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField,
                             denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure);
     }
     else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
         const NrdBackend nrdBackend = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR ? NrdBackend::Reblur : NrdBackend::Relax;
         // Declaration order defines the RDG read/write sequence: prep writes -> dispatch -> writeback
-        if (nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, nrdBackend, relax, reblur, frameNumber, ctx.frameIndex, renderFps)) {
-            SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend, reblur, preExposure);
+        const NrdFrame nrd = nrdDenoiser->Prepare(*renderGraph, viewFamily, renderExtent, ctx.restir, nrdBackend, relax, reblur, frameNumber, ctx.frameIndex, renderFps);
+        if (nrd.IsValid()) {
+            SetupNRDPrepPasses(*renderGraph, pipelineManager, renderExtent, targets, scene, nrd, nrdBackend, reblur, preExposure);
             nrdDenoiser->AddDispatchPass(*renderGraph, resourceManager, pipelineManager, ctx.frameIndex);
-            SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets, nrdBackend, preExposure);
+            SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets, nrd, nrdBackend, preExposure);
         }
-        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection,
-                                  giGatherMode);
+        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, 0, remodulateOutputMode,
+                                  viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
     }
     else {
-        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, remodulateOutputMode, viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection,
-                                  giGatherMode);
+        SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, 0, remodulateOutputMode,
+                                  viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
     }
 }
 
@@ -706,10 +717,10 @@ void RenderThread::RecordSunShadows(FrameContext& ctx)
     const Core::Extent2D renderExtent = ctx.renderExtent;
     const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
     const Core::Extent2D sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Extent2D{renderExtent.width / 2, renderExtent.height / 2} : renderExtent;
-    SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, ctx.targets, 0, frameNumber, sunShadowPixelScale);
-    SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, 0, frameNumber);
-    SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, 0);
-    SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, sunShadowExtent, ctx.targets, 0, sunShadowPixelScale);
+    ctx.sunShadow = SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, ctx.targets, ctx.scene, 0, frameNumber, sunShadowPixelScale);
+    const SigmaDenoiseFrame sigma = SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, frameNumber);
+    SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, ctx.scene, sigma, ctx.sunShadow, 0);
+    SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, sunShadowExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, sunShadowPixelScale);
 }
 
 void RenderThread::RecordPostLighting(FrameContext& ctx)
@@ -720,25 +731,25 @@ void RenderThread::RecordPostLighting(FrameContext& ctx)
     const Core::Extent2D renderExtent = ctx.renderExtent;
 
     if (ctx.needs.bLitHistory) {
-        AddColorCopyPass(*renderGraph, pipelineManager, "Lit Color Snapshot"_sid, targets.colorOutput, LIT_COLOR_HISTORY, renderExtent);
+        AddColorCopyPass(*renderGraph, pipelineManager, "Lit Color Snapshot"_sid, targets.colorOutput, targets.litSnapshot, renderExtent);
     }
 
-    const bool bPreOverlayCopy = ctx.targets.preOverlayColor == LIT_COLOR_PREOVERLAY;
+    const bool bPreOverlayCopy = targets.preOverlayColor.IsValid() && targets.preOverlayColor != targets.litSnapshot;
     if (ctx.features.bVolumetricFog) {
-        SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, bPreOverlayCopy, ctx.features.DDGIApplied(),
+        SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, ctx.worldGrid, ctx.ddgi, 0, frameNumber, bPreOverlayCopy, ctx.features.DDGIApplied(),
                            frameBuffer.debug.fogDebugMode, frameBuffer.debug.fogDebugMode != lastFogDebugMode);
         lastFogDebugMode = frameBuffer.debug.fogDebugMode;
     }
     else if (bPreOverlayCopy) {
-        AddColorCopyPass(*renderGraph, pipelineManager, "Pre-Overlay Color Copy"_sid, targets.colorOutput, LIT_COLOR_PREOVERLAY, renderExtent);
+        AddColorCopyPass(*renderGraph, pipelineManager, "Pre-Overlay Color Copy"_sid, targets.colorOutput, targets.preOverlayColor, renderExtent);
     }
 
 #if WILL_EDITOR
     debugCursorReadback.litTexture = targets.colorOutput;
 #endif
 
-    SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
-    SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
+    SetupTextForwardPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene);
+    SetupSpritesPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene);
 
 #if WILL_EDITOR
     if (frameBuffer.selectedStableId != 0) {
@@ -746,12 +757,12 @@ void RenderThread::RecordPostLighting(FrameContext& ctx)
     }
 #endif
 
-    SetupDebugRender(*renderGraph, viewFamily, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
+    SetupDebugRender(*renderGraph, viewFamily, ctx.scene, renderExtent, targets.depthStencil, targets.colorOutput, frameResourceLimits);
 
-    SetupProbePreviewSpheres(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, viewFamily);
+    SetupProbePreviewSpheres(*renderGraph, pipelineManager, renderExtent, ctx.scene, targets.depthStencil, targets.colorOutput, viewFamily);
 
     if (frameBuffer.debug.bEnableGPUDebug) {
-        SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, targets.depthStencil, targets.colorOutput, frameBuffer.debug.bLockGPUDebug);
+        SetupGPUDebugDraw(*renderGraph, pipelineManager, renderExtent, ctx.scene, ctx.gpuDebug, ctx.gpuDebugLines, targets.depthStencil, targets.colorOutput, frameBuffer.debug.bLockGPUDebug);
     }
 }
 
@@ -764,30 +775,30 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
     const Core::Extent2D outputExtent = ctx.outputExtent;
 
     if (ctx.path != FrameRenderingPath::GroundTruth) {
-        targets.colorOutput = PPDepthOfField(*renderGraph, pipelineManager, viewFamily.postProcessConfig, targets, renderExtent, frameNumber, targets.colorOutput);
+        targets.colorOutput = PPDepthOfField(*renderGraph, pipelineManager, viewFamily.postProcessConfig, targets, ctx.scene, renderExtent, frameNumber, targets.colorOutput);
     }
 
     switch (viewFamily.aaConfig.mode) {
         case Core::AntiAliasingMode::SMAA:
-            targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
+            targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene);
             break;
         case Core::AntiAliasingMode::TAA:
-            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, "taa_main"_sid);
+            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, "taa_main"_sid);
             break;
         case Core::AntiAliasingMode::NaiveTAA:
-            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, "taa_naive"_sid);
+            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, "taa_naive"_sid);
             break;
         case Core::AntiAliasingMode::DonutTAA:
-            targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets);
+            targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, ctx.scene);
             ctx.postAaExtent = outputExtent;
             break;
         case Core::AntiAliasingMode::FSR2:
-            targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, frameBuffer.reflection,
+            targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, ctx.scene, frameBuffer.reflection,
                                             frameBuffer.timeFrame.renderDeltaTime, framerateScale, frameNumber, preExposure, prevPreExposure);
             ctx.postAaExtent = outputExtent;
             break;
         case Core::AntiAliasingMode::SMAAT2X:
-            targets.colorOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, targets);
+            targets.colorOutput = SetupSMAA_T2X(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene);
             break;
         default: break;
     }
@@ -797,13 +808,13 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
     }
 
     const Core::Extent2D postAaExtent = ctx.postAaExtent;
-    targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, frameBuffer.timeFrame.renderDeltaTime, frameNumber, preExposure);
+    targets.colorOutput = SetupPostProcessing(*renderGraph, pipelineManager, viewFamily, postAaExtent, renderExtent, outputExtent, targets, ctx.scene, frameBuffer.timeFrame.renderDeltaTime, frameNumber, preExposure);
 
     if (!viewFamily.screenFade.bDrawOverUI) {
         targets.colorOutput = PPScreenFade(*renderGraph, pipelineManager, viewFamily.screenFade, postAaExtent, targets.colorOutput);
     }
 
-    SetupUIRender(*renderGraph, pipelineManager, viewFamily, postAaExtent, targets.colorOutput);
+    SetupUIRender(*renderGraph, pipelineManager, viewFamily, postAaExtent, ctx.scene, targets.colorOutput);
 
     if (viewFamily.screenFade.bDrawOverUI) {
         targets.colorOutput = PPScreenFade(*renderGraph, pipelineManager, viewFamily.screenFade, postAaExtent, targets.colorOutput);
@@ -820,12 +831,12 @@ void RenderThread::RecordProbeCapture(FrameContext& ctx)
     }
 
     screenCapture->PrepareProbeCaptureResources(captureSquare);
-    renderGraph->CreateTexture("probe_capture_intermediate"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, captureSquare, captureSquare, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture intermediate = renderGraph->CreateTexture("probe_capture_intermediate"_sid, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, captureSquare, captureSquare, 1}, CLEAR_COLOR_EMPTY, true);
 
     auto& probeCaptureBlitPass = renderGraph->AddPass("Probe Capture Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
     probeCaptureBlitPass.ReadBlitImage(ctx.targets.colorOutput);
-    probeCaptureBlitPass.WriteBlitImage("probe_capture_intermediate"_sid);
-    probeCaptureBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, s = captureSquare, postAaExtent](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    probeCaptureBlitPass.WriteBlitImage(intermediate);
+    probeCaptureBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, intermediate, s = captureSquare, postAaExtent](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkImageBlit2 blitRegion{};
         blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
         blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -839,7 +850,7 @@ void RenderThread::RecordProbeCapture(FrameContext& ctx)
         blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
         blitInfo.srcImage = renderGraph->GetImageHandle(colorOutput);
         blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = renderGraph->GetImageHandle("probe_capture_intermediate"_sid);
+        blitInfo.dstImage = renderGraph->GetImageHandle(intermediate);
         blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         blitInfo.regionCount = 1;
         blitInfo.pRegions = &blitRegion;
@@ -848,8 +859,8 @@ void RenderThread::RecordProbeCapture(FrameContext& ctx)
     });
 
     auto& probeCaptureCopyPass = renderGraph->AddPass("Probe Capture Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-    probeCaptureCopyPass.ReadCopyImage("probe_capture_intermediate"_sid);
-    probeCaptureCopyPass.Execute([this, s = captureSquare](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    probeCaptureCopyPass.ReadCopyImage(intermediate);
+    probeCaptureCopyPass.Execute([this, intermediate, s = captureSquare](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkBufferImageCopy2 copyRegion{};
         copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
         copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -857,7 +868,7 @@ void RenderThread::RecordProbeCapture(FrameContext& ctx)
 
         VkCopyImageToBufferInfo2 copyInfo{};
         copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
-        copyInfo.srcImage = renderGraph->GetImageHandle("probe_capture_intermediate"_sid);
+        copyInfo.srcImage = renderGraph->GetImageHandle(intermediate);
         copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         copyInfo.dstBuffer = screenCapture->probeCaptureReadbackBuffer.handle;
         copyInfo.regionCount = 1;
@@ -888,23 +899,23 @@ void RenderThread::RecordDiagnostics(FrameContext& ctx)
         debugCursorReadback.pixel[1] = cursorPixel[1];
         if (GPU_STATS_ENABLED) {
             if (frameBuffer.debug.bWorldGridCursorCell && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin) {
-                SetupDebugWorldGridCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
+                SetupDebugWorldGridCursorCellPass(*renderGraph, pipelineManager, ctx.scene, ctx.worldGrid, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
             }
             if (frameBuffer.debug.bReGIRCursorCell && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::ReGIR) {
-                SetupDebugReGIRCursorCellPass(*renderGraph, pipelineManager, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
+                SetupDebugReGIRCursorCellPass(*renderGraph, pipelineManager, ctx.scene, ctx.restir, 0, targets.depthCopy, renderExtent, {debugCursorReadback.pixel[0], debugCursorReadback.pixel[1]});
             }
         }
     }
     else {
-        debugCursorReadback.litTexture = StringID{};
+        debugCursorReadback.litTexture = RDGTexture{};
     }
 
     if (frameBuffer.debug.pickRequestId != 0u) {
         Core::Array<uint32_t, 2> pickPixel{renderExtent.width, renderExtent.height};
         DisplayUvToRenderPixel(std::clamp(frameBuffer.debug.pickU, 0.0f, 1.0f), 1.0f - std::clamp(frameBuffer.debug.pickV, 0.0f, 1.0f), ctx.displayPanini, ctx.displayAspect, renderExtent, pickPixel);
-        SetupDebugPickPixelPass(*renderGraph, pipelineManager, 0, targets.visibility, targets.depthCopy, renderExtent, pickPixel, frameBuffer.debug.pickRequestId);
+        SetupDebugPickPixelPass(*renderGraph, pipelineManager, ctx.scene, 0, targets.visibility, targets.depthCopy, renderExtent, pickPixel, frameBuffer.debug.pickRequestId);
     }
-    resourceManager->debugReadback.ScheduleCopies(*renderGraph, "debug_readback_buffer"_sid);
+    resourceManager->debugReadback.ScheduleCopies(*renderGraph, ctx.scene.debugReadback);
 
     if (!ctx.viewFamily.debugResourceName.IsEmpty()) {
         RecordDebugVisualize(ctx);
@@ -914,71 +925,71 @@ void RenderThread::RecordDiagnostics(FrameContext& ctx)
 void RenderThread::RecordDebugVisualize(FrameContext& ctx)
 {
     const Core::ViewFamily& viewFamily = ctx.viewFamily;
-    StringID debugTargetName = StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size());
-
-    bool bDebugBuffersReady = renderGraph->HasBuffer(SCENE_DATA_BUFFER);
+    const SceneResources& scene = ctx.scene;
+    const ReSTIRFrame& restir = ctx.restir;
+    const RDGTexture debugTarget = renderGraph->FindTexture(StringID(viewFamily.debugResourceName.c_str(), viewFamily.debugResourceName.Size()));
 
     bool bDebugReservoirReady = true;
     switch (viewFamily.debugTransformationType) {
         case DebugTransformationType::ReservoirLightIdx:
         case DebugTransformationType::ReservoirGenerateW:
-            bDebugReservoirReady = renderGraph->HasBuffer("restir_reservoir_base"_sid);
+            bDebugReservoirReady = restir.reservoirBase.IsValid();
             break;
         case DebugTransformationType::ReservoirTemporalLightIdx:
         case DebugTransformationType::ReservoirTemporalW:
-            bDebugReservoirReady = renderGraph->HasBuffer("restir_reservoir_temporal"_sid);
+            bDebugReservoirReady = restir.reservoirTemporal.IsValid();
             break;
         case DebugTransformationType::ReservoirSpatialLightIdx:
         case DebugTransformationType::ReservoirSpatialW:
-            bDebugReservoirReady = renderGraph->HasBuffer("restir_reservoir_spatial"_sid);
+            bDebugReservoirReady = restir.reservoirSpatial.IsValid();
             break;
         case DebugTransformationType::ReservoirHistoryLightIdx:
         case DebugTransformationType::ReservoirHistoryW:
-            bDebugReservoirReady = renderGraph->ResourceHasVersion("restir_reservoir_history"_sid, 1);
+            bDebugReservoirReady = restir.reservoirHistory.IsValid();
             break;
         default:
             break;
     }
 
-    if (!bDebugBuffersReady || !bDebugReservoirReady || !renderGraph->HasTexture(debugTargetName) || !renderGraph->HasTexture(ctx.targets.depthCopy)) {
+    if (!scene.sceneData.IsValid() || !bDebugReservoirReady || !debugTarget.IsValid() || !ctx.targets.depthCopy.IsValid()) {
         return;
     }
 
     auto& debugVisPass = renderGraph->AddPass("Debug Visualize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
-    debugVisPass.ReadSampledImage(debugTargetName);
+    debugVisPass.ReadSampledImage(debugTarget);
     debugVisPass.ReadSampledImage(ctx.targets.depthCopy);
-    const StringID debugVisBuffers[] = {
-        SCENE_DATA_BUFFER,
-        GEOMETRY_VERTEX_POSITION_BUFFER,
-        GEOMETRY_VERTEX_ATTRIBUTE_BUFFER,
-        GEOMETRY_MESHLET_VERTEX_BUFFER,
-        GEOMETRY_MESHLET_TRIANGLE_BUFFER,
-        GEOMETRY_MESHLET_BUFFER,
-        GEOMETRY_PRIMITIVE_BUFFER,
-        GEOMETRY_INSTANCE_BUFFER,
-        GEOMETRY_MODEL_BUFFER,
-        GEOMETRY_MATERIAL_BUFFER,
-        "restir_reservoir_base"_sid,
-        "restir_reservoir_temporal"_sid,
-        "restir_reservoir_spatial"_sid,
-        renderGraph->ResourceVersionID("restir_reservoir_history"_sid, 1),
-        REFLECTION_PROBE_BUFFER,
-        "world_grid_probe_grid"_sid,
-        LIGHT_DATA_BUFFER,
-        "regir_hash_entries"_sid,
-        "regir_cell_data"_sid,
+    const RDGBuffer debugVisBuffers[] = {
+        scene.sceneData,
+        scene.vertexPositions,
+        scene.vertexAttributes,
+        scene.meshletVertices,
+        scene.meshletTriangles,
+        scene.meshlets,
+        scene.primitives,
+        scene.instances,
+        scene.models,
+        scene.materials,
+        restir.reservoirBase,
+        restir.reservoirTemporal,
+        restir.reservoirSpatial,
+        restir.reservoirHistory,
+        scene.reflectionProbes,
+        ctx.worldGrid.probeGrid,
+        scene.lightData,
+        restir.regirHashEntries,
+        restir.regirCellData,
     };
-    for (const StringID bufferId : debugVisBuffers) {
-        if (renderGraph->HasBuffer(bufferId)) {
-            debugVisPass.ReadBuffer(bufferId);
+    for (const RDGBuffer buffer : debugVisBuffers) {
+        if (buffer.IsValid()) {
+            debugVisPass.ReadBuffer(buffer);
         }
     }
     debugVisPass.WriteStorageImage(ctx.targets.colorOutput);
-    debugVisPass.Execute([this, &ctx, debugTargetName, colorOutput = ctx.targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    debugVisPass.Execute([this, &ctx, debugTarget, colorOutput = ctx.targets.colorOutput](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         const Core::ViewFamily& viewFamily = ctx.viewFamily;
-        const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTargetName);
+        const ResourceDimensions& dims = renderGraph->GetImageDimensions(debugTarget);
         if (dims.Is3D()) { return; }
-        VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTargetName);
+        VkImageAspectFlags aspect = renderGraph->GetImageAspect(debugTarget);
 
         VkImageAspectFlags viewAspect = aspect;
         if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
@@ -1011,14 +1022,14 @@ void RenderThread::RecordDebugVisualize(FrameContext& ctx)
                 break;
         }
 
-        uint32_t textureIndexInArray = renderGraph->GetSampledImageViewDescriptorIndex(debugTargetName);
+        uint32_t textureIndexInArray = renderGraph->GetSampledImageViewDescriptorIndex(debugTarget);
         if (viewFamily.debugViewAspect == Core::DebugViewAspect::Depth) {
-            textureIndexInArray = renderGraph->GetDepthOnlySampledImageViewDescriptorIndex(debugTargetName);
+            textureIndexInArray = renderGraph->GetDepthOnlySampledImageViewDescriptorIndex(debugTarget);
         }
         else if (viewFamily.debugViewAspect == Core::DebugViewAspect::Stencil) {
             // uint storage descriptor array
             textureArrayIndex = 7;
-            textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTargetName);
+            textureIndexInArray = renderGraph->GetStencilOnlyStorageImageViewDescriptorIndex(debugTarget);
         }
 
         uint32_t outputIndexIndex = renderGraph->GetStorageImageViewDescriptorIndex(colorOutput);
@@ -1027,20 +1038,20 @@ void RenderThread::RecordDebugVisualize(FrameContext& ctx)
         const uint32_t historyCheckerboardField = checkerboardField == 0u ? 0u : (3u - checkerboardField);
 
         DebugVisualizePushConstant pc{
-            .sceneData = renderGraph->TryGetBufferAddress(SCENE_DATA_BUFFER),
-            .vertexPosBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-            .vertexAttrBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-            .meshletVerticesBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-            .meshletTrianglesBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-            .meshletBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-            .primitiveBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-            .instanceBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .modelBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MODEL_BUFFER),
-            .materialBuffer = renderGraph->TryGetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-            .reservoirBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_base"_sid),
-            .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_temporal"_sid),
-            .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress("restir_reservoir_spatial"_sid),
-            .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(renderGraph->ResourceVersionID("restir_reservoir_history"_sid, 1)),
+            .sceneData = renderGraph->TryGetBufferAddress(ctx.scene.sceneData),
+            .vertexPosBuffer = renderGraph->TryGetBufferAddress(ctx.scene.vertexPositions),
+            .vertexAttrBuffer = renderGraph->TryGetBufferAddress(ctx.scene.vertexAttributes),
+            .meshletVerticesBuffer = renderGraph->TryGetBufferAddress(ctx.scene.meshletVertices),
+            .meshletTrianglesBuffer = renderGraph->TryGetBufferAddress(ctx.scene.meshletTriangles),
+            .meshletBuffer = renderGraph->TryGetBufferAddress(ctx.scene.meshlets),
+            .primitiveBuffer = renderGraph->TryGetBufferAddress(ctx.scene.primitives),
+            .instanceBuffer = renderGraph->TryGetBufferAddress(ctx.scene.instances),
+            .modelBuffer = renderGraph->TryGetBufferAddress(ctx.scene.models),
+            .materialBuffer = renderGraph->TryGetBufferAddress(ctx.scene.materials),
+            .reservoirBuffer = renderGraph->TryGetBufferAddress(ctx.restir.reservoirBase),
+            .reservoirTemporalBuffer = renderGraph->TryGetBufferAddress(ctx.restir.reservoirTemporal),
+            .reservoirSpatialBuffer = renderGraph->TryGetBufferAddress(ctx.restir.reservoirSpatial),
+            .reservoirHistoryBuffer = renderGraph->TryGetBufferAddress(ctx.restir.reservoirHistory),
             .srcExtent = {ctx.renderExtent.width, ctx.renderExtent.height},
             .dstExtent = {ctx.postAaExtent.width, ctx.postAaExtent.height},
             .nearPlane = viewFamily.mainView.currentViewData.nearPlane,
@@ -1051,13 +1062,13 @@ void RenderThread::RecordDebugVisualize(FrameContext& ctx)
             .depthTextureIndex = renderGraph->GetSampledImageViewDescriptorIndex(ctx.targets.depthCopy),
             .checkerboardField = checkerboardField,
             .historyCheckerboardField = historyCheckerboardField,
-            .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? renderGraph->TryGetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
+            .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? renderGraph->TryGetBufferAddress(ctx.scene.reflectionProbes) : 0,
             .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
             .dofPackedRadii = glm::packHalf2x16(glm::vec2(viewFamily.postProcessConfig.dofNearRadiusPx, viewFamily.postProcessConfig.dofFarRadiusPx)),
-            .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress("world_grid_probe_grid"_sid),
-            .lightData = renderGraph->TryGetBufferAddress(LIGHT_DATA_BUFFER),
-            .regirHashEntries = renderGraph->TryGetBufferAddress("regir_hash_entries"_sid),
-            .regirCellData = renderGraph->TryGetBufferAddress("regir_cell_data"_sid),
+            .worldGridProbeGrid = viewFamily.bReflectionProbeBruteForce ? 0 : renderGraph->TryGetBufferAddress(ctx.worldGrid.probeGrid),
+            .lightData = renderGraph->TryGetBufferAddress(ctx.scene.lightData),
+            .regirHashEntries = renderGraph->TryGetBufferAddress(ctx.restir.regirHashEntries),
+            .regirCellData = renderGraph->TryGetBufferAddress(ctx.restir.regirCellData),
         };
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("debug_visualize"_sid);
         vkCmdBindPipeline(_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -1092,11 +1103,11 @@ void RenderThread::RecordFrameExport(FrameContext& ctx)
                                                            (static_cast<float>(frameBuffer.currentMousePosition[1]) + 0.5f) / static_cast<float>(outputExtent.height),
                                                            ctx.displayPanini, ctx.displayAspect, ctx.renderExtent, mousePixel);
         RenderPass& copyStableId = renderGraph->AddPass("Copy Stable ID"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-        copyStableId.ReadCopyImage("stable_id"_sid);
-        copyStableId.WriteTransferBuffer("readback_buffer"_sid);
-        copyStableId.Execute([this, bMouseOnSource, mouseX = mousePixel[0], mouseY = mousePixel[1]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        copyStableId.ReadCopyImage(ctx.targets.stableId);
+        copyStableId.WriteTransferBuffer(ctx.scene.readback);
+        copyStableId.Execute([this, bMouseOnSource, stableId = ctx.targets.stableId, readback = ctx.scene.readback, mouseX = mousePixel[0], mouseY = mousePixel[1]](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             if (!bMouseOnSource) {
-                vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle("readback_buffer"_sid), offsetof(ReadbackStruct, selectedStableId), sizeof(uint64_t), 0u);
+                vkCmdFillBuffer(cmd, renderGraph->GetBufferHandle(readback), offsetof(ReadbackStruct, selectedStableId), sizeof(uint64_t), 0u);
                 return;
             }
             VkBufferImageCopy region{};
@@ -1112,9 +1123,9 @@ void RenderThread::RecordFrameExport(FrameContext& ctx)
 
             vkCmdCopyImageToBuffer(
                 cmd,
-                renderGraph->GetImageHandle("stable_id"_sid),
+                renderGraph->GetImageHandle(stableId),
                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                renderGraph->GetBufferHandle("readback_buffer"_sid),
+                renderGraph->GetBufferHandle(readback),
                 1,
                 &region
             );
@@ -1123,8 +1134,8 @@ void RenderThread::RecordFrameExport(FrameContext& ctx)
 #endif
 
     RenderPass& readbackMeshletCount = renderGraph->AddPass("[Critical] Readback Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-    readbackMeshletCount.ReadTransferBuffer("readback_buffer"_sid);
-    readbackMeshletCount.Execute([this](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    readbackMeshletCount.ReadTransferBuffer(ctx.scene.readback);
+    readbackMeshletCount.Execute([this, readback = ctx.scene.readback](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         VkBufferCopy copy;
         copy.srcOffset = 0;
         copy.dstOffset = 0;
@@ -1132,7 +1143,7 @@ void RenderThread::RecordFrameExport(FrameContext& ctx)
 
         vkCmdCopyBuffer(
             cmd,
-            renderGraph->GetBufferHandle("readback_buffer"_sid),
+            renderGraph->GetBufferHandle(readback),
             renderGraph->GetReadback(),
             1,
             &copy
@@ -1146,12 +1157,12 @@ void RenderThread::RecordScreenshot(FrameContext& ctx)
     screenCapture->PrepareScreenshotResources(postAaExtent.width, postAaExtent.height);
     const uint32_t screenshotSlot = screenCapture->AcquireScreenshotSlot();
     RenderScreenCapture::ScreenshotSlot& slot = screenCapture->screenshotSlots[screenshotSlot];
-    renderGraph->CreateTexture("screenshot_intermediate"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent.width, postAaExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
+    const RDGTexture intermediate = renderGraph->CreateTexture("screenshot_intermediate"_sid, TextureInfo{VK_FORMAT_R8G8B8A8_SRGB, postAaExtent.width, postAaExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     auto& screenshotBlitPass = renderGraph->AddPass("Screenshot Blit"_sid, VK_PIPELINE_STAGE_2_BLIT_BIT, Render::RenderCategory::Untagged);
     screenshotBlitPass.ReadBlitImage(ctx.targets.colorOutput);
-    screenshotBlitPass.WriteBlitImage("screenshot_intermediate"_sid);
-    screenshotBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, postAaExtent](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    screenshotBlitPass.WriteBlitImage(intermediate);
+    screenshotBlitPass.Execute([this, colorOutput = ctx.targets.colorOutput, intermediate, postAaExtent](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkImageBlit2 blitRegion{};
         blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
         blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -1165,7 +1176,7 @@ void RenderThread::RecordScreenshot(FrameContext& ctx)
         blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
         blitInfo.srcImage = renderGraph->GetImageHandle(colorOutput);
         blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        blitInfo.dstImage = renderGraph->GetImageHandle("screenshot_intermediate"_sid);
+        blitInfo.dstImage = renderGraph->GetImageHandle(intermediate);
         blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         blitInfo.regionCount = 1;
         blitInfo.pRegions = &blitRegion;
@@ -1174,8 +1185,8 @@ void RenderThread::RecordScreenshot(FrameContext& ctx)
     });
 
     auto& screenshotCopyPass = renderGraph->AddPass("Screenshot Copy"_sid, VK_PIPELINE_STAGE_2_COPY_BIT, Render::RenderCategory::Untagged);
-    screenshotCopyPass.ReadCopyImage("screenshot_intermediate"_sid);
-    screenshotCopyPass.Execute([this, readback = slot.readbackBuffer.handle](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
+    screenshotCopyPass.ReadCopyImage(intermediate);
+    screenshotCopyPass.Execute([this, intermediate, readback = slot.readbackBuffer.handle](VkCommandBuffer _cmd, VulkanContext*, RenderGraph& graph) {
         VkBufferImageCopy2 copyRegion{};
         copyRegion.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
         copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -1183,7 +1194,7 @@ void RenderThread::RecordScreenshot(FrameContext& ctx)
 
         VkCopyImageToBufferInfo2 copyInfo{};
         copyInfo.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_BUFFER_INFO_2;
-        copyInfo.srcImage = renderGraph->GetImageHandle("screenshot_intermediate"_sid);
+        copyInfo.srcImage = renderGraph->GetImageHandle(intermediate);
         copyInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         copyInfo.dstBuffer = readback;
         copyInfo.regionCount = 1;

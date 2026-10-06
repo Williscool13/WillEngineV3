@@ -17,39 +17,42 @@
 
 namespace Render
 {
-void SetupReflectionTracePass(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              Core::Extent2D renderExtent,
-                              const RenderTargets& targets,
-                              uint32_t sceneIndex,
-                              uint64_t frameNumber,
-                              const Core::ReflectionConfiguration& reflectionConfig)
+ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
+                                         PipelineManager* pipelineManager,
+                                         Core::Extent2D renderExtent,
+                                         const RenderTargets& targets,
+                                         const SceneResources& scene,
+                                         uint32_t sceneIndex,
+                                         uint64_t frameNumber,
+                                         const Core::ReflectionConfiguration& reflectionConfig)
 {
     ZoneScoped;
+    ReflectionFrame reflection{};
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-    if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(RT_TLAS_BUFFER)) {
-        return;
+    if (reflectionRoughnessMax < 0.0f || !scene.tlas.IsValid()) {
+        return reflection;
     }
 
-    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
+    const RDGBuffer hitDescriptors = graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
+    reflection.hitDescriptors = hitDescriptors;
 
     RenderPass& pass = graph.AddPass("[Reflection] Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(scene.sceneData);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
-    pass.ReadTLASBuffer(RT_TLAS_BUFFER);
-    pass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
+    pass.ReadTLASBuffer(scene.tlas);
+    pass.WriteBuffer(hitDescriptors);
 
     pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
-            gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            gbufferOne = targets.gbufferOne, depth = targets.depthCopy, &scene, hitDescriptors](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReflectionTracePushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
+                .reflectionDescriptors = graph.GetBufferAddress(hitDescriptors),
                 .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER),
+                .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(scene.tlas),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
                 .roughnessMax = reflectionRoughnessMax,
                 .mirrorRoughnessMax = mirrorRoughnessMax,
@@ -59,38 +62,42 @@ void SetupReflectionTracePass(RenderGraph& graph,
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
+    return reflection;
 }
 
 static constexpr float SSR_EDGE_FADE = 0.1f;
 
-void SetupSSRTracePass(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       Core::Extent2D renderExtent,
-                       const RenderTargets& targets,
-                       uint32_t sceneIndex,
-                       uint64_t frameNumber,
-                       uint32_t activeCheckerboardField,
-                       const Core::ReflectionConfiguration& reflectionConfig)
+ReflectionFrame SetupSSRTracePass(RenderGraph& graph,
+                                  PipelineManager* pipelineManager,
+                                  Core::Extent2D renderExtent,
+                                  const RenderTargets& targets,
+                                  const SceneResources& scene,
+                                  uint32_t sceneIndex,
+                                  uint64_t frameNumber,
+                                  uint32_t activeCheckerboardField,
+                                  const Core::ReflectionConfiguration& reflectionConfig)
 {
     ZoneScoped;
+    ReflectionFrame reflection{};
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
     if (reflectionRoughnessMax < 0.0f) {
-        return;
+        return reflection;
     }
 
-    graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
+    const RDGBuffer hitDescriptors = graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
+    reflection.hitDescriptors = hitDescriptors;
 
     RenderPass& pass = graph.AddPass("[Reflection] SSR Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
+    pass.ReadBuffer(scene.sceneData);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.depthCopy);
-    pass.WriteBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
+    pass.WriteBuffer(hitDescriptors);
 
     pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax, ssrThickness = reflectionConfig.ssrThickness, ssrMaxSteps = reflectionConfig.ssrMaxSteps, activeCheckerboardField,
-            gbufferOne = targets.gbufferOne, depth = targets.depthCopy](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            gbufferOne = targets.gbufferOne, depth = targets.depthCopy, &scene, hitDescriptors](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             SSRTracePushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
+                .reflectionDescriptors = graph.GetBufferAddress(hitDescriptors),
                 .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
@@ -108,73 +115,90 @@ void SetupSSRTracePass(RenderGraph& graph,
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
+    return reflection;
 }
 
-void SetupReflectionShadePass(RenderGraph& graph,
-                              PipelineManager* pipelineManager,
-                              const Core::ViewFamily& viewFamily,
-                              Core::Extent2D renderExtent,
-                              const RenderTargets& targets,
-                              uint32_t sceneIndex,
-                              uint64_t frameNumber,
-                              uint32_t activeCheckerboardField,
-                              const Core::ReflectionConfiguration& reflectionConfig,
-                              bool bDDGIApply,
-                              bool bCheckerboardPacked,
-                              bool bDisableScreenTier)
+ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
+                                         PipelineManager* pipelineManager,
+                                         const Core::ViewFamily& viewFamily,
+                                         Core::Extent2D renderExtent,
+                                         const RenderTargets& targets,
+                                         const SceneResources& scene,
+                                         const ReflectionFrame& trace,
+                                         const DDGIFrame& ddgi,
+                                         const WorldGridFrame& worldGrid,
+                                         uint32_t sceneIndex,
+                                         uint64_t frameNumber,
+                                         uint32_t activeCheckerboardField,
+                                         const Core::ReflectionConfiguration& reflectionConfig,
+                                         bool bDDGIApply,
+                                         bool bCheckerboardPacked,
+                                         bool bDisableScreenTier)
 {
     ZoneScoped;
+    ReflectionFrame reflection = trace;
     const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-    if (reflectionRoughnessMax < 0.0f || !graph.HasBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER)) {
-        return;
+    if (reflectionRoughnessMax < 0.0f || !trace.hitDescriptors.IsValid()) {
+        return reflection;
     }
 
-    const bool bHasTLAS = graph.HasBuffer(RT_TLAS_BUFFER);
-    const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
-    const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
+    const RDGBuffer hitDescriptors = trace.hitDescriptors;
+    const bool bHasTLAS = scene.tlas.IsValid();
+    const bool bDDGI = bDDGIApply && ddgi.cascades.IsValid();
+    const RDGBuffer ddgiCascades = ddgi.cascades;
+    const bool bWorldGrid = worldGrid.lightGrid.IsValid() && worldGrid.indexList.IsValid();
+    const RDGBuffer worldLightGrid = worldGrid.lightGrid;
+    const RDGBuffer worldIndexList = worldGrid.indexList;
+    const RDGBuffer probeGrid = worldGrid.probeGrid;
     const bool bSSRSource = reflectionConfig.bScreenSpaceTrace;
-    const StringID litHistory = graph.ResourceVersionID(LIT_COLOR_HISTORY, 1);
-    const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
-    const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
-    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion(LIT_COLOR_HISTORY, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
+    const RDGTexture litHistory = targets.litSnapshotHistory;
+    const RDGTexture depthHistory = targets.depthCopyHistory;
+    const RDGTexture gbufferOneHistory = targets.gbufferOneHistory;
+    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && litHistory.IsValid() && depthHistory.IsValid() && gbufferOneHistory.IsValid();
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
-    graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
+    const RDGTexture specNoisy = graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
+    reflection.specNoisy = specNoisy;
     const bool bHitDelta = reflectionConfig.bMergedDenoise && bHasTLAS;
+    RDGTexture hitDelta{};
     if (bHitDelta) {
-        graph.CreateVersionedTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}});
+        const RDGTextureRing hitDeltaRing = graph.CreateVersionedTexture(REFLECTION_HIT_DELTA_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false,
+                                                                            VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}});
+        hitDelta = hitDeltaRing.Current();
+        reflection.hitDelta = hitDelta;
+        reflection.hitDeltaHistory = hitDeltaRing.Version(1);
     }
 
     RenderPass& pass = graph.AddPass("[Reflection] Shade"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
-    pass.ReadBuffer(SCENE_DATA_BUFFER);
-    pass.ReadBuffer(LIGHT_DATA_BUFFER);
-    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    pass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-    pass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    pass.ReadBuffer(GEOMETRY_INDEX_BUFFER);
-    pass.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
-    pass.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
-    pass.ReadBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER);
-    pass.ReadBuffer(REFLECTION_PROBE_BUFFER);
-    if (graph.HasBuffer("world_grid_probe_grid"_sid)) { pass.ReadBuffer("world_grid_probe_grid"_sid); }
+    pass.ReadBuffer(scene.sceneData);
+    pass.ReadBuffer(scene.lightData);
+    pass.ReadBuffer(scene.instances);
+    pass.ReadBuffer(scene.primitives);
+    pass.ReadBuffer(scene.models);
+    pass.ReadBuffer(scene.materials);
+    pass.ReadBuffer(scene.indices);
+    pass.ReadBuffer(scene.vertexAttributes);
+    pass.ReadBuffer(scene.vertexPositions);
+    pass.ReadBuffer(hitDescriptors);
+    pass.ReadBuffer(scene.reflectionProbes);
+    if (probeGrid.IsValid()) { pass.ReadBuffer(probeGrid); }
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.ReadSampledImage(targets.depthCopy);
-    if (bHasTLAS) { pass.ReadTLASBuffer(RT_TLAS_BUFFER); }
-    if (bDDGI) { AddDDGISampleDependencies(graph, pass); }
+    if (bHasTLAS) { pass.ReadTLASBuffer(scene.tlas); }
+    if (bDDGI) { AddDDGISampleDependencies(graph, pass, ddgi); }
     if (bWorldGrid) {
-        pass.ReadBuffer("world_grid_light_grid"_sid);
-        pass.ReadBuffer("world_grid_index_list"_sid);
+        pass.ReadBuffer(worldLightGrid);
+        pass.ReadBuffer(worldIndexList);
     }
     if (bScreenSpace) {
         pass.ReadSampledImage(litHistory);
         pass.ReadSampledImage(depthHistory);
         pass.ReadSampledImage(gbufferOneHistory);
     }
-    pass.WriteStorageImage(REFLECTION_SPEC_NOISY_TARGET);
+    pass.WriteStorageImage(specNoisy);
     if (bHitDelta) {
-        pass.WriteStorageImage(REFLECTION_HIT_DELTA_TARGET);
+        pass.WriteStorageImage(hitDelta);
     }
 
     const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
@@ -183,29 +207,30 @@ void SetupReflectionShadePass(RenderGraph& graph,
         ? static_cast<uint32_t>(Core::ReflectionConfiguration::SunMode::AlwaysLit)
         : static_cast<uint32_t>(reflectionConfig.sunMode);
     pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, bHitDelta, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, iblIntensity = viewFamily.iblIntensity, bCheckerboardPacked, sunMode,
-            field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy, reflectionProbeCount, litHistory, depthHistory, gbufferOneHistory](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(RT_TLAS_BUFFER) : ~0u;
+            field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy, reflectionProbeCount, litHistory, depthHistory, gbufferOneHistory,
+            hitDescriptors, ddgiCascades, worldLightGrid, worldIndexList, probeGrid, specNoisy, hitDelta](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(scene.tlas) : ~0u;
 
             ReflectionShadePushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                .reflectionDescriptors = graph.GetBufferAddress(REFLECTION_HIT_DESCRIPTORS_BUFFER),
-                .lightData = graph.GetBufferAddress(LIGHT_DATA_BUFFER),
-                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                .indexBuffer = graph.GetBufferAddress(GEOMETRY_INDEX_BUFFER),
-                .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                .ddgiCascades = bDDGI ? graph.GetBufferAddress(DDGI_CASCADES_BUFFER) : 0,
-                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress("world_grid_light_grid"_sid) : 0,
-                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress("world_grid_index_list"_sid) : 0,
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
+                .reflectionDescriptors = graph.GetBufferAddress(hitDescriptors),
+                .lightData = graph.GetBufferAddress(scene.lightData),
+                .instanceBuffer = graph.GetBufferAddress(scene.instances),
+                .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
+                .modelBuffer = graph.GetBufferAddress(scene.models),
+                .materialBuffer = graph.GetBufferAddress(scene.materials),
+                .indexBuffer = graph.GetBufferAddress(scene.indices),
+                .vertexAttrBuffer = graph.GetBufferAddress(scene.vertexAttributes),
+                .vertexPosBuffer = graph.GetBufferAddress(scene.vertexPositions),
+                .ddgiCascades = bDDGI ? graph.GetBufferAddress(ddgiCascades) : 0,
+                .worldGridBuffer = bWorldGrid ? graph.GetBufferAddress(worldLightGrid) : 0,
+                .worldGridIndexList = bWorldGrid ? graph.GetBufferAddress(worldIndexList) : 0,
                 .renderExtent = {renderExtent.width, renderExtent.height},
                 .sceneDataIndex = sceneIndex,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .gbufferTwoIndex = graph.GetSampledImageViewDescriptorIndex(gbufferTwo),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .outputIndex = graph.GetStorageImageViewDescriptorIndex(REFLECTION_SPEC_NOISY_TARGET),
+                .outputIndex = graph.GetStorageImageViewDescriptorIndex(specNoisy),
                 .tlasIndex = tlasIndex,
                 .skyboxIndex = skyboxIndex,
                 .frameIndex = static_cast<uint32_t>(frameNumber),
@@ -218,8 +243,8 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .depthHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0u,
                 .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
                 .reflectionProbeCount = reflectionProbeCount,
-                .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(REFLECTION_PROBE_BUFFER) : 0,
-                .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && graph.HasBuffer("world_grid_probe_grid"_sid)) ? graph.GetBufferAddress("world_grid_probe_grid"_sid) : 0,
+                .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(scene.reflectionProbes) : 0,
+                .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && probeGrid.IsValid()) ? graph.GetBufferAddress(probeGrid) : 0,
                 .sunMode = sunMode,
                 .maxRayIntensity = reflectionConfig.maxRayIntensity,
                 .iblIntensity = iblIntensity,
@@ -227,12 +252,13 @@ void SetupReflectionShadePass(RenderGraph& graph,
                 .bAlphaTest = reflectionConfig.bAlphaTest ? 1u : 0u,
                 .hitLocalShadowRays = bHasTLAS ? static_cast<uint32_t>(reflectionConfig.hitLocalShadowRays) : 0u,
                 .hitTextureLod = reflectionConfig.hitTextureLod,
-                .hitDeltaIndex = bHitDelta ? graph.GetStorageImageViewDescriptorIndex(REFLECTION_HIT_DELTA_TARGET) : ~0u,
+                .hitDeltaIndex = bHitDelta ? graph.GetStorageImageViewDescriptorIndex(hitDelta) : ~0u,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("reflection_shade"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);
         });
+    return reflection;
 }
 } // Render

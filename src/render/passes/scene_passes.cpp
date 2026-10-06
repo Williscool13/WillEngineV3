@@ -19,6 +19,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
                           const RenderTargets& targets,
+                          const SceneResources& scene,
                           uint32_t sceneIndex)
 {
     ZoneScoped;
@@ -27,7 +28,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
 
     RenderPass& skyboxPass = graph.AddPass(
         "Skybox"_sid, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, RenderCategory::Scene);
-    skyboxPass.ReadBuffer(SCENE_DATA_BUFFER);
+    skyboxPass.ReadBuffer(scene.sceneData);
     skyboxPass.WriteColorAttachment(targets.colorOutput);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, renderExtent, sceneIndex,
@@ -45,7 +46,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
             vkCmdBeginRendering(cmd, &renderInfo);
 
             EnvironmentSkyboxPushConstant pc{
-                .sceneData = graph.GetBufferAddress("scene_data"_sid),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .sceneDataIndex = sceneIndex,
                 .cubemapIndex = skyboxIndex,
                 .skyboxLOD = skyboxLOD,
@@ -66,22 +67,23 @@ void SetupTextForwardPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
-                          const RenderTargets& targets)
+                          const RenderTargets& targets,
+                          const SceneResources& scene)
 {
     ZoneScoped;
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
-    if (!graph.HasBuffer(TEXT_GLYPH_QUAD_BUFFER) || !graph.HasBuffer(TEXT_INSTANCE_BUFFER) || !graph.HasBuffer(TEXT_MATERIAL_BUFFER) || !graph.HasBuffer(FONT_CURVE_BUFFER)) { return; }
+    if (!scene.textGlyphQuads.IsValid() || !scene.textInstances.IsValid() || !scene.textMaterials.IsValid() || !scene.fontCurves.IsValid()) { return; }
 
     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("text_default"_sid);
     if (!pipelineEntry) { return; }
 
     RenderPass& textPass = graph.AddPass("Text Forward"_sid, VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, Render::RenderCategory::Scene);
-    textPass.ReadBuffer(SCENE_DATA_BUFFER);
-    textPass.ReadBuffer(TEXT_GLYPH_QUAD_BUFFER);
-    textPass.ReadBuffer(TEXT_INSTANCE_BUFFER);
-    textPass.ReadBuffer(TEXT_MATERIAL_BUFFER);
-    textPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-    textPass.ReadBuffer(FONT_CURVE_BUFFER);
+    textPass.ReadBuffer(scene.sceneData);
+    textPass.ReadBuffer(scene.textGlyphQuads);
+    textPass.ReadBuffer(scene.textInstances);
+    textPass.ReadBuffer(scene.textMaterials);
+    textPass.ReadBuffer(scene.models);
+    textPass.ReadBuffer(scene.fontCurves);
     //textPass.ReadDepthAttachment(targets.depthStencil);
     textPass.ReadWriteDepthAttachment(targets.depthStencil);
     textPass.WriteColorAttachment(targets.colorOutput);
@@ -110,12 +112,12 @@ void SetupTextForwardPass(RenderGraph& graph,
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
 
-        VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(SCENE_DATA_BUFFER);
-        VkDeviceAddress glyphQuadsAddr = graph.GetBufferAddress(TEXT_GLYPH_QUAD_BUFFER);
-        VkDeviceAddress instAddr = graph.GetBufferAddress(TEXT_INSTANCE_BUFFER);
-        VkDeviceAddress modelAddr = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER);
-        VkDeviceAddress matAddr = graph.GetBufferAddress(TEXT_MATERIAL_BUFFER);
-        VkDeviceAddress fontCurveAddr = graph.GetBufferAddress(FONT_CURVE_BUFFER);
+        VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(scene.sceneData);
+        VkDeviceAddress glyphQuadsAddr = graph.GetBufferAddress(scene.textGlyphQuads);
+        VkDeviceAddress instAddr = graph.GetBufferAddress(scene.textInstances);
+        VkDeviceAddress modelAddr = graph.GetBufferAddress(scene.models);
+        VkDeviceAddress matAddr = graph.GetBufferAddress(scene.textMaterials);
+        VkDeviceAddress fontCurveAddr = graph.GetBufferAddress(scene.fontCurves);
 
         for (const Core::TextDrawCall& dc : viewFamily.textDrawCalls) {
             uint32_t groupCount = (dc.quadCount + 15) / 16;
@@ -141,7 +143,7 @@ void SetupTextForwardPass(RenderGraph& graph,
     });
 }
 
-void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const RenderTargets& targets)
+void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const RenderTargets& targets, const SceneResources& scene)
 {
     ZoneScoped;
     if (viewFamily.spriteBatches.IsEmpty()) {
@@ -149,8 +151,8 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
     }
 
     auto& spritesPass = graph.AddPass("Sprites"_sid, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, Render::RenderCategory::Scene);
-    spritesPass.ReadBuffer(SCENE_DATA_BUFFER);
-    spritesPass.ReadBuffer(SPRITE_BUFFER);
+    spritesPass.ReadBuffer(scene.sceneData);
+    spritesPass.ReadBuffer(scene.sprites);
     spritesPass.ReadWriteDepthAttachment(targets.depthStencil);
     spritesPass.WriteColorAttachment(targets.colorOutput);
 #if WILL_EDITOR
@@ -176,8 +178,8 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("sprites"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineEntry->pipeline);
 
-        const VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(SCENE_DATA_BUFFER);
-        const VkDeviceAddress spritesAddr = graph.GetBufferAddress(SPRITE_BUFFER);
+        const VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(scene.sceneData);
+        const VkDeviceAddress spritesAddr = graph.GetBufferAddress(scene.sprites);
 
         for (const Core::SpriteBatch& batch : viewFamily.spriteBatches) {
             SpritePushConstant pc{

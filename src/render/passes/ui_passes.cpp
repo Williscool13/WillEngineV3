@@ -15,17 +15,17 @@
 
 namespace Render
 {
-void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, StringID targetImage)
+void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const SceneResources& scene, RDGTexture targetImage)
 {
     ZoneScoped;
     if (viewFamily.uiDrawList.IsEmpty()) { return; }
 
-    const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && graph.HasBuffer(UI_GLYPH_QUAD_BUFFER) && graph.HasBuffer(FONT_CURVE_BUFFER);
+    const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && scene.uiGlyphQuads.IsValid() && scene.fontCurves.IsValid();
 
     RenderPass& uiPass = graph.AddPass("UI Render"_sid, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::UI);
     if (bHasText) {
-        uiPass.ReadBuffer(UI_GLYPH_QUAD_BUFFER);
-        uiPass.ReadBuffer(FONT_CURVE_BUFFER);
+        uiPass.ReadBuffer(scene.uiGlyphQuads);
+        uiPass.ReadBuffer(scene.fontCurves);
     }
     uiPass.WriteColorAttachment(targetImage);
     uiPass.Execute([&, renderExtent, targetImage, pipelineManager, bHasText](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -41,8 +41,8 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({renderExtent.width, renderExtent.height}, &colorAttachment, 1, nullptr, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
-        const VkDeviceAddress glyphQuadsAddr = bHasText ? graph.GetBufferAddress(UI_GLYPH_QUAD_BUFFER) : 0;
-        const VkDeviceAddress fontCurveAddr = bHasText ? graph.GetBufferAddress(FONT_CURVE_BUFFER) : 0;
+        const VkDeviceAddress glyphQuadsAddr = bHasText ? graph.GetBufferAddress(scene.uiGlyphQuads) : 0;
+        const VkDeviceAddress fontCurveAddr = bHasText ? graph.GetBufferAddress(scene.fontCurves) : 0;
 
         const PipelineEntry* rectPipeline = pipelineManager->GetPipelineEntry("ui_rect_default"_sid);
         const PipelineEntry* imagePipeline = pipelineManager->GetPipelineEntry("ui_image_default"_sid);

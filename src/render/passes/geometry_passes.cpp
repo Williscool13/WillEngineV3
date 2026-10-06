@@ -18,40 +18,26 @@
 
 namespace Render
 {
-void SetupGeometryPass(RenderGraph& graph,
-                       PipelineManager* pipelineManager,
-                       const Core::ViewFamily& viewFamily,
-                       const SceneBufferSizes& bufferSizes,
-                       const Core::DebugRenderParams& debug,
-                       Core::Extent2D renderExtent,
-                       const RenderTargets& targets,
-                       uint32_t sceneIndex)
+RDGTexture SetupGeometryPass(RenderGraph& graph,
+                             PipelineManager* pipelineManager,
+                             const Core::ViewFamily& viewFamily,
+                             const SceneBufferSizes& bufferSizes,
+                             const Core::DebugRenderParams& debug,
+                             Core::Extent2D renderExtent,
+                             const RenderTargets& targets,
+                             const SceneResources& scene,
+                             uint32_t sceneIndex)
 {
     ZoneScoped;
     if (viewFamily.instanceCount == 0) {
-        return;
+        return {};
     }
 
-    const StringID instanceMeshletOffsets = "instance_meshlet_offsets"_sid;
-    const StringID level1Sums = "level1_sums"_sid;
-    const StringID level1BlockSums = "level1_block_sums"_sid;
-    const StringID level2Sums = "level2_sums"_sid;
-    const StringID level2BlockSums = "level2_block_sums"_sid;
-    const StringID scannedLevel2BlockSums = "scanned_level2_block_sums"_sid;
-    const StringID intermediateMeshlets = "intermediate_meshlets"_sid;
-    const StringID meshletLevel1Sums = "meshlet_level1_sums"_sid;
-    const StringID meshletLevel1BlockSums = "meshlet_level1_block_sums"_sid;
-    const StringID meshletLevel2Sums = "meshlet_level2_sums"_sid;
-    const StringID meshletLevel2BlockSums = "meshlet_level2_block_sums"_sid;
-    const StringID meshletScannedLevel2BlockSums = "meshlet_scanned_level2_block_sums"_sid;
-    const StringID visibleMeshlets = "visible_meshlets"_sid;
-    const StringID meshletCountDispatchArgs = "meshlet_count_dispatch_args"_sid;
-    const StringID compactedMeshletDispatchArgs = "compacted_meshlet_dispatch_args"_sid;
     const uint32_t instanceCount = viewFamily.instanceCount;
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
     auto highestMeshletCount = bufferSizes.visibleMeshletUpperBound;
 
-    const StringID visBits = "instance_vis_bits"_sid;
+    const StringID visBitsId = "instance_vis_bits"_sid;
     const bool bOcclusion = sceneIndex == 0 && debug.bOcclusionCulling;
     const bool bOcclusionFreeze = bOcclusion && debug.bOcclusionFreeze;
     const uint32_t cullFlags = (debug.bCullInstanceFrustum ? CULL_FLAG_INSTANCE_FRUSTUM : 0u) |
@@ -61,29 +47,28 @@ void SetupGeometryPass(RenderGraph& graph,
                                (debug.bCullMeshletContribution ? CULL_FLAG_MESHLET_CONTRIBUTION : 0u);
 
     // Shared buffers
-    {
-        {
-            graph.CreateBuffer(instanceMeshletOffsets, bufferSizes.instanceMeshletOffsetsBufferSize, false);
-            graph.CreateBuffer(level1Sums, bufferSizes.level1SumsBufferSize, false);
-            graph.CreateBuffer(level1BlockSums, bufferSizes.level1BlockSumsBufferSize, false);
-            graph.CreateBuffer(level2Sums, bufferSizes.level2SumsBufferSize, false);
-            graph.CreateBuffer(level2BlockSums, bufferSizes.level2BlockSumsBufferSize, false);
-            graph.CreateBuffer(scannedLevel2BlockSums, bufferSizes.scannedLevel2BlockSumsBufferSize, false);
-            graph.CreateBuffer(intermediateMeshlets, bufferSizes.intermediateMeshletBufferSize, false);
-            graph.CreateBuffer(meshletLevel1Sums, bufferSizes.meshletLevel1SumsBufferSize, false);
-            graph.CreateBuffer(meshletLevel1BlockSums, bufferSizes.meshletLevel1BlockSumsBufferSize, false);
-            graph.CreateBuffer(meshletLevel2Sums, bufferSizes.meshletLevel2SumsBufferSize, false);
-            graph.CreateBuffer(meshletLevel2BlockSums, bufferSizes.meshletLevel2BlockSumsBufferSize, false);
-            graph.CreateBuffer(meshletScannedLevel2BlockSums, bufferSizes.meshletScannedLevel2BlockSumsBufferSize, false);
-            graph.CreateBuffer(visibleMeshlets, bufferSizes.visibleMeshletsBufferSize, false);
-            graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
-            graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
-            if (bOcclusion) {
-                // Fixed size so the persistent ring never resizes; garbage content on first use is safe (phase 2 corrects)
-                graph.CreateVersionedBuffer(visBits, MAX_INSTANCE_SLOTS / 8, 0, graph.ResourceHasVersion(visBits, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh);
-            }
-        }
+    const RDGBuffer instanceMeshletOffsets = graph.CreateBuffer("instance_meshlet_offsets"_sid, bufferSizes.instanceMeshletOffsetsBufferSize, false);
+    const RDGBuffer level1Sums = graph.CreateBuffer("level1_sums"_sid, bufferSizes.level1SumsBufferSize, false);
+    const RDGBuffer level1BlockSums = graph.CreateBuffer("level1_block_sums"_sid, bufferSizes.level1BlockSumsBufferSize, false);
+    const RDGBuffer level2Sums = graph.CreateBuffer("level2_sums"_sid, bufferSizes.level2SumsBufferSize, false);
+    const RDGBuffer level2BlockSums = graph.CreateBuffer("level2_block_sums"_sid, bufferSizes.level2BlockSumsBufferSize, false);
+    const RDGBuffer scannedLevel2BlockSums = graph.CreateBuffer("scanned_level2_block_sums"_sid, bufferSizes.scannedLevel2BlockSumsBufferSize, false);
+    const RDGBuffer intermediateMeshlets = graph.CreateBuffer("intermediate_meshlets"_sid, bufferSizes.intermediateMeshletBufferSize, false);
+    const RDGBuffer meshletLevel1Sums = graph.CreateBuffer("meshlet_level1_sums"_sid, bufferSizes.meshletLevel1SumsBufferSize, false);
+    const RDGBuffer meshletLevel1BlockSums = graph.CreateBuffer("meshlet_level1_block_sums"_sid, bufferSizes.meshletLevel1BlockSumsBufferSize, false);
+    const RDGBuffer meshletLevel2Sums = graph.CreateBuffer("meshlet_level2_sums"_sid, bufferSizes.meshletLevel2SumsBufferSize, false);
+    const RDGBuffer meshletLevel2BlockSums = graph.CreateBuffer("meshlet_level2_block_sums"_sid, bufferSizes.meshletLevel2BlockSumsBufferSize, false);
+    const RDGBuffer meshletScannedLevel2BlockSums = graph.CreateBuffer("meshlet_scanned_level2_block_sums"_sid, bufferSizes.meshletScannedLevel2BlockSumsBufferSize, false);
+    const RDGBuffer visibleMeshlets = graph.CreateBuffer("visible_meshlets"_sid, bufferSizes.visibleMeshletsBufferSize, false);
+    const RDGBuffer meshletCountDispatchArgs = graph.CreateBuffer("meshlet_count_dispatch_args"_sid, sizeof(InstancingMeshletDispatchIndirect), false);
+    const RDGBuffer compactedMeshletDispatchArgs = graph.CreateBuffer("compacted_meshlet_dispatch_args"_sid, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
+    RDGBuffer visBits;
+    if (bOcclusion) {
+        // Fixed size so the persistent ring never resizes; garbage content on first use is safe (phase 2 corrects)
+        visBits = graph.CreateVersionedBuffer(visBitsId, MAX_INSTANCE_SLOTS / 8, 0, graph.ResourceHasVersion(visBitsId, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh).Current();
     }
+    RDGTexture hizPyramid;
+    const RDGBuffer readback = scene.readback;
 
     auto addCullChain = [&](bool bPhase2) {
         const RenderCategory chainCategory = bPhase2 ? RenderCategory::GeometryPhase2 : RenderCategory::Geometry;
@@ -106,31 +91,31 @@ void SetupGeometryPass(RenderGraph& graph,
         // Instance Visibility/LOD: phase 1 gates on last frame's bit, phase 2 tests against the fresh pyramid
         if (bPhase2) {
             RenderPass& instanceLODPass = graph.AddPass(chainID("Instance Occlusion/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
-            instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
-            instanceLODPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-            instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-            instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-            instanceLODPass.ReadSampledImage(HIZ_PYRAMID);
+            instanceLODPass.ReadBuffer(scene.sceneData);
+            instanceLODPass.ReadBuffer(scene.primitives);
+            instanceLODPass.ReadBuffer(scene.models);
+            instanceLODPass.ReadBuffer(scene.instances);
+            instanceLODPass.ReadSampledImage(hizPyramid);
             instanceLODPass.ReadWriteBuffer(visBits);
             instanceLODPass.ReadWriteBuffer(instanceMeshletOffsets);
             if (GPU_STATS_ENABLED) {
-                instanceLODPass.ReadWriteBuffer("readback_buffer"_sid);
+                instanceLODPass.ReadWriteBuffer(readback);
             }
-            instanceLODPass.Execute([instanceMeshletOffsets, visBits, instanceCount, lodBias, cullFlags, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const ResourceDimensions& dims = graph.GetImageDimensions(HIZ_PYRAMID);
+            instanceLODPass.Execute([&scene, instanceMeshletOffsets, visBits, hizPyramid, readback, instanceCount, lodBias, cullFlags, pipelineManager, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                const ResourceDimensions& dims = graph.GetImageDimensions(hizPyramid);
                 InstanceLODOcclusionPushConstant pc{
-                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                    .sceneData = graph.GetBufferAddress(scene.sceneData),
+                    .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
+                    .modelBuffer = graph.GetBufferAddress(scene.models),
+                    .instanceBuffer = graph.GetBufferAddress(scene.instances),
                     .visBits = graph.GetBufferAddress(visBits),
                     .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
-                    .occludedCounter = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, culledInstanceOcclusion) : 0,
+                    .occludedCounter = GPU_STATS_ENABLED ? graph.GetBufferAddress(readback) + offsetof(ReadbackStruct, culledInstanceOcclusion) : 0,
                     .hizExtent = {dims.width, dims.height},
                     .instanceCount = instanceCount,
                     .sceneDataIndex = sceneIndex,
                     .lodBias = lodBias,
-                    .hizIndex = graph.GetSampledImageViewDescriptorIndex(HIZ_PYRAMID),
+                    .hizIndex = graph.GetSampledImageViewDescriptorIndex(hizPyramid),
                     .hizMipCount = dims.levels,
                     .cullFlags = cullFlags,
                 };
@@ -145,20 +130,22 @@ void SetupGeometryPass(RenderGraph& graph,
         }
         else {
             RenderPass& instanceLODPass = graph.AddPass(chainID("Instance Visibility/LOD Selection"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
-            instanceLODPass.ReadBuffer(SCENE_DATA_BUFFER);
-            instanceLODPass.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-            instanceLODPass.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-            instanceLODPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
+            instanceLODPass.ReadBuffer(scene.sceneData);
+            instanceLODPass.ReadBuffer(scene.primitives);
+            instanceLODPass.ReadBuffer(scene.models);
+            instanceLODPass.ReadBuffer(scene.instances);
             if (bOcclusion) {
                 instanceLODPass.ReadBuffer(visBits);
             }
             instanceLODPass.WriteBuffer(instanceMeshletOffsets);
             if (GPU_STATS_ENABLED) {
-                instanceLODPass.ReadWriteBuffer("readback_buffer"_sid);
+                instanceLODPass.ReadWriteBuffer(readback);
             }
             instanceLODPass.Execute(
-                [instanceMeshletOffsets,
+                [&scene,
+                    instanceMeshletOffsets,
                     visBits,
+                    readback,
                     bOcclusion,
                     instanceCount,
                     lodBias,
@@ -166,13 +153,13 @@ void SetupGeometryPass(RenderGraph& graph,
                     pipelineManager,
                     sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     InstanceLODPushConstant pc{
-                        .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                        .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                        .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                        .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
+                        .sceneData = graph.GetBufferAddress(scene.sceneData),
+                        .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
+                        .modelBuffer = graph.GetBufferAddress(scene.models),
+                        .instanceBuffer = graph.GetBufferAddress(scene.instances),
                         .visBits = bOcclusion ? graph.GetBufferAddress(visBits) : 0,
                         .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
-                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, culledInstanceFrustum) : 0,
+                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(readback) + offsetof(ReadbackStruct, culledInstanceFrustum) : 0,
                         .instanceCount = instanceCount,
                         .sceneDataIndex = sceneIndex,
                         .lodBias = lodBias,
@@ -330,43 +317,43 @@ void SetupGeometryPass(RenderGraph& graph,
         {
             RenderPass& expandInstancesToMeshlets = graph.AddPass(
                 chainID("Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
-            expandInstancesToMeshlets.ReadBuffer(SCENE_DATA_BUFFER);
-            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
-            expandInstancesToMeshlets.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
+            expandInstancesToMeshlets.ReadBuffer(scene.sceneData);
+            expandInstancesToMeshlets.ReadBuffer(scene.instances);
+            expandInstancesToMeshlets.ReadBuffer(scene.primitives);
+            expandInstancesToMeshlets.ReadBuffer(scene.models);
+            expandInstancesToMeshlets.ReadBuffer(scene.meshlets);
+            expandInstancesToMeshlets.ReadBuffer(scene.materials);
             expandInstancesToMeshlets.ReadBuffer(instanceMeshletOffsets);
             expandInstancesToMeshlets.ReadIndirectBuffer(meshletCountDispatchArgs);
             expandInstancesToMeshlets.WriteBuffer(intermediateMeshlets);
             if (bPhase2) {
-                expandInstancesToMeshlets.ReadSampledImage(HIZ_PYRAMID);
+                expandInstancesToMeshlets.ReadSampledImage(hizPyramid);
             }
             if (GPU_STATS_ENABLED) {
-                expandInstancesToMeshlets.ReadWriteBuffer("readback_buffer"_sid);
+                expandInstancesToMeshlets.ReadWriteBuffer(readback);
             }
-            expandInstancesToMeshlets.Execute([instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets,
+            expandInstancesToMeshlets.Execute([&scene, instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets, hizPyramid, readback,
                     pipelineManager, instanceCount, highestMeshletCount, sceneIndex, bPhase2, cullFlags](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                     uint2 hizExtent{0u, 0u};
                     uint32_t hizIndex = 0;
                     uint32_t hizMipCount = 1;
                     if (bPhase2) {
-                        const ResourceDimensions& dims = graph.GetImageDimensions(HIZ_PYRAMID);
+                        const ResourceDimensions& dims = graph.GetImageDimensions(hizPyramid);
                         hizExtent = {dims.width, dims.height};
-                        hizIndex = graph.GetSampledImageViewDescriptorIndex(HIZ_PYRAMID);
+                        hizIndex = graph.GetSampledImageViewDescriptorIndex(hizPyramid);
                         hizMipCount = dims.levels;
                     }
                     ExpandMeshletsPushConstant pc{
                         .indirectDispatchBuffer = graph.GetBufferAddress(meshletCountDispatchArgs),
                         .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
                         .intermediateMeshlets = graph.GetBufferAddress(intermediateMeshlets),
-                        .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                        .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                        .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                        .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                        .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                        .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
-                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, culledMeshletFrustum) : 0,
+                        .instanceBuffer = graph.GetBufferAddress(scene.instances),
+                        .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
+                        .modelBuffer = graph.GetBufferAddress(scene.models),
+                        .meshletBuffer = graph.GetBufferAddress(scene.meshlets),
+                        .materialBuffer = graph.GetBufferAddress(scene.materials),
+                        .sceneData = graph.GetBufferAddress(scene.sceneData),
+                        .cullStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(readback) + offsetof(ReadbackStruct, culledMeshletFrustum) : 0,
                         .hizExtent = hizExtent,
                         .sceneDataIndex = sceneIndex,
                         .instanceCount = instanceCount,
@@ -528,12 +515,12 @@ void SetupGeometryPass(RenderGraph& graph,
                 chainID("Compacted Meshlet Dispatch Calculation"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
             compactedDispatchCalc.ReadWriteBuffer(compactedMeshletDispatchArgs);
             if (GPU_STATS_ENABLED) {
-                compactedDispatchCalc.ReadWriteBuffer("readback_buffer"_sid);
+                compactedDispatchCalc.ReadWriteBuffer(readback);
             }
-            compactedDispatchCalc.Execute([compactedMeshletDispatchArgs, pipelineManager, highestMeshletCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            compactedDispatchCalc.Execute([compactedMeshletDispatchArgs, readback, pipelineManager, highestMeshletCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 CompactedMeshletDispatchPushConstant pc{
                     .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
-                    .regionVisibleStats = GPU_STATS_ENABLED ? graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, meshletRegionVisible) : 0,
+                    .regionVisibleStats = GPU_STATS_ENABLED ? graph.GetBufferAddress(readback) + offsetof(ReadbackStruct, meshletRegionVisible) : 0,
                     .currentFrameBufferMeshletLimit = highestMeshletCount,
                 };
 
@@ -546,11 +533,11 @@ void SetupGeometryPass(RenderGraph& graph,
 
         RenderPass& maxMeshletCount = graph.AddPass(chainID("Max Meshlet Count"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, chainCategory);
         maxMeshletCount.ReadBuffer(meshletCountDispatchArgs);
-        maxMeshletCount.ReadWriteBuffer("readback_buffer"_sid);
-        maxMeshletCount.Execute([&, pipelineManager, bufferSrc = meshletCountDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        maxMeshletCount.ReadWriteBuffer(readback);
+        maxMeshletCount.Execute([&, pipelineManager, readback, bufferSrc = meshletCountDispatchArgs](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             MaxMeshletCountPushConstant pc{
                 .indirectDispatchBuffer = graph.GetBufferAddress(bufferSrc),
-                .currentHighest = graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, meshletCount),
+                .currentHighest = graph.GetBufferAddress(readback) + offsetof(ReadbackStruct, meshletCount),
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("instancing_max_meshlet_count"_sid);
@@ -568,16 +555,16 @@ void SetupGeometryPass(RenderGraph& graph,
         instancedMeshShading.WriteColorAttachment(targets.stableId);
 #endif
         instancedMeshShading.WriteDepthAttachment(targets.depthStencil);
-        instancedMeshShading.ReadBuffer(SCENE_DATA_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
-        instancedMeshShading.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
+        instancedMeshShading.ReadBuffer(scene.sceneData);
+        instancedMeshShading.ReadBuffer(scene.models);
+        instancedMeshShading.ReadBuffer(scene.materials);
+        instancedMeshShading.ReadBuffer(scene.instances);
+        instancedMeshShading.ReadBuffer(scene.primitives);
+        instancedMeshShading.ReadBuffer(scene.meshlets);
+        instancedMeshShading.ReadBuffer(scene.meshletVertices);
+        instancedMeshShading.ReadBuffer(scene.meshletTriangles);
+        instancedMeshShading.ReadBuffer(scene.vertexPositions);
+        instancedMeshShading.ReadBuffer(scene.vertexAttributes);
         instancedMeshShading.ReadBuffer(visibleMeshlets);
         instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
         instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, renderExtent,
@@ -604,16 +591,16 @@ void SetupGeometryPass(RenderGraph& graph,
                 vkCmdBeginRendering(cmd, &renderInfo);
 
                 VisibilityBufferAccumulatePushConstant pushConstants{
-                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-                    .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                    .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                    .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                    .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                    .sceneData = graph.GetBufferAddress(scene.sceneData) + sceneIndex * sizeof(SceneData),
+                    .vertexPosBuffer = graph.GetBufferAddress(scene.vertexPositions),
+                    .vertexAttrBuffer = graph.GetBufferAddress(scene.vertexAttributes),
+                    .meshletVerticesBuffer = graph.GetBufferAddress(scene.meshletVertices),
+                    .meshletTrianglesBuffer = graph.GetBufferAddress(scene.meshletTriangles),
+                    .meshletBuffer = graph.GetBufferAddress(scene.meshlets),
+                    .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
+                    .instanceBuffer = graph.GetBufferAddress(scene.instances),
+                    .modelBuffer = graph.GetBufferAddress(scene.models),
+                    .materialBuffer = graph.GetBufferAddress(scene.materials),
                     .visibleMeshlets = graph.GetBufferAddress(visibleMeshlets),
                     .compactedDispatchBuffer = graph.GetBufferAddress(compactedMeshletDispatchArgs),
                 };
@@ -648,11 +635,11 @@ void SetupGeometryPass(RenderGraph& graph,
     addCullChain(false);
 
     if (!bOcclusion || bOcclusionFreeze) {
-        return;
+        return {};
     }
 
     // Phase 2: pyramid from phase-1 depth, then the whole chain again with the Hi-Z variants
-    SetupHiZPyramid(graph, pipelineManager, renderExtent, targets);
+    hizPyramid = SetupHiZPyramid(graph, pipelineManager, renderExtent, targets);
 
     RenderPass& occlusionClear = graph.AddPass("[Geometry P2] Occlusion Clear"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::GeometryPhase2);
     occlusionClear.WriteTransferBuffer(visBits);
@@ -661,56 +648,62 @@ void SetupGeometryPass(RenderGraph& graph,
     });
 
     addCullChain(true);
+    return hizPyramid;
 }
 
-void SetupVisibilityBucketingPass(RenderGraph& graph,
-                                  PipelineManager* pipelineManager,
-                                  const Core::ViewFamily& viewFamily,
-                                  Core::Extent2D renderExtent,
-                                  const RenderTargets& targets,
-                                  uint32_t sceneIndex,
-                                  Core::BucketDebugMode bucketDebugMode)
+GeometryFrame SetupVisibilityBucketingPass(RenderGraph& graph,
+                                           PipelineManager* pipelineManager,
+                                           const Core::ViewFamily& viewFamily,
+                                           Core::Extent2D renderExtent,
+                                           const RenderTargets& targets,
+                                           const SceneResources& scene,
+                                           uint32_t sceneIndex,
+                                           Core::BucketDebugMode bucketDebugMode,
+                                           VisibilityBucketTiles& outTiles)
 {
     ZoneScoped;
-    if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
-    if (!graph.HasBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER)) { return; }
+    outTiles = {};
+    if (!scene.shadingBucketingDispatches.IsValid()) { return {}; }
+    if (!scene.lightingBucketingDispatches.IsValid()) { return {}; }
 
     const uint32_t tilesX = (renderExtent.width + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
     const uint32_t tilesY = (renderExtent.height + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
     const uint32_t tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height);
     const uint32_t lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size());
-    graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialCount) * tileCapacity * sizeof(uint32_t));
-    graph.CreateBuffer(LIGHTING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(lightingCount) * tileCapacity * sizeof(uint32_t));
+    const RDGBuffer shadingTileList = graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialCount) * tileCapacity * sizeof(uint32_t));
+    const RDGBuffer lightingTileList = graph.CreateBuffer(LIGHTING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(lightingCount) * tileCapacity * sizeof(uint32_t));
+    outTiles.shadingTileList = shadingTileList;
 
     const bool bShadeDebug = bucketDebugMode == Core::BucketDebugMode::ShadeBuckets || bucketDebugMode == Core::BucketDebugMode::ShadeHeat;
     const bool bLightDebug = bucketDebugMode == Core::BucketDebugMode::LightBuckets || bucketDebugMode == Core::BucketDebugMode::LightHeat;
+    const GeometryFrame frame{.lightingTileList = lightingTileList};
     if (bShadeDebug || bLightDebug) {
         const uint32_t words = bShadeDebug ? MAX_SHADE_BUCKETS / 32 : MAX_LIGHTING_BUCKETS / 32;
-        graph.CreateBuffer(BUCKET_TILE_BITS_BUFFER, static_cast<VkDeviceSize>(tileCapacity) * words * sizeof(uint32_t));
+        outTiles.tileBits = graph.CreateBuffer(BUCKET_TILE_BITS_BUFFER, static_cast<VkDeviceSize>(tileCapacity) * words * sizeof(uint32_t));
     }
 
     RenderPass& boundsPass = graph.AddPass("Shade Bucketing Bounds"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     boundsPass.ReadSampledImage(targets.visibility);
-    boundsPass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    boundsPass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    boundsPass.ReadWriteBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    boundsPass.ReadWriteBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    boundsPass.WriteBuffer(SHADING_TILE_LIST_BUFFER);
-    boundsPass.WriteBuffer(LIGHTING_TILE_LIST_BUFFER);
+    boundsPass.ReadBuffer(scene.instances);
+    boundsPass.ReadBuffer(scene.materials);
+    boundsPass.ReadWriteBuffer(scene.shadingBucketingDispatches);
+    boundsPass.ReadWriteBuffer(scene.lightingBucketingDispatches);
+    boundsPass.WriteBuffer(shadingTileList);
+    boundsPass.WriteBuffer(lightingTileList);
     if (bShadeDebug || bLightDebug) {
-        boundsPass.WriteBuffer(BUCKET_TILE_BITS_BUFFER);
+        boundsPass.WriteBuffer(outTiles.tileBits);
     }
     boundsPass.Execute([&, pipelineManager, renderExtent, tilesX, tilesY, tileCapacity, bShadeDebug, bLightDebug,
-            visibility = targets.visibility](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            visibility = targets.visibility, shadingTileList, lightingTileList, tileBits = outTiles.tileBits](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ShadeBucketingPushConstant pc{
-                .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-                .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
-                .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                .shadeTileListBuffer = graph.GetBufferAddress(SHADING_TILE_LIST_BUFFER),
-                .lightTileListBuffer = graph.GetBufferAddress(LIGHTING_TILE_LIST_BUFFER),
-                .shadeTileBitsBuffer = bShadeDebug ? graph.GetBufferAddress(BUCKET_TILE_BITS_BUFFER) : 0,
-                .lightTileBitsBuffer = bLightDebug ? graph.GetBufferAddress(BUCKET_TILE_BITS_BUFFER) : 0,
+                .instanceBuffer = graph.GetBufferAddress(scene.instances),
+                .materialBuffer = graph.GetBufferAddress(scene.materials),
+                .shadeDispatchBuffer = graph.GetBufferAddress(scene.shadingBucketingDispatches),
+                .lightDispatchBuffer = graph.GetBufferAddress(scene.lightingBucketingDispatches),
+                .shadeTileListBuffer = graph.GetBufferAddress(shadingTileList),
+                .lightTileListBuffer = graph.GetBufferAddress(lightingTileList),
+                .shadeTileBitsBuffer = bShadeDebug ? graph.GetBufferAddress(tileBits) : 0,
+                .lightTileBitsBuffer = bLightDebug ? graph.GetBufferAddress(tileBits) : 0,
                 .extents = {renderExtent.width, renderExtent.height},
                 .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
                 .tileCapacity = tileCapacity,
@@ -722,21 +715,21 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
         });
 
     if constexpr (!GPU_STATS_ENABLED) {
-        return;
+        return frame;
     }
 
     // Technically not "critical", used for stats. But since we write to readback_buffer, it becomes critical.
     RenderPass& dispatchCountPass = graph.AddPass("Bucket Dispatch Count"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
-    dispatchCountPass.ReadBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    dispatchCountPass.ReadBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER);
-    dispatchCountPass.ReadWriteBuffer("readback_buffer"_sid);
+    dispatchCountPass.ReadBuffer(scene.shadingBucketingDispatches);
+    dispatchCountPass.ReadBuffer(scene.lightingBucketingDispatches);
+    dispatchCountPass.ReadWriteBuffer(scene.readback);
     dispatchCountPass.Execute([&, pipelineManager,
             materialCount = viewFamily.materialCount,
             lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
-                .shadeDispatchBuffer = graph.GetBufferAddress(SHADING_DISPATCH_BUCKETING_BUFFER),
-                .lightDispatchBuffer = graph.GetBufferAddress(LIGHTING_DISPATCH_BUCKETING_BUFFER),
-                .countBuffer = graph.GetBufferAddress("readback_buffer"_sid) + offsetof(ReadbackStruct, shadingDispatches),
+                .shadeDispatchBuffer = graph.GetBufferAddress(scene.shadingBucketingDispatches),
+                .lightDispatchBuffer = graph.GetBufferAddress(scene.lightingBucketingDispatches),
+                .countBuffer = graph.GetBufferAddress(scene.readback) + offsetof(ReadbackStruct, shadingDispatches),
                 .materialCount = materialCount,
                 .lightingCount = lightingCount,
             };
@@ -745,6 +738,7 @@ void SetupVisibilityBucketingPass(RenderGraph& graph,
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, 1, 1, 1);
         });
+    return frame;
 }
 
 void SetupVisibilityShadingPass(RenderGraph& graph,
@@ -752,11 +746,13 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                                 const Core::ViewFamily& viewFamily,
                                 Core::Extent2D renderExtent,
                                 const RenderTargets& targets,
+                                const SceneResources& scene,
+                                const VisibilityBucketTiles& tiles,
                                 uint32_t sceneIndex,
                                 Core::Arena& arena)
 {
     ZoneScoped;
-    if (!graph.HasBuffer(SHADING_DISPATCH_BUCKETING_BUFFER)) { return; }
+    if (!scene.shadingBucketingDispatches.IsValid()) { return; }
 
     struct MaterialEntry
     {
@@ -775,26 +771,26 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
 
     RenderPass& visShading = graph.AddPass("Visibility Shading"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Geometry);
     visShading.ReadSampledImage(targets.visibility);
-    visShading.ReadBuffer(SCENE_DATA_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_VERTEX_POSITION_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_MESHLET_VERTEX_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_MESHLET_TRIANGLE_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_MESHLET_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_PRIMITIVE_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_MODEL_BUFFER);
-    visShading.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    visShading.ReadIndirectBuffer(SHADING_DISPATCH_BUCKETING_BUFFER);
-    if (graph.HasBuffer(SHADING_TILE_LIST_BUFFER)) { visShading.ReadBuffer(SHADING_TILE_LIST_BUFFER); }
+    visShading.ReadBuffer(scene.sceneData);
+    visShading.ReadBuffer(scene.vertexPositions);
+    visShading.ReadBuffer(scene.vertexAttributes);
+    visShading.ReadBuffer(scene.meshletVertices);
+    visShading.ReadBuffer(scene.meshletTriangles);
+    visShading.ReadBuffer(scene.meshlets);
+    visShading.ReadBuffer(scene.primitives);
+    visShading.ReadBuffer(scene.instances);
+    visShading.ReadBuffer(scene.models);
+    visShading.ReadBuffer(scene.materials);
+    visShading.ReadIndirectBuffer(scene.shadingBucketingDispatches);
+    if (tiles.shadingTileList.IsValid()) { visShading.ReadBuffer(tiles.shadingTileList); }
     visShading.WriteStorageImage(targets.gbufferOne);
     visShading.WriteStorageImage(targets.gbufferTwo);
     visShading.WriteStorageImage(targets.shadowOriginOffset);
     visShading.Execute([&, pipelineManager, sceneIndex,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset,
-            sortedMaterials, materialCount, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-            VkDeviceAddress tileListAddress = graph.GetBufferAddress(SHADING_TILE_LIST_BUFFER);
+            sortedMaterials, materialCount, renderExtent, shadingTileList = tiles.shadingTileList](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            VkDeviceAddress tileListAddress = graph.GetBufferAddress(shadingTileList);
 
             StringID boundShader{};
             const PipelineEntry* pipelineEntry = nullptr;
@@ -812,16 +808,16 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                 }
 
                 VisibilityShadingPushConstant pc{
-                    .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER) + sceneIndex * sizeof(SceneData),
-                    .vertexPosBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_POSITION_BUFFER),
-                    .vertexAttrBuffer = graph.GetBufferAddress(GEOMETRY_VERTEX_ATTRIBUTE_BUFFER),
-                    .meshletVerticesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_VERTEX_BUFFER),
-                    .meshletTrianglesBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_TRIANGLE_BUFFER),
-                    .meshletBuffer = graph.GetBufferAddress(GEOMETRY_MESHLET_BUFFER),
-                    .primitiveBuffer = graph.GetBufferAddress(GEOMETRY_PRIMITIVE_BUFFER),
-                    .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-                    .modelBuffer = graph.GetBufferAddress(GEOMETRY_MODEL_BUFFER),
-                    .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
+                    .sceneData = graph.GetBufferAddress(scene.sceneData) + sceneIndex * sizeof(SceneData),
+                    .vertexPosBuffer = graph.GetBufferAddress(scene.vertexPositions),
+                    .vertexAttrBuffer = graph.GetBufferAddress(scene.vertexAttributes),
+                    .meshletVerticesBuffer = graph.GetBufferAddress(scene.meshletVertices),
+                    .meshletTrianglesBuffer = graph.GetBufferAddress(scene.meshletTriangles),
+                    .meshletBuffer = graph.GetBufferAddress(scene.meshlets),
+                    .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
+                    .instanceBuffer = graph.GetBufferAddress(scene.instances),
+                    .modelBuffer = graph.GetBufferAddress(scene.models),
+                    .materialBuffer = graph.GetBufferAddress(scene.materials),
                     .tileListBuffer = tileListAddress,
                     .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
                     .extents = {renderExtent.width, renderExtent.height},
@@ -832,7 +828,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                     .shadowOriginOffsetIndex = graph.GetStorageImageViewDescriptorIndex(shadowOriginOffset),
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(SHADING_DISPATCH_BUCKETING_BUFFER), entry.materialIndex * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
+                vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(scene.shadingBucketingDispatches), entry.materialIndex * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));
             }
         });
 }
@@ -842,40 +838,42 @@ void SetupBucketDebugPass(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
                           const RenderTargets& targets,
+                          const SceneResources& scene,
+                          const VisibilityBucketTiles& tiles,
                           Core::BucketDebugMode bucketDebugMode)
 {
     ZoneScoped;
     if (bucketDebugMode == Core::BucketDebugMode::Off) {
         return;
     }
-    if (!graph.HasBuffer(BUCKET_TILE_BITS_BUFFER)) {
+    if (!tiles.tileBits.IsValid()) {
         return;
     }
     const bool bLighting = bucketDebugMode == Core::BucketDebugMode::LightBuckets || bucketDebugMode == Core::BucketDebugMode::LightHeat;
     const bool bHeat = bucketDebugMode == Core::BucketDebugMode::ShadeHeat || bucketDebugMode == Core::BucketDebugMode::LightHeat;
     const uint32_t tilesX = (renderExtent.width + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
     const uint32_t tilesY = (renderExtent.height + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
-    graph.CreateTexture(BUCKET_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
+    const RDGTexture debugTarget = graph.CreateTexture(BUCKET_DEBUG_TARGET, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent.width, renderExtent.height, 1}, {std::nullopt}, true);
 
     RenderPass& pass = graph.AddPass("Bucket Debug"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Debug);
     pass.ReadSampledImage(targets.visibility);
-    pass.ReadBuffer(GEOMETRY_INSTANCE_BUFFER);
-    pass.ReadBuffer(GEOMETRY_MATERIAL_BUFFER);
-    pass.ReadBuffer(BUCKET_TILE_BITS_BUFFER);
-    pass.WriteStorageImage(BUCKET_DEBUG_TARGET);
-    pass.Execute([pipelineManager, renderExtent, tilesX, tilesY, bLighting, bHeat, visibility = targets.visibility](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.ReadBuffer(scene.instances);
+    pass.ReadBuffer(scene.materials);
+    pass.ReadBuffer(tiles.tileBits);
+    pass.WriteStorageImage(debugTarget);
+    pass.Execute([&scene, pipelineManager, renderExtent, tilesX, tilesY, bLighting, bHeat, visibility = targets.visibility, tileBits = tiles.tileBits, debugTarget](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("bucket_debug"_sid);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         BucketDebugPushConstant pc{
-            .instanceBuffer = graph.GetBufferAddress(GEOMETRY_INSTANCE_BUFFER),
-            .materialBuffer = graph.GetBufferAddress(GEOMETRY_MATERIAL_BUFFER),
-            .tileBitsBuffer = graph.GetBufferAddress(BUCKET_TILE_BITS_BUFFER),
+            .instanceBuffer = graph.GetBufferAddress(scene.instances),
+            .materialBuffer = graph.GetBufferAddress(scene.materials),
+            .tileBitsBuffer = graph.GetBufferAddress(tileBits),
             .extents = {renderExtent.width, renderExtent.height},
             .tilesX = tilesX,
             .bLighting = bLighting ? 1u : 0u,
             .bHeat = bHeat ? 1u : 0u,
             .visibilityBufferIndex = graph.GetSampledImageViewDescriptorIndex(visibility),
-            .outputIndex = graph.GetStorageImageViewDescriptorIndex(BUCKET_DEBUG_TARGET),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(debugTarget),
         };
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
         vkCmdDispatch(cmd, tilesX, tilesY, 1);

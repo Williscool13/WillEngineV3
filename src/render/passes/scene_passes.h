@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_SCENE_PASSES_H
 #define WILL_ENGINE_SCENE_PASSES_H
 
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
@@ -19,6 +20,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
                           const RenderTargets& targets,
+                          const SceneResources& scene,
                           uint32_t sceneIndex);
 
 /**
@@ -29,18 +31,21 @@ void SetupSkyboxRendering(RenderGraph& graph,
  * @param viewFamily
  * @param renderExtent
  * @param targets
+ * @param scene
  */
 void SetupTextForwardPass(RenderGraph& graph,
                           PipelineManager* pipelineManager,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
-                          const RenderTargets& targets);
+                          const RenderTargets& targets,
+                          const SceneResources& scene);
 
 void SetupSpritesPass(RenderGraph& graph,
                       PipelineManager* pipelineManager,
                       const Core::ViewFamily& viewFamily,
                       Core::Extent2D renderExtent,
-                      const RenderTargets& targets);
+                      const RenderTargets& targets,
+                      const SceneResources& scene);
 } // Render
 
 #endif //WILL_ENGINE_SCENE_PASSES_H

@@ -35,7 +35,6 @@ const StringID NRD_IN_DIFF_SID = "nrd_in_diff_radiance_hitdist"_sid;
 const StringID NRD_IN_SPEC_SID = "nrd_in_spec_radiance_hitdist"_sid;
 const StringID NRD_OUT_DIFF_SID = "nrd_out_diff_radiance_hitdist"_sid;
 const StringID NRD_OUT_SPEC_SID = "nrd_out_spec_radiance_hitdist"_sid;
-const StringID RESTIR_CONFIDENCE_SID = "restir_confidence"_sid;
 
 constexpr float NRD_RADIANCE_UNIT_SCALE = 1.0f / 65536.0f;
 constexpr float NRD_FP16_MAX = 65504.0f;
@@ -586,9 +585,10 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Extent
     stagedReblur.enableAntiFirefly = reblurParams.enableAntiFirefly;
 }
 
-bool NrdDenoiser::Prepare(RenderGraph& graph,
+NrdFrame NrdDenoiser::Prepare(RenderGraph& graph,
                           const Core::ViewFamily& viewFamily,
                           Core::Extent2D renderExtent,
+                          const ReSTIRFrame& restir,
                           NrdBackend backend,
                           const Core::RELAXParams& relaxParams,
                           const Core::ReBLURParams& reblurParams,
@@ -596,39 +596,50 @@ bool NrdDenoiser::Prepare(RenderGraph& graph,
                           uint32_t frameInFlightIndex,
                           float renderFps)
 {
-    if (!EnsureInstance()) { return false; }
+    if (!EnsureInstance()) { return NrdFrame{}; }
     EnsureResources(renderExtent, frameNumber);
-    if (bInitFailed) { return false; }
+    if (bInitFailed) { return NrdFrame{}; }
     ReleaseRetired(frameNumber, false);
 
     activeBackend = backend;
     // A frame gap or backend switch leaves stale history.
     const bool bHistoryReset = bPendingHistoryClear || backend != lastBackend || (lastRecordedFrame != UINT64_MAX && frameNumber != lastRecordedFrame + 1);
     lastBackend = backend;
-    bHasConfidence = graph.HasTexture(RESTIR_CONFIDENCE_SID);
+    confidence = restir.confidence;
+    bHasConfidence = confidence.IsValid();
     StageSettings(viewFamily, renderExtent, relaxParams, reblurParams, frameNumber, renderFps, bHistoryReset);
     bPendingHistoryClear = false;
 
     // FIF fence already waited; this frame slot's sets are GPU-idle
     VK_CHECK(vkResetDescriptorPool(context->device, frameDescriptorPools[frameInFlightIndex], 0));
 
+    Core::Array<RDGTexture, IO_COUNT> imported{};
     for (uint32_t i = 0; i < IO_COUNT; i++) {
         TrackedTexture& tex = ioTextures[i];
         // The RDG's end-of-frame final barrier left every previously used IO texture in GENERAL
         const VkImageLayout importLayout = tex.layout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL;
-        graph.ImportTexture(NRD_IO_SIDS[i], tex.image, tex.view,
-                            TextureInfo{tex.format, tex.width, tex.height, 1},
-                            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-                            importLayout, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                            VK_IMAGE_LAYOUT_GENERAL);
+        imported[i] = graph.ImportTexture(NRD_IO_SIDS[i], tex.image, tex.view,
+                                          TextureInfo{tex.format, tex.width, tex.height, 1},
+                                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                                          importLayout, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                                          VK_IMAGE_LAYOUT_GENERAL);
         tex.layout = VK_IMAGE_LAYOUT_GENERAL;
         tex.access = VK_ACCESS_2_NONE;
     }
+    frame = NrdFrame{
+        .inMv = imported[IO_IN_MV],
+        .inNormalRoughness = imported[IO_IN_NORMAL_ROUGHNESS],
+        .inViewZ = imported[IO_IN_VIEWZ],
+        .inDiff = imported[IO_IN_DIFF_RADIANCE_HITDIST],
+        .inSpec = imported[IO_IN_SPEC_RADIANCE_HITDIST],
+        .outDiff = imported[IO_OUT_DIFF_RADIANCE_HITDIST],
+        .outSpec = imported[IO_OUT_SPEC_RADIANCE_HITDIST],
+    };
 
     lastRecordedFrame = frameNumber;
     prevRectWidth = renderExtent.width;
     prevRectHeight = renderExtent.height;
-    return true;
+    return frame;
 }
 
 void NrdDenoiser::AddDispatchPass(RenderGraph& graph, ResourceManager* resourceManager, PipelineManager* pipelineManager, uint32_t frameInFlightIndex)
@@ -637,25 +648,25 @@ void NrdDenoiser::AddDispatchPass(RenderGraph& graph, ResourceManager* resourceM
     auto& pass = graph.AddPass(bReblur ? "[NRD] ReBLUR Dispatch"_sid : "[NRD] RELAX Dispatch"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
     if (bReblur) {
         // REBLUR's temporal stabilization writes modified motion back into IN_MV
-        pass.WriteStorageImage(NRD_IN_MV_SID);
+        pass.WriteStorageImage(frame.inMv);
     }
     else {
-        pass.ReadSampledImage(NRD_IN_MV_SID);
+        pass.ReadSampledImage(frame.inMv);
     }
-    pass.ReadSampledImage(NRD_IN_NORMAL_ROUGHNESS_SID);
-    pass.ReadSampledImage(NRD_IN_VIEWZ_SID);
-    pass.ReadSampledImage(NRD_IN_DIFF_SID);
-    pass.ReadSampledImage(NRD_IN_SPEC_SID);
-    pass.WriteStorageImage(NRD_OUT_DIFF_SID);
-    pass.WriteStorageImage(NRD_OUT_SPEC_SID);
+    pass.ReadSampledImage(frame.inNormalRoughness);
+    pass.ReadSampledImage(frame.inViewZ);
+    pass.ReadSampledImage(frame.inDiff);
+    pass.ReadSampledImage(frame.inSpec);
+    pass.WriteStorageImage(frame.outDiff);
+    pass.WriteStorageImage(frame.outSpec);
     if (bHasConfidence) {
-        pass.ReadSampledImage(RESTIR_CONFIDENCE_SID);
+        pass.ReadSampledImage(confidence);
     }
-    pass.Execute([this, resourceManager, pipelineManager, frameInFlightIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([this, resourceManager, pipelineManager, frameInFlightIndex, confidenceHandle = confidence](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         confidenceTexture = TrackedTexture{};
         if (bHasConfidence) {
-            confidenceTexture.image = graph.GetImageHandle(RESTIR_CONFIDENCE_SID);
-            confidenceTexture.view = graph.GetImageViewHandle(RESTIR_CONFIDENCE_SID);
+            confidenceTexture.image = graph.GetImageHandle(confidenceHandle);
+            confidenceTexture.view = graph.GetImageViewHandle(confidenceHandle);
             confidenceTexture.format = VK_FORMAT_R8_UNORM;
             confidenceTexture.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             confidenceTexture.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
@@ -875,34 +886,40 @@ void NrdDenoiser::RecordDispatches(VkCommandBuffer cmd, ResourceManager* resourc
     RebindEngineDescriptorBuffers(cmd, resourceManager, pipelineManager);
 }
 
-void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, const Core::ReBLURParams& reblurParams, float preExposure)
+void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, const SceneResources& scene, const NrdFrame& nrd, NrdBackend backend,
+                        const Core::ReBLURParams& reblurParams, float preExposure)
 {
     ZoneScoped;
     const uint32_t width = renderExtent.width;
     const uint32_t height = renderExtent.height;
     const float radianceScale = NRD_RADIANCE_UNIT_SCALE / preExposure;
-    const StringID gbufferOne = targets.gbufferOne;
-    const StringID depth = targets.depthCopy;
-    const StringID diffInput = targets.intermediateOne;
-    const StringID specInput = targets.intermediateTwo;
+    const RDGTexture gbufferOne = targets.gbufferOne;
+    const RDGTexture depth = targets.depthCopy;
+    const RDGTexture diffInput = targets.intermediateOne;
+    const RDGTexture specInput = targets.intermediateTwo;
+    const RDGTexture inNormalRoughness = nrd.inNormalRoughness;
+    const RDGTexture inMv = nrd.inMv;
+    const RDGTexture inViewZ = nrd.inViewZ;
+    const RDGTexture inDiff = nrd.inDiff;
+    const RDGTexture inSpec = nrd.inSpec;
 
     {
         auto& pass = graph.AddPass("[NRD] Prep Guides"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
-        pass.ReadBuffer(SCENE_DATA_BUFFER);
+        pass.ReadBuffer(scene.sceneData);
         pass.ReadSampledImage(gbufferOne);
         pass.ReadSampledImage(depth);
-        pass.WriteStorageImage(NRD_IN_NORMAL_ROUGHNESS_SID);
-        pass.WriteStorageImage(NRD_IN_MV_SID);
-        pass.WriteStorageImage(NRD_IN_VIEWZ_SID);
-        pass.Execute([pipelineManager, gbufferOne, depth, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.WriteStorageImage(inNormalRoughness);
+        pass.WriteStorageImage(inMv);
+        pass.WriteStorageImage(inViewZ);
+        pass.Execute([pipelineManager, &scene, gbufferOne, depth, inNormalRoughness, inMv, inViewZ, width, height](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             NrdPrepGuidesPushConstant pc{
-                .sceneData = graph.GetBufferAddress(SCENE_DATA_BUFFER),
+                .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .sceneDataIndex = 0,
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
-                .outNormalRoughnessIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_NORMAL_ROUGHNESS_SID),
-                .outMvIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_MV_SID),
-                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_VIEWZ_SID),
+                .outNormalRoughnessIndex = graph.GetStorageImageViewDescriptorIndex(inNormalRoughness),
+                .outMvIndex = graph.GetStorageImageViewDescriptorIndex(inMv),
+                .outViewZIndex = graph.GetStorageImageViewDescriptorIndex(inViewZ),
                 .rectSize = {width, height},
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_prep_guides"_sid);
@@ -918,19 +935,19 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
         pass.ReadSampledImage(gbufferOne);
-        pass.ReadSampledImage(NRD_IN_VIEWZ_SID);
-        pass.WriteStorageImage(NRD_IN_DIFF_SID);
-        pass.WriteStorageImage(NRD_IN_SPEC_SID);
-        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, hitDistParams, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.ReadSampledImage(inViewZ);
+        pass.WriteStorageImage(inDiff);
+        pass.WriteStorageImage(inSpec);
+        pass.Execute([pipelineManager, diffInput, specInput, gbufferOne, inViewZ, inDiff, inSpec, hitDistParams, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             NrdReblurRadiancePackPushConstant pc{
                 .hitDistParams = hitDistParams,
                 .rectSize = {width, height},
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
                 .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
-                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(NRD_IN_VIEWZ_SID),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
+                .viewZIndex = graph.GetSampledImageViewDescriptorIndex(inViewZ),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(inDiff),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(inSpec),
                 .radianceScale = radianceScale,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("nrd_reblur_radiance_pack"_sid);
@@ -943,15 +960,15 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
         auto& pass = graph.AddPass("[NRD] Prep Radiance"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::NRD);
         pass.ReadSampledImage(diffInput);
         pass.ReadSampledImage(specInput);
-        pass.WriteStorageImage(NRD_IN_DIFF_SID);
-        pass.WriteStorageImage(NRD_IN_SPEC_SID);
-        pass.Execute([pipelineManager, diffInput, specInput, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        pass.WriteStorageImage(inDiff);
+        pass.WriteStorageImage(inSpec);
+        pass.Execute([pipelineManager, diffInput, specInput, inDiff, inSpec, width, height, radianceScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             NrdRadianceCopyPushConstant pc{
                 .rectSize = {width, height},
                 .diffIndex = graph.GetSampledImageViewDescriptorIndex(diffInput),
                 .specIndex = graph.GetSampledImageViewDescriptorIndex(specInput),
-                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_DIFF_SID),
-                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(NRD_IN_SPEC_SID),
+                .outDiffIndex = graph.GetStorageImageViewDescriptorIndex(inDiff),
+                .outSpecIndex = graph.GetStorageImageViewDescriptorIndex(inSpec),
                 .radianceScale = radianceScale,
                 .maxLuminance = NRD_RELAX_MAX_LUMINANCE,
             };
@@ -963,16 +980,16 @@ void SetupNRDPrepPasses(RenderGraph& graph, PipelineManager* pipelineManager, Co
     }
 }
 
-void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, NrdBackend backend, float preExposure)
+void SetupNRDOutputPass(RenderGraph& graph, PipelineManager* pipelineManager, Core::Extent2D renderExtent, const RenderTargets& targets, const NrdFrame& nrd, NrdBackend backend, float preExposure)
 {
     ZoneScoped;
     const uint32_t width = renderExtent.width;
     const uint32_t height = renderExtent.height;
     const float radianceScale = preExposure / NRD_RADIANCE_UNIT_SCALE;
-    const StringID diffOutput = targets.intermediateOne;
-    const StringID specOutput = targets.intermediateTwo;
-    const StringID srcDiff = NRD_OUT_DIFF_SID;
-    const StringID srcSpec = NRD_OUT_SPEC_SID;
+    const RDGTexture diffOutput = targets.intermediateOne;
+    const RDGTexture specOutput = targets.intermediateTwo;
+    const RDGTexture srcDiff = nrd.outDiff;
+    const RDGTexture srcSpec = nrd.outSpec;
     // REBLUR outputs YCoCg + normalized hitT; remodulate only consumes .rgb, so the writeback just converts color
     const StringID copyPipeline = backend == NrdBackend::Reblur ? "nrd_reblur_output_copy"_sid : "nrd_radiance_copy"_sid;
 

@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+#include "render/frame_outputs.h"
 #include "render/render-graph/render_graph.h"
 #include "render/shaders/ddgi_interop.h"
 #include "render/passes/radiance_cache_passes.h"
@@ -24,8 +25,6 @@ class RenderPass;
 
 inline const StringID DDGI_CASCADES_BUFFER = "ddgi_cascades"_sid;
 inline const StringID DDGI_CASCADES_PREV_BUFFER = "ddgi_cascades_prev"_sid;
-inline const StringID WORLD_GRID_DDGI_GRID_BUFFER = "world_grid_ddgi_grid"_sid;
-inline const StringID WORLD_GRID_DDGI_INDEX_BUFFER = "world_grid_ddgi_index_list"_sid;
 inline constexpr int32_t DDGI_PROBE_DEBUG_LOCALS_ONLY = -2;
 
 /** Finest first. Locals occupy [count, count + localCount), slot-sticky by localIds to keep history. */
@@ -55,10 +54,12 @@ struct DDGICascades
 DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3& cameraPosition, const Core::LocalDDGIVolume* localVolumes, uint32_t localVolumeCount, const DDGICascades& previous, uint64_t frameNumber, bool bFreeze);
 
 /**
- * False when nothing was recorded; the caller treats that as a cold start. framerateScale = fps / 60.
+ * Invalid when nothing was recorded; the caller treats that as a cold start. framerateScale = fps / 60.
  * @param graph
  * @param pipelineManager
  * @param arena frame arena backing the descriptor sources captured by the upload passes
+ * @param scene
+ * @param worldGrid this frame's world grid; its DDGI volume grid is copied into the returned frame
  * @param params
  * @param cascades
  * @param previous cascades used last frame, for scroll/resize invalidation and feedback sampling
@@ -71,30 +72,33 @@ DDGICascades ComputeDDGICascades(const Core::DDGIParams& params, const glm::vec3
  * @param bReflectionProbeBruteForce debug: bypass the world-grid probe bin for the fallback shading's probe pick
  * @param gridCamPos camera the world grid binned against; stored in the uploaded descriptor set so samplers resolve the same cell the bin wrote
  * @param framerateScale fps / 60
- * @return false when nothing was recorded (no TLAS or geometry yet); the caller treats the next frame as a cold start
+ * @return invalid when nothing was recorded (no TLAS or geometry yet); the caller treats the next frame as a cold start
  */
-bool SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale);
+DDGIFrame SetupDDGIProbeUpdate(RenderGraph& graph, PipelineManager* pipelineManager, Core::Arena& arena, const SceneResources& scene, const WorldGridFrame& worldGrid, const Core::DDGIParams& params, const DDGICascades& cascades, const DDGICascades& previous, int32_t skyboxIndex, float iblIntensity, uint64_t frameNumber, bool bBounceOnly, const RadianceCacheFrame& radianceCache, uint32_t reflectionProbeCount, bool bReflectionProbeBruteForce, const glm::vec3& gridCamPos, float framerateScale);
 
-void DeclareDDGIVolumeGridReads(RenderGraph& graph, RenderPass& pass);
+void DeclareDDGIVolumeGridReads(RenderPass& pass, const DDGIFrame& ddgi);
 
 /**
  * Declares the pass dependencies for sampling the cascade chain. Returns false when the chain doesn't exist this frame.
  * @param graph
  * @param pass
+ * @param ddgi
  */
-bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass);
+bool AddDDGISampleDependencies(RenderGraph& graph, RenderPass& pass, const DDGIFrame& ddgi);
 
 /**
  * debugCascade: -1 all entries tinted, -2 locals only, >= 0 that entry untinted. probeDebugMode: 0 irradiance, 1 visibility, 2 flat volume tint.
  * @param graph
  * @param pipelineManager
+ * @param ddgi
+ * @param gpuDebug
  * @param cascades
  * @param probeDebugExposure linear scale applied to the fitted probe irradiance so bright probes do not blow out to flat white
  * @param debugCascade -1 draws every entry (cascades and resident locals) with a per-entry identification tint; DDGI_PROBE_DEBUG_LOCALS_ONLY (-2) draws only local entries, tinted; >= 0 draws only that entry, untinted
  * @param bHideInactive skip classification-inactive probes entirely instead of drawing them flat blue
  * @param probeDebugMode 0 fits the irradiance atlas; 1 fits the visibility atlas (red = mean distance / miss clamp, green = std/mean); 2 draws flat volume tint for reading placement and window coverage
  */
-void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode);
+void SetupDDGIProbeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const DDGIFrame& ddgi, const GPUDebugFrame& gpuDebug, const DDGICascades& cascades, float probeDebugExposure, int32_t debugCascade, bool bHideInactive, int32_t probeDebugMode);
 } // Render
 
 #endif //WILL_ENGINE_DDGI_PASSES_H

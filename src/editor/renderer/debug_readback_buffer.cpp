@@ -25,10 +25,10 @@ void DebugReadbackBuffer::Init(Render::VulkanContext* context, const size_t buff
     buffer.SetDebugName("Debug Readback Buffer");
 }
 
-void DebugReadbackBuffer::ScheduleCopies(Render::RenderGraph& graph, const StringID name)
+void DebugReadbackBuffer::ScheduleCopies(Render::RenderGraph& graph, const Render::RDGBuffer target)
 {
     for (const Entry& entry : entries) {
-        entry.copyFn(graph, name, entry.offset);
+        entry.copyFn(graph, target, entry.offset);
     }
 }
 

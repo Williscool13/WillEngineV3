@@ -9,6 +9,7 @@
 
 #include "core/containers/array.h"
 #include "core/string_id.h"
+#include "render/frame_outputs.h"
 #include "render/renderer_types.h"
 #include "core/types/extent.h"
 
@@ -29,6 +30,7 @@ struct PostProcessContext
     RenderGraph& graph;
     const Core::PostProcessConfiguration& config;
     const RenderTargets& targets;
+    const SceneResources& scene;
     const Core::ViewFamily& view;
     Core::Extent2D extent;
     Core::Extent2D preAaExtent;
@@ -37,6 +39,8 @@ struct PostProcessContext
     float preExposure;
     uint64_t frameNumber;
     PipelineManager* pipelines;
+    // Written by PPBloom, read by PPFinalize
+    RDGTexture bloomChain{};
 };
 
 struct PaniniParams
@@ -62,19 +66,20 @@ float EV100ToLuminance(float ev100);
 float CameraEV100(const Core::PostProcessConfiguration& config);
 
 // Sideband passes: produce named side resources, return input unchanged
-StringID PPExposure(PostProcessContext& ctx, StringID input);
-StringID PPBloom(PostProcessContext& ctx, StringID input);
+RDGTexture PPExposure(PostProcessContext& ctx, RDGTexture input);
+RDGTexture PPBloom(PostProcessContext& ctx, RDGTexture input);
 
 // Transform passes: 1-in 1-out, return their output name
-StringID PPMotionBlur(PostProcessContext& ctx, StringID input);
+RDGTexture PPMotionBlur(PostProcessContext& ctx, RDGTexture input);
 // Fused panini remap + chromatic aberration + bloom composite + exposure + tonemap + grading + vignette.
-StringID PPFinalize(PostProcessContext& ctx, StringID input);
+RDGTexture PPFinalize(PostProcessContext& ctx, RDGTexture input);
 // Display-referred sharpen + film grain + sRGB-step dither.
-StringID PPCompose(PostProcessContext& ctx, StringID input);
+RDGTexture PPCompose(PostProcessContext& ctx, RDGTexture input);
 // Gameplay screen cover (fade/iris/wipe/dissolve/letterbox); skipped entirely when inactive.
 // Outside the chain above because ScreenFadeState::bDrawOverUI decides whether it runs before or after UI compositing.
-StringID PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Extent2D extent, StringID input);
-StringID PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Core::PostProcessConfiguration& config, const RenderTargets& targets, Core::Extent2D extent, uint64_t frameNumber, StringID input);
+RDGTexture PPScreenFade(RenderGraph& graph, PipelineManager* pipelines, const Core::ScreenFadeState& fade, Core::Extent2D extent, RDGTexture input);
+RDGTexture PPDepthOfField(RenderGraph& graph, PipelineManager* pipelines, const Core::PostProcessConfiguration& config, const RenderTargets& targets, const SceneResources& scene, Core::Extent2D extent,
+                          uint64_t frameNumber, RDGTexture input);
 } // Render
 
 #endif //WILLENGINEV3_POST_PROCESSING_H

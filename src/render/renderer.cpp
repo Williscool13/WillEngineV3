@@ -8,13 +8,14 @@
 
 namespace Render
 {
-StringID SetupPostProcessing(RenderGraph& graph,
+RDGTexture SetupPostProcessing(RenderGraph& graph,
                              PipelineManager* pipelineManager,
                              const Core::ViewFamily& viewFamily,
                              Core::Extent2D renderExtent,
                              Core::Extent2D preAaExtent,
                              Core::Extent2D displayExtent,
                              const RenderTargets& targets,
+                             const SceneResources& scene,
                              float deltaTime,
                              uint64_t frameNumber,
                              float preExposure)
@@ -23,6 +24,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
         .graph = graph,
         .config = viewFamily.postProcessConfig,
         .targets = targets,
+        .scene = scene,
         .view = viewFamily,
         .extent = renderExtent,
         .preAaExtent = preAaExtent,
@@ -33,7 +35,7 @@ StringID SetupPostProcessing(RenderGraph& graph,
         .pipelines = pipelineManager,
     };
 
-    StringID current = ctx.targets.colorOutput;
+    RDGTexture current = ctx.targets.colorOutput;
     current = PPExposure(ctx, current);
     current = PPMotionBlur(ctx, current);
     current = PPBloom(ctx, current);
