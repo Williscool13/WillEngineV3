@@ -38,6 +38,10 @@ inline constexpr int32_t RDG_MAX_STORAGE_3D_FLOAT4 = 32;
 inline constexpr int32_t RDG_MAX_TLAS = 64;
 
 inline const StringID SCENE_DATA_BUFFER = "scene_data"_sid;
+/** Lit scene before fog and overlays */
+inline const StringID LIT_COLOR_HISTORY = "lit_color_history"_sid;
+/** Current frame after fog, before overlays */
+inline const StringID LIT_COLOR_PREOVERLAY = "lit_color_preoverlay"_sid;
 inline const StringID LIGHT_DATA_BUFFER = "light_data"_sid;
 inline const StringID EMISSIVE_TRI_WORK_BUFFER = "emissive_tri_work"_sid;
 inline const StringID REFLECTION_PROBE_BUFFER = "reflection_probes"_sid;

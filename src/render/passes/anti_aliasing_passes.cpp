@@ -10,7 +10,6 @@
 #include <cmath>
 
 #include "reflection_passes.h"
-#include "volumetric_fog_passes.h"
 #include "render/render_utils.h"
 #include "render/render-view/render_view_helpers.h"
 #include "render/pipelines/pipeline_data.h"
@@ -431,7 +430,6 @@ StringID SetupFsr2(RenderGraph& graph,
                    Core::Array<uint32_t, 2> renderExtent,
                    Core::Array<uint32_t, 2> outputExtent,
                    const RenderTargets& targets,
-                   bool bHasPreOverlayColor,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
                    float framerateScale,
@@ -442,8 +440,8 @@ StringID SetupFsr2(RenderGraph& graph,
     ZoneScoped;
     static constexpr uint32_t INVALID_INDEX = 0xFFFFFFFFu;
     const Core::Fsr2Configuration& config = viewFamily.aaConfig.fsr2;
-    // Fog lands after the snapshot; compare against the fogged copy so fog itself is not flagged reactive.
-    const StringID preOverlayColor = graph.HasTexture(LIT_COLOR_FOGGED) ? LIT_COLOR_FOGGED : "lit_color_preoverlay"_sid;
+    const StringID preOverlayColor = targets.preOverlayColor;
+    const bool bHasPreOverlayColor = static_cast<bool>(preOverlayColor);
 
     const uint32_t renderW = renderExtent[0];
     const uint32_t renderH = renderExtent[1];

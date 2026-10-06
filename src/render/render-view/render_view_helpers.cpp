@@ -231,11 +231,9 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
 }
 
 
-RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
+SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
 {
-    RenderFamilyProperties renderFamilyProperties{};
-    renderFamilyProperties.viewFamily = &viewFamily;
-    renderFamilyProperties.bCanRender = _pipelineManager->IsCategoryReady(PipelineCategory::Critical);
+    SceneBufferSizes sizes{};
 
     _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelCount));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(_pipelineManager->GetLightingPipelines().Size()));
@@ -250,40 +248,40 @@ RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamil
     _limits.highestTextMaterialCount = std::max(_limits.highestTextMaterialCount, NextPowerOfTwo(viewFamily.textMaterials.Size()));
 
 
-    renderFamilyProperties.modelBufferSize = _limits.highestModelCount * sizeof(Model);
-    renderFamilyProperties.materialBufferSize = Render::BINDLESS_MATERIAL_BUFFER_SIZE;
-    renderFamilyProperties.shadeDispatchBufferSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(BucketDispatchParameters);
-    renderFamilyProperties.lightingDispatchBufferSize = _limits.highestLightingCount * sizeof(BucketDispatchParameters);
-    renderFamilyProperties.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
+    sizes.modelBufferSize = _limits.highestModelCount * sizeof(Model);
+    sizes.materialBufferSize = Render::BINDLESS_MATERIAL_BUFFER_SIZE;
+    sizes.shadeDispatchBufferSize = Render::BINDLESS_MATERIAL_BUFFER_COUNT * sizeof(BucketDispatchParameters);
+    sizes.lightingDispatchBufferSize = _limits.highestLightingCount * sizeof(BucketDispatchParameters);
+    sizes.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
 
 
-    renderFamilyProperties.instanceMeshletOffsetsBufferSize = _limits.highestInstanceCount * sizeof(InstanceMeshletOffsetPrefixSum);
+    sizes.instanceMeshletOffsetsBufferSize = _limits.highestInstanceCount * sizeof(InstanceMeshletOffsetPrefixSum);
     uint32_t level1BlockCount = (_limits.highestInstanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
     uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    renderFamilyProperties.level1SumsBufferSize = _limits.highestInstanceCount * sizeof(uint32_t);
-    renderFamilyProperties.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
-    renderFamilyProperties.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
+    sizes.level1SumsBufferSize = _limits.highestInstanceCount * sizeof(uint32_t);
+    sizes.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    sizes.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    sizes.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
+    sizes.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
 
-    renderFamilyProperties.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
+    sizes.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
     uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
     uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
 
-    renderFamilyProperties.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint4);
-    renderFamilyProperties.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
-    renderFamilyProperties.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
-    renderFamilyProperties.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint4);
-    renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint4);
+    sizes.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint4);
+    sizes.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
+    sizes.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
+    sizes.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint4);
+    sizes.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint4);
 
-    renderFamilyProperties.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
-    renderFamilyProperties.visibleMeshletUpperBound = _limits.highestMeshletCount;
+    sizes.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
+    sizes.visibleMeshletUpperBound = _limits.highestMeshletCount;
 
-    renderFamilyProperties.glyphQuadBufferSize = _limits.highestGlyphQuadCount * sizeof(WorldGlyphQuad);
-    renderFamilyProperties.uiGlyphQuadBufferSize = _limits.highestUIGlyphQuadCount * sizeof(UIGlyphQuad);
-    renderFamilyProperties.textInstanceBufferSize = _limits.highestTextInstanceCount * sizeof(TextInstanceData);
-    renderFamilyProperties.textMaterialBufferSize = _limits.highestTextMaterialCount * sizeof(TextRenderMaterial);
+    sizes.glyphQuadBufferSize = _limits.highestGlyphQuadCount * sizeof(WorldGlyphQuad);
+    sizes.uiGlyphQuadBufferSize = _limits.highestUIGlyphQuadCount * sizeof(UIGlyphQuad);
+    sizes.textInstanceBufferSize = _limits.highestTextInstanceCount * sizeof(TextInstanceData);
+    sizes.textMaterialBufferSize = _limits.highestTextMaterialCount * sizeof(TextRenderMaterial);
 
-    return renderFamilyProperties;
+    return sizes;
 }
 } // Render

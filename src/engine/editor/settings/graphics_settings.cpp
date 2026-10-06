@@ -388,7 +388,7 @@ static void DrawLightingProfiles(Engine::EngineState* state)
                 Engine::Profiles::LightingProfileBundle bundle = Engine::Profiles::CaptureLightingProfile(*state);
                 if (Engine::Profiles::LoadLightingProfile(names[i].c_str(), bundle)) {
                     Engine::Profiles::ApplyLightingProfile(*state, bundle);
-                    state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+                    state->requests.RequestRenderReset(Core::RenderReset::Flush);
                 }
                 Engine::WriteProjectConfig(cfg, state->allocator);
             }
@@ -2147,11 +2147,11 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             Widgets::SubHeader("Render Cache Reset");
             if (Widgets::Button("Full Renderer Clear")) {
-                state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+                state->requests.RequestRenderReset(Core::RenderReset::Flush);
             }
             Widgets::SameLine();
             if (Widgets::Button("Reset Screen History")) {
-                state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+                state->requests.RequestRenderReset(Core::RenderReset::Cut);
             }
 
             Widgets::SubHeader("Probes");

@@ -215,7 +215,12 @@ struct FrameRequests
     bool bViewportClickPending{false};
     bool bRequestedQuit{false};
     bool bLogRDG{false};
-    Core::RenderCacheReset pendingCacheReset{Core::RenderCacheReset::None};
+    Core::RenderReset renderReset{Core::RenderReset::None};
+
+    void RequestRenderReset(Core::RenderReset reset)
+    {
+        if (reset > renderReset) { renderReset = reset; }
+    }
 };
 
 struct AssetLoadState

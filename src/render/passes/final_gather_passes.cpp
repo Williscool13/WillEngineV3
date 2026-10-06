@@ -79,11 +79,11 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     graph.CreateVersionedTexture(GI_GATHER_NOISE, TextureInfo{VK_FORMAT_R16G16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
     const StringID noiseHistory = graph.ResourceVersionID(GI_GATHER_NOISE, 1);
 
-    const StringID litHistory = graph.ResourceVersionID("lit_color_preoverlay"_sid, 1);
+    const StringID litHistory = graph.ResourceVersionID(LIT_COLOR_HISTORY, 1);
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
     const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
 
-    const bool bScreenSpace = !bDebugView && !bDisableScreenTier && graph.ResourceHasVersion("lit_color_preoverlay"_sid, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
+    const bool bScreenSpace = !bDebugView && !bDisableScreenTier && graph.ResourceHasVersion(LIT_COLOR_HISTORY, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const bool bScreenDiffuse = bScreenSpace && graph.ResourceHasVersion(GI_SCREEN_DIFFUSE, 1);
     const StringID screenDiffuseHistory = graph.ResourceVersionID(GI_SCREEN_DIFFUSE, 1);
 

@@ -52,49 +52,102 @@ static bool DisplayUvToRenderPixel(float u, float v, const PaniniParams& panini,
     return true;
 }
 
-static FrameFeatures ComputeFrameFeatures(const Core::FrameBuffer& frameBuffer, const Core::ViewFamily& viewFamily, const RenderFamilyProperties& properties)
+static void AddColorCopyPass(RenderGraph& graph, PipelineManager* pipelineManager, StringID passName, StringID src, StringID dst, Core::Array<uint32_t, 2> extent)
 {
-    const Core::LightingMode mode = viewFamily.lightingMode;
+    auto& copyPass = graph.AddPass(passName, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
+    copyPass.ReadSampledImage(src);
+    copyPass.WriteStorageImage(dst);
+    copyPass.Execute([src, dst, w = extent[0], h = extent[1], pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("color_copy"_sid);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+        ColorCopyPushConstant pc{
+            .srcIndex = graph.GetSampledImageViewDescriptorIndex(src),
+            .dstIndex = graph.GetStorageImageViewDescriptorIndex(dst),
+            .extents = {w, h},
+        };
+        vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
+    });
+}
+
+static FrameRenderingPath ResolveFrameRenderingPath(const Core::ViewFamily& viewFamily)
+{
+    if (viewFamily.groundTruthMode != Core::GroundTruthMode::None) {
+        return FrameRenderingPath::GroundTruth;
+    }
+    switch (viewFamily.lightingMode) {
+        case Core::LightingMode::Default: return FrameRenderingPath::Default;
+        case Core::LightingMode::ReSTIR: return FrameRenderingPath::ReSTIR;
+        case Core::LightingMode::PathTracing: return FrameRenderingPath::PathTracing;
+    }
+    return FrameRenderingPath::Default;
+}
+
+static FrameFeatures ComputeFrameFeatures(const Core::FrameBuffer& frameBuffer, const Core::ViewFamily& viewFamily, FrameRenderingPath path, bool bHasScene)
+{
     FrameFeatures f{};
-    f.bGeometry = properties.bCanRender && viewFamily.instanceCount > 0;
-    f.bGroundTruth = viewFamily.groundTruthMode != Core::GroundTruthMode::None;
-    f.bReflectionScreenSpace = mode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
-    f.bGIGatherScreenSpace = frameBuffer.ddgi.bEnabled && (frameBuffer.ddgi.bFinalGather || frameBuffer.debug.giGatherDebugMode != 0);
-    const bool bLitColorIsScene = frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both && mode != Core::LightingMode::PathTracing;
-    f.bFsr2Reactive = viewFamily.aaConfig.mode == Core::AntiAliasingMode::FSR2 && viewFamily.aaConfig.fsr2.bReactiveMask;
-    f.bSnapshotLitColor = !f.bGroundTruth && ((bLitColorIsScene && (f.bReflectionScreenSpace || f.bGIGatherScreenSpace)) || f.bFsr2Reactive);
-    f.bVolumetricFog = f.bGeometry && viewFamily.volumetricFog.bEnabled && !f.bGroundTruth && mode != Core::LightingMode::PathTracing;
-    f.bFoggedLitCopy = f.bVolumetricFog && f.bSnapshotLitColor;
-    f.bDDGI = frameBuffer.ddgi.bEnabled;
-    f.bDDGIApply = frameBuffer.ddgi.bEnabled && frameBuffer.ddgi.bApplyToLighting;
-    f.bNeedsWorldGrid = mode == Core::LightingMode::Default
-                        || (mode == Core::LightingMode::ReSTIR && frameBuffer.reflection.bEnabled)
-                        || (mode == Core::LightingMode::ReSTIR && frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin)
-                        || frameBuffer.ddgi.bEnabled
-                        || viewFamily.reflectionProbes.Size() > 0u
-                        || f.bVolumetricFog;
-    f.bGIGather = frameBuffer.ddgi.bEnabled && ((frameBuffer.ddgi.bFinalGather && f.bDDGIApply) || frameBuffer.debug.giGatherDebugMode != 0);
-    f.bSunViaReSTIR = mode == Core::LightingMode::ReSTIR && frameBuffer.restir.bSunLight;
-    f.bRTSun = viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f && !f.bSunViaReSTIR
-               && (mode == Core::LightingMode::Default || mode == Core::LightingMode::ReSTIR);
+    if (!bHasScene || path == FrameRenderingPath::GroundTruth) {
+        return f;
+    }
+
+    const Core::DDGIParams& ddgi = frameBuffer.ddgi;
+    f.ddgi = !ddgi.bEnabled ? DDGIUsage::Off : ddgi.bApplyToLighting ? DDGIUsage::Applied : DDGIUsage::ProbesOnly;
+    f.bGIGather = ddgi.bEnabled && ((ddgi.bFinalGather && f.ddgi == DDGIUsage::Applied) || frameBuffer.debug.giGatherDebugMode != 0);
+    f.bGTAO = viewFamily.gtaoConfig.bEnabled;
+    if (path == FrameRenderingPath::PathTracing) {
+        return f;
+    }
+
+    f.bVolumetricFog = viewFamily.volumetricFog.bEnabled;
+    if (path == FrameRenderingPath::ReSTIR && frameBuffer.restir.bSunLight) {
+        f.sunShadow = SunShadowSource::ReSTIR;
+    }
+    else if (viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f) {
+        f.sunShadow = SunShadowSource::RayTraced;
+    }
     return f;
+}
+
+static FrameNeeds ComputeFrameNeeds(const Core::FrameBuffer& frameBuffer, const Core::ViewFamily& viewFamily, FrameRenderingPath path, const FrameFeatures& features, bool bCanRender, bool bHasScene)
+{
+    FrameNeeds n{};
+    if (!bCanRender) {
+        return n;
+    }
+    const bool bReSTIR = path == FrameRenderingPath::ReSTIR;
+    if (bHasScene && path != FrameRenderingPath::GroundTruth) {
+        n.bWorldGrid = path == FrameRenderingPath::Default
+                       || (bReSTIR && (frameBuffer.reflection.bEnabled || frameBuffer.restir.lightProposal == Core::ReSTIRParams::LightProposal::WorldGridBin))
+                       || features.ddgi != DDGIUsage::Off
+                       || viewFamily.reflectionProbes.Size() > 0u
+                       || features.bVolumetricFog;
+    }
+
+    // A remodulate debug output is not the lit scene, so it must not feed back as history
+    const bool bLitColorIsScene = (path == FrameRenderingPath::Default || bReSTIR) && frameBuffer.restir.remodulateOutput == Core::ReSTIRParams::RemodulateOutput::Both;
+    const bool bReflectionScreenSpace = bReSTIR && frameBuffer.reflection.bEnabled && frameBuffer.reflection.bScreenSpaceLighting;
+    n.bLitHistory = bHasScene && bLitColorIsScene && (bReflectionScreenSpace || features.bGIGather);
+
+    const bool bFsr2Reactive = viewFamily.aaConfig.mode == Core::AntiAliasingMode::FSR2 && viewFamily.aaConfig.fsr2.bReactiveMask;
+    n.bPreOverlayColor = bFsr2Reactive || viewFamily.postProcessConfig.exposureMode == Core::ExposureMode::Auto;
+    return n;
 }
 
 RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, VkCommandBuffer cmd, VkCommandBuffer asyncCmd, Core::FrameBuffer& frameBuffer, ImDrawDataSnapshot& imguiSnapshot)
 {
     ZoneScoped;
 
-    ApplyRenderReset(frameBuffer.cacheReset);
+    ApplyRenderReset(frameBuffer.renderReset);
 
     renderGraph->FrameStartReset(frameIndex, frameNumber, RDG_PHYSICAL_RESOURCE_UNUSED_THRESHOLD);
 
     FrameContext ctx = BeginFrame(frameIndex, frameBuffer);
     RecordFrameSetup(ctx, cmd, asyncCmd);
 
-    if (ctx.properties.bCanRender) {
+    if (ctx.bCanRender) {
         ZoneScopedN("SetupRenderGraph");
         RecordSceneServices(ctx);
-        if (ctx.viewFamily.instanceCount > 0) {
+        if (ctx.bHasScene) {
             RecordLighting(ctx);
         }
         RecordPostLighting(ctx);
@@ -137,18 +190,20 @@ RenderThread::RenderResponseCode RenderThread::RecordFrame(uint32_t frameIndex, 
     return bRenderRequestsRecreate ? RENDER_REQUESTED_RECREATE : SUCCESS;
 }
 
-void RenderThread::ApplyRenderReset(Core::RenderCacheReset reset)
+void RenderThread::ApplyRenderReset(Core::RenderReset reset)
 {
-    if (reset != Core::RenderCacheReset::None) {
+    if (reset != Core::RenderReset::None) {
         nrdDenoiser->RequestHistoryClear();
     }
-    if (reset == Core::RenderCacheReset::ScreenHistory) {
+    if (reset == Core::RenderReset::Cut) {
         renderGraph->InvalidateViewportHistory();
     }
-    else if (reset == Core::RenderCacheReset::All) {
+    else if (reset == Core::RenderReset::Flush) {
         vkQueueWaitIdle(context->graphicsQueue);
         gpuDispatcher->WaitAsyncComputeIdle();
         renderGraph->InvalidateAllVersioned();
+        renderGraph->ClearReadbacks();
+        frameResourceLimits = FrameResourceLimits{};
         rtGroundTruthDIAccumCount = 0;
         rtGroundTruthGIAccumCount = 0;
         rtGroundTruthFullAccumCount = 0;
@@ -228,19 +283,12 @@ FrameContext RenderThread::BeginFrame(uint32_t frameIndex, Core::FrameBuffer& fr
 
     SanitizeViewFamily(viewFamily, pipelineManager, &renderArena.Get());
     PrepareRenderFamily(viewFamily);
-    ctx.properties = PrepareRenderFamilyProperties(viewFamily, readbackData, pipelineManager, frameResourceLimits);
-    if (bRenderRequestsRecreate) { ctx.properties.bCanRender = false; }
-    ctx.properties.bWireframe = frameBuffer.debug.bWireframe;
-    ctx.properties.bOcclusionCulling = frameBuffer.debug.bOcclusionCulling;
-    ctx.properties.bOcclusionFreeze = frameBuffer.debug.bOcclusionFreeze;
-    ctx.properties.cullFlags =
-            (frameBuffer.debug.bCullInstanceFrustum ? CULL_FLAG_INSTANCE_FRUSTUM : 0u) |
-            (frameBuffer.debug.bCullInstanceContribution ? CULL_FLAG_INSTANCE_CONTRIBUTION : 0u) |
-            (frameBuffer.debug.bCullMeshletFrustum ? CULL_FLAG_MESHLET_FRUSTUM : 0u) |
-            (frameBuffer.debug.bCullMeshletCone ? CULL_FLAG_MESHLET_CONE : 0u) |
-            (frameBuffer.debug.bCullMeshletContribution ? CULL_FLAG_MESHLET_CONTRIBUTION : 0u);
-
-    ctx.features = ComputeFrameFeatures(frameBuffer, viewFamily, ctx.properties);
+    ctx.bufferSizes = ComputeSceneBufferSizes(viewFamily, readbackData, pipelineManager, frameResourceLimits);
+    ctx.bCanRender = pipelineManager->IsCategoryReady(PipelineCategory::Critical) && !bRenderRequestsRecreate;
+    ctx.bHasScene = ctx.bCanRender && viewFamily.instanceCount > 0;
+    ctx.path = ResolveFrameRenderingPath(viewFamily);
+    ctx.features = ComputeFrameFeatures(frameBuffer, viewFamily, ctx.path, ctx.bHasScene);
+    ctx.needs = ComputeFrameNeeds(frameBuffer, viewFamily, ctx.path, ctx.features, ctx.bCanRender, ctx.bHasScene);
     return ctx;
 }
 
@@ -269,9 +317,9 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
     {
         ZoneScopedN("SetupUniforms");
         UploadFrameUniforms(viewFamily, renderExtent, ctx.frameBuffer.timeFrame.renderDeltaTime);
-        UploadModelUniforms(viewFamily, ctx.properties);
-        UploadTextUniforms(viewFamily, ctx.properties);
-        UploadUIUniforms(viewFamily, ctx.properties);
+        UploadModelUniforms(viewFamily, ctx.bufferSizes);
+        UploadTextUniforms(viewFamily, ctx.bufferSizes);
+        UploadUIUniforms(viewFamily, ctx.bufferSizes);
         UploadSpriteUniforms(viewFamily);
     }
     //
@@ -335,7 +383,7 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
     const RenderTargets& targets = ctx.targets;
 
     renderGraph->CreateTexture(targets.visibility, TextureInfo{VISIBILITY_BUFFER_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_VISIBILITY_EMPTY, true);
-    const bool bGeometry = ctx.features.bGeometry;
+    const bool bGeometry = ctx.bHasScene;
     auto declareGeometryTarget = [&](StringID name, const TextureInfo& info, std::optional<VkClearValue> clear) {
         if (bGeometry) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT, false, clear); }
         else if (renderGraph->ResourceHasVersion(name, 0)) { renderGraph->CreateVersionedTexture(name, info, 1, VersionSource::NoShiftReadOnly, true, VK_IMAGE_USAGE_SAMPLED_BIT); }
@@ -353,14 +401,18 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
     renderGraph->CreateTexture(targets.stableId, TextureInfo{GBUFFER_STABLE_ID_FORMAT, renderExtent[0], renderExtent[1], 1}, CLEAR_COLOR_EMPTY, true);
 #endif
 
-    if (ctx.features.bFoggedLitCopy) {
-        renderGraph->CreateTexture(LIT_COLOR_FOGGED, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, std::nullopt, true);
-    }
-    if (ctx.features.bSnapshotLitColor) {
-        renderGraph->CreateVersionedTexture("lit_color_preoverlay"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
-        if (ctx.features.bGIGatherScreenSpace && viewFamily.lightingMode == Core::LightingMode::ReSTIR) {
+    if (ctx.needs.bLitHistory) {
+        renderGraph->CreateVersionedTexture(LIT_COLOR_HISTORY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        if (ctx.features.bGIGather && ctx.path == FrameRenderingPath::ReSTIR) {
             renderGraph->CreateTexture(RESTIR_DIFFUSE_RATIO, TextureInfo{VK_FORMAT_R16_SFLOAT, renderExtent[0], renderExtent[1], 1}, {std::nullopt}, true);
             renderGraph->CreateVersionedTexture(GI_SCREEN_DIFFUSE, TextureInfo{VK_FORMAT_R16G16B16A16_SFLOAT, renderExtent[0], renderExtent[1], 1}, 1, VersionSource::Fresh, true, VK_IMAGE_USAGE_SAMPLED_BIT);
+        }
+    }
+    // Without fog the lit history already holds the pre-overlay color
+    if (ctx.needs.bPreOverlayColor) {
+        ctx.targets.preOverlayColor = ctx.needs.bLitHistory && !ctx.features.bVolumetricFog ? LIT_COLOR_HISTORY : LIT_COLOR_PREOVERLAY;
+        if (ctx.targets.preOverlayColor == LIT_COLOR_PREOVERLAY) {
+            renderGraph->CreateTexture(LIT_COLOR_PREOVERLAY, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, std::nullopt, true);
         }
     }
 
@@ -387,7 +439,7 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
         return;
     }
 
-    SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, ctx.properties, renderExtent, targets, 0);
+    SetupGeometryPass(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, frameBuffer.debug, renderExtent, targets, 0);
 
     SetupVisibilityBucketingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameBuffer.debug.bucketDebugMode);
 
@@ -400,14 +452,14 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
     const DDGICascades ddgiCascades = ComputeDDGICascades(frameBuffer.ddgi, viewFamily.mainView.currentViewData.cameraPos, viewFamily.localDDGIVolumes.Data(),
                                                           static_cast<uint32_t>(viewFamily.localDDGIVolumes.Size()), ddgiPreviousCascades, frameNumber, frameBuffer.debug.bFreezeGIField);
 
-    if (ctx.features.bNeedsWorldGrid) {
+    if (ctx.needs.bWorldGrid) {
         SetupWorldGridBinningPass(*renderGraph, pipelineManager, viewFamily, 0, renderArena.Get(), ddgiCascades);
         if (frameBuffer.debug.bEnableGPUDebug && frameBuffer.debug.bWorldGridDebug && !frameBuffer.debug.bLockGPUDebug) {
             SetupWorldGridDebug(*renderGraph, pipelineManager, 0, frameBuffer.debug.worldGridDebugLevel);
         }
     }
 
-    if (ctx.features.bDDGI) {
+    if (ctx.features.ddgi != DDGIUsage::Off) {
         RecordDDGI(ctx, ddgiCascades);
     }
     else {
@@ -437,11 +489,11 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
         SetupHiZDebug(*renderGraph, pipelineManager, renderExtent, frameBuffer.debug.hizDebugMip);
     }
 
-    if (ctx.features.bDDGI && frameBuffer.debug.giDeconstructMode != 0) {
+    if (ctx.features.ddgi != DDGIUsage::Off && frameBuffer.debug.giDeconstructMode != 0) {
         SetupGIDeconstruct(*renderGraph, pipelineManager, renderExtent, targets, 0, frameBuffer.debug.giDeconstructMode);
     }
 
-    if (viewFamily.gtaoConfig.bEnabled) {
+    if (ctx.features.bGTAO) {
         SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, frameNumber, 0);
     }
 
@@ -489,8 +541,7 @@ void RenderThread::RecordDDGI(FrameContext& ctx, const DDGICascades& ddgiCascade
 
 void RenderThread::RecordLighting(FrameContext& ctx)
 {
-    // An active ground-truth overlay replaces the normal lighting path regardless of LightingMode.
-    if (ctx.features.bGroundTruth) {
+    if (ctx.path == FrameRenderingPath::GroundTruth) {
         RecordGroundTruth(ctx);
         return;
     }
@@ -501,24 +552,26 @@ void RenderThread::RecordLighting(FrameContext& ctx)
                                                            frameBuffer.ddgi.bFinalGatherTemporal, frameBuffer.ddgi.gatherRaysPerPixel, false, frameBuffer.debug.bFreezeScreenFeedback,
                                                            frameBuffer.ddgi.bFinalGatherQuarterRes, frameBuffer.ddgi.bounceIntensity, frameBuffer.ddgi.maxRayRadiance);
         if (giGather.bValid) {
-            ctx.giGatherMode = (frameBuffer.ddgi.bFinalGather && ctx.features.bDDGIApply) ? 1u : 0u;
+            ctx.giGatherMode = (frameBuffer.ddgi.bFinalGather && ctx.features.DDGIApplied()) ? 1u : 0u;
             SetupGIGatherDebug(*renderGraph, pipelineManager, ctx.renderExtent, frameBuffer.debug.giGatherDebugMode, frameBuffer.ddgi.bFinalGatherQuarterRes);
         }
     }
 
-    switch (ctx.viewFamily.lightingMode) {
-        case Core::LightingMode::Default:
+    switch (ctx.path) {
+        case FrameRenderingPath::Default:
             RecordLightingDefault(ctx);
             break;
-        case Core::LightingMode::ReSTIR:
+        case FrameRenderingPath::ReSTIR:
             RecordLightingReSTIR(ctx);
             break;
-        case Core::LightingMode::PathTracing:
+        case FrameRenderingPath::PathTracing:
             SetupRTShadowTest(*renderGraph, context, pipelineManager, ctx.viewFamily, ctx.renderExtent, ctx.targets, ctx.targets.colorOutput, 0);
+            break;
+        case FrameRenderingPath::GroundTruth:
             break;
     }
 
-    if (ctx.features.bRTSun) {
+    if (ctx.features.sunShadow == SunShadowSource::RayTraced) {
         RecordSunShadows(ctx);
     }
 }
@@ -575,8 +628,8 @@ void RenderThread::RecordLightingDefault(FrameContext& ctx)
     else {
         SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, 0, frameNumber, frameBuffer.reflection);
     }
-    SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, ctx.features.bDDGIApply, false, frameBuffer.debug.bFreezeScreenFeedback);
-    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, ctx.features.bDDGIApply, ctx.giGatherMode, frameBuffer.reflection);
+    SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, 0u, frameBuffer.reflection, ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
+    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, ctx.features.DDGIApplied(), ctx.giGatherMode, frameBuffer.reflection);
 }
 
 void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
@@ -585,7 +638,7 @@ void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
     Core::FrameBuffer& frameBuffer = ctx.frameBuffer;
     const RenderTargets& targets = ctx.targets;
     const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
-    const bool bDDGIApply = ctx.features.bDDGIApply;
+    const bool bDDGIApply = ctx.features.DDGIApplied();
     const uint32_t giGatherMode = ctx.giGatherMode;
 
     const Core::ReSTIRParams& restir = frameBuffer.restir;
@@ -666,28 +719,18 @@ void RenderThread::RecordPostLighting(FrameContext& ctx)
     const RenderTargets& targets = ctx.targets;
     const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
 
-    if (ctx.features.bSnapshotLitColor) {
-        auto& snapshotPass = renderGraph->AddPass("Lit Color Snapshot"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::Untagged);
-        snapshotPass.ReadSampledImage(targets.colorOutput);
-        snapshotPass.WriteStorageImage("lit_color_preoverlay"_sid);
-        snapshotPass.Execute([src = targets.colorOutput, dst = "lit_color_preoverlay"_sid,
-                w = renderExtent[0], h = renderExtent[1], &pipelineManager = pipelineManager](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("color_copy"_sid);
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-                ColorCopyPushConstant pc{
-                    .srcIndex = graph.GetSampledImageViewDescriptorIndex(src),
-                    .dstIndex = graph.GetStorageImageViewDescriptorIndex(dst),
-                    .extents = {w, h},
-                };
-                vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-                vkCmdDispatch(cmd, (w + 7) / 8, (h + 7) / 8, 1);
-            });
+    if (ctx.needs.bLitHistory) {
+        AddColorCopyPass(*renderGraph, pipelineManager, "Lit Color Snapshot"_sid, targets.colorOutput, LIT_COLOR_HISTORY, renderExtent);
     }
 
+    const bool bPreOverlayCopy = ctx.targets.preOverlayColor == LIT_COLOR_PREOVERLAY;
     if (ctx.features.bVolumetricFog) {
-        SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, ctx.features.bFoggedLitCopy, ctx.features.bDDGIApply,
+        SetupVolumetricFog(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, 0, frameNumber, bPreOverlayCopy, ctx.features.DDGIApplied(),
                            frameBuffer.debug.fogDebugMode, frameBuffer.debug.fogDebugMode != lastFogDebugMode);
         lastFogDebugMode = frameBuffer.debug.fogDebugMode;
+    }
+    else if (bPreOverlayCopy) {
+        AddColorCopyPass(*renderGraph, pipelineManager, "Pre-Overlay Color Copy"_sid, targets.colorOutput, LIT_COLOR_PREOVERLAY, renderExtent);
     }
 
 #if WILL_EDITOR
@@ -720,7 +763,7 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
     const Core::Array<uint32_t, 2> renderExtent = ctx.renderExtent;
     const Core::Array<uint32_t, 2> outputExtent = ctx.outputExtent;
 
-    if (!ctx.features.bGroundTruth) {
+    if (ctx.path != FrameRenderingPath::GroundTruth) {
         targets.colorOutput = PPDepthOfField(*renderGraph, pipelineManager, viewFamily.postProcessConfig, targets, renderExtent, frameNumber, targets.colorOutput);
     }
 
@@ -739,7 +782,7 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
             ctx.postAaExtent = outputExtent;
             break;
         case Core::AntiAliasingMode::FSR2:
-            targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, ctx.features.bSnapshotLitColor, frameBuffer.reflection,
+            targets.colorOutput = SetupFsr2(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, frameBuffer.reflection,
                                             frameBuffer.timeFrame.renderDeltaTime, framerateScale, frameNumber, preExposure, prevPreExposure);
             ctx.postAaExtent = outputExtent;
             break;

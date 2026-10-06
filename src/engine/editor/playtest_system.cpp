@@ -165,7 +165,7 @@ static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState
     camera.currentViewData = BuildPerspectiveView(translation, rotation * WORLD_FORWARD, WORLD_UP, aspect,
                                                   glm::radians(state->projectConfig.editorCameraFovDegrees), state->projectConfig.editorCameraNearPlane);
     if (bCut) {
-        camera.transition = Component::CameraTransition::Cut;
+        state->requests.RequestRenderReset(Core::RenderReset::Cut);
     }
 }
 
@@ -268,7 +268,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         frameLimit = 0;
         if (bProfileStashed) {
             Profiles::ApplyLightingProfile(*state, stashedProfile);
-            state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+            state->requests.RequestRenderReset(Core::RenderReset::Flush);
             bProfileStashed = false;
         }
         state->inputContext = stashedInputContext;
@@ -374,9 +374,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                     }
                     case Op::Reset:
                     {
-                        if (state->requests.pendingCacheReset == Core::RenderCacheReset::None) {
-                            state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
-                        }
+                        state->requests.RequestRenderReset(Core::RenderReset::Cut);
                         ++cursor;
                         break;
                     }
@@ -431,7 +429,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                         if (Profiles::LoadLightingProfile(e.name.c_str(), bundle)) {
                             bundle.gtao.bEnabled = state->lighting.gtaoConfig.bEnabled;
                             Profiles::ApplyLightingProfile(*state, bundle);
-                            state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+                            state->requests.RequestRenderReset(Core::RenderReset::Flush);
                         }
                         else {
                             LOG_WARN(Engine, "Run '{}': lighting profile '{}' not found", runName.c_str(), e.name.c_str());

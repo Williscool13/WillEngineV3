@@ -10,18 +10,10 @@
 
 namespace Engine::Component
 {
-/** Cut drops camera motion and screen history for the next frame. */
-enum class CameraTransition : uint8_t
-{
-    Continuous,
-    Cut,
-};
-
 struct CameraComponent
 {
     Core::ViewData currentViewData;
     Core::ViewData previousViewData;
-    CameraTransition transition{CameraTransition::Continuous};
 };
 
 struct GameCameraTag

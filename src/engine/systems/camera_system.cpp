@@ -113,7 +113,7 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-bool BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
     entt::entity mainCamera;
@@ -139,10 +139,8 @@ bool BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
     }
     state->renderedCamera = mainCamera;
 
-    const bool bCut = cam.transition == Component::CameraTransition::Cut;
-    if (bCut) {
+    if (state->requests.renderReset != Core::RenderReset::None) {
         cam.previousViewData = cam.currentViewData;
-        cam.transition = Component::CameraTransition::Continuous;
     }
     mainViewFamily.mainView.currentViewData = cam.currentViewData;
     mainViewFamily.mainView.previousViewData = cam.previousViewData;
@@ -165,7 +163,6 @@ bool BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
 #endif
 
     ProbeBakeOverrideView(state, mainViewFamily);
-    return bCut;
 }
 
 } // Engine

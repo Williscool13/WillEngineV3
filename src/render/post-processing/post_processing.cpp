@@ -14,7 +14,6 @@
 #include "render/render-graph/render_pass.h"
 #include "render/passes/final_gather_passes.h"
 #include "render/passes/reflection_passes.h"
-#include "render/passes/volumetric_fog_passes.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/push_constant_interop.h"
@@ -101,8 +100,6 @@ static void ReadbackAdaptedLuminance(RenderGraph& graph)
 StringID PPExposure(PostProcessContext& ctx, StringID input)
 {
     RenderGraph& graph = ctx.graph;
-    const uint32_t width = ctx.extent[0];
-    const uint32_t height = ctx.extent[1];
     PipelineManager* pipelines = ctx.pipelines;
     const Core::PostProcessConfiguration& config = ctx.config;
     float deltaTime = ctx.deltaTime;
@@ -117,14 +114,11 @@ StringID PPExposure(PostProcessContext& ctx, StringID input)
         return input;
     }
 
-    // Overlays (text/sprites/debug lines) composite pre-AA into the chain input; meter the clean snapshot when it exists
-    StringID meteringSource = input;
-    if (graph.HasTexture(LIT_COLOR_FOGGED) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
-        meteringSource = LIT_COLOR_FOGGED;
-    }
-    else if (graph.HasTexture("lit_color_preoverlay"_sid) && ctx.preAaExtent[0] == width && ctx.preAaExtent[1] == height) {
-        meteringSource = "lit_color_preoverlay"_sid;
-    }
+    // Overlays (text/sprites/debug lines) composite pre-AA into the chain input
+    const bool bPreOverlay = static_cast<bool>(ctx.targets.preOverlayColor);
+    const StringID meteringSource = bPreOverlay ? ctx.targets.preOverlayColor : input;
+    const uint32_t width = bPreOverlay ? ctx.preAaExtent[0] : ctx.extent[0];
+    const uint32_t height = bPreOverlay ? ctx.preAaExtent[1] : ctx.extent[1];
 
     graph.CreateBuffer("luminance_histogram"_sid, POST_PROCESS_LUMINANCE_BUFFER_SIZE, false);
 

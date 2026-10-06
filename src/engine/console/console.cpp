@@ -191,7 +191,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
     });
 
     Register(state, Origin::Engine, "render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
-        state->requests.pendingCacheReset = Core::RenderCacheReset::All;
+        state->requests.RequestRenderReset(Core::RenderReset::Flush);
     });
 
     Register(state, Origin::Engine, "gtao", "`gtao 0|1` toggles ambient occlusion", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
@@ -284,7 +284,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         auto& transform = camView.get<Component::TransformComponent>(camEntity);
         transform.translation = preset.translation;
         transform.rotation = preset.rotation;
-        camView.get<Component::CameraComponent>(camEntity).transition = Component::CameraTransition::Cut;
+        state->requests.RequestRenderReset(Core::RenderReset::Cut);
         Print(state, Core::InlineString<64>::Format("  cam %d", slot + 1).c_str());
     });
 

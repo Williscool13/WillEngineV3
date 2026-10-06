@@ -133,10 +133,10 @@ void SetupReflectionShadePass(RenderGraph& graph,
     const bool bDDGI = bDDGIApply && graph.HasBuffer(DDGI_CASCADES_BUFFER);
     const bool bWorldGrid = graph.HasBuffer("world_grid_light_grid"_sid) && graph.HasBuffer("world_grid_index_list"_sid);
     const bool bSSRSource = reflectionConfig.bScreenSpaceTrace;
-    const StringID litHistory = graph.ResourceVersionID("lit_color_preoverlay"_sid, 1);
+    const StringID litHistory = graph.ResourceVersionID(LIT_COLOR_HISTORY, 1);
     const StringID depthHistory = graph.ResourceVersionID(targets.depthCopy, 1);
     const StringID gbufferOneHistory = graph.ResourceVersionID(targets.gbufferOne, 1);
-    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion("lit_color_preoverlay"_sid, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
+    const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && graph.ResourceHasVersion(LIT_COLOR_HISTORY, 1) && graph.ResourceHasVersion(targets.depthCopy, 1) && graph.ResourceHasVersion(targets.gbufferOne, 1);
     const int32_t skyboxIndex = viewFamily.skyboxIndex;
 
     graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent[0], renderExtent[1], 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);

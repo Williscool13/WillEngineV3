@@ -20,7 +20,7 @@ namespace Engine
 {
 void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-bool BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily);
 
 Core::ViewData BuildPerspectiveView(glm::vec3 pos, glm::vec3 forward, glm::vec3 up, float aspectRatio, float fovRadians, float nearPlane);
 } // Engine

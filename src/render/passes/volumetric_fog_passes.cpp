@@ -23,7 +23,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                         const RenderTargets& targets,
                         uint32_t sceneIndex,
                         uint64_t frameIndex,
-                        bool bFoggedCopy,
+                        bool bPreOverlayCopy,
                         bool bDDGIApply,
                         int32_t debugMode,
                         bool bResetHistory)
@@ -158,13 +158,13 @@ void SetupVolumetricFog(RenderGraph& graph,
     applyPass.ReadSampledImage(targets.depthCopy);
     applyPass.ReadSampledImage(VOLUMETRIC_FOG_INTEGRATED);
     applyPass.ReadWriteImage(targets.colorOutput);
-    if (bFoggedCopy) {
-        applyPass.WriteStorageImage(LIT_COLOR_FOGGED);
+    if (bPreOverlayCopy) {
+        applyPass.WriteStorageImage(LIT_COLOR_PREOVERLAY);
     }
     if (bDebug) {
         applyPass.WriteStorageImage(VOLUMETRIC_FOG_DEBUG_TARGET);
     }
-    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bFoggedCopy, bDebug, debugMode, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
+    applyPass.Execute([pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bPreOverlayCopy, bDebug, debugMode, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
             skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_apply"_sid);
             if (!pipeline) { return; }
@@ -179,7 +179,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .integratedIndex = graph.GetSampledImageViewDescriptorIndex(VOLUMETRIC_FOG_INTEGRATED),
                 .colorIndex = graph.GetStorageImageViewDescriptorIndex(color),
-                .foggedCopyIndex = bFoggedCopy ? graph.GetStorageImageViewDescriptorIndex(LIT_COLOR_FOGGED) : ~0u,
+                .foggedCopyIndex = bPreOverlayCopy ? graph.GetStorageImageViewDescriptorIndex(LIT_COLOR_PREOVERLAY) : ~0u,
                 .maxDistance = maxDistance,
                 .frameIndex = static_cast<uint32_t>(frameIndex),
                 .heightFalloff = glm::max(fog.heightFalloff, 0.0f),

@@ -43,6 +43,8 @@ struct RenderTargets
     StringID depthStencil;
     StringID depthCopy;
     StringID stableId;
+    // LIT_COLOR_HISTORY if no fog. LIT_COLOR_PREOVERLAY with fog on. Empty if not used by anything
+    StringID preOverlayColor;
 };
 
 #endif //WILL_ENGINE_RENDERER_TYPES_H

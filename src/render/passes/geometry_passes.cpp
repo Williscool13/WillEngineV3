@@ -8,6 +8,7 @@
 
 #include "render/passes/occlusion_passes.h"
 #include "render/render_utils.h"
+#include "render/shaders/constants_interop.h"
 #include "core/containers/inline_string.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -20,7 +21,8 @@ namespace Render
 void SetupGeometryPass(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       const RenderFamilyProperties& renderFamilyProperties,
+                       const SceneBufferSizes& bufferSizes,
+                       const Core::DebugRenderParams& debug,
                        Core::Array<uint32_t, 2> renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex)
@@ -47,29 +49,33 @@ void SetupGeometryPass(RenderGraph& graph,
     const StringID compactedMeshletDispatchArgs = "compacted_meshlet_dispatch_args"_sid;
     const uint32_t instanceCount = viewFamily.instanceCount;
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
-    auto highestMeshletCount = renderFamilyProperties.visibleMeshletUpperBound;
+    auto highestMeshletCount = bufferSizes.visibleMeshletUpperBound;
 
     const StringID visBits = "instance_vis_bits"_sid;
-    const bool bOcclusion = sceneIndex == 0 && renderFamilyProperties.bOcclusionCulling;
-    const bool bOcclusionFreeze = bOcclusion && renderFamilyProperties.bOcclusionFreeze;
-    const uint32_t cullFlags = renderFamilyProperties.cullFlags;
+    const bool bOcclusion = sceneIndex == 0 && debug.bOcclusionCulling;
+    const bool bOcclusionFreeze = bOcclusion && debug.bOcclusionFreeze;
+    const uint32_t cullFlags = (debug.bCullInstanceFrustum ? CULL_FLAG_INSTANCE_FRUSTUM : 0u) |
+                               (debug.bCullInstanceContribution ? CULL_FLAG_INSTANCE_CONTRIBUTION : 0u) |
+                               (debug.bCullMeshletFrustum ? CULL_FLAG_MESHLET_FRUSTUM : 0u) |
+                               (debug.bCullMeshletCone ? CULL_FLAG_MESHLET_CONE : 0u) |
+                               (debug.bCullMeshletContribution ? CULL_FLAG_MESHLET_CONTRIBUTION : 0u);
 
     // Shared buffers
     {
         {
-            graph.CreateBuffer(instanceMeshletOffsets, renderFamilyProperties.instanceMeshletOffsetsBufferSize, false);
-            graph.CreateBuffer(level1Sums, renderFamilyProperties.level1SumsBufferSize, false);
-            graph.CreateBuffer(level1BlockSums, renderFamilyProperties.level1BlockSumsBufferSize, false);
-            graph.CreateBuffer(level2Sums, renderFamilyProperties.level2SumsBufferSize, false);
-            graph.CreateBuffer(level2BlockSums, renderFamilyProperties.level2BlockSumsBufferSize, false);
-            graph.CreateBuffer(scannedLevel2BlockSums, renderFamilyProperties.scannedLevel2BlockSumsBufferSize, false);
-            graph.CreateBuffer(intermediateMeshlets, renderFamilyProperties.intermediateMeshletBufferSize, false);
-            graph.CreateBuffer(meshletLevel1Sums, renderFamilyProperties.meshletLevel1SumsBufferSize, false);
-            graph.CreateBuffer(meshletLevel1BlockSums, renderFamilyProperties.meshletLevel1BlockSumsBufferSize, false);
-            graph.CreateBuffer(meshletLevel2Sums, renderFamilyProperties.meshletLevel2SumsBufferSize, false);
-            graph.CreateBuffer(meshletLevel2BlockSums, renderFamilyProperties.meshletLevel2BlockSumsBufferSize, false);
-            graph.CreateBuffer(meshletScannedLevel2BlockSums, renderFamilyProperties.meshletScannedLevel2BlockSumsBufferSize, false);
-            graph.CreateBuffer(visibleMeshlets, renderFamilyProperties.visibleMeshletsBufferSize, false);
+            graph.CreateBuffer(instanceMeshletOffsets, bufferSizes.instanceMeshletOffsetsBufferSize, false);
+            graph.CreateBuffer(level1Sums, bufferSizes.level1SumsBufferSize, false);
+            graph.CreateBuffer(level1BlockSums, bufferSizes.level1BlockSumsBufferSize, false);
+            graph.CreateBuffer(level2Sums, bufferSizes.level2SumsBufferSize, false);
+            graph.CreateBuffer(level2BlockSums, bufferSizes.level2BlockSumsBufferSize, false);
+            graph.CreateBuffer(scannedLevel2BlockSums, bufferSizes.scannedLevel2BlockSumsBufferSize, false);
+            graph.CreateBuffer(intermediateMeshlets, bufferSizes.intermediateMeshletBufferSize, false);
+            graph.CreateBuffer(meshletLevel1Sums, bufferSizes.meshletLevel1SumsBufferSize, false);
+            graph.CreateBuffer(meshletLevel1BlockSums, bufferSizes.meshletLevel1BlockSumsBufferSize, false);
+            graph.CreateBuffer(meshletLevel2Sums, bufferSizes.meshletLevel2SumsBufferSize, false);
+            graph.CreateBuffer(meshletLevel2BlockSums, bufferSizes.meshletLevel2BlockSumsBufferSize, false);
+            graph.CreateBuffer(meshletScannedLevel2BlockSums, bufferSizes.meshletScannedLevel2BlockSumsBufferSize, false);
+            graph.CreateBuffer(visibleMeshlets, bufferSizes.visibleMeshletsBufferSize, false);
             graph.CreateBuffer(meshletCountDispatchArgs, sizeof(InstancingMeshletDispatchIndirect), false);
             graph.CreateBuffer(compactedMeshletDispatchArgs, sizeof(InstancingCompactedMeshletDispatchIndirect), false);
             if (bOcclusion) {
@@ -575,7 +581,7 @@ void SetupGeometryPass(RenderGraph& graph,
         instancedMeshShading.ReadBuffer(visibleMeshlets);
         instancedMeshShading.ReadIndirectBuffer(compactedMeshletDispatchArgs);
         instancedMeshShading.Execute([&, pipelineManager, visibleMeshlets, compactedMeshletDispatchArgs, sceneIndex, width = renderExtent[0], height = renderExtent[1],
-                bWireframe = renderFamilyProperties.bWireframe,
+                bWireframe = debug.bWireframe,
                 visibility = targets.visibility, stableId = targets.stableId, depthStencil = targets.depthStencil](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
                 VkViewport viewport = VkHelpers::GenerateViewport(width, height);
                 vkCmdSetViewport(cmd, 0, 1, &viewport);

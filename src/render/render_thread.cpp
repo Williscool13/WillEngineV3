@@ -871,13 +871,13 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
 
 }
 
-void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
+void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const
 {
     ZoneScoped;
 
     if (viewFamily.instanceCount > 0) {
         ZoneScopedN("Instances");
-        const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_INSTANCE_BUFFER, renderFamilyProperties.instanceBufferSize);
+        const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_INSTANCE_BUFFER, bufferSizes.instanceBufferSize);
         const Instance* payload = viewFamily.instancePayload.Data();
         size_t cursor = 0;
         for (const Core::DirtyRun& run : viewFamily.instanceRuns) {
@@ -888,7 +888,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
 
     if (viewFamily.modelCount > 0) {
         ZoneScopedN("Models");
-        const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MODEL_BUFFER, renderFamilyProperties.modelBufferSize);
+        const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MODEL_BUFFER, bufferSizes.modelBufferSize);
         const Model* payload = viewFamily.modelPayload.Data();
         size_t cursor = 0;
         for (const Core::DirtyRun& run : viewFamily.modelRuns) {
@@ -900,7 +900,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
     if (viewFamily.materialCount > 0) {
         {
             ZoneScopedN("Materials");
-            const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MATERIAL_BUFFER, renderFamilyProperties.materialBufferSize);
+            const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MATERIAL_BUFFER, bufferSizes.materialBufferSize);
             const MaterialProperties* payload = viewFamily.materialPayload.Data();
             size_t cursor = 0;
             for (const Core::DirtyRun& run : viewFamily.materialRuns) {
@@ -910,29 +910,29 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Rende
         }
 
         ZoneScopedN("Dispatch Resets");
-        auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+        auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, bufferSizes.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
         for (uint32_t i = 0; i < viewFamily.materialCount; ++i) {
             shadeDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = i};
         }
 
-        auto* lightDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, renderFamilyProperties.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+        auto* lightDispatchBuffer = static_cast<BucketDispatchParameters*>(renderGraph->OpenHostBuffer(LIGHTING_DISPATCH_BUCKETING_BUFFER, bufferSizes.lightingDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
         for (size_t i = 0; i < pipelineManager->GetLightingPipelines().Size(); ++i) {
             lightDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = static_cast<uint32_t>(i)};
         }
     }
 }
 
-void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
+void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const
 {
     ZoneScoped;
 
     if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
 
-    void* glyphDst = renderGraph->OpenHostBuffer(TEXT_GLYPH_QUAD_BUFFER, renderFamilyProperties.glyphQuadBufferSize);
+    void* glyphDst = renderGraph->OpenHostBuffer(TEXT_GLYPH_QUAD_BUFFER, bufferSizes.glyphQuadBufferSize);
     memcpy(glyphDst, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
 
     const uint32_t instCount = viewFamily.textInstances.Size();
-    auto* instDst = static_cast<TextInstanceData*>(renderGraph->OpenHostBuffer(TEXT_INSTANCE_BUFFER, renderFamilyProperties.textInstanceBufferSize));
+    auto* instDst = static_cast<TextInstanceData*>(renderGraph->OpenHostBuffer(TEXT_INSTANCE_BUFFER, bufferSizes.textInstanceBufferSize));
     for (uint32_t i = 0; i < instCount; ++i) {
         const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
         instDst[i] = {
@@ -942,7 +942,7 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const Render
         };
     }
 
-    void* matDst = renderGraph->OpenHostBuffer(TEXT_MATERIAL_BUFFER, renderFamilyProperties.textMaterialBufferSize);
+    void* matDst = renderGraph->OpenHostBuffer(TEXT_MATERIAL_BUFFER, bufferSizes.textMaterialBufferSize);
     memcpy(matDst, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
 }
 
@@ -973,13 +973,13 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily) cons
 
 }
 
-void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const
+void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const
 {
     ZoneScoped;
 
     if (!viewFamily.uiGlyphQuads.IsEmpty()) {
         const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
-        void* quadDst = renderGraph->OpenHostBuffer(UI_GLYPH_QUAD_BUFFER, renderFamilyProperties.uiGlyphQuadBufferSize);
+        void* quadDst = renderGraph->OpenHostBuffer(UI_GLYPH_QUAD_BUFFER, bufferSizes.uiGlyphQuadBufferSize);
         memcpy(quadDst, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
     }
 }

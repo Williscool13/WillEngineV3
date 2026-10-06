@@ -298,6 +298,9 @@ public:
 
     [[nodiscard]] ReadbackStruct* GetReadbackData() const { return static_cast<ReadbackStruct*>(meshletCountReadbacks[currentFrameIndex].mappedData); }
 
+    /** Zeroes every frame slot's readback so frames recorded before a flush are not read back. The GPU must be idle. */
+    void ClearReadbacks() const;
+
 public:
     /** Reads the previous use of this frame-in-flight slot; call once per frame before Execute. */
     GPUProfileSnapshot CollectGPUProfile(uint32_t frameIndex);

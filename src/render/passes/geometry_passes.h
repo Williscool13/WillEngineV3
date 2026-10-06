@@ -8,6 +8,7 @@
 #include "render/renderer_types.h"
 #include "render/render-graph/render_graph.h"
 #include "render/types/render_types.h"
+#include "render/interface/render_params.h"
 
 namespace Render
 {
@@ -16,7 +17,8 @@ class PipelineManager;
 void SetupGeometryPass(RenderGraph& graph,
                        PipelineManager* pipelineManager,
                        const Core::ViewFamily& viewFamily,
-                       const RenderFamilyProperties& renderFamilyProperties,
+                       const SceneBufferSizes& bufferSizes,
+                       const Core::DebugRenderParams& debug,
                        Core::Array<uint32_t, 2> renderExtent,
                        const RenderTargets& targets,
                        uint32_t sceneIndex);

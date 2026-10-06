@@ -172,8 +172,8 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     }
 
     state->lighting.bResetGroundTruth = false;
-    frameBuffer->cacheReset = state->requests.pendingCacheReset;
-    state->requests.pendingCacheReset = Core::RenderCacheReset::None;
+    frameBuffer->renderReset = state->requests.renderReset;
+    state->requests.renderReset = Core::RenderReset::None;
     frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
     frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
     frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
@@ -201,9 +201,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("FunctionKeyRenderUpdate", &FunctionKeyRenderUpdate);
 
     graph.Add("BuildViewFamily", [](EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer) {
-        if (BuildViewFamily(ctx, state, frameBuffer->mainViewFamily) && frameBuffer->cacheReset == Core::RenderCacheReset::None) {
-            frameBuffer->cacheReset = Core::RenderCacheReset::ScreenHistory;
-        }
+        BuildViewFamily(ctx, state, frameBuffer->mainViewFamily);
     });
     graph.Add("PublishFrameSettings", &PublishFrameSettings);
 

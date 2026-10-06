@@ -141,18 +141,18 @@ public:
 private:
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, float renderDeltaTime) const;
 
-    void UploadModelUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
+    void UploadModelUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
 
-    void UploadTextUniforms(Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
+    void UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
 
-    void UploadUIUniforms(const Core::ViewFamily& viewFamily, const RenderFamilyProperties& renderFamilyProperties) const;
+    void UploadUIUniforms(const Core::ViewFamily& viewFamily, const SceneBufferSizes& bufferSizes) const;
 
     void UploadSpriteUniforms(const Core::ViewFamily& viewFamily) const;
 
     void SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& viewFamily, Core::Array<uint32_t, 2> renderExtent, StringID depthTarget, StringID targetImage, FrameResourceLimits& limits) const;
 
     // RecordFrame phases, in record_frame.cpp. Pass declaration order is the order they are called.
-    void ApplyRenderReset(Core::RenderCacheReset reset);
+    void ApplyRenderReset(Core::RenderReset reset);
 
     FrameContext BeginFrame(uint32_t frameIndex, Core::FrameBuffer& frameBuffer);
 

@@ -326,7 +326,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             overrideView = BuildPerspectiveView(capturePosition, face.forward, face.up, aspect, fovY, state->projectConfig.editorCameraNearPlane);
             bViewOverrideActive = true;
 
-            state->requests.pendingCacheReset = Core::RenderCacheReset::ScreenHistory;
+            state->requests.RequestRenderReset(Core::RenderReset::Cut);
             if (bGroundTruthBake) {
                 state->lighting.bResetGroundTruth = true;
             }

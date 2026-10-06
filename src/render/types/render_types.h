@@ -47,16 +47,9 @@ struct BucketIndices
     uint32_t lightingBucket;
 };
 
-struct RenderFamilyProperties
+/** Host and scratch buffer sizes for this frame's scene and text data, grown to the high-water marks in FrameResourceLimits. */
+struct SceneBufferSizes
 {
-    Core::ViewFamily* viewFamily{nullptr};
-
-    bool bCanRender{false};
-    bool bWireframe{false};
-    bool bOcclusionCulling{true};
-    bool bOcclusionFreeze{false};
-    uint32_t cullFlags{0xFFFFFFFFu};
-
     size_t modelBufferSize{128};
     size_t materialBufferSize{128};
     size_t shadeDispatchBufferSize{128};

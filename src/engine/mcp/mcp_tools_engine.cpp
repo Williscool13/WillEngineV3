@@ -490,7 +490,7 @@ static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
         call.SetError("No editor camera in the registry");
         return ToolResult::Error;
     }
-    auto [camera, transform] = camView.get<Component::CameraComponent, Component::TransformComponent>(camEntity);
+    auto& transform = camView.get<Component::TransformComponent>(camEntity);
 
     const glm::vec3 translation{static_cast<float>(call.GetFloat("x", transform.translation.x)), static_cast<float>(call.GetFloat("y", transform.translation.y)),
                                 static_cast<float>(call.GetFloat("z", transform.translation.z))};
@@ -520,7 +520,7 @@ static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
 
     transform.translation = translation;
     transform.rotation = rotation;
-    camera.transition = Component::CameraTransition::Cut;
+    state->requests.RequestRenderReset(Core::RenderReset::Cut);
     return GetCamera(nullptr, state, call);
 }
 

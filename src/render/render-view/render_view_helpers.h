@@ -64,7 +64,7 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily);
  * @param _limits
  * @return
  */
-RenderFamilyProperties PrepareRenderFamilyProperties(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
+SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits);
 
 } // Render
 

@@ -42,7 +42,6 @@ StringID SetupDonutTemporalAntiAliasing(RenderGraph& graph,
 
 /**
  * In-house FSR 2.2.1 (extern/fsr2). Upscales colorOutput from renderExtent to outputExtent and replaces the AA stage.
- * @param bHasPreOverlayColor "lit_color_preoverlay" was snapshotted this frame; enables the reactive mask
  * @param reflectionConfig roughness caps for the mirror reactive term (fsr2.reflectionReactive)
  * @param deltaTime seconds, for auto exposure smoothing
  * @param framerateScale fps / 60
@@ -55,7 +54,6 @@ StringID SetupFsr2(RenderGraph& graph,
                    Core::Array<uint32_t, 2> renderExtent,
                    Core::Array<uint32_t, 2> outputExtent,
                    const RenderTargets& targets,
-                   bool bHasPreOverlayColor,
                    const Core::ReflectionConfiguration& reflectionConfig,
                    float deltaTime,
                    float framerateScale,

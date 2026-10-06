@@ -6,6 +6,7 @@
 
 #include <utility>
 #include <bit>
+#include <cstring>
 
 #include "render_graph_config.h"
 #include "platform/file_utils.h"
@@ -18,6 +19,7 @@
 #include "engine/logging/engine_assert.h"
 #include "engine/logging/engine_log.h"
 #include "render/resource_manager.h"
+#include "render/shaders/common_interop.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_utils.h"
 #include "tracy/Tracy.hpp"
@@ -1754,6 +1756,13 @@ void RenderGraph::FrameStartReset(uint32_t _currentFrameIndex, uint64_t currentF
     bRemoveSwapchainPhysicals = false;
     bDropAllRings = false;
     bDropViewportRings = false;
+}
+
+void RenderGraph::ClearReadbacks() const
+{
+    for (const TransientReadback& readback : meshletCountReadbacks) {
+        std::memset(readback.mappedData, 0, sizeof(ReadbackStruct));
+    }
 }
 
 void RenderGraph::OnPhysicalRemoved(uint32_t physicalIndex)

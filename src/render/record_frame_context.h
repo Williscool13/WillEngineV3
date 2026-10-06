@@ -12,22 +12,46 @@
 
 namespace Render
 {
+enum class FrameRenderingPath : uint8_t
+{
+    Default,
+    ReSTIR,
+    PathTracing,
+    GroundTruth,
+};
+
+enum class SunShadowSource : uint8_t
+{
+    None,
+    RayTraced,
+    ReSTIR,
+};
+
+enum class DDGIUsage : uint8_t
+{
+    Off,
+    ProbesOnly,
+    Applied,
+};
+
 struct FrameFeatures
 {
-    bool bGeometry{false};
-    bool bGroundTruth{false};
-    bool bReflectionScreenSpace{false};
-    bool bGIGatherScreenSpace{false};
-    bool bFsr2Reactive{false};
-    bool bSnapshotLitColor{false};
-    bool bVolumetricFog{false};
-    bool bFoggedLitCopy{false};
-    bool bNeedsWorldGrid{false};
-    bool bDDGI{false};
-    bool bDDGIApply{false};
+    SunShadowSource sunShadow{SunShadowSource::None};
+    DDGIUsage ddgi{DDGIUsage::Off};
     bool bGIGather{false};
-    bool bSunViaReSTIR{false};
-    bool bRTSun{false};
+    bool bGTAO{false};
+    bool bVolumetricFog{false};
+
+    bool DDGIApplied() const { return ddgi == DDGIUsage::Applied; }
+};
+
+struct FrameNeeds
+{
+    bool bWorldGrid{false};
+    // LIT_COLOR_HISTORY: lit scene before fog, read next frame by the screen-space reflection and gather tiers
+    bool bLitHistory{false};
+    // LIT_COLOR_PREOVERLAY: lit frame after fog, before overlays, read by FSR2 reactive mask and exposure metering
+    bool bPreOverlayColor{false};
 };
 
 /** Per-frame state shared by RecordFrame's phases; it outlives Execute, so recorded lambdas may reference it. */
@@ -44,9 +68,14 @@ struct FrameContext
     float displayAspect{1.0f};
     PaniniParams displayPanini{};
 
-    RenderFamilyProperties properties{};
-    RenderTargets targets{};
+    bool bCanRender{false};
+    bool bHasScene{false};
+    FrameRenderingPath path{FrameRenderingPath::Default};
     FrameFeatures features{};
+    FrameNeeds needs{};
+
+    SceneBufferSizes bufferSizes{};
+    RenderTargets targets{};
 
     // Set while recording lighting
     uint32_t restirCheckerboardField{0};

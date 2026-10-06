@@ -1067,7 +1067,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
             auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
             transform.translation = state->editor.pieCameraTranslation;
             transform.rotation = state->editor.pieCameraRotation;
-            state->registry.get<Component::CameraComponent>(camEntity).transition = Component::CameraTransition::Cut;
+            state->requests.RequestRenderReset(Core::RenderReset::Cut);
         }
     }
 }

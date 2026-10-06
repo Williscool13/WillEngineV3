@@ -1015,7 +1015,7 @@ static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state
             else if (preset.bSet) {
                 tf.translation = preset.translation;
                 tf.rotation = preset.rotation;
-                state->registry.get<Component::CameraComponent>(editorCam).transition = Component::CameraTransition::Cut;
+                state->requests.RequestRenderReset(Core::RenderReset::Cut);
             }
         }
         if (bOccupied) {

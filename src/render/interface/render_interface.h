@@ -533,11 +533,15 @@ struct ViewFamily
 };
 
 
-enum class RenderCacheReset : uint8_t
+/**
+ * Cut: the view jumped; camera motion and screen-space history drop for one frame.
+ * Flush: Cut plus every history ring, resource high-water mark and readback, after a GPU idle. A sharp change, so hide it behind a transition.
+ */
+enum class RenderReset : uint8_t
 {
     None = 0,
-    ScreenHistory,
-    All,
+    Cut,
+    Flush,
 };
 
 struct FrameBuffer
@@ -600,7 +604,7 @@ struct FrameBuffer
     bool bCaptureProbeFace{false};
 
     uint32_t probeCaptureCropSize{0};
-    RenderCacheReset cacheReset = RenderCacheReset::None;
+    RenderReset renderReset = RenderReset::None;
 };
 } // Core
 
