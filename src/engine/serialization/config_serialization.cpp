@@ -443,6 +443,26 @@ void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
     p.temporalClampScale = r.Float("temporalClampScale", p.temporalClampScale);
 }
 
+void Serialize(const Core::CSMParams& p, TextWriter& w)
+{
+    w.Key("bEnabled", p.bEnabled);
+    w.Key("cascadeCount", p.cascadeCount);
+    w.Key("resolution", p.resolution);
+    w.Key("maxDistance", p.maxDistance);
+    w.Key("splitLambda", p.splitLambda);
+    w.Key("casterExtension", p.casterExtension);
+}
+
+void Deserialize(const TextReader& r, Core::CSMParams& p)
+{
+    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.cascadeCount = r.Int("cascadeCount", p.cascadeCount);
+    p.resolution = r.Int("resolution", p.resolution);
+    p.maxDistance = r.Float("maxDistance", p.maxDistance);
+    p.splitLambda = r.Float("splitLambda", p.splitLambda);
+    p.casterExtension = r.Float("casterExtension", p.casterExtension);
+}
+
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)
 {
     w.Key("edgeDetectionMode", static_cast<int32_t>(p.edgeDetectionMode));

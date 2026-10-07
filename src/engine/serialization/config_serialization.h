@@ -12,6 +12,7 @@ struct DDGIParams;
 struct ReflectionConfiguration;
 struct ReflectionProbeConfiguration;
 struct GTAOConfiguration;
+struct CSMParams;
 struct SMAAConfiguration;
 struct TAAConfiguration;
 struct DonutTAAConfiguration;
@@ -44,6 +45,9 @@ void Deserialize(const TextReader& r, Core::ReflectionProbeConfiguration& p);
 
 void Serialize(const Core::GTAOConfiguration& p, TextWriter& w);
 void Deserialize(const TextReader& r, Core::GTAOConfiguration& p);
+
+void Serialize(const Core::CSMParams& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::CSMParams& p);
 
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w);
 void Deserialize(const TextReader& r, Core::SMAAConfiguration& p);

@@ -38,6 +38,7 @@
 #include "engine/components/core_components.h"
 #include "engine/components/physics/physics_body_desc.h"
 #include "render/types/render_types.h"
+#include "render/render-view/csm_views.h"
 #include "core/memory/memory_manager.h"
 
 
@@ -1141,6 +1142,27 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
                 }
             }
         }
+    }
+}
+
+void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
+    const Core::ViewData& view = viewFamily.mainView.currentViewData;
+    Engine::CSMDebugState& csmDebug = state->debug.csm;
+    if (!csmDebug.bFreeze) {
+        csmDebug.frozenAnchor = view.cameraPos;
+    }
+    if (!csmDebug.bDrawCascades) { return; }
+
+    static constexpr glm::vec4 CASCADE_COLORS[Render::CSM_MAX_CASCADES] = {{1.0f, 0.2f, 0.2f, 1.0f}, {0.2f, 1.0f, 0.2f, 1.0f}, {0.2f, 0.4f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.2f, 1.0f}};
+    const Render::CSMFrame frame = Render::ComputeCSMFrame(state->lighting.csm, csmDebug.frozenAnchor, viewFamily.directionalLight.direction, view.nearPlane);
+    const glm::quat rotation = glm::quat_cast(glm::mat3(frame.right, frame.up, frame.toSun));
+    for (uint32_t i = 0; i < frame.cascadeCount; ++i) {
+        const Render::CSMCascade& cascade = frame.cascades[i];
+        const glm::vec3 extents{cascade.halfExtent, cascade.halfExtent, 0.5f * cascade.depthRange};
+        DEBUG_ADD_BOX(viewFamily.debugBoxes, {cascade.center, extents, rotation, CASCADE_COLORS[i], cascade.halfExtent * 0.002f});
     }
 }
 }

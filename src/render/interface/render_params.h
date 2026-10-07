@@ -308,6 +308,18 @@ struct SIGMAParams
     float penumbraScale{1.f};
 };
 
+struct CSMParams
+{
+    bool bEnabled{false};
+    int32_t cascadeCount{4};
+    int32_t resolution{2048};
+    float maxDistance{150.0f};
+    float splitLambda{0.7f};
+    float casterExtension{50.0f};
+
+    bool operator==(const CSMParams&) const = default;
+};
+
 struct ReBLURParams
 {
     float denoisingRange{1000.f};

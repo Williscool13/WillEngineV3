@@ -87,6 +87,7 @@ struct LightingState
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
     Core::SIGMAParams sigmaParams{};
+    Core::CSMParams csm{};
 
     Core::DDGIParams ddgi{};
     Core::ReflectionConfiguration reflection{};
@@ -164,6 +165,13 @@ struct PickPixelState
     glm::vec3 worldPos{0.0f};
 };
 
+struct CSMDebugState
+{
+    bool bDrawCascades{false};
+    bool bFreeze{false};
+    glm::vec3 frozenAnchor{0.0f};
+};
+
 struct DebugState
 {
     Core::DebugRenderParams render{};
@@ -182,6 +190,7 @@ struct DebugState
     DiagnosticsState diagnostics{};
     PickPixelState pick{};
     EmissiveDebugState emissive{};
+    CSMDebugState csm{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Core::InlineString<> resourceName{};

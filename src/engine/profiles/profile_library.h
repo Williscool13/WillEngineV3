@@ -37,6 +37,7 @@ struct LightingProfileBundle
     Core::ReflectionConfiguration reflection{};
     Core::ReflectionProbeConfiguration reflectionProbe{};
     Core::GTAOConfiguration gtao{};
+    Core::CSMParams csm{};
     StringID shadingOverride{};
     StringID lightingOverride{};
     float iblIntensity{1.0f};

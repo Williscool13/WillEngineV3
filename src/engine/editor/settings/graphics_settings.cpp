@@ -37,6 +37,7 @@
 #include "render/shaders/radiance_cache_interop.h"
 #include "render/shaders/restir_interop.h"
 #include "render/shaders/world_grid_interop.h"
+#include "render/render-view/csm_views.h"
 
 namespace Engine
 {
@@ -1779,6 +1780,41 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
             if (Widgets::Button("Reset SIGMA")) {
                 sigma = Core::SIGMAParams{};
+                changed = true;
+            }
+            Widgets::EndSection();
+        }
+
+        Widgets::SectionHeader csmHeader = MakeLightingSectionHeader(liveLighting, nullptr);
+        if ((bAnalyticMode || (bReSTIRMode && !state->debug.restir.bSunLight)) && Widgets::BeginSection("Sun Shadow (CSM)", &csmHeader)) {
+            Core::CSMParams& csm = state->lighting.csm;
+            static const Core::CSMParams csmDefaults{};
+
+            if (Widgets::Checkbox("Enabled##csm", &csm.bEnabled, "Cascaded shadow maps for the sun instead of the ray traced + SIGMA chain.")) { changed = true; }
+            if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(Render::CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
+            static constexpr int CSM_RESOLUTIONS[] = {512, 1024, 2048, 4096};
+            static constexpr const char* CSM_RESOLUTION_LABELS[] = {"512", "1024", "2048", "4096"};
+            int resolutionIndex = 2;
+            for (int i = 0; i < 4; ++i) {
+                if (CSM_RESOLUTIONS[i] == csm.resolution) { resolutionIndex = i; }
+            }
+            if (Widgets::Combo("Resolution##csm", &resolutionIndex, CSM_RESOLUTION_LABELS, 4, "Per-cascade shadow map size. Default 2048.")) {
+                csm.resolution = CSM_RESOLUTIONS[resolutionIndex];
+                changed = true;
+            }
+
+            auto csmF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+            };
+            csmF("Max Distance##csm", &csm.maxDistance, csmDefaults.maxDistance, 10.0f, 1000.0f, "%.0f m", "Half-width of the last cascade; shadows fade out past it. Default 150 m.");
+            csmF("Split Lambda##csm", &csm.splitLambda, csmDefaults.splitLambda, 0.0f, 1.0f, "%.2f", "0 = even cascade sizes, 1 = logarithmic (sharper near the camera). Default 0.7.");
+            csmF("Caster Extension##csm", &csm.casterExtension, csmDefaults.casterExtension, 0.0f, 500.0f, "%.0f m", "Depth kept toward the sun beyond each cascade so distant casters keep their true distance for soft shadows. Casters past it still shadow. Default 50 m.");
+
+            Widgets::Checkbox("Draw Cascades##csm", &state->debug.csm.bDrawCascades, "Draws each cascade's light-space box.");
+            Widgets::Checkbox("Freeze Cascades##csm", &state->debug.csm.bFreeze, "Holds the cascades where they are so they can be inspected from elsewhere.");
+
+            if (Widgets::Button("Reset CSM")) {
+                csm = Core::CSMParams{};
                 changed = true;
             }
             Widgets::EndSection();

@@ -243,6 +243,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("DrawEditorInterface", &DrawEditorInterface);
     graph.Add("GatherEditorSprites", &GatherEditorSprites);
     graph.Add("GatherLightDebugDraws", &GatherLightDebugDraws);
+    graph.Add("GatherCSMDebugDraws", &GatherCSMDebugDraws);
 #endif
 
 #ifdef WDEBUG
