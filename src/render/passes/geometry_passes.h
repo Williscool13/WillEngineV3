@@ -23,6 +23,34 @@ struct VisibilityBucketTiles
     RDGBuffer tileBits;
 };
 
+struct MeshletCullBuffers
+{
+    RDGBuffer instanceMeshletOffsets;
+    RDGBuffer level1Sums;
+    RDGBuffer level1BlockSums;
+    RDGBuffer level2Sums;
+    RDGBuffer level2BlockSums;
+    RDGBuffer scannedLevel2BlockSums;
+    RDGBuffer intermediateMeshlets;
+    RDGBuffer meshletLevel1Sums;
+    RDGBuffer meshletLevel1BlockSums;
+    RDGBuffer meshletLevel2Sums;
+    RDGBuffer meshletLevel2BlockSums;
+    RDGBuffer meshletScannedLevel2BlockSums;
+    RDGBuffer visibleMeshlets;
+    RDGBuffer meshletCountDispatchArgs;
+    RDGBuffer compactedMeshletDispatchArgs;
+};
+
+MeshletCullBuffers CreateMeshletCullBuffers(RenderGraph& graph, const MeshletCullBufferSizes& sizes, const char* namePrefix);
+
+void AddMeshletCullClear(RenderGraph& graph, const MeshletCullBuffers& buffers, const char* passPrefix, RenderCategory category);
+
+void AddInstanceMeshletPrefixSum(RenderGraph& graph, PipelineManager* pipelineManager, const MeshletCullBuffers& buffers, uint32_t elementCount, const char* passPrefix, RenderCategory category);
+
+void AddMeshletCompaction(RenderGraph& graph, PipelineManager* pipelineManager, const MeshletCullBuffers& buffers, uint32_t meshletUpperBound, RDGBuffer readback, size_t meshletCountOffset,
+                          bool bRegionStats, const char* passPrefix, RenderCategory category);
+
 /**
  * Two-phase meshlet cull and visibility buffer draw.
  * @return the Hi-Z pyramid, invalid when phase 2 did not run

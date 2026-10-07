@@ -92,6 +92,7 @@ SHADER_PUBLIC SHADER_ENUM DebugTransformationType
     ReGIRCellMass = 50,
     ReGIRCursorCell = 51,
     Tonemap = 52,
+    CSMCascade = 53,
 };
 
 SHADER_PUBLIC struct Frustum
@@ -148,7 +149,7 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC uint32_t meshletCount;
     SHADER_PUBLIC uint32_t shadingDispatches;
     SHADER_PUBLIC uint32_t lightingDispatches;
-    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t shadowMeshletCount;
     SHADER_PUBLIC uint64_t selectedStableId;
     SHADER_PUBLIC uint32_t wcOccupied;
     SHADER_PUBLIC uint32_t wcCarried;

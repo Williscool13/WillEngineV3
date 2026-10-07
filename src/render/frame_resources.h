@@ -14,6 +14,7 @@ struct FrameResourceLimits
 
     size_t highestInstanceCount{1024};
     size_t highestMeshletCount{128};
+    size_t highestShadowMeshletCount{128};
 
     size_t highestTLASInstanceCount{1024};
 

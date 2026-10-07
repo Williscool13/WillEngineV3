@@ -47,18 +47,10 @@ struct BucketIndices
     uint32_t lightingBucket;
 };
 
-/** Host and scratch buffer sizes for this frame's scene and text data, grown to the high-water marks in FrameResourceLimits. */
-struct SceneBufferSizes
+struct MeshletCullBufferSizes
 {
-    size_t modelBufferSize{128};
-    size_t materialBufferSize{128};
-    size_t shadeDispatchBufferSize{128};
-    size_t lightingDispatchBufferSize{128};
-    size_t instanceBufferSize{128};
-
     uint32_t visibleMeshletUpperBound{0};
 
-    // New meshlet instancing buffers
     size_t instanceMeshletOffsetsBufferSize{128};
     size_t level1SumsBufferSize{128};
     size_t level1BlockSumsBufferSize{128};
@@ -72,7 +64,20 @@ struct SceneBufferSizes
     size_t meshletLevel2SumsBufferSize{128};
     size_t meshletLevel2BlockSumsBufferSize{128};
     size_t meshletScannedLevel2BlockSumsBufferSize{128};
-    size_t visibleMeshletsBufferSize{128};       // Final compacted output{}
+    size_t visibleMeshletsBufferSize{128};
+};
+
+/** Host and scratch buffer sizes for this frame's scene and text data, grown to the high-water marks in FrameResourceLimits. */
+struct SceneBufferSizes
+{
+    size_t modelBufferSize{128};
+    size_t materialBufferSize{128};
+    size_t shadeDispatchBufferSize{128};
+    size_t lightingDispatchBufferSize{128};
+    size_t instanceBufferSize{128};
+
+    MeshletCullBufferSizes geometryCull{};
+    MeshletCullBufferSizes shadowCull{};
 
     size_t glyphQuadBufferSize{128};
     size_t uiGlyphQuadBufferSize{128};

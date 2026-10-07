@@ -70,6 +70,12 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::EnableDepthBias(float depthBia
     return *this;
 }
 
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::EnableDepthClamp()
+{
+    rasterizer.depthClampEnable = VK_TRUE;
+    return *this;
+}
+
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::SetupMultisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples,
                                                                      float minSampleShading, const VkSampleMask* pSampleMask,
                                                                      VkBool32 alphaToCoverageEnable, VkBool32 alphaToOneEnable)

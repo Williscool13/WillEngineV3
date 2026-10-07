@@ -9,11 +9,10 @@
 
 #include "core/containers/array.h"
 #include "render/interface/render_params.h"
+#include "render/shaders/shadow_interop.h"
 
 namespace Render
 {
-inline constexpr uint32_t CSM_MAX_CASCADES = 4;
-
 /** Camera-centered cascade */
 struct CSMCascade
 {
@@ -35,13 +34,14 @@ struct CSMFrame
 };
 
 /**
- * Cascade half-widths split the [nearDistance, maxDistance] range (practical split); each box is snapped to its texel grid so a static scene rasterizes identically as the anchor moves, and nothing depends on the camera's rotation.
- * @param params
- * @param anchor world position the cascades are centered on, normally the camera position
- * @param sunDirection direction light travels (away from the sun)
- * @param nearDistance camera near plane
+ * Cascades centered on the anchor, each snapped to its texel grid.
+ * @param sunDirection direction light travels
  */
 CSMFrame ComputeCSMFrame(const Core::CSMParams& params, const glm::vec3& anchor, const glm::vec3& sunDirection, float nearDistance);
+
+CSMData BuildCSMData(const CSMFrame& frame, const Core::CSMParams& params);
+
+glm::uvec2 CSMAtlasExtent(uint32_t cascadeCount, uint32_t resolution);
 } // Render
 
 #endif //WILL_ENGINE_CSM_VIEWS_H

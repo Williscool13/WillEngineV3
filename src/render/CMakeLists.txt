@@ -58,6 +58,7 @@ add_library(render STATIC
         shaders/push_constant_interop.h
         shaders/instancing_interop.h
         shaders/lights_interop.h
+        shaders/shadow_interop.h
         pipelines/pipeline_manager.cpp
         pipelines/pipeline_manager.h
         pipelines/pipeline_category.cpp

@@ -34,6 +34,7 @@
 #include "engine/logging/engine_log.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-view/render_view_helpers.h"
+#include "render/render-view/csm_views.h"
 #include "render/post-processing/post_processing.h"
 #include "render/vulkan/vk_config.h"
 
@@ -103,7 +104,7 @@ static FrameFeatures ComputeFrameFeatures(const Core::FrameBuffer& frameBuffer, 
         f.sunShadow = SunShadowSource::ReSTIR;
     }
     else if (viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f) {
-        f.sunShadow = SunShadowSource::RayTraced;
+        f.sunShadow = viewFamily.csm.bEnabled ? SunShadowSource::ShadowMap : SunShadowSource::RayTraced;
     }
     return f;
 }
@@ -579,7 +580,7 @@ void RenderThread::RecordLighting(FrameContext& ctx)
             break;
     }
 
-    if (ctx.features.sunShadow == SunShadowSource::RayTraced) {
+    if (ctx.features.sunShadow == SunShadowSource::RayTraced || ctx.features.sunShadow == SunShadowSource::ShadowMap) {
         RecordSunShadows(ctx);
     }
 }
@@ -715,6 +716,17 @@ void RenderThread::RecordSunShadows(FrameContext& ctx)
 {
     Core::ViewFamily& viewFamily = ctx.viewFamily;
     const Core::Extent2D renderExtent = ctx.renderExtent;
+    if (ctx.features.sunShadow == SunShadowSource::ShadowMap) {
+        const CSMFrame frame = ComputeCSMFrame(viewFamily.csm, viewFamily.csmAnchor, viewFamily.directionalLight.direction, viewFamily.mainView.currentViewData.nearPlane);
+        const CSMData data = BuildCSMData(frame, viewFamily.csm);
+        const HostBufferMapping csmMapping = renderGraph->OpenHostBuffer("csm_data"_sid, sizeof(CSMData));
+        memcpy(csmMapping.data, &data, sizeof(CSMData));
+        const RDGTexture atlas = SetupCSMDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, csmMapping.buffer, frame.cascadeCount, 0);
+        ctx.sunShadow = SetupCSMResolve(*renderGraph, pipelineManager, renderExtent, ctx.targets, ctx.scene, csmMapping.buffer, atlas, 0);
+        SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, renderExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, 1);
+        return;
+    }
+
     const uint32_t sunShadowPixelScale = viewFamily.sigmaParams.bHalfRes ? 2u : 1u;
     const Core::Extent2D sunShadowExtent = viewFamily.sigmaParams.bHalfRes ? Core::Extent2D{renderExtent.width / 2, renderExtent.height / 2} : renderExtent;
     ctx.sunShadow = SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, ctx.targets, ctx.scene, 0, frameNumber, sunShadowPixelScale);

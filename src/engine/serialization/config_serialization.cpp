@@ -451,6 +451,8 @@ void Serialize(const Core::CSMParams& p, TextWriter& w)
     w.Key("maxDistance", p.maxDistance);
     w.Key("splitLambda", p.splitLambda);
     w.Key("casterExtension", p.casterExtension);
+    w.Key("slopeBias", p.slopeBias);
+    w.Key("normalOffset", p.normalOffset);
 }
 
 void Deserialize(const TextReader& r, Core::CSMParams& p)
@@ -461,6 +463,8 @@ void Deserialize(const TextReader& r, Core::CSMParams& p)
     p.maxDistance = r.Float("maxDistance", p.maxDistance);
     p.splitLambda = r.Float("splitLambda", p.splitLambda);
     p.casterExtension = r.Float("casterExtension", p.casterExtension);
+    p.slopeBias = r.Float("slopeBias", p.slopeBias);
+    p.normalOffset = r.Float("normalOffset", p.normalOffset);
 }
 
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)

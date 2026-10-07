@@ -1150,14 +1150,10 @@ void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state,
     ZoneScoped;
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
     const Core::ViewData& view = viewFamily.mainView.currentViewData;
-    Engine::CSMDebugState& csmDebug = state->debug.csm;
-    if (!csmDebug.bFreeze) {
-        csmDebug.frozenAnchor = view.cameraPos;
-    }
-    if (!csmDebug.bDrawCascades) { return; }
+    if (!state->debug.csm.bDrawCascades) { return; }
 
-    static constexpr glm::vec4 CASCADE_COLORS[Render::CSM_MAX_CASCADES] = {{1.0f, 0.2f, 0.2f, 1.0f}, {0.2f, 1.0f, 0.2f, 1.0f}, {0.2f, 0.4f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.2f, 1.0f}};
-    const Render::CSMFrame frame = Render::ComputeCSMFrame(state->lighting.csm, csmDebug.frozenAnchor, viewFamily.directionalLight.direction, view.nearPlane);
+    static constexpr glm::vec4 CASCADE_COLORS[CSM_MAX_CASCADES] = {{1.0f, 0.2f, 0.2f, 1.0f}, {0.2f, 1.0f, 0.2f, 1.0f}, {0.2f, 0.4f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.2f, 1.0f}};
+    const Render::CSMFrame frame = Render::ComputeCSMFrame(viewFamily.csm, viewFamily.csmAnchor, viewFamily.directionalLight.direction, view.nearPlane);
     const glm::quat rotation = glm::quat_cast(glm::mat3(frame.right, frame.up, frame.toSun));
     for (uint32_t i = 0; i < frame.cascadeCount; ++i) {
         const Render::CSMCascade& cascade = frame.cascades[i];

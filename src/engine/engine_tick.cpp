@@ -181,6 +181,11 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
+    frameBuffer->mainViewFamily.csm = state->lighting.csm;
+    if (!state->debug.csm.bFreeze) {
+        state->debug.csm.frozenAnchor = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
+    }
+    frameBuffer->mainViewFamily.csmAnchor = state->debug.csm.frozenAnchor;
     frameBuffer->mainViewFamily.iblIntensity = state->lighting.iblIntensity;
     frameBuffer->mainViewFamily.indirectIntensity = state->lighting.indirectIntensity;
     frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;

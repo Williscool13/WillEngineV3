@@ -355,6 +355,8 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                     query.features.shaderImageGatherExtended &&
                     query.features.shaderClipDistance &&
                     query.features.samplerAnisotropy &&
+                    // Shadow map pancaking
+                    query.features.depthClamp &&
                     // BC Compression
                     query.features.textureCompressionBC &&
                     // Extensions
@@ -527,6 +529,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         features10.shaderClipDistance = VK_TRUE;
         features10.samplerAnisotropy = VK_TRUE;
         features10.fillModeNonSolid = VK_TRUE;
+        features10.depthClamp = VK_TRUE;
 
         // BC Compression
         features10.textureCompressionBC = VK_TRUE;

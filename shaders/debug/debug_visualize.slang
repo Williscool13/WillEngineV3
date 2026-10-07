@@ -385,6 +385,12 @@ void ComputeDebugVisualize(uint3 threadID : SV_DispatchThreadID) {
             srcPixel.xyz = max(srcPixel.xyz, 0.0) / (1.0 + max(srcPixel.xyz, 0.0));
             break;
         }
+        case 53: { // CSMCascade, .y = (cascade + 1) / 4, 0 outside every cascade
+            const float3 cascadeColors[5] = {float3(0.15, 0.15, 0.15), float3(1.0, 0.25, 0.25), float3(0.25, 1.0, 0.25), float3(0.3, 0.45, 1.0), float3(1.0, 1.0, 0.25)};
+            uint cascade = min(uint(round(srcPixel.y * 4.0)), 4u);
+            srcPixel.xyz = cascadeColors[cascade] * (0.35 + 0.65 * srcPixel.x * srcPixel.x);
+            break;
+        }
         case 42: { // DofCoc
             float coc = srcPixel.a;
             srcPixel.xyz = float3(sqrt(saturate(-coc / 64.0)), 0.0, sqrt(saturate(coc / 64.0)));

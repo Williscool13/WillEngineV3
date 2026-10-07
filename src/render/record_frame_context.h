@@ -28,6 +28,7 @@ enum class SunShadowSource : uint8_t
     None,
     RayTraced,
     ReSTIR,
+    ShadowMap,
 };
 
 enum class DDGIUsage : uint8_t

@@ -12,6 +12,7 @@
 #include "render/frame_resources.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/types/render_types.h"
+#include "render/shaders/shadow_interop.h"
 
 namespace Render
 {
@@ -231,6 +232,32 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
 }
 
 
+static MeshletCullBufferSizes ComputeMeshletCullBufferSizes(size_t elementCapacity, size_t meshletCapacity)
+{
+    MeshletCullBufferSizes sizes{};
+    sizes.instanceMeshletOffsetsBufferSize = elementCapacity * sizeof(InstanceMeshletOffsetPrefixSum);
+    const uint32_t level1BlockCount = static_cast<uint32_t>((elementCapacity + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X);
+    const uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    sizes.level1SumsBufferSize = elementCapacity * sizeof(uint32_t);
+    sizes.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    sizes.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
+    sizes.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
+    sizes.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
+
+    sizes.intermediateMeshletBufferSize = meshletCapacity * sizeof(IntermediateMeshlet);
+    const uint32_t meshletLevel1BlockCount = static_cast<uint32_t>((meshletCapacity + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X);
+    const uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
+    sizes.meshletLevel1SumsBufferSize = meshletCapacity * sizeof(uint4);
+    sizes.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
+    sizes.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
+    sizes.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint4);
+    sizes.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint4);
+
+    sizes.visibleMeshletsBufferSize = meshletCapacity * sizeof(CompactedMeshlet);
+    sizes.visibleMeshletUpperBound = static_cast<uint32_t>(meshletCapacity);
+    return sizes;
+}
+
 SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackStruct* readbackData, PipelineManager* _pipelineManager, FrameResourceLimits& _limits)
 {
     SceneBufferSizes sizes{};
@@ -242,6 +269,7 @@ SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackS
     _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestTLASInstanceCount = std::max(_limits.highestTLASInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
+    _limits.highestShadowMeshletCount = std::max(_limits.highestShadowMeshletCount, NextPowerOfTwo(readbackData->shadowMeshletCount));
     _limits.highestGlyphQuadCount = std::max(_limits.highestGlyphQuadCount, NextPowerOfTwo(viewFamily.worldGlyphQuads.Size()));
     _limits.highestUIGlyphQuadCount = std::max(_limits.highestUIGlyphQuadCount, NextPowerOfTwo(viewFamily.uiGlyphQuads.Size()));
     _limits.highestTextInstanceCount = std::max(_limits.highestTextInstanceCount, NextPowerOfTwo(viewFamily.textInstances.Size()));
@@ -255,27 +283,8 @@ SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackS
     sizes.instanceBufferSize = _limits.highestInstanceCount * sizeof(Instance);
 
 
-    sizes.instanceMeshletOffsetsBufferSize = _limits.highestInstanceCount * sizeof(InstanceMeshletOffsetPrefixSum);
-    uint32_t level1BlockCount = (_limits.highestInstanceCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    uint32_t level2BlockCount = (level1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    sizes.level1SumsBufferSize = _limits.highestInstanceCount * sizeof(uint32_t);
-    sizes.level1BlockSumsBufferSize = level1BlockCount * sizeof(uint32_t);
-    sizes.level2SumsBufferSize = level1BlockCount * sizeof(uint32_t);
-    sizes.level2BlockSumsBufferSize = level2BlockCount * sizeof(uint32_t);
-    sizes.scannedLevel2BlockSumsBufferSize = glm::max(level2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint32_t);
-
-    sizes.intermediateMeshletBufferSize = _limits.highestMeshletCount * sizeof(IntermediateMeshlet);
-    uint32_t meshletLevel1BlockCount = (_limits.highestMeshletCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-    uint32_t meshletLevel2BlockCount = (meshletLevel1BlockCount + INSTANCING_PREFIX_SUM_DISPATCH_X - 1) / INSTANCING_PREFIX_SUM_DISPATCH_X;
-
-    sizes.meshletLevel1SumsBufferSize = _limits.highestMeshletCount * sizeof(uint4);
-    sizes.meshletLevel1BlockSumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
-    sizes.meshletLevel2SumsBufferSize = meshletLevel1BlockCount * sizeof(uint4);
-    sizes.meshletLevel2BlockSumsBufferSize = meshletLevel2BlockCount * sizeof(uint4);
-    sizes.meshletScannedLevel2BlockSumsBufferSize = glm::max(meshletLevel2BlockCount, INSTANCING_PREFIX_SUM_DISPATCH_X) * sizeof(uint4);
-
-    sizes.visibleMeshletsBufferSize = _limits.highestMeshletCount * sizeof(CompactedMeshlet);
-    sizes.visibleMeshletUpperBound = _limits.highestMeshletCount;
+    sizes.geometryCull = ComputeMeshletCullBufferSizes(_limits.highestInstanceCount, _limits.highestMeshletCount);
+    sizes.shadowCull = ComputeMeshletCullBufferSizes(_limits.highestInstanceCount * CSM_MAX_CASCADES, _limits.highestShadowMeshletCount);
 
     sizes.glyphQuadBufferSize = _limits.highestGlyphQuadCount * sizeof(WorldGlyphQuad);
     sizes.uiGlyphQuadBufferSize = _limits.highestUIGlyphQuadCount * sizeof(UIGlyphQuad);

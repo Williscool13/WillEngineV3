@@ -942,6 +942,15 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::EndSection();
         }
 
+        if (bSigmaActive && Widgets::BeginSection("Sun Shadow (CSM)")) {
+            view("Atlas Depth", "csm_atlas", DebugTransformationType::None, Core::DebugViewAspect::Depth);
+            Widgets::SameLine();
+            view("Visibility", "csm_shadow", DebugTransformationType::SunShadowVisibility);
+            Widgets::SameLine();
+            view("Cascades", "csm_shadow", DebugTransformationType::CSMCascade);
+            Widgets::EndSection();
+        }
+
         if (bReSTIRMode && restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX && Widgets::BeginSection("Denoiser (RELAX)")) {
             view("Tiles##relax", "relax_tiles");
             Widgets::SameLine();
@@ -1791,7 +1800,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             static const Core::CSMParams csmDefaults{};
 
             if (Widgets::Checkbox("Enabled##csm", &csm.bEnabled, "Cascaded shadow maps for the sun instead of the ray traced + SIGMA chain.")) { changed = true; }
-            if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(Render::CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
+            if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
             static constexpr int CSM_RESOLUTIONS[] = {512, 1024, 2048, 4096};
             static constexpr const char* CSM_RESOLUTION_LABELS[] = {"512", "1024", "2048", "4096"};
             int resolutionIndex = 2;
@@ -1809,6 +1818,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             csmF("Max Distance##csm", &csm.maxDistance, csmDefaults.maxDistance, 10.0f, 1000.0f, "%.0f m", "Half-width of the last cascade; shadows fade out past it. Default 150 m.");
             csmF("Split Lambda##csm", &csm.splitLambda, csmDefaults.splitLambda, 0.0f, 1.0f, "%.2f", "0 = even cascade sizes, 1 = logarithmic (sharper near the camera). Default 0.7.");
             csmF("Caster Extension##csm", &csm.casterExtension, csmDefaults.casterExtension, 0.0f, 500.0f, "%.0f m", "Depth kept toward the sun beyond each cascade so distant casters keep their true distance for soft shadows. Casters past it still shadow. Default 50 m.");
+            csmF("Slope Bias##csm", &csm.slopeBias, csmDefaults.slopeBias, 0.0f, 8.0f, "%.2f", "Rasterizer slope-scaled depth bias. Raise for acne on steep surfaces, lower for peter-panning. Default 2.");
+            csmF("Normal Offset##csm", &csm.normalOffset, csmDefaults.normalOffset, 0.0f, 4.0f, "%.2f texels", "Receiver offset along the normal, in texels of the sampled cascade. Default 1.");
 
             Widgets::Checkbox("Draw Cascades##csm", &state->debug.csm.bDrawCascades, "Draws each cascade's light-space box.");
             Widgets::Checkbox("Freeze Cascades##csm", &state->debug.csm.bFreeze, "Holds the cascades where they are so they can be inspected from elsewhere.");

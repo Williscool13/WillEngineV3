@@ -26,6 +26,7 @@ import reflection_probe_interop;
 import world_grid_interop;
 import radiance_cache_interop;
 import volumetric_fog_interop;
+import shadow_interop;
 #else
 #include <glm/glm.hpp>
 #include <volk.h>
@@ -43,6 +44,7 @@ import volumetric_fog_interop;
 #include "reflection_probe_interop.h"
 #include "world_grid_interop.h"
 #include "radiance_cache_interop.h"
+#include "shadow_interop.h"
 #include "volumetric_fog_interop.h"
 
 using uint = uint32_t;
@@ -2479,6 +2481,66 @@ SHADER_PUBLIC struct VolumetricFogApplyPushConstant
     SHADER_PUBLIC float anisotropy;
     SHADER_PUBLIC uint32_t debugMode;
     SHADER_PUBLIC uint32_t debugOutIndex;
+};
+
+SHADER_PUBLIC struct CSMInstanceCullPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t cascadeCount;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC int32_t lodBias;
+};
+
+SHADER_PUBLIC struct CSMExpandMeshletsPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
+    SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
+    SHADER_PUBLIC SHADER_PTR(IntermediateMeshlet) intermediateMeshlets;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC uint32_t instanceCount;
+    SHADER_PUBLIC uint32_t elementCount;
+    SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
+};
+
+SHADER_PUBLIC struct CSMDepthPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) meshletTrianglesBuffer;
+    SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
+    SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
+    SHADER_PUBLIC uint32_t drawRegion;
+};
+
+SHADER_PUBLIC struct CSMResolvePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint2 atlasExtent;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t gbufferOneIndex;
+    SHADER_PUBLIC uint32_t atlasIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

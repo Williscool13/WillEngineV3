@@ -64,7 +64,7 @@ TEST_CASE("CSM: cascades grow, end at max distance, and clamp the count", "[csm]
     CHECK(std::fabs(frame.cascades[0].texelWorldSize - 2.0f * frame.cascades[0].halfExtent / static_cast<float>(params.resolution)) < EPS);
 
     params.cascadeCount = 9;
-    CHECK(Render::ComputeCSMFrame(params, glm::vec3(0.0f), SUN_DIRECTIONS[0], 0.1f).cascadeCount == Render::CSM_MAX_CASCADES);
+    CHECK(Render::ComputeCSMFrame(params, glm::vec3(0.0f), SUN_DIRECTIONS[0], 0.1f).cascadeCount == CSM_MAX_CASCADES);
     params.cascadeCount = 0;
     CHECK(Render::ComputeCSMFrame(params, glm::vec3(0.0f), SUN_DIRECTIONS[0], 0.1f).cascadeCount == 1);
 }
@@ -83,7 +83,6 @@ TEST_CASE("CSM: the anchor maps inside every cascade and depth runs sunward plan
             CHECK(ndc.z > 0.0f);
             CHECK(ndc.z < 1.0f);
 
-            // Snapping moves the box by under a texel, so the anchor stays within one texel of the box center.
             CHECK(std::fabs(ndc.x) <= 2.0f / static_cast<float>(params.resolution) + EPS);
             CHECK(std::fabs(ndc.y) <= 2.0f / static_cast<float>(params.resolution) + EPS);
 

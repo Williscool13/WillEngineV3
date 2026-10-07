@@ -40,6 +40,8 @@ inline constexpr VkFormat GBUFFER_TARGET_ONE = VK_FORMAT_R32G32B32A32_UINT;
 // R: Albedo RGBA8 (alpha written but unread)
 // G: Emissive RGBE 9:9:9:5
 inline constexpr VkFormat GBUFFER_TARGET_TWO = VK_FORMAT_R32G32_UINT;
+
+inline constexpr VkFormat CSM_DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
 } // Render
 
 #endif //WILL_ENGINE_VK_CONFIG_H

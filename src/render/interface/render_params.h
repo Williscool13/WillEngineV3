@@ -316,6 +316,8 @@ struct CSMParams
     float maxDistance{150.0f};
     float splitLambda{0.7f};
     float casterExtension{50.0f};
+    float slopeBias{2.0f};
+    float normalOffset{1.0f};
 
     bool operator==(const CSMParams&) const = default;
 };

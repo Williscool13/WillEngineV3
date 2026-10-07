@@ -602,6 +602,13 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("shadows_resolve"_sid, src / "shadows_resolve.spv", "ComputeShadowsResolve",
                             sizeof(ShadowsResolvePushConstant), PipelineCategory::Critical);
 
+    RegisterComputePipeline("csm_instance_cull"_sid, src / "csm_cull.spv", "ComputeCSMInstanceCull",
+                            sizeof(CSMInstanceCullPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("csm_expand_meshlets"_sid, src / "csm_cull.spv", "ComputeCSMExpandMeshlets",
+                            sizeof(CSMExpandMeshletsPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("csm_resolve"_sid, src / "csm_resolve.spv", "ComputeCSMResolve",
+                            sizeof(CSMResolvePushConstant), PipelineCategory::Critical);
+
     RegisterComputePipeline("taa_main"_sid, src / "taa.spv", "ComputeTemporalAntialiasing",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);
     RegisterComputePipeline("taa_naive"_sid, src / "taa_naive.spv", "ComputeNaiveTemporalAntialiasing",
@@ -840,6 +847,37 @@ void PipelineManager::RegisterPipelines()
             VK_SHADER_STAGE_MESH_BIT_EXT,
             PipelineCategory::Critical
         );
+        builder.Clear();
+    }
+
+    // CSM depth
+    {
+        builder.AddShaderStage(src / "csm_depth.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshCSMDepth");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.EnableDepthBias();
+        builder.EnableDepthClamp();
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_CULL_MODE);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
+        builder.SetupRenderer(nullptr, 0, CSM_DEPTH_FORMAT, VK_FORMAT_UNDEFINED);
+        RegisterGraphicsPipeline("csm_depth"_sid, builder, sizeof(CSMDepthPushConstant), VK_SHADER_STAGE_MESH_BIT_EXT, PipelineCategory::Critical);
+        builder.Clear();
+    }
+
+    // CSM depth cutout
+    {
+        builder.AddShaderStage(src / "csm_depth.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshCSMDepthCutout");
+        builder.AddShaderStage(src / "csm_depth.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentCSMDepthCutout");
+        builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.EnableDepthBias();
+        builder.EnableDepthClamp();
+        builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_CULL_MODE);
+        builder.AddDynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS);
+        builder.SetupRenderer(nullptr, 0, CSM_DEPTH_FORMAT, VK_FORMAT_UNDEFINED);
+        RegisterGraphicsPipeline("csm_depth_cutout"_sid, builder, sizeof(CSMDepthPushConstant), VK_SHADER_STAGE_MESH_BIT_EXT, PipelineCategory::Critical);
         builder.Clear();
     }
 

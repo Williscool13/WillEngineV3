@@ -44,6 +44,8 @@ public:
         float depthBiasClamp = 0.0f,
         float depthBiasSlopeFactor = 0.0f);
 
+    GraphicsPipelineBuilder& EnableDepthClamp();
+
     GraphicsPipelineBuilder& SetupMultisampling(VkBool32 sampleShadingEnable, VkSampleCountFlagBits rasterizationSamples,
                                                 float minSampleShading, const VkSampleMask* pSampleMask,
                                                 VkBool32 alphaToCoverageEnable, VkBool32 alphaToOneEnable);

@@ -23,6 +23,29 @@ struct SigmaDenoiseFrame
 };
 
 /**
+ * Culls every instance against every cascade in one chain and draws all cascades into one depth atlas.
+ * @return the atlas, invalid without instances
+ */
+RDGTexture SetupCSMDepth(RenderGraph& graph,
+                         PipelineManager* pipelineManager,
+                         const Core::ViewFamily& viewFamily,
+                         const SceneBufferSizes& bufferSizes,
+                         const SceneResources& scene,
+                         RDGBuffer csmData,
+                         uint32_t cascadeCount,
+                         uint32_t sceneIndex);
+
+/** Samples the CSM atlas into the sun visibility the directional lighting pass reads. */
+SunShadowFrame SetupCSMResolve(RenderGraph& graph,
+                               PipelineManager* pipelineManager,
+                               Core::Extent2D renderExtent,
+                               const RenderTargets& targets,
+                               const SceneResources& scene,
+                               RDGBuffer csmData,
+                               RDGTexture atlas,
+                               uint32_t sceneIndex);
+
+/**
  * Writes targets.shadows, temporally filtering GTAO when it ran.
  * @param gtao invalid when GTAO did not run
  */

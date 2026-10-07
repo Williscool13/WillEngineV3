@@ -497,6 +497,8 @@ struct ViewFamily
     PostProcessConfiguration postProcessConfig{};
     ScreenFadeState screenFade{};
     SIGMAParams sigmaParams{};
+    CSMParams csm{};
+    glm::vec3 csmAnchor{0.0f};
     float iblIntensity{1.0f};
     float indirectIntensity{1.0f};
     bool bReflectionProbeBruteForce{false};
