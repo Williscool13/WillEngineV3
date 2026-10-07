@@ -44,11 +44,11 @@ CSMFrame ComputeCSMFrame(const Core::CSMParams& params, const glm::vec3& anchor,
         glm::mat4 viewProj(0.0f);
         for (int32_t c = 0; c < 3; ++c) {
             viewProj[c][0] = frame.right[c] / halfExtent;
-            viewProj[c][1] = frame.up[c] / halfExtent;
+            viewProj[c][1] = -frame.up[c] / halfExtent;
             viewProj[c][2] = frame.toSun[c] / depthRange;
         }
         viewProj[3][0] = -centerX / halfExtent;
-        viewProj[3][1] = -centerY / halfExtent;
+        viewProj[3][1] = centerY / halfExtent;
         viewProj[3][2] = -zFar / depthRange;
         viewProj[3][3] = 1.0f;
 

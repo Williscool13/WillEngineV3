@@ -8,6 +8,7 @@
 #include <volk.h>
 
 #include "core/containers/array.h"
+#include "core/types/extent.h"
 #include "render/render-graph/render_graph_handles.h"
 #include "render/shaders/ddgi_interop.h"
 
@@ -174,6 +175,8 @@ struct SunShadowFrame
     RDGTexture gbuffer;
     RDGTexture sigmaShadow;
     RDGTexture sigmaStabilized;
+    Core::Extent2D extent{};
+    uint32_t pixelScale{1};
 
     [[nodiscard]] bool IsValid() const { return shadow.IsValid(); }
 };

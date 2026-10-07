@@ -45,7 +45,8 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
                         bool bDDGIApply,
                         const Core::ReflectionConfiguration& reflectionConfig,
                         uint32_t giGatherMode,
-                        float historyExposureRatio)
+                        float historyExposureRatio,
+                        bool bDirectSun)
 {
     ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
@@ -664,7 +665,7 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
         const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
         pass.Execute([pipelineManager, &scene, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI,
                 ddgiCascades, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giResolved, giData, giSkyVis, giGatherMode, reflectionProbeCount, bProbeBrute, probeGrid,
-                bScreenDiffuse, diffuseRatio, screenDiffuse](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                bScreenDiffuse, diffuseRatio, screenDiffuse, bDirectSun](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .lightData = graph.GetBufferAddress(scene.lightData),
@@ -696,6 +697,7 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
                 .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(diffuseRatio) : ~0x0u,
                 .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(screenDiffuse) : ~0x0u,
                 .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(giSkyVis) : ~0x0u,
+                .bDirectSun = bDirectSun ? 1u : 0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);
@@ -727,7 +729,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          bool bDDGIApply,
                          const Core::ReflectionConfiguration& reflectionConfig,
                           uint32_t giGatherMode,
-                          float historyExposureRatio)
+                          float historyExposureRatio,
+                          bool bDirectSun)
 {
     ZoneScoped;
     const bool bCheckerboard = activeCheckerboardField != 0u;
@@ -1326,7 +1329,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
         pass.Execute([pipelineManager, &scene, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI,
                 ddgiCascades, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giResolved, giData, giSkyVis, giGatherMode, reflectionProbeCount, bProbeBrute, probeGrid,
-                bScreenDiffuse, diffuseRatio, screenDiffuse](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+                bScreenDiffuse, diffuseRatio, screenDiffuse, bDirectSun](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .lightData = graph.GetBufferAddress(scene.lightData),
@@ -1358,6 +1361,7 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                 .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(diffuseRatio) : ~0x0u,
                 .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(screenDiffuse) : ~0x0u,
                 .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(giSkyVis) : ~0x0u,
+                .bDirectSun = bDirectSun ? 1u : 0u,
             };
             const PipelineEntry* p = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, p->pipeline);

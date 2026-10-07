@@ -57,6 +57,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                          const RenderTargets& targets,
                          const SceneResources& scene,
                          const GTAOFrame& gtao,
+                         const SunShadowFrame& sunShadow,
                          uint32_t sceneIndex);
 
 /**

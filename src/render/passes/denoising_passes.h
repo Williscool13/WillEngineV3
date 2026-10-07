@@ -42,7 +42,8 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
                         bool bDDGIApply,
                         const Core::ReflectionConfiguration& reflectionConfig,
                         uint32_t giGatherMode,
-                        float historyExposureRatio);
+                        float historyExposureRatio,
+                        bool bDirectSun);
 
 void SetupReBLURDenoiser(RenderGraph& graph,
                          PipelineManager* pipelineManager,
@@ -64,7 +65,8 @@ void SetupReBLURDenoiser(RenderGraph& graph,
                          bool bDDGIApply,
                          const Core::ReflectionConfiguration& reflectionConfig,
                           uint32_t giGatherMode,
-                          float historyExposureRatio);
+                          float historyExposureRatio,
+                          bool bDirectSun);
 } // Render
 
 #endif //WILL_ENGINE_DENOISING_PASSES_H

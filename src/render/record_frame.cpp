@@ -415,7 +415,7 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
     ctx.scene.luminance = renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, luminanceSource, 0,
                                                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT).Current();
 
-    targets.shadows = renderGraph->CreateTexture("shadows_resolve_target"_sid, texture2D(VK_FORMAT_R8G8_UNORM), {std::nullopt}, true);
+    targets.shadows = renderGraph->CreateTexture("shadows_resolve_target"_sid, texture2D(VK_FORMAT_R16G16_UNORM), {std::nullopt}, true);
 
     SetupSkyboxRendering(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, 0);
 
@@ -504,7 +504,11 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
         ctx.gtao = SetupGroundTruthAmbientOcclusion(*renderGraph, pipelineManager, viewFamily, renderExtent, scene, targets, frameNumber, 0);
     }
 
-    SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.gtao, 0);
+    if (ctx.features.sunShadow == SunShadowSource::RayTraced || ctx.features.sunShadow == SunShadowSource::ShadowMap) {
+        RecordSunShadows(ctx);
+    }
+
+    SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.gtao, ctx.sunShadow, 0);
 }
 
 void RenderThread::RecordDDGI(FrameContext& ctx, const DDGICascades& ddgiCascades)
@@ -578,10 +582,6 @@ void RenderThread::RecordLighting(FrameContext& ctx)
             break;
         case FrameRenderingPath::GroundTruth:
             break;
-    }
-
-    if (ctx.features.sunShadow == SunShadowSource::RayTraced || ctx.features.sunShadow == SunShadowSource::ShadowMap) {
-        RecordSunShadows(ctx);
     }
 }
 
@@ -684,15 +684,16 @@ void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
                                    restirCheckerboardPacked, bRestirFullRateResolve ? 1u : 0u, frameBuffer.reflection);
 
     const uint32_t remodulateOutputMode = static_cast<uint32_t>(restir.remodulateOutput);
+    const bool bDirectSun = ctx.features.sunShadow == SunShadowSource::RayTraced || ctx.features.sunShadow == SunShadowSource::ShadowMap;
 
     if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
         ctx.targets.reflectionVirtualMotion = SetupRELAXDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.restir, ctx.reflection, ctx.gather, ctx.ddgi,
                                                                  ctx.worldGrid, relax, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField,
-                           denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure);
+                           denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure, bDirectSun);
     }
     else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::ReBLUR) {
         SetupReBLURDenoiser(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.restir, ctx.reflection, ctx.gather, ctx.ddgi, ctx.worldGrid, reblur, frameNumber, remodulateOutputMode, viewFamily.iblIntensity, denoiserCheckerboardField,
-                            denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure);
+                            denoiserCheckerboardResolveSpeed, bDDGIApply, frameBuffer.reflection, giGatherMode, preExposure / prevPreExposure, bDirectSun);
     }
     else if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR) {
         const NrdBackend nrdBackend = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR ? NrdBackend::Reblur : NrdBackend::Relax;
@@ -704,11 +705,11 @@ void RenderThread::RecordLightingReSTIR(FrameContext& ctx)
             SetupNRDOutputPass(*renderGraph, pipelineManager, renderExtent, targets, nrd, nrdBackend, preExposure);
         }
         SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, 0, remodulateOutputMode,
-                                  viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
+                                  viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode, bDirectSun);
     }
     else {
         SetupReSTIRRemodulatePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, 0, remodulateOutputMode,
-                                  viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode);
+                                  viewFamily.iblIntensity, frameNumber, bDDGIApply, frameBuffer.reflection, giGatherMode, bDirectSun);
     }
 }
 
@@ -724,7 +725,7 @@ void RenderThread::RecordSunShadows(FrameContext& ctx)
         memcpy(csmMapping.data, &data, sizeof(CSMData));
         const RDGTexture atlas = SetupCSMDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, csmMapping.buffer, frame.cascadeCount, 0);
         ctx.sunShadow = SetupCSMResolve(*renderGraph, pipelineManager, renderExtent, ctx.targets, ctx.scene, csmMapping.buffer, atlas, 0, frameNumber);
-        SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, renderExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, 1);
+        ctx.sunShadow.extent = renderExtent;
         return;
     }
 
@@ -733,7 +734,8 @@ void RenderThread::RecordSunShadows(FrameContext& ctx)
     ctx.sunShadow = SetupRTSunShadow(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, renderExtent, ctx.targets, ctx.scene, 0, frameNumber, sunShadowPixelScale);
     const SigmaDenoiseFrame sigma = SetupSigmaShadowDenoise(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, frameNumber);
     SetupSigmaShadowTemporal(*renderGraph, pipelineManager, viewFamily, sunShadowExtent, ctx.targets, ctx.scene, sigma, ctx.sunShadow, 0);
-    SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, sunShadowExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, sunShadowPixelScale);
+    ctx.sunShadow.extent = sunShadowExtent;
+    ctx.sunShadow.pixelScale = sunShadowPixelScale;
 }
 
 void RenderThread::RecordPostLighting(FrameContext& ctx)

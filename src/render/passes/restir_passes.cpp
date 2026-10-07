@@ -686,7 +686,8 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                                uint64_t frameNumber,
                                bool bDDGIApply,
                                const Core::ReflectionConfiguration& reflectionConfig,
-                               uint32_t giGatherMode)
+                               uint32_t giGatherMode,
+                               bool bDirectSun)
 {
     ZoneScoped;
     const uint32_t width = renderExtent.width;
@@ -742,7 +743,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput,
-            &scene, probeGrid, ddgiCascades, giResolved, giData, giSkyVis, diffuseRatio, screenDiffuse](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            &scene, probeGrid, ddgiCascades, giResolved, giData, giSkyVis, diffuseRatio, screenDiffuse, bDirectSun](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
                 .sceneData = graph.GetBufferAddress(scene.sceneData),
                 .lightData = graph.GetBufferAddress(scene.lightData),
@@ -774,6 +775,7 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
                 .diffuseRatioIndex = bScreenDiffuse ? graph.GetSampledImageViewDescriptorIndex(diffuseRatio) : ~0x0u,
                 .screenDiffuseOutIndex = bScreenDiffuse ? graph.GetStorageImageViewDescriptorIndex(screenDiffuse) : ~0x0u,
                 .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(giSkyVis) : ~0x0u,
+                .bDirectSun = bDirectSun ? 1u : 0u,
             };
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("restir_remodulate"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

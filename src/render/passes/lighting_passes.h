@@ -100,17 +100,6 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
                                   bool bReset,
                                   uint32_t& accumulationCount,
                                   uint64_t frameNumber);
-
-void SetupDirectionalLightingPass(RenderGraph& graph,
-                                  PipelineManager* pipelineManager,
-                                  const Core::ViewFamily& viewFamily,
-                                  Core::Extent2D renderExtent,
-                                  Core::Extent2D shadowExtent,
-                                  const RenderTargets& targets,
-                                  const SceneResources& scene,
-                                  const SunShadowFrame& sunShadow,
-                                  uint32_t sceneIndex,
-                                  uint32_t pixelScale);
 } // Render
 
 #endif //WILL_ENGINE_LIGHTING_PASSES_H

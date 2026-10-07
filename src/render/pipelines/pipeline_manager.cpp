@@ -521,9 +521,6 @@ void PipelineManager::RegisterPipelines()
     RegisterComputePipeline("lighting_ground_truth"_sid, src / "lighting_ground_truth.spv", "ComputeLightingGroundTruth",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 
-    RegisterComputePipeline("directional_light"_sid, src / "directional_light.spv", "ComputeDirectionalLight",
-                            sizeof(DirectionalLightPushConstant), PipelineCategory::Critical);
-
     RegisterComputePipeline("volumetric_fog_tile_depth"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogTileDepth",
                             sizeof(VolumetricFogTileDepthPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("volumetric_fog_scatter"_sid, src / "volumetric_fog.spv", "ComputeVolumetricFogScatter",
@@ -854,7 +851,7 @@ void PipelineManager::RegisterPipelines()
     {
         builder.AddShaderStage(src / "csm_depth.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshCSMDepth");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
         builder.EnableDepthBias();
         builder.EnableDepthClamp();
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -870,7 +867,7 @@ void PipelineManager::RegisterPipelines()
         builder.AddShaderStage(src / "csm_depth.spv", VK_SHADER_STAGE_MESH_BIT_EXT, "MeshCSMDepthCutout");
         builder.AddShaderStage(src / "csm_depth.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "FragmentCSMDepthCutout");
         builder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+        builder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
         builder.EnableDepthBias();
         builder.EnableDepthClamp();
         builder.SetupDepthState(VK_TRUE, VK_TRUE, VK_COMPARE_OP_GREATER_OR_EQUAL);

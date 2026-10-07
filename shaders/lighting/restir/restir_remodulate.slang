@@ -86,9 +86,19 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float3 diffuse = rdgTexturesFloat4[pc.diffuseIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
     float3 specular = rdgTexturesFloat4[pc.specularIndex].Load(int3(pixel, 0)).rgb / scene.preExposure;
 
-    float gtao = 1.0;
-    if (pc.shadowsIndex != ~0x0u) {
-        gtao = rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).y;
+    float2 shadows = pc.shadowsIndex != ~0x0u ? rdgTexturesFloat2[pc.shadowsIndex].Load(int3(pixel, 0)).xy : float2(1.0);
+    float gtao = shadows.y;
+
+    float3 sunDiffuse = float3(0.0);
+    float3 sunSpecular = float3(0.0);
+    if (pc.bDirectSun != 0u && shadows.x > 0.0) {
+        DirectionalLightData sun = pc.lightData->directionalLight;
+        float3 L = normalize(mul((float3x3)scene.view, normalize(-sun.directionIntensity.xyz)));
+        float3 sunDiffuseTerm;
+        float3 sunSpecularTerm;
+        EvalSunContribution(sun, N, V, L, nDotV, F0, metallic, roughness, specReflectance, sunDiffuseTerm, sunSpecularTerm);
+        sunDiffuse = sunDiffuseTerm * albedo * shadows.x;
+        sunSpecular = sunSpecularTerm * specReflectance * shadows.x;
     }
 
     float3 F_ibl = F_SCHLICK_ROUGHNESS(nDotV, F0, roughness);
@@ -132,15 +142,15 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
     float3 finalColor;
     float litAlpha = 1.0;
     if (pc.outputMode == 1u) {
-        finalColor = diffuse * albedo + ibl + emissive;
+        finalColor = diffuse * albedo + sunDiffuse + ibl + emissive;
     } else if (pc.outputMode == 2u) {
-        finalColor = specular * specReflectance + ibl + emissive;
+        finalColor = specular * specReflectance + sunSpecular + ibl + emissive;
     } else if (pc.outputMode == 3u) {
         // Raw indirect diffuse
         finalColor = indirectDiffuse;
     } else {
-        finalColor = diffuse * albedo + specular * specReflectance + ibl + emissive;
-        litAlpha = 1.0 - saturate(Luma(specular * specReflectance + reflectionSpecular) / max(Luma(finalColor), 1e-4));
+        finalColor = diffuse * albedo + specular * specReflectance + sunDiffuse + sunSpecular + ibl + emissive;
+        litAlpha = 1.0 - saturate(Luma(specular * specReflectance + sunSpecular + reflectionSpecular) / max(Luma(finalColor), 1e-4));
     }
     rdgStorageFloat4[pc.outputIndex][pixel] = float4(finalColor * scene.preExposure, litAlpha);
 }

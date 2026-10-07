@@ -86,7 +86,8 @@ void ComputeCSMExpandMeshlets(uniform CSMExpandMeshletsPushConstant pc, uint3 dt
     float4 worldBounds = ComputeMeshletWorldBounds(mlet, model);
     CSMCascadeGPU cascade = pc.csmData->cascades[cascadeIndex];
 
-    bool bVisible = IsSphereInFrustum(cascade.frustum, worldBounds) && 2.0 * worldBounds.w >= cascade.texelWorldSize && alphaMode != MATERIAL_ALPHA_BLEND;
+    bool bConeCulled = !bTwoSided && dot(-pc.csmData->toSun.xyz, normalize(mul((float3x3)model.modelMatrix, mlet.coneAxis))) >= mlet.coneCutoff;
+    bool bVisible = !bConeCulled && IsSphereInFrustum(cascade.frustum, worldBounds) && 2.0 * worldBounds.w >= cascade.texelWorldSize && alphaMode != MATERIAL_ALPHA_BLEND;
     bool bCutout = alphaMode == MATERIAL_ALPHA_CUTOUT && (inst.flags & INSTANCE_FLAG_ALPHA_CUTOUT) != 0u;
     uint region = (bCutout ? MESHLET_REGION_CUTOUT : MESHLET_REGION_OPAQUE) | (bTwoSided ? 1u : 0u);
 

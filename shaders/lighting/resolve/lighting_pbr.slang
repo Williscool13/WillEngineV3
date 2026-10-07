@@ -53,9 +53,19 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
     float nDotV = max(dot(N, V), 0.0);
 
-    // Directional sun is applied separately in the RT directional lighting pass.
     float gtao = li.shadows.y;
     float3 directLight = float3(0.0);
+
+    float3 L = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].view, normalize(-pc.lightData->directionalLight.directionIntensity.xyz)));
+    float nDotL = max(dot(N, L), 0.0);
+    if (nDotL > 0.0 && li.shadows.x > 0.0) {
+        float3 H = normalize(V + L);
+        float3 F = F_SCHLICK(V, H, F0);
+        float3 specular = (D_GGX(N, H, roughness) * G_SMITH_HEIGHT_CORRELATED(N, V, L, roughness) * F) / max(4.0 * nDotV * nDotL, 0.001);
+        float3 diffuse = (1.0 - F) * (1.0 - li.metallic) * li.albedo.xyz * Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
+        float3 sunColor = UnpackUnorm4x8(pc.lightData->directionalLight.packedColor).rgb * pc.lightData->directionalLight.directionIntensity.w;
+        directLight += (diffuse + specular) * nDotL * li.shadows.x * sunColor;
+    }
 
     // Area / sphere lights, selected per WorldGridBinning cell.
     if (pc.worldGridBuffer != 0)

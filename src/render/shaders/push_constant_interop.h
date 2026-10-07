@@ -423,6 +423,7 @@ SHADER_PUBLIC struct VisibilityShadingPushConstant
 SHADER_PUBLIC struct ShadowsResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
+    SHADER_PUBLIC uint2 sunShadowExtent;
     SHADER_PUBLIC int32_t gtaoFilteredIndex;
     SHADER_PUBLIC uint32_t outputImageIndex;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -434,6 +435,11 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC uint32_t bHistoryValid;
     SHADER_PUBLIC float temporalMaxAccum;
     SHADER_PUBLIC float temporalClampScale;
+    // ~0u = no sun shadow source this frame (visibility 1)
+    SHADER_PUBLIC uint32_t sunShadowIndex;
+    SHADER_PUBLIC uint32_t sunShadowDepthIndex;
+    SHADER_PUBLIC uint32_t sunShadowNormalIndex;
+    SHADER_PUBLIC uint32_t sunShadowPixelScale;
 };
 
 SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
@@ -931,6 +937,8 @@ SHADER_PUBLIC struct ReSTIRRemodulatePushConstant
     SHADER_PUBLIC uint32_t screenDiffuseOutIndex;
     // GI_GATHER_SKY_VIS_HISTORY .x; ~0u = derive from the diffuse ratio
     SHADER_PUBLIC uint32_t skyVisIndex;
+    // Sun shaded here from the shadows target because ReSTIR does not sample it
+    SHADER_PUBLIC uint32_t bDirectSun;
 };
 
 SHADER_PUBLIC struct ReflectionTracePushConstant
@@ -2336,23 +2344,6 @@ SHADER_PUBLIC struct RTSunShadowPushConstant
     SHADER_PUBLIC uint32_t outputDepthIndex;
     SHADER_PUBLIC uint32_t outputGbufferIndex;
     SHADER_PUBLIC uint32_t bAlphaTest;
-};
-
-SHADER_PUBLIC struct DirectionalLightPushConstant
-{
-    SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
-    SHADER_PUBLIC uint32_t depthIndex;
-    SHADER_PUBLIC uint32_t gbufferOneIndex;
-    SHADER_PUBLIC uint32_t gbufferTwoIndex;
-    SHADER_PUBLIC uint32_t shadowIndex;
-    SHADER_PUBLIC uint32_t outputIndex;
-    SHADER_PUBLIC uint32_t sceneDataIndex;
-    SHADER_PUBLIC uint2 renderExtent;
-    SHADER_PUBLIC uint2 shadowExtent;
-    SHADER_PUBLIC uint32_t pixelScale;
-    SHADER_PUBLIC uint32_t shadowDepthIndex;
-    SHADER_PUBLIC uint32_t shadowNormalIndex;
 };
 
 SHADER_PUBLIC struct SigmaClassifyPushConstant

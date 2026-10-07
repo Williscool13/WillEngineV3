@@ -229,6 +229,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                          const RenderTargets& targets,
                          const SceneResources& scene,
                          const GTAOFrame& gtao,
+                         const SunShadowFrame& sunShadow,
                          uint32_t sceneIndex)
 {
     ZoneScoped;
@@ -253,9 +254,21 @@ void SetupShadowsResolve(RenderGraph& graph,
     const RDGTexture depthHistory = targets.depthCopyHistory;
     const RDGTexture gbufferOneHistory = targets.gbufferOneHistory;
     if (bTemporal) {
-        shadowsResolvePass.ReadSampledImage(targets.depthCopy);
-        shadowsResolvePass.ReadSampledImage(targets.gbufferOne);
         shadowsResolvePass.WriteStorageImage(gtaoTemporalOut);
+    }
+    shadowsResolvePass.ReadSampledImage(targets.depthCopy);
+    shadowsResolvePass.ReadSampledImage(targets.gbufferOne);
+
+    RDGTexture sunShadowTex = sunShadow.shadow;
+    if (sunShadow.sigmaShadow.IsValid()) { sunShadowTex = sunShadow.sigmaShadow; }
+    if (sunShadow.sigmaStabilized.IsValid()) { sunShadowTex = sunShadow.sigmaStabilized; }
+    const bool bSunUpsample = sunShadowTex.IsValid() && sunShadow.pixelScale > 1u;
+    if (sunShadowTex.IsValid()) {
+        shadowsResolvePass.ReadSampledImage(sunShadowTex);
+    }
+    if (bSunUpsample) {
+        shadowsResolvePass.ReadSampledImage(sunShadow.depth);
+        shadowsResolvePass.ReadSampledImage(sunShadow.gbuffer);
     }
     if (bHistoryValid) {
         shadowsResolvePass.ReadSampledImage(gtaoTemporalPrev);
@@ -267,17 +280,19 @@ void SetupShadowsResolve(RenderGraph& graph,
     shadowsResolvePass.WriteStorageImage(targets.shadows);
     shadowsResolvePass.Execute([&scene, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, gtaoFiltered, gtaoTemporalOut, gtaoTemporalPrev, depthHistory, gbufferOneHistory, temporalMaxAccum,
             temporalClampScale, depth = targets.depthCopy, gbufferOne = targets.gbufferOne, output = targets.shadows,
-            renderExtent, sceneIndex](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            renderExtent, sceneIndex, sunShadowTex, bSunUpsample, sunShadowDepth = sunShadow.depth, sunShadowNormal = sunShadow.gbuffer, sunShadowExtent = sunShadow.extent,
+            sunShadowPixelScale = sunShadow.pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadows_resolve"_sid);
 
             int32_t gtaoIndex = bHasGTAO ? static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex(gtaoFiltered)) : -1;
 
             ShadowsResolvePushConstant pc{
                 .sceneData = graph.GetBufferAddress(scene.sceneData) + sizeof(SceneData) * sceneIndex,
+                .sunShadowExtent = {sunShadowExtent.width, sunShadowExtent.height},
                 .gtaoFilteredIndex = gtaoIndex,
                 .outputImageIndex = graph.GetStorageImageViewDescriptorIndex(output),
-                .depthIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(depth) : ~0x0u,
-                .gbufferOneIndex = bTemporal ? graph.GetSampledImageViewDescriptorIndex(gbufferOne) : ~0x0u,
+                .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+                .gbufferOneIndex = graph.GetSampledImageViewDescriptorIndex(gbufferOne),
                 .historyIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(gtaoTemporalPrev) : ~0x0u,
                 .depthHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(depthHistory) : ~0x0u,
                 .gbufferOneHistoryIndex = bHistoryValid ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0x0u,
@@ -285,6 +300,10 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .bHistoryValid = bHistoryValid ? 1u : 0u,
                 .temporalMaxAccum = temporalMaxAccum,
                 .temporalClampScale = temporalClampScale,
+                .sunShadowIndex = sunShadowTex.IsValid() ? graph.GetSampledImageViewDescriptorIndex(sunShadowTex) : ~0x0u,
+                .sunShadowDepthIndex = bSunUpsample ? graph.GetSampledImageViewDescriptorIndex(sunShadowDepth) : ~0x0u,
+                .sunShadowNormalIndex = bSunUpsample ? graph.GetSampledImageViewDescriptorIndex(sunShadowNormal) : ~0x0u,
+                .sunShadowPixelScale = sunShadowPixelScale,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
