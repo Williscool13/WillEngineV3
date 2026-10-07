@@ -52,6 +52,7 @@ static void ApplyLightingBundle(const TextReader& r, LightingProfileBundle& bund
     ConfigSerialization::Deserialize(r.Block("reflection"), bundle.reflection);
     ConfigSerialization::Deserialize(r.Block("reflectionProbe"), bundle.reflectionProbe);
     ConfigSerialization::Deserialize(r.Block("gtao"), bundle.gtao);
+    bundle.sunShadowMode = static_cast<Core::SunShadowMode>(r.UInt("sunShadowMode", static_cast<uint32_t>(bundle.sunShadowMode)));
     ConfigSerialization::Deserialize(r.Block("csm"), bundle.csm);
     bundle.iblIntensity = r.Float("iblIntensity", bundle.iblIntensity);
     bundle.indirectIntensity = r.Float("indirectIntensity", bundle.indirectIntensity);
@@ -77,6 +78,7 @@ static void BuildLightingBundle(const LightingProfileBundle& bundle, TextWriter&
     w.BeginBlock("gtao");
     ConfigSerialization::Serialize(bundle.gtao, w);
     w.EndBlock();
+    w.Key("sunShadowMode", static_cast<uint32_t>(bundle.sunShadowMode));
     w.BeginBlock("csm");
     ConfigSerialization::Serialize(bundle.csm, w);
     w.EndBlock();
@@ -100,6 +102,7 @@ LightingProfileBundle CaptureLightingProfile(const EngineState& state)
     bundle.reflection = state.lighting.reflection;
     bundle.reflectionProbe = state.lighting.reflectionProbe;
     bundle.gtao = state.lighting.gtaoConfig;
+    bundle.sunShadowMode = state.lighting.sunShadowMode;
     bundle.csm = state.lighting.csm;
     bundle.shadingOverride = state.debug.shadingShaderOverride;
     bundle.lightingOverride = state.debug.lightingShaderOverride;
@@ -116,6 +119,7 @@ void ApplyLightingProfile(EngineState& state, const LightingProfileBundle& bundl
     state.lighting.reflection = bundle.reflection;
     state.lighting.reflectionProbe = bundle.reflectionProbe;
     state.lighting.gtaoConfig = bundle.gtao;
+    state.lighting.sunShadowMode = bundle.sunShadowMode;
     state.lighting.csm = bundle.csm;
     state.debug.shadingShaderOverride = bundle.shadingOverride;
     state.debug.lightingShaderOverride = bundle.lightingOverride;

@@ -52,7 +52,11 @@ SHADER_PUBLIC struct CSMData
     SHADER_PUBLIC uint32_t cascadeCount;
     SHADER_PUBLIC uint32_t resolution;
     SHADER_PUBLIC float normalOffsetTexels;
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float tanAngularRadius;
+    SHADER_PUBLIC float blendBand;
+    SHADER_PUBLIC uint32_t bPCSS;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
 };
 
 #endif //WILL_ENGINE_SHADOW_INTEROP_H

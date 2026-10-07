@@ -2541,6 +2541,7 @@ SHADER_PUBLIC struct CSMResolvePushConstant
     SHADER_PUBLIC uint32_t atlasIndex;
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

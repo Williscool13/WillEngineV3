@@ -76,6 +76,8 @@ CSMData BuildCSMData(const CSMFrame& frame, const Core::CSMParams& params)
     data.cascadeCount = frame.cascadeCount;
     data.resolution = static_cast<uint32_t>(glm::max(params.resolution, 1));
     data.normalOffsetTexels = glm::max(params.normalOffset, 0.0f);
+    data.blendBand = glm::clamp(params.blendBand, 0.0f, 0.5f);
+    data.bPCSS = params.bPCSS ? 1u : 0u;
 
     const uint32_t columns = glm::min(frame.cascadeCount, CSM_ATLAS_COLUMNS);
     const uint32_t rows = (frame.cascadeCount + CSM_ATLAS_COLUMNS - 1) / CSM_ATLAS_COLUMNS;

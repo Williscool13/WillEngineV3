@@ -104,7 +104,7 @@ static FrameFeatures ComputeFrameFeatures(const Core::FrameBuffer& frameBuffer, 
         f.sunShadow = SunShadowSource::ReSTIR;
     }
     else if (viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f) {
-        f.sunShadow = viewFamily.csm.bEnabled ? SunShadowSource::ShadowMap : SunShadowSource::RayTraced;
+        f.sunShadow = viewFamily.sunShadowMode == Core::SunShadowMode::ShadowMap ? SunShadowSource::ShadowMap : SunShadowSource::RayTraced;
     }
     return f;
 }
@@ -718,11 +718,12 @@ void RenderThread::RecordSunShadows(FrameContext& ctx)
     const Core::Extent2D renderExtent = ctx.renderExtent;
     if (ctx.features.sunShadow == SunShadowSource::ShadowMap) {
         const CSMFrame frame = ComputeCSMFrame(viewFamily.csm, viewFamily.csmAnchor, viewFamily.directionalLight.direction, viewFamily.mainView.currentViewData.nearPlane);
-        const CSMData data = BuildCSMData(frame, viewFamily.csm);
+        CSMData data = BuildCSMData(frame, viewFamily.csm);
+        data.tanAngularRadius = glm::tan(glm::radians(glm::clamp(viewFamily.directionalLight.angularRadiusDegrees, 0.0f, 30.0f)));
         const HostBufferMapping csmMapping = renderGraph->OpenHostBuffer("csm_data"_sid, sizeof(CSMData));
         memcpy(csmMapping.data, &data, sizeof(CSMData));
         const RDGTexture atlas = SetupCSMDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, csmMapping.buffer, frame.cascadeCount, 0);
-        ctx.sunShadow = SetupCSMResolve(*renderGraph, pipelineManager, renderExtent, ctx.targets, ctx.scene, csmMapping.buffer, atlas, 0);
+        ctx.sunShadow = SetupCSMResolve(*renderGraph, pipelineManager, renderExtent, ctx.targets, ctx.scene, csmMapping.buffer, atlas, 0, frameNumber);
         SetupDirectionalLightingPass(*renderGraph, pipelineManager, viewFamily, renderExtent, renderExtent, ctx.targets, ctx.scene, ctx.sunShadow, 0, 1);
         return;
     }

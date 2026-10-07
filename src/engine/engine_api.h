@@ -87,6 +87,7 @@ struct LightingState
     Core::AntiAliasingConfiguration aaConfig{};
     Core::PostProcessConfiguration postProcess{};
     Core::SIGMAParams sigmaParams{};
+    Core::SunShadowMode sunShadowMode{Core::SunShadowMode::RayTraced};
     Core::CSMParams csm{};
 
     Core::DDGIParams ddgi{};

@@ -445,7 +445,7 @@ void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
 
 void Serialize(const Core::CSMParams& p, TextWriter& w)
 {
-    w.Key("bEnabled", p.bEnabled);
+    w.Key("bPCSS", p.bPCSS);
     w.Key("cascadeCount", p.cascadeCount);
     w.Key("resolution", p.resolution);
     w.Key("maxDistance", p.maxDistance);
@@ -453,11 +453,12 @@ void Serialize(const Core::CSMParams& p, TextWriter& w)
     w.Key("casterExtension", p.casterExtension);
     w.Key("slopeBias", p.slopeBias);
     w.Key("normalOffset", p.normalOffset);
+    w.Key("blendBand", p.blendBand);
 }
 
 void Deserialize(const TextReader& r, Core::CSMParams& p)
 {
-    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.bPCSS = r.Bool("bPCSS", p.bPCSS);
     p.cascadeCount = r.Int("cascadeCount", p.cascadeCount);
     p.resolution = r.Int("resolution", p.resolution);
     p.maxDistance = r.Float("maxDistance", p.maxDistance);
@@ -465,6 +466,7 @@ void Deserialize(const TextReader& r, Core::CSMParams& p)
     p.casterExtension = r.Float("casterExtension", p.casterExtension);
     p.slopeBias = r.Float("slopeBias", p.slopeBias);
     p.normalOffset = r.Float("normalOffset", p.normalOffset);
+    p.blendBand = r.Float("blendBand", p.blendBand);
 }
 
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)

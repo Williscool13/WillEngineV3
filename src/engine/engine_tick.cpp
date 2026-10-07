@@ -181,6 +181,7 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
     frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
+    frameBuffer->mainViewFamily.sunShadowMode = state->lighting.sunShadowMode;
     frameBuffer->mainViewFamily.csm = state->lighting.csm;
     if (!state->debug.csm.bFreeze) {
         state->debug.csm.frozenAnchor = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;

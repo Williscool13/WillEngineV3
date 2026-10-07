@@ -43,7 +43,8 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                const SceneResources& scene,
                                RDGBuffer csmData,
                                RDGTexture atlas,
-                               uint32_t sceneIndex);
+                               uint32_t sceneIndex,
+                               uint64_t frameNumber);
 
 /**
  * Writes targets.shadows, temporally filtering GTAO when it ran.

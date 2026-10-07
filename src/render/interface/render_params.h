@@ -232,6 +232,12 @@ enum class LightingMode : uint8_t
     PathTracing,
 };
 
+enum class SunShadowMode : uint8_t
+{
+    RayTraced = 0,
+    ShadowMap,
+};
+
 enum class GroundTruthMode : uint8_t
 {
     None = 0,
@@ -310,7 +316,7 @@ struct SIGMAParams
 
 struct CSMParams
 {
-    bool bEnabled{false};
+    bool bPCSS{true};
     int32_t cascadeCount{4};
     int32_t resolution{2048};
     float maxDistance{150.0f};
@@ -318,6 +324,7 @@ struct CSMParams
     float casterExtension{50.0f};
     float slopeBias{2.0f};
     float normalOffset{1.0f};
+    float blendBand{0.1f};
 
     bool operator==(const CSMParams&) const = default;
 };

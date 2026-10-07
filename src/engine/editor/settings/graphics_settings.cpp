@@ -719,7 +719,9 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         Core::DebugRenderParams& render = state->debug.render;
         const Core::ReSTIRParams& restir = state->debug.restir;
         const bool bReSTIRMode = state->lighting.lightingMode == Core::LightingMode::ReSTIR;
-        const bool bSigmaActive = state->lighting.lightingMode == Core::LightingMode::Analytic || (bReSTIRMode && !restir.bSunLight);
+        const bool bSunShadowSlot = state->lighting.lightingMode == Core::LightingMode::Analytic || (bReSTIRMode && !restir.bSunLight);
+        const bool bSigmaActive = bSunShadowSlot && state->lighting.sunShadowMode == Core::SunShadowMode::RayTraced;
+        const bool bCSMActive = bSunShadowSlot && state->lighting.sunShadowMode == Core::SunShadowMode::ShadowMap;
         const Core::AntiAliasingMode aaMode = state->lighting.aaConfig.mode;
 
         auto view = [&](const char* label, const char* resourceName, DebugTransformationType transform = DebugTransformationType::None, Core::DebugViewAspect aspect = Core::DebugViewAspect::None) {
@@ -942,7 +944,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::EndSection();
         }
 
-        if (bSigmaActive && Widgets::BeginSection("Sun Shadow (CSM)")) {
+        if (bCSMActive && Widgets::BeginSection("Sun Shadow (CSM)")) {
             view("Atlas Depth", "csm_atlas", DebugTransformationType::None, Core::DebugViewAspect::Depth);
             Widgets::SameLine();
             view("Visibility", "csm_shadow", DebugTransformationType::SunShadowVisibility);
@@ -1771,11 +1773,22 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         HandleLightingSectionAction(state, directHeader, CopyDirectLightingSection);
 
+        const bool bSunShadowSlot = bAnalyticMode || (bReSTIRMode && !state->debug.restir.bSunLight);
+        auto sunShadowSource = [&]() {
+            static constexpr const char* SUN_SHADOW_MODES[] = {"Ray Traced", "Shadow Map"};
+            int mode = static_cast<int>(state->lighting.sunShadowMode);
+            if (Widgets::Combo("Source##sunshadow", &mode, SUN_SHADOW_MODES, 2, "Ray traced + SIGMA, or cascaded shadow maps.")) {
+                state->lighting.sunShadowMode = static_cast<Core::SunShadowMode>(mode);
+                changed = true;
+            }
+        };
+
         Widgets::SectionHeader sigmaHeader = MakeLightingSectionHeader(liveLighting, nullptr);
-        if ((bAnalyticMode || (bReSTIRMode && !state->debug.restir.bSunLight)) && Widgets::BeginSection("Sun Shadow (SIGMA)", &sigmaHeader)) {
+        if (bSunShadowSlot && state->lighting.sunShadowMode == Core::SunShadowMode::RayTraced && Widgets::BeginSection("Sun Shadow (SIGMA)", &sigmaHeader)) {
             Core::SIGMAParams& sigma = state->lighting.sigmaParams;
             static const Core::SIGMAParams sigmaDefaults{};
 
+            sunShadowSource();
             if (Widgets::Checkbox("Half Res##sigma", &sigma.bHalfRes, "Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.")) { changed = true; }
             if (Widgets::Checkbox("Alpha Test Cutout##sigma", &sigma.bAlphaTest, "Sun shadow rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid. Costs a texture fetch per cutout candidate along the ray.")) { changed = true; }
             if (Widgets::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur, "Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.")) { changed = true; }
@@ -1795,11 +1808,12 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         Widgets::SectionHeader csmHeader = MakeLightingSectionHeader(liveLighting, nullptr);
-        if ((bAnalyticMode || (bReSTIRMode && !state->debug.restir.bSunLight)) && Widgets::BeginSection("Sun Shadow (CSM)", &csmHeader)) {
+        if (bSunShadowSlot && state->lighting.sunShadowMode == Core::SunShadowMode::ShadowMap && Widgets::BeginSection("Sun Shadow (CSM)", &csmHeader)) {
             Core::CSMParams& csm = state->lighting.csm;
             static const Core::CSMParams csmDefaults{};
 
-            if (Widgets::Checkbox("Enabled##csm", &csm.bEnabled, "Cascaded shadow maps for the sun instead of the ray traced + SIGMA chain.")) { changed = true; }
+            sunShadowSource();
+            if (Widgets::Checkbox("PCSS##csm", &csm.bPCSS, "Contact-hardening penumbra sized from the sun's angular radius. Off: fixed one-texel filter, no blocker search.")) { changed = true; }
             if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
             static constexpr int CSM_RESOLUTIONS[] = {512, 1024, 2048, 4096};
             static constexpr const char* CSM_RESOLUTION_LABELS[] = {"512", "1024", "2048", "4096"};
@@ -1820,6 +1834,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             csmF("Caster Extension##csm", &csm.casterExtension, csmDefaults.casterExtension, 0.0f, 500.0f, "%.0f m", "Depth kept toward the sun beyond each cascade so distant casters keep their true distance for soft shadows. Casters past it still shadow. Default 50 m.");
             csmF("Slope Bias##csm", &csm.slopeBias, csmDefaults.slopeBias, 0.0f, 8.0f, "%.2f", "Rasterizer slope-scaled depth bias. Raise for acne on steep surfaces, lower for peter-panning. Default 2.");
             csmF("Normal Offset##csm", &csm.normalOffset, csmDefaults.normalOffset, 0.0f, 4.0f, "%.2f texels", "Receiver offset along the normal, in texels of the sampled cascade. Default 1.");
+            csmF("Cascade Blend##csm", &csm.blendBand, csmDefaults.blendBand, 0.0f, 0.5f, "%.2f", "Fraction of each cascade's edge dithered into the next; on the last cascade, the fade to unshadowed. Default 0.1.");
 
             Widgets::Checkbox("Draw Cascades##csm", &state->debug.csm.bDrawCascades, "Draws each cascade's light-space box.");
             Widgets::Checkbox("Freeze Cascades##csm", &state->debug.csm.bFreeze, "Holds the cascades where they are so they can be inspected from elsewhere.");

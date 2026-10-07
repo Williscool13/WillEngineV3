@@ -182,7 +182,8 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                const SceneResources& scene,
                                RDGBuffer csmData,
                                RDGTexture atlas,
-                               uint32_t sceneIndex)
+                               uint32_t sceneIndex,
+                               uint64_t frameNumber)
 {
     ZoneScoped;
     SunShadowFrame sunShadow{};
@@ -199,7 +200,7 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(atlas);
     pass.WriteStorageImage(sunShadow.shadow);
-    pass.Execute([&scene, pipelineManager, csmData, atlas, renderExtent, sceneIndex, depth = targets.depthCopy, gbufferOne = targets.gbufferOne, output = sunShadow.shadow](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([&scene, pipelineManager, csmData, atlas, renderExtent, sceneIndex, frameNumber, depth = targets.depthCopy, gbufferOne = targets.gbufferOne, output = sunShadow.shadow](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("csm_resolve"_sid);
         const ResourceDimensions& atlasDims = graph.GetImageDimensions(atlas);
         CSMResolvePushConstant pc{
@@ -212,6 +213,7 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
             .atlasIndex = graph.GetSampledImageViewDescriptorIndex(atlas),
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
             .sceneDataIndex = sceneIndex,
+            .frameIndex = static_cast<uint32_t>(frameNumber),
         };
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
