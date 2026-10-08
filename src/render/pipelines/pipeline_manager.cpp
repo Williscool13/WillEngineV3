@@ -605,6 +605,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ShadowExpandMeshletsPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("csm_resolve"_sid, src / "csm_resolve.spv", "ComputeCSMResolve",
                             sizeof(CSMResolvePushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("shadow_bake_linearize"_sid, src / "shadow_bake.spv", "ComputeShadowBakeLinearize",
+                            sizeof(ShadowBakeLinearizePushConstant), PipelineCategory::Legacy);
 
     RegisterComputePipeline("taa_main"_sid, src / "taa.spv", "ComputeTemporalAntialiasing",
                             sizeof(TemporalAntialiasingPushConstant), PipelineCategory::Legacy);

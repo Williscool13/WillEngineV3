@@ -48,6 +48,20 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
                                  glm::uvec2& liveAtlasExtent,
                                  uint32_t sceneIndex);
 
+/**
+ * Draws one baked shadow-map face from bake-static casters and writes linear R16 depth to output.
+ */
+void SetupShadowBake(RenderGraph& graph,
+                     PipelineManager* pipelineManager,
+                     const Core::ViewFamily& viewFamily,
+                     const SceneBufferSizes& bufferSizes,
+                     const SceneResources& scene,
+                     const ShadowViewGPU& view,
+                     uint32_t resolution,
+                     float slopeBias,
+                     VkDeviceAddress output,
+                     uint32_t sceneIndex);
+
 /** Samples the CSM atlas into the sun visibility the directional lighting pass reads. */
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                PipelineManager* pipelineManager,

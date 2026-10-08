@@ -26,10 +26,23 @@ glm::uvec2 LocalShadowAtlasTiles(uint32_t viewBudget);
  * Picks this frame's shadowed lights by contribution to the camera; last frame's picks are favoured so the set does not flip.
  * @param previous light indices picked last frame
  * @param outLights receives at most LOCAL_SHADOW_MAX_VIEWS light indices
+ * @param skipMask bit per light index to leave out, or null
  * @return number of lights picked
  */
 uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, const glm::mat4& cameraViewProj, const glm::vec3& cameraPos, const uint32_t* previous, uint32_t previousCount,
-                                 uint32_t viewBudget, uint32_t* outLights);
+                                 uint32_t viewBudget, uint32_t* outLights, const uint32_t* skipMask = nullptr);
+
+struct LocalShadowBakeParams
+{
+    glm::vec3 eye{0.0f};
+    glm::vec3 forward{0.0f};
+    float tanHalf{0.0f};
+    float nearPlane{0.0f};
+    float farPlane{0.0f};
+    uint32_t faceCount{0};
+};
+
+LocalShadowBakeParams GetLocalShadowBakeParams(const LightInfo& light);
 
 /**
  * The light's view for one face (ignored for a spot), drawn into an atlas tile.

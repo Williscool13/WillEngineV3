@@ -1506,6 +1506,23 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     }
 }
 
+static void DrawShadowBakeSection(Engine::EngineState* state)
+{
+    ShadowBakeSystem& bake = state->shadowBake;
+    if (ImGui::Button("Bake All Shadow Maps##shadowbakeall")) {
+        bake.EnqueueAll(state->registry);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Every light set to Baked shadows. Casters are objects with Bake on that are not moving physics bodies.");
+    }
+    if (bake.IsBusy()) {
+        ImGui::Text("Light %u of %u, face %u/%u", bake.batchDone + 1, bake.batchTotal, bake.face + 1, bake.key.faceCount);
+        if (ImGui::Button("Cancel##shadowbakecancel")) {
+            bake.Cancel();
+        }
+    }
+}
+
 static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     if (ImGui::Button("Bake All Probes##probebakeall")) {
@@ -1622,6 +1639,9 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (ImGui::CollapsingHeader("Probe Bake")) {
                 DrawProbeBakeSection(ctx, state);
+            }
+            if (ImGui::CollapsingHeader("Shadow Map Bake")) {
+                DrawShadowBakeSection(state);
             }
         }
 

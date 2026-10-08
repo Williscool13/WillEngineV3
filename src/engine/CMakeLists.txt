@@ -29,6 +29,8 @@ add_library(engine STATIC
         core/model_id.h
         core/probe_id.h
         core/texture_array_id.h
+        resources/shadow_map/shadow_map_format.cpp
+        resources/shadow_map/shadow_map_format.h
         core/physics_collider_id.h
         core/action_handle.h
         memory/alloc_tags.h
@@ -229,6 +231,8 @@ add_library(engine STATIC
         editor/playtest_system.h
         editor/probe_bake_system.cpp
         editor/probe_bake_system.h
+        editor/shadow_bake_system.cpp
+        editor/shadow_bake_system.h
         editor/core_systems.cpp
         editor/core_systems.h
         editor/ddgi_converge_boost.h

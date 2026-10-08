@@ -39,6 +39,7 @@
 #include "engine/systems/command_queue.h"
 #include "engine/editor_state.h"
 #include "engine/editor/probe_bake_system.h"
+#include "engine/editor/shadow_bake_system.h"
 #include "engine/editor/playtest_system.h"
 #include "engine/console/console.h"
 #include "engine/mcp/mcp_tool.h"
@@ -339,6 +340,7 @@ struct EngineState
     DebugState debug;
     DDGIConvergeBoost ddgiConvergeBoost;
     ProbeBakeSystem probeBake{};
+    ShadowBakeSystem shadowBake{};
     PlaytestSystem playtest{};
     CameraRecorder cameraRecorder{};
     Console::ConsoleState console{};

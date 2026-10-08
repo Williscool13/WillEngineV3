@@ -19,9 +19,8 @@ namespace AssetLoad
 class UploadStaging;
 
 /**
- * Copies every level and face of a parsed WImage into image layers 0..faceCount-1 and leaves it SHADER_READ_ONLY_OPTIMAL.
- * Faces larger than the staging buffer stream in block-row chunks.
- * @param submitAndWait called with true when staging is full; must submit, wait and restart the command buffer
+ * Uploads every level and face of a WImage into layers 0..faceCount-1, ending in SHADER_READ_ONLY_OPTIMAL.
+ * @param submitAndWait called when staging is full; must submit, wait and restart the command buffer
  */
 void UploadWImageLayers(VkCommandBuffer cmd, const Engine::WImageView& blobView, VkImage image, UploadStaging* uploadStaging, const Core::InlineFunction<void(bool)>& submitAndWait);
 } // AssetLoad

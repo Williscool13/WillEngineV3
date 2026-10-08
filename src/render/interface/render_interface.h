@@ -443,6 +443,14 @@ struct LocalShadowLight
     float strength{1.0f};
 };
 
+inline constexpr uint32_t MAX_BAKED_SHADOW_LIGHTS = 256;
+
+struct BakedShadowLight
+{
+    uint32_t lightIndex{0};
+    uint32_t textureArrayIndex{0};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -520,6 +528,7 @@ struct ViewFamily
     uint32_t localShadowActiveTiles{0};
     uint32_t localShadowDirtyTiles{0};
     glm::uvec2 localShadowAtlasExtent{0};
+    InlineVector<BakedShadowLight, MAX_BAKED_SHADOW_LIGHTS> bakedShadowLights{};
     float iblIntensity{1.0f};
     float indirectIntensity{1.0f};
     bool bReflectionProbeBruteForce{false};
@@ -565,6 +574,16 @@ enum class RenderReset : uint8_t
     None = 0,
     Cut,
     Flush,
+};
+
+/** requestId 0 = none; each requestId is drawn once. */
+struct ShadowBakeRequest
+{
+    uint64_t requestId{0};
+    LightInfo light{};
+    uint32_t face{0};
+    uint32_t resolution{0};
+    float slopeBias{0.0f};
 };
 
 struct FrameBuffer
@@ -627,6 +646,7 @@ struct FrameBuffer
     bool bCaptureProbeFace{false};
 
     uint32_t probeCaptureCropSize{0};
+    ShadowBakeRequest shadowBake{};
     RenderReset renderReset = RenderReset::None;
 };
 } // Core

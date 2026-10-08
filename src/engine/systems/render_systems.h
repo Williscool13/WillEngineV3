@@ -42,6 +42,9 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
 void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 /** Upgrades a stand-in/unbaked probe to its baked content once its first bake lands in the probe registry; re-enters the kickoff flow. */
 void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+/** Loads baked shadow maps that match their lights, drops stale ones, and lists the resident ones on the view family. */
+void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);

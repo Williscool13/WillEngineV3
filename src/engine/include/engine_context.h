@@ -146,6 +146,14 @@ struct ProbeCaptureStaging
     std::atomic<bool> bReady{false};
 };
 
+struct ShadowBakeCaptureStaging
+{
+    Core::HeapArray<uint16_t> pixels{};
+    uint64_t requestId{0};
+    uint32_t resolution{0};
+    std::atomic<bool> bReady{false};
+};
+
 /** Face buffers are S x S RGBA16F, moved in. */
 struct ProbeAssembleStaging
 {
@@ -275,6 +283,8 @@ struct EngineContext
     void ConsumeProbeCapture() { probeCapture.bReady.store(false, std::memory_order_release); }
 
     ProbeAssembleStaging probeAssemble{};
+
+    ShadowBakeCaptureStaging shadowBakeCapture{};
 
     /** Moves the 6 face buffers; the engine forwards them to the asset generator next frame. */
     void SubmitProbeAssemble(Core::HeapArray<uint16_t>* faces, uint32_t captureSize, uint32_t targetResolution, const Core::Path& outputPath, uint64_t probeId, const ProbeBakeSnapshot& snapshot, float radianceScale)

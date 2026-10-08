@@ -11,10 +11,6 @@
 
 namespace Render
 {
-static constexpr float LOCAL_SHADOW_CONE_MARGIN = 0.035f;
-// Slightly wider than 90 degrees so PCF taps at a face edge stay inside the tile.
-static constexpr float LOCAL_SHADOW_CUBE_TAN = 1.03f;
-static constexpr float LOCAL_SHADOW_NEAR = 0.05f;
 static constexpr float LOCAL_SHADOW_HYSTERESIS = 1.5f;
 
 static constexpr glm::vec3 CUBE_AXES[6] = {{1.0f, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}};
@@ -168,7 +164,7 @@ static float LightPower(const LightInfo& light)
 }
 
 uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, const glm::mat4& cameraViewProj, const glm::vec3& cameraPos, const uint32_t* previous, uint32_t previousCount,
-                                 uint32_t viewBudget, uint32_t* outLights)
+                                 uint32_t viewBudget, uint32_t* outLights, const uint32_t* skipMask)
 {
     const Frustum frustum = CreateFrustum(cameraViewProj);
     uint32_t ranked[LOCAL_SHADOW_MAX_VIEWS];
@@ -177,7 +173,7 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
 
     for (uint32_t i = 0; i < lightCount; ++i) {
         const LightInfo& light = lights[i];
-        if (!IsShadowEligible(light)) {
+        if (!IsShadowEligible(light) || (skipMask != nullptr && (skipMask[i >> 5] & (1u << (i & 31u))) != 0u)) {
             continue;
         }
         const glm::vec3 position(light.position);
@@ -230,6 +226,24 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
         usedViews += views;
     }
     return pickedCount;
+}
+
+LocalShadowBakeParams GetLocalShadowBakeParams(const LightInfo& light)
+{
+    LocalShadowBakeParams params{};
+    params.eye = glm::vec3(light.position);
+    params.nearPlane = NearPlane(light);
+    params.farPlane = glm::max(light.range, params.nearPlane * 2.0f);
+    if (IsLocalShadowSpot(light)) {
+        params.forward = glm::normalize(glm::vec3(light.normal));
+        params.tanHalf = SpotTanHalf(light);
+        params.faceCount = 1;
+    }
+    else {
+        params.tanHalf = LOCAL_SHADOW_CUBE_TAN;
+        params.faceCount = 6;
+    }
+    return params;
 }
 
 ShadowViewGPU BuildLocalShadowView(const LightInfo& light, uint32_t face, uint32_t tile, glm::uvec2 tiles, uint32_t resolution)

@@ -14,7 +14,6 @@
 
 namespace Render
 {
-/** A 2D array image (one WImage face per layer) sampled through assetTextureArrays[]. */
 struct TextureArray
 {
     enum class LoadState

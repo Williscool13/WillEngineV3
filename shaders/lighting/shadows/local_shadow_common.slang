@@ -62,6 +62,83 @@ static float2 ReceiverDepthGradient(ShadowViewGPU view, float3 worldPos, float3 
     return num / det;
 }
 
+static const float3 CUBE_AXES[6] = { float3(1.0, 0.0, 0.0), float3(-1.0, 0.0, 0.0), float3(0.0, 1.0, 0.0), float3(0.0, -1.0, 0.0), float3(0.0, 0.0, 1.0), float3(0.0, 0.0, -1.0) };
+static const float3 CUBE_UPS[6] = { float3(0.0, 1.0, 0.0), float3(0.0, 1.0, 0.0), float3(0.0, 0.0, -1.0), float3(0.0, 0.0, 1.0), float3(0.0, 1.0, 0.0), float3(0.0, 1.0, 0.0) };
+
+// The view a baked face was drawn with (BuildLocalShadowView); valid because a stale bake is never bound.
+static ShadowViewGPU BakedFaceView(LightInfo light, uint face, uint resolution)
+{
+    float nearPlane = light.type == LIGHT_TYPE_SPHERE ? max(light.right.w * 1.05, LOCAL_SHADOW_NEAR) : LOCAL_SHADOW_NEAR;
+    float farPlane = max(light.range, nearPlane * 2.0);
+    float3 eye = light.position.xyz;
+    float3 forward = CUBE_AXES[face];
+    float3 up = CUBE_UPS[face];
+    float tanHalf = LOCAL_SHADOW_CUBE_TAN;
+    if (IsSpotRecord(light)) {
+        forward = normalize(light.normal.xyz);
+        up = abs(forward.y) < 0.99 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+        tanHalf = tan(acos(saturate(light.position.w)) + LOCAL_SHADOW_CONE_MARGIN);
+    }
+    float3 s = normalize(cross(forward, up));
+    float3 u = cross(s, forward);
+    float a = nearPlane / (farPlane - nearPlane);
+
+    ShadowViewGPU view;
+    view.viewProj = float4x4(
+        float4(s / tanHalf, -dot(s, eye) / tanHalf),
+        float4(-u / tanHalf, dot(u, eye) / tanHalf),
+        float4(-a * forward, a * dot(forward, eye) + a * farPlane),
+        float4(forward, -dot(forward, eye)));
+    view.atlasScaleOffset = float4(1.0, 1.0, 0.0, 0.0);
+    view.eye = float4(eye, 1.0);
+    view.texelSize = 2.0 * tanHalf / float(resolution);
+    view.depthRange = farPlane - nearPlane;
+    view.nearPlane = nearPlane;
+    return view;
+}
+
+struct LocalShadowSource
+{
+    bool bBaked;
+    uint index;
+    uint layer;
+    float2 texel;
+    ShadowViewGPU view;
+
+    float LinearToReverseZ(float linear)
+    {
+        float farPlane = view.nearPlane + view.depthRange;
+        float z = view.nearPlane + linear * view.depthRange;
+        return view.nearPlane * (farPlane - z) / (z * view.depthRange);
+    }
+
+    // Reverse-Z depth at uv
+    float Depth(float2 uv)
+    {
+        if (!bBaked) {
+            return rdgTexturesFloat[index].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r;
+        }
+        return LinearToReverseZ(assetTextureArrays[NonUniformResourceIndex(index)].SampleLevel(assetSamplers[ASSET_SAMPLER_NEAREST_BINDLESS_INDEX], float3(uv, float(layer)), 0).r);
+    }
+
+    // Bilinear-weighted fraction of the 2x2 texels around uv that do not occlude reference
+    float Compare(float2 uv, float reference)
+    {
+        if (!bBaked) {
+            return rdgTexturesFloat[index].SampleCmpLevelZero(rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX], uv, reference);
+        }
+        float4 stored = assetTextureArrays[NonUniformResourceIndex(index)].Gather(assetSamplers[ASSET_SAMPLER_NEAREST_BINDLESS_INDEX], float3(uv, float(layer)));
+        float4 lit;
+        [unroll]
+        for (uint i = 0u; i < 4u; ++i) {
+            lit[i] = reference >= LinearToReverseZ(stored[i]) ? 1.0 : 0.0;
+        }
+        // Gather order: x = (0,1), y = (1,1), z = (1,0), w = (0,0)
+        float2 f = frac(uv / texel - 0.5);
+        return lerp(lerp(lit.w, lit.z, f.x), lerp(lit.x, lit.y, f.x), f.y);
+    }
+};
+
 /** Visibility of a local light from a shaded point, 1 when the light has no shadow map this frame. */
 public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint lightIndex, uint atlasIndex, float3 worldPos, float3 worldN, float2 noise)
 {
@@ -73,18 +150,34 @@ public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint 
         return 1.0;
     }
 
-    uint record = packed & 0xFFu;
-    uint faceMask = (packed >> LOCAL_SHADOW_FACE_SHIFT) & 0x3Fu;
     uint face = 0u;
     if (!IsSpotRecord(light)) {
         float3 d = worldPos - light.position.xyz;
         float3 a = abs(d);
         face = a.x >= a.y && a.x >= a.z ? (d.x >= 0.0 ? 0u : 1u) : a.y >= a.z ? (d.y >= 0.0 ? 2u : 3u) : (d.z >= 0.0 ? 4u : 5u);
     }
-    if ((faceMask & (1u << face)) == 0u) {
-        return 1.0;
+
+    LocalShadowSource source;
+    source.bBaked = (packed & LOCAL_SHADOW_BAKED_BIT) != 0u;
+    source.layer = face;
+    if (source.bBaked) {
+        source.index = packed & LOCAL_SHADOW_BAKED_INDEX_MASK;
+        uint3 size;
+        assetTextureArrays[NonUniformResourceIndex(source.index)].GetDimensions(size.x, size.y, size.z);
+        source.texel = 1.0 / float2(size.xy);
+        source.view = BakedFaceView(light, face, size.x);
     }
-    ShadowViewGPU view = data->views[(data->faceTiles[record] >> (LOCAL_SHADOW_TILE_BITS * face)) & LOCAL_SHADOW_TILE_MASK];
+    else {
+        uint record = packed & 0xFFu;
+        uint faceMask = (packed >> LOCAL_SHADOW_FACE_SHIFT) & 0x3Fu;
+        if ((faceMask & (1u << face)) == 0u) {
+            return 1.0;
+        }
+        source.index = atlasIndex;
+        source.texel = 1.0 / float2(data->atlasExtent);
+        source.view = data->views[(data->faceTiles[record] >> (LOCAL_SHADOW_TILE_BITS * face)) & LOCAL_SHADOW_TILE_MASK];
+    }
+    ShadowViewGPU view = source.view;
     float strength = float(packed >> LOCAL_SHADOW_STRENGTH_SHIFT) / float(LOCAL_SHADOW_STRENGTH_MAX);
 
     float texelWorld = view.texelSize * distance(worldPos, view.eye.xyz);
@@ -99,9 +192,8 @@ public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint 
     }
 
     float3 center = float3((ndc.xy * 0.5 + 0.5) * view.atlasScaleOffset.xy + view.atlasScaleOffset.zw, ndc.z);
-    float2 atlasTexel = 1.0 / float2(data->atlasExtent);
-    float2 tileMin = view.atlasScaleOffset.zw + 0.5 * atlasTexel;
-    float2 tileMax = view.atlasScaleOffset.zw + view.atlasScaleOffset.xy - 0.5 * atlasTexel;
+    float2 tileMin = view.atlasScaleOffset.zw + 0.5 * source.texel;
+    float2 tileMax = view.atlasScaleOffset.zw + view.atlasScaleOffset.xy - 0.5 * source.texel;
     float2 gradient = ReceiverDepthGradient(view, receiverPos, worldN, texelWorld, center);
     float phi = noise.x * 2.0 * PI;
 
@@ -113,9 +205,9 @@ public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint 
         // Nearest blocker to the receiver (smallest reverse-Z depth), not the average: higher parts of the occluder in the search region would widen contact shadows.
         float blockerDepth = 2.0;
         for (uint i = 0u; i < LOCAL_SHADOW_BLOCKER_TAPS; ++i) {
-            float2 o = LocalVogelOffset(i, LOCAL_SHADOW_BLOCKER_TAPS, phi) * searchRadius * atlasTexel;
+            float2 o = LocalVogelOffset(i, LOCAL_SHADOW_BLOCKER_TAPS, phi) * searchRadius * source.texel;
             float2 uv = clamp(center.xy + o, tileMin, tileMax);
-            float blocker = rdgTexturesFloat[atlasIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r;
+            float blocker = source.Depth(uv);
             if (blocker > center.z + dot(gradient, uv - center.xy)) {
                 blockerDepth = min(blockerDepth, blocker);
             }
@@ -132,9 +224,9 @@ public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint 
 
     float visibility = 0.0;
     for (uint i = 0u; i < LOCAL_SHADOW_FILTER_TAPS; ++i) {
-        float2 o = LocalVogelOffset(i, LOCAL_SHADOW_FILTER_TAPS, phi) * radius * atlasTexel;
+        float2 o = LocalVogelOffset(i, LOCAL_SHADOW_FILTER_TAPS, phi) * radius * source.texel;
         float2 uv = clamp(center.xy + o, tileMin, tileMax);
-        visibility += rdgTexturesFloat[atlasIndex].SampleCmpLevelZero(rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX], uv, center.z + dot(gradient, uv - center.xy));
+        visibility += source.Compare(uv, center.z + dot(gradient, uv - center.xy));
     }
     visibility /= float(LOCAL_SHADOW_FILTER_TAPS);
     return lerp(1.0, visibility, strength);

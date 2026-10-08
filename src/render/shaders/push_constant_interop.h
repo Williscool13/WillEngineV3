@@ -2488,6 +2488,7 @@ SHADER_PUBLIC struct ShadowInstanceCullPushConstant
     SHADER_PUBLIC uint32_t viewCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC int32_t lodBias;
+    SHADER_PUBLIC uint32_t requiredInstanceFlags;
 };
 
 SHADER_PUBLIC struct ShadowExpandMeshletsPushConstant
@@ -2521,6 +2522,15 @@ SHADER_PUBLIC struct ShadowDepthPushConstant
     SHADER_PUBLIC SHADER_PTR(CompactedMeshlet) visibleMeshlets;
     SHADER_PUBLIC SHADER_PTR(InstancingCompactedMeshletDispatchIndirect) compactedDispatchBuffer;
     SHADER_PUBLIC uint32_t drawRegion;
+};
+
+SHADER_PUBLIC struct ShadowBakeLinearizePushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(uint32_t) output;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t resolution;
+    SHADER_PUBLIC float nearPlane;
+    SHADER_PUBLIC float farPlane;
 };
 
 SHADER_PUBLIC struct CSMResolvePushConstant

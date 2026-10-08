@@ -173,7 +173,7 @@ struct LocalShadowFrame
     RDGBuffer data;
     RDGTexture atlas;
 
-    [[nodiscard]] bool IsValid() const { return atlas.IsValid(); }
+    [[nodiscard]] bool IsValid() const { return data.IsValid(); }
 };
 
 struct SunShadowFrame

@@ -27,7 +27,6 @@ enum class LightShadowMode : uint32_t
 {
     Off = 0,
     Dynamic = 1,
-    // Static casters come from a .wshadowmap; falls back to Dynamic while unbaked or stale
     Baked = 2,
 };
 
@@ -66,6 +65,8 @@ struct AreaLightComponent
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
+    /** Runtime-only. Resident baked shadow map while the bake matches the light. */
+    Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
     WILL_REFLECT(AreaLightComponent,
         WILL_FIELD(bEnabled),
@@ -129,6 +130,8 @@ struct SphereLightComponent
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
+    /** Runtime-only. Resident baked shadow map while the bake matches the light. */
+    Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
     WILL_REFLECT(SphereLightComponent,
         WILL_FIELD(bEnabled),

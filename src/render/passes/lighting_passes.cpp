@@ -397,6 +397,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     }
     if (localShadows.IsValid()) {
         lightingResolve.ReadBuffer(localShadows.data);
+    }
+    if (localShadows.atlas.IsValid()) {
         lightingResolve.ReadSampledImage(localShadows.atlas);
     }
     lightingResolve.WriteStorageImage(targets.colorOutput);
@@ -458,7 +460,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
                     .indirectIntensity = viewFamily.indirectIntensity,
                     .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(giSkyVis) : ~0x0u,
-                    .localShadows = localShadowAtlas.IsValid() ? graph.GetBufferAddress(localShadowData) : 0,
+                    .localShadows = localShadowData.IsValid() ? graph.GetBufferAddress(localShadowData) : 0,
                     .localShadowAtlasIndex = localShadowAtlas.IsValid() ? graph.GetSampledImageViewDescriptorIndex(localShadowAtlas) : ~0x0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

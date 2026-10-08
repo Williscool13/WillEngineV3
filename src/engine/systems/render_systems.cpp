@@ -691,6 +691,43 @@ static uint32_t TouchedTileMask(const ShadowViewGPU* views, uint32_t activeTiles
     return mask & activeTiles;
 }
 
+template<typename LightComponent>
+static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, LightComponent& light, bool bActive)
+{
+    Engine::AssetManager& assets = *ctx->assetManager;
+    const LightInfo* lights = state->analyticLightStore.Lights();
+    const Engine::AssetManager::ShadowMapInfo* info = light.shadowMode == Component::LightShadowMode::Baked ? assets.GetShadowMapInfo(light.shadowId) : nullptr;
+    const bool bUsable = info != nullptr && light.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT && Engine::IsShadowBakeCurrent(info->key, lights[light.lightSlot]);
+    if (!bUsable) {
+        if (light.bakedShadow.IsValid()) {
+            assets.UnloadTextureArray(light.bakedShadow);
+            light.bakedShadow = Engine::TextureArrayHandle::INVALID;
+        }
+        return;
+    }
+    if (!light.bakedShadow.IsValid()) {
+        light.bakedShadow = assets.LoadShadowMap(light.shadowId);
+    }
+    const Render::TextureArray* map = assets.GetTextureArray(light.bakedShadow);
+    if (bActive && map != nullptr && map->loadState == Render::TextureArray::LoadState::Loaded && !vf.bakedShadowLights.IsFull()) {
+        vf.bakedShadowLights.PushBack({light.lightSlot, static_cast<uint32_t>(map->bindlessHandle.index)});
+    }
+}
+
+void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    vf.bakedShadowLights.Clear();
+    const bool bActive = state->lighting.localShadows.bEnabled && state->lighting.lightingMode == Core::LightingMode::Analytic;
+    for (auto [entity, light] : state->registry.view<Component::AreaLightComponent>().each()) {
+        ResolveBakedShadow(ctx, state, vf, light, bActive);
+    }
+    for (auto [entity, light] : state->registry.view<Component::SphereLightComponent>().each()) {
+        ResolveBakedShadow(ctx, state, vf, light, bActive);
+    }
+}
+
 static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
 {
     // Past this many changed casters nearly every light's range has one; redrawing everything is cheaper than testing.
@@ -735,7 +772,13 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
         const glm::mat4 cameraViewProj = view.proj * view.view;
         const Frustum camera = Render::CreateFrustum(cameraViewProj);
         uint32_t picks[LOCAL_SHADOW_MAX_VIEWS];
-        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previousIndices, previous.lightCount, budget, picks);
+        // Lights with a resident baked map leave the dynamic budget
+        uint32_t bakedMask[MAX_ANALYTIC_LIGHTS / 32] = {};
+        for (const Core::BakedShadowLight& baked : vf.bakedShadowLights) {
+            bakedMask[baked.lightIndex >> 5] |= 1u << (baked.lightIndex & 31u);
+        }
+        auto isBaked = [&](uint32_t lightIndex) { return (bakedMask[lightIndex >> 5] & (1u << (lightIndex & 31u))) != 0u; };
+        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previousIndices, previous.lightCount, budget, picks, bakedMask);
 
         selection.lightCount = 0;
         uint32_t usedViews = 0;
@@ -759,7 +802,7 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
                 bPicked |= picks[k] == old.lightIndex;
             }
             const float strength = old.strength - fadeStep;
-            if (!bPicked && strength > 0.0f && old.lightIndex < lightCount && selection.lightCount < LOCAL_SHADOW_MAX_VIEWS) {
+            if (!bPicked && strength > 0.0f && old.lightIndex < lightCount && !isBaked(old.lightIndex) && selection.lightCount < LOCAL_SHADOW_MAX_VIEWS) {
                 add(old.lightIndex, strength);
             }
         }

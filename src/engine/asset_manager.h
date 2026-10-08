@@ -15,6 +15,7 @@
 #include "engine/core/physics_collider_id.h"
 #include "core/sampler_id.h"
 #include "engine/resources/environment_map/probe_format.h"
+#include "engine/resources/shadow_map/shadow_map_format.h"
 #include "engine/include/engine_context.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
@@ -339,6 +340,19 @@ public: // Texture arrays
         return textureArrayCache.Find(textureArrayId);
     }
 
+public: // Baked shadow maps
+    struct ShadowMapInfo
+    {
+        Core::Path source;
+        uint32_t resolution{0};
+        ShadowBakeKey key{};
+        uint64_t contentVersion{0};
+    };
+
+    [[nodiscard]] const ShadowMapInfo* GetShadowMapInfo(uint64_t shadowId) const { return shadowMapRegistry.Find(shadowId); }
+
+    TextureArrayHandle LoadShadowMap(uint64_t shadowId);
+
 public: // Reflection probes
     struct ProbeInfo
     {
@@ -590,6 +604,7 @@ private: // Asset Registry
     Core::FixedMap<ProbeID, ProbeInfo> probeRegistry;
 
     Core::FixedMap<TextureArrayID, CachedTextureArrayMetadata> textureArrayCache;
+    Core::FixedMap<uint64_t, ShadowMapInfo> shadowMapRegistry;
 
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;

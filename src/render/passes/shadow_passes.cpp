@@ -9,6 +9,7 @@
 #include "render/render_utils.h"
 #include "render/passes/geometry_passes.h"
 #include "render/render-view/csm_views.h"
+#include "render/shaders/flags_interop.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-graph/render_pass.h"
@@ -32,6 +33,7 @@ struct ShadowDepthDesc
     glm::uvec2 atlasExtent;
     float slopeBias;
     size_t readbackOffset;
+    uint32_t requiredInstanceFlags;
 };
 
 static StringID ShadowPassID(const char* prefix, const char* base)
@@ -82,7 +84,7 @@ static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
     instanceCull.ReadBuffer(scene.models);
     instanceCull.ReadBuffer(scene.instances);
     instanceCull.WriteBuffer(instanceMeshletOffsets);
-    instanceCull.Execute([&scene, pipelineManager, views, instanceMeshletOffsets, instanceCount, viewCount, elementCount, sceneIndex, lodBias](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    instanceCull.Execute([&scene, pipelineManager, views, instanceMeshletOffsets, instanceCount, viewCount, elementCount, sceneIndex, lodBias, requiredFlags = desc.requiredInstanceFlags](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadow_instance_cull"_sid);
         ShadowInstanceCullPushConstant pc{
             .sceneData = graph.GetBufferAddress(scene.sceneData),
@@ -95,6 +97,7 @@ static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
             .viewCount = viewCount,
             .sceneDataIndex = sceneIndex,
             .lodBias = lodBias,
+            .requiredInstanceFlags = requiredFlags,
         };
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
@@ -235,6 +238,7 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
         .atlasExtent = CSMAtlasExtent(cascadeCount, static_cast<uint32_t>(viewFamily.csm.resolution)),
         .slopeBias = viewFamily.csm.slopeBias,
         .readbackOffset = offsetof(ReadbackStruct, shadowMeshletCount),
+        .requiredInstanceFlags = 0,
     };
     return SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.shadowCull, scene, csmData, cascadeCount, desc, sceneIndex);
 }
@@ -273,6 +277,7 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
         .atlasExtent = atlasExtent,
         .slopeBias = viewFamily.localShadows.slopeBias,
         .readbackOffset = offsetof(ReadbackStruct, localShadowMeshletCount),
+        .requiredInstanceFlags = 0,
     };
 
     const HostBufferMapping drawViews = graph.OpenHostBuffer("local_shadow_draw_views"_sid, LOCAL_SHADOW_MAX_VIEWS * sizeof(ShadowViewGPU));
@@ -285,6 +290,67 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
     }
     SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.localShadowCull, scene, drawViews.buffer, viewCount, desc, sceneIndex);
     return atlas;
+}
+
+void SetupShadowBake(RenderGraph& graph,
+                     PipelineManager* pipelineManager,
+                     const Core::ViewFamily& viewFamily,
+                     const SceneBufferSizes& bufferSizes,
+                     const SceneResources& scene,
+                     const ShadowViewGPU& view,
+                     uint32_t resolution,
+                     float slopeBias,
+                     VkDeviceAddress output,
+                     uint32_t sceneIndex)
+{
+    ZoneScoped;
+    const HostBufferMapping viewMapping = graph.OpenHostBuffer("shadow_bake_view"_sid, sizeof(ShadowViewGPU));
+    memcpy(viewMapping.data, &view, sizeof(ShadowViewGPU));
+
+    const ShadowDepthDesc desc{
+        .passPrefix = "[Shadow Bake]",
+        .bufferPrefix = "shadow_bake_",
+        .atlas = {},
+        .clearTiles = 0,
+        .tileViews = nullptr,
+        .atlasName = "shadow_bake_depth"_sid,
+        .opaquePipeline = "local_shadow_depth"_sid,
+        .cutoutPipeline = "local_shadow_depth_cutout"_sid,
+        .atlasExtent = {resolution, resolution},
+        .slopeBias = slopeBias,
+        .readbackOffset = offsetof(ReadbackStruct, localShadowMeshletCount),
+        .requiredInstanceFlags = INSTANCE_FLAG_BAKE_STATIC,
+    };
+    const RDGTexture depth = SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.localShadowCull, scene, viewMapping.buffer, 1, desc, sceneIndex);
+    if (!depth.IsValid()) {
+        return;
+    }
+
+    RenderPass& linearize = graph.AddPass("[Shadow Bake] Linearize"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ShadowMaps);
+    linearize.ReadSampledImage(depth);
+    linearize.Execute([pipelineManager, depth, resolution, output, nearPlane = view.nearPlane, farPlane = view.nearPlane + view.depthRange](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadow_bake_linearize"_sid);
+        const ShadowBakeLinearizePushConstant pc{
+            .output = output,
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .resolution = resolution,
+            .nearPlane = nearPlane,
+            .farPlane = farPlane,
+        };
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        vkCmdDispatch(cmd, (resolution / 2 + 7) / 8, (resolution + 7) / 8, 1);
+
+        const VkMemoryBarrier2 toHost{
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT,
+            .dstAccessMask = VK_ACCESS_2_HOST_READ_BIT,
+        };
+        const VkDependencyInfo dependency{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .memoryBarrierCount = 1, .pMemoryBarriers = &toHost};
+        vkCmdPipelineBarrier2(cmd, &dependency);
+    });
 }
 
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,

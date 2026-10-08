@@ -29,6 +29,7 @@
 #include "engine/components/render/text_component.h"
 #include "engine/components/core_components.h"
 #include "engine/components/physics/physics_body_desc.h"
+#include "engine/components/physics/physics_components.h"
 #include "render/types/render_types.h"
 
 
@@ -442,12 +443,20 @@ static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity en
     return renderFlags && renderFlags->bEmissiveLight;
 }
 
-static uint32_t InstanceFlagsFrom(const Component::RenderFlagsComponent& renderFlags)
+static bool IsBakeStatic(const entt::registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
+{
+    if (!renderFlags.bBakeInclude || registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { return false; }
+    const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
+    return body == nullptr || body->motionType == Component::PhysicsMotionType::Static;
+}
+
+static uint32_t InstanceFlagsFrom(const entt::registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
     return (renderFlags.bMotionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u)
            | (renderFlags.bAlphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
            | (renderFlags.bDdgiContribute ? INSTANCE_FLAG_DDGI_VISIBLE : 0u)
-           | (renderFlags.bCameraMotionBlur ? INSTANCE_FLAG_CAMERA_MOTION_BLUR : 0u);
+           | (renderFlags.bCameraMotionBlur ? INSTANCE_FLAG_CAMERA_MOTION_BLUR : 0u)
+           | (IsBakeStatic(registry, entity, renderFlags) ? INSTANCE_FLAG_BAKE_STATIC : 0u);
 }
 
 void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity)
@@ -459,7 +468,7 @@ void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity
     if (!runtime->range.IsValid()) { return; }
 
     const bool bVisible = renderFlags->bVisible &&!state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
-    const uint32_t flags = InstanceFlagsFrom(*renderFlags);
+    const uint32_t flags = InstanceFlagsFrom(state->registry, entity, *renderFlags);
 
     const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
     if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime->stableId) { return; }
@@ -479,7 +488,7 @@ void EvaluateAllInstanceRenderStates(Engine::EngineState* state)
         if (bVisible && bAnyHideTags) {
             bVisible = !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
         }
-        const uint32_t flags = InstanceFlagsFrom(renderFlags);
+        const uint32_t flags = InstanceFlagsFrom(state->registry, entity, renderFlags);
 
         const Engine::InstanceSource& src = store[runtime.range.offset];
         if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime.stableId) { continue; }

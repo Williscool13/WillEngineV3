@@ -199,6 +199,7 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
 void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph)
 {
     graph.Add("ProbeBakeTick", &ProbeBakeTick);
+    graph.Add("ShadowBakeTick", &ShadowBakeTick);
     graph.Add("DDGIConvergeBoost", [](EngineContext* ctx, EngineState* state) {
         DDGIConvergeBoostTick(state->ddgiConvergeBoost, state->lighting.ddgi);
     });
@@ -216,6 +217,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("RenderPrepareTransforms", &RenderPrepareTransforms);
     graph.Add("SyncLightSurfaces", &SyncLightSurfaces);
     graph.Add("ResolveSkyboxCubemaps", &ResolveSkyboxCubemaps);
+    graph.Add("ResolveBakedShadows", &ResolveBakedShadows);
     graph.Add("GatherRenderables", &GatherRenderables, {
         .bExclusive = false,
         .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::VolumetricFogComponent>(), "assetManager"_sid, "materialManager"_sid, "engineConfig"_sid},

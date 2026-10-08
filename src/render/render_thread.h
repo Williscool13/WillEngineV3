@@ -19,6 +19,7 @@
 #include "render/vulkan/vk_resources.h"
 #include "render/vulkan/vk_synchronization.h"
 #include "render/systems/render_screen_capture.h"
+#include "render/systems/shadow_bake_readback.h"
 #include "render/types/render_types.h"
 #include "render/post-processing/post_processing.h"
 #include "render/frame_outputs.h"
@@ -139,6 +140,11 @@ public:
     uint32_t GetProbeCaptureSize() const { return screenCapture->GetProbeCaptureCaptureSize(); }
     float GetProbeCapturePreExposure() const { return screenCapture->probeCapturePreExposure; }
     void ReleaseProbeCapture() { screenCapture->ReleaseProbeCapture(); }
+    bool IsShadowBakeReady() const { return shadowBakeReadback.bReady.load(std::memory_order_acquire); }
+    const uint16_t* GetShadowBakePixels() const { return shadowBakeReadback.Pixels(); }
+    uint32_t GetShadowBakeResolution() const { return shadowBakeReadback.resolution; }
+    uint64_t GetShadowBakeRequestId() const { return shadowBakeReadback.requestId; }
+    void ReleaseShadowBake() { shadowBakeReadback.Release(); }
 
 private:
     void UploadFrameUniforms(const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, float renderDeltaTime, SceneResources& scene) const;
@@ -180,6 +186,8 @@ private:
     void RecordPresentation(FrameContext& ctx);
 
     void RecordProbeCapture(FrameContext& ctx);
+
+    void RecordShadowBake(FrameContext& ctx);
 
 #if WILL_EDITOR
     void RecordDiagnostics(FrameContext& ctx);
@@ -266,6 +274,7 @@ private:
 
 private:
     RenderScreenCapture* screenCapture{};
+    ShadowBakeReadback shadowBakeReadback{};
 };
 } // Render
 

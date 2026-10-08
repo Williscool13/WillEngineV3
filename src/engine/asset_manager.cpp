@@ -35,6 +35,7 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       cubemapCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       probeRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
       textureArrayCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS),
+      shadowMapRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS),
       sceneCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
       prefabCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
       playCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PLAYS),
@@ -1667,6 +1668,31 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                         if (!changedEnvironmentMapIds.IsFull()) { changedEnvironmentMapIds.PushBack(envMapId); }
                     }
                 }
+                else if (ext == ".wshadowmap") {
+                    auto header = ReadWShadowMapHeader(path);
+                    if (!header) { continue; }
+                    const ShadowMapInfo* prev = shadowMapRegistry.Find(header->shadowId);
+                    const bool bChanged = prev != nullptr && prev->contentVersion != header->contentVersion;
+
+                    ShadowMapInfo& info = shadowMapRegistry[header->shadowId];
+                    info.source = Core::Path(path);
+                    info.resolution = header->resolution;
+                    info.key = header->key;
+                    info.contentVersion = header->contentVersion;
+
+                    const TextureArrayID arrayId{header->shadowId};
+                    CachedTextureArrayMetadata& cached = textureArrayCache[arrayId];
+                    cached.source = Core::Path(path);
+                    cached.name = Core::InlineString<128>(path.Stem());
+                    cached.dataOffset = header->dataOffset;
+                    cached.dataSize = header->dataSize;
+                    cached.uncompressedSize = header->uncompressedSize;
+                    cached.compressionType = header->compressionType;
+                    cached.contentVersion = header->contentVersion;
+                    if (bChanged) {
+                        ReloadTextureArray(arrayId);
+                    }
+                }
                 else if (ext == ".wscene") {
                     auto header = ReadWSceneHeader(path);
                     if (!header) { continue; }
@@ -2342,6 +2368,14 @@ void AssetManager::UnloadTextureArray(TextureArrayHandle handle)
     if (textureArray.refCount == 0) {
         textureArray.retireFrame = TEXTURE_ARRAY_RETIRE_PENDING;
     }
+}
+
+TextureArrayHandle AssetManager::LoadShadowMap(uint64_t shadowId)
+{
+    if (!shadowMapRegistry.Contains(shadowId)) {
+        return TextureArrayHandle::INVALID;
+    }
+    return LoadTextureArray(TextureArrayID{shadowId});
 }
 
 CubemapHandle AssetManager::LoadProbe(ProbeID probeId)

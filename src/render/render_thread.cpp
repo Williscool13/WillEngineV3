@@ -92,6 +92,7 @@ RenderThread::RenderThread(Core::MemoryManager& memoryManager, Core::FrameSync* 
     renderArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Render, "render");
     renderGraph = new(memoryManager.RenderAllocRaw(sizeof(RenderGraph))) RenderGraph(context, resourceManager, renderAlloc, renderArena.Get());
     screenCapture = new(memoryManager.RenderAllocRaw(sizeof(RenderScreenCapture))) RenderScreenCapture(context, scheduler);
+    shadowBakeReadback.context = context;
     // Vulkan-side NRD init is deferred to the first Record when DenoiserMode::NRD is selected
     nrdDenoiser = new(memoryManager.RenderAllocRaw(sizeof(NrdDenoiser))) NrdDenoiser(context, renderAlloc);
     pipelineStatsQuery.Init(context);
@@ -267,6 +268,7 @@ void RenderThread::RenderFrame(uint32_t currentFrameIndex, RenderSynchronization
     statisticsManager.scratch.gpuSpanMs = smoothedGpuSpanMs;
     screenCapture->ResolveScreenshot(currentFrameIndex);
     screenCapture->ResolveProbeCapture(currentFrameIndex);
+    shadowBakeReadback.Resolve(currentFrameIndex);
 
     VK_CHECK(vkResetCommandBuffer(renderSync.commandBuffer, 0));
     VK_CHECK(vkResetCommandBuffer(renderSync.asyncComputeCommandBuffer, 0));

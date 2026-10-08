@@ -45,6 +45,13 @@ SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_STRENGTH_SHIFT = 22;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_STRENGTH_MAX = 1023;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_TILE_BITS = 4;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_TILE_MASK = 0xF;
+// lightShadow entry of a light sampled from its baked map: this bit | assetTextureArrays index | strength << LOCAL_SHADOW_STRENGTH_SHIFT
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_BAKED_BIT = 0x8000;
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_BAKED_INDEX_MASK = 0x7FFF;
+// Slightly wider than 90 degrees so PCF taps at a face edge stay inside the tile
+SHADER_PUBLIC SHADER_CONST float LOCAL_SHADOW_CUBE_TAN = 1.03f;
+SHADER_PUBLIC SHADER_CONST float LOCAL_SHADOW_NEAR = 0.05f;
+SHADER_PUBLIC SHADER_CONST float LOCAL_SHADOW_CONE_MARGIN = 0.035f;
 
 // Shadow cull meshletIndexWithinLOD: bits 0..21 meshlet, 22..27 view, 28..31 LOD.
 SHADER_PUBLIC SHADER_CONST uint32_t SHADOW_VIEW_SHIFT = 22;
@@ -94,7 +101,7 @@ SHADER_PUBLIC struct LocalShadowData
     SHADER_PUBLIC uint32_t _pad2;
     // Tile per face, LOCAL_SHADOW_TILE_BITS each, +X -X +Y -Y +Z -Z; a spot uses face 0
     SHADER_PUBLIC uint32_t faceTiles[LOCAL_SHADOW_MAX_VIEWS];
-    // Shadowed light record | face mask << LOCAL_SHADOW_FACE_SHIFT (bit 0 alone for a spot) | fade strength << LOCAL_SHADOW_STRENGTH_SHIFT; LOCAL_SHADOW_NONE when unshadowed
+    // Shadowed light record | face mask << LOCAL_SHADOW_FACE_SHIFT (bit 0 alone for a spot) | fade strength << LOCAL_SHADOW_STRENGTH_SHIFT, a baked entry, or LOCAL_SHADOW_NONE
     SHADER_PUBLIC uint32_t lightShadow[MAX_ANALYTIC_LIGHTS];
 };
 

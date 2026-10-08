@@ -78,6 +78,8 @@ add_library(render STATIC
         interface/render_interface.h
         systems/render_screen_capture.cpp
         systems/render_screen_capture.h
+        systems/shadow_bake_readback.cpp
+        systems/shadow_bake_readback.h
         renderer.cpp
         renderer.h
         passes/geometry_passes.cpp

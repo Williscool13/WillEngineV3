@@ -1734,6 +1734,17 @@ void WillEngine::Run()
                     renderThread->ReleaseProbeCapture();
                 }
 
+                if (renderThread->IsShadowBakeReady() && !engineContext->shadowBakeCapture.bReady.load(std::memory_order_acquire)) {
+                    const uint32_t resolution = renderThread->GetShadowBakeResolution();
+                    const size_t texelCount = static_cast<size_t>(resolution) * resolution;
+                    engineContext->shadowBakeCapture.pixels = Core::HeapArray<uint16_t>(&memoryManager.AssetsScratch(), Core::AllocTag::EngineContext, texelCount);
+                    memcpy(engineContext->shadowBakeCapture.pixels.Data(), renderThread->GetShadowBakePixels(), texelCount * sizeof(uint16_t));
+                    engineContext->shadowBakeCapture.resolution = resolution;
+                    engineContext->shadowBakeCapture.requestId = renderThread->GetShadowBakeRequestId();
+                    engineContext->shadowBakeCapture.bReady.store(true, std::memory_order_release);
+                    renderThread->ReleaseShadowBake();
+                }
+
                 const Render::RadianceCacheStatistics wcStats = renderThread->GetRendererStatistics().radianceCache;
                 engineContext->radianceCacheStats = {wcStats.occupiedSlots, wcStats.cellsCarried, wcStats.cellsEvicted, wcStats.insertsFailed, wcStats.cellsShaded};
                 const Render::ReGIRStatistics regirStats = renderThread->GetRendererStatistics().regir;

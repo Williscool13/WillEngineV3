@@ -37,7 +37,7 @@ void ComputeShadowInstanceCull(uniform ShadowInstanceCullPushConstant pc, uint3 
     uint count = 0;
     uint lod = LOD_CULLED;
     Instance inst = pc.instanceBuffer[instanceID];
-    if (inst.primitiveIndex != DEAD_SLOT_PRIMITIVE_INDEX) {
+    if (inst.primitiveIndex != DEAD_SLOT_PRIMITIVE_INDEX && (inst.flags & pc.requiredInstanceFlags) == pc.requiredInstanceFlags) {
         Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
         Model model = pc.modelBuffer[inst.modelIndex];
         float4 worldBounds = ComputeInstanceWorldBounds(prim, model);

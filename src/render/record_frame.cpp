@@ -35,6 +35,7 @@
 #include "render/pipelines/pipeline_manager.h"
 #include "render/render-view/render_view_helpers.h"
 #include "render/render-view/csm_views.h"
+#include "render/render-view/local_shadow_views.h"
 #include "render/post-processing/post_processing.h"
 #include "render/vulkan/vk_config.h"
 
@@ -508,6 +509,12 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
         RecordSunShadows(ctx);
     }
 
+#if WILL_EDITOR
+    if (frameBuffer.shadowBake.requestId != 0 && shadowBakeReadback.CanAccept(frameBuffer.shadowBake.requestId)) {
+        RecordShadowBake(ctx);
+    }
+#endif
+
     SetupShadowsResolve(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, scene, ctx.gtao, ctx.sunShadow, 0);
 }
 
@@ -638,7 +645,7 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
                                               ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
 
     LocalShadowFrame localShadows{};
-    if (viewFamily.localShadowActiveTiles != 0u && viewFamily.instanceCount > 0) {
+    if ((viewFamily.localShadowActiveTiles != 0u || !viewFamily.bakedShadowLights.IsEmpty()) && viewFamily.instanceCount > 0) {
         const HostBufferMapping mapping = renderGraph->OpenHostBuffer("local_shadow_data"_sid, sizeof(LocalShadowData));
         auto* data = static_cast<LocalShadowData*>(mapping.data);
         memcpy(data->views, viewFamily.localShadowViews.Data(), sizeof(data->views));
@@ -653,8 +660,15 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
             data->faceTiles[i] = light.faceTiles;
             data->lightShadow[light.lightIndex] = i | (light.faceMask << LOCAL_SHADOW_FACE_SHIFT) | (strength << LOCAL_SHADOW_STRENGTH_SHIFT);
         }
+        for (const Core::BakedShadowLight& baked : viewFamily.bakedShadowLights) {
+            if (baked.lightIndex < viewFamily.analyticLightCount) {
+                data->lightShadow[baked.lightIndex] = LOCAL_SHADOW_BAKED_BIT | baked.textureArrayIndex | (LOCAL_SHADOW_STRENGTH_MAX << LOCAL_SHADOW_STRENGTH_SHIFT);
+            }
+        }
         localShadows.data = mapping.buffer;
-        localShadows.atlas = SetupLocalShadowDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, localShadowAtlasExtent, 0);
+        if (viewFamily.localShadowActiveTiles != 0u) {
+            localShadows.atlas = SetupLocalShadowDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, localShadowAtlasExtent, 0);
+        }
     }
 
     SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, ctx.geometry, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, ctx.restir, localShadows, 0,
@@ -916,6 +930,18 @@ void RenderThread::RecordProbeCapture(FrameContext& ctx)
     screenCapture->probeCapturePreExposure = preExposure;
     screenCapture->probeCapturePendingSlot = ctx.frameIndex;
     screenCapture->StartProbeCapture();
+}
+
+void RenderThread::RecordShadowBake(FrameContext& ctx)
+{
+    const Core::ShadowBakeRequest& request = ctx.frameBuffer.shadowBake;
+    const uint32_t faceTiles = IsLocalShadowSpot(request.light) ? 1u : 6u;
+    if (request.face >= faceTiles || request.resolution < 2) {
+        return;
+    }
+    const ShadowViewGPU view = BuildLocalShadowView(request.light, request.face, 0, {1, 1}, request.resolution);
+    const VkDeviceAddress output = shadowBakeReadback.Begin(request.requestId, request.resolution, ctx.frameIndex);
+    SetupShadowBake(*renderGraph, pipelineManager, ctx.viewFamily, ctx.bufferSizes, ctx.scene, view, request.resolution, request.slopeBias, output, 0);
 }
 
 #if WILL_EDITOR

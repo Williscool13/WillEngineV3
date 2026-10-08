@@ -12,6 +12,7 @@
 #include "engine/components/core_components.h"
 #include "engine/components/render_components.h"
 #include "engine/include/engine_context.h"
+#include "engine/asset_manager.h"
 #include "render/types/render_types.h"
 
 namespace Engine
@@ -106,6 +107,30 @@ void Component::SphereLightComponent::OnEditCommit(entt::registry& registry, ent
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
 
+static void DrawShadowBakeControls(EditContext& edit, uint32_t lightSlot, uint64_t shadowId)
+{
+    entt::registry& registry = edit.Registry();
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+
+    const AssetManager::ShadowMapInfo* info = ctx->assetManager->GetShadowMapInfo(shadowId);
+    if (info == nullptr) {
+        ImGui::TextDisabled("Not baked, using dynamic");
+    }
+    else if (lightSlot != AnalyticLightStore::INVALID_SLOT && !IsShadowBakeCurrent(info->key, state->analyticLightStore.Lights()[lightSlot])) {
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Stale, using dynamic until rebaked");
+    }
+    else {
+        ImGui::Text("Baked shadow_%llu (%u)", static_cast<unsigned long long>(shadowId), info->resolution);
+    }
+
+    ImGui::BeginDisabled(edit.IsMulti());
+    if (ImGui::Button("Bake Shadow Map")) {
+        state->shadowBake.Enqueue(edit.Primary());
+    }
+    ImGui::EndDisabled();
+}
+
 static constexpr const char* SHADOW_MODE_LABELS[] = {"Off", "Dynamic", "Baked"};
 static constexpr const char* SHADOW_BAKE_RESOLUTION_LABELS[] = {"256", "512", "1024", "2048"};
 
@@ -156,10 +181,6 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         EditWidgets::Checkbox(edit, "Normalize Cone##al", &AreaLightComponent::bNormalizeCone);
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##al", &AreaLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##al", &AreaLightComponent::bExcludeFromProbeBake);
-        EditWidgets::Combo(edit, "Shadows##al", &AreaLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
-        if (comp.shadowMode == LightShadowMode::Baked) {
-            EditWidgets::Combo(edit, "Bake Resolution##al", &AreaLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
-        }
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
@@ -168,6 +189,13 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         }
         ImGui::EndDisabled();
         ImGui::PopStyleColor();
+
+        Widgets::SubHeader("Shadows");
+        EditWidgets::Combo(edit, "Mode##al", &AreaLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
+        if (comp.shadowMode == LightShadowMode::Baked) {
+            EditWidgets::Combo(edit, "Bake Resolution##al", &AreaLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
+            DrawShadowBakeControls(edit, comp.lightSlot, comp.shadowId);
+        }
     }
 
     const auto* transform = registry.try_get<WorldTransformComponent>(entity);
@@ -287,6 +315,10 @@ void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::en
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& light = registry.get<AreaLightComponent>(entity);
+    if (light.bakedShadow.IsValid()) {
+        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(light.bakedShadow);
+        light.bakedShadow = TextureArrayHandle::INVALID;
+    }
     if (light.lightSlot != AnalyticLightStore::INVALID_SLOT) {
         state->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = light.lightSlot}});
         light.lightSlot = AnalyticLightStore::INVALID_SLOT;
@@ -315,9 +347,11 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly this light scatters in volumetric fog; 0 = fog ignores it (fill and cheat lights)"); }
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
-        EditWidgets::Combo(edit, "Shadows##sl", &SphereLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
+        Widgets::SubHeader("Shadows");
+        EditWidgets::Combo(edit, "Mode##sl", &SphereLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
         if (comp.shadowMode == LightShadowMode::Baked) {
             EditWidgets::Combo(edit, "Bake Resolution##sl", &SphereLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
+            DrawShadowBakeControls(edit, comp.lightSlot, comp.shadowId);
         }
     }
 
@@ -369,6 +403,10 @@ void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& light = registry.get<SphereLightComponent>(entity);
+    if (light.bakedShadow.IsValid()) {
+        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(light.bakedShadow);
+        light.bakedShadow = TextureArrayHandle::INVALID;
+    }
     if (light.lightSlot != AnalyticLightStore::INVALID_SLOT) {
         state->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = light.lightSlot}});
         light.lightSlot = AnalyticLightStore::INVALID_SLOT;
