@@ -4,6 +4,7 @@
 
 #include "local_shadow_views.h"
 
+#include <bit>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "render/types/render_types.h"
@@ -12,16 +13,132 @@ namespace Render
 {
 static constexpr float LOCAL_SHADOW_SPOT_COS_MIN = 0.5f;
 static constexpr float LOCAL_SHADOW_CONE_MARGIN = 0.035f;
+// Slightly wider than 90 degrees so PCF taps at a face edge stay inside the tile.
+static constexpr float LOCAL_SHADOW_CUBE_TAN = 1.03f;
 static constexpr float LOCAL_SHADOW_NEAR = 0.05f;
 static constexpr float LOCAL_SHADOW_HYSTERESIS = 1.5f;
 
-uint32_t LocalShadowViewCount(const LightInfo& light)
+static constexpr glm::vec3 CUBE_AXES[6] = {{1.0f, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}};
+static constexpr glm::vec3 CUBE_UPS[6] = {{0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+
+static bool IsShadowEligible(const LightInfo& light)
 {
-    if ((light.flags & LIGHT_FLAG_CAST_SHADOWS) == 0u || light.intensity <= 0.0f || light.range <= 0.0f) {
+    const bool bType = light.type == LIGHT_TYPE_SPHERE || light.type == LIGHT_TYPE_AREA || light.type == LIGHT_TYPE_DISK;
+    return bType && (light.flags & LIGHT_FLAG_CAST_SHADOWS) != 0u && light.intensity > 0.0f && light.range > 0.0f;
+}
+
+static bool IsSpot(const LightInfo& light)
+{
+    return light.type != LIGHT_TYPE_SPHERE && light.position.w >= LOCAL_SHADOW_SPOT_COS_MIN;
+}
+
+static float NearPlane(const LightInfo& light)
+{
+    // Past the sphere's own surface, which would otherwise occlude everything.
+    return light.type == LIGHT_TYPE_SPHERE ? glm::max(light.right.w * 1.05f, LOCAL_SHADOW_NEAR) : LOCAL_SHADOW_NEAR;
+}
+
+/** Apex and far corners of a view pyramid cut off at the light's range. */
+static void PyramidPoints(const glm::vec3& apex, const glm::vec3& axis, const glm::vec3& up, float tanHalf, float range, glm::vec3 (&points)[5])
+{
+    const glm::vec3 right = glm::normalize(glm::cross(axis, up));
+    const glm::vec3 trueUp = glm::cross(right, axis);
+    points[0] = apex;
+    for (uint32_t c = 0; c < 4; ++c) {
+        const float x = (c & 1u) ? tanHalf : -tanHalf;
+        const float y = (c & 2u) ? tanHalf : -tanHalf;
+        points[c + 1] = apex + range * (axis + right * x + trueUp * y);
+    }
+}
+
+static bool IsPyramidVisible(const glm::vec3 (&points)[5], const Frustum& camera)
+{
+    for (const glm::vec4& plane : camera.planes) {
+        bool bAllOut = true;
+        for (const glm::vec3& point : points) {
+            if (!(glm::dot(glm::vec3(plane), point) + plane.w < 0.0f)) {
+                bAllOut = false;
+                break;
+            }
+        }
+        if (bAllOut) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static glm::vec3 SpotUp(const glm::vec3& forward)
+{
+    return glm::abs(forward.y) < 0.99f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+}
+
+static float SpotTanHalf(const LightInfo& light)
+{
+    return glm::tan(glm::acos(glm::clamp(light.position.w, 0.0f, 1.0f)) + LOCAL_SHADOW_CONE_MARGIN);
+}
+
+static bool IsSpotVisible(const LightInfo& light, const Frustum& camera)
+{
+    const glm::vec3 forward = glm::normalize(glm::vec3(light.normal));
+    glm::vec3 points[5];
+    PyramidPoints(glm::vec3(light.position), forward, SpotUp(forward), SpotTanHalf(light), light.range, points);
+    return IsPyramidVisible(points, camera);
+}
+
+static uint32_t CubeFaceMask(const LightInfo& light, const Frustum& camera)
+{
+    const glm::vec3 position(light.position);
+    const glm::vec3 normal(light.normal);
+    const bool bOneSided = light.type != LIGHT_TYPE_SPHERE;
+    uint32_t mask = 0;
+    for (uint32_t f = 0; f < 6; ++f) {
+        glm::vec3 points[5];
+        PyramidPoints(position, CUBE_AXES[f], CUBE_UPS[f], 1.0f, light.range, points);
+
+        bool bBehindEmitter = bOneSided;
+        for (uint32_t c = 1; c < 5 && bBehindEmitter; ++c) {
+            bBehindEmitter = glm::dot(points[c] - position, normal) <= 0.0f;
+        }
+        if (!bBehindEmitter && IsPyramidVisible(points, camera)) {
+            mask |= 1u << f;
+        }
+    }
+    return mask;
+}
+
+static ShadowViewGPU MakePerspectiveView(const glm::vec3& eye, const glm::vec3& forward, const glm::vec3& up, float tanHalf, float nearPlane, float farPlane, uint32_t tile, glm::uvec2 tiles,
+                                         uint32_t resolution)
+{
+    const glm::mat4 view = glm::lookAt(eye, eye + forward, up);
+
+    // Reverse-Z (near 1, far 0), y negated to match the CSM views' winding.
+    glm::mat4 proj(0.0f);
+    proj[0][0] = 1.0f / tanHalf;
+    proj[1][1] = -1.0f / tanHalf;
+    proj[2][2] = nearPlane / (farPlane - nearPlane);
+    proj[2][3] = -1.0f;
+    proj[3][2] = nearPlane * farPlane / (farPlane - nearPlane);
+
+    const glm::vec2 scale = 1.0f / glm::vec2(tiles);
+    ShadowViewGPU out{};
+    out.viewProj = proj * view;
+    out.frustum = CreateFrustum(out.viewProj);
+    out.atlasScaleOffset = glm::vec4(scale, static_cast<float>(tile % tiles.x) * scale.x, static_cast<float>(tile / tiles.x) * scale.y);
+    out.eye = glm::vec4(eye, 1.0f);
+    out.texelSize = 2.0f * tanHalf / static_cast<float>(resolution);
+    return out;
+}
+
+uint32_t LocalShadowViewCount(const LightInfo& light, const Frustum& camera)
+{
+    if (!IsShadowEligible(light)) {
         return 0;
     }
-    const bool bArea = light.type == LIGHT_TYPE_AREA || light.type == LIGHT_TYPE_DISK;
-    return bArea && light.position.w >= LOCAL_SHADOW_SPOT_COS_MIN ? 1u : 0u;
+    if (IsSpot(light)) {
+        return IsSpotVisible(light, camera) ? 1u : 0u;
+    }
+    return static_cast<uint32_t>(std::popcount(CubeFaceMask(light, camera)));
 }
 
 glm::uvec2 LocalShadowAtlasTiles(uint32_t viewBudget)
@@ -54,7 +171,7 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
 
     for (uint32_t i = 0; i < lightCount; ++i) {
         const LightInfo& light = lights[i];
-        if (LocalShadowViewCount(light) == 0u) {
+        if (!IsShadowEligible(light)) {
             continue;
         }
         const glm::vec3 position(light.position);
@@ -99,8 +216,8 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
     uint32_t usedViews = 0;
     uint32_t pickedCount = 0;
     for (uint32_t k = 0; k < rankedCount; ++k) {
-        const uint32_t views = LocalShadowViewCount(lights[ranked[k]]);
-        if (usedViews + views > budget) {
+        const uint32_t views = LocalShadowViewCount(lights[ranked[k]], frustum);
+        if (views == 0 || usedViews + views > budget) {
             continue;
         }
         outLights[pickedCount++] = ranked[k];
@@ -109,38 +226,35 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
     return pickedCount;
 }
 
-uint32_t BuildLocalShadowViews(const LightInfo& light, uint32_t firstTile, glm::uvec2 tiles, uint32_t resolution, ShadowViewGPU* outViews)
+uint32_t BuildLocalShadowViews(const LightInfo& light, const Frustum& camera, uint32_t firstTile, glm::uvec2 tiles, uint32_t resolution, ShadowViewGPU* outViews, uint32_t& outFaceMask)
 {
-    if (LocalShadowViewCount(light) != 1u) {
+    outFaceMask = 0;
+    if (!IsShadowEligible(light)) {
         return 0;
     }
 
     const glm::vec3 eye(light.position);
-    const glm::vec3 forward = glm::normalize(glm::vec3(light.normal));
-    const glm::vec3 reference = glm::abs(forward.y) < 0.99f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-    const glm::mat4 view = glm::lookAt(eye, eye + forward, reference);
-
-    const float tanHalf = glm::tan(glm::acos(glm::clamp(light.position.w, 0.0f, 1.0f)) + LOCAL_SHADOW_CONE_MARGIN);
-    const float nearPlane = LOCAL_SHADOW_NEAR;
+    const float nearPlane = NearPlane(light);
     const float farPlane = glm::max(light.range, nearPlane * 2.0f);
+    if (IsSpot(light)) {
+        if (!IsSpotVisible(light, camera)) {
+            return 0;
+        }
+        const glm::vec3 forward = glm::normalize(glm::vec3(light.normal));
+        outViews[0] = MakePerspectiveView(eye, forward, SpotUp(forward), SpotTanHalf(light), nearPlane, farPlane, firstTile, tiles, resolution);
+        return 1;
+    }
 
-    // Reverse-Z (near 1, far 0), y negated to match the CSM views' winding.
-    glm::mat4 proj(0.0f);
-    proj[0][0] = 1.0f / tanHalf;
-    proj[1][1] = -1.0f / tanHalf;
-    proj[2][2] = nearPlane / (farPlane - nearPlane);
-    proj[2][3] = -1.0f;
-    proj[3][2] = nearPlane * farPlane / (farPlane - nearPlane);
-
-    const glm::vec2 scale = 1.0f / glm::vec2(tiles);
-
-    ShadowViewGPU& out = outViews[0];
-    out = {};
-    out.viewProj = proj * view;
-    out.frustum = CreateFrustum(out.viewProj);
-    out.atlasScaleOffset = glm::vec4(scale, static_cast<float>(firstTile % tiles.x) * scale.x, static_cast<float>(firstTile / tiles.x) * scale.y);
-    out.eye = glm::vec4(eye, 1.0f);
-    out.texelSize = 2.0f * tanHalf / static_cast<float>(resolution);
-    return 1;
+    const uint32_t mask = CubeFaceMask(light, camera);
+    uint32_t viewCount = 0;
+    for (uint32_t f = 0; f < 6; ++f) {
+        if ((mask & (1u << f)) == 0u) {
+            continue;
+        }
+        outViews[viewCount] = MakePerspectiveView(eye, CUBE_AXES[f], CUBE_UPS[f], LOCAL_SHADOW_CUBE_TAN, nearPlane, farPlane, firstTile + viewCount, tiles, resolution);
+        ++viewCount;
+    }
+    outFaceMask = mask;
+    return viewCount;
 }
 } // Render

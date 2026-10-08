@@ -437,6 +437,8 @@ struct LocalShadowLight
     uint32_t lightIndex{0};
     uint32_t firstView{0};
     uint32_t viewCount{0};
+    // Cube faces present, +X -X +Y -Y +Z -Z; 0 = one spot view
+    uint32_t faceMask{0};
 };
 
 struct ViewFamily

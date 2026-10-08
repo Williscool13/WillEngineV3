@@ -666,14 +666,17 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
             previous[i] = selection.lights[i].lightIndex;
         }
         const Core::ViewData& view = vf.mainView.currentViewData;
+        const glm::mat4 cameraViewProj = view.proj * view.view;
+        const Frustum camera = Render::CreateFrustum(cameraViewProj);
         uint32_t picks[LOCAL_SHADOW_MAX_VIEWS];
-        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, view.proj * view.view, view.cameraPos, previous, selection.lightCount, budget, picks);
+        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previous, selection.lightCount, budget, picks);
 
         selection.viewCount = 0;
         for (uint32_t i = 0; i < pickCount; ++i) {
             const uint32_t firstView = selection.viewCount;
-            const uint32_t viewCount = Render::BuildLocalShadowViews(lights[picks[i]], firstView, tiles, resolution, selection.views.Data() + firstView);
-            selection.lights[i] = Core::LocalShadowLight{picks[i], firstView, viewCount};
+            uint32_t faceMask = 0;
+            const uint32_t viewCount = Render::BuildLocalShadowViews(lights[picks[i]], camera, firstView, tiles, resolution, selection.views.Data() + firstView, faceMask);
+            selection.lights[i] = Core::LocalShadowLight{picks[i], firstView, viewCount, faceMask};
             selection.viewCount += viewCount;
         }
         selection.lightCount = pickCount;

@@ -82,7 +82,7 @@ SHADER_PUBLIC struct LocalShadowData
     SHADER_PUBLIC uint32_t lightCount;
     SHADER_PUBLIC float normalOffsetTexels;
     SHADER_PUBLIC uint32_t _pad0;
-    // First view | face count << 16, LOCAL_SHADOW_NONE when unshadowed
+    // First view | cube face mask << 16 (0 = one spot view), LOCAL_SHADOW_NONE when unshadowed
     SHADER_PUBLIC uint32_t lightShadow[MAX_ANALYTIC_LIGHTS];
 };
 

@@ -32,7 +32,18 @@ static float LocalShadowVisibility(VisibilityLightingPushConstant pc, uint light
         return 1.0;
     }
 
-    ShadowViewGPU view = pc.localShadows->views[packed & 0xFFFFu];
+    uint viewIndex = packed & 0xFFFFu;
+    uint faceMask = packed >> 16;
+    if (faceMask != 0u) {
+        float3 d = worldPos - pc.lightData->lights[lightIndex].position.xyz;
+        float3 a = abs(d);
+        uint face = a.x >= a.y && a.x >= a.z ? (d.x >= 0.0 ? 0u : 1u) : a.y >= a.z ? (d.y >= 0.0 ? 2u : 3u) : (d.z >= 0.0 ? 4u : 5u);
+        if ((faceMask & (1u << face)) == 0u) {
+            return 1.0;
+        }
+        viewIndex += countbits(faceMask & ((1u << face) - 1u));
+    }
+    ShadowViewGPU view = pc.localShadows->views[viewIndex];
     float texel = view.texelSize * distance(worldPos, view.eye.xyz);
     float4 clip = mul(view.viewProj, float4(worldPos + worldN * (texel * pc.localShadows->normalOffsetTexels), 1.0));
     if (clip.w <= 0.0) {
