@@ -54,6 +54,7 @@ static void ApplyLightingBundle(const TextReader& r, LightingProfileBundle& bund
     ConfigSerialization::Deserialize(r.Block("gtao"), bundle.gtao);
     bundle.sunShadowMode = static_cast<Core::SunShadowMode>(r.UInt("sunShadowMode", static_cast<uint32_t>(bundle.sunShadowMode)));
     ConfigSerialization::Deserialize(r.Block("csm"), bundle.csm);
+    ConfigSerialization::Deserialize(r.Block("localShadows"), bundle.localShadows);
     bundle.iblIntensity = r.Float("iblIntensity", bundle.iblIntensity);
     bundle.indirectIntensity = r.Float("indirectIntensity", bundle.indirectIntensity);
     bundle.shadingOverride = StringID(r.U64("shadingShaderOverride", 0));
@@ -82,6 +83,9 @@ static void BuildLightingBundle(const LightingProfileBundle& bundle, TextWriter&
     w.BeginBlock("csm");
     ConfigSerialization::Serialize(bundle.csm, w);
     w.EndBlock();
+    w.BeginBlock("localShadows");
+    ConfigSerialization::Serialize(bundle.localShadows, w);
+    w.EndBlock();
     w.Key("iblIntensity", bundle.iblIntensity);
     w.Key("indirectIntensity", bundle.indirectIntensity);
     if (bundle.shadingOverride) { w.Key("shadingShaderOverride", bundle.shadingOverride.id); }
@@ -104,6 +108,7 @@ LightingProfileBundle CaptureLightingProfile(const EngineState& state)
     bundle.gtao = state.lighting.gtaoConfig;
     bundle.sunShadowMode = state.lighting.sunShadowMode;
     bundle.csm = state.lighting.csm;
+    bundle.localShadows = state.lighting.localShadows;
     bundle.shadingOverride = state.debug.shadingShaderOverride;
     bundle.lightingOverride = state.debug.lightingShaderOverride;
     bundle.iblIntensity = state.lighting.iblIntensity;
@@ -121,6 +126,7 @@ void ApplyLightingProfile(EngineState& state, const LightingProfileBundle& bundl
     state.lighting.gtaoConfig = bundle.gtao;
     state.lighting.sunShadowMode = bundle.sunShadowMode;
     state.lighting.csm = bundle.csm;
+    state.lighting.localShadows = bundle.localShadows;
     state.debug.shadingShaderOverride = bundle.shadingOverride;
     state.debug.lightingShaderOverride = bundle.lightingOverride;
     state.lighting.iblIntensity = bundle.iblIntensity;

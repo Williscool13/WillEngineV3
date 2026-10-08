@@ -20,6 +20,7 @@
 #include "core/types/transform.h"
 #include "engine/material_manager.h"
 #include "core/containers/inline_vector.h"
+#include "core/containers/array.h"
 #include "render/shaders/lights_interop.h"
 #include "render/shaders/model_interop.h"
 #include "render/shaders/push_constant_interop.h"
@@ -431,6 +432,13 @@ struct LocalDDGIVolume
     uint64_t volumeId{0};
 };
 
+struct LocalShadowLight
+{
+    uint32_t lightIndex{0};
+    uint32_t firstView{0};
+    uint32_t viewCount{0};
+};
+
 struct ViewFamily
 {
     ViewFamily() = default;
@@ -500,6 +508,12 @@ struct ViewFamily
     SunShadowMode sunShadowMode{SunShadowMode::RayTraced};
     CSMParams csm{};
     glm::vec3 csmAnchor{0.0f};
+    LocalShadowParams localShadows{};
+    uint32_t localShadowLightCount{0};
+    Core::Array<LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> localShadowLights{};
+    uint32_t localShadowViewCount{0};
+    Core::Array<ShadowViewGPU, LOCAL_SHADOW_MAX_VIEWS> localShadowViews{};
+    glm::uvec2 localShadowAtlasExtent{0};
     float iblIntensity{1.0f};
     float indirectIntensity{1.0f};
     bool bReflectionProbeBruteForce{false};

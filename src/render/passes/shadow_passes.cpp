@@ -17,57 +17,77 @@
 
 namespace Render
 {
-RDGTexture SetupCSMDepth(RenderGraph& graph,
-                         PipelineManager* pipelineManager,
-                         const Core::ViewFamily& viewFamily,
-                         const SceneBufferSizes& bufferSizes,
-                         const SceneResources& scene,
-                         RDGBuffer csmData,
-                         uint32_t cascadeCount,
-                         uint32_t sceneIndex)
+struct ShadowDepthDesc
+{
+    const char* passPrefix;
+    const char* bufferPrefix;
+    StringID atlasName;
+    StringID opaquePipeline;
+    StringID cutoutPipeline;
+    glm::uvec2 atlasExtent;
+    float slopeBias;
+    size_t readbackOffset;
+};
+
+static StringID ShadowPassID(const char* prefix, const char* base)
+{
+    const Core::InlineString<96> name = Core::InlineString<96>::Format("%s %s", prefix, base);
+    return StringID(name.c_str(), name.Size());
+}
+
+/** Culls every instance against every view in one chain and draws all views into one depth atlas. */
+static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
+                                       PipelineManager* pipelineManager,
+                                       const Core::ViewFamily& viewFamily,
+                                       const MeshletCullBufferSizes& cullSizes,
+                                       const SceneResources& scene,
+                                       RDGBuffer views,
+                                       uint32_t viewCount,
+                                       const ShadowDepthDesc& desc,
+                                       uint32_t sceneIndex)
 {
     ZoneScoped;
-    if (viewFamily.instanceCount == 0) {
+    if (viewFamily.instanceCount == 0 || viewCount == 0) {
         return {};
     }
 
-    constexpr const char* PREFIX = "[CSM]";
+    const char* prefix = desc.passPrefix;
     constexpr RenderCategory CATEGORY = RenderCategory::ShadowMaps;
     const uint32_t instanceCount = viewFamily.instanceCount;
-    const uint32_t elementCount = instanceCount * cascadeCount;
-    const uint32_t meshletUpperBound = bufferSizes.shadowCull.visibleMeshletUpperBound;
+    const uint32_t elementCount = instanceCount * viewCount;
+    const uint32_t meshletUpperBound = cullSizes.visibleMeshletUpperBound;
     const auto lodBias = static_cast<int32_t>(LOD_BIAS);
 
-    const glm::uvec2 atlasExtent = CSMAtlasExtent(cascadeCount, static_cast<uint32_t>(viewFamily.csm.resolution));
-    const RDGTexture atlas = graph.CreateTexture("csm_atlas"_sid, TextureInfo{CSM_DEPTH_FORMAT, atlasExtent.x, atlasExtent.y, 1}, CLEAR_DEPTH_FAR);
+    const glm::uvec2 atlasExtent = desc.atlasExtent;
+    const RDGTexture atlas = graph.CreateTexture(desc.atlasName, TextureInfo{CSM_DEPTH_FORMAT, atlasExtent.x, atlasExtent.y, 1}, CLEAR_DEPTH_FAR);
 
-    const MeshletCullBuffers cull = CreateMeshletCullBuffers(graph, bufferSizes.shadowCull, "csm_");
+    const MeshletCullBuffers cull = CreateMeshletCullBuffers(graph, cullSizes, desc.bufferPrefix);
     const RDGBuffer instanceMeshletOffsets = cull.instanceMeshletOffsets;
     const RDGBuffer intermediateMeshlets = cull.intermediateMeshlets;
     const RDGBuffer visibleMeshlets = cull.visibleMeshlets;
     const RDGBuffer meshletCountDispatchArgs = cull.meshletCountDispatchArgs;
     const RDGBuffer compactedMeshletDispatchArgs = cull.compactedMeshletDispatchArgs;
 
-    AddMeshletCullClear(graph, cull, PREFIX, CATEGORY);
+    AddMeshletCullClear(graph, cull, prefix, CATEGORY);
 
-    RenderPass& instanceCull = graph.AddPass("[CSM] Instance Cull"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, CATEGORY);
+    RenderPass& instanceCull = graph.AddPass(ShadowPassID(prefix, "Instance Cull"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, CATEGORY);
     instanceCull.ReadBuffer(scene.sceneData);
-    instanceCull.ReadBuffer(csmData);
+    instanceCull.ReadBuffer(views);
     instanceCull.ReadBuffer(scene.primitives);
     instanceCull.ReadBuffer(scene.models);
     instanceCull.ReadBuffer(scene.instances);
     instanceCull.WriteBuffer(instanceMeshletOffsets);
-    instanceCull.Execute([&scene, pipelineManager, csmData, instanceMeshletOffsets, instanceCount, cascadeCount, elementCount, sceneIndex, lodBias](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("csm_instance_cull"_sid);
-        CSMInstanceCullPushConstant pc{
+    instanceCull.Execute([&scene, pipelineManager, views, instanceMeshletOffsets, instanceCount, viewCount, elementCount, sceneIndex, lodBias](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadow_instance_cull"_sid);
+        ShadowInstanceCullPushConstant pc{
             .sceneData = graph.GetBufferAddress(scene.sceneData),
-            .csmData = graph.GetBufferAddress(csmData),
+            .views = graph.GetBufferAddress(views),
             .primitiveBuffer = graph.GetBufferAddress(scene.primitives),
             .modelBuffer = graph.GetBufferAddress(scene.models),
             .instanceBuffer = graph.GetBufferAddress(scene.instances),
             .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
             .instanceCount = instanceCount,
-            .cascadeCount = cascadeCount,
+            .viewCount = viewCount,
             .sceneDataIndex = sceneIndex,
             .lodBias = lodBias,
         };
@@ -76,10 +96,10 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
         vkCmdDispatch(cmd, (elementCount + INSTANCING_VISIBILITY_DISPATCH_X - 1) / INSTANCING_VISIBILITY_DISPATCH_X, 1, 1);
     });
 
-    AddInstanceMeshletPrefixSum(graph, pipelineManager, cull, elementCount, PREFIX, CATEGORY);
+    AddInstanceMeshletPrefixSum(graph, pipelineManager, cull, elementCount, prefix, CATEGORY);
 
-    RenderPass& expand = graph.AddPass("[CSM] Expand Instance To Meshlet"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, CATEGORY);
-    expand.ReadBuffer(csmData);
+    RenderPass& expand = graph.AddPass(ShadowPassID(prefix, "Expand Instance To Meshlet"), VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, CATEGORY);
+    expand.ReadBuffer(views);
     expand.ReadBuffer(scene.instances);
     expand.ReadBuffer(scene.primitives);
     expand.ReadBuffer(scene.models);
@@ -88,9 +108,9 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
     expand.ReadBuffer(instanceMeshletOffsets);
     expand.ReadIndirectBuffer(meshletCountDispatchArgs);
     expand.WriteBuffer(intermediateMeshlets);
-    expand.Execute([&scene, pipelineManager, csmData, instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets, instanceCount, elementCount, meshletUpperBound](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("csm_expand_meshlets"_sid);
-        CSMExpandMeshletsPushConstant pc{
+    expand.Execute([&scene, pipelineManager, views, instanceMeshletOffsets, meshletCountDispatchArgs, intermediateMeshlets, instanceCount, elementCount, meshletUpperBound](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadow_expand_meshlets"_sid);
+        ShadowExpandMeshletsPushConstant pc{
             .indirectDispatchBuffer = graph.GetBufferAddress(meshletCountDispatchArgs),
             .instanceMeshletOffsets = graph.GetBufferAddress(instanceMeshletOffsets),
             .intermediateMeshlets = graph.GetBufferAddress(intermediateMeshlets),
@@ -99,7 +119,7 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
             .modelBuffer = graph.GetBufferAddress(scene.models),
             .meshletBuffer = graph.GetBufferAddress(scene.meshlets),
             .materialBuffer = graph.GetBufferAddress(scene.materials),
-            .csmData = graph.GetBufferAddress(csmData),
+            .views = graph.GetBufferAddress(views),
             .instanceCount = instanceCount,
             .elementCount = elementCount,
             .currentFrameBufferMeshletLimit = meshletUpperBound,
@@ -109,11 +129,11 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
         vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(meshletCountDispatchArgs), offsetof(InstancingMeshletDispatchIndirect, x));
     });
 
-    AddMeshletCompaction(graph, pipelineManager, cull, meshletUpperBound, scene.readback, offsetof(ReadbackStruct, shadowMeshletCount), false, PREFIX, CATEGORY);
+    AddMeshletCompaction(graph, pipelineManager, cull, meshletUpperBound, scene.readback, desc.readbackOffset, false, prefix, CATEGORY);
 
-    RenderPass& draw = graph.AddPass("[CSM] Depth"_sid, VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, CATEGORY);
+    RenderPass& draw = graph.AddPass(ShadowPassID(prefix, "Depth"), VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, CATEGORY);
     draw.WriteDepthAttachment(atlas);
-    draw.ReadBuffer(csmData);
+    draw.ReadBuffer(views);
     draw.ReadBuffer(scene.models);
     draw.ReadBuffer(scene.materials);
     draw.ReadBuffer(scene.instances);
@@ -125,20 +145,21 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
     draw.ReadBuffer(scene.vertexAttributes);
     draw.ReadBuffer(visibleMeshlets);
     draw.ReadIndirectBuffer(compactedMeshletDispatchArgs);
-    draw.Execute([&scene, pipelineManager, csmData, atlas, atlasExtent, visibleMeshlets, compactedMeshletDispatchArgs, slopeBias = viewFamily.csm.slopeBias](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    draw.Execute([&scene, pipelineManager, views, atlas, atlasExtent, visibleMeshlets, compactedMeshletDispatchArgs, slopeBias = desc.slopeBias, opaquePipeline = desc.opaquePipeline,
+            cutoutPipeline = desc.cutoutPipeline](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const VkViewport viewport = VkHelpers::GenerateViewport(atlasExtent.x, atlasExtent.y);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         const VkRect2D scissor = VkHelpers::GenerateScissor(atlasExtent.x, atlasExtent.y);
         vkCmdSetScissor(cmd, 0, 1, &scissor);
-        // Reverse-Z: a negative slope factor pushes depth away from the sun.
+        // Reverse-Z: a negative slope factor pushes depth away from the light.
         vkCmdSetDepthBias(cmd, 0.0f, 0.0f, -slopeBias);
 
         const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(atlas), nullptr, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({atlasExtent.x, atlasExtent.y}, nullptr, 0, &depthAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
 
-        CSMDepthPushConstant pc{
-            .csmData = graph.GetBufferAddress(csmData),
+        ShadowDepthPushConstant pc{
+            .views = graph.GetBufferAddress(views),
             .vertexPosBuffer = graph.GetBufferAddress(scene.vertexPositions),
             .vertexAttrBuffer = graph.GetBufferAddress(scene.vertexAttributes),
             .meshletVerticesBuffer = graph.GetBufferAddress(scene.meshletVertices),
@@ -153,10 +174,10 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
         };
 
         const PipelineEntry* regionPipelines[MESHLET_REGION_COUNT] = {
-            pipelineManager->GetPipelineEntry("csm_depth"_sid),
-            pipelineManager->GetPipelineEntry("csm_depth"_sid),
-            pipelineManager->GetPipelineEntry("csm_depth_cutout"_sid),
-            pipelineManager->GetPipelineEntry("csm_depth_cutout"_sid),
+            pipelineManager->GetPipelineEntry(opaquePipeline),
+            pipelineManager->GetPipelineEntry(opaquePipeline),
+            pipelineManager->GetPipelineEntry(cutoutPipeline),
+            pipelineManager->GetPipelineEntry(cutoutPipeline),
         };
         for (uint32_t region = 0; region < MESHLET_REGION_COUNT; region++) {
             const PipelineEntry* entry = regionPipelines[region];
@@ -173,6 +194,49 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
     });
 
     return atlas;
+}
+
+RDGTexture SetupCSMDepth(RenderGraph& graph,
+                         PipelineManager* pipelineManager,
+                         const Core::ViewFamily& viewFamily,
+                         const SceneBufferSizes& bufferSizes,
+                         const SceneResources& scene,
+                         RDGBuffer csmData,
+                         uint32_t cascadeCount,
+                         uint32_t sceneIndex)
+{
+    const ShadowDepthDesc desc{
+        .passPrefix = "[CSM]",
+        .bufferPrefix = "csm_",
+        .atlasName = "csm_atlas"_sid,
+        .opaquePipeline = "csm_depth"_sid,
+        .cutoutPipeline = "csm_depth_cutout"_sid,
+        .atlasExtent = CSMAtlasExtent(cascadeCount, static_cast<uint32_t>(viewFamily.csm.resolution)),
+        .slopeBias = viewFamily.csm.slopeBias,
+        .readbackOffset = offsetof(ReadbackStruct, shadowMeshletCount),
+    };
+    return SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.shadowCull, scene, csmData, cascadeCount, desc, sceneIndex);
+}
+
+RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
+                                 PipelineManager* pipelineManager,
+                                 const Core::ViewFamily& viewFamily,
+                                 const SceneBufferSizes& bufferSizes,
+                                 const SceneResources& scene,
+                                 RDGBuffer localShadowData,
+                                 uint32_t sceneIndex)
+{
+    const ShadowDepthDesc desc{
+        .passPrefix = "[Local Shadow]",
+        .bufferPrefix = "local_shadow_",
+        .atlasName = "local_shadow_atlas"_sid,
+        .opaquePipeline = "local_shadow_depth"_sid,
+        .cutoutPipeline = "local_shadow_depth_cutout"_sid,
+        .atlasExtent = viewFamily.localShadowAtlasExtent,
+        .slopeBias = viewFamily.localShadows.slopeBias,
+        .readbackOffset = offsetof(ReadbackStruct, localShadowMeshletCount),
+    };
+    return SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.localShadowCull, scene, localShadowData, viewFamily.localShadowViewCount, desc, sceneIndex);
 }
 
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,

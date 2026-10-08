@@ -41,6 +41,7 @@ struct AreaLightComponent
     bool bDisk{false};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
+    bool bCastShadows{true};
     bool bEnabled{true};
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
@@ -60,7 +61,8 @@ struct AreaLightComponent
         WILL_FIELD(bNormalizeCone),
         WILL_FIELD(bDisk),
         WILL_FIELD(drawEmissiveSurface),
-        WILL_FIELD(bExcludeFromProbeBake))
+        WILL_FIELD(bExcludeFromProbeBake),
+        WILL_FIELD(bCastShadows))
 
     static void Sanitize(AreaLightComponent& comp);
 
@@ -98,6 +100,7 @@ struct SphereLightComponent
     float volumetricScale{1.0f}; // fog scattering multiplier; 0 = invisible to fog
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
+    bool bCastShadows{true};
     bool bEnabled{true};
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
@@ -112,7 +115,8 @@ struct SphereLightComponent
         WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
         WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f),
         WILL_FIELD(drawEmissiveSurface),
-        WILL_FIELD(bExcludeFromProbeBake))
+        WILL_FIELD(bExcludeFromProbeBake),
+        WILL_FIELD(bCastShadows))
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 

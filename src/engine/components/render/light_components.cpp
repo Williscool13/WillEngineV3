@@ -131,6 +131,7 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         EditWidgets::Checkbox(edit, "Normalize Cone##al", &AreaLightComponent::bNormalizeCone);
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##al", &AreaLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##al", &AreaLightComponent::bExcludeFromProbeBake);
+        EditWidgets::Checkbox(edit, "Cast Shadows##al", &AreaLightComponent::bCastShadows);
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
@@ -239,6 +240,7 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
         .falloffBias = 2.0f - light.falloffExponent,
         .volumetricScale = glm::max(light.volumetricScale, 0.0f),
         .coneScale = light.bNormalizeCone ? AreaLightConeScale(cosInner, cosOuter) : 1.0f,
+        .flags = light.bCastShadows ? LIGHT_FLAG_CAST_SHADOWS : 0u,
     };
 }
 
@@ -283,6 +285,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly this light scatters in volumetric fog; 0 = fog ignores it (fill and cheat lights)"); }
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
+        EditWidgets::Checkbox(edit, "Cast Shadows##sl", &SphereLightComponent::bCastShadows);
     }
 
     return {.bRequestRemoval = remove};
@@ -314,6 +317,7 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
         .falloffBias = 2.0f - light.falloffExponent,
         .volumetricScale = glm::max(light.volumetricScale, 0.0f),
         .coneScale = 1.0f,
+        .flags = light.bCastShadows ? LIGHT_FLAG_CAST_SHADOWS : 0u,
     };
 }
 

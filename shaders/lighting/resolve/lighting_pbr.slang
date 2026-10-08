@@ -2,6 +2,7 @@ import push_constant_interop;
 import constants_interop;
 import model_interop;
 import lights_interop;
+import shadow_interop;
 import ddgi_interop;
 import ddgi_common;
 
@@ -20,6 +21,38 @@ import indirect_lighting_common;
 
 import bindless_declarations;
 import bucket_dispatch_common;
+
+static float LocalShadowVisibility(VisibilityLightingPushConstant pc, uint lightIndex, float3 worldPos, float3 worldN)
+{
+    if (pc.localShadows == nullptr || lightIndex >= pc.localShadows->lightCount) {
+        return 1.0;
+    }
+    uint packed = pc.localShadows->lightShadow[lightIndex];
+    if (packed == LOCAL_SHADOW_NONE) {
+        return 1.0;
+    }
+
+    ShadowViewGPU view = pc.localShadows->views[packed & 0xFFFFu];
+    float texel = view.texelSize * distance(worldPos, view.eye.xyz);
+    float4 clip = mul(view.viewProj, float4(worldPos + worldN * (texel * pc.localShadows->normalOffsetTexels), 1.0));
+    if (clip.w <= 0.0) {
+        return 1.0;
+    }
+    float3 ndc = clip.xyz / clip.w;
+    if (any(abs(ndc.xy) > 1.0) || ndc.z < 0.0 || ndc.z > 1.0) {
+        return 1.0;
+    }
+
+    float2 uv = (ndc.xy * 0.5 + 0.5) * view.atlasScaleOffset.xy + view.atlasScaleOffset.zw;
+    float2 atlasTexel = 1.0 / float2(pc.localShadows->atlasExtent);
+    float visibility = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            visibility += rdgTexturesFloat[pc.localShadowAtlasIndex].SampleCmpLevelZero(rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX], uv + float2(x, y) * atlasTexel, ndc.z);
+        }
+    }
+    return visibility / 9.0;
+}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -46,6 +79,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
     float3 N = normalize(li.viewNormal);
     float3 V = normalize(-viewPosition);
     float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
+    float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
 
     // Clamp roughness so D_GGX never produces 0/0 at NdotH=1 (degenerate delta lobe)
     float roughness = max(li.roughness, MIN_ROUGHNESS);
@@ -76,7 +110,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         {
             uint lightIndex = pc.worldGridIndexList[gridEntry.x + j];
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], pc.sceneData[pc.sceneDataIndex].view);
-            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
+            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0) * LocalShadowVisibility(pc, lightIndex, worldPosition, worldN);
         }
     }
     else
@@ -84,7 +118,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         for (int j = 0; j < pc.lightData->lightCount; j++)
         {
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[j], pc.sceneData[pc.sceneDataIndex].view);
-            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0);
+            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0) * LocalShadowVisibility(pc, uint(j), worldPosition, worldN);
         }
     }
 

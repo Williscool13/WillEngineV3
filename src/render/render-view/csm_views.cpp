@@ -83,7 +83,7 @@ CSMData BuildCSMData(const CSMFrame& frame, const Core::CSMParams& params)
     const uint32_t rows = (frame.cascadeCount + CSM_ATLAS_COLUMNS - 1) / CSM_ATLAS_COLUMNS;
     for (uint32_t i = 0; i < frame.cascadeCount; ++i) {
         const CSMCascade& cascade = frame.cascades[i];
-        CSMCascadeGPU& gpu = data.cascades[i];
+        ShadowViewGPU& gpu = data.cascades[i];
         gpu.viewProj = cascade.viewProj;
         gpu.frustum = CreateFrustum(cascade.viewProj);
         gpu.frustum.planes[5] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -91,7 +91,8 @@ CSMData BuildCSMData(const CSMFrame& frame, const Core::CSMParams& params)
         const float row = static_cast<float>(i / CSM_ATLAS_COLUMNS);
         gpu.atlasScaleOffset = glm::vec4(1.0f / static_cast<float>(columns), 1.0f / static_cast<float>(rows), column / static_cast<float>(columns), row / static_cast<float>(rows));
         gpu.halfExtent = cascade.halfExtent;
-        gpu.texelWorldSize = cascade.texelWorldSize;
+        gpu.eye = glm::vec4(frame.toSun, 0.0f);
+        gpu.texelSize = cascade.texelWorldSize;
         gpu.depthRange = cascade.depthRange;
     }
     return data;

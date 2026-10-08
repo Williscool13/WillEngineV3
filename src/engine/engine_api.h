@@ -75,6 +75,16 @@ struct PhysicsState
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;
 };
 
+/** This frame's shadowed local lights and their views  */
+struct LocalShadowSelection
+{
+    Core::Array<Core::LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> lights{};
+    uint32_t lightCount{0};
+    Core::Array<ShadowViewGPU, LOCAL_SHADOW_MAX_VIEWS> views{};
+    uint32_t viewCount{0};
+    glm::uvec2 atlasExtent{0};
+};
+
 struct LightingState
 {
     Core::LightingMode lightingMode{Core::LightingMode::Analytic};
@@ -89,6 +99,7 @@ struct LightingState
     Core::SIGMAParams sigmaParams{};
     Core::SunShadowMode sunShadowMode{Core::SunShadowMode::RayTraced};
     Core::CSMParams csm{};
+    Core::LocalShadowParams localShadows{};
 
     Core::DDGIParams ddgi{};
     Core::ReflectionConfiguration reflection{};
@@ -173,6 +184,12 @@ struct CSMDebugState
     glm::vec3 frozenAnchor{0.0f};
 };
 
+struct LocalShadowDebugState
+{
+    bool bDrawViews{false};
+    bool bFreeze{false};
+};
+
 struct DebugState
 {
     Core::DebugRenderParams render{};
@@ -192,6 +209,7 @@ struct DebugState
     PickPixelState pick{};
     EmissiveDebugState emissive{};
     CSMDebugState csm{};
+    LocalShadowDebugState localShadow{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Core::InlineString<> resourceName{};
@@ -291,6 +309,7 @@ struct EngineState
     InstanceStore instanceStore{};
     ModelStore modelStore{};
     AnalyticLightStore analyticLightStore{};
+    LocalShadowSelection localShadowSelection{};
     TriLightStore triLightStore{};
 
     AssetLoadState assetLoad{};

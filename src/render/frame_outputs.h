@@ -168,6 +168,14 @@ struct ReSTIRFrame
 };
 
 /** RT sun shadow and its SIGMA denoise. */
+struct LocalShadowFrame
+{
+    RDGBuffer data;
+    RDGTexture atlas;
+
+    [[nodiscard]] bool IsValid() const { return atlas.IsValid(); }
+};
+
 struct SunShadowFrame
 {
     RDGTexture shadow;

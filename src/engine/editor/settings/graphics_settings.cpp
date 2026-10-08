@@ -944,12 +944,23 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::EndSection();
         }
 
+        if (state->lighting.lightingMode == Core::LightingMode::Analytic && state->lighting.localShadows.bEnabled && Widgets::BeginSection("Local Light Shadows")) {
+            view("Atlas Depth##localshadow", "local_shadow_atlas", DebugTransformationType::None, Core::DebugViewAspect::Depth);
+            Widgets::Checkbox("Draw Views##localshadow", &state->debug.localShadow.bDrawViews, "Draws each shadowed light's view frustum, coloured like its atlas tile order.");
+            Widgets::Checkbox("Freeze##localshadow", &state->debug.localShadow.bFreeze, "Holds the shadowed lights and their views so they can be inspected from elsewhere.");
+            const Engine::LocalShadowSelection& selection = state->localShadowSelection;
+            ImGui::Text("Shadowed: %u lights, %u/%d views", selection.lightCount, selection.viewCount, state->lighting.localShadows.viewBudget);
+            Widgets::EndSection();
+        }
+
         if (bCSMActive && Widgets::BeginSection("Sun Shadow (CSM)")) {
             view("Atlas Depth", "csm_atlas", DebugTransformationType::None, Core::DebugViewAspect::Depth);
             Widgets::SameLine();
             view("Visibility", "csm_shadow", DebugTransformationType::SunShadowVisibility);
             Widgets::SameLine();
             view("Cascades", "csm_shadow", DebugTransformationType::CSMCascade);
+            Widgets::Checkbox("Draw Cascades##csm", &state->debug.csm.bDrawCascades, "Draws each cascade's light-space box.");
+            Widgets::Checkbox("Freeze Cascades##csm", &state->debug.csm.bFreeze, "Holds the cascades where they are so they can be inspected from elsewhere.");
             Widgets::EndSection();
         }
 
@@ -1774,74 +1785,94 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         HandleLightingSectionAction(state, directHeader, CopyDirectLightingSection);
 
         const bool bSunShadowSlot = bAnalyticMode || (bReSTIRMode && !state->debug.restir.bSunLight);
-        auto sunShadowSource = [&]() {
-            static constexpr const char* SUN_SHADOW_MODES[] = {"Ray Traced", "Shadow Map"};
-            int mode = static_cast<int>(state->lighting.sunShadowMode);
-            if (Widgets::Combo("Source##sunshadow", &mode, SUN_SHADOW_MODES, 2, "Ray traced + SIGMA, or cascaded shadow maps.")) {
-                state->lighting.sunShadowMode = static_cast<Core::SunShadowMode>(mode);
-                changed = true;
+        Widgets::SectionHeader shadowHeader = MakeLightingSectionHeader(liveLighting, nullptr);
+        if ((bSunShadowSlot || bAnalyticMode) && Widgets::BeginSection("Shadows", &shadowHeader)) {
+            if (bSunShadowSlot) {
+                Widgets::SubHeader("Sun");
+                static constexpr const char* SUN_SHADOW_MODES[] = {"Ray Traced", "Shadow Map"};
+                int mode = static_cast<int>(state->lighting.sunShadowMode);
+                if (Widgets::Combo("Source##sunshadow", &mode, SUN_SHADOW_MODES, 2, "Ray traced + SIGMA, or cascaded shadow maps.")) {
+                    state->lighting.sunShadowMode = static_cast<Core::SunShadowMode>(mode);
+                    changed = true;
+                }
+
+                if (state->lighting.sunShadowMode == Core::SunShadowMode::RayTraced) {
+                    Core::SIGMAParams& sigma = state->lighting.sigmaParams;
+                    static const Core::SIGMAParams sigmaDefaults{};
+
+                    if (Widgets::Checkbox("Half Res##sigma", &sigma.bHalfRes, "Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.")) { changed = true; }
+                    if (Widgets::Checkbox("Alpha Test Cutout##sigma", &sigma.bAlphaTest, "Sun shadow rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid. Costs a texture fetch per cutout candidate along the ray.")) { changed = true; }
+                    if (Widgets::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur, "Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.")) { changed = true; }
+
+                    auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                        if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+                    };
+                    sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.875f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Saturates at 0.875 (SIGMA history cap). Default 0.8.");
+                    sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
+                    sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
+
+                    if (Widgets::Button("Reset SIGMA")) {
+                        sigma = Core::SIGMAParams{};
+                        changed = true;
+                    }
+                }
+                else {
+                    Core::CSMParams& csm = state->lighting.csm;
+                    static const Core::CSMParams csmDefaults{};
+
+                    if (Widgets::Checkbox("PCSS##csm", &csm.bPCSS, "Contact-hardening penumbra sized from the sun's angular radius. Off: fixed one-texel filter, no blocker search.")) { changed = true; }
+                    if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
+                    static constexpr int CSM_RESOLUTIONS[] = {512, 1024, 2048, 4096};
+                    static constexpr const char* CSM_RESOLUTION_LABELS[] = {"512", "1024", "2048", "4096"};
+                    int resolutionIndex = 2;
+                    for (int i = 0; i < 4; ++i) {
+                        if (CSM_RESOLUTIONS[i] == csm.resolution) { resolutionIndex = i; }
+                    }
+                    if (Widgets::Combo("Resolution##csm", &resolutionIndex, CSM_RESOLUTION_LABELS, 4, "Per-cascade shadow map size. Default 2048.")) {
+                        csm.resolution = CSM_RESOLUTIONS[resolutionIndex];
+                        changed = true;
+                    }
+
+                    auto csmF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
+                        if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
+                    };
+                    csmF("Max Distance##csm", &csm.maxDistance, csmDefaults.maxDistance, 10.0f, 1000.0f, "%.0f m", "Half-width of the last cascade; shadows fade out past it. Default 150 m.");
+                    csmF("Split Lambda##csm", &csm.splitLambda, csmDefaults.splitLambda, 0.0f, 1.0f, "%.2f", "0 = even cascade sizes, 1 = logarithmic (sharper near the camera). Default 0.7.");
+                    csmF("Caster Extension##csm", &csm.casterExtension, csmDefaults.casterExtension, 0.0f, 500.0f, "%.0f m", "Depth kept toward the sun beyond each cascade so distant casters keep their true distance for soft shadows. Casters past it still shadow. Default 50 m.");
+                    csmF("Slope Bias##csm", &csm.slopeBias, csmDefaults.slopeBias, 0.0f, 8.0f, "%.2f", "Rasterizer slope-scaled depth bias. Raise for acne on steep surfaces, lower for peter-panning. Default 2.");
+                    csmF("Normal Offset##csm", &csm.normalOffset, csmDefaults.normalOffset, 0.0f, 4.0f, "%.2f texels", "Receiver offset along the normal, in texels of the sampled cascade. Default 1.");
+                    csmF("Cascade Blend##csm", &csm.blendBand, csmDefaults.blendBand, 0.0f, 0.5f, "%.2f", "Fraction of each cascade's edge dithered into the next; on the last cascade, the fade to unshadowed. Default 0.1.");
+
+                    if (Widgets::Button("Reset CSM")) {
+                        csm = Core::CSMParams{};
+                        changed = true;
+                    }
+                }
             }
-        };
 
-        Widgets::SectionHeader sigmaHeader = MakeLightingSectionHeader(liveLighting, nullptr);
-        if (bSunShadowSlot && state->lighting.sunShadowMode == Core::SunShadowMode::RayTraced && Widgets::BeginSection("Sun Shadow (SIGMA)", &sigmaHeader)) {
-            Core::SIGMAParams& sigma = state->lighting.sigmaParams;
-            static const Core::SIGMAParams sigmaDefaults{};
+            if (bAnalyticMode) {
+                Widgets::SubHeader("Local Lights");
+                Core::LocalShadowParams& local = state->lighting.localShadows;
+                static const Core::LocalShadowParams localDefaults{};
 
-            sunShadowSource();
-            if (Widgets::Checkbox("Half Res##sigma", &sigma.bHalfRes, "Trace + denoise the sun shadow at half resolution, then bilaterally upsample. Cuts the trace/temporal cost; softens contact shadows. Matches half-res ReSTIR.")) { changed = true; }
-            if (Widgets::Checkbox("Alpha Test Cutout##sigma", &sigma.bAlphaTest, "Sun shadow rays alpha-test cutout surfaces (foliage, fences) instead of treating them as solid. Costs a texture fetch per cutout candidate along the ray.")) { changed = true; }
-            if (Widgets::Checkbox("Post-Blur##sigma", &sigma.enablePostBlur, "Second decorrelated spatial pass after the main blur. The single largest quality lever; cleans residual penumbra noise. Default on.")) { changed = true; }
-
-            auto sigmaF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
-                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
-            };
-            sigmaF("History Weight##sigma", &sigma.historyWeight, sigmaDefaults.historyWeight, 0.0f, 0.875f, "%.2f", "Temporal stabilization strength. Higher = steadier but laggier on moving shadows; lower = snappier but shimmerier. Saturates at 0.875 (SIGMA history cap). Default 0.8.");
-            sigmaF("Max Kernel Pixels##sigma", &sigma.maxKernelPixels, sigmaDefaults.maxKernelPixels, 1.0f, 64.0f, "%.0f", "Cap on the penumbra blur radius (px). Bounds cost on very soft shadows. Default 32.");
-            sigmaF("Penumbra Scale##sigma", &sigma.penumbraScale, sigmaDefaults.penumbraScale, 0.0f, 4.0f, "%.2f", "Artistic multiplier on the estimated penumbra. >1 softer, <1 sharper. Default 1.0.");
-
-            if (Widgets::Button("Reset SIGMA")) {
-                sigma = Core::SIGMAParams{};
-                changed = true;
-            }
-            Widgets::EndSection();
-        }
-
-        Widgets::SectionHeader csmHeader = MakeLightingSectionHeader(liveLighting, nullptr);
-        if (bSunShadowSlot && state->lighting.sunShadowMode == Core::SunShadowMode::ShadowMap && Widgets::BeginSection("Sun Shadow (CSM)", &csmHeader)) {
-            Core::CSMParams& csm = state->lighting.csm;
-            static const Core::CSMParams csmDefaults{};
-
-            sunShadowSource();
-            if (Widgets::Checkbox("PCSS##csm", &csm.bPCSS, "Contact-hardening penumbra sized from the sun's angular radius. Off: fixed one-texel filter, no blocker search.")) { changed = true; }
-            if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
-            static constexpr int CSM_RESOLUTIONS[] = {512, 1024, 2048, 4096};
-            static constexpr const char* CSM_RESOLUTION_LABELS[] = {"512", "1024", "2048", "4096"};
-            int resolutionIndex = 2;
-            for (int i = 0; i < 4; ++i) {
-                if (CSM_RESOLUTIONS[i] == csm.resolution) { resolutionIndex = i; }
-            }
-            if (Widgets::Combo("Resolution##csm", &resolutionIndex, CSM_RESOLUTION_LABELS, 4, "Per-cascade shadow map size. Default 2048.")) {
-                csm.resolution = CSM_RESOLUTIONS[resolutionIndex];
-                changed = true;
-            }
-
-            auto csmF = [&](const char* label, float* v, float def, float mn, float mx, const char* fmt, const char* tip) {
-                if (Widgets::SliderFloat(label, v, mn, mx, {.format = fmt, .tooltip = tip, .reset = true, .resetTo = def})) { changed = true; }
-            };
-            csmF("Max Distance##csm", &csm.maxDistance, csmDefaults.maxDistance, 10.0f, 1000.0f, "%.0f m", "Half-width of the last cascade; shadows fade out past it. Default 150 m.");
-            csmF("Split Lambda##csm", &csm.splitLambda, csmDefaults.splitLambda, 0.0f, 1.0f, "%.2f", "0 = even cascade sizes, 1 = logarithmic (sharper near the camera). Default 0.7.");
-            csmF("Caster Extension##csm", &csm.casterExtension, csmDefaults.casterExtension, 0.0f, 500.0f, "%.0f m", "Depth kept toward the sun beyond each cascade so distant casters keep their true distance for soft shadows. Casters past it still shadow. Default 50 m.");
-            csmF("Slope Bias##csm", &csm.slopeBias, csmDefaults.slopeBias, 0.0f, 8.0f, "%.2f", "Rasterizer slope-scaled depth bias. Raise for acne on steep surfaces, lower for peter-panning. Default 2.");
-            csmF("Normal Offset##csm", &csm.normalOffset, csmDefaults.normalOffset, 0.0f, 4.0f, "%.2f texels", "Receiver offset along the normal, in texels of the sampled cascade. Default 1.");
-            csmF("Cascade Blend##csm", &csm.blendBand, csmDefaults.blendBand, 0.0f, 0.5f, "%.2f", "Fraction of each cascade's edge dithered into the next; on the last cascade, the fade to unshadowed. Default 0.1.");
-
-            Widgets::Checkbox("Draw Cascades##csm", &state->debug.csm.bDrawCascades, "Draws each cascade's light-space box.");
-            Widgets::Checkbox("Freeze Cascades##csm", &state->debug.csm.bFreeze, "Holds the cascades where they are so they can be inspected from elsewhere.");
-
-            if (Widgets::Button("Reset CSM")) {
-                csm = Core::CSMParams{};
-                changed = true;
+                if (Widgets::Checkbox("Enabled##localshadow", &local.bEnabled, "Shadow maps for the most important shadow-casting local lights.")) { changed = true; }
+                if (Widgets::SliderInt("View Budget##localshadow", &local.viewBudget, 1, static_cast<int>(LOCAL_SHADOW_MAX_VIEWS), {.tooltip = "Shadow map views per frame; a spot or coned area light takes 1. Default 16.", .reset = true, .resetTo = static_cast<double>(localDefaults.viewBudget)})) { changed = true; }
+                static constexpr int LOCAL_RESOLUTIONS[] = {256, 512, 1024};
+                static constexpr const char* LOCAL_RESOLUTION_LABELS[] = {"256", "512", "1024"};
+                int resolutionIndex = 1;
+                for (int i = 0; i < 3; ++i) {
+                    if (LOCAL_RESOLUTIONS[i] == local.resolution) { resolutionIndex = i; }
+                }
+                if (Widgets::Combo("Resolution##localshadow", &resolutionIndex, LOCAL_RESOLUTION_LABELS, 3, "Per-view tile size; the atlas grows with the view budget. Default 512.")) {
+                    local.resolution = LOCAL_RESOLUTIONS[resolutionIndex];
+                    changed = true;
+                }
+                if (Widgets::SliderFloat("Slope Bias##localshadow", &local.slopeBias, 0.0f, 8.0f, {.format = "%.2f", .tooltip = "Rasterizer slope-scaled depth bias. Default 2.", .reset = true, .resetTo = localDefaults.slopeBias})) { changed = true; }
+                if (Widgets::SliderFloat("Normal Offset##localshadow", &local.normalOffset, 0.0f, 4.0f, {.format = "%.2f texels", .tooltip = "Receiver offset along the normal, in shadow texels at the receiver. Default 1.5.", .reset = true, .resetTo = localDefaults.normalOffset})) { changed = true; }
+                if (Widgets::Button("Reset Local Shadows")) {
+                    local = Core::LocalShadowParams{};
+                    changed = true;
+                }
             }
             Widgets::EndSection();
         }

@@ -92,6 +92,8 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 
 void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+
+void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 } // Engine
 
 #endif //WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H

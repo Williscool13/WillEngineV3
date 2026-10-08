@@ -666,6 +666,8 @@ SHADER_PUBLIC struct VisibilityLightingPushConstant
     SHADER_PUBLIC uint32_t tileCapacity;
     SHADER_PUBLIC float indirectIntensity;
     SHADER_PUBLIC uint32_t skyVisIndex;
+    SHADER_PUBLIC SHADER_PTR(LocalShadowData) localShadows;
+    SHADER_PUBLIC uint32_t localShadowAtlasIndex;
 };
 
 SHADER_PUBLIC struct FrustumBinningPushConstant
@@ -2474,21 +2476,21 @@ SHADER_PUBLIC struct VolumetricFogApplyPushConstant
     SHADER_PUBLIC uint32_t debugOutIndex;
 };
 
-SHADER_PUBLIC struct CSMInstanceCullPushConstant
+SHADER_PUBLIC struct ShadowInstanceCullPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
-    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC SHADER_PTR(ShadowViewGPU) views;
     SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
     SHADER_PUBLIC uint32_t instanceCount;
-    SHADER_PUBLIC uint32_t cascadeCount;
+    SHADER_PUBLIC uint32_t viewCount;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC int32_t lodBias;
 };
 
-SHADER_PUBLIC struct CSMExpandMeshletsPushConstant
+SHADER_PUBLIC struct ShadowExpandMeshletsPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(InstancingMeshletDispatchIndirect) indirectDispatchBuffer;
     SHADER_PUBLIC SHADER_PTR(InstanceMeshletOffsetPrefixSum) instanceMeshletOffsets;
@@ -2498,15 +2500,15 @@ SHADER_PUBLIC struct CSMExpandMeshletsPushConstant
     SHADER_PUBLIC SHADER_PTR(Model) modelBuffer;
     SHADER_PUBLIC SHADER_PTR(Meshlet) meshletBuffer;
     SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
-    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC SHADER_PTR(ShadowViewGPU) views;
     SHADER_PUBLIC uint32_t instanceCount;
     SHADER_PUBLIC uint32_t elementCount;
     SHADER_PUBLIC uint32_t currentFrameBufferMeshletLimit;
 };
 
-SHADER_PUBLIC struct CSMDepthPushConstant
+SHADER_PUBLIC struct ShadowDepthPushConstant
 {
-    SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC SHADER_PTR(ShadowViewGPU) views;
     SHADER_PUBLIC SHADER_PTR(VertexPosition) vertexPosBuffer;
     SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC SHADER_PTR(uint32_t) meshletVerticesBuffer;

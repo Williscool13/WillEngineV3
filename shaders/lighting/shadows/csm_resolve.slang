@@ -22,7 +22,7 @@ static float2 VogelDiskOffset(uint i, uint count, float phi)
 }
 
 // d(clip.z) / d(clip.xy) across the receiver's plane, so wide kernels compare against the plane instead of the centre depth.
-static float2 ReceiverDepthGradient(CSMCascadeGPU cascade, float3 n)
+static float2 ReceiverDepthGradient(ShadowViewGPU cascade, float3 n)
 {
     float3 t1 = normalize(cross(n, abs(n.y) < 0.99 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0)));
     float3 t2 = cross(n, t1);
@@ -41,7 +41,7 @@ static float2 ReceiverDepthGradient(CSMCascadeGPU cascade, float3 n)
     return num / det;
 }
 
-static float FilterCSMCascade(CSMResolvePushConstant pc, CSMCascadeGPU cascade, float3 worldN, float3 clip, float phi)
+static float FilterCSMCascade(CSMResolvePushConstant pc, ShadowViewGPU cascade, float3 worldN, float3 clip, float phi)
 {
     float texelClip = 2.0 / float(pc.csmData->resolution);
     float2 gradient = ReceiverDepthGradient(cascade, worldN);
@@ -110,8 +110,8 @@ void ComputeCSMResolve(uniform CSMResolvePushConstant pc, uint3 dtid : SV_Dispat
     float band = max(pc.csmData->blendBand, 1e-4) * inner;
     uint cascadeCount = pc.csmData->cascadeCount;
     for (uint c = 0; c < cascadeCount; ++c) {
-        CSMCascadeGPU cascade = pc.csmData->cascades[c];
-        float3 offsetPos = worldPos + worldN * (cascade.texelWorldSize * pc.csmData->normalOffsetTexels);
+        ShadowViewGPU cascade = pc.csmData->cascades[c];
+        float3 offsetPos = worldPos + worldN * (cascade.texelSize * pc.csmData->normalOffsetTexels);
         float3 clip = mul(cascade.viewProj, float4(offsetPos, 1.0)).xyz;
         float edge = max(abs(clip.x), abs(clip.y));
         if (edge > inner || clip.z < 0.0 || clip.z > 1.0) {

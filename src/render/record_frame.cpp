@@ -636,7 +636,26 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
                                       : SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, ctx.scene, 0, frameNumber, frameBuffer.reflection);
     ctx.reflection = SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, trace, ctx.ddgi, ctx.worldGrid, 0, frameNumber, 0u, frameBuffer.reflection,
                                               ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
-    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, ctx.geometry, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, ctx.restir, 0,
+
+    LocalShadowFrame localShadows{};
+    if (viewFamily.localShadowViewCount > 0) {
+        const HostBufferMapping mapping = renderGraph->OpenHostBuffer("local_shadow_data"_sid, sizeof(LocalShadowData));
+        auto* data = static_cast<LocalShadowData*>(mapping.data);
+        memcpy(data->views, viewFamily.localShadowViews.Data(), viewFamily.localShadowViewCount * sizeof(ShadowViewGPU));
+        data->viewCount = viewFamily.localShadowViewCount;
+        data->lightCount = viewFamily.analyticLightCount;
+        data->atlasExtent = viewFamily.localShadowAtlasExtent;
+        data->normalOffsetTexels = viewFamily.localShadows.normalOffset;
+        memset(data->lightShadow, 0xFF, viewFamily.analyticLightCount * sizeof(uint32_t));
+        for (uint32_t i = 0; i < viewFamily.localShadowLightCount; ++i) {
+            const Core::LocalShadowLight& light = viewFamily.localShadowLights[i];
+            data->lightShadow[light.lightIndex] = light.firstView | (light.viewCount << 16);
+        }
+        localShadows.data = mapping.buffer;
+        localShadows.atlas = SetupLocalShadowDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, mapping.buffer, 0);
+    }
+
+    SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, ctx.geometry, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, ctx.restir, localShadows, 0,
                                        frameNumber, ctx.features.DDGIApplied(), ctx.giGatherMode, frameBuffer.reflection);
 }
 

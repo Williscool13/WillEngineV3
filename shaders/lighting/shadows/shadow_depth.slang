@@ -11,16 +11,16 @@ import bindless_declarations;
 import shader_functions;
 import material_uv_common;
 
-struct CSMMeshlet
+struct ShadowMeshlet
 {
     Instance inst;
     Primitive prim;
     Model model;
     Meshlet meshlet;
-    CSMCascadeGPU cascade;
+    ShadowViewGPU view;
 };
 
-static bool LoadCSMMeshlet(CSMDepthPushConstant pc, uint3 gid, out CSMMeshlet m)
+static bool LoadShadowMeshlet(ShadowDepthPushConstant pc, uint3 gid, out ShadowMeshlet m)
 {
     m = {};
     uint globalMeshletIndex = gid.x + gid.y * ((MAX_MESH_WORK_GROUP_COUNT_X / 2) + 1);
@@ -30,27 +30,29 @@ static bool LoadCSMMeshlet(CSMDepthPushConstant pc, uint3 gid, out CSMMeshlet m)
 
     CompactedMeshlet compacted = pc.visibleMeshlets[pc.compactedDispatchBuffer->regionBase[pc.drawRegion] + globalMeshletIndex];
     uint packedLocal = compacted.meshletIndexWithinLOD;
-    uint lod = packedLocal >> 30;
+    uint lod = packedLocal >> SHADOW_LOD_SHIFT;
     m.inst = pc.instanceBuffer[compacted.instanceIndex];
     m.prim = pc.primitiveBuffer[m.inst.primitiveIndex];
     m.model = pc.modelBuffer[m.inst.modelIndex];
-    m.meshlet = pc.meshletBuffer[m.prim.meshletOffset[lod] + (packedLocal & 0x0FFFFFFF)];
-    m.cascade = pc.csmData->cascades[(packedLocal >> 28) & 3u];
+    m.meshlet = pc.meshletBuffer[m.prim.meshletOffset[lod] + (packedLocal & SHADOW_MESHLET_MASK)];
+    m.view = pc.views[(packedLocal >> SHADOW_VIEW_SHIFT) & SHADOW_VIEW_MASK];
     return true;
 }
 
-static float4 CascadeToAtlasClip(CSMCascadeGPU cascade, float3 worldPos, out float clipDistance[4])
+// Remaps the view's clip space into its atlas tile; linear in clip space, so it holds for perspective views too.
+static float4 ViewToAtlasClip(ShadowViewGPU view, float3 worldPos, out float clipDistance[4])
 {
-    float3 clip = mul(cascade.viewProj, float4(worldPos, 1.0)).xyz;
-    clipDistance[0] = 1.0 - clip.x;
-    clipDistance[1] = 1.0 + clip.x;
-    clipDistance[2] = 1.0 - clip.y;
-    clipDistance[3] = 1.0 + clip.y;
-    float2 atlasUv = (clip.xy * 0.5 + 0.5) * cascade.atlasScaleOffset.xy + cascade.atlasScaleOffset.zw;
-    return float4(atlasUv * 2.0 - 1.0, clip.z, 1.0);
+    float4 clip = mul(view.viewProj, float4(worldPos, 1.0));
+    clipDistance[0] = clip.w - clip.x;
+    clipDistance[1] = clip.w + clip.x;
+    clipDistance[2] = clip.w - clip.y;
+    clipDistance[3] = clip.w + clip.y;
+    float2 scale = view.atlasScaleOffset.xy;
+    float2 offset = scale + 2.0 * view.atlasScaleOffset.zw - 1.0;
+    return float4(clip.xy * scale + clip.w * offset, clip.z, clip.w);
 }
 
-static float3 LoadWorldPosition(CSMDepthPushConstant pc, CSMMeshlet m, uint localIndex)
+static float3 LoadWorldPosition(ShadowDepthPushConstant pc, ShadowMeshlet m, uint localIndex)
 {
     uint vertexIndex = pc.meshletVerticesBuffer[m.meshlet.meshletVertexOffset + localIndex];
     VertexPosition v = pc.vertexPosBuffer[m.meshlet.vertexOffset + vertexIndex];
@@ -58,13 +60,13 @@ static float3 LoadWorldPosition(CSMDepthPushConstant pc, CSMMeshlet m, uint loca
     return mul(m.model.modelMatrix, float4(vertexPos, 1.0)).xyz;
 }
 
-static uint3 LoadTriangle(CSMDepthPushConstant pc, CSMMeshlet m, uint i)
+static uint3 LoadTriangle(ShadowDepthPushConstant pc, ShadowMeshlet m, uint i)
 {
     uint packed = pc.meshletTrianglesBuffer[m.meshlet.meshletTriangleOffset + i];
     return uint3(packed & 0xFF, (packed >> 8) & 0xFF, (packed >> 16) & 0xFF);
 }
 
-struct CSMVertex
+struct ShadowVertex
 {
     float4 position : SV_Position;
     float clipDistance[4] : SV_ClipDistance;
@@ -73,15 +75,15 @@ struct CSMVertex
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
-void MeshCSMDepth(
-    OutputVertices<CSMVertex, MESHLET_MAX_VERTICES> vertices,
+void MeshShadowDepth(
+    OutputVertices<ShadowVertex, MESHLET_MAX_VERTICES> vertices,
     OutputIndices<uint3, MESHLET_MAX_TRIANGLES> triangles,
     uint3 gid : SV_GroupID,
     uint3 gtid : SV_GroupThreadID,
-    uniform CSMDepthPushConstant pc)
+    uniform ShadowDepthPushConstant pc)
 {
-    CSMMeshlet m;
-    if (!LoadCSMMeshlet(pc, gid, m)) {
+    ShadowMeshlet m;
+    if (!LoadShadowMeshlet(pc, gid, m)) {
         SetMeshOutputCounts(0, 0);
         return;
     }
@@ -89,7 +91,7 @@ void MeshCSMDepth(
 
     for (uint i = gtid.x; i < m.meshlet.meshletVertexCount; i += MESH_SHADER_DISPATCH_X) {
         float clipDistance[4];
-        vertices[i].position = CascadeToAtlasClip(m.cascade, LoadWorldPosition(pc, m, i), clipDistance);
+        vertices[i].position = ViewToAtlasClip(m.view, LoadWorldPosition(pc, m, i), clipDistance);
         vertices[i].clipDistance = clipDistance;
     }
     for (uint i = gtid.x; i < m.meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -97,7 +99,7 @@ void MeshCSMDepth(
     }
 }
 
-struct CSMVertexCutout
+struct ShadowVertexCutout
 {
     float4 position : SV_Position;
     float clipDistance[4] : SV_ClipDistance;
@@ -110,15 +112,15 @@ struct CSMVertexCutout
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(MESH_SHADER_DISPATCH_X, 1, 1)]
-void MeshCSMDepthCutout(
-    OutputVertices<CSMVertexCutout, MESHLET_MAX_VERTICES> vertices,
+void MeshShadowDepthCutout(
+    OutputVertices<ShadowVertexCutout, MESHLET_MAX_VERTICES> vertices,
     OutputIndices<uint3, MESHLET_MAX_TRIANGLES> triangles,
     uint3 gid : SV_GroupID,
     uint3 gtid : SV_GroupThreadID,
-    uniform CSMDepthPushConstant pc)
+    uniform ShadowDepthPushConstant pc)
 {
-    CSMMeshlet m;
-    if (!LoadCSMMeshlet(pc, gid, m)) {
+    ShadowMeshlet m;
+    if (!LoadShadowMeshlet(pc, gid, m)) {
         SetMeshOutputCounts(0, 0);
         return;
     }
@@ -133,7 +135,7 @@ void MeshCSMDepthCutout(
         VertexAttribute attr = pc.vertexAttrBuffer[m.meshlet.vertexOffset + vertexIndex];
         float3 worldPos = LoadWorldPosition(pc, m, i);
         float clipDistance[4];
-        vertices[i].position = CascadeToAtlasClip(m.cascade, worldPos, clipDistance);
+        vertices[i].position = ViewToAtlasClip(m.view, worldPos, clipDistance);
         vertices[i].clipDistance = clipDistance;
         vertices[i].uv = MaterialBaseUV(material, DecodeUV(attr), m.model.modelMatrix, worldPos, DecodeNormal(attr)) * material.colorUvTransform.xy + material.colorUvTransform.zw;
         vertices[i].alphaScale = material.colorFactor.a * DecodeColor(attr).a;
@@ -146,7 +148,7 @@ void MeshCSMDepthCutout(
 }
 
 [shader("fragment")]
-void FragmentCSMDepthCutout(CSMVertexCutout input)
+void FragmentShadowDepthCutout(ShadowVertexCutout input)
 {
     float alpha = input.alphaScale;
     if (input.alphaTexture.x != 0xFFFFFFFF) {

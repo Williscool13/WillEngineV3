@@ -13,6 +13,7 @@ struct ReflectionConfiguration;
 struct ReflectionProbeConfiguration;
 struct GTAOConfiguration;
 struct CSMParams;
+struct LocalShadowParams;
 struct SMAAConfiguration;
 struct TAAConfiguration;
 struct DonutTAAConfiguration;
@@ -48,6 +49,8 @@ void Deserialize(const TextReader& r, Core::GTAOConfiguration& p);
 
 void Serialize(const Core::CSMParams& p, TextWriter& w);
 void Deserialize(const TextReader& r, Core::CSMParams& p);
+void Serialize(const Core::LocalShadowParams& p, TextWriter& w);
+void Deserialize(const TextReader& r, Core::LocalShadowParams& p);
 
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w);
 void Deserialize(const TextReader& r, Core::SMAAConfiguration& p);

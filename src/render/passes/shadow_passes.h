@@ -23,7 +23,7 @@ struct SigmaDenoiseFrame
 };
 
 /**
- * Culls every instance against every cascade in one chain and draws all cascades into one depth atlas.
+ * Sun cascades into the CSM atlas.
  * @return the atlas, invalid without instances
  */
 RDGTexture SetupCSMDepth(RenderGraph& graph,
@@ -34,6 +34,18 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
                          RDGBuffer csmData,
                          uint32_t cascadeCount,
                          uint32_t sceneIndex);
+
+/**
+ * The frame's selected local light views into the local shadow atlas.
+ * @return the atlas, invalid without instances or views
+ */
+RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
+                                 PipelineManager* pipelineManager,
+                                 const Core::ViewFamily& viewFamily,
+                                 const SceneBufferSizes& bufferSizes,
+                                 const SceneResources& scene,
+                                 RDGBuffer localShadowData,
+                                 uint32_t sceneIndex);
 
 /** Samples the CSM atlas into the sun visibility the directional lighting pass reads. */
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,

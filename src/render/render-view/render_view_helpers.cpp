@@ -270,6 +270,7 @@ SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackS
     _limits.highestTLASInstanceCount = std::max(_limits.highestTLASInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     _limits.highestShadowMeshletCount = std::max(_limits.highestShadowMeshletCount, NextPowerOfTwo(readbackData->shadowMeshletCount));
+    _limits.highestLocalShadowMeshletCount = std::max(_limits.highestLocalShadowMeshletCount, NextPowerOfTwo(readbackData->localShadowMeshletCount));
     _limits.highestGlyphQuadCount = std::max(_limits.highestGlyphQuadCount, NextPowerOfTwo(viewFamily.worldGlyphQuads.Size()));
     _limits.highestUIGlyphQuadCount = std::max(_limits.highestUIGlyphQuadCount, NextPowerOfTwo(viewFamily.uiGlyphQuads.Size()));
     _limits.highestTextInstanceCount = std::max(_limits.highestTextInstanceCount, NextPowerOfTwo(viewFamily.textInstances.Size()));
@@ -285,6 +286,7 @@ SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackS
 
     sizes.geometryCull = ComputeMeshletCullBufferSizes(_limits.highestInstanceCount, _limits.highestMeshletCount);
     sizes.shadowCull = ComputeMeshletCullBufferSizes(_limits.highestInstanceCount * CSM_MAX_CASCADES, _limits.highestShadowMeshletCount);
+    sizes.localShadowCull = ComputeMeshletCullBufferSizes(_limits.highestInstanceCount * LOCAL_SHADOW_MAX_VIEWS, _limits.highestLocalShadowMeshletCount);
 
     sizes.glyphQuadBufferSize = _limits.highestGlyphQuadCount * sizeof(WorldGlyphQuad);
     sizes.uiGlyphQuadBufferSize = _limits.highestUIGlyphQuadCount * sizeof(UIGlyphQuad);

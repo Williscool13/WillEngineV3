@@ -39,6 +39,7 @@ struct LightingProfileBundle
     Core::GTAOConfiguration gtao{};
     Core::SunShadowMode sunShadowMode{};
     Core::CSMParams csm{};
+    Core::LocalShadowParams localShadows{};
     StringID shadingOverride{};
     StringID lightingOverride{};
     float iblIntensity{1.0f};

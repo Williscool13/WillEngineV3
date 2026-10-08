@@ -53,6 +53,8 @@ SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_SPHERE = 1u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_TRIANGLE = 2u;
 SHADER_PUBLIC SHADER_CONST uint LIGHT_TYPE_DISK = 3u;
 
+SHADER_PUBLIC SHADER_CONST uint LIGHT_FLAG_CAST_SHADOWS = 1u;
+
 // Resolution-independent XY tiles, log-distributed Z slices
 SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_X = 16u;
 SHADER_PUBLIC SHADER_CONST uint CLUSTER_GRID_Y = 9u;
@@ -83,7 +85,7 @@ SHADER_PUBLIC struct LightInfo
     SHADER_PUBLIC float falloffBias; // 2 - distance exponent; 0 = inverse square
     SHADER_PUBLIC float volumetricScale;
     SHADER_PUBLIC float coneScale; // radiance multiplier; 1 unless the cone is normalized
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC uint flags; // LIGHT_FLAG_*
 };
 
 /** Sphere: radius in centerHalfWidth.w, area = 4*pi*r^2 in rightArea.w. Triangle: center = v0, right/up = edges e1/e2 (unnormalized), halfWidth/halfHeight = 0. */

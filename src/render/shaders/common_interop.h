@@ -181,7 +181,7 @@ SHADER_PUBLIC struct ReadbackStruct
     SHADER_PUBLIC float regirCursorTopShare[8];
     SHADER_PUBLIC uint32_t regirCursorTopLightCount[8];
     SHADER_PUBLIC float regirCursorTopPos[24];
-    SHADER_PUBLIC uint32_t _pad1;
+    SHADER_PUBLIC uint32_t localShadowMeshletCount;
     // Kept = what binning listed, inRange = everything passing its membership test.
     SHADER_PUBLIC uint32_t wgCursorValid;
     SHADER_PUBLIC uint32_t wgCursorLevel;

@@ -339,6 +339,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                                         const FinalGatherFrame& gather,
                                         const ReflectionFrame& reflection,
                                         const ReSTIRFrame& restir,
+                                        const LocalShadowFrame& localShadows,
                                         uint32_t sceneIndex,
                                         uint64_t frameNumber,
                                         bool bDDGIApply,
@@ -394,6 +395,10 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     if (bReflection) {
         lightingResolve.ReadSampledImage(reflectionTarget);
     }
+    if (localShadows.IsValid()) {
+        lightingResolve.ReadBuffer(localShadows.data);
+        lightingResolve.ReadSampledImage(localShadows.atlas);
+    }
     lightingResolve.WriteStorageImage(targets.colorOutput);
     lightingResolve.Execute([&viewFamily, &scene, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
@@ -402,7 +407,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             tileList = geometry.lightingTileList, reservoirFinal = restir.reservoirFinal, ddgiCascades = ddgi.cascades,
             worldGridLightGrid = worldGrid.lightGrid, worldGridIndexList = worldGrid.indexList, worldGridProbeGrid = worldGrid.probeGrid,
             giResolved = gather.resolved, giData = gather.data, giSkyVis = gather.skyVisHistory,
-            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, lightSpecularFromReflectionsMax = bReflection ? ComputeLightSpecularFromReflectionsMax(reflectionConfig) : -1.0f
+            bDDGI, bWorldGrid, bGIGather, giGatherMode, bReflection, reflectionTarget, reflectionRoughnessMax, lightSpecularFromReflectionsMax = bReflection ? ComputeLightSpecularFromReflectionsMax(reflectionConfig) : -1.0f,
+            localShadowData = localShadows.data, localShadowAtlas = localShadows.atlas
             ](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress tileListAddress = graph.GetBufferAddress(tileList);
 
@@ -452,6 +458,8 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
                     .indirectIntensity = viewFamily.indirectIntensity,
                     .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(giSkyVis) : ~0x0u,
+                    .localShadows = localShadowAtlas.IsValid() ? graph.GetBufferAddress(localShadowData) : 0,
+                    .localShadowAtlasIndex = localShadowAtlas.IsValid() ? graph.GetSampledImageViewDescriptorIndex(localShadowAtlas) : ~0x0u,
                 };
                 vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
                 vkCmdDispatchIndirect(cmd, graph.GetBufferHandle(scene.lightingBucketingDispatches), entry.index * sizeof(BucketDispatchParameters) + offsetof(BucketDispatchParameters, xDispatch));

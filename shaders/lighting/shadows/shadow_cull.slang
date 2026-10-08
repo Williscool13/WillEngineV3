@@ -9,17 +9,30 @@ import shadow_interop;
 import shader_functions;
 import instancing_common;
 
-// Elements are cascade-major: element = cascade * instanceCount + instance.
+static float ShadowTexelSize(ShadowViewGPU view, float3 center)
+{
+    return view.eye.w == 0.0 ? view.texelSize : view.texelSize * distance(center, view.eye.xyz);
+}
+
+static bool IsShadowConeFrontFacing(ShadowViewGPU view, Meshlet mlet, float4 worldBounds, Model model)
+{
+    if (view.eye.w == 0.0) {
+        return dot(-view.eye.xyz, normalize(mul((float3x3)model.modelMatrix, mlet.coneAxis))) < mlet.coneCutoff;
+    }
+    return IsConeFrontFacing(mlet.coneAxis, mlet.coneCutoff, worldBounds.xyz, worldBounds.w, view.eye.xyz, (float3x3)model.modelMatrix);
+}
+
+// Elements are view-major: element = view * instanceCount + instance.
 [shader("compute")]
 [numthreads(INSTANCING_VISIBILITY_DISPATCH_X, 1, 1)]
-void ComputeCSMInstanceCull(uniform CSMInstanceCullPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+void ComputeShadowInstanceCull(uniform ShadowInstanceCullPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint element = dtid.x;
-    if (element >= pc.instanceCount * pc.cascadeCount) {
+    if (element >= pc.instanceCount * pc.viewCount) {
         return;
     }
     uint instanceID = element % pc.instanceCount;
-    uint cascadeIndex = element / pc.instanceCount;
+    uint viewIndex = element / pc.instanceCount;
 
     uint count = 0;
     uint lod = LOD_CULLED;
@@ -28,10 +41,13 @@ void ComputeCSMInstanceCull(uniform CSMInstanceCullPushConstant pc, uint3 dtid :
         Primitive prim = pc.primitiveBuffer[inst.primitiveIndex];
         Model model = pc.modelBuffer[inst.modelIndex];
         float4 worldBounds = ComputeInstanceWorldBounds(prim, model);
-        CSMCascadeGPU cascade = pc.csmData->cascades[cascadeIndex];
-        bool bVisible = IsSphereInFrustum(cascade.frustum, worldBounds) && 2.0 * worldBounds.w >= cascade.texelWorldSize;
+        ShadowViewGPU view = pc.views[viewIndex];
+        bool bVisible = IsSphereInFrustum(view.frustum, worldBounds) && 2.0 * worldBounds.w >= ShadowTexelSize(view, worldBounds.xyz);
         if (bVisible) {
-            lod = SelectInstanceLOD(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale, pc.lodBias);
+            // Perspective views pick LOD from the light so a cached map stays valid as the camera moves.
+            lod = view.eye.w == 0.0
+                      ? SelectInstanceLOD(worldBounds, pc.sceneData[pc.sceneDataIndex].cameraWorldPos.xyz, pc.sceneData[pc.sceneDataIndex].lodScreenSizeScale, pc.lodBias)
+                      : SelectInstanceLOD(worldBounds, view.eye.xyz, 1.0 / view.texelSize, pc.lodBias);
             count = prim.meshletCount[lod];
         }
     }
@@ -41,10 +57,9 @@ void ComputeCSMInstanceCull(uniform CSMInstanceCullPushConstant pc, uint3 dtid :
     pc.instanceMeshletOffsets[element].primitiveIndex = inst.primitiveIndex;
 }
 
-// meshletIndexWithinLOD packs the cascade into bits 28..29 below the LOD bits.
 [shader("compute")]
 [numthreads(INSTANCING_EXPAND_DISPATCH_X, 1, 1)]
-void ComputeCSMExpandMeshlets(uniform CSMExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
+void ComputeShadowExpandMeshlets(uniform ShadowExpandMeshletsPushConstant pc, uint3 dtid : SV_DispatchThreadID)
 {
     uint globalMeshletIndex = dtid.x;
     if (globalMeshletIndex >= pc.indirectDispatchBuffer->totalMeshlets) {
@@ -71,7 +86,7 @@ void ComputeCSMExpandMeshlets(uniform CSMExpandMeshletsPushConstant pc, uint3 dt
     }
 
     uint instanceIndex = element % pc.instanceCount;
-    uint cascadeIndex = element / pc.instanceCount;
+    uint viewIndex = element / pc.instanceCount;
     uint meshletIndexWithinLOD = globalMeshletIndex - pc.instanceMeshletOffsets[element].offset;
     uint lod = pc.instanceMeshletOffsets[element].lod;
 
@@ -84,15 +99,15 @@ void ComputeCSMExpandMeshlets(uniform CSMExpandMeshletsPushConstant pc, uint3 dt
 
     Meshlet mlet = pc.meshletBuffer[prim.meshletOffset[lod] + meshletIndexWithinLOD];
     float4 worldBounds = ComputeMeshletWorldBounds(mlet, model);
-    CSMCascadeGPU cascade = pc.csmData->cascades[cascadeIndex];
+    ShadowViewGPU view = pc.views[viewIndex];
 
-    bool bConeCulled = !bTwoSided && dot(-pc.csmData->toSun.xyz, normalize(mul((float3x3)model.modelMatrix, mlet.coneAxis))) >= mlet.coneCutoff;
-    bool bVisible = !bConeCulled && IsSphereInFrustum(cascade.frustum, worldBounds) && 2.0 * worldBounds.w >= cascade.texelWorldSize && alphaMode != MATERIAL_ALPHA_BLEND;
+    bool bConeCulled = !bTwoSided && !IsShadowConeFrontFacing(view, mlet, worldBounds, model);
+    bool bVisible = !bConeCulled && IsSphereInFrustum(view.frustum, worldBounds) && 2.0 * worldBounds.w >= ShadowTexelSize(view, worldBounds.xyz) && alphaMode != MATERIAL_ALPHA_BLEND;
     bool bCutout = alphaMode == MATERIAL_ALPHA_CUTOUT && (inst.flags & INSTANCE_FLAG_ALPHA_CUTOUT) != 0u;
     uint region = (bCutout ? MESHLET_REGION_CUTOUT : MESHLET_REGION_OPAQUE) | (bTwoSided ? 1u : 0u);
 
     uint packedInstanceIndex = (instanceIndex & 0x1FFFFFFF) | (region << 29) | (bVisible ? 0x80000000 : 0);
-    uint packedLocalMeshlet = (meshletIndexWithinLOD & 0x0FFFFFFF) | (cascadeIndex << 28) | (lod << 30);
+    uint packedLocalMeshlet = (meshletIndexWithinLOD & SHADOW_MESHLET_MASK) | (viewIndex << SHADOW_VIEW_SHIFT) | (lod << SHADOW_LOD_SHIFT);
 
     if (globalMeshletIndex < pc.currentFrameBufferMeshletLimit) {
         pc.intermediateMeshlets[globalMeshletIndex].instanceIndex = packedInstanceIndex;

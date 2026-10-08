@@ -39,6 +39,7 @@
 #include "engine/components/physics/physics_body_desc.h"
 #include "render/types/render_types.h"
 #include "render/render-view/csm_views.h"
+#include "render/render-view/local_shadow_views.h"
 #include "core/memory/memory_manager.h"
 
 
@@ -648,6 +649,44 @@ void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     MarkAnalyticLightsDirty(state->registry);
 }
 
+static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
+{
+    const Engine::LightingState& lighting = state->lighting;
+    Engine::LocalShadowSelection& selection = state->localShadowSelection;
+    if (!lighting.localShadows.bEnabled || lighting.lightingMode != Core::LightingMode::Analytic) {
+        selection = {};
+    }
+    else if (!state->debug.localShadow.bFreeze) {
+        const auto resolution = static_cast<uint32_t>(glm::clamp(lighting.localShadows.resolution, 64, 2048));
+        const auto budget = static_cast<uint32_t>(glm::clamp(lighting.localShadows.viewBudget, 1, static_cast<int32_t>(LOCAL_SHADOW_MAX_VIEWS)));
+        const glm::uvec2 tiles = Render::LocalShadowAtlasTiles(budget);
+
+        uint32_t previous[LOCAL_SHADOW_MAX_VIEWS];
+        for (uint32_t i = 0; i < selection.lightCount; ++i) {
+            previous[i] = selection.lights[i].lightIndex;
+        }
+        const Core::ViewData& view = vf.mainView.currentViewData;
+        uint32_t picks[LOCAL_SHADOW_MAX_VIEWS];
+        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, view.proj * view.view, view.cameraPos, previous, selection.lightCount, budget, picks);
+
+        selection.viewCount = 0;
+        for (uint32_t i = 0; i < pickCount; ++i) {
+            const uint32_t firstView = selection.viewCount;
+            const uint32_t viewCount = Render::BuildLocalShadowViews(lights[picks[i]], firstView, tiles, resolution, selection.views.Data() + firstView);
+            selection.lights[i] = Core::LocalShadowLight{picks[i], firstView, viewCount};
+            selection.viewCount += viewCount;
+        }
+        selection.lightCount = pickCount;
+        selection.atlasExtent = tiles * resolution;
+    }
+
+    vf.localShadowLightCount = selection.lightCount;
+    vf.localShadowLights = selection.lights;
+    vf.localShadowViewCount = selection.viewCount;
+    vf.localShadowViews = selection.views;
+    vf.localShadowAtlasExtent = selection.atlasExtent;
+}
+
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -673,6 +712,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         memcpy(vf.lightPayload.Data() + base, storeLights + offset, count * sizeof(LightInfo));
         vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
     });
+    SelectLocalShadows(state, vf, storeLights, analyticWatermark);
 
     Engine::TriLightStore& triLightStore = state->triLightStore;
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;
@@ -1159,6 +1199,31 @@ void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state,
         const Render::CSMCascade& cascade = frame.cascades[i];
         const glm::vec3 extents{cascade.halfExtent, cascade.halfExtent, 0.5f * cascade.depthRange};
         DEBUG_ADD_BOX(viewFamily.debugBoxes, {cascade.center, extents, rotation, CASCADE_COLORS[i], cascade.halfExtent * 0.002f});
+    }
+}
+
+void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    if (!state->debug.localShadow.bDrawViews) { return; }
+    Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
+    const Engine::LocalShadowSelection& selection = state->localShadowSelection;
+
+    static constexpr glm::vec4 TILE_COLORS[] = {{1.0f, 0.2f, 0.2f, 1.0f}, {0.2f, 1.0f, 0.2f, 1.0f}, {0.2f, 0.4f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.2f, 1.0f},
+                                                {1.0f, 0.2f, 1.0f, 1.0f}, {0.2f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.6f, 0.2f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    static constexpr int32_t EDGES[12][2] = {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    for (uint32_t v = 0; v < selection.viewCount; ++v) {
+        const glm::mat4 invViewProj = glm::inverse(selection.views[v].viewProj);
+        glm::vec3 corners[8];
+        for (int32_t c = 0; c < 8; ++c) {
+            const glm::vec4 ndc((c & 1) ? 1.0f : -1.0f, (c & 2) ? 1.0f : -1.0f, (c & 4) ? 0.0f : 1.0f, 1.0f);
+            const glm::vec4 world = invViewProj * ndc;
+            corners[c] = glm::vec3(world) / world.w;
+        }
+        const glm::vec4 color = TILE_COLORS[v % 8];
+        for (const auto& edge : EDGES) {
+            DEBUG_ADD_LINE(viewFamily.debugLines, {corners[edge[0]], corners[edge[1]], color, 0.02f});
+        }
     }
 }
 }

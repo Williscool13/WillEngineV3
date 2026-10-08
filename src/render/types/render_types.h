@@ -78,6 +78,7 @@ struct SceneBufferSizes
 
     MeshletCullBufferSizes geometryCull{};
     MeshletCullBufferSizes shadowCull{};
+    MeshletCullBufferSizes localShadowCull{};
 
     size_t glyphQuadBufferSize{128};
     size_t uiGlyphQuadBufferSize{128};

@@ -469,6 +469,24 @@ void Deserialize(const TextReader& r, Core::CSMParams& p)
     p.blendBand = r.Float("blendBand", p.blendBand);
 }
 
+void Serialize(const Core::LocalShadowParams& p, TextWriter& w)
+{
+    w.Key("bEnabled", p.bEnabled);
+    w.Key("viewBudget", p.viewBudget);
+    w.Key("resolution", p.resolution);
+    w.Key("slopeBias", p.slopeBias);
+    w.Key("normalOffset", p.normalOffset);
+}
+
+void Deserialize(const TextReader& r, Core::LocalShadowParams& p)
+{
+    p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.viewBudget = r.Int("viewBudget", p.viewBudget);
+    p.resolution = r.Int("resolution", p.resolution);
+    p.slopeBias = r.Float("slopeBias", p.slopeBias);
+    p.normalOffset = r.Float("normalOffset", p.normalOffset);
+}
+
 void Serialize(const Core::SMAAConfiguration& p, TextWriter& w)
 {
     w.Key("edgeDetectionMode", static_cast<int32_t>(p.edgeDetectionMode));

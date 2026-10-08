@@ -183,6 +183,7 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
     frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
     frameBuffer->mainViewFamily.sunShadowMode = state->lighting.sunShadowMode;
     frameBuffer->mainViewFamily.csm = state->lighting.csm;
+    frameBuffer->mainViewFamily.localShadows = state->lighting.localShadows;
     if (!state->debug.csm.bFreeze) {
         state->debug.csm.frozenAnchor = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
     }
@@ -223,7 +224,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherLights", &GatherLights, {
         .bExclusive = false,
         .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenTag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::WorldTransformComponent>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
-        .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid},
+        .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid},
     });
     graph.Add("GatherTextRenderables", &GatherTextRenderables, {
         .bExclusive = false,
@@ -250,6 +251,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherEditorSprites", &GatherEditorSprites);
     graph.Add("GatherLightDebugDraws", &GatherLightDebugDraws);
     graph.Add("GatherCSMDebugDraws", &GatherCSMDebugDraws);
+    graph.Add("GatherLocalShadowDebugDraws", &GatherLocalShadowDebugDraws);
 #endif
 
 #ifdef WDEBUG
