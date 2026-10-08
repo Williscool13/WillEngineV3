@@ -646,10 +646,12 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
         data->lightCount = viewFamily.analyticLightCount;
         data->atlasExtent = viewFamily.localShadowAtlasExtent;
         data->normalOffsetTexels = viewFamily.localShadows.normalOffset;
+        data->bPCSS = viewFamily.localShadows.bPCSS ? 1u : 0u;
         memset(data->lightShadow, 0xFF, viewFamily.analyticLightCount * sizeof(uint32_t));
         for (uint32_t i = 0; i < viewFamily.localShadowLightCount; ++i) {
             const Core::LocalShadowLight& light = viewFamily.localShadowLights[i];
-            data->lightShadow[light.lightIndex] = light.firstView | (light.faceMask << 16);
+            const auto strength = static_cast<uint32_t>(glm::clamp(light.strength, 0.0f, 1.0f) * static_cast<float>(LOCAL_SHADOW_STRENGTH_MAX) + 0.5f);
+            data->lightShadow[light.lightIndex] = light.firstView | (light.faceMask << LOCAL_SHADOW_FACE_SHIFT) | (strength << LOCAL_SHADOW_STRENGTH_SHIFT);
         }
         localShadows.data = mapping.buffer;
         localShadows.atlas = SetupLocalShadowDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, mapping.buffer, 0);

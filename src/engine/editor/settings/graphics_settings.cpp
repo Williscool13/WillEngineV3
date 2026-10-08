@@ -1856,6 +1856,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 static const Core::LocalShadowParams localDefaults{};
 
                 if (Widgets::Checkbox("Enabled##localshadow", &local.bEnabled, "Shadow maps for the most important shadow-casting local lights.")) { changed = true; }
+                if (Widgets::Checkbox("PCSS##localshadow", &local.bPCSS, "Contact-hardening penumbra sized from each light's source size. Off: fixed one-texel filter, no blocker search.")) { changed = true; }
+                if (Widgets::SliderFloat("Fade##localshadow", &local.fadeSeconds, 0.0f, 2.0f, {.format = "%.2f s", .tooltip = "Time for a shadow to fade in when its light joins the budget, and out when it leaves. Default 0.25 s.", .reset = true, .resetTo = localDefaults.fadeSeconds})) { changed = true; }
                 if (Widgets::SliderInt("View Budget##localshadow", &local.viewBudget, 1, static_cast<int>(LOCAL_SHADOW_MAX_VIEWS), {.tooltip = "Shadow map views per frame; a coned area light takes 1, an omni up to 6 (faces the camera cannot see are skipped). Default 16.", .reset = true, .resetTo = static_cast<double>(localDefaults.viewBudget)})) { changed = true; }
                 static constexpr int LOCAL_RESOLUTIONS[] = {256, 512, 1024};
                 static constexpr const char* LOCAL_RESOLUTION_LABELS[] = {"256", "512", "1024"};

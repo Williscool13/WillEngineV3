@@ -127,6 +127,8 @@ static ShadowViewGPU MakePerspectiveView(const glm::vec3& eye, const glm::vec3& 
     out.atlasScaleOffset = glm::vec4(scale, static_cast<float>(tile % tiles.x) * scale.x, static_cast<float>(tile / tiles.x) * scale.y);
     out.eye = glm::vec4(eye, 1.0f);
     out.texelSize = 2.0f * tanHalf / static_cast<float>(resolution);
+    out.depthRange = farPlane - nearPlane;
+    out.nearPlane = nearPlane;
     return out;
 }
 

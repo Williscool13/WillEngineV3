@@ -3,6 +3,8 @@ import constants_interop;
 import model_interop;
 import lights_interop;
 import shadow_interop;
+import local_shadow_common;
+import random_common;
 import ddgi_interop;
 import ddgi_common;
 
@@ -21,49 +23,6 @@ import indirect_lighting_common;
 
 import bindless_declarations;
 import bucket_dispatch_common;
-
-static float LocalShadowVisibility(VisibilityLightingPushConstant pc, uint lightIndex, float3 worldPos, float3 worldN)
-{
-    if (pc.localShadows == nullptr || lightIndex >= pc.localShadows->lightCount) {
-        return 1.0;
-    }
-    uint packed = pc.localShadows->lightShadow[lightIndex];
-    if (packed == LOCAL_SHADOW_NONE) {
-        return 1.0;
-    }
-
-    uint viewIndex = packed & 0xFFFFu;
-    uint faceMask = packed >> 16;
-    if (faceMask != 0u) {
-        float3 d = worldPos - pc.lightData->lights[lightIndex].position.xyz;
-        float3 a = abs(d);
-        uint face = a.x >= a.y && a.x >= a.z ? (d.x >= 0.0 ? 0u : 1u) : a.y >= a.z ? (d.y >= 0.0 ? 2u : 3u) : (d.z >= 0.0 ? 4u : 5u);
-        if ((faceMask & (1u << face)) == 0u) {
-            return 1.0;
-        }
-        viewIndex += countbits(faceMask & ((1u << face) - 1u));
-    }
-    ShadowViewGPU view = pc.localShadows->views[viewIndex];
-    float texel = view.texelSize * distance(worldPos, view.eye.xyz);
-    float4 clip = mul(view.viewProj, float4(worldPos + worldN * (texel * pc.localShadows->normalOffsetTexels), 1.0));
-    if (clip.w <= 0.0) {
-        return 1.0;
-    }
-    float3 ndc = clip.xyz / clip.w;
-    if (any(abs(ndc.xy) > 1.0) || ndc.z < 0.0 || ndc.z > 1.0) {
-        return 1.0;
-    }
-
-    float2 uv = (ndc.xy * 0.5 + 0.5) * view.atlasScaleOffset.xy + view.atlasScaleOffset.zw;
-    float2 atlasTexel = 1.0 / float2(pc.localShadows->atlasExtent);
-    float visibility = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            visibility += rdgTexturesFloat[pc.localShadowAtlasIndex].SampleCmpLevelZero(rdgCompareSamplers[RDG_LINEAR_DEPTH_SAMPLER_INDEX], uv + float2(x, y) * atlasTexel, ndc.z);
-        }
-    }
-    return visibility / 9.0;
-}
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -91,6 +50,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
     float3 V = normalize(-viewPosition);
     float3 worldPosition = mul(pc.sceneData[pc.sceneDataIndex].invView, float4(viewPosition, 1.0)).xyz;
     float3 worldN = normalize(mul((float3x3)pc.sceneData[pc.sceneDataIndex].invView, N));
+    float2 shadowNoise = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 13u);
 
     // Clamp roughness so D_GGX never produces 0/0 at NdotH=1 (degenerate delta lobe)
     float roughness = max(li.roughness, MIN_ROUGHNESS);
@@ -121,7 +81,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         {
             uint lightIndex = pc.worldGridIndexList[gridEntry.x + j];
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[lightIndex], pc.sceneData[pc.sceneDataIndex].view);
-            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0) * LocalShadowVisibility(pc, lightIndex, worldPosition, worldN);
+            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0) * LocalShadowVisibility(pc.localShadows, pc.lightData->lights[lightIndex], lightIndex, pc.localShadowAtlasIndex, worldPosition, worldN, shadowNoise);
         }
     }
     else
@@ -129,7 +89,7 @@ void ComputeLightingPBR(uniform VisibilityLightingPushConstant pc, uint3 gid : S
         for (int j = 0; j < pc.lightData->lightCount; j++)
         {
             PunctualLight punctual = DegenerateLight(pc.lightData->lights[j], pc.sceneData[pc.sceneDataIndex].view);
-            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0) * LocalShadowVisibility(pc, uint(j), worldPosition, worldN);
+            directLight += ShadePunctual(punctual, N, V, viewPosition, li.albedo.xyz, li.metallic, roughness, F0) * LocalShadowVisibility(pc.localShadows, pc.lightData->lights[j], uint(j), pc.localShadowAtlasIndex, worldPosition, worldN, shadowNoise);
         }
     }
 

@@ -472,6 +472,8 @@ void Deserialize(const TextReader& r, Core::CSMParams& p)
 void Serialize(const Core::LocalShadowParams& p, TextWriter& w)
 {
     w.Key("bEnabled", p.bEnabled);
+    w.Key("bPCSS", p.bPCSS);
+    w.Key("fadeSeconds", p.fadeSeconds);
     w.Key("viewBudget", p.viewBudget);
     w.Key("resolution", p.resolution);
     w.Key("slopeBias", p.slopeBias);
@@ -481,6 +483,8 @@ void Serialize(const Core::LocalShadowParams& p, TextWriter& w)
 void Deserialize(const TextReader& r, Core::LocalShadowParams& p)
 {
     p.bEnabled = r.Bool("bEnabled", p.bEnabled);
+    p.bPCSS = r.Bool("bPCSS", p.bPCSS);
+    p.fadeSeconds = r.Float("fadeSeconds", p.fadeSeconds);
     p.viewBudget = r.Int("viewBudget", p.viewBudget);
     p.resolution = r.Int("resolution", p.resolution);
     p.slopeBias = r.Float("slopeBias", p.slopeBias);

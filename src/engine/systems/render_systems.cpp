@@ -660,26 +660,55 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
         const auto resolution = static_cast<uint32_t>(glm::clamp(lighting.localShadows.resolution, 64, 2048));
         const auto budget = static_cast<uint32_t>(glm::clamp(lighting.localShadows.viewBudget, 1, static_cast<int32_t>(LOCAL_SHADOW_MAX_VIEWS)));
         const glm::uvec2 tiles = Render::LocalShadowAtlasTiles(budget);
+        const float fadeStep = lighting.localShadows.fadeSeconds > 0.0f ? state->timeFrame->deltaTime / lighting.localShadows.fadeSeconds : 1.0f;
 
-        uint32_t previous[LOCAL_SHADOW_MAX_VIEWS];
-        for (uint32_t i = 0; i < selection.lightCount; ++i) {
-            previous[i] = selection.lights[i].lightIndex;
+        const Engine::LocalShadowSelection previous = selection;
+        uint32_t previousIndices[LOCAL_SHADOW_MAX_VIEWS];
+        for (uint32_t i = 0; i < previous.lightCount; ++i) {
+            previousIndices[i] = previous.lights[i].lightIndex;
         }
+        auto previousStrength = [&](uint32_t lightIndex) {
+            for (uint32_t i = 0; i < previous.lightCount; ++i) {
+                if (previous.lights[i].lightIndex == lightIndex) { return previous.lights[i].strength; }
+            }
+            return -1.0f;
+        };
+
         const Core::ViewData& view = vf.mainView.currentViewData;
         const glm::mat4 cameraViewProj = view.proj * view.view;
         const Frustum camera = Render::CreateFrustum(cameraViewProj);
         uint32_t picks[LOCAL_SHADOW_MAX_VIEWS];
-        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previous, selection.lightCount, budget, picks);
+        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previousIndices, previous.lightCount, budget, picks);
 
+        selection.lightCount = 0;
         selection.viewCount = 0;
-        for (uint32_t i = 0; i < pickCount; ++i) {
+        auto add = [&](uint32_t lightIndex, float strength) {
             const uint32_t firstView = selection.viewCount;
             uint32_t faceMask = 0;
-            const uint32_t viewCount = Render::BuildLocalShadowViews(lights[picks[i]], camera, firstView, tiles, resolution, selection.views.Data() + firstView, faceMask);
-            selection.lights[i] = Core::LocalShadowLight{picks[i], firstView, viewCount, faceMask};
+            const uint32_t viewCount = Render::BuildLocalShadowViews(lights[lightIndex], camera, firstView, tiles, resolution, selection.views.Data() + firstView, faceMask);
+            selection.lights[selection.lightCount++] = Core::LocalShadowLight{lightIndex, firstView, viewCount, faceMask, strength};
             selection.viewCount += viewCount;
+        };
+        for (uint32_t i = 0; i < pickCount; ++i) {
+            add(picks[i], glm::min(glm::max(previousStrength(picks[i]), 0.0f) + fadeStep, 1.0f));
         }
-        selection.lightCount = pickCount;
+
+        // Dropped lights fade out on their old shadow while the budget has room.
+        for (uint32_t i = 0; i < previous.lightCount; ++i) {
+            const Core::LocalShadowLight& old = previous.lights[i];
+            bool bPicked = false;
+            for (uint32_t k = 0; k < pickCount; ++k) {
+                bPicked |= picks[k] == old.lightIndex;
+            }
+            const float strength = old.strength - fadeStep;
+            if (bPicked || strength <= 0.0f || old.lightIndex >= lightCount || selection.lightCount >= LOCAL_SHADOW_MAX_VIEWS) {
+                continue;
+            }
+            const uint32_t views = Render::LocalShadowViewCount(lights[old.lightIndex], camera);
+            if (views > 0 && selection.viewCount + views <= budget) {
+                add(old.lightIndex, strength);
+            }
+        }
         selection.atlasExtent = tiles * resolution;
     }
 

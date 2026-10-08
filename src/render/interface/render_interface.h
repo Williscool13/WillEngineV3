@@ -439,6 +439,8 @@ struct LocalShadowLight
     uint32_t viewCount{0};
     // Cube faces present, +X -X +Y -Y +Z -Z; 0 = one spot view
     uint32_t faceMask{0};
+    // Fades in after the light is picked and out after it is dropped
+    float strength{1.0f};
 };
 
 struct ViewFamily

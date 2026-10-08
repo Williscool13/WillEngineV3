@@ -317,6 +317,8 @@ struct SIGMAParams
 struct LocalShadowParams
 {
     bool bEnabled{true};
+    bool bPCSS{true};
+    float fadeSeconds{0.25f};
     int32_t viewBudget{16};
     int32_t resolution{512};
     float slopeBias{2.0f};

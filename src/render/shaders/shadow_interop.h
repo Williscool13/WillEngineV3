@@ -38,6 +38,9 @@ SHADER_PUBLIC SHADER_CONST uint32_t CSM_ATLAS_COLUMNS = 2;
 
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_MAX_VIEWS = 16;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_NONE = 0xFFFFFFFF;
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_FACE_SHIFT = 16;
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_STRENGTH_SHIFT = 22;
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_STRENGTH_MAX = 1023;
 
 // Shadow cull meshletIndexWithinLOD: bits 0..21 meshlet, 22..27 view, 28..31 LOD.
 SHADER_PUBLIC SHADER_CONST uint32_t SHADOW_VIEW_SHIFT = 22;
@@ -55,8 +58,9 @@ SHADER_PUBLIC struct ShadowViewGPU
     // World size of one texel; at unit distance for perspective views
     SHADER_PUBLIC float texelSize;
     SHADER_PUBLIC float halfExtent;
+    // World distance between the near and far depth planes
     SHADER_PUBLIC float depthRange;
-    SHADER_PUBLIC float _pad0;
+    SHADER_PUBLIC float nearPlane;
 };
 
 SHADER_PUBLIC struct CSMData
@@ -81,8 +85,8 @@ SHADER_PUBLIC struct LocalShadowData
     SHADER_PUBLIC uint32_t viewCount;
     SHADER_PUBLIC uint32_t lightCount;
     SHADER_PUBLIC float normalOffsetTexels;
-    SHADER_PUBLIC uint32_t _pad0;
-    // First view | cube face mask << 16 (0 = one spot view), LOCAL_SHADOW_NONE when unshadowed
+    SHADER_PUBLIC uint32_t bPCSS;
+    // First view | cube face mask << LOCAL_SHADOW_FACE_SHIFT (0 = one spot view) | fade strength << LOCAL_SHADOW_STRENGTH_SHIFT; LOCAL_SHADOW_NONE when unshadowed
     SHADER_PUBLIC uint32_t lightShadow[MAX_ANALYTIC_LIGHTS];
 };
 
