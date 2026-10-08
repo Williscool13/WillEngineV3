@@ -57,10 +57,7 @@ TEST_CASE("Local shadows: view counts per light shape", "[localshadow]")
 
     // Camera inside the range looking down -Z: the +Z face is behind it.
     const Frustum inside = Render::CreateFrustum(CameraViewProj({0, 0, 0}, {0, 0, -1}));
-    ShadowViewGPU views[6];
-    uint32_t faceMask = 0;
-    CHECK(Render::BuildLocalShadowViews(sphere, inside, 0, Render::LocalShadowAtlasTiles(16), 512, views, faceMask) == 5);
-    CHECK(faceMask == 0b101111u);
+    CHECK(Render::LocalShadowFaceMask(sphere, inside) == 0b101111u);
 
     // One-sided hemisphere emitter facing down: the +Y face is all behind it.
     CHECK(Render::LocalShadowViewCount(MakeSpot({}, {0, -1, 0}, 90.0f, 1000.0f, 5.0f), outside) == 5);
@@ -72,9 +69,11 @@ TEST_CASE("Local shadows: cube faces cover their axis and start past a sphere li
     sphere.type = LIGHT_TYPE_SPHERE;
     sphere.right.w = 0.5f;
     const Frustum outside = Render::CreateFrustum(CameraViewProj({0, 0, 40}, {0, 0, 0}));
+    REQUIRE(Render::LocalShadowFaceMask(sphere, outside) == 0b111111u);
     ShadowViewGPU views[6];
-    uint32_t faceMask = 0;
-    REQUIRE(Render::BuildLocalShadowViews(sphere, outside, 0, Render::LocalShadowAtlasTiles(16), 512, views, faceMask) == 6);
+    for (uint32_t f = 0; f < 6; ++f) {
+        views[f] = Render::BuildLocalShadowView(sphere, f, f, Render::LocalShadowAtlasTiles(16), 512);
+    }
     const glm::vec3 axes[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
     for (uint32_t f = 0; f < 6; ++f) {
         const glm::vec3 onAxis = ToNdc(views[f].viewProj, glm::vec3(1, 2, 3) + axes[f] * 4.0f);
@@ -91,10 +90,8 @@ TEST_CASE("Local shadows: spot view is reverse-Z between near and range, centred
     const glm::vec3 position{2.0f, 5.0f, -1.0f};
     for (const glm::vec3& normal : {glm::vec3(0, -1, 0), glm::normalize(glm::vec3(1, -1, 0.5f)), glm::vec3(0, 1, 0)}) {
         const LightInfo light = MakeSpot(position, normal, 40.0f);
-        ShadowViewGPU view{};
-        uint32_t faceMask = 1;
-        REQUIRE(Render::BuildLocalShadowViews(light, Render::CreateFrustum(CameraViewProj({0, 0, 30}, {0, 0, 0})), 5, Render::LocalShadowAtlasTiles(16), 512, &view, faceMask) == 1);
-        CHECK(faceMask == 0);
+        CHECK(Render::IsLocalShadowSpot(light));
+        const ShadowViewGPU view = Render::BuildLocalShadowView(light, 0, 5, Render::LocalShadowAtlasTiles(16), 512);
 
         const glm::vec3 onAxis = ToNdc(view.viewProj, position + normal * 4.0f);
         CHECK(std::fabs(onAxis.x) < 1e-4f);

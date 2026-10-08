@@ -435,10 +435,10 @@ struct LocalDDGIVolume
 struct LocalShadowLight
 {
     uint32_t lightIndex{0};
-    uint32_t firstView{0};
-    uint32_t viewCount{0};
-    // Cube faces present, +X -X +Y -Y +Z -Z; 0 = one spot view
+    // Faces present, +X -X +Y -Y +Z -Z. Bit 0 alone for a spot
     uint32_t faceMask{0};
+    // Atlas tile per face, LOCAL_SHADOW_TILE_BITS each
+    uint32_t faceTiles{0};
     // Fades in after the light is picked and out after it is dropped
     float strength{1.0f};
 };
@@ -515,8 +515,10 @@ struct ViewFamily
     LocalShadowParams localShadows{};
     uint32_t localShadowLightCount{0};
     Core::Array<LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> localShadowLights{};
-    uint32_t localShadowViewCount{0};
+    // Indexed by atlas tile
     Core::Array<ShadowViewGPU, LOCAL_SHADOW_MAX_VIEWS> localShadowViews{};
+    uint32_t localShadowActiveTiles{0};
+    uint32_t localShadowDirtyTiles{0};
     glm::uvec2 localShadowAtlasExtent{0};
     float iblIntensity{1.0f};
     float indirectIntensity{1.0f};

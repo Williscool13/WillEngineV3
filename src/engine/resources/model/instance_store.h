@@ -7,6 +7,8 @@
 
 #include <cstdint>
 
+#include "core/containers/span.h"
+#include "core/containers/vector.h"
 #include "core/containers/virtual_array.h"
 #include "core/memory/dirty_bits.h"
 #include "core/memory/range_allocator.h"
@@ -36,6 +38,8 @@ struct InstanceSource
     MaterialID materialID{};
     uint64_t blasDeviceAddress{0};
     Mat4 modelSpaceTransform{1.0f};
+    // Primitive bounding sphere in its node's space
+    Vec4 localBounds{0.0f};
     uint64_t stableId{0};
     uint32_t lightIndex{~0u};
     uint32_t flags{INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR};
@@ -99,6 +103,14 @@ public:
 
     [[nodiscard]] uint32_t VerifyRecords() const;
 
+    /** Records the slot's world bounding sphere. The previous sphere and the new one both join the bounds changes. */
+    void SetWorldBounds(uint32_t slot, const Vec4& bounds);
+
+    /** World spheres of everything added, moved, hidden, shown, re-materialed or removed since the last clear. */
+    [[nodiscard]] Core::Span<const Vec4> GetBoundsChanges() const { return {boundsChanges_.Data(), boundsChanges_.Size()}; }
+
+    void ClearBoundsChanges() { boundsChanges_.Clear(); }
+
     [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
     [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
     [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
@@ -111,8 +123,13 @@ private:
 
     void WriteRecord(uint32_t slot);
 
+    void PushBoundsChange(uint32_t slot);
+
     Core::VirtualArray<InstanceSource> instances_{};
     Core::VirtualArray<Instance> gpuInstances_{};
+    // Last world sphere per slot
+    Core::VirtualArray<Vec4> worldBounds_{};
+    Core::Vector<Vec4> boundsChanges_{};
     Core::RangeAllocator ranges_{};
     Core::DirtyBits dirty_{};
     TriLightStore* triLightStore_{nullptr};

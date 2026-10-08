@@ -37,10 +37,14 @@ SHADER_PUBLIC SHADER_CONST uint32_t CSM_MAX_CASCADES = 4;
 SHADER_PUBLIC SHADER_CONST uint32_t CSM_ATLAS_COLUMNS = 2;
 
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_MAX_VIEWS = 16;
+// Area and disk lights coned to at least this cosine get one spot view; wider ones and spheres get cube faces
+SHADER_PUBLIC SHADER_CONST float LOCAL_SHADOW_SPOT_COS_MIN = 0.5f;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_NONE = 0xFFFFFFFF;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_FACE_SHIFT = 16;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_STRENGTH_SHIFT = 22;
 SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_STRENGTH_MAX = 1023;
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_TILE_BITS = 4;
+SHADER_PUBLIC SHADER_CONST uint32_t LOCAL_SHADOW_TILE_MASK = 0xF;
 
 // Shadow cull meshletIndexWithinLOD: bits 0..21 meshlet, 22..27 view, 28..31 LOD.
 SHADER_PUBLIC SHADER_CONST uint32_t SHADOW_VIEW_SHIFT = 22;
@@ -77,16 +81,20 @@ SHADER_PUBLIC struct CSMData
     SHADER_PUBLIC uint32_t _pad1;
 };
 
-// views stays first: the shadow cull reads it through a ShadowViewGPU pointer
+// Indexed by atlas tile; tiles stay with their light while it is picked so their depth can be kept between frames
 SHADER_PUBLIC struct LocalShadowData
 {
     SHADER_PUBLIC ShadowViewGPU views[LOCAL_SHADOW_MAX_VIEWS];
     SHADER_PUBLIC uint2 atlasExtent;
-    SHADER_PUBLIC uint32_t viewCount;
     SHADER_PUBLIC uint32_t lightCount;
     SHADER_PUBLIC float normalOffsetTexels;
     SHADER_PUBLIC uint32_t bPCSS;
-    // First view | cube face mask << LOCAL_SHADOW_FACE_SHIFT (0 = one spot view) | fade strength << LOCAL_SHADOW_STRENGTH_SHIFT; LOCAL_SHADOW_NONE when unshadowed
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+    SHADER_PUBLIC uint32_t _pad2;
+    // Tile per face, LOCAL_SHADOW_TILE_BITS each, +X -X +Y -Y +Z -Z; a spot uses face 0
+    SHADER_PUBLIC uint32_t faceTiles[LOCAL_SHADOW_MAX_VIEWS];
+    // Shadowed light record | face mask << LOCAL_SHADOW_FACE_SHIFT (bit 0 alone for a spot) | fade strength << LOCAL_SHADOW_STRENGTH_SHIFT; LOCAL_SHADOW_NONE when unshadowed
     SHADER_PUBLIC uint32_t lightShadow[MAX_ANALYTIC_LIGHTS];
 };
 

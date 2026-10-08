@@ -322,7 +322,7 @@ struct LocalShadowParams
     int32_t viewBudget{16};
     int32_t resolution{512};
     float slopeBias{2.0f};
-    float normalOffset{1.5f};
+    float normalOffset{3.0f};
 
     bool operator==(const LocalShadowParams&) const = default;
 };

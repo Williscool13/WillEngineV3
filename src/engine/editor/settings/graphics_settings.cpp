@@ -947,9 +947,12 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (state->lighting.lightingMode == Core::LightingMode::Analytic && state->lighting.localShadows.bEnabled && Widgets::BeginSection("Local Light Shadows")) {
             view("Atlas Depth##localshadow", "local_shadow_atlas", DebugTransformationType::None, Core::DebugViewAspect::Depth);
             Widgets::Checkbox("Draw Views##localshadow", &state->debug.localShadow.bDrawViews, "Draws each shadowed light's view frustum, coloured like its atlas tile order.");
+            Widgets::SameLine();
+            Widgets::Checkbox("Redrawn Only##localshadow", &state->debug.localShadow.bRedrawnOnly, "Only the views whose tile is redrawn this frame; a static scene draws none.");
             Widgets::Checkbox("Freeze##localshadow", &state->debug.localShadow.bFreeze, "Holds the shadowed lights and their views so they can be inspected from elsewhere.");
             const Engine::LocalShadowSelection& selection = state->localShadowSelection;
-            ImGui::Text("Shadowed: %u lights, %u/%d views", selection.lightCount, selection.viewCount, state->lighting.localShadows.viewBudget);
+            ImGui::Text("Shadowed: %u lights, %d/%d views, %d redrawn, %u caster changes", selection.lightCount, std::popcount(selection.activeTiles), state->lighting.localShadows.viewBudget,
+                        std::popcount(selection.dirtyTiles), selection.boundsChangeCount);
             Widgets::EndSection();
         }
 
@@ -1870,7 +1873,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     changed = true;
                 }
                 if (Widgets::SliderFloat("Slope Bias##localshadow", &local.slopeBias, 0.0f, 8.0f, {.format = "%.2f", .tooltip = "Rasterizer slope-scaled depth bias. Default 2.", .reset = true, .resetTo = localDefaults.slopeBias})) { changed = true; }
-                if (Widgets::SliderFloat("Normal Offset##localshadow", &local.normalOffset, 0.0f, 4.0f, {.format = "%.2f texels", .tooltip = "Receiver offset along the normal, in shadow texels at the receiver. Default 1.5.", .reset = true, .resetTo = localDefaults.normalOffset})) { changed = true; }
+                if (Widgets::SliderFloat("Normal Offset##localshadow", &local.normalOffset, 0.0f, 4.0f, {.format = "%.2f texels", .tooltip = "Receiver offset along the normal, in shadow texels at the receiver. Default 3.", .reset = true, .resetTo = localDefaults.normalOffset})) { changed = true; }
                 if (Widgets::Button("Reset Local Shadows")) {
                     local = Core::LocalShadowParams{};
                     changed = true;

@@ -21,6 +21,11 @@ struct ShadowDepthDesc
 {
     const char* passPrefix;
     const char* bufferPrefix;
+    // Drawn into when valid, otherwise a transient atlas named atlasName is created and cleared
+    RDGTexture atlas;
+    // Tiles of a kept atlas cleared before drawing, placed by tileViews[tile].atlasScaleOffset
+    uint32_t clearTiles;
+    const ShadowViewGPU* tileViews;
     StringID atlasName;
     StringID opaquePipeline;
     StringID cutoutPipeline;
@@ -59,7 +64,7 @@ static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
     const auto lodBias = static_cast<int32_t>(LOD_BIAS);
 
     const glm::uvec2 atlasExtent = desc.atlasExtent;
-    const RDGTexture atlas = graph.CreateTexture(desc.atlasName, TextureInfo{CSM_DEPTH_FORMAT, atlasExtent.x, atlasExtent.y, 1}, CLEAR_DEPTH_FAR);
+    const RDGTexture atlas = desc.atlas.IsValid() ? desc.atlas : graph.CreateTexture(desc.atlasName, TextureInfo{CSM_DEPTH_FORMAT, atlasExtent.x, atlasExtent.y, 1}, CLEAR_DEPTH_FAR);
 
     const MeshletCullBuffers cull = CreateMeshletCullBuffers(graph, cullSizes, desc.bufferPrefix);
     const RDGBuffer instanceMeshletOffsets = cull.instanceMeshletOffsets;
@@ -146,7 +151,7 @@ static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
     draw.ReadBuffer(visibleMeshlets);
     draw.ReadIndirectBuffer(compactedMeshletDispatchArgs);
     draw.Execute([&scene, pipelineManager, views, atlas, atlasExtent, visibleMeshlets, compactedMeshletDispatchArgs, slopeBias = desc.slopeBias, opaquePipeline = desc.opaquePipeline,
-            cutoutPipeline = desc.cutoutPipeline](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            cutoutPipeline = desc.cutoutPipeline, clearTiles = desc.clearTiles, tileViews = desc.tileViews](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const VkViewport viewport = VkHelpers::GenerateViewport(atlasExtent.x, atlasExtent.y);
         vkCmdSetViewport(cmd, 0, 1, &viewport);
         const VkRect2D scissor = VkHelpers::GenerateScissor(atlasExtent.x, atlasExtent.y);
@@ -157,6 +162,19 @@ static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
         const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(graph.GetImageViewHandle(atlas), nullptr, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
         const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({atlasExtent.x, atlasExtent.y}, nullptr, 0, &depthAttachment, nullptr);
         vkCmdBeginRendering(cmd, &renderInfo);
+        if (clearTiles != 0u) {
+            VkClearRect rects[LOCAL_SHADOW_MAX_VIEWS];
+            uint32_t rectCount = 0;
+            for (uint32_t tile = 0; tile < LOCAL_SHADOW_MAX_VIEWS; ++tile) {
+                if ((clearTiles & (1u << tile)) == 0u) { continue; }
+                const glm::vec4& scaleOffset = tileViews[tile].atlasScaleOffset;
+                const glm::vec2 offset = glm::vec2(scaleOffset.z, scaleOffset.w) * glm::vec2(atlasExtent) + 0.5f;
+                const glm::vec2 size = glm::vec2(scaleOffset.x, scaleOffset.y) * glm::vec2(atlasExtent) + 0.5f;
+                rects[rectCount++] = VkClearRect{{{static_cast<int32_t>(offset.x), static_cast<int32_t>(offset.y)}, {static_cast<uint32_t>(size.x), static_cast<uint32_t>(size.y)}}, 0, 1};
+            }
+            const VkClearAttachment clear{.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .clearValue = CLEAR_DEPTH_FAR};
+            vkCmdClearAttachments(cmd, 1, &clear, rectCount, rects);
+        }
 
         ShadowDepthPushConstant pc{
             .views = graph.GetBufferAddress(views),
@@ -208,6 +226,9 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
     const ShadowDepthDesc desc{
         .passPrefix = "[CSM]",
         .bufferPrefix = "csm_",
+        .atlas = {},
+        .clearTiles = 0,
+        .tileViews = nullptr,
         .atlasName = "csm_atlas"_sid,
         .opaquePipeline = "csm_depth"_sid,
         .cutoutPipeline = "csm_depth_cutout"_sid,
@@ -223,20 +244,47 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
                                  const Core::ViewFamily& viewFamily,
                                  const SceneBufferSizes& bufferSizes,
                                  const SceneResources& scene,
-                                 RDGBuffer localShadowData,
+                                 glm::uvec2& liveAtlasExtent,
                                  uint32_t sceneIndex)
 {
+    ZoneScoped;
+    constexpr StringID ATLAS_NAME = "local_shadow_atlas"_sid;
+    const glm::uvec2 atlasExtent = viewFamily.localShadowAtlasExtent;
+    const bool bFresh = liveAtlasExtent != atlasExtent || !graph.ResourceHasVersion(ATLAS_NAME, 0);
+    const RDGTexture atlas = graph.CreateVersionedTexture(ATLAS_NAME, TextureInfo{CSM_DEPTH_FORMAT, atlasExtent.x, atlasExtent.y, 1}, 0, bFresh ? VersionSource::Fresh : VersionSource::NoShiftReadWrite, false,
+                                                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, false, CLEAR_DEPTH_FAR).Current();
+    liveAtlasExtent = atlasExtent;
+
+    // A fresh atlas holds nothing, so every active tile draws; otherwise only the tiles the engine marked dirty.
+    const uint32_t drawTiles = bFresh ? viewFamily.localShadowActiveTiles : viewFamily.localShadowDirtyTiles & viewFamily.localShadowActiveTiles;
+    if (drawTiles == 0u) {
+        return atlas;
+    }
+
     const ShadowDepthDesc desc{
         .passPrefix = "[Local Shadow]",
         .bufferPrefix = "local_shadow_",
-        .atlasName = "local_shadow_atlas"_sid,
+        .atlas = atlas,
+        .clearTiles = bFresh ? 0u : drawTiles,
+        .tileViews = viewFamily.localShadowViews.Data(),
+        .atlasName = ATLAS_NAME,
         .opaquePipeline = "local_shadow_depth"_sid,
         .cutoutPipeline = "local_shadow_depth_cutout"_sid,
-        .atlasExtent = viewFamily.localShadowAtlasExtent,
+        .atlasExtent = atlasExtent,
         .slopeBias = viewFamily.localShadows.slopeBias,
         .readbackOffset = offsetof(ReadbackStruct, localShadowMeshletCount),
     };
-    return SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.localShadowCull, scene, localShadowData, viewFamily.localShadowViewCount, desc, sceneIndex);
+
+    const HostBufferMapping drawViews = graph.OpenHostBuffer("local_shadow_draw_views"_sid, LOCAL_SHADOW_MAX_VIEWS * sizeof(ShadowViewGPU));
+    auto* views = static_cast<ShadowViewGPU*>(drawViews.data);
+    uint32_t viewCount = 0;
+    for (uint32_t tile = 0; tile < LOCAL_SHADOW_MAX_VIEWS; ++tile) {
+        if ((drawTiles & (1u << tile)) == 0u) { continue; }
+        const ShadowViewGPU& view = viewFamily.localShadowViews[tile];
+        views[viewCount++] = view;
+    }
+    SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.localShadowCull, scene, drawViews.buffer, viewCount, desc, sceneIndex);
+    return atlas;
 }
 
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,

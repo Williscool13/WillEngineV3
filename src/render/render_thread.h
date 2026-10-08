@@ -243,6 +243,8 @@ private:
     float smoothedWallFrameMs{0.0f};
     float smoothedGpuSpanMs{0.0f};
     uint32_t rtGroundTruthDIAccumCount{0};
+    // Extent the kept local shadow atlas was last declared with
+    glm::uvec2 localShadowAtlasExtent{0};
     uint32_t rtGroundTruthGIAccumCount{0};
     uint32_t rtGroundTruthFullAccumCount{0};
     uint32_t previousRestirCheckerboardField{0};

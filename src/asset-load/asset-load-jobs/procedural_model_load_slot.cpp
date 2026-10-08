@@ -3837,6 +3837,9 @@ void ProceduralModelLoadSlot::PrepareUploadData()
             const size_t indexEnd = localPi + 1 < rawData.primitives.Size() ? rawData.primitives[localPi + 1].indexOffset : rawData.indices.Size();
             primitiveIndex.triangleCount = static_cast<uint32_t>((indexEnd - rawData.primitives[localPi].indexOffset) / 3);
             primitiveIndex.meshletCount = static_cast<uint32_t>(rawData.primitives[localPi].meshletCount.x);
+            primitiveIndex.boundingBoxMin = rawData.primitives[localPi].boundingBoxMin;
+            primitiveIndex.boundingBoxMax = rawData.primitives[localPi].boundingBoxMax;
+            primitiveIndex.boundingSphere = rawData.primitives[localPi].boundingSphere;
         }
     }
 

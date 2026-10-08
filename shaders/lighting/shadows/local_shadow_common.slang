@@ -21,6 +21,11 @@ static float2 LocalVogelOffset(uint i, uint count, float phi)
     return r * float2(cos(theta), sin(theta));
 }
 
+static bool IsSpotRecord(LightInfo light)
+{
+    return light.type != LIGHT_TYPE_SPHERE && light.position.w >= LOCAL_SHADOW_SPOT_COS_MIN;
+}
+
 static float LightSourceRadius(LightInfo light)
 {
     if (light.type == LIGHT_TYPE_AREA) {
@@ -68,18 +73,18 @@ public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint 
         return 1.0;
     }
 
-    uint viewIndex = packed & 0xFFFFu;
+    uint record = packed & 0xFFu;
     uint faceMask = (packed >> LOCAL_SHADOW_FACE_SHIFT) & 0x3Fu;
-    if (faceMask != 0u) {
+    uint face = 0u;
+    if (!IsSpotRecord(light)) {
         float3 d = worldPos - light.position.xyz;
         float3 a = abs(d);
-        uint face = a.x >= a.y && a.x >= a.z ? (d.x >= 0.0 ? 0u : 1u) : a.y >= a.z ? (d.y >= 0.0 ? 2u : 3u) : (d.z >= 0.0 ? 4u : 5u);
-        if ((faceMask & (1u << face)) == 0u) {
-            return 1.0;
-        }
-        viewIndex += countbits(faceMask & ((1u << face) - 1u));
+        face = a.x >= a.y && a.x >= a.z ? (d.x >= 0.0 ? 0u : 1u) : a.y >= a.z ? (d.y >= 0.0 ? 2u : 3u) : (d.z >= 0.0 ? 4u : 5u);
     }
-    ShadowViewGPU view = data->views[viewIndex];
+    if ((faceMask & (1u << face)) == 0u) {
+        return 1.0;
+    }
+    ShadowViewGPU view = data->views[(data->faceTiles[record] >> (LOCAL_SHADOW_TILE_BITS * face)) & LOCAL_SHADOW_TILE_MASK];
     float strength = float(packed >> LOCAL_SHADOW_STRENGTH_SHIFT) / float(LOCAL_SHADOW_STRENGTH_MAX);
 
     float texelWorld = view.texelSize * distance(worldPos, view.eye.xyz);
@@ -105,23 +110,21 @@ public float LocalShadowVisibility(LocalShadowData* data, LightInfo light, uint 
         float lightSize = LightSourceRadius(light);
         float receiverDistance = clip.w;
         float searchRadius = clamp(lightSize / texelWorld, LOCAL_SHADOW_MIN_RADIUS_TEXELS, LOCAL_SHADOW_MAX_RADIUS_TEXELS);
-        float blockerSum = 0.0;
-        uint blockerCount = 0u;
+        // Nearest blocker to the receiver (smallest reverse-Z depth), not the average: higher parts of the occluder in the search region would widen contact shadows.
+        float blockerDepth = 2.0;
         for (uint i = 0u; i < LOCAL_SHADOW_BLOCKER_TAPS; ++i) {
             float2 o = LocalVogelOffset(i, LOCAL_SHADOW_BLOCKER_TAPS, phi) * searchRadius * atlasTexel;
             float2 uv = clamp(center.xy + o, tileMin, tileMax);
             float blocker = rdgTexturesFloat[atlasIndex].SampleLevel(rdgSamplers[RDG_POINT_SAMPLER_INDEX], uv, 0).r;
             if (blocker > center.z + dot(gradient, uv - center.xy)) {
-                blockerSum += blocker;
-                blockerCount += 1u;
+                blockerDepth = min(blockerDepth, blocker);
             }
         }
-        if (blockerCount == 0u) {
+        if (blockerDepth > 1.0) {
             return 1.0;
         }
         // Reverse-Z depth back to distance along the view axis.
         float farPlane = view.nearPlane + view.depthRange;
-        float blockerDepth = blockerSum / float(blockerCount);
         float blockerDistance = view.nearPlane * farPlane / (blockerDepth * view.depthRange + view.nearPlane);
         float penumbraWorld = lightSize * max(receiverDistance - blockerDistance, 0.0) / max(blockerDistance, 1e-4);
         radius = clamp(penumbraWorld / texelWorld, LOCAL_SHADOW_MIN_RADIUS_TEXELS, LOCAL_SHADOW_MAX_RADIUS_TEXELS);

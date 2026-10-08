@@ -12,8 +12,12 @@
 
 namespace Render
 {
-/** Views the light needs this frame: 1 for an area or disk light coned to 60 degrees, otherwise one per cube face the camera can see. */
+/** Faces the light needs this frame, +X -X +Y -Y +Z -Z; a spot (area or disk light coned to 60 degrees) uses bit 0 alone. 0 when it needs none. */
+uint32_t LocalShadowFaceMask(const LightInfo& light, const Frustum& camera);
+
 uint32_t LocalShadowViewCount(const LightInfo& light, const Frustum& camera);
+
+bool IsLocalShadowSpot(const LightInfo& light);
 
 /** Tile grid (columns, rows) of an atlas that holds viewBudget views. */
 glm::uvec2 LocalShadowAtlasTiles(uint32_t viewBudget);
@@ -28,12 +32,10 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
                                  uint32_t viewBudget, uint32_t* outLights);
 
 /**
- * Writes the light's views into consecutive atlas tiles starting at firstTile.
+ * The light's view for one face (ignored for a spot), drawn into an atlas tile.
  * @param tiles atlas tile grid from LocalShadowAtlasTiles
- * @param outFaceMask cube faces written, in +X -X +Y -Y +Z -Z order; 0 for a single spot view
- * @return views written
  */
-uint32_t BuildLocalShadowViews(const LightInfo& light, const Frustum& camera, uint32_t firstTile, glm::uvec2 tiles, uint32_t resolution, ShadowViewGPU* outViews, uint32_t& outFaceMask);
+ShadowViewGPU BuildLocalShadowView(const LightInfo& light, uint32_t face, uint32_t tile, glm::uvec2 tiles, uint32_t resolution);
 } // Render
 
 #endif //WILL_ENGINE_LOCAL_SHADOW_VIEWS_H

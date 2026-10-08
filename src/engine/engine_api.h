@@ -78,11 +78,20 @@ struct PhysicsState
 /** This frame's shadowed local lights and their views  */
 struct LocalShadowSelection
 {
+    static constexpr uint32_t FREE_TILE = ~0u;
+
     Core::Array<Core::LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> lights{};
     uint32_t lightCount{0};
     Core::Array<ShadowViewGPU, LOCAL_SHADOW_MAX_VIEWS> views{};
-    uint32_t viewCount{0};
+    Core::Array<uint32_t, LOCAL_SHADOW_MAX_VIEWS> tileOwners{};
+    Core::Array<LightInfo, LOCAL_SHADOW_MAX_VIEWS> tileLights{};
+    uint32_t activeTiles{0};
+    uint32_t dirtyTiles{0};
     glm::uvec2 atlasExtent{0};
+    uint32_t resolution{0};
+    uint32_t budget{0};
+    uint32_t boundsChangeCount{0};
+    bool bWasFrozen{false};
 };
 
 struct LightingState
@@ -187,6 +196,7 @@ struct CSMDebugState
 struct LocalShadowDebugState
 {
     bool bDrawViews{false};
+    bool bRedrawnOnly{false};
     bool bFreeze{false};
 };
 

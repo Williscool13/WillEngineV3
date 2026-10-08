@@ -11,7 +11,6 @@
 
 namespace Render
 {
-static constexpr float LOCAL_SHADOW_SPOT_COS_MIN = 0.5f;
 static constexpr float LOCAL_SHADOW_CONE_MARGIN = 0.035f;
 // Slightly wider than 90 degrees so PCF taps at a face edge stay inside the tile.
 static constexpr float LOCAL_SHADOW_CUBE_TAN = 1.03f;
@@ -27,7 +26,7 @@ static bool IsShadowEligible(const LightInfo& light)
     return bType && (light.flags & LIGHT_FLAG_CAST_SHADOWS) != 0u && light.intensity > 0.0f && light.range > 0.0f;
 }
 
-static bool IsSpot(const LightInfo& light)
+bool IsLocalShadowSpot(const LightInfo& light)
 {
     return light.type != LIGHT_TYPE_SPHERE && light.position.w >= LOCAL_SHADOW_SPOT_COS_MIN;
 }
@@ -132,15 +131,20 @@ static ShadowViewGPU MakePerspectiveView(const glm::vec3& eye, const glm::vec3& 
     return out;
 }
 
-uint32_t LocalShadowViewCount(const LightInfo& light, const Frustum& camera)
+uint32_t LocalShadowFaceMask(const LightInfo& light, const Frustum& camera)
 {
     if (!IsShadowEligible(light)) {
         return 0;
     }
-    if (IsSpot(light)) {
+    if (IsLocalShadowSpot(light)) {
         return IsSpotVisible(light, camera) ? 1u : 0u;
     }
-    return static_cast<uint32_t>(std::popcount(CubeFaceMask(light, camera)));
+    return CubeFaceMask(light, camera);
+}
+
+uint32_t LocalShadowViewCount(const LightInfo& light, const Frustum& camera)
+{
+    return static_cast<uint32_t>(std::popcount(LocalShadowFaceMask(light, camera)));
 }
 
 glm::uvec2 LocalShadowAtlasTiles(uint32_t viewBudget)
@@ -228,35 +232,15 @@ uint32_t SelectLocalShadowLights(const LightInfo* lights, uint32_t lightCount, c
     return pickedCount;
 }
 
-uint32_t BuildLocalShadowViews(const LightInfo& light, const Frustum& camera, uint32_t firstTile, glm::uvec2 tiles, uint32_t resolution, ShadowViewGPU* outViews, uint32_t& outFaceMask)
+ShadowViewGPU BuildLocalShadowView(const LightInfo& light, uint32_t face, uint32_t tile, glm::uvec2 tiles, uint32_t resolution)
 {
-    outFaceMask = 0;
-    if (!IsShadowEligible(light)) {
-        return 0;
-    }
-
     const glm::vec3 eye(light.position);
     const float nearPlane = NearPlane(light);
     const float farPlane = glm::max(light.range, nearPlane * 2.0f);
-    if (IsSpot(light)) {
-        if (!IsSpotVisible(light, camera)) {
-            return 0;
-        }
+    if (IsLocalShadowSpot(light)) {
         const glm::vec3 forward = glm::normalize(glm::vec3(light.normal));
-        outViews[0] = MakePerspectiveView(eye, forward, SpotUp(forward), SpotTanHalf(light), nearPlane, farPlane, firstTile, tiles, resolution);
-        return 1;
+        return MakePerspectiveView(eye, forward, SpotUp(forward), SpotTanHalf(light), nearPlane, farPlane, tile, tiles, resolution);
     }
-
-    const uint32_t mask = CubeFaceMask(light, camera);
-    uint32_t viewCount = 0;
-    for (uint32_t f = 0; f < 6; ++f) {
-        if ((mask & (1u << f)) == 0u) {
-            continue;
-        }
-        outViews[viewCount] = MakePerspectiveView(eye, CUBE_AXES[f], CUBE_UPS[f], LOCAL_SHADOW_CUBE_TAN, nearPlane, farPlane, firstTile + viewCount, tiles, resolution);
-        ++viewCount;
-    }
-    outFaceMask = mask;
-    return viewCount;
+    return MakePerspectiveView(eye, CUBE_AXES[face], CUBE_UPS[face], LOCAL_SHADOW_CUBE_TAN, nearPlane, farPlane, tile, tiles, resolution);
 }
 } // Render

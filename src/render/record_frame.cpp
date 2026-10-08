@@ -638,11 +638,10 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
                                               ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
 
     LocalShadowFrame localShadows{};
-    if (viewFamily.localShadowViewCount > 0) {
+    if (viewFamily.localShadowActiveTiles != 0u && viewFamily.instanceCount > 0) {
         const HostBufferMapping mapping = renderGraph->OpenHostBuffer("local_shadow_data"_sid, sizeof(LocalShadowData));
         auto* data = static_cast<LocalShadowData*>(mapping.data);
-        memcpy(data->views, viewFamily.localShadowViews.Data(), viewFamily.localShadowViewCount * sizeof(ShadowViewGPU));
-        data->viewCount = viewFamily.localShadowViewCount;
+        memcpy(data->views, viewFamily.localShadowViews.Data(), sizeof(data->views));
         data->lightCount = viewFamily.analyticLightCount;
         data->atlasExtent = viewFamily.localShadowAtlasExtent;
         data->normalOffsetTexels = viewFamily.localShadows.normalOffset;
@@ -651,10 +650,11 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
         for (uint32_t i = 0; i < viewFamily.localShadowLightCount; ++i) {
             const Core::LocalShadowLight& light = viewFamily.localShadowLights[i];
             const auto strength = static_cast<uint32_t>(glm::clamp(light.strength, 0.0f, 1.0f) * static_cast<float>(LOCAL_SHADOW_STRENGTH_MAX) + 0.5f);
-            data->lightShadow[light.lightIndex] = light.firstView | (light.faceMask << LOCAL_SHADOW_FACE_SHIFT) | (strength << LOCAL_SHADOW_STRENGTH_SHIFT);
+            data->faceTiles[i] = light.faceTiles;
+            data->lightShadow[light.lightIndex] = i | (light.faceMask << LOCAL_SHADOW_FACE_SHIFT) | (strength << LOCAL_SHADOW_STRENGTH_SHIFT);
         }
         localShadows.data = mapping.buffer;
-        localShadows.atlas = SetupLocalShadowDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, mapping.buffer, 0);
+        localShadows.atlas = SetupLocalShadowDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, localShadowAtlasExtent, 0);
     }
 
     SetupVisibilityLightingResolvePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, ctx.geometry, ctx.worldGrid, ctx.ddgi, ctx.gather, ctx.reflection, ctx.restir, localShadows, 0,

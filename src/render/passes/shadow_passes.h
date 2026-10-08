@@ -36,15 +36,16 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
                          uint32_t sceneIndex);
 
 /**
- * The frame's selected local light views into the local shadow atlas.
- * @return the atlas, invalid without instances or views
+ * Redraws the local shadow atlas tiles that changed; the rest keep their depth from earlier frames.
+ * @param liveAtlasExtent extent the kept atlas was last declared with; a different extent starts a fresh atlas and redraws every tile
+ * @return the atlas
  */
 RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
                                  PipelineManager* pipelineManager,
                                  const Core::ViewFamily& viewFamily,
                                  const SceneBufferSizes& bufferSizes,
                                  const SceneResources& scene,
-                                 RDGBuffer localShadowData,
+                                 glm::uvec2& liveAtlasExtent,
                                  uint32_t sceneIndex);
 
 /** Samples the CSM atlas into the sun visibility the directional lighting pass reads. */

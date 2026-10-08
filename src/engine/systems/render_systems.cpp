@@ -4,6 +4,10 @@
 
 #include "render_systems.h"
 
+#include <bit>
+#include <emmintrin.h>
+#include <xmmintrin.h>
+
 #include <tracy/Tracy.hpp>
 
 #include "scene_system.h"
@@ -190,11 +194,15 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
-                const Engine::InstanceSource& inst = store[runtime.range.offset + i];
+                const uint32_t slot = runtime.range.offset + i;
+                const Engine::InstanceSource& inst = store[slot];
                 if (inst.emissiveMeshSlot != Engine::TriLightStore::INVALID_MESH_SLOT) { triLightStore.MarkDirty(inst.emissiveMeshSlot); }
+                const glm::mat4 model = renderTransform.modelMatrix * inst.modelSpaceTransform;
+                const float scale = glm::sqrt(glm::max(glm::dot(glm::vec3(model[0]), glm::vec3(model[0])), glm::max(glm::dot(glm::vec3(model[1]), glm::vec3(model[1])), glm::dot(glm::vec3(model[2]), glm::vec3(model[2])))));
+                store.SetWorldBounds(slot, glm::vec4(glm::vec3(model * glm::vec4(glm::vec3(inst.localBounds), 1.0f)), inst.localBounds.w * scale));
                 if (inst.modelSlot == lastSlot) { continue; }
                 lastSlot = inst.modelSlot;
-                modelStore.SetModel(inst.modelSlot, {renderTransform.modelMatrix * inst.modelSpaceTransform, renderTransform.previousMatrix * inst.modelSpaceTransform});
+                modelStore.SetModel(inst.modelSlot, {model, renderTransform.previousMatrix * inst.modelSpaceTransform});
             }
         }
     }
@@ -649,20 +657,69 @@ void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     MarkAnalyticLightsDirty(state->registry);
 }
 
+/** Bit per active tile whose view frustum a changed caster's bounds touch. */
+static uint32_t TouchedTileMask(const ShadowViewGPU* views, uint32_t activeTiles, Core::Span<const Vec4> changes)
+{
+    // planes[p][axis][tile], inactive tiles get a plane nothing is inside of
+    alignas(16) float planes[6][4][LOCAL_SHADOW_MAX_VIEWS];
+    for (uint32_t tile = 0; tile < LOCAL_SHADOW_MAX_VIEWS; ++tile) {
+        const bool bActive = (activeTiles & (1u << tile)) != 0u;
+        for (uint32_t p = 0; p < 6; ++p) {
+            const glm::vec4 plane = bActive ? views[tile].frustum.planes[p] : glm::vec4(0.0f, 0.0f, 0.0f, -1e30f);
+            for (uint32_t axis = 0; axis < 4; ++axis) {
+                planes[p][axis][tile] = plane[axis];
+            }
+        }
+    }
+
+    uint32_t mask = 0;
+    for (const Vec4& change : changes) {
+        const __m128 cx = _mm_set1_ps(change.x);
+        const __m128 cy = _mm_set1_ps(change.y);
+        const __m128 cz = _mm_set1_ps(change.z);
+        const __m128 negRadius = _mm_set1_ps(-change.w);
+        for (uint32_t g = 0; g < LOCAL_SHADOW_MAX_VIEWS / 4; ++g) {
+            __m128 inside = _mm_castsi128_ps(_mm_set1_epi32(-1));
+            for (uint32_t p = 0; p < 6; ++p) {
+                const __m128 distance = _mm_add_ps(_mm_add_ps(_mm_mul_ps(_mm_load_ps(planes[p][0] + 4 * g), cx), _mm_mul_ps(_mm_load_ps(planes[p][1] + 4 * g), cy)),
+                                                   _mm_add_ps(_mm_mul_ps(_mm_load_ps(planes[p][2] + 4 * g), cz), _mm_load_ps(planes[p][3] + 4 * g)));
+                inside = _mm_and_ps(inside, _mm_cmpge_ps(distance, negRadius));
+            }
+            mask |= static_cast<uint32_t>(_mm_movemask_ps(inside)) << (4 * g);
+        }
+    }
+    return mask & activeTiles;
+}
+
 static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
 {
+    // Past this many changed casters nearly every light's range has one; redrawing everything is cheaper than testing.
+    constexpr size_t LOCAL_SHADOW_CHANGE_LIMIT = 10000;
+    using Selection = Engine::LocalShadowSelection;
+
     const Engine::LightingState& lighting = state->lighting;
-    Engine::LocalShadowSelection& selection = state->localShadowSelection;
+    Selection& selection = state->localShadowSelection;
+    const Core::Span<const Vec4> changes = state->instanceStore.GetBoundsChanges();
     if (!lighting.localShadows.bEnabled || lighting.lightingMode != Core::LightingMode::Analytic) {
         selection = {};
     }
-    else if (!state->debug.localShadow.bFreeze) {
+    else if (state->debug.localShadow.bFreeze) {
+        selection.dirtyTiles = 0;
+        selection.bWasFrozen = true;
+    }
+    else {
         const auto resolution = static_cast<uint32_t>(glm::clamp(lighting.localShadows.resolution, 64, 2048));
         const auto budget = static_cast<uint32_t>(glm::clamp(lighting.localShadows.viewBudget, 1, static_cast<int32_t>(LOCAL_SHADOW_MAX_VIEWS)));
         const glm::uvec2 tiles = Render::LocalShadowAtlasTiles(budget);
         const float fadeStep = lighting.localShadows.fadeSeconds > 0.0f ? state->timeFrame->deltaTime / lighting.localShadows.fadeSeconds : 1.0f;
+        const bool bRedrawAll = selection.resolution != resolution || selection.budget != budget || selection.bWasFrozen || changes.Size() > LOCAL_SHADOW_CHANGE_LIMIT;
+        if (selection.resolution != resolution || selection.budget != budget) {
+            for (uint32_t t = 0; t < LOCAL_SHADOW_MAX_VIEWS; ++t) {
+                selection.tileOwners[t] = Selection::FREE_TILE;
+            }
+        }
 
-        const Engine::LocalShadowSelection previous = selection;
+        const Selection previous = selection;
         uint32_t previousIndices[LOCAL_SHADOW_MAX_VIEWS];
         for (uint32_t i = 0; i < previous.lightCount; ++i) {
             previousIndices[i] = previous.lights[i].lightIndex;
@@ -681,18 +738,19 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
         const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previousIndices, previous.lightCount, budget, picks);
 
         selection.lightCount = 0;
-        selection.viewCount = 0;
+        uint32_t usedViews = 0;
         auto add = [&](uint32_t lightIndex, float strength) {
-            const uint32_t firstView = selection.viewCount;
-            uint32_t faceMask = 0;
-            const uint32_t viewCount = Render::BuildLocalShadowViews(lights[lightIndex], camera, firstView, tiles, resolution, selection.views.Data() + firstView, faceMask);
-            selection.lights[selection.lightCount++] = Core::LocalShadowLight{lightIndex, firstView, viewCount, faceMask, strength};
-            selection.viewCount += viewCount;
+            const uint32_t faceMask = Render::LocalShadowFaceMask(lights[lightIndex], camera);
+            const auto views = static_cast<uint32_t>(std::popcount(faceMask));
+            if (views == 0 || usedViews + views > budget) {
+                return;
+            }
+            selection.lights[selection.lightCount++] = Core::LocalShadowLight{lightIndex, faceMask, 0, strength};
+            usedViews += views;
         };
         for (uint32_t i = 0; i < pickCount; ++i) {
             add(picks[i], glm::min(glm::max(previousStrength(picks[i]), 0.0f) + fadeStep, 1.0f));
         }
-
         // Dropped lights fade out on their old shadow while the budget has room.
         for (uint32_t i = 0; i < previous.lightCount; ++i) {
             const Core::LocalShadowLight& old = previous.lights[i];
@@ -701,21 +759,74 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
                 bPicked |= picks[k] == old.lightIndex;
             }
             const float strength = old.strength - fadeStep;
-            if (bPicked || strength <= 0.0f || old.lightIndex >= lightCount || selection.lightCount >= LOCAL_SHADOW_MAX_VIEWS) {
-                continue;
-            }
-            const uint32_t views = Render::LocalShadowViewCount(lights[old.lightIndex], camera);
-            if (views > 0 && selection.viewCount + views <= budget) {
+            if (!bPicked && strength > 0.0f && old.lightIndex < lightCount && selection.lightCount < LOCAL_SHADOW_MAX_VIEWS) {
                 add(old.lightIndex, strength);
             }
         }
+
+        // A face keeps its tile while it stays active, so its depth survives; new faces take free tiles and draw.
+        Core::Array<uint32_t, LOCAL_SHADOW_MAX_VIEWS> owners{};
+        for (uint32_t t = 0; t < LOCAL_SHADOW_MAX_VIEWS; ++t) {
+            owners[t] = Selection::FREE_TILE;
+        }
+        uint32_t dirty = 0;
+        for (uint32_t pass = 0; pass < 2; ++pass) {
+            for (uint32_t l = 0; l < selection.lightCount; ++l) {
+                Core::LocalShadowLight& light = selection.lights[l];
+                for (uint32_t face = 0; face < 6; ++face) {
+                    if ((light.faceMask & (1u << face)) == 0u) { continue; }
+                    const uint32_t key = (light.lightIndex << 3) | face;
+                    uint32_t tile = Selection::FREE_TILE;
+                    for (uint32_t t = 0; t < budget; ++t) {
+                        if (owners[t] == key) { tile = t; }
+                    }
+                    if (tile != Selection::FREE_TILE) { continue; }
+                    for (uint32_t t = 0; t < budget && tile == Selection::FREE_TILE; ++t) {
+                        const bool bKept = pass == 0 && previous.tileOwners[t] == key;
+                        const bool bFree = pass == 1 && owners[t] == Selection::FREE_TILE;
+                        if (bKept || bFree) { tile = t; }
+                    }
+                    if (tile == Selection::FREE_TILE) { continue; }
+                    owners[tile] = key;
+                    if (pass == 1) { dirty |= 1u << tile; }
+                    light.faceTiles |= tile << (LOCAL_SHADOW_TILE_BITS * face);
+                }
+            }
+        }
+
+        uint32_t active = 0;
+        for (uint32_t t = 0; t < budget; ++t) {
+            if (owners[t] == Selection::FREE_TILE) { continue; }
+            const uint32_t lightIndex = owners[t] >> 3;
+            const uint32_t face = owners[t] & 7u;
+            const LightInfo& info = lights[lightIndex];
+            if (memcmp(&selection.tileLights[t], &info, sizeof(LightInfo)) != 0) {
+                dirty |= 1u << t;
+            }
+            selection.views[t] = Render::BuildLocalShadowView(info, face, t, tiles, resolution);
+            selection.tileLights[t] = info;
+            active |= 1u << t;
+        }
+
+        if (!bRedrawAll) {
+            dirty |= TouchedTileMask(selection.views.Data(), active, changes);
+        }
+        selection.boundsChangeCount = static_cast<uint32_t>(changes.Size());
+        selection.tileOwners = owners;
+        selection.activeTiles = active;
+        selection.dirtyTiles = bRedrawAll ? active : dirty & active;
         selection.atlasExtent = tiles * resolution;
+        selection.resolution = resolution;
+        selection.budget = budget;
+        selection.bWasFrozen = false;
     }
+    state->instanceStore.ClearBoundsChanges();
 
     vf.localShadowLightCount = selection.lightCount;
     vf.localShadowLights = selection.lights;
-    vf.localShadowViewCount = selection.viewCount;
     vf.localShadowViews = selection.views;
+    vf.localShadowActiveTiles = selection.activeTiles;
+    vf.localShadowDirtyTiles = selection.dirtyTiles;
     vf.localShadowAtlasExtent = selection.atlasExtent;
 }
 
@@ -1244,7 +1355,9 @@ void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState
     static constexpr glm::vec4 TILE_COLORS[] = {{1.0f, 0.2f, 0.2f, 1.0f}, {0.2f, 1.0f, 0.2f, 1.0f}, {0.2f, 0.4f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.2f, 1.0f},
                                                 {1.0f, 0.2f, 1.0f, 1.0f}, {0.2f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.6f, 0.2f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
     static constexpr int32_t EDGES[12][2] = {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
-    for (uint32_t v = 0; v < selection.viewCount; ++v) {
+    const uint32_t drawnTiles = state->debug.localShadow.bRedrawnOnly ? selection.dirtyTiles : selection.activeTiles;
+    for (uint32_t v = 0; v < LOCAL_SHADOW_MAX_VIEWS; ++v) {
+        if ((drawnTiles & (1u << v)) == 0u) { continue; }
         const glm::mat4 invViewProj = glm::inverse(selection.views[v].viewProj);
         glm::vec3 corners[8];
         for (int32_t c = 0; c < 8; ++c) {
