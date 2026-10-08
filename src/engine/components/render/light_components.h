@@ -23,6 +23,24 @@ namespace Engine::Component
 {
 struct TransformComponent;
 
+enum class LightShadowMode : uint32_t
+{
+    Off = 0,
+    Dynamic = 1,
+    // Static casters come from a .wshadowmap; falls back to Dynamic while unbaked or stale
+    Baked = 2,
+};
+
+enum class ShadowBakeResolution : uint32_t
+{
+    Res256 = 0,
+    Res512 = 1,
+    Res1024 = 2,
+    Res2048 = 3,
+};
+
+inline uint32_t ShadowBakeResolutionPixels(ShadowBakeResolution resolution) { return 256u << static_cast<uint32_t>(resolution); }
+
 struct AreaLightComponent
 {
     static constexpr const char* COMPONENT_NAME = "AreaLightComponent";
@@ -41,7 +59,9 @@ struct AreaLightComponent
     bool bDisk{false};
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
-    bool bCastShadows{true};
+    LightShadowMode shadowMode{LightShadowMode::Dynamic};
+    ShadowBakeResolution shadowBakeResolution{ShadowBakeResolution::Res512};
+    uint64_t shadowId{0};
     bool bEnabled{true};
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
@@ -62,7 +82,9 @@ struct AreaLightComponent
         WILL_FIELD(bDisk),
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(bExcludeFromProbeBake),
-        WILL_FIELD(bCastShadows))
+        WILL_FIELD(shadowMode),
+        WILL_FIELD(shadowBakeResolution),
+        WILL_FIELD(shadowId))
 
     static void Sanitize(AreaLightComponent& comp);
 
@@ -100,7 +122,9 @@ struct SphereLightComponent
     float volumetricScale{1.0f}; // fog scattering multiplier; 0 = invisible to fog
     bool drawEmissiveSurface{true};
     bool bExcludeFromProbeBake{false};
-    bool bCastShadows{true};
+    LightShadowMode shadowMode{LightShadowMode::Dynamic};
+    ShadowBakeResolution shadowBakeResolution{ShadowBakeResolution::Res512};
+    uint64_t shadowId{0};
     bool bEnabled{true};
 
     /** Runtime-only stable analytic light slot. Allocated OnConstruct */
@@ -116,7 +140,9 @@ struct SphereLightComponent
         WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f),
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(bExcludeFromProbeBake),
-        WILL_FIELD(bCastShadows))
+        WILL_FIELD(shadowMode),
+        WILL_FIELD(shadowBakeResolution),
+        WILL_FIELD(shadowId))
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 

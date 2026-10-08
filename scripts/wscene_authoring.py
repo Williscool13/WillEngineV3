@@ -45,7 +45,7 @@ MODULE = component_key("ModuleMeshComponent")               # parts[]{type, <sha
 STATIC_MESH = component_key("StaticMeshComponent")          # modelId, shader overrides, renderOffset, renderRotation. ONE entity = one whole model.
 STATIC_MESH_OVERRIDES = component_key("StaticMeshOverridesComponent")  # materialOverrides{slot:id}, primitiveBlacklist[]; see add_static_mesh()
 STATIC_MESH_PRIMITIVE = component_key("StaticMeshPrimitiveComponent")  # modelId, primitiveOrdinal, renderOffset, renderRotation
-RENDER_FLAGS = component_key("RenderFlagsComponent")        # visible, probeBake, ddgi, motionBlur, alphaCutout bools; absent key = true (engine default); see add_render_flags()
+RENDER_FLAGS = component_key("RenderFlagsComponent")        # visible, bake, ddgi, motionBlur, alphaCutout bools; absent key = true (engine default); see add_render_flags()
 SPAWN = component_key("PlayerSpawnComponent")               # offset, priority
 LIGHT_DIRECTIONAL = component_key("DirectionalLightComponent")  # color, intensity, priority, angularRadiusDegrees; direction = rotation*(0,0,1), highest priority wins
 LIGHT_AREA = component_key("AreaLightComponent")            # color[3], intensity, halfWidth, halfHeight, range, drawEmissiveSurface; world extent = half*transform.scale, emissive quad = unit XZ plane
@@ -240,12 +240,12 @@ def next_sort():
 
 RENDER_DEFAULTS = {"material": 0, "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0]}
 
-def add_render_flags(entity, visible=True, probe_bake_include=True, ddgi_contribute=True, motion_blur=True,
+def add_render_flags(entity, visible=True, bake_include=True, ddgi_contribute=True, motion_blur=True,
                      alpha_cutout=True, emissive_light=False, camera_motion_blur=True):
     """RenderFlagsComponent entry. Only needed for NON-default flags; a missing key reads back as
     that bit's default, which is set for every bit EXCEPT emissive_light (opt-in: it
     allocates a TriLightStore range per emissive primitive, so it cannot default on)."""
-    entity[RENDER_FLAGS] = {"visible": visible, "probeBake": probe_bake_include, "ddgi": ddgi_contribute,
+    entity[RENDER_FLAGS] = {"visible": visible, "bake": bake_include, "ddgi": ddgi_contribute,
                             "motionBlur": motion_blur, "alphaCutout": alpha_cutout, "emissiveLight": emissive_light,
                             "cameraMotionBlur": camera_motion_blur}
     return entity

@@ -63,6 +63,24 @@ static void EditLightIntensity(EditContext& edit, const char* label, float C::* 
     EditWidgets::CommitOnRelease<C>(edit, false);
 }
 
+static void ClaimShadowId(entt::registry& registry, entt::entity entity, Component::LightShadowMode mode, uint64_t& shadowId)
+{
+    if (mode != Component::LightShadowMode::Baked) { return; }
+    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto isTaken = [&](uint64_t id) {
+        for (const auto [other, light] : registry.view<Component::AreaLightComponent>().each()) {
+            if (other != entity && light.shadowId == id) { return true; }
+        }
+        for (const auto [other, light] : registry.view<Component::SphereLightComponent>().each()) {
+            if (other != entity && light.shadowId == id) { return true; }
+        }
+        return false;
+    };
+    while (shadowId == 0 || isTaken(shadowId)) {
+        shadowId = state->rng();
+    }
+}
+
 void Component::AreaLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
@@ -70,6 +88,8 @@ void Component::AreaLightComponent::OnEditPreview(entt::registry& registry, entt
 
 void Component::AreaLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
+    auto& light = registry.get<AreaLightComponent>(entity);
+    ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
@@ -81,8 +101,13 @@ void Component::SphereLightComponent::OnEditPreview(entt::registry& registry, en
 
 void Component::SphereLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
+    auto& light = registry.get<SphereLightComponent>(entity);
+    ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
 }
+
+static constexpr const char* SHADOW_MODE_LABELS[] = {"Off", "Dynamic", "Baked"};
+static constexpr const char* SHADOW_BAKE_RESOLUTION_LABELS[] = {"256", "512", "1024", "2048"};
 
 Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
@@ -131,7 +156,10 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         EditWidgets::Checkbox(edit, "Normalize Cone##al", &AreaLightComponent::bNormalizeCone);
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##al", &AreaLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##al", &AreaLightComponent::bExcludeFromProbeBake);
-        EditWidgets::Checkbox(edit, "Cast Shadows##al", &AreaLightComponent::bCastShadows);
+        EditWidgets::Combo(edit, "Shadows##al", &AreaLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
+        if (comp.shadowMode == LightShadowMode::Baked) {
+            EditWidgets::Combo(edit, "Bake Resolution##al", &AreaLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
+        }
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
@@ -240,14 +268,16 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
         .falloffBias = 2.0f - light.falloffExponent,
         .volumetricScale = glm::max(light.volumetricScale, 0.0f),
         .coneScale = light.bNormalizeCone ? AreaLightConeScale(cosInner, cosOuter) : 1.0f,
-        .flags = light.bCastShadows ? LIGHT_FLAG_CAST_SHADOWS : 0u,
+        .flags = light.shadowMode != LightShadowMode::Off ? LIGHT_FLAG_CAST_SHADOWS : 0u,
     };
 }
 
 void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    registry.get<AreaLightComponent>(entity).lightSlot = AnalyticLightStore::INVALID_SLOT;
+    auto& light = registry.get<AreaLightComponent>(entity);
+    light.lightSlot = AnalyticLightStore::INVALID_SLOT;
+    ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
     state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);
@@ -285,7 +315,10 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly this light scatters in volumetric fog; 0 = fog ignores it (fill and cheat lights)"); }
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
         EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
-        EditWidgets::Checkbox(edit, "Cast Shadows##sl", &SphereLightComponent::bCastShadows);
+        EditWidgets::Combo(edit, "Shadows##sl", &SphereLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
+        if (comp.shadowMode == LightShadowMode::Baked) {
+            EditWidgets::Combo(edit, "Bake Resolution##sl", &SphereLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
+        }
     }
 
     return {.bRequestRemoval = remove};
@@ -317,14 +350,16 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
         .falloffBias = 2.0f - light.falloffExponent,
         .volumetricScale = glm::max(light.volumetricScale, 0.0f),
         .coneScale = 1.0f,
-        .flags = light.bCastShadows ? LIGHT_FLAG_CAST_SHADOWS : 0u,
+        .flags = light.shadowMode != LightShadowMode::Off ? LIGHT_FLAG_CAST_SHADOWS : 0u,
     };
 }
 
 void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    registry.get<SphereLightComponent>(entity).lightSlot = AnalyticLightStore::INVALID_SLOT;
+    auto& light = registry.get<SphereLightComponent>(entity);
+    light.lightSlot = AnalyticLightStore::INVALID_SLOT;
+    ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
     state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
     registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
     registry.emplace_or_replace<LightSurfacePendingTag>(entity);

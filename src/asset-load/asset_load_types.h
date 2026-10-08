@@ -30,6 +30,7 @@ struct Font;
 namespace AssetLoad
 {
 class CubemapLoadSlot;
+class TextureArrayLoadSlot;
 class TextureLoadSlot;
 class ProceduralTextureLoadSlot;
 class StaticModelLoadSlot;
@@ -43,6 +44,7 @@ class FontCurveLoadSlot;
 namespace Render
 {
 struct PipelineData;
+struct TextureArray;
 struct VulkanContext;
 }
 
@@ -152,6 +154,7 @@ using ProceduralModelSlotHandle = Core::Handle<ProceduralModelLoadSlot>;
 using PhysicsColliderSlotHandle = Core::Handle<PhysicsColliderLoadSlot>;
 using TextureSlotHandle = Core::Handle<TextureLoadSlot>;
 using CubemapSlotHandle = Core::Handle<CubemapLoadSlot>;
+using TextureArraySlotHandle = Core::Handle<TextureArrayLoadSlot>;
 using ProceduralTextureSlotHandle = Core::Handle<ProceduralTextureLoadSlot>;
 using FontCurveSlotHandle = Core::Handle<FontCurveLoadSlot>;
 
@@ -218,6 +221,17 @@ struct CubemapLoadRequest
 struct CubemapLoadComplete
 {
     Render::Cubemap* cubemap;
+    bool bSuccess;
+};
+
+struct TextureArrayLoadRequest
+{
+    Render::TextureArray* textureArray;
+};
+
+struct TextureArrayLoadComplete
+{
+    Render::TextureArray* textureArray;
     bool bSuccess;
 };
 

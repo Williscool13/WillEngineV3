@@ -44,7 +44,7 @@ entities.append(sky)
 floor = base_entity("Floor", (-20.0, -0.5, -12.0))
 fields, ptype = box_params(40.0, 0.5, 24.0)
 add_procedural(floor, ptype, fields)
-add_render_flags(floor, visible=False, probe_bake_include=False, ddgi_contribute=False)
+add_render_flags(floor, visible=False, bake_include=False, ddgi_contribute=False)
 entities.append(floor)
 
 spawn = base_entity("Spawn", (8.0, 1.0, 0.0))

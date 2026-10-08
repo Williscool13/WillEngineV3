@@ -18,6 +18,7 @@
 #include "asset-load-jobs/physics_collider_load_slot.h"
 #include "asset-load-jobs/texture_load_slot.h"
 #include "asset-load-jobs/cubemap_load_slot.h"
+#include "asset-load-jobs/texture_array_load_slot.h"
 #include "asset-load-jobs/procedural_texture_load_slot.h"
 #include "asset-load-jobs/font_curve_load_slot.h"
 #include "core/containers/array.h"
@@ -96,6 +97,11 @@ public:
 
     bool TryDequeueCubemapComplete(CubemapLoadComplete& outResult);
 
+    // Texture array loading
+    void RequestTextureArrayLoad(Render::TextureArray* textureArray);
+
+    bool TryDequeueTextureArrayComplete(TextureArrayLoadComplete& outResult);
+
     // Sampler loading
     void RequestSamplerLoad(Engine::Sampler* sampler);
 
@@ -145,6 +151,11 @@ public:
     [[nodiscard]] uint32_t GetActiveCubemapLoadCount() const
     {
         return cubemapLoadAllocator.GetCount();
+    }
+
+    [[nodiscard]] uint32_t GetActiveTextureArrayLoadCount() const
+    {
+        return textureArrayLoadAllocator.GetCount();
     }
 
     [[nodiscard]] uint32_t GetActiveProceduralTextureLoadCount() const
@@ -217,6 +228,12 @@ private:
     Core::ConcurrentQueue<CubemapLoadRequest> cubemapRequestQueue;
     Core::ConcurrentQueue<CubemapLoadComplete> cubemapLoadCompleteQueue;
 
+    // Texture Array Loading
+    Core::LockFreeHandleAllocator<TextureArrayLoadSlot, TEXTURE_ARRAY_JOB_COUNT> textureArrayLoadAllocator;
+    Core::Array<TextureArrayLoadSlot, TEXTURE_ARRAY_JOB_COUNT> textureArrayLoadSlots;
+    Core::ConcurrentQueue<TextureArrayLoadRequest> textureArrayRequestQueue;
+    Core::ConcurrentQueue<TextureArrayLoadComplete> textureArrayLoadCompleteQueue;
+
     // Sampler loading (processed inline in ThreadMain, no task slot needed)
     Core::ConcurrentQueue<SamplerLoadRequest> samplerRequestQueue;
     Core::ConcurrentQueue<SamplerLoadComplete> samplerLoadCompleteQueue;
@@ -248,6 +265,8 @@ private:
     void OnTextureLoadComplete(bool success, TextureSlotHandle textureSlotHandle);
 
     void OnCubemapComplete(bool success, CubemapSlotHandle cubemapSlotHandle);
+
+    void OnTextureArrayComplete(bool success, TextureArraySlotHandle slotHandle);
 
     void OnProceduralTextureLoadComplete(bool success, ProceduralTextureSlotHandle slotHandle);
 

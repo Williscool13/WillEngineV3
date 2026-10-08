@@ -133,7 +133,7 @@ label("Label -Z", "-Z", (0.0, 0.0, -IN), (1.0, 0.0, 0.0, 0.0)) # identity, faces
 label("Label +Y", "+Y", (0.0,  IN, 0.0), ( S,  S, 0.0, 0.0))   # +90 about X, faces -Y, glyph-up = +Z
 label("Label -Y", "-Y", (0.0, -IN, 0.0), ( S, -S, 0.0, 0.0))   # -90 about X, faces +Y, glyph-up = -Z
 
-# Viewing spheres: excluded from the probe bake (probe_bake_include=False) so the capture
+# Viewing spheres: excluded from the probe bake (bake_include=False) so the capture
 # stays walls-only, but visible live to inspect the probe's reflections on a
 # mirror and at a mip-blurring roughness. Place the probe entity at the origin.
 def view_sphere(name, pos, mat):
@@ -141,7 +141,7 @@ def view_sphere(name, pos, mat):
     fields, idx = sphere_params(1.0, 32, 32)
     e[PROCEDURAL] = {**fields, "material": mat,
                      "renderOffset": [0.0, 0.0, 0.0], "renderRotation": [1.0, 0.0, 0.0, 0.0], "type": idx}
-    wa.add_render_flags(e, probe_bake_include=False)
+    wa.add_render_flags(e, bake_include=False)
     entities.append(e)
 
 view_sphere("View Sphere Mirror", (-1.5, -2.8, 0.0), MAT_MIRROR)

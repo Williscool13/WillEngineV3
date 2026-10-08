@@ -40,7 +40,7 @@ bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
     }
     ImGui::NewLine();
     if (toggles & RENDER_TOGGLE_PROBE_BAKE) {
-        EditWidgets::Checkbox(edit, "Probe Bake", &RenderFlagsComponent::bProbeBakeInclude);
+        EditWidgets::Checkbox(edit, "Bake", &RenderFlagsComponent::bBakeInclude);
         ImGui::SameLine();
     }
     if (toggles & RENDER_TOGGLE_MOTION_BLUR) {

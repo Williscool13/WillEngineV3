@@ -14,6 +14,7 @@ struct WillAudio;
 namespace Render
 {
 struct Cubemap;
+struct TextureArray;
 }
 
 namespace Engine
@@ -28,6 +29,7 @@ using StaticModelHandle = Core::Handle<StaticModel>;
 using TextureHandle = Core::Handle<Texture>;
 using SamplerHandle = Core::Handle<Sampler>;
 using CubemapHandle = Core::Handle<Render::Cubemap>;
+using TextureArrayHandle = Core::Handle<Render::TextureArray>;
 using AudioHandle = Core::Handle<Audio::WillAudio>;
 using FontHandle = Core::Handle<Font>;
 using PhysicsColliderHandle = Core::Handle<PhysicsColliderAsset>;

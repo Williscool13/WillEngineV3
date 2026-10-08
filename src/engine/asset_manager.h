@@ -11,6 +11,7 @@
 #include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
 #include "engine/core/probe_id.h"
+#include "engine/core/texture_array_id.h"
 #include "engine/core/physics_collider_id.h"
 #include "core/sampler_id.h"
 #include "engine/resources/environment_map/probe_format.h"
@@ -27,6 +28,7 @@
 #include "core/containers/vector.h"
 #include "engine/resources/sampler/sampler.h"
 #include "render/types/cubemap_asset.h"
+#include "render/types/texture_array_asset.h"
 #include "resources/model/model_types.h"
 #include "engine/resources/font/font.h"
 #include "engine/resources/texture/texture.h"
@@ -52,6 +54,7 @@ struct ResolveLoadResult
     int32_t modelLoadedCount{0};
     int32_t textureLoadedCount{0};
     int32_t cubeLoadedCount{0};
+    int32_t textureArrayLoadedCount{0};
     int32_t samplerLoadedCount{0};
     int32_t fontLoadedCount{0};
     int32_t colliderLoadedCount{0};
@@ -90,6 +93,7 @@ public: // Models
     [[nodiscard]] uint32_t GetActiveTextureCount() const { return textureAllocator.GetCount(); }
     [[nodiscard]] uint32_t GetActiveSamplerCount() const { return samplerAllocator.GetCount(); }
     [[nodiscard]] uint32_t GetActiveCubemapCount() const { return cubemapAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveTextureArrayCount() const { return textureArrayAllocator.GetCount(); }
 
     StaticModelHandle LoadModel(ModelID modelId);
 
@@ -309,6 +313,32 @@ public: // Cubemaps
         return cubemapCache.Find(cubemapId);
     }
 
+public: // Texture arrays
+    struct CachedTextureArrayMetadata
+    {
+        Core::Path source;
+        Core::InlineString<128> name;
+        uint64_t dataOffset{};
+        uint64_t dataSize{};
+        uint64_t uncompressedSize{};
+        CompressionType compressionType{CompressionType::Zstd};
+        uint64_t contentVersion{0};
+    };
+
+    TextureArrayHandle LoadTextureArray(TextureArrayID textureArrayId);
+
+    /** Hot-reload: re-reads an already-loaded texture array from textureArrayCache. No-op if it is not resident. */
+    bool ReloadTextureArray(TextureArrayID textureArrayId);
+
+    Render::TextureArray* GetTextureArray(TextureArrayHandle handle);
+
+    void UnloadTextureArray(TextureArrayHandle handle);
+
+    [[nodiscard]] const CachedTextureArrayMetadata* GetTextureArrayMetadata(TextureArrayID textureArrayId) const
+    {
+        return textureArrayCache.Find(textureArrayId);
+    }
+
 public: // Reflection probes
     struct ProbeInfo
     {
@@ -439,6 +469,10 @@ private:
     Core::Array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
     Core::InlineMap<EnvironmentMapID, CubemapHandle, 512> cubemapIdToHandle;
 
+    Core::HandleAllocator<Render::TextureArray, MAX_LOADED_TEXTURE_ARRAYS> textureArrayAllocator;
+    Core::Array<Render::TextureArray, MAX_LOADED_TEXTURE_ARRAYS> textureArrays{};
+    Core::InlineMap<TextureArrayID, TextureArrayHandle, 512> textureArrayIdToHandle;
+
     int32_t pendingModelLogCount{0};
     std::chrono::steady_clock::time_point modelLastActivity{};
 
@@ -555,6 +589,8 @@ private: // Asset Registry
 
     Core::FixedMap<ProbeID, ProbeInfo> probeRegistry;
 
+    Core::FixedMap<TextureArrayID, CachedTextureArrayMetadata> textureArrayCache;
+
     Core::FixedMap<StringID, CachedSceneMetadata> sceneCache;
     Core::FixedMap<StringID, CachedPrefabMetadata> prefabCache;
     Core::FixedMap<StringID, CachedPlayMetadata> playCache;
@@ -580,9 +616,18 @@ private: // Asset Registry
         uint64_t releaseFrame{0};
     };
 
+    struct DeferredTextureArrayRelease
+    {
+        Render::BindlessTextureArrayHandle handle{};
+        uint64_t releaseFrame{0};
+        Render::AllocatedImage image{};
+        Render::ImageView imageView{};
+    };
+
     /** Old bindless slots orphaned by Reload*; released in ResolveUnloads once in-flight frames can no longer reference them. */
     Core::Vector<DeferredTextureBindingRelease> deferredTextureBindingReleases;
     Core::Vector<DeferredCubemapBindingRelease> deferredCubemapBindingReleases;
+    Core::Vector<DeferredTextureArrayRelease> deferredTextureArrayReleases;
 };
 } // Engine
 

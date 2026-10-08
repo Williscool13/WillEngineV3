@@ -21,6 +21,7 @@ BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(VulkanContext* co
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, BINDLESS_SAMPLER_COUNT);
     layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_IMAGE_COUNT);
     layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_CUBEMAP_COUNT);
+    layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT);
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo = layoutBuilder.Build(
         static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT),
@@ -50,6 +51,7 @@ BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(BindlessResources
       , samplerAllocator(std::move(other.samplerAllocator))
       , textureAllocator(std::move(other.textureAllocator))
       , cubemapAllocator(std::move(other.cubemapAllocator))
+      , textureArrayAllocator(std::move(other.textureArrayAllocator))
 {
     other.context = nullptr;
 }
@@ -64,6 +66,7 @@ BindlessResourcesSamplerImages& BindlessResourcesSamplerImages::operator=(Bindle
         samplerAllocator = std::move(other.samplerAllocator);
         textureAllocator = std::move(other.textureAllocator);
         cubemapAllocator = std::move(other.cubemapAllocator);
+        textureArrayAllocator = std::move(other.textureArrayAllocator);
 
         other.context = nullptr;
     }
@@ -255,6 +258,46 @@ bool BindlessResourcesSamplerImages::UpdateCubemap(BindlessCubemapHandle cubemap
 bool BindlessResourcesSamplerImages::ReleaseCubemapBinding(BindlessCubemapHandle handle)
 {
     return cubemapAllocator.Remove(handle);
+}
+
+BindlessTextureArrayHandle BindlessResourcesSamplerImages::ReserveAllocateTextureArray()
+{
+    BindlessTextureArrayHandle handle = textureArrayAllocator.Add();
+    if (!handle.IsValid()) {
+        SPDLOG_WARN("No more texture array indices available");
+        return BindlessTextureArrayHandle::INVALID;
+    }
+    return handle;
+}
+
+bool BindlessResourcesSamplerImages::UpdateTextureArray(BindlessTextureArrayHandle handle, const VkDescriptorImageInfo& imageInfo)
+{
+    if (!textureArrayAllocator.IsValid(handle)) {
+        SPDLOG_ERROR("Invalid texture array handle for UpdateTextureArray");
+        return false;
+    }
+    WriteSampledImageDescriptor(3, handle.index, imageInfo);
+    return true;
+}
+
+bool BindlessResourcesSamplerImages::ReleaseTextureArrayBinding(BindlessTextureArrayHandle handle)
+{
+    return textureArrayAllocator.Remove(handle);
+}
+
+void BindlessResourcesSamplerImages::WriteSampledImageDescriptor(uint32_t binding, uint32_t index, const VkDescriptorImageInfo& imageInfo)
+{
+    size_t bindingOffset;
+    vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, binding, &bindingOffset);
+    char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+    VkDescriptorGetInfoEXT descriptorGetInfo{};
+    descriptorGetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+    descriptorGetInfo.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    descriptorGetInfo.data.pSampledImage = &imageInfo;
+
+    const size_t sampledImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
+    vkGetDescriptorEXT(context->device, &descriptorGetInfo, sampledImageDescriptorSize, basePtr + index * sampledImageDescriptorSize);
 }
 
 VkDescriptorBufferBindingInfoEXT BindlessResourcesSamplerImages::GetBindingInfo() const

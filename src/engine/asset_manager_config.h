@@ -12,6 +12,7 @@ inline constexpr uint32_t MAX_LOADED_MODELS = 2048;
 inline constexpr uint32_t MAX_LOADED_TEXTURES = 2048;
 inline constexpr uint32_t MAX_LOADED_SAMPLERS = 128;
 inline constexpr uint32_t MAX_LOADED_CUBEMAPS = 256;
+inline constexpr uint32_t MAX_LOADED_TEXTURE_ARRAYS = 256;
 inline constexpr uint32_t MAX_LOADED_AUDIO = 128;
 inline constexpr uint32_t MAX_LOADED_FONTS = 64;
 inline constexpr uint32_t MAX_LOADED_COLLIDERS = 2048;
@@ -25,6 +26,7 @@ inline constexpr uint32_t MAX_CACHED_TEXTURES = 4096;
 inline constexpr uint32_t MAX_CACHED_SAMPLERS = 256;
 inline constexpr uint32_t MAX_CACHED_CUBEMAPS = 512;
 inline constexpr uint32_t MAX_CACHED_PROBES = 512;
+inline constexpr uint32_t MAX_CACHED_TEXTURE_ARRAYS = 1024;
 inline constexpr uint32_t MAX_CACHED_AUDIO = 256;
 inline constexpr uint32_t MAX_CACHED_SCENES = 512;
 inline constexpr uint32_t MAX_CACHED_PREFABS = 512;
@@ -43,6 +45,7 @@ inline constexpr uint64_t MODEL_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t FONT_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t COLLIDER_RETIRE_PENDING = UINT64_MAX;
 inline constexpr uint64_t CUBEMAP_RETIRE_PENDING = UINT64_MAX;
+inline constexpr uint64_t TEXTURE_ARRAY_RETIRE_PENDING = UINT64_MAX;
 
 }
 

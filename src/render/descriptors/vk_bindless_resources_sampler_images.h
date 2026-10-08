@@ -24,16 +24,22 @@ struct BindlessTexture
 struct BindlessCubemap
 {};
 
+struct BindlessTextureArray
+{};
+
 using BindlessSamplerHandle = Core::Handle<BindlessSampler>;
 using BindlessTextureHandle = Core::Handle<BindlessTexture>;
 using BindlessCubemapHandle = Core::Handle<BindlessCubemap>;
+using BindlessTextureArrayHandle = Core::Handle<BindlessTextureArray>;
 
 /**
  * Bindless descriptor buffer for samplers and sampled images.
  *
- * Contains two bindings:
+ * Bindings:
  *   - Binding 0: Array of samplers (BINDLESS_SAMPLER_COUNT)
  *   - Binding 1: Array of sampled images (BINDLESS_SAMPLED_IMAGE_COUNT)
+ *   - Binding 2: Array of sampled cubemaps (BINDLESS_SAMPLED_CUBEMAP_COUNT)
+ *   - Binding 3: Array of sampled 2D array images (BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT)
  *
  * Uses Vulkan descriptor buffers (VK_EXT_descriptor_buffer) for bindless access.
  * Handles are managed via HandleAllocator and returned on allocation for shader indexing.
@@ -135,6 +141,13 @@ public:
      */
     bool ReleaseCubemapBinding(BindlessCubemapHandle handle);
 
+    /** Not thread-safe. Reserves a 2D array slot; the descriptor is written later by UpdateTextureArray. */
+    BindlessTextureArrayHandle ReserveAllocateTextureArray();
+
+    bool UpdateTextureArray(BindlessTextureArrayHandle handle, const VkDescriptorImageInfo& imageInfo);
+
+    bool ReleaseTextureArrayBinding(BindlessTextureArrayHandle handle);
+
     /**
      * Get binding info for vkCmdBindDescriptorBuffersEXT.
      * @return Descriptor buffer binding info
@@ -149,6 +162,9 @@ private:
     Core::HandleAllocator<BindlessSampler, BINDLESS_SAMPLER_COUNT> samplerAllocator;
     Core::HandleAllocator<BindlessTexture, BINDLESS_SAMPLED_IMAGE_COUNT> textureAllocator;
     Core::HandleAllocator<BindlessCubemap, BINDLESS_SAMPLED_CUBEMAP_COUNT> cubemapAllocator;
+    Core::HandleAllocator<BindlessTextureArray, BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT> textureArrayAllocator;
+
+    void WriteSampledImageDescriptor(uint32_t binding, uint32_t index, const VkDescriptorImageInfo& imageInfo);
 };
 } // Render
 

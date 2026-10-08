@@ -1421,7 +1421,7 @@ void WillEngine::Run()
         if (!bStartupStreamLogged) {
             const uint32_t activeLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()
                                          + asyncAssetLoadManager->GetActiveTextureLoadCount() + asyncAssetLoadManager->GetActiveCubemapLoadCount()
-                                         + asyncAssetLoadManager->GetActiveProceduralTextureLoadCount() + asyncAssetLoadManager->GetActivePhysicsColliderLoadCount()
+                                         + asyncAssetLoadManager->GetActiveTextureArrayLoadCount() + asyncAssetLoadManager->GetActiveProceduralTextureLoadCount() + asyncAssetLoadManager->GetActivePhysicsColliderLoadCount()
                                          + asyncAssetLoadManager->GetActivePipelineLoadCount() + asyncAssetLoadManager->GetActiveAudioLoadCount();
 
             if (activeLoads > 0) {
@@ -1564,7 +1564,7 @@ void WillEngine::Run()
             constexpr uint32_t SCRATCH_RELEASE_QUIET_FRAMES = 120;
             const uint32_t activeScratchLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()
                                                 + asyncAssetLoadManager->GetActiveTextureLoadCount() + asyncAssetLoadManager->GetActiveCubemapLoadCount()
-                                                + asyncAssetLoadManager->GetActivePhysicsColliderLoadCount();
+                                                + asyncAssetLoadManager->GetActiveTextureArrayLoadCount() + asyncAssetLoadManager->GetActivePhysicsColliderLoadCount();
             static uint32_t scratchQuietFrames = 0;
             if (activeScratchLoads > 0) {
                 scratchQuietFrames = 0;

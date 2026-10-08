@@ -38,7 +38,7 @@ struct RenderFlagsComponent
     static constexpr const char* COMPONENT_NAME = "RenderFlagsComponent";
 
     bool bVisible{true};
-    bool bProbeBakeInclude{true};
+    bool bBakeInclude{true};
     bool bDdgiContribute{true};
     bool bMotionBlur{true};
     bool bAlphaCutout{true};
@@ -47,7 +47,7 @@ struct RenderFlagsComponent
 
     WILL_REFLECT(RenderFlagsComponent,
         WILL_FIELD(bVisible, .key = "visible"),
-        WILL_FIELD(bProbeBakeInclude, .key = "probeBake"),
+        WILL_FIELD(bBakeInclude, .key = "bake"),
         WILL_FIELD(bDdgiContribute, .key = "ddgi"),
         WILL_FIELD(bMotionBlur, .key = "motionBlur"),
         WILL_FIELD(bAlphaCutout, .key = "alphaCutout"),

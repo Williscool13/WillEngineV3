@@ -23,6 +23,7 @@
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_data.h"
 #include "render/types/cubemap_asset.h"
+#include "render/types/texture_array_asset.h"
 #include "render/vulkan/vk_context.h"
 #include "render/vulkan/vk_helpers.h"
 #include "render/vulkan/vk_utils.h"
@@ -169,6 +170,21 @@ AsyncAssetLoadManager::AsyncAssetLoadManager(Core::MemoryManager& memoryManager,
             },
             [this](bool success, CubemapSlotHandle cubemapSlotHandle) {
                 OnCubemapComplete(success, cubemapSlotHandle);
+            }
+        );
+    }
+
+    for (uint32_t i = 0; i < TEXTURE_ARRAY_JOB_COUNT; ++i) {
+        textureArrayLoadSlots[i].Initialize(
+            scheduler,
+            context,
+            resourceManager,
+            &memoryManager,
+            [this](VkCommandBuffer cmd, VkFence fence, std::binary_semaphore* submittedSignal) {
+                this->gpuDispatcher->Enqueue(Render::DispatchChannel::Transfer, cmd, fence, submittedSignal);
+            },
+            [this](bool success, TextureArraySlotHandle slotHandle) {
+                OnTextureArrayComplete(success, slotHandle);
             }
         );
     }
@@ -348,6 +364,27 @@ void AsyncAssetLoadManager::ThreadMain()
                 }
                 else {
                     cubemapRequestQueue.enqueue(cubemapReq);
+                }
+            }
+        }
+        //
+        {
+            ZoneScopedN("Process Texture Array Requests");
+            TextureArrayLoadRequest arrayReq{};
+            if (textureArrayRequestQueue.try_dequeue(arrayReq)) {
+                Core::Handle<TextureArrayLoadSlot> slotHandle = textureArrayLoadAllocator.Add();
+                if (slotHandle.IsValid()) {
+                    UploadStaging* uploadStaging = stagingDepot.CheckOut(arrayReq.textureArray->uncompressedSize / UPLOAD_STAGING_MIP0_DIVISOR);
+                    if (uploadStaging) {
+                        textureArrayLoadSlots[slotHandle.index].Launch(slotHandle, uploadStaging, arrayReq.textureArray);
+                    }
+                    else {
+                        textureArrayRequestQueue.enqueue(arrayReq);
+                        textureArrayLoadAllocator.Remove(slotHandle);
+                    }
+                }
+                else {
+                    textureArrayRequestQueue.enqueue(arrayReq);
                 }
             }
         }
@@ -582,6 +619,25 @@ void AsyncAssetLoadManager::RequestCubemapLoad(Render::Cubemap* cubemap)
 bool AsyncAssetLoadManager::TryDequeueCubemapComplete(CubemapLoadComplete& outResult)
 {
     return cubemapLoadCompleteQueue.try_dequeue(outResult);
+}
+
+void AsyncAssetLoadManager::RequestTextureArrayLoad(Render::TextureArray* textureArray)
+{
+    ZoneScoped;
+    if (bShouldExit.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (!textureArray) {
+        LOG_ERROR(Asset, "RequestTextureArrayLoad called with null texture array");
+        return;
+    }
+    textureArrayRequestQueue.enqueue({textureArray});
+    Wake();
+}
+
+bool AsyncAssetLoadManager::TryDequeueTextureArrayComplete(TextureArrayLoadComplete& outResult)
+{
+    return textureArrayLoadCompleteQueue.try_dequeue(outResult);
 }
 
 void AsyncAssetLoadManager::RequestFontCurveLoad(Engine::Font* font)
@@ -864,6 +920,34 @@ void AsyncAssetLoadManager::OnCubemapComplete(bool success, CubemapSlotHandle cu
     }
     slot.Clear();
     cubemapLoadAllocator.Remove(cubemapSlotHandle);
+
+    Wake();
+}
+
+void AsyncAssetLoadManager::OnTextureArrayComplete(bool success, TextureArraySlotHandle slotHandle)
+{
+    ZoneScoped;
+
+    if (!textureArrayLoadAllocator.IsValid(slotHandle)) {
+        LOG_ERROR(Asset, "OnTextureArrayComplete called with invalid slot handle");
+        return;
+    }
+
+    TextureArrayLoadSlot& slot = textureArrayLoadSlots[slotHandle.index];
+    textureArrayLoadCompleteQueue.enqueue({slot.outputTextureArray, success});
+
+    if (success) {
+        LOG_TRACE(Asset, "Finished loading texture array: {}", slot.outputTextureArray->source.c_str());
+    }
+    else {
+        LOG_ERROR(Asset, "Failed to load texture array: {}", slot.outputTextureArray->source.c_str());
+    }
+
+    if (slot.uploadStaging) {
+        stagingDepot.Return(slot.uploadStaging);
+    }
+    slot.Clear();
+    textureArrayLoadAllocator.Remove(slotHandle);
 
     Wake();
 }

@@ -250,7 +250,7 @@ FIELDS = {
     "SceneFolderComponent": [("folderId", "u", 0), ("parentFolder", "u", 0), ("name", "s", "")],
     "FreeCameraComponent": [("moveSpeed", "f", 5.0), ("lookSpeed", "f", 0.1)],
     "MotionBlurMovementComponent": [("bIsHorizontal", "b", False)],
-    "RenderFlagsComponent": [("visible", "b", True), ("probeBake", "b", True), ("ddgi", "b", True), ("motionBlur", "b", True),
+    "RenderFlagsComponent": [("visible", "b", True), ("bake", "b", True), ("ddgi", "b", True), ("motionBlur", "b", True),
                              ("alphaCutout", "b", True), ("emissiveLight", "b", False), ("cameraMotionBlur", "b", True)],
     "CheckpointComponent": [("checkpointId", "u", 0), ("priority", "i", 0), ("spawnOffset", "v3", [0.0, 0.0, 0.0]),
                             ("spawnRotation", "v3", [0.0, 0.0, 0.0])],

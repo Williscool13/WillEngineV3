@@ -34,13 +34,15 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       cubemapNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       cubemapCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
       probeRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
+      textureArrayCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS),
       sceneCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
       prefabCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
       playCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PLAYS),
       fontNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
       fontCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
       deferredTextureBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURES),
-      deferredCubemapBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS)
+      deferredCubemapBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS),
+      deferredTextureArrayReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURE_ARRAYS)
 {
     for (uint32_t i = MAX_LOADED_MODULE_MODELS; i > 0; i--) {
         moduleParamsFreeList.PushBack(i - 1);
@@ -1099,6 +1101,18 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         pendingCubemapLogCount = 0;
     }
 
+    AssetLoad::TextureArrayLoadComplete arrayComplete{};
+    while (assetLoadManager->TryDequeueTextureArrayComplete(arrayComplete)) {
+        if (arrayComplete.bSuccess) {
+            arrayComplete.textureArray->loadState = Render::TextureArray::LoadState::Loaded;
+            loadCounts.textureArrayLoadedCount++;
+        }
+        else {
+            arrayComplete.textureArray->loadState = Render::TextureArray::LoadState::FailedToLoad;
+            LOG_ERROR(Asset, "Texture array load failed: {}", arrayComplete.textureArray->name.c_str());
+        }
+    }
+
     AssetLoad::SamplerLoadComplete samplerComplete{};
     int32_t samplersThisTick{0};
     while (assetLoadManager->TryDequeueSamplerComplete(samplerComplete)) {
@@ -1223,6 +1237,13 @@ void AssetManager::KickOffRetires()
             cubemap.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
         }
     }
+    for (auto& textureArray : textureArrays) {
+        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
+        if (textureArray.refCount > 0 || textureArray.retireFrame != TEXTURE_ARRAY_RETIRE_PENDING) { continue; }
+        if (textureArray.loadState != Render::TextureArray::LoadState::Loading) {
+            textureArray.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
+        }
+    }
 }
 
 bool AssetManager::HasPendingLoads() const
@@ -1246,6 +1267,10 @@ bool AssetManager::HasPendingLoads() const
     for (const auto& cubemap : cubemaps) {
         if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
         if (cubemap.loadState == Render::Cubemap::LoadState::Loading) { return true; }
+    }
+    for (const auto& textureArray : textureArrays) {
+        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
+        if (textureArray.loadState == Render::TextureArray::LoadState::Loading) { return true; }
     }
     return false;
 }
@@ -1282,6 +1307,12 @@ void AssetManager::LogPendingLoads() const
             LOG_WARN(Asset, "Pending load: cubemap '{}' (refCount {})", cubemap.name.c_str(), cubemap.refCount);
         }
     }
+    for (const auto& textureArray : textureArrays) {
+        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
+        if (textureArray.loadState == Render::TextureArray::LoadState::Loading) {
+            LOG_WARN(Asset, "Pending load: texture array '{}' (refCount {})", textureArray.name.c_str(), textureArray.refCount);
+        }
+    }
 }
 
 ResolveUnloadResult AssetManager::ResolveUnloads()
@@ -1299,6 +1330,12 @@ ResolveUnloadResult AssetManager::ResolveUnloads()
         if (currentFrame < deferredCubemapBindingReleases[i].releaseFrame) { continue; }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseCubemapBinding(deferredCubemapBindingReleases[i].handle);
         deferredCubemapBindingReleases.SwapRemove(i);
+    }
+    for (size_t i = deferredTextureArrayReleases.Size(); i > 0;) {
+        --i;
+        if (currentFrame < deferredTextureArrayReleases[i].releaseFrame) { continue; }
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureArrayBinding(deferredTextureArrayReleases[i].handle);
+        deferredTextureArrayReleases.SwapRemove(i);
     }
 
     int32_t modelsUnloadedThisTick{0};
@@ -1402,6 +1439,19 @@ ResolveUnloadResult AssetManager::ResolveUnloads()
         }
         cubemapAllocator.Remove(cubemap.selfHandle);
         cubemap = {};
+    }
+
+    for (auto& textureArray : textureArrays) {
+        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
+        if (textureArray.refCount > 0 || textureArray.retireFrame == 0 || textureArray.retireFrame == TEXTURE_ARRAY_RETIRE_PENDING || currentFrame < textureArray.retireFrame) { continue; }
+
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureArrayBinding(textureArray.bindlessHandle);
+        TextureArrayHandle* stored = textureArrayIdToHandle.Find(textureArray.textureArrayId);
+        if (stored && *stored == textureArray.selfHandle) {
+            textureArrayIdToHandle.Remove(textureArray.textureArrayId);
+        }
+        textureArrayAllocator.Remove(textureArray.selfHandle);
+        textureArray = {};
     }
 
     int32_t samplersUnloadedThisTick{0};
@@ -2199,6 +2249,98 @@ void AssetManager::UnloadCubemap(CubemapHandle handle)
 
     if (cubemap.refCount == 0) {
         cubemap.retireFrame = CUBEMAP_RETIRE_PENDING;
+    }
+}
+
+TextureArrayHandle AssetManager::LoadTextureArray(TextureArrayID textureArrayId)
+{
+    const CachedTextureArrayMetadata* meta = textureArrayCache.Find(textureArrayId);
+    if (meta == nullptr) {
+        LOG_ERROR(Asset, "Texture array {:x} not found in registry", textureArrayId.id);
+        return TextureArrayHandle::INVALID;
+    }
+
+    if (TextureArrayHandle* existing = textureArrayIdToHandle.Find(textureArrayId)) {
+        if (textureArrayAllocator.IsValid(*existing)) {
+            Render::TextureArray& textureArray = textureArrays[existing->index];
+            textureArray.refCount++;
+            textureArray.retireFrame = 0;
+            return *existing;
+        }
+        textureArrayIdToHandle.Remove(textureArrayId);
+    }
+
+    const TextureArrayHandle handle = textureArrayAllocator.Add();
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate texture array slot for: {:x}", textureArrayId.id);
+        return TextureArrayHandle::INVALID;
+    }
+
+    Render::TextureArray& textureArray = textureArrays[handle.index];
+    textureArray.source = meta->source;
+    textureArray.name = meta->name;
+    textureArray.textureArrayId = textureArrayId;
+    textureArray.selfHandle = handle;
+    textureArray.dataOffset = meta->dataOffset;
+    textureArray.dataSize = meta->dataSize;
+    textureArray.uncompressedSize = meta->uncompressedSize;
+    textureArray.compressionType = meta->compressionType;
+    textureArray.refCount = 1;
+    textureArray.retireFrame = 0;
+    textureArray.loadState = Render::TextureArray::LoadState::Loading;
+    textureArray.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTextureArray();
+    textureArrayIdToHandle[textureArrayId] = handle;
+
+    assetLoadManager->RequestTextureArrayLoad(&textureArray);
+    return handle;
+}
+
+bool AssetManager::ReloadTextureArray(TextureArrayID textureArrayId)
+{
+    const CachedTextureArrayMetadata* meta = textureArrayCache.Find(textureArrayId);
+    TextureArrayHandle* existing = textureArrayIdToHandle.Find(textureArrayId);
+    if (meta == nullptr || existing == nullptr || !textureArrayAllocator.IsValid(*existing)) {
+        return false;
+    }
+
+    Render::TextureArray& textureArray = textureArrays[existing->index];
+    if (textureArray.loadState == Render::TextureArray::LoadState::Loading) {
+        LOG_WARN(Asset, "Texture array '{}' reload requested mid-load; skipped", textureArray.name.c_str());
+        return false;
+    }
+    textureArray.source = meta->source;
+    textureArray.name = meta->name;
+    textureArray.dataOffset = meta->dataOffset;
+    textureArray.dataSize = meta->dataSize;
+    textureArray.uncompressedSize = meta->uncompressedSize;
+    textureArray.compressionType = meta->compressionType;
+    textureArray.loadState = Render::TextureArray::LoadState::Loading;
+    deferredTextureArrayReleases.PushBack({textureArray.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4, std::move(textureArray.image), std::move(textureArray.imageView)});
+    textureArray.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTextureArray();
+
+    assetLoadManager->RequestTextureArrayLoad(&textureArray);
+    return true;
+}
+
+Render::TextureArray* AssetManager::GetTextureArray(TextureArrayHandle handle)
+{
+    if (!textureArrayAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &textureArrays[handle.index];
+}
+
+void AssetManager::UnloadTextureArray(TextureArrayHandle handle)
+{
+    if (!textureArrayAllocator.IsValid(handle)) {
+        LOG_WARN(Asset, "Attempted to unload invalid texture array handle");
+        return;
+    }
+
+    Render::TextureArray& textureArray = textureArrays[handle.index];
+    textureArray.refCount--;
+    if (textureArray.refCount == 0) {
+        textureArray.retireFrame = TEXTURE_ARRAY_RETIRE_PENDING;
     }
 }
 

@@ -28,6 +28,7 @@ add_library(engine STATIC
         core/sampler_id.h
         core/model_id.h
         core/probe_id.h
+        core/texture_array_id.h
         core/physics_collider_id.h
         core/action_handle.h
         memory/alloc_tags.h
