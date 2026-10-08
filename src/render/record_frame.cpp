@@ -745,7 +745,8 @@ void RenderThread::RecordSunShadows(FrameContext& ctx)
         const HostBufferMapping csmMapping = renderGraph->OpenHostBuffer("csm_data"_sid, sizeof(CSMData));
         memcpy(csmMapping.data, &data, sizeof(CSMData));
         const RDGTexture atlas = SetupCSMDepth(*renderGraph, pipelineManager, viewFamily, ctx.bufferSizes, ctx.scene, csmMapping.buffer, frame.cascadeCount, 0);
-        ctx.sunShadow = SetupCSMResolve(*renderGraph, pipelineManager, renderExtent, ctx.targets, ctx.scene, csmMapping.buffer, atlas, 0, frameNumber);
+        ctx.sunShadow = SetupCSMResolve(*renderGraph, pipelineManager, renderExtent, ctx.targets, ctx.scene, csmMapping.buffer, atlas, 0, frameNumber,
+                                         viewFamily.csm.bRayTraceBeyond, viewFamily.sigmaParams.bAlphaTest);
         ctx.sunShadow.extent = renderExtent;
         return;
     }

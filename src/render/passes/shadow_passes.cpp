@@ -295,7 +295,9 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                RDGBuffer csmData,
                                RDGTexture atlas,
                                uint32_t sceneIndex,
-                               uint64_t frameNumber)
+                               uint64_t frameNumber,
+                               bool bRayTraceBeyond,
+                               bool bAlphaTest)
 {
     ZoneScoped;
     SunShadowFrame sunShadow{};
@@ -311,13 +313,27 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
     pass.ReadSampledImage(targets.depthCopy);
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(atlas);
+    const bool bTrace = bRayTraceBeyond && scene.tlas.IsValid();
+    if (bTrace) {
+        pass.ReadTLASBuffer(scene.tlas);
+        pass.ReadBuffer(scene.instances);
+        pass.ReadBuffer(scene.primitives);
+        pass.ReadBuffer(scene.materials);
+        pass.ReadBuffer(scene.indices);
+        pass.ReadBuffer(scene.vertexAttributes);
+    }
     pass.WriteStorageImage(sunShadow.shadow);
-    pass.Execute([&scene, pipelineManager, csmData, atlas, renderExtent, sceneIndex, frameNumber, depth = targets.depthCopy, gbufferOne = targets.gbufferOne, output = sunShadow.shadow](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    pass.Execute([&scene, pipelineManager, csmData, atlas, renderExtent, sceneIndex, frameNumber, bTrace, bAlphaTest, depth = targets.depthCopy, gbufferOne = targets.gbufferOne, output = sunShadow.shadow](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("csm_resolve"_sid);
         const ResourceDimensions& atlasDims = graph.GetImageDimensions(atlas);
         CSMResolvePushConstant pc{
             .sceneData = graph.GetBufferAddress(scene.sceneData),
             .csmData = graph.GetBufferAddress(csmData),
+            .instanceBuffer = bTrace ? graph.GetBufferAddress(scene.instances) : 0,
+            .primitiveBuffer = bTrace ? graph.GetBufferAddress(scene.primitives) : 0,
+            .materialBuffer = bTrace ? graph.GetBufferAddress(scene.materials) : 0,
+            .indexBuffer = bTrace ? graph.GetBufferAddress(scene.indices) : 0,
+            .vertexAttrBuffer = bTrace ? graph.GetBufferAddress(scene.vertexAttributes) : 0,
             .renderExtent = {renderExtent.width, renderExtent.height},
             .atlasExtent = {atlasDims.width, atlasDims.height},
             .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
@@ -326,6 +342,8 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
             .outputIndex = graph.GetStorageImageViewDescriptorIndex(output),
             .sceneDataIndex = sceneIndex,
             .frameIndex = static_cast<uint32_t>(frameNumber),
+            .tlasIndex = bTrace ? graph.GetAccelerationStructureDescriptorIndex(scene.tlas) : ~0x0u,
+            .bAlphaTest = bAlphaTest ? 1u : 0u,
         };
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
         vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);

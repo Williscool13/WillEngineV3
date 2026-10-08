@@ -6,6 +6,8 @@ import bindless_declarations;
 import shader_constants;
 import shader_functions;
 import random_common;
+import instance_mask_interop;
+import rt_alpha_test_common;
 
 static const uint CSM_BLOCKER_TAPS = 12;
 static const uint CSM_FILTER_TAPS = 16;
@@ -81,6 +83,21 @@ static float FilterCSMCascade(CSMResolvePushConstant pc, ShadowViewGPU cascade, 
     return visibility / float(CSM_FILTER_TAPS);
 }
 
+// One hard ray toward the sun for receivers past the last cascade.
+static float TraceSunVisibility(CSMResolvePushConstant pc, float3 worldPos, float3 worldN, float footprint)
+{
+    RayDesc ray;
+    ray.Origin = OffsetGBufferRayOrigin(worldPos, worldN, footprint, 1.0);
+    ray.Direction = pc.csmData->toSun.xyz;
+    ray.TMin = 0.0;
+    ray.TMax = 10000.0;
+    RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER> q;
+    q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], pc.bAlphaTest != 0u ? 0u : RAY_FLAG_FORCE_OPAQUE, INSTANCE_MASK_SUN_OCCLUDER, ray);
+    RTAlphaTestBuffers alphaBuffers = { pc.instanceBuffer, pc.primitiveBuffer, pc.materialBuffer, pc.indexBuffer, pc.vertexAttrBuffer };
+    RTProceedAlphaTested(q, alphaBuffers);
+    return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0 : 1.0;
+}
+
 // R = sqrt(visibility) to match the ray traced sun shadow, G = (cascade + 1) / CSM_MAX_CASCADES, 0 outside every cascade.
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -105,6 +122,11 @@ void ComputeCSMResolve(uniform CSMResolvePushConstant pc, uint3 dtid : SV_Dispat
     float3 worldPos = mul(scene.invView, float4(viewPos, 1.0)).xyz;
     float3 worldN = normalize(mul((float3x3)scene.invView, UnpackNormalOct16(gt1.r)));
 
+    bool bFacing = dot(worldN, pc.csmData->toSun.xyz) > 0.0;
+    float3 viewN = normalize(UnpackNormalOct16(gt1.r));
+    float footprint = RayOriginPixelFootprint(viewZ, scene.ndcToViewMulXPixelSize, abs(dot(viewN, normalize(-viewPos))));
+    bool bTrace = pc.tlasIndex != ~0u;
+
     float2 noise = SpatioTemporalBlueNoise2D(pixel, pc.frameIndex, 11u);
     float inner = 1.0 - (CSM_MAX_FILTER_TEXELS + 1.0) * 2.0 / float(pc.csmData->resolution);
     float band = max(pc.csmData->blendBand, 1e-4) * inner;
@@ -125,13 +147,15 @@ void ComputeCSMResolve(uniform CSMResolvePushConstant pc, uint3 dtid : SV_Dispat
             continue;
         }
 
-        float visibility = dot(worldN, pc.csmData->toSun.xyz) > 0.0 ? FilterCSMCascade(pc, cascade, worldN, clip, noise.x * 2.0 * PI) : 0.0;
-        if (bLast) {
-            visibility = lerp(visibility, 1.0, blend);
+        float visibility = bFacing ? FilterCSMCascade(pc, cascade, worldN, clip, noise.x * 2.0 * PI) : 0.0;
+        if (bLast && blend > 0.0) {
+            float beyond = bTrace ? (bFacing ? TraceSunVisibility(pc, worldPos, worldN, footprint) : 0.0) : 1.0;
+            visibility = lerp(visibility, beyond, blend);
         }
         rdgStorageFloat2[pc.outputIndex][pixel] = float2(sqrt(visibility), float(c + 1) / float(CSM_MAX_CASCADES));
         return;
     }
 
-    rdgStorageFloat2[pc.outputIndex][pixel] = float2(1.0, 0.0);
+    float beyond = bTrace ? (bFacing ? TraceSunVisibility(pc, worldPos, worldN, footprint) : 0.0) : 1.0;
+    rdgStorageFloat2[pc.outputIndex][pixel] = float2(beyond, 0.0);
 }

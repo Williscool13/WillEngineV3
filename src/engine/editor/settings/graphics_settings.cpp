@@ -1824,6 +1824,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     static const Core::CSMParams csmDefaults{};
 
                     if (Widgets::Checkbox("PCSS##csm", &csm.bPCSS, "Contact-hardening penumbra sized from the sun's angular radius. Off: fixed one-texel filter, no blocker search.")) { changed = true; }
+                    if (Widgets::Checkbox("Ray Trace Beyond##csm", &csm.bRayTraceBeyond, "Past the last cascade, one hard shadow ray per pixel instead of fading to unshadowed. Alpha test follows the SIGMA setting.")) { changed = true; }
                     if (Widgets::SliderInt("Cascades##csm", &csm.cascadeCount, 1, static_cast<int>(CSM_MAX_CASCADES), {.tooltip = "Camera-centered cascades; sizes follow the split. Default 4.", .reset = true, .resetTo = static_cast<double>(csmDefaults.cascadeCount)})) { changed = true; }
                     static constexpr int CSM_RESOLUTIONS[] = {512, 1024, 2048, 4096};
                     static constexpr const char* CSM_RESOLUTION_LABELS[] = {"512", "1024", "2048", "4096"};

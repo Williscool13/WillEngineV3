@@ -57,7 +57,9 @@ SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                RDGBuffer csmData,
                                RDGTexture atlas,
                                uint32_t sceneIndex,
-                               uint64_t frameNumber);
+                               uint64_t frameNumber,
+                               bool bRayTraceBeyond,
+                               bool bAlphaTest);
 
 /**
  * Writes targets.shadows, temporally filtering GTAO when it ran.

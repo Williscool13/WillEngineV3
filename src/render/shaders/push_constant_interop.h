@@ -2527,6 +2527,11 @@ SHADER_PUBLIC struct CSMResolvePushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
     SHADER_PUBLIC SHADER_PTR(CSMData) csmData;
+    SHADER_PUBLIC SHADER_PTR(Instance) instanceBuffer;
+    SHADER_PUBLIC SHADER_PTR(Primitive) primitiveBuffer;
+    SHADER_PUBLIC SHADER_PTR(MaterialProperties) materialBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint32_t) indexBuffer;
+    SHADER_PUBLIC SHADER_PTR(VertexAttribute) vertexAttrBuffer;
     SHADER_PUBLIC uint2 renderExtent;
     SHADER_PUBLIC uint2 atlasExtent;
     SHADER_PUBLIC uint32_t depthIndex;
@@ -2535,6 +2540,9 @@ SHADER_PUBLIC struct CSMResolvePushConstant
     SHADER_PUBLIC uint32_t outputIndex;
     SHADER_PUBLIC uint32_t sceneDataIndex;
     SHADER_PUBLIC uint32_t frameIndex;
+    // ~0u = fade to unshadowed past the last cascade instead of tracing
+    SHADER_PUBLIC uint32_t tlasIndex;
+    SHADER_PUBLIC uint32_t bAlphaTest;
 };
 
 #endif //WILL_ENGINE_PUSH_CONSTANT_INTEROP_H

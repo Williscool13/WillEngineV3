@@ -446,6 +446,7 @@ void Deserialize(const TextReader& r, Core::GTAOConfiguration& p)
 void Serialize(const Core::CSMParams& p, TextWriter& w)
 {
     w.Key("bPCSS", p.bPCSS);
+    w.Key("bRayTraceBeyond", p.bRayTraceBeyond);
     w.Key("cascadeCount", p.cascadeCount);
     w.Key("resolution", p.resolution);
     w.Key("maxDistance", p.maxDistance);
@@ -459,6 +460,7 @@ void Serialize(const Core::CSMParams& p, TextWriter& w)
 void Deserialize(const TextReader& r, Core::CSMParams& p)
 {
     p.bPCSS = r.Bool("bPCSS", p.bPCSS);
+    p.bRayTraceBeyond = r.Bool("bRayTraceBeyond", p.bRayTraceBeyond);
     p.cascadeCount = r.Int("cascadeCount", p.cascadeCount);
     p.resolution = r.Int("resolution", p.resolution);
     p.maxDistance = r.Float("maxDistance", p.maxDistance);

@@ -330,6 +330,7 @@ struct LocalShadowParams
 struct CSMParams
 {
     bool bPCSS{true};
+    bool bRayTraceBeyond{true};
     int32_t cascadeCount{4};
     int32_t resolution{2048};
     float maxDistance{150.0f};
