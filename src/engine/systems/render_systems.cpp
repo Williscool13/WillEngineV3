@@ -708,7 +708,7 @@ static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* 
     }
     const Render::TextureArray* map = assets.GetTextureArray(light.bakedShadow);
     if (bActive && map != nullptr && map->loadState == Render::TextureArray::LoadState::Loaded && !vf.bakedShadowLights.IsFull()) {
-        vf.bakedShadowLights.PushBack({light.lightSlot, static_cast<uint32_t>(map->bindlessHandle.index)});
+        vf.bakedShadowLights.PushBack({light.lightSlot, static_cast<uint32_t>(map->bindlessHandle.index), light.bMovingObjectShadows});
     }
 }
 
@@ -726,7 +726,87 @@ void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
+static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::InstanceStore& store, const LightInfo* lights, const Core::ViewFamily& vf, uint8_t* outFaces)
+{
+    const auto bakedCount = static_cast<uint32_t>(vf.bakedShadowLights.Size());
+    if (bakedCount == 0) { return; }
+
+    // spheres[group][xyzr][lane], planes[light][half][plane][axis][lane]
+    constexpr uint32_t PLANE_FLOATS = 2 * 6 * 4 * 4;
+    const uint32_t groups = (bakedCount + 3) / 4;
+    Core::Arena& arena = ctx->gameplayArena.Get();
+    auto* spheres = static_cast<float*>(arena.AllocRaw(sizeof(float) * 16 * groups, 16));
+    auto* planes = static_cast<float*>(arena.AllocRaw(sizeof(float) * PLANE_FLOATS * bakedCount, 16));
+
+    for (uint32_t i = 0; i < groups * 4; ++i) {
+        float* sphere = spheres + (i / 4) * 16 + (i % 4);
+        if (i >= bakedCount || !vf.bakedShadowLights[i].bMovingObjectShadows) {
+            sphere[0] = sphere[4] = sphere[8] = 1e30f;
+            sphere[12] = 0.0f;
+            continue;
+        }
+        const LightInfo& light = lights[vf.bakedShadowLights[i].lightIndex];
+        sphere[0] = light.position.x;
+        sphere[4] = light.position.y;
+        sphere[8] = light.position.z;
+        sphere[12] = light.range;
+
+        const uint32_t faceCount = Render::IsLocalShadowSpot(light) ? 1u : 6u;
+        Frustum frusta[6];
+        for (uint32_t face = 0; face < faceCount; ++face) {
+            frusta[face] = Render::BuildLocalShadowView(light, face, 0, {1, 1}, 1).frustum;
+        }
+        for (uint32_t slot = 0; slot < 8; ++slot) {
+            for (uint32_t plane = 0; plane < 6; ++plane) {
+                const glm::vec4 value = slot < faceCount ? frusta[slot].planes[plane] : glm::vec4(0.0f, 0.0f, 0.0f, -1e30f);
+                for (uint32_t axis = 0; axis < 4; ++axis) {
+                    planes[i * PLANE_FLOATS + (slot / 4) * 96 + plane * 16 + axis * 4 + slot % 4] = value[axis];
+                }
+            }
+        }
+    }
+
+    const uint32_t watermark = store.GetWatermark();
+    for (uint32_t slot = 0; slot < watermark; ++slot) {
+        const Engine::InstanceSource& inst = store[slot];
+        const Vec4& bounds = store.GetWorldBounds(slot);
+        if (!inst.bVisible || bounds.w <= 0.0f || (inst.flags & INSTANCE_FLAG_BAKE_STATIC) != 0u) { continue; }
+
+        const __m128 cx = _mm_set1_ps(bounds.x);
+        const __m128 cy = _mm_set1_ps(bounds.y);
+        const __m128 cz = _mm_set1_ps(bounds.z);
+        const __m128 radius = _mm_set1_ps(bounds.w);
+        const __m128 negRadius = _mm_set1_ps(-bounds.w);
+        for (uint32_t g = 0; g < groups; ++g) {
+            const float* sphere = spheres + g * 16;
+            const __m128 dx = _mm_sub_ps(_mm_load_ps(sphere), cx);
+            const __m128 dy = _mm_sub_ps(_mm_load_ps(sphere + 4), cy);
+            const __m128 dz = _mm_sub_ps(_mm_load_ps(sphere + 8), cz);
+            const __m128 reach = _mm_add_ps(_mm_load_ps(sphere + 12), radius);
+            const __m128 distanceSq = _mm_add_ps(_mm_add_ps(_mm_mul_ps(dx, dx), _mm_mul_ps(dy, dy)), _mm_mul_ps(dz, dz));
+            uint32_t nearLights = static_cast<uint32_t>(_mm_movemask_ps(_mm_cmple_ps(distanceSq, _mm_mul_ps(reach, reach))));
+            while (nearLights != 0u) {
+                const uint32_t i = g * 4 + static_cast<uint32_t>(std::countr_zero(nearLights));
+                nearLights &= nearLights - 1u;
+                uint32_t faces = 0;
+                for (uint32_t half = 0; half < 2; ++half) {
+                    const float* block = planes + i * PLANE_FLOATS + half * 96;
+                    __m128 inside = _mm_castsi128_ps(_mm_set1_epi32(-1));
+                    for (uint32_t plane = 0; plane < 6; ++plane) {
+                        const float* row = block + plane * 16;
+                        const __m128 distance = _mm_add_ps(_mm_add_ps(_mm_mul_ps(_mm_load_ps(row), cx), _mm_mul_ps(_mm_load_ps(row + 4), cy)),
+                                                           _mm_add_ps(_mm_mul_ps(_mm_load_ps(row + 8), cz), _mm_load_ps(row + 12)));
+                        inside = _mm_and_ps(inside, _mm_cmpge_ps(distance, negRadius));
+                    }
+                    faces |= static_cast<uint32_t>(_mm_movemask_ps(inside)) << (half * 4);
+                }
+                outFaces[vf.bakedShadowLights[i].lightIndex] |= static_cast<uint8_t>(faces & 0x3Fu);
+            }
+        }
+    }
+}
+
+static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
 {
     // Past this many changed casters nearly every light's range has one; redrawing everything is cheaper than testing.
     constexpr size_t LOCAL_SHADOW_CHANGE_LIMIT = 10000;
@@ -770,23 +850,29 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
         const glm::mat4 cameraViewProj = view.proj * view.view;
         const Frustum camera = Render::CreateFrustum(cameraViewProj);
         uint32_t picks[LOCAL_SHADOW_MAX_VIEWS];
-        // Lights with a resident baked map leave the dynamic budget
         uint32_t bakedMask[MAX_ANALYTIC_LIGHTS / 32] = {};
         for (const Core::BakedShadowLight& baked : vf.bakedShadowLights) {
             bakedMask[baked.lightIndex >> 5] |= 1u << (baked.lightIndex & 31u);
         }
+        uint8_t moverFaces[MAX_ANALYTIC_LIGHTS] = {};
+        FindBakedLightMoverFaces(ctx, state->instanceStore, lights, vf, moverFaces);
+        uint32_t skipMask[MAX_ANALYTIC_LIGHTS / 32];
+        memcpy(skipMask, bakedMask, sizeof(skipMask));
+        for (const Core::BakedShadowLight& baked : vf.bakedShadowLights) {
+            if (moverFaces[baked.lightIndex] != 0u) { skipMask[baked.lightIndex >> 5] &= ~(1u << (baked.lightIndex & 31u)); }
+        }
         auto isBaked = [&](uint32_t lightIndex) { return (bakedMask[lightIndex >> 5] & (1u << (lightIndex & 31u))) != 0u; };
-        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previousIndices, previous.lightCount, budget, picks, bakedMask);
+        const uint32_t pickCount = Render::SelectLocalShadowLights(lights, lightCount, cameraViewProj, view.cameraPos, previousIndices, previous.lightCount, budget, picks, skipMask);
 
         selection.lightCount = 0;
         uint32_t usedViews = 0;
         auto add = [&](uint32_t lightIndex, float strength) {
-            const uint32_t faceMask = Render::LocalShadowFaceMask(lights[lightIndex], camera);
+            const uint32_t faceMask = Render::LocalShadowFaceMask(lights[lightIndex], camera) & (isBaked(lightIndex) ? moverFaces[lightIndex] : 0x3Fu);
             const auto views = static_cast<uint32_t>(std::popcount(faceMask));
             if (views == 0 || usedViews + views > budget) {
                 return;
             }
-            selection.lights[selection.lightCount++] = Core::LocalShadowLight{lightIndex, faceMask, 0, strength};
+            selection.lights[selection.lightCount++] = Core::LocalShadowLight{lightIndex, faceMask, 0, strength, isBaked(lightIndex)};
             usedViews += views;
         };
         for (uint32_t i = 0; i < pickCount; ++i) {
@@ -816,7 +902,7 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
                 Core::LocalShadowLight& light = selection.lights[l];
                 for (uint32_t face = 0; face < 6; ++face) {
                     if ((light.faceMask & (1u << face)) == 0u) { continue; }
-                    const uint32_t key = (light.lightIndex << 3) | face;
+                    const uint32_t key = (light.lightIndex << 4) | (light.bOverlay ? 8u : 0u) | face;
                     uint32_t tile = Selection::FREE_TILE;
                     for (uint32_t t = 0; t < budget; ++t) {
                         if (owners[t] == key) { tile = t; }
@@ -838,13 +924,14 @@ static void SelectLocalShadows(Engine::EngineState* state, Core::ViewFamily& vf,
         uint32_t active = 0;
         for (uint32_t t = 0; t < budget; ++t) {
             if (owners[t] == Selection::FREE_TILE) { continue; }
-            const uint32_t lightIndex = owners[t] >> 3;
+            const uint32_t lightIndex = owners[t] >> 4;
             const uint32_t face = owners[t] & 7u;
             const LightInfo& info = lights[lightIndex];
             if (memcmp(&selection.tileLights[t], &info, sizeof(LightInfo)) != 0) {
                 dirty |= 1u << t;
             }
             selection.views[t] = Render::BuildLocalShadowView(info, face, t, tiles, resolution);
+            selection.views[t].excludedInstanceFlags = (owners[t] & 8u) != 0u ? INSTANCE_FLAG_BAKE_STATIC : 0u;
             selection.tileLights[t] = info;
             active |= 1u << t;
         }
@@ -896,7 +983,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         memcpy(vf.lightPayload.Data() + base, storeLights + offset, count * sizeof(LightInfo));
         vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
     });
-    SelectLocalShadows(state, vf, storeLights, analyticWatermark);
+    SelectLocalShadows(ctx, state, vf, storeLights, analyticWatermark);
 
     Engine::TriLightStore& triLightStore = state->triLightStore;
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;

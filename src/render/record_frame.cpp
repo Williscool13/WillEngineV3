@@ -654,11 +654,13 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
         data->normalOffsetTexels = viewFamily.localShadows.normalOffset;
         data->bPCSS = viewFamily.localShadows.bPCSS ? 1u : 0u;
         memset(data->lightShadow, 0xFF, viewFamily.analyticLightCount * sizeof(uint32_t));
+        memset(data->lightOverlay, 0xFF, viewFamily.analyticLightCount * sizeof(uint32_t));
         for (uint32_t i = 0; i < viewFamily.localShadowLightCount; ++i) {
             const Core::LocalShadowLight& light = viewFamily.localShadowLights[i];
             const auto strength = static_cast<uint32_t>(glm::clamp(light.strength, 0.0f, 1.0f) * static_cast<float>(LOCAL_SHADOW_STRENGTH_MAX) + 0.5f);
             data->faceTiles[i] = light.faceTiles;
-            data->lightShadow[light.lightIndex] = i | (light.faceMask << LOCAL_SHADOW_FACE_SHIFT) | (strength << LOCAL_SHADOW_STRENGTH_SHIFT);
+            uint32_t* entries = light.bOverlay ? data->lightOverlay : data->lightShadow;
+            entries[light.lightIndex] = i | (light.faceMask << LOCAL_SHADOW_FACE_SHIFT) | (strength << LOCAL_SHADOW_STRENGTH_SHIFT);
         }
         for (const Core::BakedShadowLight& baked : viewFamily.bakedShadowLights) {
             if (baked.lightIndex < viewFamily.analyticLightCount) {

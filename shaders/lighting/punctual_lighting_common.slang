@@ -5,6 +5,8 @@ import lights_interop;
 import pbr_functions;
 import packing_functions;
 
+static const float PUNCTUAL_BEAM_BLEND_START = 0.5;
+
 /** Area/sphere light degenerated to a view-space punctual source: sphere -> point, rect -> one-sided emitter. */
 public struct PunctualLight
 {
@@ -120,7 +122,7 @@ float3 RepresentativePointL(PunctualLight pl, float3 N, float3 V, float3 viewPos
 }
 
 /** Direction, distance and irradiance scale toward the light. bBeam: the cone footprint is smaller than the emitter, so it lights along its normal like a bounded directional light. */
-bool PunctualIncidence(PunctualLight pl, float3 viewPos, out float3 L, out float dist, out float irradiance, out bool bBeam)
+bool PunctualIncidence(PunctualLight pl, float3 viewPos, bool bAllowBeam, out float3 L, out float dist, out float irradiance, out bool bBeam)
 {
     L = float3(0.0);
     dist = 0.0;
@@ -128,7 +130,7 @@ bool PunctualIncidence(PunctualLight pl, float3 viewPos, out float3 L, out float
     bBeam = false;
 
     ConeClip clip;
-    if (pl.oneSided && LightConeClip(pl.pos, pl.dir, pl.rightAxis, pl.upAxis, pl.halfWidth, pl.halfHeight, pl.bDisk, pl.cosConeOuter, pl.area, viewPos, clip))
+    if (bAllowBeam && pl.oneSided && LightConeClip(pl.pos, pl.dir, pl.rightAxis, pl.upAxis, pl.halfWidth, pl.halfHeight, pl.bDisk, pl.cosConeOuter, pl.area, viewPos, clip))
     {
         bBeam = true;
         float coverage = LightConeClipCoverage(clip);
@@ -164,8 +166,7 @@ float3 SafeHalfVector(float3 V, float3 L, float3 N)
     return lenSq > 1e-12 ? H * rsqrt(lenSq) : N;
 }
 
-/** Shade a degenerated punctual light: Oren-Nayar diffuse + representative-point GGX specular. */
-public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
+static float3 ShadePunctualModel(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0, bool bBeamModel, bool bSpecular)
 {
     if (!pl.valid) { return float3(0.0); }
 
@@ -173,7 +174,7 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     float dist;
     float irradiance;
     bool bBeam;
-    if (!PunctualIncidence(pl, viewPos, L, dist, irradiance, bBeam)) { return float3(0.0); }
+    if (!PunctualIncidence(pl, viewPos, bBeamModel, L, dist, irradiance, bBeam)) { return float3(0.0); }
 
     float nDotV = max(dot(N, V), 0.0);
     float nDotL = max(dot(N, L), 0.0);
@@ -181,6 +182,9 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     float3 kD = (1.0 - F_SCHLICK(V, SafeHalfVector(V, L, N), F0)) * (1.0 - metallic);
     float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
     float3 diffuse = kD * albedo * orenNayar * nDotL;
+    if (!bSpecular) {
+        return diffuse * irradiance * pl.color;
+    }
 
     // Representative-point specular; widen roughness by the source's angular size and renormalize.
     float3 Ls = L;
@@ -206,23 +210,35 @@ public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos
     return (diffuse + specular) * irradiance * pl.color;
 }
 
+/** 1 where the cone footprint is well inside the emitter (beam), 0 where the emitter acts as a point; the two models are blended between so they meet without a seam. */
+static float PunctualBeamWeight(PunctualLight pl, float3 viewPos)
+{
+    if (!pl.oneSided || pl.cosConeOuter <= 0.0) { return 0.0; }
+    float h = dot(viewPos - pl.pos, pl.dir);
+    if (h <= 0.0) { return 0.0; }
+    float tanOuter = sqrt((1.0 - pl.cosConeOuter) * (1.0 + pl.cosConeOuter)) / pl.cosConeOuter;
+    float r = h * tanOuter * LIGHT_CONE_FOOTPRINT_PAD;
+    return 1.0 - smoothstep(PUNCTUAL_BEAM_BLEND_START, 1.0, 4.0 * r * r / pl.area);
+}
+
+static float3 ShadePunctualBlended(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0, bool bSpecular)
+{
+    if (!pl.valid) { return float3(0.0); }
+    float beam = PunctualBeamWeight(pl, viewPos);
+    if (beam <= 0.0) { return ShadePunctualModel(pl, N, V, viewPos, albedo, metallic, roughness, F0, false, bSpecular); }
+    if (beam >= 1.0) { return ShadePunctualModel(pl, N, V, viewPos, albedo, metallic, roughness, F0, true, bSpecular); }
+    return lerp(ShadePunctualModel(pl, N, V, viewPos, albedo, metallic, roughness, F0, false, bSpecular),
+                ShadePunctualModel(pl, N, V, viewPos, albedo, metallic, roughness, F0, true, bSpecular), beam);
+}
+
+/** Shade a degenerated punctual light: Oren-Nayar diffuse + representative-point GGX specular. */
+public float3 ShadePunctual(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
+{
+    return ShadePunctualBlended(pl, N, V, viewPos, albedo, metallic, roughness, F0, true);
+}
+
 /** Diffuse-only punctual shade for view-independent sinks (radiance cache): identical to ShadePunctual minus the representative-point specular lobe, which is meaningless when V is forced to N. */
 public float3 ShadePunctualDiffuse(PunctualLight pl, float3 N, float3 V, float3 viewPos, float3 albedo, float metallic, float roughness, float3 F0)
 {
-    if (!pl.valid) { return float3(0.0); }
-
-    float3 L;
-    float dist;
-    float irradiance;
-    bool bBeam;
-    if (!PunctualIncidence(pl, viewPos, L, dist, irradiance, bBeam)) { return float3(0.0); }
-
-    float nDotV = max(dot(N, V), 0.0);
-    float nDotL = max(dot(N, L), 0.0);
-
-    float3 kD = (1.0 - F_SCHLICK(V, SafeHalfVector(V, L, N), F0)) * (1.0 - metallic);
-    float orenNayar = Diffuse_OrenNayar(nDotL, nDotV, L, V, roughness);
-    float3 diffuse = kD * albedo * orenNayar * nDotL;
-
-    return diffuse * irradiance * pl.color;
+    return ShadePunctualBlended(pl, N, V, viewPos, albedo, metallic, roughness, F0, false);
 }

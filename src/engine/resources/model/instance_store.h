@@ -106,6 +106,8 @@ public:
     /** Records the slot's world bounding sphere. The previous sphere and the new one both join the bounds changes. */
     void SetWorldBounds(uint32_t slot, const Vec4& bounds);
 
+    [[nodiscard]] const Vec4& GetWorldBounds(uint32_t slot) const { return worldBounds_[slot]; }
+
     /** World spheres of everything added, moved, hidden, shown, re-materialed or removed since the last clear. */
     [[nodiscard]] Core::Span<const Vec4> GetBoundsChanges() const { return {boundsChanges_.Data(), boundsChanges_.Size()}; }
 

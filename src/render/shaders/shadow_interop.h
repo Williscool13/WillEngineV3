@@ -72,6 +72,10 @@ SHADER_PUBLIC struct ShadowViewGPU
     // World distance between the near and far depth planes
     SHADER_PUBLIC float depthRange;
     SHADER_PUBLIC float nearPlane;
+    SHADER_PUBLIC uint32_t excludedInstanceFlags;
+    SHADER_PUBLIC uint32_t _pad0;
+    SHADER_PUBLIC uint32_t _pad1;
+    SHADER_PUBLIC uint32_t _pad2;
 };
 
 SHADER_PUBLIC struct CSMData
@@ -103,6 +107,7 @@ SHADER_PUBLIC struct LocalShadowData
     SHADER_PUBLIC uint32_t faceTiles[LOCAL_SHADOW_MAX_VIEWS];
     // Shadowed light record | face mask << LOCAL_SHADOW_FACE_SHIFT (bit 0 alone for a spot) | fade strength << LOCAL_SHADOW_STRENGTH_SHIFT, a baked entry, or LOCAL_SHADOW_NONE
     SHADER_PUBLIC uint32_t lightShadow[MAX_ANALYTIC_LIGHTS];
+    SHADER_PUBLIC uint32_t lightOverlay[MAX_ANALYTIC_LIGHTS];
 };
 
 #endif //WILL_ENGINE_SHADOW_INTEROP_H

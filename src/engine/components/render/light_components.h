@@ -59,6 +59,7 @@ struct AreaLightComponent
     bool drawEmissiveSurface{true};
     LightShadowMode shadowMode{LightShadowMode::Dynamic};
     ShadowBakeResolution shadowBakeResolution{ShadowBakeResolution::Res512};
+    bool bMovingObjectShadows{true};
     uint64_t shadowId{0};
     bool bEnabled{true};
 
@@ -83,6 +84,7 @@ struct AreaLightComponent
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(shadowMode),
         WILL_FIELD(shadowBakeResolution),
+        WILL_FIELD(bMovingObjectShadows, .key = "movingObjectShadows"),
         WILL_FIELD(shadowId))
 
     static void Sanitize(AreaLightComponent& comp);
@@ -122,6 +124,7 @@ struct SphereLightComponent
     bool drawEmissiveSurface{true};
     LightShadowMode shadowMode{LightShadowMode::Dynamic};
     ShadowBakeResolution shadowBakeResolution{ShadowBakeResolution::Res512};
+    bool bMovingObjectShadows{true};
     uint64_t shadowId{0};
     bool bEnabled{true};
 
@@ -141,6 +144,7 @@ struct SphereLightComponent
         WILL_FIELD(drawEmissiveSurface),
         WILL_FIELD(shadowMode),
         WILL_FIELD(shadowBakeResolution),
+        WILL_FIELD(bMovingObjectShadows, .key = "movingObjectShadows"),
         WILL_FIELD(shadowId))
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);

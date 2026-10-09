@@ -193,6 +193,8 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         EditWidgets::Combo(edit, "Mode##al", &AreaLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
         if (comp.shadowMode == LightShadowMode::Baked) {
             EditWidgets::Combo(edit, "Bake Resolution##al", &AreaLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
+            EditWidgets::Checkbox(edit, "Moving Object Shadows##al", &AreaLightComponent::bMovingObjectShadows);
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Movable objects inside the light still cast shadows, from a small dynamic map drawn only while something moves in range. Off: baked shadows only, no runtime cost."); }
             DrawShadowBakeControls(edit, comp.lightSlot, comp.shadowId);
         }
     }
@@ -349,6 +351,8 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         EditWidgets::Combo(edit, "Mode##sl", &SphereLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
         if (comp.shadowMode == LightShadowMode::Baked) {
             EditWidgets::Combo(edit, "Bake Resolution##sl", &SphereLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
+            EditWidgets::Checkbox(edit, "Moving Object Shadows##sl", &SphereLightComponent::bMovingObjectShadows);
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Movable objects inside the light still cast shadows, from a small dynamic map drawn only while something moves in range. Off: baked shadows only, no runtime cost."); }
             DrawShadowBakeControls(edit, comp.lightSlot, comp.shadowId);
         }
     }

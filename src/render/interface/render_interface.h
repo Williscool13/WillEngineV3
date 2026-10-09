@@ -439,8 +439,8 @@ struct LocalShadowLight
     uint32_t faceMask{0};
     // Atlas tile per face, LOCAL_SHADOW_TILE_BITS each
     uint32_t faceTiles{0};
-    // Fades in after the light is picked and out after it is dropped
     float strength{1.0f};
+    bool bOverlay{false};
 };
 
 inline constexpr uint32_t MAX_BAKED_SHADOW_LIGHTS = 256;
@@ -449,6 +449,7 @@ struct BakedShadowLight
 {
     uint32_t lightIndex{0};
     uint32_t textureArrayIndex{0};
+    bool bMovingObjectShadows{true};
 };
 
 struct ViewFamily
