@@ -70,7 +70,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
     ImGui::PopStyleColor();
 
     if (open) {
-        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_PROBE_BAKE | RENDER_TOGGLE_EMISSIVE)) {
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
             edit.ForEachTarget<ModuleMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ModuleMeshLoadingTag>(e); });
         }
 

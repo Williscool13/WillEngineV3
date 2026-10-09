@@ -233,6 +233,8 @@ add_library(engine STATIC
         editor/probe_bake_system.h
         editor/shadow_bake_system.cpp
         editor/shadow_bake_system.h
+        editor/mobility_assign.cpp
+        editor/mobility_assign.h
         editor/core_systems.cpp
         editor/core_systems.h
         editor/ddgi_converge_boost.h

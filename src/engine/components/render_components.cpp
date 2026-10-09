@@ -39,10 +39,6 @@ bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
         ImGui::SameLine();
     }
     ImGui::NewLine();
-    if (toggles & RENDER_TOGGLE_PROBE_BAKE) {
-        EditWidgets::Checkbox(edit, "Bake", &RenderFlagsComponent::bBakeInclude);
-        ImGui::SameLine();
-    }
     if (toggles & RENDER_TOGGLE_MOTION_BLUR) {
         EditWidgets::Checkbox(edit, "Motion Blur", &RenderFlagsComponent::bMotionBlur);
         ImGui::SameLine();

@@ -23,6 +23,12 @@ struct ViewFamily;
 
 namespace Engine::Component
 {
+enum class Mobility : uint32_t
+{
+    Static = 0,
+    Movable = 1,
+};
+
 /**
  * Local transform, relative to parent (or world when no HierarchyComponent).
  */
@@ -32,7 +38,9 @@ struct TransformComponent
 
     glm::vec3 translation{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
-    glm::vec3 scale{1.0f, 1.0f, 1.0f};;
+    glm::vec3 scale{1.0f, 1.0f, 1.0f};
+    Mobility mobility{Mobility::Static};
+    bool bMobilityLocked{false};
 
     operator Transform() const { return {translation, rotation, scale}; }
 
@@ -47,7 +55,9 @@ struct TransformComponent
     WILL_REFLECT(TransformComponent,
         WILL_FIELD(translation, .speed = 0.1f),
         WILL_FIELD(rotation),
-        WILL_FIELD(scale, .speed = 0.01f))
+        WILL_FIELD(scale, .speed = 0.01f),
+        WILL_FIELD(mobility),
+        WILL_FIELD(bMobilityLocked, .key = "mobilityLocked"))
 
     static void OnEditPreview(entt::registry& registry, entt::entity entity);
 
@@ -58,6 +68,15 @@ struct TransformComponent
     static void OnConstruct(entt::registry& registry, entt::entity entity);
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
+};
+
+/** Play-time lock on a Static entity: transform writes are reverted to this pose. */
+struct StaticTransformLockComponent
+{
+    glm::vec3 translation{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 scale{1.0f};
+    bool bWarned{false};
 };
 
 inline glm::mat4 GetMatrix(const TransformComponent& transform)

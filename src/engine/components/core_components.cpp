@@ -14,7 +14,10 @@
 #include "engine/components/component_editor.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "engine/editor/editor_multi_edit.h"
+#include "engine/editor/edit_widgets.h"
+#include "engine/editor/mobility_assign.h"
 #include "engine/components/render_components.h"
+#include "engine/systems/render_systems.h"
 
 
 void Engine::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -47,6 +50,7 @@ void Engine::Component::TransformComponent::OnEditPreview(entt::registry& regist
 void Engine::Component::TransformComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
     registry.emplace_or_replace<DirtyTransformTag>(entity);
+    Engine::EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
 }
 
 namespace Engine
@@ -145,6 +149,42 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
         c |= drawField(idZ, v + 2, Editor::COLOR_AXIS_Z);
         return c;
     };
+
+    static constexpr const char* MOBILITY_LABELS[] = {"Static", "Movable"};
+    const bool bMobilityMixed = edit.IsMixed(&TransformComponent::mobility);
+    const bool bOverridden = component.bMobilityLocked || edit.IsMixed(&TransformComponent::bMobilityLocked);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Mobility");
+    ImGui::SameLine(0.0f, innerSpacing);
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Static objects bake into shadow maps and probes and cannot move during play. Movable objects never bake.\nAssign Mobility (Lighting > Authoring) sets it automatically. Picking one here overrides that (green); R clears the override.");
+    }
+    ImGui::SameLine(labelColW);
+    const float resetW = bOverridden ? ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f + innerSpacing : 0.0f;
+    const float mobilityW = (ImGui::GetContentRegionAvail().x - resetW) / 2.0f;
+    const ImVec4 activeColor = bOverridden ? ImVec4(0.2f, 0.55f, 0.25f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+    for (int32_t i = 0; i < 2; ++i) {
+        const Mobility option = static_cast<Mobility>(i);
+        const bool bActive = !bMobilityMixed && component.mobility == option;
+        if (i > 0) { ImGui::SameLine(0.0f, 0.0f); }
+        if (bActive) { ImGui::PushStyleColor(ImGuiCol_Button, activeColor); }
+        if (ImGui::Button(MOBILITY_LABELS[i], ImVec2(mobilityW, 0.0f)) && !(bActive && component.bMobilityLocked)) {
+            edit.Set(&TransformComponent::mobility, option);
+            edit.Set(&TransformComponent::bMobilityLocked, true);
+        }
+        if (bActive) { ImGui::PopStyleColor(); }
+    }
+    if (bOverridden) {
+        ImGui::SameLine(0.0f, innerSpacing);
+        if (ImGui::Button("R##mobility")) {
+            edit.Set(&TransformComponent::bMobilityLocked, false);
+            if (!edit.IsMulti()) {
+                edit.Set(&TransformComponent::mobility, IsMovedAtRuntime(state, edit.Primary()) ? Mobility::Movable : Mobility::Static);
+            }
+        }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Clear the override; Assign Mobility decides again"); }
+    }
 
     // Translation
     ImGui::AlignTextToFramePadding();

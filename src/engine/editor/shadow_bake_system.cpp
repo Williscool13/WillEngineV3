@@ -12,6 +12,7 @@
 #include "engine/include/engine_context.h"
 #include "engine/logging/engine_log.h"
 #include "engine/components/render/light_components.h"
+#include "engine/editor/probe_bake_system.h"
 #include "engine/resources/wimage_format.h"
 #include "engine/systems/render_systems.h"
 #include "core/containers/inline_string.h"
@@ -166,7 +167,7 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameB
         capture.bReady.store(false, std::memory_order_release);
     }
 
-    while (requestId == 0 && !queue.IsEmpty()) {
+    while (requestId == 0 && !queue.IsEmpty() && !ProbeBakeInFlight(state)) {
         const entt::entity next = queue.PopBackValue();
         if (!LightForBake(state, next, shadowId, resolution, light)) {
             ++batchDone;

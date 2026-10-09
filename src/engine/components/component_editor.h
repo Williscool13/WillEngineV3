@@ -27,6 +27,10 @@ concept HasCanAdd = requires(const entt::registry& r, entt::entity e) {
     { T::CanAdd(r, e) } -> std::same_as<bool>;
 };
 
+/** Opt-in with `static constexpr bool MOVES_ENTITY = true;` on components that move their entity at runtime. */
+template<typename T>
+concept MovesEntity = requires { { T::MOVES_ENTITY } -> std::convertible_to<bool>; } && T::MOVES_ENTITY;
+
 inline Engine::ComponentEditorResult DefaultDrawComponentEditor(const char* name)
 {
     ImGui::CollapsingHeader(name, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_AllowOverlap);

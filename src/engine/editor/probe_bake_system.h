@@ -133,6 +133,8 @@ ProbeBakeSystem& ProbeBakeGet(Engine::EngineState* state);
 /** True while a bake is walking its faces. */
 bool ProbeBakeActive(Engine::EngineState* state);
 
+bool ProbeBakeInFlight(Engine::EngineState* state);
+
 /** Advances the bake state machine one render frame; call before BuildViewFamily so the override lands this frame. */
 void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 

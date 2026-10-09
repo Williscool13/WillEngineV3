@@ -111,7 +111,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
     ImGui::PopStyleColor();
 
     if (open) {
-        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_PROBE_BAKE | RENDER_TOGGLE_EMISSIVE)) {
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
             edit.ForEachTarget<StaticMeshPrimitiveComponent>([&registry](entt::entity e) { registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(e); });
         }
 

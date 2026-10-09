@@ -57,7 +57,6 @@ struct AreaLightComponent
     bool bNormalizeCone{false}; // a surface in the beam is lit as if under an open emitter, whatever the cone
     bool bDisk{false};
     bool drawEmissiveSurface{true};
-    bool bExcludeFromProbeBake{false};
     LightShadowMode shadowMode{LightShadowMode::Dynamic};
     ShadowBakeResolution shadowBakeResolution{ShadowBakeResolution::Res512};
     uint64_t shadowId{0};
@@ -82,7 +81,6 @@ struct AreaLightComponent
         WILL_FIELD(bNormalizeCone),
         WILL_FIELD(bDisk),
         WILL_FIELD(drawEmissiveSurface),
-        WILL_FIELD(bExcludeFromProbeBake),
         WILL_FIELD(shadowMode),
         WILL_FIELD(shadowBakeResolution),
         WILL_FIELD(shadowId))
@@ -122,7 +120,6 @@ struct SphereLightComponent
     float falloffExponent{2.0f}; // 2 = inverse square, 0 = none; pivots at 1 m
     float volumetricScale{1.0f}; // fog scattering multiplier; 0 = invisible to fog
     bool drawEmissiveSurface{true};
-    bool bExcludeFromProbeBake{false};
     LightShadowMode shadowMode{LightShadowMode::Dynamic};
     ShadowBakeResolution shadowBakeResolution{ShadowBakeResolution::Res512};
     uint64_t shadowId{0};
@@ -142,7 +139,6 @@ struct SphereLightComponent
         WILL_FIELD(falloffExponent, .min = 0.0f, .max = 4.0f, .speed = 0.01f),
         WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f),
         WILL_FIELD(drawEmissiveSurface),
-        WILL_FIELD(bExcludeFromProbeBake),
         WILL_FIELD(shadowMode),
         WILL_FIELD(shadowBakeResolution),
         WILL_FIELD(shadowId))

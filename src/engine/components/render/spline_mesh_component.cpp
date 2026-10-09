@@ -120,7 +120,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
     bool dirty = false;
     if (open) {
-        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_PROBE_BAKE | RENDER_TOGGLE_EMISSIVE)) {
+        if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
             edit.ForEachTarget<SplineMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<SplineMeshLoadingTag>(e); });
         }
 

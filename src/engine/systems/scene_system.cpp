@@ -34,6 +34,7 @@
 #include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/systems/physics_system.h"
+#include "engine/editor/mobility_assign.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 
@@ -720,6 +721,9 @@ void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* s
     if (registry.view<Component::DirtyTransformTag>().empty()) { return; }
 
     const bool bPlaying = IsPlaying(state);
+    if (bPlaying) {
+        RejectStaticTransformWrites(state);
+    }
     EnsureHierarchyOrder(state);
     for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
         if (!registry.valid(node.parent) || !registry.all_of<Component::DirtyTransformTag>(node.parent)) { continue; }
@@ -1032,6 +1036,8 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
         }
     }
+
+    LockStaticTransforms(state);
 
     state->inputContext = Engine::InputContext::Gameplay;
     ctx->setCursorHiddenFn(true);

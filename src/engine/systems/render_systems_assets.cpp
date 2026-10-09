@@ -445,7 +445,8 @@ static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity en
 
 static bool IsBakeStatic(const entt::registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
-    if (!renderFlags.bBakeInclude || registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { return false; }
+    const auto* transform = registry.try_get<Component::TransformComponent>(entity);
+    if (!transform || transform->mobility != Component::Mobility::Static || registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { return false; }
     const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
     return body == nullptr || body->motionType == Component::PhysicsMotionType::Static;
 }

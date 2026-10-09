@@ -626,16 +626,14 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
 {
     entt::registry& registry = state->registry;
 
-    for (const auto& [entity, renderFlags] : registry.view<Component::RenderFlagsComponent>().each()) {
-        if (!renderFlags.bBakeInclude) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    for (const auto& [entity, transform] : registry.view<Component::TransformComponent>().each()) {
+        if (transform.mobility != Component::Mobility::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
     }
 
-    for (const auto& [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
-        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    for (auto entity : registry.view<Component::AreaLightComponent>()) {
         registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
     }
-    for (const auto& [entity, light] : registry.view<Component::SphereLightComponent>().each()) {
-        if (light.bExcludeFromProbeBake) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+    for (auto entity : registry.view<Component::SphereLightComponent>()) {
         registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
     }
 

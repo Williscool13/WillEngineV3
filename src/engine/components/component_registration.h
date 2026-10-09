@@ -89,6 +89,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         SerializeFields(comp, w);
     };
 
+    componentRegistry.registry[index].bMovesEntity = MovesEntity<T>;
     componentRegistry.registryMapping[typeId] = index;
 }
 
@@ -137,6 +138,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         hidden,
         hideInInspector
     });
+    componentRegistry.registry[index].bMovesEntity = MovesEntity<T>;
     componentRegistry.registryMapping[typeId] = index;
 }
 

@@ -38,7 +38,6 @@ struct RenderFlagsComponent
     static constexpr const char* COMPONENT_NAME = "RenderFlagsComponent";
 
     bool bVisible{true};
-    bool bBakeInclude{true};
     bool bDdgiContribute{true};
     bool bMotionBlur{true};
     bool bAlphaCutout{true};
@@ -47,7 +46,6 @@ struct RenderFlagsComponent
 
     WILL_REFLECT(RenderFlagsComponent,
         WILL_FIELD(bVisible, .key = "visible"),
-        WILL_FIELD(bBakeInclude, .key = "bake"),
         WILL_FIELD(bDdgiContribute, .key = "ddgi"),
         WILL_FIELD(bMotionBlur, .key = "motionBlur"),
         WILL_FIELD(bAlphaCutout, .key = "alphaCutout"),
@@ -62,7 +60,6 @@ enum RenderFlagToggle : uint32_t
 {
     RENDER_TOGGLE_VISIBLE = 1u << 0,
     RENDER_TOGGLE_DDGI = 1u << 1,
-    RENDER_TOGGLE_PROBE_BAKE = 1u << 2,
     RENDER_TOGGLE_MOTION_BLUR = 1u << 3,
     RENDER_TOGGLE_CAMERA_MOTION_BLUR = 1u << 4,
     RENDER_TOGGLE_ALPHA_CUTOUT = 1u << 5,

@@ -40,6 +40,8 @@ intensity|0x00000000
 ;
 entity
 8357514868041474787
+mobility|1
+mobilityLocked|1
 translation|0xc1a00000|0xbf000000|0xc1400000
 ;
 13819805800635272091
@@ -83,7 +85,6 @@ sizeZ|0x41c00000
 ;
 9933298491518004787
 visible|0
-bake|0
 ddgi|0
 ;
 ;

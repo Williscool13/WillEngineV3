@@ -17,6 +17,7 @@
 #include "engine/systems/render_systems.h"
 #include "engine/systems/scene_system.h"
 #include "engine/editor/probe_bake_system.h"
+#include "engine/editor/mobility_assign.h"
 #include "engine/editor/ddgi_converge_boost.h"
 #include "engine/components/camera_components.h"
 #include "engine/components/common_components.h"
@@ -1506,6 +1507,9 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
     }
 }
 
+static MobilityAssignResult gLastMobilityAssign{};
+static bool gbMobilityAssigned = false;
+
 static void DrawShadowBakeSection(Engine::EngineState* state)
 {
     ShadowBakeSystem& bake = state->shadowBake;
@@ -1636,6 +1640,30 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             if (Widgets::SliderFloat("Probe Line Width##authoring", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe and DDGI world volume wireframes.", .reset = true, .resetTo = 0.02})) {
                 Engine::WriteProjectConfig(state->projectConfig, state->allocator);
+            }
+            ImGui::BeginDisabled(IsPlaying(state));
+            if (Widgets::Button("Assign Mobility##assignmobility")) {
+                gLastMobilityAssign = AssignMobility(state);
+                gbMobilityAssigned = true;
+            }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Movable when the object or a parent has a moving physics body or a component that moves it (path mover, rotator); Static otherwise. Objects with a hand-picked (green) mobility are left alone.");
+            }
+            if (gbMobilityAssigned) {
+                ImGui::SameLine();
+                ImGui::Text("%u Static, %u Movable, %u overridden, %u changed", gLastMobilityAssign.staticCount, gLastMobilityAssign.movableCount, gLastMobilityAssign.lockedCount,
+                            gLastMobilityAssign.changedCount);
+                if (gLastMobilityAssign.bakedLightsOnMovers > 0) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%u baked-shadow lights move (see log)", gLastMobilityAssign.bakedLightsOnMovers);
+                }
+            }
+            if (Widgets::Button("Bake All Lighting##bakealllighting")) {
+                state->shadowBake.EnqueueAll(state->registry);
+                ProbeBakeGet(state).EnqueueAllProbesInterbounce(state);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Shadow maps first, then every reflection probe with the 2-pass interbounce bake. Probe and shadow bakes never run at the same time.");
             }
             if (ImGui::CollapsingHeader("Probe Bake")) {
                 DrawProbeBakeSection(ctx, state);

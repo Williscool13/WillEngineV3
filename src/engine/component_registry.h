@@ -66,6 +66,8 @@ struct ComponentEntry
     // Undo/redo: copies snapshot fields onto the live component, then OnEditCommit
     RestoreFn restore{};
     FillDefaultsFn fillDefaults{};
+
+    bool bMovesEntity{false};
 };
 
 struct ComponentRegistry

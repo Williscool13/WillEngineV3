@@ -245,7 +245,10 @@ def add_render_flags(entity, visible=True, bake_include=True, ddgi_contribute=Tr
     """RenderFlagsComponent entry. Only needed for NON-default flags; a missing key reads back as
     that bit's default, which is set for every bit EXCEPT emissive_light (opt-in: it
     allocates a TriLightStore range per emissive primitive, so it cannot default on)."""
-    entity[RENDER_FLAGS] = {"visible": visible, "bake": bake_include, "ddgi": ddgi_contribute,
+    if not bake_include:
+        entity[TRANSFORM]["mobility"] = 1
+        entity[TRANSFORM]["mobilityLocked"] = True
+    entity[RENDER_FLAGS] = {"visible": visible, "ddgi": ddgi_contribute,
                             "motionBlur": motion_blur, "alphaCutout": alpha_cutout, "emissiveLight": emissive_light,
                             "cameraMotionBlur": camera_motion_blur}
     return entity

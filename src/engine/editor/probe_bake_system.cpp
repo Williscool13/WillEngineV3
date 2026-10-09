@@ -57,6 +57,11 @@ bool ProbeBakeActive(Engine::EngineState* state)
     return ProbeBakeGet(state).bBakeActive;
 }
 
+bool ProbeBakeInFlight(Engine::EngineState* state)
+{
+    return ProbeBakeGet(state).phase != ProbeBakeSystem::Phase::Idle;
+}
+
 void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ProbeBakeGet(state).Tick(ctx, state, frameBuffer);
@@ -90,7 +95,7 @@ void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state,
 
 void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe)
 {
-    if (bBakeActive) { return; }
+    if (bBakeActive || state->shadowBake.IsBusy()) { return; }
     probeEntity = probe;
     currentFace = 0;
     settleCounter = 0;
@@ -213,6 +218,8 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 probe.bBakeRequested = false;
                 if (!bakeQueue.Contains(entity) && !bakeQueue.IsFull()) { bakeQueue.PushBack(entity); }
             }
+
+            if (state->shadowBake.IsBusy()) { break; }
 
             while (!bakeQueue.IsEmpty()) {
                 const entt::entity next = bakeQueue.Front();
@@ -502,6 +509,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 #else
 
 bool ProbeBakeActive(Engine::EngineState*) { return false; }
+bool ProbeBakeInFlight(Engine::EngineState*) { return false; }
 void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
 void ProbeBakeOverrideView(Engine::EngineState*, Core::ViewFamily&) {}
 void ProbeBakeScrubFrame(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}

@@ -180,7 +180,6 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         EditWidgets::CommitOnRelease<AreaLightComponent>(edit, false);
         EditWidgets::Checkbox(edit, "Normalize Cone##al", &AreaLightComponent::bNormalizeCone);
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##al", &AreaLightComponent::drawEmissiveSurface);
-        EditWidgets::Checkbox(edit, "Probe Bake Exclude##al", &AreaLightComponent::bExcludeFromProbeBake);
 
         ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
         ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
@@ -346,7 +345,6 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
         EditWidgets::DragFloat(edit, "Volumetric##sl", &SphereLightComponent::volumetricScale, 0.01f, 0.0f, 100.0f);
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("How strongly this light scatters in volumetric fog; 0 = fog ignores it (fill and cheat lights)"); }
         EditWidgets::Checkbox(edit, "Draw Emissive Surface##sl", &SphereLightComponent::drawEmissiveSurface);
-        EditWidgets::Checkbox(edit, "Probe Bake Exclude##sl", &SphereLightComponent::bExcludeFromProbeBake);
         Widgets::SubHeader("Shadows");
         EditWidgets::Combo(edit, "Mode##sl", &SphereLightComponent::shadowMode, SHADOW_MODE_LABELS, 3);
         if (comp.shadowMode == LightShadowMode::Baked) {
