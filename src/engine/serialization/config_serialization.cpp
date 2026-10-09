@@ -455,6 +455,11 @@ void Serialize(const Core::CSMParams& p, TextWriter& w)
     w.Key("slopeBias", p.slopeBias);
     w.Key("normalOffset", p.normalOffset);
     w.Key("blendBand", p.blendBand);
+    w.Key("bContactShadows", p.bContactShadows);
+    w.Key("contactThickness", p.contactThickness);
+    w.Key("contactBilinearThreshold", p.contactBilinearThreshold);
+    w.Key("contactContrast", p.contactContrast);
+    w.Key("bContactIgnoreEdges", p.bContactIgnoreEdges);
 }
 
 void Deserialize(const TextReader& r, Core::CSMParams& p)
@@ -469,6 +474,11 @@ void Deserialize(const TextReader& r, Core::CSMParams& p)
     p.slopeBias = r.Float("slopeBias", p.slopeBias);
     p.normalOffset = r.Float("normalOffset", p.normalOffset);
     p.blendBand = r.Float("blendBand", p.blendBand);
+    p.bContactShadows = r.Bool("bContactShadows", p.bContactShadows);
+    p.contactThickness = r.Float("contactThickness", p.contactThickness);
+    p.contactBilinearThreshold = r.Float("contactBilinearThreshold", p.contactBilinearThreshold);
+    p.contactContrast = r.Float("contactContrast", p.contactContrast);
+    p.bContactIgnoreEdges = r.Bool("bContactIgnoreEdges", p.bContactIgnoreEdges);
 }
 
 void Serialize(const Core::LocalShadowParams& p, TextWriter& w)

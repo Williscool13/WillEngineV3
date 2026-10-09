@@ -1871,6 +1871,16 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                         csm = Core::CSMParams{};
                         changed = true;
                     }
+
+                    Widgets::SubHeader("Contact Shadows");
+                    if (Widgets::Checkbox("Enabled##contact", &csm.bContactShadows, "Screen-space march towards the sun (Bend Studio) for the contact the shadow map's bias and filter lose.")) { changed = true; }
+                    if (csm.bContactShadows) {
+                        if (Widgets::SliderFloat("Thickness##contact", &csm.contactThickness, 0.0005f, 0.05f, {.format = "%.4f", .tooltip = "Assumed thickness of each depth pixel, as a fraction of the depth remaining to the far plane. Default 0.005.", .reset = true, .resetTo = csmDefaults.contactThickness})) { changed = true; }
+                        if (Widgets::SliderFloat("Edge Threshold##contact", &csm.contactBilinearThreshold, 0.0f, 0.2f, {.format = "%.3f", .tooltip = "Depth difference, as a fraction, treated as an edge (point sampled, no interpolation). Default 0.02.", .reset = true, .resetTo = csmDefaults.contactBilinearThreshold})) { changed = true; }
+                        if (Widgets::SliderFloat("Contrast##contact", &csm.contactContrast, 1.0f, 8.0f, {.format = "%.1f", .tooltip = "Sharpens the transition into shadow. Default 4.", .reset = true, .resetTo = csmDefaults.contactContrast})) { changed = true; }
+                        if (Widgets::Checkbox("Ignore Edges##contact", &csm.bContactIgnoreEdges, "Edge pixels cast nothing. Removes grazing-angle aliasing on large flat surfaces; thins foliage shadows.")) { changed = true; }
+                        if (Widgets::Checkbox("Debug Edges##contact", &csm.bContactDebugEdges, "Show the detected edge mask as the shadow, to tune the edge threshold. Not saved.")) { changed = true; }
+                    }
                 }
             }
 

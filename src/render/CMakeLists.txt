@@ -68,6 +68,8 @@ add_library(render STATIC
         render-view/render_view_helpers.h
         render-view/csm_views.cpp
         render-view/csm_views.h
+        render-view/contact_shadow_dispatch.cpp
+        render-view/contact_shadow_dispatch.h
         render-view/local_shadow_views.cpp
         render-view/local_shadow_views.h
         pipelines/pipeline_data.cpp

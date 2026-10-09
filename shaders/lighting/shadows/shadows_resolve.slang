@@ -54,7 +54,11 @@ static float ResolveSunVisibility(ShadowsResolvePushConstant pc, SceneData scene
         }
         visibility = wsum > 1e-4 ? vsum / wsum : nearest;
     }
-    return visibility * visibility;
+    visibility *= visibility;
+    if (pc.contactShadowIndex != ~0x0u) {
+        visibility = min(visibility, rdgTexturesFloat[pc.contactShadowIndex].Load(int3(pixel, 0)).r);
+    }
+    return visibility;
 }
 
 [shader("compute")]

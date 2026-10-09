@@ -62,6 +62,14 @@ void SetupShadowBake(RenderGraph& graph,
                      VkDeviceAddress output,
                      uint32_t sceneIndex);
 
+/** Bend screen-space contact shadows towards the sun: R8 render-resolution mask, 1 = lit. */
+RDGTexture SetupContactShadows(RenderGraph& graph,
+                               PipelineManager* pipelineManager,
+                               const Core::ViewFamily& viewFamily,
+                               Core::Extent2D renderExtent,
+                               const RenderTargets& targets,
+                               const glm::vec3& toSun);
+
 /** Samples the CSM atlas into the sun visibility the directional lighting pass reads. */
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                PipelineManager* pipelineManager,

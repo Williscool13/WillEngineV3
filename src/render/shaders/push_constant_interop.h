@@ -440,6 +440,24 @@ SHADER_PUBLIC struct ShadowsResolvePushConstant
     SHADER_PUBLIC uint32_t sunShadowDepthIndex;
     SHADER_PUBLIC uint32_t sunShadowNormalIndex;
     SHADER_PUBLIC uint32_t sunShadowPixelScale;
+    // ~0u = no contact shadow mask
+    SHADER_PUBLIC uint32_t contactShadowIndex;
+};
+
+SHADER_PUBLIC struct ContactShadowPushConstant
+{
+    SHADER_PUBLIC float4 lightCoordinate;
+    SHADER_PUBLIC int2 waveOffset;
+    SHADER_PUBLIC uint2 extent;
+    SHADER_PUBLIC uint32_t depthIndex;
+    SHADER_PUBLIC uint32_t outputIndex;
+    SHADER_PUBLIC float surfaceThickness;
+    SHADER_PUBLIC float bilinearThreshold;
+    SHADER_PUBLIC float shadowContrast;
+    SHADER_PUBLIC uint32_t bIgnoreEdgePixels;
+    SHADER_PUBLIC uint32_t bBilinearSamplingOffsetMode;
+    SHADER_PUBLIC uint32_t bUseEarlyOut;
+    SHADER_PUBLIC uint32_t bDebugEdgeMask;
 };
 
 SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant

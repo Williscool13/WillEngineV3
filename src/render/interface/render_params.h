@@ -339,6 +339,12 @@ struct CSMParams
     float slopeBias{2.0f};
     float normalOffset{1.0f};
     float blendBand{0.1f};
+    bool bContactShadows{true};
+    float contactThickness{0.005f};
+    float contactBilinearThreshold{0.02f};
+    float contactContrast{4.0f};
+    bool bContactIgnoreEdges{false};
+    bool bContactDebugEdges{false};
 
     bool operator==(const CSMParams&) const = default;
 };

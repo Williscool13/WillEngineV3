@@ -8,6 +8,7 @@
 
 #include "render/render_utils.h"
 #include "render/passes/geometry_passes.h"
+#include "render/render-view/contact_shadow_dispatch.h"
 #include "render/render-view/csm_views.h"
 #include "render/shaders/flags_interop.h"
 #include "render/pipelines/pipeline_data.h"
@@ -353,6 +354,54 @@ void SetupShadowBake(RenderGraph& graph,
     });
 }
 
+RDGTexture SetupContactShadows(RenderGraph& graph,
+                               PipelineManager* pipelineManager,
+                               const Core::ViewFamily& viewFamily,
+                               Core::Extent2D renderExtent,
+                               const RenderTargets& targets,
+                               const glm::vec3& toSun)
+{
+    ZoneScoped;
+    const Core::ViewData& view = viewFamily.mainView.currentViewData;
+    const glm::vec4 lightProjection = view.proj * view.view * glm::vec4(toSun, 0.0f);
+    const ContactShadowDispatchList list = BuildContactShadowDispatchList(lightProjection, {static_cast<int32_t>(renderExtent.width), static_cast<int32_t>(renderExtent.height)});
+
+    const RDGTexture mask = graph.CreateTexture("contact_shadow"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_FULL, true);
+
+    RenderPass& pass = graph.AddPass("Contact Shadows"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ShadowMaps);
+    pass.ReadSampledImage(targets.depthCopy);
+    pass.WriteStorageImage(mask);
+    const Core::CSMParams& csm = viewFamily.csm;
+    const glm::vec3 tuning{glm::max(csm.contactThickness, 1e-5f), csm.contactBilinearThreshold, glm::max(csm.contactContrast, 1.0f)};
+    const bool bIgnoreEdges = csm.bContactIgnoreEdges;
+    const bool bDebugEdges = csm.bContactDebugEdges;
+    pass.Execute([pipelineManager, list, renderExtent, tuning, bIgnoreEdges, bDebugEdges, depth = targets.depthCopy, mask](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("contact_shadows"_sid);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+        ContactShadowPushConstant pc{
+            .lightCoordinate = list.lightCoordinate,
+            .waveOffset = {0, 0},
+            .extent = {renderExtent.width, renderExtent.height},
+            .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
+            .outputIndex = graph.GetStorageImageViewDescriptorIndex(mask),
+            .surfaceThickness = tuning.x,
+            .bilinearThreshold = tuning.y,
+            .shadowContrast = tuning.z,
+            .bIgnoreEdgePixels = bIgnoreEdges ? 1u : 0u,
+            .bBilinearSamplingOffsetMode = 0u,
+            .bUseEarlyOut = bDebugEdges ? 0u : 1u,
+            .bDebugEdgeMask = bDebugEdges ? 1u : 0u,
+        };
+        for (int32_t i = 0; i < list.dispatchCount; ++i) {
+            const ContactShadowDispatch& dispatch = list.dispatches[i];
+            pc.waveOffset = {dispatch.waveOffset.x, dispatch.waveOffset.y};
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, dispatch.waveCount[0], dispatch.waveCount[1], dispatch.waveCount[2]);
+        }
+    });
+    return mask;
+}
+
 SunShadowFrame SetupCSMResolve(RenderGraph& graph,
                                PipelineManager* pipelineManager,
                                Core::Extent2D renderExtent,
@@ -462,6 +511,9 @@ void SetupShadowsResolve(RenderGraph& graph,
     if (sunShadowTex.IsValid()) {
         shadowsResolvePass.ReadSampledImage(sunShadowTex);
     }
+    if (sunShadow.contact.IsValid()) {
+        shadowsResolvePass.ReadSampledImage(sunShadow.contact);
+    }
     if (bSunUpsample) {
         shadowsResolvePass.ReadSampledImage(sunShadow.depth);
         shadowsResolvePass.ReadSampledImage(sunShadow.gbuffer);
@@ -477,7 +529,7 @@ void SetupShadowsResolve(RenderGraph& graph,
     shadowsResolvePass.Execute([&scene, pipelineManager, bHasGTAO, bTemporal, bHistoryValid, gtaoFiltered, gtaoTemporalOut, gtaoTemporalPrev, depthHistory, gbufferOneHistory, temporalMaxAccum,
             temporalClampScale, depth = targets.depthCopy, gbufferOne = targets.gbufferOne, output = targets.shadows,
             renderExtent, sceneIndex, sunShadowTex, bSunUpsample, sunShadowDepth = sunShadow.depth, sunShadowNormal = sunShadow.gbuffer, sunShadowExtent = sunShadow.extent,
-            sunShadowPixelScale = sunShadow.pixelScale](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            sunShadowPixelScale = sunShadow.pixelScale, contact = sunShadow.contact](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("shadows_resolve"_sid);
 
             int32_t gtaoIndex = bHasGTAO ? static_cast<int32_t>(graph.GetSampledImageViewDescriptorIndex(gtaoFiltered)) : -1;
@@ -500,6 +552,7 @@ void SetupShadowsResolve(RenderGraph& graph,
                 .sunShadowDepthIndex = bSunUpsample ? graph.GetSampledImageViewDescriptorIndex(sunShadowDepth) : ~0x0u,
                 .sunShadowNormalIndex = bSunUpsample ? graph.GetSampledImageViewDescriptorIndex(sunShadowNormal) : ~0x0u,
                 .sunShadowPixelScale = sunShadowPixelScale,
+                .contactShadowIndex = contact.IsValid() ? graph.GetSampledImageViewDescriptorIndex(contact) : ~0x0u,
             };
 
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

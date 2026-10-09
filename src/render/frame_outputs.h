@@ -183,6 +183,7 @@ struct SunShadowFrame
     RDGTexture gbuffer;
     RDGTexture sigmaShadow;
     RDGTexture sigmaStabilized;
+    RDGTexture contact;
     Core::Extent2D extent{};
     uint32_t pixelScale{1};
 
