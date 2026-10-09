@@ -933,6 +933,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     };
 
     triLightStore.SetEnabled(state->debug.restir.bEmissiveTriangleLights);
+    triLightStore.SetRangeMultiplier(state->debug.restir.emissiveTriRangeMultiplier);
     vf.triLightCount = triLightStore.GetWatermark();
     vf.emissiveMeshletCount = triLightStore.GetMeshletWatermark();
     vf.emissiveMeshCount = triLightStore.GetMeshWatermark();

@@ -83,6 +83,13 @@ void TriLightStore::SetEnabled(bool bEnabled)
     if (bEnabled) { MarkAllDirty(); }
 }
 
+void TriLightStore::SetRangeMultiplier(float rangeMultiplier)
+{
+    if (rangeMultiplier == rangeMultiplier_) { return; }
+    rangeMultiplier_ = rangeMultiplier;
+    MarkAllDirty();
+}
+
 void TriLightStore::Tick(uint64_t frame)
 {
     frame_ = frame;

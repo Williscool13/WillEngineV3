@@ -54,6 +54,9 @@ public:
     /** Switching on re-marks everything; the slots hold stale data from before. */
     void SetEnabled(bool bEnabled);
 
+    /** Ranges are baked into the built lights, so a new multiplier re-marks everything. */
+    void SetRangeMultiplier(float rangeMultiplier);
+
     void Tick(uint64_t frame);
 
     [[nodiscard]] const Reservation& Get(uint32_t meshSlot) const { return reservations_[meshSlot]; }
@@ -90,6 +93,7 @@ private:
     Core::Vector<PendingFree> pendingFrees_{};
     uint32_t reservationCount_{0};
     uint64_t frame_{0};
+    float rangeMultiplier_{-1.0f};
     bool bEnabled_{true};
     bool bWarnedFull_{false};
     bool bWarnedCapReached_{false};
