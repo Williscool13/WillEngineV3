@@ -259,6 +259,7 @@ RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
                                      Core::Extent2D renderExtent,
                                      const RenderTargets& targets,
                                      const SceneResources& scene,
+                                     uint64_t frameNumber,
                                      StringID pipelineSID)
 {
     ZoneScoped;
@@ -315,7 +316,7 @@ RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
     taaPass.ReadSampledImage(gbufferOneHistory);
     taaPass.WriteStorageImage(taaCurrent);
     taaPass.WriteStorageImage(taaOutput);
-    taaPass.Execute([&scene, pipelineManager, renderExtent,
+    taaPass.Execute([&scene, pipelineManager, renderExtent, frameNumber,
             outputColor = targets.colorOutput, depthStencil = targets.depthCopy,
             gbufferOne = targets.gbufferOne, pipelineSID, taaConfig,
             depthHistory, gbufferOneHistory, taaHistory, taaCurrent, taaOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
@@ -337,6 +338,7 @@ RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
                 .invalidHistoryBlend = taaConfig.invalidHistoryBlend,
                 .lumaBoostCap = taaConfig.lumaBoostCap,
                 .grazingTurnoverStrength = taaConfig.grazingTurnoverStrength,
+                .frameIndex = static_cast<uint32_t>(frameNumber),
             };
 
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(pipelineSID);

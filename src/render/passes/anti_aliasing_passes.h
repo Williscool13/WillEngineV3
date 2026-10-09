@@ -36,6 +36,7 @@ RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
                                      Core::Extent2D renderExtent,
                                      const RenderTargets& targets,
                                      const SceneResources& scene,
+                                     uint64_t frameNumber,
                                      StringID pipelineSID);
 
 RDGTexture SetupDonutTemporalAntiAliasing(RenderGraph& graph,

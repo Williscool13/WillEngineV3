@@ -15,6 +15,14 @@ public float HashStep(inout uint h)
     return float(h >> 8) * (1.0f / float(1u << 24));
 }
 
+public float3 DitherForHalfStore(float3 v, uint2 pixel, uint frameIndex)
+{
+    uint h = SeedRng(pixel, frameIndex, 0x7A3Du);
+    float3 u = float3(HashStep(h), HashStep(h), HashStep(h)) - 0.5;
+    float3 binade = floor(log2(max(abs(v), 6.103515625e-05)));
+    return v + u * exp2(binade - 10.0);
+}
+
 public float InterleavedGradientNoise(float2 p)
 {
     return frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715))));

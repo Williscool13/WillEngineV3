@@ -1056,6 +1056,7 @@ SHADER_PUBLIC struct TemporalAntialiasingPushConstant
     SHADER_PUBLIC float invalidHistoryBlend;
     SHADER_PUBLIC float lumaBoostCap;
     SHADER_PUBLIC float grazingTurnoverStrength;
+    SHADER_PUBLIC uint32_t frameIndex;
 };
 
 SHADER_PUBLIC struct DonutTaaPushConstant

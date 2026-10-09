@@ -837,10 +837,10 @@ void RenderThread::RecordPresentation(FrameContext& ctx)
             targets.colorOutput = SetupSubpixelMorphologicalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene);
             break;
         case Core::AntiAliasingMode::TAA:
-            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, "taa_main"_sid);
+            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, frameNumber, "taa_main"_sid);
             break;
         case Core::AntiAliasingMode::NaiveTAA:
-            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, "taa_naive"_sid);
+            targets.colorOutput = SetupTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, frameNumber, "taa_naive"_sid);
             break;
         case Core::AntiAliasingMode::DonutTAA:
             targets.colorOutput = SetupDonutTemporalAntiAliasing(*renderGraph, pipelineManager, viewFamily, renderExtent, outputExtent, targets, ctx.scene);

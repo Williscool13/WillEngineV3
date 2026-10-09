@@ -4,6 +4,7 @@ import shader_functions;
 import constants_interop;
 
 import bindless_declarations;
+import random_common;
 
 [[vk::push_constant]]
 TemporalAntialiasingPushConstant pc;
@@ -30,6 +31,6 @@ void ComputeNaiveTemporalAntialiasing(uint3 threadID : SV_DispatchThreadID) {
         resultRGB = lerp(historyColor, currentColor, 0.01);
     }
 
-    rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(resultRGB, 1.0);
+    rdgStorageFloat4[pc.outputImageIndex][threadID.xy] = float4(DitherForHalfStore(resultRGB, threadID.xy, pc.frameIndex), 1.0);
     rdgStorageFloat4[pc.outputCopyIndex][threadID.xy] = float4(resultRGB, 1.0);
 }
