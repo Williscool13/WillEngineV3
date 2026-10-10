@@ -164,28 +164,23 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                 float3 triXi = float3(0.0);
                 LightView hitVS = (LightView)0;
 #if RESTIR_ENABLE_BRDF_RAY
-                float3 worldN = normalize(mul(float3x3(scene.invView), N));
-                RayDesc ray;
-                ray.Origin = ReflectionRayOrigin(reflWorldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
-                ray.Direction = normalize(mul(float3x3(scene.invView), brdfL));
-                ray.TMin = 0.0;
-                ray.TMax = 1e30;
-                RayQuery<RAY_FLAG_FORCE_OPAQUE> q;
-                q.TraceRayInline(rdgAccelerationStructures[pc.tlasIndex], 0, INSTANCE_MASK_ALL, ray);
-                q.Proceed();
+                ReflectionHitDescriptor refl = (ReflectionHitDescriptor)0;
+                refl.hitT = REFLECTION_HIT_T_SKY;
+                if (pc.reflectionDescriptors != nullptr) {
+                    refl = pc.reflectionDescriptors[pixelIdx];
+                }
 
                 bool bReflEligible = roughness <= pc.reflectionRoughnessMax;
-                if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) {
-                    Instance hitInst = pc.instanceBuffer[q.CommittedInstanceID()];
+                if (refl.hitT >= 0.0) {
+                    Instance hitInst = pc.instanceBuffer[refl.instanceID];
                     bool bOwnedByReSTIR = false;
                     if (hitInst.emissiveTriLightBase != ~0u) {
-                        uint idx = hitInst.emissiveTriLightBase + q.CommittedPrimitiveIndex();
+                        uint idx = hitInst.emissiveTriLightBase + refl.primIndex;
                         if (IsLiveLight(idx, lightCount, analyticCount)) {
                             hitLightIdx = int(idx);
                             hitVS = UnpackLightVS(pc.lightVS[idx]);
-                            float2 bary = q.CommittedTriangleBarycentrics();
                             // Exact view-space hit from barycentrics avoids the origin-offset t error of a re-intersection
-                            triXi = hitVS.center + bary.x * hitVS.right + bary.y * hitVS.up;
+                            triXi = hitVS.center + refl.bary.x * hitVS.right + refl.bary.y * hitVS.up;
                             bTriHit = true;
                         }
                         bOwnedByReSTIR = true;
@@ -203,32 +198,14 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                         }
                     }
 
-                    // Reflections piggyback this already-traced ray
-                    if (bReflEligible) {
-                        ReflectionHitDescriptor refl;
-                        refl.rayDir = ray.Direction;
-                        // Below this roughness the traced reflection pass supplies the specular.
-                        if (bOwnedByReSTIR && roughness > pc.lightSpecularFromReflectionsMax) {
-                            refl.hitT = REFLECTION_HIT_T_OWNED;
-                            refl.bary = float2(0.0);
-                            refl.instanceID = ~0u;
-                            refl.primIndex = ~0u;
-                        } else {
-                            refl.hitT = q.CommittedRayT();
-                            refl.bary = q.CommittedTriangleBarycentrics();
-                            refl.instanceID = q.CommittedInstanceID();
-                            refl.primIndex = q.CommittedPrimitiveIndex();
-                        }
+                    // Below this roughness the traced reflection pass supplies the specular.
+                    if (bReflEligible && bOwnedByReSTIR && roughness > pc.lightSpecularFromReflectionsMax) {
+                        refl.hitT = REFLECTION_HIT_T_OWNED;
+                        refl.bary = float2(0.0);
+                        refl.instanceID = ~0u;
+                        refl.primIndex = ~0u;
                         pc.reflectionDescriptors[pixelIdx] = refl;
                     }
-                } else if (bReflEligible) {
-                    ReflectionHitDescriptor refl;
-                    refl.rayDir = ray.Direction;
-                    refl.hitT = REFLECTION_HIT_T_SKY;
-                    refl.bary = float2(0.0);
-                    refl.instanceID = ~0u;
-                    refl.primIndex = ~0u;
-                    pc.reflectionDescriptors[pixelIdx] = refl;
                 }
 #else
                 float nearestT = 1e30;

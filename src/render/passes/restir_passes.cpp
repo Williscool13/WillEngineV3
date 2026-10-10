@@ -45,7 +45,6 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
     const uint32_t pixelCount = renderExtent.width * renderExtent.height;
     const uint32_t reservoirBufferSize = pixelCount * static_cast<uint32_t>(sizeof(Reservoir));
     const float reflectionRoughnessMax = bSkipReflectionPiggyback ? -1.0f : ComputeReflectionRoughnessMax(reflectionConfig);
-    const uint32_t reflectionBufferSize = pixelCount * static_cast<uint32_t>(sizeof(ReflectionHitDescriptor));
 
     const bool bHasTLAS = scene.tlas.IsValid();
     const bool bTemporalReuse = restirParams.bEnableTemporal;
@@ -236,16 +235,12 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
 
         reservoirBase = graph.CreateBuffer("restir_reservoir_base"_sid, reservoirBufferSize, true);
         restir.reservoirBase = reservoirBase;
-        RDGBuffer hitDescriptors{};
-        if (reflectionRoughnessMax >= 0.0f) {
-            hitDescriptors = graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, reflectionBufferSize, true);
+        const float brdfMirrorRoughnessMax = reflectionRoughnessMax >= 0.0f ? reflectionConfig.mirrorRoughnessMax : -1.0f;
+        const RDGBuffer hitDescriptors = SetupReflectionTracePass(graph, pipelineManager, renderExtent, targets, scene, sceneIndex, frameNumber, activeCheckerboardField, reflectionConfig.tracedRoughnessMax,
+                                                                  brdfMirrorRoughnessMax, reflectionRoughnessMax >= 0.0f ? REFLECTION_HIT_DESCRIPTORS_BUFFER : RESTIR_BRDF_HITS_BUFFER).hitDescriptors;
+        const bool bHasBrdfHits = hitDescriptors.IsValid();
+        if (bHasBrdfHits && reflectionRoughnessMax >= 0.0f) {
             reflection.hitDescriptors = hitDescriptors;
-
-            RenderPass& reflClearPass = graph.AddPass("[Reflection] Clear Descriptors"_sid, VK_PIPELINE_STAGE_2_CLEAR_BIT, RenderCategory::ReflectionsDenoise);
-            reflClearPass.WriteTransferBuffer(hitDescriptors);
-            reflClearPass.Execute([hitDescriptors](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
-                vkCmdFillBuffer(cmd, graph.GetBufferHandle(hitDescriptors), 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
-            });
         }
 
         // Base candidate generation
@@ -271,8 +266,8 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
         basePass.ReadSampledImage(targets.depthCopy);
         if (bHasTLAS) { basePass.ReadTLASBuffer(scene.tlas); }
         basePass.WriteBuffer(reservoirBase);
-        if (reflectionRoughnessMax >= 0.0f) { basePass.WriteBuffer(hitDescriptors); }
-        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy,
+        if (bHasBrdfHits) { basePass.ReadWriteBuffer(hitDescriptors); }
+        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasBrdfHits, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy,
                 lightsVS, regirHashEntries, regirEntries, regirCellData, reservoirBase, hitDescriptors, worldLightGrid, worldIndexList, worldEmissiveGrid, worldEmissiveIndexList, worldCellPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bReGIRProposal ? "restir_di_base_regir"_sid : "restir_di_base_bin"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -291,7 +286,7 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
                 .historyBuffer = 0,
                 .genBuffer = 0,
                 .outputBuffer = graph.GetBufferAddress(reservoirBase),
-                .reflectionDescriptors = reflectionRoughnessMax >= 0.0f ? graph.GetBufferAddress(hitDescriptors) : 0,
+                .reflectionDescriptors = bHasBrdfHits ? graph.GetBufferAddress(hitDescriptors) : 0,
                 .worldGridBuffer = bBin ? graph.GetBufferAddress(worldLightGrid) : 0,
                 .worldGridIndexList = bBin ? graph.GetBufferAddress(worldIndexList) : 0,
                 .worldGridEmissiveGrid = bBin ? graph.GetBufferAddress(worldEmissiveGrid) : 0,

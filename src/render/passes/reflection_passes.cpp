@@ -24,16 +24,18 @@ ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
                                          const SceneResources& scene,
                                          uint32_t sceneIndex,
                                          uint64_t frameNumber,
-                                         const Core::ReflectionConfiguration& reflectionConfig)
+                                         uint32_t activeCheckerboardField,
+                                         float roughnessMax,
+                                         float mirrorRoughnessMax,
+                                         StringID bufferName)
 {
     ZoneScoped;
     ReflectionFrame reflection{};
-    const float reflectionRoughnessMax = ComputeReflectionRoughnessMax(reflectionConfig);
-    if (reflectionRoughnessMax < 0.0f || !scene.tlas.IsValid()) {
+    if (roughnessMax < 0.0f || !scene.tlas.IsValid()) {
         return reflection;
     }
 
-    const RDGBuffer hitDescriptors = graph.CreateBuffer(REFLECTION_HIT_DESCRIPTORS_BUFFER, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
+    const RDGBuffer hitDescriptors = graph.CreateBuffer(bufferName, sizeof(ReflectionHitDescriptor) * renderExtent.width * renderExtent.height, true);
     reflection.hitDescriptors = hitDescriptors;
 
     RenderPass& pass = graph.AddPass("[Reflection] Trace"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReflectionsShade);
@@ -43,7 +45,7 @@ ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
     pass.ReadTLASBuffer(scene.tlas);
     pass.WriteBuffer(hitDescriptors);
 
-    pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, reflectionRoughnessMax, mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
+    pass.Execute([pipelineManager, sceneIndex, renderExtent, frameNumber, roughnessMax, mirrorRoughnessMax, activeCheckerboardField,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy, &scene, hitDescriptors](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReflectionTracePushConstant pc{
                 .sceneData = graph.GetBufferAddress(scene.sceneData),
@@ -54,8 +56,9 @@ ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
                 .depthIndex = graph.GetSampledImageViewDescriptorIndex(depth),
                 .tlasIndex = graph.GetAccelerationStructureDescriptorIndex(scene.tlas),
                 .frameIndex = static_cast<uint32_t>(frameNumber),
-                .roughnessMax = reflectionRoughnessMax,
+                .roughnessMax = roughnessMax,
                 .mirrorRoughnessMax = mirrorRoughnessMax,
+                .activeCheckerboardField = activeCheckerboardField,
             };
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("reflection_trace"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

@@ -95,7 +95,7 @@ void ComputeReflectionShade(uniform ReflectionShadePushConstant pc, uint3 thread
     float3 V = normalize(-viewPosition);
     float3 worldN = normalize(mul(float3x3(scene.invView), N));
     float3 worldPos = mul(scene.invView, float4(viewPosition, 1.0)).xyz;
-    // Must match the base pass's BRDF ray origin exactly: the descriptor's hitT was measured from this same offset.
+    // Must match the trace pass's BRDF ray origin exactly: the descriptor's hitT was measured from this same offset.
     float3 rayOrigin = ReflectionRayOrigin(worldPos, worldN, viewSpaceDepth, scene.ndcToViewMulXPixelSize, abs(dot(N, V)));
 
     uint2 rcoord = PixelPosToReservoirPos(pixel, field);

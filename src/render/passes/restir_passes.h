@@ -25,7 +25,7 @@ class PipelineManager;
 
 /**
  * Light transform, ReGIR, reservoir generation/reuse, sun visibility and confidence.
- * @param reflection receives hitDescriptors when the base pass piggybacks the reflection BRDF ray (bSkipReflectionPiggyback false, reflections enabled); left untouched otherwise
+ * @param reflection receives the BRDF trace's hitDescriptors when reflections consume them (bSkipReflectionPiggyback false, reflections enabled); left untouched otherwise
  * @return every ReSTIR output this frame produced
  */
 ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,

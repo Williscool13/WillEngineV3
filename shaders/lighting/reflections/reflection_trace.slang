@@ -11,7 +11,6 @@ import random_common;
 
 import bindless_declarations;
 
-// Dedicated producer for the non-ReSTIR path, where no BRDF ray exists to piggyback.
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void ComputeReflectionTrace(uniform ReflectionTracePushConstant pc, uint3 threadID : SV_DispatchThreadID) {
@@ -20,7 +19,12 @@ void ComputeReflectionTrace(uniform ReflectionTracePushConstant pc, uint3 thread
         return;
     }
 
-    uint pixelIdx = pixel.y * pc.renderExtent.x + pixel.x;
+    uint field = pc.activeCheckerboardField;
+    if (field != 0u && !IsActiveCheckerboardPixel(int2(pixel), false, field)) {
+        return;
+    }
+
+    uint pixelIdx = ReservoirIndex(PixelPosToReservoirPos(pixel, field), pc.renderExtent.x, field);
 
     // Every pixel writes exactly once, so no separate clear pass is needed. OWNED is the "contribute nothing" default.
     ReflectionHitDescriptor refl;

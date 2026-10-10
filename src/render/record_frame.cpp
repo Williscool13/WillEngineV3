@@ -637,10 +637,10 @@ void RenderThread::RecordLightingAnalytic(FrameContext& ctx)
         constexpr float kDebugClusterZFar = 500.0f;
         SetupClusterGridDebug(*renderGraph, pipelineManager, ctx.scene, ctx.gpuDebugLines, 0, viewFamily.mainView.currentViewData.nearPlane, kDebugClusterZFar);
     }
-    // No ReSTIR BRDF ray to piggyback on here, so reflections trace their own.
     const ReflectionFrame trace = frameBuffer.reflection.bScreenSpaceTrace
                                       ? SetupSSRTracePass(*renderGraph, pipelineManager, renderExtent, targets, ctx.scene, 0, frameNumber, 0u, frameBuffer.reflection)
-                                      : SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, ctx.scene, 0, frameNumber, frameBuffer.reflection);
+                                      : SetupReflectionTracePass(*renderGraph, pipelineManager, renderExtent, targets, ctx.scene, 0, frameNumber, 0u, ComputeReflectionRoughnessMax(frameBuffer.reflection),
+                                                                 frameBuffer.reflection.mirrorRoughnessMax, REFLECTION_HIT_DESCRIPTORS_BUFFER);
     ctx.reflection = SetupReflectionShadePass(*renderGraph, pipelineManager, viewFamily, renderExtent, targets, ctx.scene, trace, ctx.ddgi, ctx.worldGrid, 0, frameNumber, 0u, frameBuffer.reflection,
                                               ctx.features.DDGIApplied(), false, frameBuffer.debug.bFreezeScreenFeedback);
 

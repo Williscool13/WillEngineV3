@@ -25,6 +25,7 @@ namespace Render
 class PipelineManager;
 
 inline const StringID REFLECTION_HIT_DESCRIPTORS_BUFFER = "reflection_hit_descriptors"_sid;
+inline const StringID RESTIR_BRDF_HITS_BUFFER = "restir_brdf_hits"_sid;
 inline const StringID REFLECTION_SPEC_NOISY_TARGET = "reflection_spec_noisy"_sid;
 inline const StringID REFLECTION_HIT_DELTA_TARGET = "reflection_hit_delta"_sid;
 inline const StringID REFLECTION_VIRTUAL_MOTION_TARGET = "reflection_virtual_motion"_sid;
@@ -43,8 +44,9 @@ inline float ComputeLightSpecularFromReflectionsMax(const Core::ReflectionConfig
 }
 
 /**
- * RT trace of the reflection BRDF ray, used when ReSTIR does not piggyback it.
- * @return the frame with hitDescriptors; invalid hitDescriptors when reflections are off or there is no TLAS
+ * RT trace of the GGX BRDF ray; reflections and ReSTIR's BRDF candidate both read its hits.
+ * @param mirrorRoughnessMax at or below it the ray is the mirror direction; negative never mirrors
+ * @return the frame with hitDescriptors; invalid when roughnessMax is negative or there is no TLAS
  */
 ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
                                          PipelineManager* pipelineManager,
@@ -53,7 +55,10 @@ ReflectionFrame SetupReflectionTracePass(RenderGraph& graph,
                                          const SceneResources& scene,
                                          uint32_t sceneIndex,
                                          uint64_t frameNumber,
-                                         const Core::ReflectionConfiguration& reflectionConfig);
+                                         uint32_t activeCheckerboardField,
+                                         float roughnessMax,
+                                         float mirrorRoughnessMax,
+                                         StringID bufferName);
 
 /**
  * Hits carry the REFLECTION_INSTANCE_NONE sentinel.
@@ -71,7 +76,7 @@ ReflectionFrame SetupSSRTracePass(RenderGraph& graph,
 
 /**
  * ReSTIR-owned hits contribute nothing. Output is demodulated.
- * @param trace the trace output (SetupReflectionTracePass, SetupSSRTracePass, or SetupReSTIRPasses' piggyback); nothing is recorded without hitDescriptors
+ * @param trace the trace output (SetupReflectionTracePass, SetupSSRTracePass, or SetupReSTIRPasses' BRDF trace); nothing is recorded without hitDescriptors
  * @return trace completed with specNoisy and, under merged denoise with a TLAS, hitDelta/hitDeltaHistory
  */
 ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,

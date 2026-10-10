@@ -973,6 +973,7 @@ SHADER_PUBLIC struct ReflectionTracePushConstant
     SHADER_PUBLIC uint32_t frameIndex;
     SHADER_PUBLIC float roughnessMax;
     SHADER_PUBLIC float mirrorRoughnessMax;
+    SHADER_PUBLIC uint32_t activeCheckerboardField;
 };
 
 SHADER_PUBLIC struct SSRTracePushConstant
