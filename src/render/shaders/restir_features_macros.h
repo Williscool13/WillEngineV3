@@ -20,4 +20,7 @@
 // [temporal] RELAX moving-shadow confidence chain.
 #define RESTIR_ENABLE_CONFIDENCE 0
 
+// [base] Draws most light candidates from the lights last frame's 8x8 tile saw lit; the rest stay with the regular proposal.
+#define RESTIR_ENABLE_TILE_GUIDING 1
+
 #endif // WILL_ENGINE_RESTIR_FEATURES

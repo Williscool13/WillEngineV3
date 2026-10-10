@@ -470,6 +470,8 @@ void PipelineManager::RegisterPipelines()
 
     RegisterComputePipeline("restir_di_transform_lights"_sid, src / "restir_di_transform_lights.spv", "ComputeReSTIRDITransformLights",
                             sizeof(ReSTIRTransformLightsPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("restir_tile_lights"_sid, src / "restir_tile_lights.spv", "ComputeReSTIRTileLights",
+                            sizeof(ReSTIRTileLightsPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("regir_touch"_sid, src / "regir_touch.spv", "ComputeReGIRTouch",
                             sizeof(ReGIRTouchPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("regir_build_indirect"_sid, src / "regir_build_indirect.spv", "ComputeReGIRBuildIndirect",

@@ -202,6 +202,7 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
     RDGBufferRing reservoirHistoryRing{};
     RDGBuffer reservoirTemporal{};
     RDGBuffer reservoirBase{};
+    RDGBuffer tileLightsOut{};
     RDGTexture shadowVis{};
     RDGTexture signal{};
     RDGTexture gradient{};
@@ -232,6 +233,16 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
         // Last frame's TLAS re-shades the winner against last frame's occluders; the TLAS ring is one frame deep (BLAS lifetime).
         const bool bHasPrevTlas = bConfidence && scene.tlasHistory.IsValid();
         const RDGBuffer prevTlas = bHasPrevTlas ? scene.tlasHistory : RDGBuffer{};
+
+        const uint32_t tileCountX = (renderExtent.width + TILE_LIGHT_SIZE - 1u) / TILE_LIGHT_SIZE;
+        const uint32_t tileCountY = (renderExtent.height + TILE_LIGHT_SIZE - 1u) / TILE_LIGHT_SIZE;
+        RDGBuffer tileLightsHistory{};
+        if (RESTIR_ENABLE_TILE_GUIDING) {
+            const RDGBufferRing tileRing = graph.CreateVersionedBuffer("restir_tile_lights"_sid, tileCountX * tileCountY * TILE_LIGHT_STRIDE * sizeof(uint32_t), 1, VersionSource::Fresh);
+            tileLightsOut = tileRing.Current();
+            tileLightsHistory = bHasHistory ? tileRing.Version(1) : RDGBuffer{};
+        }
+        const bool bHasTileHistory = tileLightsHistory.IsValid();
 
         reservoirBase = graph.CreateBuffer("restir_reservoir_base"_sid, reservoirBufferSize, true);
         restir.reservoirBase = reservoirBase;
@@ -267,7 +278,8 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
         if (bHasTLAS) { basePass.ReadTLASBuffer(scene.tlas); }
         basePass.WriteBuffer(reservoirBase);
         if (bHasBrdfHits) { basePass.ReadWriteBuffer(hitDescriptors); }
-        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasBrdfHits, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy,
+        if (bHasTileHistory) { basePass.ReadBuffer(tileLightsHistory); }
+        basePass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bHasBrdfHits, bHasTileHistory, tileLightsHistory, tileCountX, reflectionRoughnessMax, bReGIRProposal, bWorldGrid, field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy,
                 lightsVS, regirHashEntries, regirEntries, regirCellData, reservoirBase, hitDescriptors, worldLightGrid, worldIndexList, worldEmissiveGrid, worldEmissiveIndexList, worldCellPower](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(bReGIRProposal ? "restir_di_base_regir"_sid : "restir_di_base_bin"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -314,6 +326,8 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
                 .brdfRoughnessMax = reflectionConfig.tracedRoughnessMax,
                 .lightSpecularFromReflectionsMax = ComputeLightSpecularFromReflectionsMax(reflectionConfig),
                 .mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
+                .tileLights = bHasTileHistory ? graph.GetBufferAddress(tileLightsHistory) : 0,
+                .tileCountX = tileCountX,
             };
             vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
 
@@ -547,6 +561,31 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
     }
 
     if (bTemporalReuse) { graph.EmplaceVersion(reservoirHistoryRing, reuseBuffer); }
+
+    if (tileLightsOut.IsValid()) {
+        const uint32_t tileCountX = (renderExtent.width + TILE_LIGHT_SIZE - 1u) / TILE_LIGHT_SIZE;
+        const uint32_t tileCountY = (renderExtent.height + TILE_LIGHT_SIZE - 1u) / TILE_LIGHT_SIZE;
+        RenderPass& tilePass = graph.AddPass("[ReSTIR DI] Tile Lights"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
+        tilePass.ReadBuffer(scene.lightData);
+        tilePass.ReadBuffer(reuseBuffer);
+        if (bTemporalReuse || restirParams.boilingFilterStrength > 0.0f) { tilePass.ReadBuffer(reservoirBase); }
+        tilePass.WriteBuffer(tileLightsOut);
+        tilePass.Execute([pipelineManager, &scene, renderExtent, tileCountX, tileCountY, field = activeCheckerboardField, finalBuffer = reuseBuffer, reservoirBase, tileLightsOut](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_tile_lights"_sid);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+            ReSTIRTileLightsPushConstant pc{
+                .lightData = graph.GetBufferAddress(scene.lightData),
+                .finalBuffer = graph.GetBufferAddress(finalBuffer),
+                .baseBuffer = graph.GetBufferAddress(reservoirBase),
+                .tileLights = graph.GetBufferAddress(tileLightsOut),
+                .renderExtent = {renderExtent.width, renderExtent.height},
+                .activeCheckerboardField = field,
+                .tileCountX = tileCountX,
+            };
+            vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+            vkCmdDispatch(cmd, tileCountX, tileCountY, 1);
+        });
+    }
 
     restir.reservoirFinal = reuseBuffer;
     return restir;

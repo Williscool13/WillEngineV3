@@ -77,7 +77,30 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
     float3 cameraPos = scene.cameraWorldPos.xyz;
     float camDist = distance(worldPos, cameraPos);
 
-    prop.Acquire(worldPos, cameraPos, scene.view, camDist, h);
+#if RESTIR_ENABLE_TILE_GUIDING
+    GuidedProposal<P> proposal;
+    proposal.inner = prop;
+    proposal.lightData = pc.lightData;
+    proposal.tileLights = pc.tileLights;
+    proposal.tileBase = 0u;
+    proposal.listCount = 0u;
+    proposal.analyticCount = pc.lightData->analyticLightCount;
+    if (pc.tileLights != nullptr) {
+        float2 historyUV = uv + UnpackMotionVectors(gt1.g) * 0.5;
+        if (all(historyUV >= float2(0.0)) && all(historyUV <= float2(1.0))) {
+            float2 tilePos = historyUV * float2(pc.renderExtent) / float(TILE_LIGHT_SIZE) - 0.5;
+            float2 tileFrac = tilePos - floor(tilePos);
+            int2 tile = int2(floor(tilePos)) + int2(HashStep(h) < tileFrac.x ? 1 : 0, HashStep(h) < tileFrac.y ? 1 : 0);
+            int2 tileCount = int2(int(pc.tileCountX), int((pc.renderExtent.y + TILE_LIGHT_SIZE - 1u) / TILE_LIGHT_SIZE));
+            tile = clamp(tile, int2(0, 0), tileCount - int2(1, 1));
+            proposal.tileBase = (uint(tile.y) * pc.tileCountX + uint(tile.x)) * TILE_LIGHT_STRIDE;
+            proposal.listCount = min(pc.tileLights[proposal.tileBase], TILE_LIGHT_MAX);
+        }
+    }
+#else
+    P proposal = prop;
+#endif
+    proposal.Acquire(worldPos, cameraPos, scene.view, camDist, h);
 
     int analyticCount = pc.lightData->analyticLightCount;
     int liveCount = int(LiveLightCount(lightCount, analyticCount));
@@ -92,7 +115,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
 
             int lightIdx;
             float pSelect;
-            if (!prop.Draw(uint(i), uint(RESTIR_M_LIGHT), liveCount, h, lightIdx, pSelect)) {
+            if (!proposal.Draw(uint(i), uint(RESTIR_M_LIGHT), liveCount, h, lightIdx, pSelect)) {
                 float u = (float(i) + HashStep(h)) / float(RESTIR_M_LIGHT);
                 lightIdx = int(LiveLightIndex(uint(clamp(int(u * float(liveCount)), 0, liveCount - 1)), analyticCount));
                 pSelect = invLightCount;
@@ -228,7 +251,7 @@ void ReSTIRDIBase<P : ILightProposal>(inout P prop, ReSTIRDICombinedTemporalPush
                     Xi = bTriHit ? triXi : viewPosition + brdfL * hitT;
                     LightSample s = EvalLightSample(vs, Xi, viewPosition, N, vs.range);
                     // Backend-specific marginal light-selection pdf for the BRDF-hit light, exact in both backends
-                    float pSelect = prop.Marginal(hitLightIdx, vs, liveCount);
+                    float pSelect = proposal.Marginal(hitLightIdx, vs, liveCount);
                     p_light_area = pSelect * LightSamplePdfArea(vs, viewPosition, Xi);
                     p_brdf_area = (s.cosLight > 0.0) ? (p_brdf_sample * s.cosLight / max(s.dist * s.dist, 1e-8)) : 0.0;
                     float3 brdfLightColor = UnpackUnorm4x8(vs.packedColor).rgb;

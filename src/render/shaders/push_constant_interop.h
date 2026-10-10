@@ -468,6 +468,17 @@ SHADER_PUBLIC struct ReSTIRTransformLightsPushConstant
     SHADER_PUBLIC uint32_t sceneDataIndex;
 };
 
+SHADER_PUBLIC struct ReSTIRTileLightsPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) finalBuffer;
+    SHADER_PUBLIC SHADER_PTR(Reservoir) baseBuffer;
+    SHADER_PUBLIC SHADER_PTR(uint) tileLights;
+    SHADER_PUBLIC uint2 renderExtent;
+    SHADER_PUBLIC uint32_t activeCheckerboardField;
+    SHADER_PUBLIC uint32_t tileCountX;
+};
+
 SHADER_PUBLIC struct ReGIRTouchPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(SceneData) sceneData;
@@ -543,6 +554,8 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC float finalWClamp;
     SHADER_PUBLIC float lightSpecularFromReflectionsMax;
     SHADER_PUBLIC float mirrorRoughnessMax;
+    SHADER_PUBLIC SHADER_PTR(uint) tileLights;
+    SHADER_PUBLIC uint32_t tileCountX;
 };
 
 SHADER_PUBLIC struct ReSTIRDISpatioTemporalPushConstant

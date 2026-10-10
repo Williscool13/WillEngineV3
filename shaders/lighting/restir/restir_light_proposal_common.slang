@@ -59,6 +59,84 @@ float MeshletTriPdf(LightData* lightData, EmissiveMeshlet meshlet, MeshletTriCdf
     return (width > 0.0 && cdf.total > 0.0) ? width / cdf.total : 0.0;
 }
 
+public struct GuidedProposal<P : ILightProposal> : ILightProposal
+{
+    public P inner;
+    public LightData* lightData;
+    public uint* tileLights;
+    public uint tileBase;
+    public uint listCount;
+    public int analyticCount;
+
+    [mutating] public void Acquire(float3 worldPos, float3 cameraPos, float4x4 view, float camDist, inout uint h)
+    {
+        inner.Acquire(worldPos, cameraPos, view, camDist, h);
+    }
+
+    float ListPdf(int lightIdx)
+    {
+        uint key;
+        uint meshletIdx = ~0u;
+        if (lightIdx < MAX_ANALYTIC_LIGHTS) {
+            key = uint(lightIdx);
+        }
+        else {
+            meshletIdx = lightData->meshletOf[uint(lightIdx) - uint(MAX_ANALYTIC_LIGHTS)];
+            if (meshletIdx == ~0u) { return 0.0; }
+            key = REGIR_KEY_MESHLET | meshletIdx;
+        }
+        for (uint k = 0u; k < listCount; k++) {
+            if (tileLights[tileBase + 1u + k] != key) { continue; }
+            float p = 1.0 / float(listCount);
+            if (meshletIdx != ~0u) {
+                EmissiveMeshlet meshlet = lightData->emissiveMeshlets[meshletIdx];
+                if (meshlet.lightCount == 0u) { return 0.0; }
+                p *= MeshletTriPdf(lightData, meshlet, MeshletTriCdfOf(lightData, meshlet), uint(lightIdx));
+            }
+            return p;
+        }
+        return 0.0;
+    }
+
+    public bool Draw(uint i, uint m, int liveCount, inout uint h, out int lightIdx, out float pSelect)
+    {
+        if (listCount == 0u) {
+            return inner.Draw(i, m, liveCount, h, lightIdx, pSelect);
+        }
+        lightIdx = -1;
+        pSelect = 0.0;
+        if (HashStep(h) < TILE_LIGHT_HIDDEN_FRACTION) {
+            float pInner;
+            if (!inner.Draw(i, m, liveCount, h, lightIdx, pInner)) {
+                float u = (float(i) + HashStep(h)) / float(m);
+                lightIdx = int(LiveLightIndex(uint(clamp(int(u * float(liveCount)), 0, liveCount - 1)), analyticCount));
+            }
+            if (lightIdx < 0) { return true; }
+        }
+        else {
+            uint key = tileLights[tileBase + 1u + min(uint(HashStep(h) * float(listCount)), listCount - 1u)];
+            uint idx = key;
+            if ((key & REGIR_KEY_MESHLET) != 0u) {
+                EmissiveMeshlet meshlet = lightData->emissiveMeshlets[key & ~REGIR_KEY_MESHLET];
+                if (meshlet.lightCount == 0u) { return true; }
+                idx = MeshletDrawTri(lightData, meshlet, MeshletTriCdfOf(lightData, meshlet), HashStep(h));
+            }
+            if (!IsLiveLight(idx, lightData->lightCount, analyticCount)) { return true; }
+            lightIdx = int(idx);
+        }
+        pSelect = Marginal(lightIdx, (LightView)0, liveCount);
+        return true;
+    }
+
+    public float Marginal(int lightIdx, LightView vs, int liveCount)
+    {
+        if (listCount == 0u) {
+            return inner.Marginal(lightIdx, vs, liveCount);
+        }
+        return TILE_LIGHT_HIDDEN_FRACTION * inner.Marginal(lightIdx, vs, liveCount) + (1.0 - TILE_LIGHT_HIDDEN_FRACTION) * ListPdf(lightIdx);
+    }
+}
+
 public struct ReGIRProposal : ILightProposal
 {
     public uint* hashEntries;
