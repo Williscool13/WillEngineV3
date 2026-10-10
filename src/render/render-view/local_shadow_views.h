@@ -19,6 +19,11 @@ uint32_t LocalShadowViewCount(const LightInfo& light, const Frustum& camera);
 
 bool IsLocalShadowSpot(const LightInfo& light);
 
+uint32_t LocalShadowCubeFacesTouched(const glm::vec3& offset, float radius);
+
+/** Whether a sphere at offset from a spot touches its shadow cone, ignoring range. */
+bool LocalShadowSpotTouched(const LightInfo& light, const glm::vec3& offset, float radius);
+
 /** Tile grid (columns, rows) of an atlas that holds viewBudget views. */
 glm::uvec2 LocalShadowAtlasTiles(uint32_t viewBudget);
 

@@ -27,6 +27,21 @@ bool IsLocalShadowSpot(const LightInfo& light)
     return light.type != LIGHT_TYPE_SPHERE && light.position.w >= LOCAL_SHADOW_SPOT_COS_MIN;
 }
 
+uint32_t LocalShadowCubeFacesTouched(const glm::vec3& offset, float radius)
+{
+    const float slack = -radius * glm::sqrt(LOCAL_SHADOW_CUBE_TAN * LOCAL_SHADOW_CUBE_TAN + 1.0f);
+    const glm::vec3 a = glm::abs(offset);
+    const glm::vec3 t = offset * LOCAL_SHADOW_CUBE_TAN;
+    uint32_t faces = 0;
+    faces |= (t.x - a.y >= slack && t.x - a.z >= slack) ? 1u : 0u;
+    faces |= (-t.x - a.y >= slack && -t.x - a.z >= slack) ? 2u : 0u;
+    faces |= (t.y - a.x >= slack && t.y - a.z >= slack) ? 4u : 0u;
+    faces |= (-t.y - a.x >= slack && -t.y - a.z >= slack) ? 8u : 0u;
+    faces |= (t.z - a.x >= slack && t.z - a.y >= slack) ? 16u : 0u;
+    faces |= (-t.z - a.x >= slack && -t.z - a.y >= slack) ? 32u : 0u;
+    return faces;
+}
+
 static float NearPlane(const LightInfo& light)
 {
     // Past the sphere's own surface, which would otherwise occlude everything.
@@ -68,9 +83,28 @@ static glm::vec3 SpotUp(const glm::vec3& forward)
     return glm::abs(forward.y) < 0.99f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
 }
 
+static float SpotHalfAngle(const LightInfo& light)
+{
+    return glm::acos(glm::clamp(light.position.w, 0.0f, 1.0f)) + LOCAL_SHADOW_CONE_MARGIN;
+}
+
 static float SpotTanHalf(const LightInfo& light)
 {
-    return glm::tan(glm::acos(glm::clamp(light.position.w, 0.0f, 1.0f)) + LOCAL_SHADOW_CONE_MARGIN);
+    return glm::tan(SpotHalfAngle(light));
+}
+
+bool LocalShadowSpotTouched(const LightInfo& light, const glm::vec3& offset, float radius)
+{
+    const float halfAngle = SpotHalfAngle(light);
+    const float cosHalf = glm::cos(halfAngle);
+    const float sinHalf = glm::sin(halfAngle);
+    const float distanceSq = glm::dot(offset, offset);
+    const float along = glm::dot(offset, glm::normalize(glm::vec3(light.normal)));
+    const float perp = glm::sqrt(glm::max(distanceSq - along * along, 0.0f));
+    if (along * cosHalf + perp * sinHalf < 0.0f) {
+        return distanceSq <= radius * radius;
+    }
+    return perp * cosHalf - along * sinHalf <= radius;
 }
 
 static bool IsSpotVisible(const LightInfo& light, const Frustum& camera)

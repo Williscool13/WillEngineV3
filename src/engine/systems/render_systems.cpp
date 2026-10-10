@@ -731,12 +731,10 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
     const auto bakedCount = static_cast<uint32_t>(vf.bakedShadowLights.Size());
     if (bakedCount == 0) { return; }
 
-    // spheres[group][xyzr][lane], planes[light][half][plane][axis][lane]
-    constexpr uint32_t PLANE_FLOATS = 2 * 6 * 4 * 4;
+    // spheres[group][xyzr][lane]
     const uint32_t groups = (bakedCount + 3) / 4;
     Core::Arena& arena = ctx->gameplayArena.Get();
     auto* spheres = static_cast<float*>(arena.AllocRaw(sizeof(float) * 16 * groups, 16));
-    auto* planes = static_cast<float*>(arena.AllocRaw(sizeof(float) * PLANE_FLOATS * bakedCount, 16));
 
     for (uint32_t i = 0; i < groups * 4; ++i) {
         float* sphere = spheres + (i / 4) * 16 + (i % 4);
@@ -750,20 +748,6 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
         sphere[4] = light.position.y;
         sphere[8] = light.position.z;
         sphere[12] = light.range;
-
-        const uint32_t faceCount = Render::IsLocalShadowSpot(light) ? 1u : 6u;
-        Frustum frusta[6];
-        for (uint32_t face = 0; face < faceCount; ++face) {
-            frusta[face] = Render::BuildLocalShadowView(light, face, 0, {1, 1}, 1).frustum;
-        }
-        for (uint32_t slot = 0; slot < 8; ++slot) {
-            for (uint32_t plane = 0; plane < 6; ++plane) {
-                const glm::vec4 value = slot < faceCount ? frusta[slot].planes[plane] : glm::vec4(0.0f, 0.0f, 0.0f, -1e30f);
-                for (uint32_t axis = 0; axis < 4; ++axis) {
-                    planes[i * PLANE_FLOATS + (slot / 4) * 96 + plane * 16 + axis * 4 + slot % 4] = value[axis];
-                }
-            }
-        }
     }
 
     const uint32_t watermark = store.GetWatermark();
@@ -776,7 +760,6 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
         const __m128 cy = _mm_set1_ps(bounds.y);
         const __m128 cz = _mm_set1_ps(bounds.z);
         const __m128 radius = _mm_set1_ps(bounds.w);
-        const __m128 negRadius = _mm_set1_ps(-bounds.w);
         for (uint32_t g = 0; g < groups; ++g) {
             const float* sphere = spheres + g * 16;
             const __m128 dx = _mm_sub_ps(_mm_load_ps(sphere), cx);
@@ -788,19 +771,15 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
             while (nearLights != 0u) {
                 const uint32_t i = g * 4 + static_cast<uint32_t>(std::countr_zero(nearLights));
                 nearLights &= nearLights - 1u;
-                uint32_t faces = 0;
-                for (uint32_t half = 0; half < 2; ++half) {
-                    const float* block = planes + i * PLANE_FLOATS + half * 96;
-                    __m128 inside = _mm_castsi128_ps(_mm_set1_epi32(-1));
-                    for (uint32_t plane = 0; plane < 6; ++plane) {
-                        const float* row = block + plane * 16;
-                        const __m128 distance = _mm_add_ps(_mm_add_ps(_mm_mul_ps(_mm_load_ps(row), cx), _mm_mul_ps(_mm_load_ps(row + 4), cy)),
-                                                           _mm_add_ps(_mm_mul_ps(_mm_load_ps(row + 8), cz), _mm_load_ps(row + 12)));
-                        inside = _mm_and_ps(inside, _mm_cmpge_ps(distance, negRadius));
-                    }
-                    faces |= static_cast<uint32_t>(_mm_movemask_ps(inside)) << (half * 4);
+                const uint32_t lightIndex = vf.bakedShadowLights[i].lightIndex;
+                const LightInfo& light = lights[lightIndex];
+                const glm::vec3 offset = glm::vec3(bounds) - glm::vec3(light.position);
+                if (Render::IsLocalShadowSpot(light)) {
+                    outFaces[lightIndex] |= Render::LocalShadowSpotTouched(light, offset, bounds.w) ? 1u : 0u;
                 }
-                outFaces[vf.bakedShadowLights[i].lightIndex] |= static_cast<uint8_t>(faces & 0x3Fu);
+                else {
+                    outFaces[lightIndex] |= static_cast<uint8_t>(Render::LocalShadowCubeFacesTouched(offset, bounds.w));
+                }
             }
         }
     }
@@ -886,7 +865,7 @@ static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* 
                 bPicked |= picks[k] == old.lightIndex;
             }
             const float strength = old.strength - fadeStep;
-            if (!bPicked && strength > 0.0f && old.lightIndex < lightCount && !isBaked(old.lightIndex) && selection.lightCount < LOCAL_SHADOW_MAX_VIEWS) {
+            if (!bPicked && strength > 0.0f && old.lightIndex < lightCount && old.bOverlay == isBaked(old.lightIndex) && selection.lightCount < LOCAL_SHADOW_MAX_VIEWS) {
                 add(old.lightIndex, strength);
             }
         }
