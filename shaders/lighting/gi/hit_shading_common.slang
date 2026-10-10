@@ -300,10 +300,10 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
 
 struct HitShadowCandidates
 {
-    float3 contribution[REFLECTION_HIT_SHADOW_RAYS_MAX];
-    float3 direction[REFLECTION_HIT_SHADOW_RAYS_MAX];
-    float tMax[REFLECTION_HIT_SHADOW_RAYS_MAX];
-    float luma[REFLECTION_HIT_SHADOW_RAYS_MAX];
+    float3 contribution[REFLECTION_HIT_SHADOW_RAYS];
+    float3 direction[REFLECTION_HIT_SHADOW_RAYS];
+    float tMax[REFLECTION_HIT_SHADOW_RAYS];
+    float luma[REFLECTION_HIT_SHADOW_RAYS];
     uint count;
 
     [mutating] void Push(uint capacity, float3 c, float3 d, float t)
@@ -398,7 +398,7 @@ public float3 ShadeReflectionRayHit(ReflectionShadePushConstant pc, Instance ins
         }
     }
 
-    uint shadowRayBudget = pc.tlasIndex != ~0u ? min(pc.hitLocalShadowRays, REFLECTION_HIT_SHADOW_RAYS_MAX) : 0u;
+    uint shadowRayBudget = pc.tlasIndex != ~0u ? REFLECTION_HIT_SHADOW_RAYS : 0u;
     HitShadowCandidates candidates;
     candidates.count = 0u;
     if (worldGridLights.grid != nullptr) {

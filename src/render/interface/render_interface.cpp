@@ -19,6 +19,7 @@ ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
     lightRuns = ArenaVector<DirtyRun>(&arena, wm.lightRuns);
     reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
     emissiveTriWork = ArenaFixedVector<EmissiveTriLightWork>(&arena, MAX_EMISSIVE_MESHES);
+    boundsChanges = ArenaFixedVector<glm::vec4>(&arena, MAX_BOUNDS_CHANGES);
     probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
     localDDGIVolumes = ArenaFixedVector<LocalDDGIVolume>(&arena, MAX_LOCAL_DDGI_VOLUMES);
 

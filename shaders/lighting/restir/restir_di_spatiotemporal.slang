@@ -159,7 +159,7 @@ void ComputeReSTIRDISpatioTemporal(uniform ReSTIRDISpatioTemporalPushConstant pc
 
     uint2 baseHistory = min(uint2(saturate(historyUV) * float2(pc.renderExtent)), pc.renderExtent - uint2(1, 1));
 #if RESTIR_ENABLE_PERMUTATION_SAMPLING
-    if (bHistoryOnScreen && pc.bPermutationSampling != 0u) {
+    if (bHistoryOnScreen) {
         int2 permuted = ApplyPermutationSampling(int2(baseHistory), pc.frameIndex);
         if (all(permuted >= int2(0, 0)) && all(permuted < int2(pc.renderExtent))) {
             baseHistory = uint2(permuted);

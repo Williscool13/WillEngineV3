@@ -177,7 +177,6 @@ static void DeserializeReblur(const TextReader& r, Core::ReBLURParams& p)
 
 void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
 {
-    w.Key("bPermutationSampling", p.bPermutationSampling);
     w.Key("bEnableAntilag", p.bEnableAntilag);
     w.Key("antilagStrength", p.antilagStrength);
     w.Key("spatialRadius", p.spatialRadius);
@@ -195,7 +194,6 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
     w.Key("lightProposal", static_cast<uint32_t>(p.lightProposal));
     w.Key("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
     w.Key("emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier);
-    w.Key("bEnableConfidence", p.bEnableConfidence);
     w.Key("confidenceStrength", p.confidenceStrength);
     w.Key("confidenceSensitivity", p.confidenceSensitivity);
     w.Key("confidenceDarknessBias", p.confidenceDarknessBias);
@@ -227,7 +225,6 @@ void Serialize(const Core::ReSTIRParams& p, TextWriter& w)
 
 void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
 {
-    p.bPermutationSampling = r.Bool("bPermutationSampling", p.bPermutationSampling);
     p.bEnableAntilag = r.Bool("bEnableAntilag", p.bEnableAntilag);
     p.antilagStrength = r.Float("antilagStrength", p.antilagStrength);
     p.spatialRadius = r.UInt("spatialRadius", p.spatialRadius);
@@ -245,7 +242,6 @@ void Deserialize(const TextReader& r, Core::ReSTIRParams& p)
     p.lightProposal = static_cast<Core::ReSTIRParams::LightProposal>(r.UInt("lightProposal", static_cast<uint32_t>(p.lightProposal)));
     p.bEmissiveTriangleLights = r.Bool("bEmissiveTriangleLights", p.bEmissiveTriangleLights);
     p.emissiveTriRangeMultiplier = r.Float("emissiveTriRangeMultiplier", p.emissiveTriRangeMultiplier);
-    p.bEnableConfidence = r.Bool("bEnableConfidence", p.bEnableConfidence);
     p.confidenceStrength = r.Float("confidenceStrength", p.confidenceStrength);
     p.confidenceSensitivity = r.Float("confidenceSensitivity", p.confidenceSensitivity);
     p.confidenceDarknessBias = r.Float("confidenceDarknessBias", p.confidenceDarknessBias);
@@ -366,7 +362,6 @@ void Serialize(const Core::ReflectionConfiguration& p, TextWriter& w)
     w.Key("maxRayIntensity", p.maxRayIntensity);
     w.Key("ssrThickness", p.ssrThickness);
     w.Key("ssrMaxSteps", p.ssrMaxSteps);
-    w.Key("hitLocalShadowRays", p.hitLocalShadowRays);
     w.Key("hitTextureLod", p.hitTextureLod);
 }
 
@@ -386,8 +381,6 @@ void Deserialize(const TextReader& r, Core::ReflectionConfiguration& p)
     p.maxRayIntensity = r.Float("maxRayIntensity", p.maxRayIntensity);
     p.ssrThickness = r.Float("ssrThickness", p.ssrThickness);
     p.ssrMaxSteps = r.Int("ssrMaxSteps", p.ssrMaxSteps);
-    const int32_t hitLocalShadowRaysRaw = r.Int("hitLocalShadowRays", p.hitLocalShadowRays);
-    p.hitLocalShadowRays = hitLocalShadowRaysRaw < 0 ? 0 : (hitLocalShadowRaysRaw > static_cast<int32_t>(REFLECTION_HIT_SHADOW_RAYS_MAX) ? static_cast<int32_t>(REFLECTION_HIT_SHADOW_RAYS_MAX) : hitLocalShadowRaysRaw);
     p.hitTextureLod = r.Float("hitTextureLod", p.hitTextureLod);
 }
 

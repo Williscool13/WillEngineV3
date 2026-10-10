@@ -253,7 +253,6 @@ ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
                 .iblIntensity = iblIntensity,
                 .mirrorRoughnessMax = reflectionConfig.mirrorRoughnessMax,
                 .bAlphaTest = reflectionConfig.bAlphaTest ? 1u : 0u,
-                .hitLocalShadowRays = bHasTLAS ? static_cast<uint32_t>(reflectionConfig.hitLocalShadowRays) : 0u,
                 .hitTextureLod = reflectionConfig.hitTextureLod,
                 .hitDeltaIndex = bHitDelta ? graph.GetStorageImageViewDescriptorIndex(hitDelta) : ~0u,
             };

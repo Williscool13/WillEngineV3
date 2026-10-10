@@ -444,6 +444,7 @@ struct LocalShadowLight
 };
 
 inline constexpr uint32_t MAX_BAKED_SHADOW_LIGHTS = 256;
+inline constexpr uint32_t MAX_BOUNDS_CHANGES = 10000;
 
 struct BakedShadowLight
 {
@@ -530,6 +531,8 @@ struct ViewFamily
     uint32_t localShadowDirtyTiles{0};
     glm::uvec2 localShadowAtlasExtent{0};
     InlineVector<BakedShadowLight, MAX_BAKED_SHADOW_LIGHTS> bakedShadowLights{};
+    ArenaFixedVector<glm::vec4> boundsChanges{};
+    bool bBoundsChangesOverflow{false};
     float iblIntensity{1.0f};
     float indirectIntensity{1.0f};
     bool bReflectionProbeBruteForce{false};

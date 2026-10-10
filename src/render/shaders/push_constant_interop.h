@@ -534,7 +534,6 @@ SHADER_PUBLIC struct ReSTIRDICombinedTemporalPushConstant
     SHADER_PUBLIC uint32_t prevShadowVisIndex;
     SHADER_PUBLIC uint32_t shadowVisIndex;
     SHADER_PUBLIC uint32_t signalIndex;
-    SHADER_PUBLIC uint32_t bPermutationSampling;
     SHADER_PUBLIC float antilagStrength;
     SHADER_PUBLIC uint32_t bInitialVisibility;
     SHADER_PUBLIC uint32_t bTemporalSearch;
@@ -572,7 +571,6 @@ SHADER_PUBLIC struct ReSTIRDISpatioTemporalPushConstant
     SHADER_PUBLIC uint32_t signalIndex;
     SHADER_PUBLIC uint32_t spatialRadius;
     SHADER_PUBLIC uint32_t spatialNeighbors;
-    SHADER_PUBLIC uint32_t bPermutationSampling;
     SHADER_PUBLIC uint32_t bTemporalSearch;
     SHADER_PUBLIC uint32_t bInitialVisibility;
     SHADER_PUBLIC float antilagStrength;
@@ -1033,7 +1031,6 @@ SHADER_PUBLIC struct ReflectionShadePushConstant
     SHADER_PUBLIC float iblIntensity;
     SHADER_PUBLIC float mirrorRoughnessMax;
     SHADER_PUBLIC uint32_t bAlphaTest;
-    SHADER_PUBLIC uint32_t hitLocalShadowRays;
     SHADER_PUBLIC float hitTextureLod;
     SHADER_PUBLIC uint32_t hitDeltaIndex;
 };

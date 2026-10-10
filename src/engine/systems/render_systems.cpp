@@ -787,8 +787,6 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
 
 static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
 {
-    // Past this many changed casters nearly every light's range has one; redrawing everything is cheaper than testing.
-    constexpr size_t LOCAL_SHADOW_CHANGE_LIMIT = 10000;
     using Selection = Engine::LocalShadowSelection;
 
     const Engine::LightingState& lighting = state->lighting;
@@ -806,7 +804,7 @@ static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* 
         const auto budget = static_cast<uint32_t>(glm::clamp(lighting.localShadows.viewBudget, 1, static_cast<int32_t>(LOCAL_SHADOW_MAX_VIEWS)));
         const glm::uvec2 tiles = Render::LocalShadowAtlasTiles(budget);
         const float fadeStep = lighting.localShadows.fadeSeconds > 0.0f ? state->timeFrame->deltaTime / lighting.localShadows.fadeSeconds : 1.0f;
-        const bool bRedrawAll = selection.resolution != resolution || selection.budget != budget || selection.bWasFrozen || changes.Size() > LOCAL_SHADOW_CHANGE_LIMIT;
+        const bool bRedrawAll = selection.resolution != resolution || selection.budget != budget || selection.bWasFrozen || vf.bBoundsChangesOverflow;
         if (selection.resolution != resolution || selection.budget != budget) {
             for (uint32_t t = 0; t < LOCAL_SHADOW_MAX_VIEWS; ++t) {
                 selection.tileOwners[t] = Selection::FREE_TILE;
@@ -927,7 +925,6 @@ static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* 
         selection.budget = budget;
         selection.bWasFrozen = false;
     }
-    state->instanceStore.ClearBoundsChanges();
 
     vf.localShadowLightCount = selection.lightCount;
     vf.localShadowLights = selection.lights;
@@ -962,7 +959,16 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         memcpy(vf.lightPayload.Data() + base, storeLights + offset, count * sizeof(LightInfo));
         vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
     });
+    const Core::Span<const Vec4> boundsChanges = state->instanceStore.GetBoundsChanges();
+    vf.boundsChanges.Clear();
+    vf.bBoundsChangesOverflow = boundsChanges.Size() > Core::MAX_BOUNDS_CHANGES;
+    if (!vf.bBoundsChangesOverflow) {
+        for (const Vec4& change : boundsChanges) {
+            vf.boundsChanges.PushBack(change);
+        }
+    }
     SelectLocalShadows(ctx, state, vf, storeLights, analyticWatermark);
+    state->instanceStore.ClearBoundsChanges();
 
     Engine::TriLightStore& triLightStore = state->triLightStore;
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;

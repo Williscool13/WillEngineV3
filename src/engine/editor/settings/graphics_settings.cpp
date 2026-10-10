@@ -82,7 +82,6 @@ static void CopyEnvironmentSection(const LightingBundle& from, LightingBundle& t
 static void CopyReSTIRDenoiserFields(const Core::ReSTIRParams& from, Core::ReSTIRParams& to)
 {
     to.denoiserMode = from.denoiserMode;
-    to.bEnableConfidence = from.bEnableConfidence;
     to.confidenceStrength = from.confidenceStrength;
     to.confidenceSensitivity = from.confidenceSensitivity;
     to.confidenceDarknessBias = from.confidenceDarknessBias;
@@ -1779,11 +1778,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 changed = true;
             }
             ImGui::EndDisabled();
-            ImGui::BeginDisabled(!RESTIR_ENABLE_PERMUTATION_SAMPLING);
-            if (Widgets::Checkbox("Permutation Sampling", &restir.bPermutationSampling)) {
-                changed = true;
-            }
-            ImGui::EndDisabled();
             if (Widgets::SliderFloat("Boiling Filter (0=off)", &restir.boilingFilterStrength, 0.0f, 1.0f)) {
                 changed = true;
             }
@@ -1963,9 +1957,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             const bool bConfidenceDenoiser = restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR;
-            if (bConfidenceDenoiser) {
-                ImGui::BeginDisabled(!RESTIR_ENABLE_CONFIDENCE);
-                featureSection("Confidence (Moving-Shadow Antilag)", &restir.bEnableConfidence, [&] {
+            if (RESTIR_ENABLE_CONFIDENCE && bConfidenceDenoiser && Widgets::BeginSection("Confidence (Moving-Shadow Antilag)")) {
+                {
                     if (Widgets::SliderFloat("History Confidence##restir", &restir.confidenceStrength, 0.0f, 1.0f,
                                              {.format = "%.2f", .tooltip = "Moving-shadow antilag: temporal luminance-gradient confidence fed to RELAX (RTXDI-style). Master mix.", .reset = true, .resetTo = 0.75f})) {
                         changed = true;
@@ -1988,8 +1981,8 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                         restir.confidenceBlurRadius = static_cast<uint32_t>(confidenceBlurRadius);
                         changed = true;
                     }
-                });
-                ImGui::EndDisabled();
+                }
+                Widgets::EndSection();
             }
 
             if (restir.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX) {
@@ -2222,7 +2215,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 reflF("SSR Thickness##reflection", &reflection.ssrThickness, reflectionDefaults.ssrThickness, 0.05f, 2.0f, "%.2f", "View-space depth window (meters) behind a surface that still counts as a hit. Larger = fewer gaps but more over-reflection behind thin objects. Default 0.3.");
                 if (Widgets::SliderInt("SSR Max Steps##reflection", &reflection.ssrMaxSteps, 16, 256, {.tooltip = "Maximum march steps per ray before giving up. Higher = longer reflections, higher cost. Default 64.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.ssrMaxSteps)})) { changed = true; }
             }
-            if (Widgets::SliderInt("Hit Local Shadow Rays##reflection", &reflection.hitLocalShadowRays, 0, static_cast<int>(REFLECTION_HIT_SHADOW_RAYS_MAX), {.tooltip = "Analytic hit shading: shadow rays spent on the brightest local-light contributions at the hit (sun has its own ray via Hit Sun Mode). Remaining lights stay unshadowed. 0 = none. Default 1.", .reset = true, .resetTo = static_cast<double>(reflectionDefaults.hitLocalShadowRays)})) { changed = true; }
             reflF("Hit Texture LOD##reflection", &reflection.hitTextureLod, reflectionDefaults.hitTextureLod, 0.0f, 8.0f, "%.1f", "Analytic hit shading: fixed mip level for albedo/emissive/metal-rough sampling at the hit. 0 = full-res (sharper, more cache pressure). Default 3.");
 
             ImGui::Spacing();

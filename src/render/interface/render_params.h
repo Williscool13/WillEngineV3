@@ -411,7 +411,6 @@ struct ReBLURParams
 
 struct ReSTIRParams
 {
-    bool bPermutationSampling{true};
     bool bEnableAntilag{false};
     float antilagStrength{0.5f};
     uint32_t spatialRadius{30};
@@ -434,7 +433,6 @@ struct ReSTIRParams
     bool bEmissiveTriangleLights{true};
     float emissiveTriRangeMultiplier{0.03125f};
     // RELAX only
-    bool bEnableConfidence{true};
     float confidenceStrength{0.75f};
     float confidenceSensitivity{3.0f};
     float confidenceDarknessBias{655.36f};
@@ -550,7 +548,6 @@ struct ReflectionConfiguration
     float maxRayIntensity{0.0f};
     float ssrThickness{0.3f};
     int32_t ssrMaxSteps{64};
-    int32_t hitLocalShadowRays{1};
     float hitTextureLod{3.0f};
 
     bool operator==(const ReflectionConfiguration&) const = default;

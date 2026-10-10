@@ -49,8 +49,8 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
     const bool bHasTLAS = scene.tlas.IsValid();
     const bool bTemporalReuse = restirParams.bEnableTemporal;
     const bool bConfidenceDenoiser = restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::RELAX || restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRD || restirParams.denoiserMode == Core::ReSTIRParams::DenoiserMode::NRDReBLUR;
-    const bool bConfidence = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && bConfidenceDenoiser;
-    const bool bSunFlip = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && restirParams.bEnableConfidence && bConfidenceDenoiser;
+    const bool bConfidence = bTemporalReuse && RESTIR_ENABLE_CONFIDENCE && bConfidenceDenoiser;
+    const bool bSunFlip = bConfidence;
     const bool bAntilag = bTemporalReuse && RESTIR_ENABLE_ANTILAG && restirParams.bEnableAntilag;
     const bool bShadowVis = bAntilag;
 
@@ -307,7 +307,6 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
                 .prevShadowVisIndex = ~0u,
                 .shadowVisIndex = ~0u,
                 .signalIndex = ~0u,
-                .bPermutationSampling = 0u,
                 .antilagStrength = 0.0f,
                 .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                 .activeCheckerboardField = field,
@@ -375,7 +374,6 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
                     .signalIndex = bConfidence ? graph.GetStorageImageViewDescriptorIndex(signal) : ~0u,
                     .spatialRadius = restirParams.spatialRadius,
                     .spatialNeighbors = restirParams.spatialNeighbors,
-                    .bPermutationSampling = restirParams.bPermutationSampling ? 1u : 0u,
                     .bTemporalSearch = restirParams.bTemporalSearch ? 1u : 0u,
                     .bInitialVisibility = (tlasIndex != ~0u && restirParams.bInitialVisibility) ? 1u : 0u,
                     .antilagStrength = restirParams.antilagStrength,
