@@ -23,4 +23,7 @@
 // [base] Draws most light candidates from the lights last frame's 8x8 tile saw lit; the rest stay with the regular proposal.
 #define RESTIR_ENABLE_TILE_GUIDING 1
 
+// [resolve] Each pixel also shades its neighbours' reservoir winners, reusing their visibility.
+#define RESTIR_ENABLE_SHADING_REUSE 1
+
 #endif // WILL_ENGINE_RESTIR_FEATURES
