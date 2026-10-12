@@ -15,15 +15,9 @@ import restir_common;
 import bindless_declarations;
 import bucket_dispatch_common;
 
-#include "restir_features_macros.h"
-
 // Directional-light hit distance for the denoiser's specular hitT channel; matches the sun trace TMax.
 static const float SUN_SPEC_HIT_T = 10000.0;
 static const float NEIGHBOR_REJECT_DISTANCE = 3.0e+38;
-static const int2 REUSE_CROSS[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
-static const int2 REUSE_DIAG[4] = { int2(-1, -1), int2(1, -1), int2(-1, 1), int2(1, 1) };
-static const float REUSE_DEPTH_SCALE = 5000.0;
-static const float REUSE_MIN_WEIGHT = 1.0e-6;
 
 float3 SanitizeRadiance(float3 c) {
     c.x = (isnan(c.x) || isinf(c.x)) ? 0.0 : c.x;
@@ -69,14 +63,6 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
     float viewSpaceDepth = ScreenToViewSpaceDepth(depth, scene.depthLinearizeMult, scene.depthLinearizeAdd);
     float3 viewPosition = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, uv, viewSpaceDepth);
 
-    float3 N = normalize(li.viewNormal);
-    float3 V = normalize(-viewPosition);
-
-#if RESTIR_ENABLE_SHADING_REUSE
-    uint tapCount = bHole ? 4u : 5u;
-#else
-    uint tapCount = 1u;
-    int2 selfOffset = int2(0, 0);
     if (bHole) {
         int xl = int(pixel.x) - 1;
         int xr = int(pixel.x) + 1;
@@ -91,9 +77,11 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
             if (rawR > 0.0) { dr = abs(ScreenToViewSpaceDepth(rawR, scene.depthLinearizeMult, scene.depthLinearizeAdd) - viewSpaceDepth); }
         }
         int borrowX = (dl <= dr) ? max(xl, 0) : min(xr, int(pc.renderExtent.x) - 1);
-        selfOffset = int2(borrowX - int(pixel.x), 0);
+        rcoord = uint2(uint(borrowX) >> 1u, pixel.y);
     }
-#endif
+
+    float3 N = normalize(li.viewNormal);
+    float3 V = normalize(-viewPosition);
 
     float roughness = max(li.roughness, RESTIR_MIN_ROUGHNESS);
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), li.albedo.xyz, li.metallic);
@@ -108,38 +96,13 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
     float bestDiffLum = -1.0;
     float bestSpecLum = -1.0;
 
-    bool bAnyLight = pc.reservoirBuffer != 0;
-    float weightSum = 0.0;
-    [loop]
-    for (uint t = 0u; t < tapCount && bAnyLight; t++)
-    {
-#if RESTIR_ENABLE_SHADING_REUSE
-        int2 offset = bHole ? REUSE_CROSS[t] : (t == 0u ? int2(0, 0) : (field != 0u ? REUSE_DIAG[t - 1u] : REUSE_CROSS[t - 1u]));
-#else
-        int2 offset = selfOffset;
-#endif
-        int2 q = int2(pixel) + offset;
-        if (any(q < 0) || any(q >= int2(pc.renderExtent))) {
-            continue;
-        }
-        float tapWeight = 1.0;
-#if RESTIR_ENABLE_SHADING_REUSE
-        if (any(offset != 0)) {
-            float rawQ = rdgTexturesFloat[pc.depthIndex].Load(int3(q, 0)).r;
-            if (rawQ <= 0.0) {
-                continue;
-            }
-            float zq = ScreenToViewSpaceDepth(rawQ, scene.depthLinearizeMult, scene.depthLinearizeAdd);
-            float3 pq = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, (float2(q) + 0.5) / float2(pc.renderExtent), zq);
-            float3 nq = normalize(UnpackNormalOct16(rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(q, 0)).r));
-            float plane = abs(dot(N, pq - viewPosition)) / abs(viewSpaceDepth);
-            float normalWeight = 1.0 - saturate(acos(saturate(dot(N, nq))));
-            tapWeight = max(exp2(-REUSE_DEPTH_SCALE * plane * plane) * normalWeight * normalWeight, REUSE_MIN_WEIGHT);
-        }
-#endif
-        weightSum += tapWeight;
+    uint stride = RestirCheckerboardStride(pc.renderExtent.x, field);
+    uint pixelIdx = rcoord.y * stride + rcoord.x;
 
-        Reservoir r = pc.reservoirBuffer[ReservoirIndex(PixelPosToReservoirPos(uint2(q), field), pc.renderExtent.x, field)];
+    bool bAnyLight = pc.reservoirBuffer != 0;
+    if (bAnyLight)
+    {
+        Reservoir r = pc.reservoirBuffer[pixelIdx];
 
         if (r.lightIdx != ~0u && r.W > 0.0 && r.lightIdx < uint(pc.lightData->lightCount))
         {
@@ -163,7 +126,7 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
                 float3 diffuseAl = kDal * li.albedo.xyz * orenNayarAl;
 
                 float3 alColor = UnpackUnorm4x8(vs.packedColor).rgb;
-                float3 commonTerm = s.cosShade * LightGeometryTerm(s) * vs.intensity * alColor * s.attenuation * r.W * tapWeight;
+                float3 commonTerm = s.cosShade * LightGeometryTerm(s) * vs.intensity * alColor * s.attenuation * r.W;
 
                 float3 diffContribution = diffuseAl * commonTerm;
                 diffuseRadiance += diffContribution;
@@ -191,14 +154,6 @@ void ComputeLightingPBRRestir(uniform VisibilityLightingPushConstant pc, uint3 g
                 }
             }
         }
-    }
-    if (weightSum > 0.0)
-    {
-        float invWeightSum = 1.0 / weightSum;
-        diffuseRadiance *= invWeightSum;
-        specularRadiance *= invWeightSum;
-        resolvedDiffuse *= invWeightSum;
-        baselineDiffuse *= invWeightSum;
     }
 
     if (pc.sunVisIndex != ~0x0u)
