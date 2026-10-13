@@ -46,6 +46,7 @@ ProjectConfig ReadProjectConfig()
 
     config.resolutionScale = r.Float("resolutionScale", config.resolutionScale);
     config.reflectionProbeLineWidth = r.Float("reflectionProbeLineWidth", config.reflectionProbeLineWidth);
+    config.bDrawPostProcessVolumes = r.Bool("bDrawPostProcessVolumes", config.bDrawPostProcessVolumes);
 
     config.gameCameraFovDegrees = r.Float("gameCameraFovDegrees", config.gameCameraFovDegrees);
     config.gameCameraNearPlane = r.Float("gameCameraNearPlane", config.gameCameraNearPlane);
@@ -100,6 +101,7 @@ bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
     w.EndBlock();
     w.Key("resolutionScale", config.resolutionScale);
     w.Key("reflectionProbeLineWidth", config.reflectionProbeLineWidth);
+    w.Key("bDrawPostProcessVolumes", config.bDrawPostProcessVolumes);
     w.Key("gameCameraFovDegrees", config.gameCameraFovDegrees);
     w.Key("gameCameraNearPlane", config.gameCameraNearPlane);
     w.Key("editorCameraFovDegrees", config.editorCameraFovDegrees);

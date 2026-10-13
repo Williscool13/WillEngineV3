@@ -1184,34 +1184,24 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
 void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    struct ActiveVolume
-    {
-        int32_t priority;
-        float weight;
-        const Component::PostProcessVolumeComponent* volume;
-    };
-
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     const Vec3 cameraPos = vf.mainView.currentViewData.cameraPos;
-    Core::InlineVector<ActiveVolume, 64> active;
+    Core::InlineVector<Engine::ActivePostProcessVolume, Engine::DebugState::MAX_ACTIVE_POST_PROCESS_VOLUMES>& active = state->debug.postProcessVolumes;
+    active.Clear();
     for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
         if (active.IsFull()) { break; }
         const float weight = Component::PostProcessVolumeComponent::CameraWeight(volume, worldTransform.translation, worldTransform.rotation, worldTransform.scale, cameraPos);
         if (weight <= 0.0f || volume.overrides.IsEmpty()) { continue; }
-        active.PushBack({volume.priority, weight, &volume});
+        active.PushBack({entity, volume.priority, weight});
         for (size_t i = active.Size() - 1; i > 0 && active[i - 1].priority > active[i].priority; --i) {
             std::swap(active[i - 1], active[i]);
         }
     }
 
-    for (const ActiveVolume& a : active) {
-        for (const Component::PostProcessOverride& o : a.volume->overrides) {
-            const Component::PostProcessOverrideField* field = Component::FindPostProcessOverrideField(o.field.View());
-            if (!field) { continue; }
-            float* value = field->resolve(vf);
-            const uint32_t count = field->bColor ? 3u : 1u;
-            for (uint32_t c = 0; c < count; ++c) {
-                value[c] = glm::mix(value[c], o.value[static_cast<glm::length_t>(c)], a.weight);
+    for (const Engine::ActivePostProcessVolume& a : active) {
+        for (const Component::PostProcessOverride& o : state->registry.get<Component::PostProcessVolumeComponent>(a.entity).overrides) {
+            if (const Component::PostProcessOverrideField* field = Component::FindPostProcessOverrideField(o.field.View())) {
+                Component::ApplyPostProcessOverride(*field, vf, o.value, a.weight);
             }
         }
     }
@@ -1307,6 +1297,22 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
             .billboard = true,
         });
     }
+
+    for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+        uint64_t stableId = 0;
+        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
+            stableId = stable->id.id;
+        }
+        sprites.PushBack(Core::Sprite{
+            .worldPosition = transform.translation,
+            .pixelSize = 0.5f,
+            .color = {0.7f, 0.4f, 1.0f, 1.0f},
+            .stableId = stableId,
+            .textureIndex = SPRITE_DDGI_VOLUME_BINDLESS_INDEX,
+            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
+            .billboard = true,
+        });
+    }
 }
 
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
@@ -1315,7 +1321,8 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     const Engine::LightDebugDrawMode mode = state->editor.lightDebugDrawMode;
     const bool bProbeDebugDraw = state->lighting.reflectionProbe.bDebugDraw;
     const bool bVolumeDebugDraw = state->lighting.ddgi.bDebugDrawVolumes;
-    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw && !bVolumeDebugDraw) { return; }
+    const bool bPostProcessVolumeDebugDraw = state->projectConfig.bDrawPostProcessVolumes;
+    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw && !bVolumeDebugDraw && !bPostProcessVolumeDebugDraw) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
 
@@ -1430,6 +1437,11 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
         const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
         Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
+    }
+
+    for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+        if (!bPostProcessVolumeDebugDraw && !shouldDraw(entity)) { continue; }
+        Component::PostProcessVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {

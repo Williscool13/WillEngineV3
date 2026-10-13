@@ -1637,7 +1637,13 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Every authored world volume as the region it fully owns (the probe window minus its one-cell fade band). Interior faces must sit inside the box. Face crosses on selected volumes only.");
             }
-            if (Widgets::SliderFloat("Probe Line Width##authoring", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe and DDGI world volume wireframes.", .reset = true, .resetTo = 0.02})) {
+            if (ImGui::Checkbox("Draw Post Process Volumes##authoring", &state->projectConfig.bDrawPostProcessVolumes)) {
+                Engine::WriteProjectConfig(state->projectConfig, state->allocator);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Blend band on selected volumes only.");
+            }
+            if (Widgets::SliderFloat("Probe Line Width##authoring", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe, DDGI world volume and post process volume wireframes.", .reset = true, .resetTo = 0.02})) {
                 Engine::WriteProjectConfig(state->projectConfig, state->allocator);
             }
             ImGui::BeginDisabled(IsPlaying(state));
@@ -2497,6 +2503,20 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp, Engine::EngineSta
     return changed;
 }
 
+static void DrawActivePostProcessVolumes(Engine::EngineState* state)
+{
+    const auto& active = state->debug.postProcessVolumes;
+    if (active.IsEmpty()) {
+        ImGui::TextDisabled("No active volumes");
+        return;
+    }
+    ImGui::TextUnformatted("Active volumes:");
+    for (const Engine::ActivePostProcessVolume& a : active) {
+        const auto* nameComp = state->registry.try_get<Component::NameComponent>(a.entity);
+        ImGui::BulletText("%s  priority %d  weight %.2f", nameComp != nullptr ? nameComp->name.c_str() : "(unnamed)", a.priority, a.weight);
+    }
+}
+
 void DrawPostProcessingWindow(Engine::EngineState* state)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_POST_PROCESSING];
@@ -2508,6 +2528,7 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
             SavePostProcessTab(state);
         }
         DrawPostProcessProfiles(state);
+        DrawActivePostProcessVolumes(state);
 
         ImGui::Separator();
         if (ImGui::Button("Reset All to Defaults")) {

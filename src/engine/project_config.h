@@ -66,6 +66,7 @@ struct ProjectConfig
 
     /** World-space wireframe line widths, one field per debug-draw category. */
     float reflectionProbeLineWidth{0.02f};
+    bool bDrawPostProcessVolumes{false};
 
     /** Camera projection. Aspect is viewport-derived, far is infinite (reverse-Z). */
     float gameCameraFovDegrees{70.0f};

@@ -201,8 +201,17 @@ struct LocalShadowDebugState
     bool bFreeze{false};
 };
 
+struct ActivePostProcessVolume
+{
+    entt::entity entity{entt::null};
+    int32_t priority{0};
+    float weight{0.0f};
+};
+
 struct DebugState
 {
+    static constexpr uint32_t MAX_ACTIVE_POST_PROCESS_VOLUMES = 64;
+
     Core::DebugRenderParams render{};
 
     /** Master GI freeze */
@@ -221,6 +230,7 @@ struct DebugState
     EmissiveDebugState emissive{};
     CSMDebugState csm{};
     LocalShadowDebugState localShadow{};
+    Core::InlineVector<ActivePostProcessVolume, MAX_ACTIVE_POST_PROCESS_VOLUMES> postProcessVolumes{};
     StringID shadingShaderOverride{};
     StringID lightingShaderOverride{};
     Core::InlineString<> resourceName{};

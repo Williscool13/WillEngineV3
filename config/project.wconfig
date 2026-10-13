@@ -44,6 +44,7 @@ mipBias|0xbf800000
 ;
 resolutionScale|0x3f400000
 reflectionProbeLineWidth|0x3dcccccd
+bDrawPostProcessVolumes|1
 gameCameraFovDegrees|0x42480000
 gameCameraNearPlane|0x3dcccccd
 editorCameraFovDegrees|0x427fe4e0
@@ -127,7 +128,7 @@ s
 id|886930926000899628
 ;
 s
-id|4722487947431716148
+id|6680640857240007171
 ;
 s
 id|7636658603264895446

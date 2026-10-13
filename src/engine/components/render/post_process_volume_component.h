@@ -40,7 +40,6 @@ struct PostProcessVolumeComponent
     bool bEnabled{true};
     bool bUnbound{false};
     int32_t priority{0};
-    Vec3 extents{5.0f, 5.0f, 5.0f};
     float blendRadius{1.0f};
     float blendWeight{1.0f};
     Core::InlineVector<PostProcessOverride, MAX_OVERRIDES> overrides;
@@ -49,7 +48,6 @@ struct PostProcessVolumeComponent
         WILL_FIELD(bEnabled),
         WILL_FIELD(bUnbound),
         WILL_FIELD(priority),
-        WILL_FIELD(extents, .min = 0.0f, .speed = 0.05f),
         WILL_FIELD(blendRadius, .min = 0.0f, .speed = 0.05f),
         WILL_FIELD(blendWeight, .min = 0.0f, .max = 1.0f, .speed = 0.01f),
         WILL_FIELD(overrides))
@@ -58,25 +56,32 @@ struct PostProcessVolumeComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    /** 0 outside the blend band, blendWeight inside the box. */
     static float CameraWeight(const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, const Vec3& cameraPos);
+
+    static void DrawBounds(Core::ViewFamily& viewFamily, const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected);
 };
+
+enum class PostProcessOverrideKind : uint8_t { Float, Color, Bool, Enum };
 
 struct PostProcessOverrideField
 {
     const char* name;
     const char* label;
     const char* group;
+    PostProcessOverrideKind kind;
     float min;
     float max;
     float speed;
-    bool bColor;
-    float* (*resolve)(Core::ViewFamily& viewFamily);
+    void* (*resolve)(Core::ViewFamily& viewFamily);
+    Core::Span<const char* const> options;
+    int32_t optionOffset;
 };
 
-Core::Span<const PostProcessOverrideField> PostProcessOverrideFields();
-
 const PostProcessOverrideField* FindPostProcessOverrideField(std::string_view name);
+
+Vec3 ReadPostProcessOverrideField(const PostProcessOverrideField& field, Core::ViewFamily& viewFamily);
+
+void ApplyPostProcessOverride(const PostProcessOverrideField& field, Core::ViewFamily& viewFamily, const Vec3& value, float weight);
 }
 
 #endif //WILL_ENGINE_POST_PROCESS_VOLUME_COMPONENT_H
