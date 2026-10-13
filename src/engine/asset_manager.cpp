@@ -175,6 +175,16 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
         LOG_CRITICAL(Asset, "Sprite texture sprite_ddgi_volume does not exist, please generate and restart the engine");
     }
 
+    TextureID spritePostProcessVolume = FindTextureByName("sprite_post_process_volume");
+    if (spritePostProcessVolume.IsValid()) {
+        Texture* spritePostProcessVolumeTex = LoadTexture(spritePostProcessVolume);
+        assert(spritePostProcessVolumeTex && spritePostProcessVolumeTex->bindlessHandle.index == SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX);
+    }
+    else {
+        resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        LOG_CRITICAL(Asset, "Sprite texture sprite_post_process_volume does not exist, please generate and restart the engine");
+    }
+
     auto roboto = FindFontByName("Roboto");
     if (roboto.IsValid()) {
         LoadFont(roboto);

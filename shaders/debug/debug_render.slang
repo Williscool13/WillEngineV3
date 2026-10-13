@@ -21,7 +21,7 @@ static const float kRefDistance = 5.0;
 static const float kDistanceExponent = 0.6;
 static const float kMinScale = 0.35;
 static const float kMaxScale = 3.0;
-static const float kMinClipW = 1e-4;
+static const float kNearClipMargin = 1e-4;
 
 [shader("mesh")]
 [outputtopology("triangle")]
@@ -57,7 +57,10 @@ void MeshDebugRender(
 
     float4 clipA = mul(scene.proj, float4(aView, 1.0));
     float4 clipB = mul(scene.proj, float4(bView, 1.0));
-    if (clipA.w < kMinClipW && clipB.w < kMinClipW) {
+    // Reverse-Z: the near plane is clip.w == clip.z
+    float nearA = clipA.w - clipA.z;
+    float nearB = clipB.w - clipB.z;
+    if (nearA < kNearClipMargin && nearB < kNearClipMargin) {
         [unroll]
         for (uint i = 0; i < 4; i++) {
             vertices[vBase + i].position = float4(0.0, 0.0, 2.0, 1.0);
@@ -73,14 +76,14 @@ void MeshDebugRender(
     float wA = seg.width * scaleA * 0.5f;
     float wB = seg.width * scaleB * 0.5f;
 
-    // Manual near clip; screen-space construction breaks at w <= 0
-    if (clipA.w < kMinClipW) {
-        float t = (kMinClipW - clipA.w) / (clipB.w - clipA.w);
+    // Manual near clip; hardware depth clipping would cut the pixel-space quad
+    if (nearA < kNearClipMargin) {
+        float t = (kNearClipMargin - nearA) / (nearB - nearA);
         clipA = lerp(clipA, clipB, t);
         wA = lerp(wA, wB, t);
     }
-    if (clipB.w < kMinClipW) {
-        float t = (kMinClipW - clipB.w) / (clipA.w - clipB.w);
+    if (nearB < kNearClipMargin) {
+        float t = (kNearClipMargin - nearB) / (nearA - nearB);
         clipB = lerp(clipB, clipA, t);
         wB = lerp(wB, wA, t);
     }
@@ -154,7 +157,10 @@ void MeshDebugRenderGPU(
 
     float4 clipA = mul(scene.proj, float4(aView, 1.0));
     float4 clipB = mul(scene.proj, float4(bView, 1.0));
-    if (clipA.w < kMinClipW && clipB.w < kMinClipW) {
+    // Reverse-Z: the near plane is clip.w == clip.z
+    float nearA = clipA.w - clipA.z;
+    float nearB = clipB.w - clipB.z;
+    if (nearA < kNearClipMargin && nearB < kNearClipMargin) {
         [unroll]
         for (uint i = 0; i < 4; i++) {
             vertices[vBase + i].position = float4(0.0, 0.0, 2.0, 1.0);
@@ -170,14 +176,14 @@ void MeshDebugRenderGPU(
     float wA = seg.width * scaleA * 0.5f;
     float wB = seg.width * scaleB * 0.5f;
 
-    // Manual near clip; screen-space construction breaks at w <= 0
-    if (clipA.w < kMinClipW) {
-        float t = (kMinClipW - clipA.w) / (clipB.w - clipA.w);
+    // Manual near clip; hardware depth clipping would cut the pixel-space quad
+    if (nearA < kNearClipMargin) {
+        float t = (kNearClipMargin - nearA) / (nearB - nearA);
         clipA = lerp(clipA, clipB, t);
         wA = lerp(wA, wB, t);
     }
-    if (clipB.w < kMinClipW) {
-        float t = (kMinClipW - clipB.w) / (clipA.w - clipB.w);
+    if (nearB < kNearClipMargin) {
+        float t = (kNearClipMargin - nearB) / (nearA - nearB);
         clipB = lerp(clipB, clipA, t);
         wB = lerp(wB, wA, t);
     }

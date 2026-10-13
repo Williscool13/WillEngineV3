@@ -1308,7 +1308,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
             .pixelSize = 0.5f,
             .color = {0.7f, 0.4f, 1.0f, 1.0f},
             .stableId = stableId,
-            .textureIndex = SPRITE_DDGI_VOLUME_BINDLESS_INDEX,
+            .textureIndex = SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX,
             .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
             .billboard = true,
         });
