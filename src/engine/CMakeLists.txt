@@ -169,6 +169,8 @@ add_library(engine STATIC
         components/render/mesh_source_exclusion.h
         components/render/module_mesh_component.cpp
         components/render/module_mesh_component.h
+        components/render/post_process_volume_component.cpp
+        components/render/post_process_volume_component.h
         components/render/procedural_mesh_component.cpp
         components/render/procedural_mesh_component.h
         components/render/reflection_probe_component.cpp

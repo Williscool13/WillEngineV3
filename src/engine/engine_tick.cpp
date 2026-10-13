@@ -243,6 +243,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         .reads = {TypeSID<Component::LocalDDGIVolumeComponent>(), TypeSID<Component::WorldTransformComponent>(), "engineConfig"_sid},
         .writes = {"viewFamily.ddgiVolumes"_sid},
     });
+    graph.Add("ApplyPostProcessVolumes", &ApplyPostProcessVolumes);
     graph.Add("ClearVerifyStores", [](EngineContext* ctx, EngineState* state) {
         state->debug.bVerifyStoresOnce = false;
     });

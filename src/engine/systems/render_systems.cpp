@@ -31,6 +31,7 @@
 #include "engine/components/render/text3d_component.h"
 #include "engine/components/render/light_components.h"
 #include "engine/components/render/local_ddgi_volume_component.h"
+#include "engine/components/render/post_process_volume_component.h"
 #include "engine/components/render/reflection_probe_component.h"
 #include "render/shaders/lights_interop.h"
 #include "render/shaders/reflection_probe_interop.h"
@@ -1177,6 +1178,42 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
             .probeSpacing = glm::max(volume.probeSpacing, 0.25f),
             .volumeId = volume.volumeId,
         });
+    }
+}
+
+void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    struct ActiveVolume
+    {
+        int32_t priority;
+        float weight;
+        const Component::PostProcessVolumeComponent* volume;
+    };
+
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    const Vec3 cameraPos = vf.mainView.currentViewData.cameraPos;
+    Core::InlineVector<ActiveVolume, 64> active;
+    for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+        if (active.IsFull()) { break; }
+        const float weight = Component::PostProcessVolumeComponent::CameraWeight(volume, worldTransform.translation, worldTransform.rotation, worldTransform.scale, cameraPos);
+        if (weight <= 0.0f || volume.overrides.IsEmpty()) { continue; }
+        active.PushBack({volume.priority, weight, &volume});
+        for (size_t i = active.Size() - 1; i > 0 && active[i - 1].priority > active[i].priority; --i) {
+            std::swap(active[i - 1], active[i]);
+        }
+    }
+
+    for (const ActiveVolume& a : active) {
+        for (const Component::PostProcessOverride& o : a.volume->overrides) {
+            const Component::PostProcessOverrideField* field = Component::FindPostProcessOverrideField(o.field.View());
+            if (!field) { continue; }
+            float* value = field->resolve(vf);
+            const uint32_t count = field->bColor ? 3u : 1u;
+            for (uint32_t c = 0; c < count; ++c) {
+                value[c] = glm::mix(value[c], o.value[static_cast<glm::length_t>(c)], a.weight);
+            }
+        }
     }
 }
 

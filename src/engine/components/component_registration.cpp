@@ -18,6 +18,7 @@
 #include "engine/components/render/module_mesh_component.h"
 #include "engine/components/render/light_components.h"
 #include "engine/components/render/local_ddgi_volume_component.h"
+#include "engine/components/render/post_process_volume_component.h"
 #include "engine/components/render/reflection_probe_component.h"
 #include "engine/components/render/static_mesh_component.h"
 #include "engine/components/render/static_mesh_primitive_component.h"
@@ -65,6 +66,7 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::VolumetricFogComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::ReflectionProbeComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::LocalDDGIVolumeComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::PostProcessVolumeComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::ProceduralMeshComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::SplineMeshComponent>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::ModuleMeshComponent>(componentRegistry, Origin::Engine, false, false);

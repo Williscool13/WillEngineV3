@@ -199,6 +199,7 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(playerEntity);
         state->registry.emplace_or_replace<Component::SetVelocityTag>(playerEntity);
+        state->requests.RequestRenderReset(Core::RenderReset::Cut);
 
         break;
     }
