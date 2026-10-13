@@ -115,7 +115,6 @@ static void CopyGTAOSection(const LightingBundle& from, LightingBundle& to)
 static void CopyDDGISection(const LightingBundle& from, LightingBundle& to)
 {
     Core::DDGIParams ddgi = from.ddgi;
-    ddgi.bDebugDrawVolumes = to.ddgi.bDebugDrawVolumes;
     ddgi.bCascadeSampling = to.ddgi.bCascadeSampling;
     ddgi.bWorldVolumeGridCull = to.ddgi.bWorldVolumeGridCull;
     to.ddgi = ddgi;
@@ -129,7 +128,6 @@ static void CopyReflectionsSection(const LightingBundle& from, LightingBundle& t
 static void CopyReflectionProbesSection(const LightingBundle& from, LightingBundle& to)
 {
     Core::ReflectionProbeConfiguration probe = from.reflectionProbe;
-    probe.bDebugDraw = to.reflectionProbe.bDebugDraw;
     probe.bBruteForcePick = to.reflectionProbe.bBruteForcePick;
     to.reflectionProbe = probe;
 }
@@ -1629,20 +1627,6 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         };
 
         if (ImGui::CollapsingHeader("Authoring")) {
-            if (ImGui::Checkbox("Draw Reflection Probe Volumes##authoring", &state->lighting.reflectionProbe.bDebugDraw)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Every reflection probe volume with its capture marker; stale bakes in red. Face crosses on selected probes only.");
-            }
-            if (ImGui::Checkbox("Draw DDGI World Volumes##authoring", &state->lighting.ddgi.bDebugDrawVolumes)) { changed = true; }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Every authored world volume as the region it fully owns (the probe window minus its one-cell fade band). Interior faces must sit inside the box. Face crosses on selected volumes only.");
-            }
-            if (ImGui::Checkbox("Draw Post Process Volumes##authoring", &state->projectConfig.bDrawPostProcessVolumes)) {
-                Engine::WriteProjectConfig(state->projectConfig, state->allocator);
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Blend band on selected volumes only.");
-            }
             if (Widgets::SliderFloat("Probe Line Width##authoring", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe, DDGI world volume and post process volume wireframes.", .reset = true, .resetTo = 0.02})) {
                 Engine::WriteProjectConfig(state->projectConfig, state->allocator);
             }

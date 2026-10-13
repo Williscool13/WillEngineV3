@@ -7,6 +7,7 @@
 
 #include <imgui.h>
 #include <ImGuizmo.h>
+#include "core/math/constants.h"
 #include "core/types/math.h"
 #include "engine/engine_api.h"
 
@@ -112,7 +113,7 @@ bool DotHandle(int32_t handleId, Vec3 worldPos, Vec3 dragPlaneNormal,
     if (active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
         Vec3 rayDir = ScreenToRay(mouse, view, proj, viewport);
         float denom = glm::dot(rayDir, dragPlaneNormal);
-        if (glm::abs(denom) > 1e-5f) {
+        if (glm::abs(denom) > DIVISION_EPSILON) {
             float t = glm::dot(worldPos - cameraPos, dragPlaneNormal) / denom;
             if (t > 0.0f) { onMoved(cameraPos + t * rayDir); }
         }
@@ -165,7 +166,7 @@ bool AxisDotHandle(int32_t handleId, Vec3 worldPos, Vec3 axis,
         Vec3 w0 = worldPos - cameraPos;
         float b = glm::dot(axis, rayDir);
         float denom = 1.0f - b * b;
-        if (denom > 1e-6f) {
+        if (denom > DIVISION_EPSILON) {
             float t = (glm::dot(w0, rayDir) - b * glm::dot(w0, axis)) / denom;
             float s = t * b - glm::dot(w0, axis);
             onMoved(worldPos + axis * s);

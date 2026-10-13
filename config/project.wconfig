@@ -44,7 +44,10 @@ mipBias|0xbf800000
 ;
 resolutionScale|0x3f400000
 reflectionProbeLineWidth|0x3dcccccd
-bDrawPostProcessVolumes|1
+editorSpriteMask|63
+editorDebugDrawMask|63
+editorDebugDrawMode|2
+editorPhysicsDebugMask|1
 gameCameraFovDegrees|0x42480000
 gameCameraNearPlane|0x3dcccccd
 editorCameraFovDegrees|0x427fe4e0

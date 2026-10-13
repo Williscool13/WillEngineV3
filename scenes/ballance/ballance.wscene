@@ -1,7 +1,7 @@
 wscene
 version 2 1
 id 6680640857240007171
-content_version 57
+content_version 59
 entity_count 36
 end_header
 scene_id|6680640857240007171
@@ -1217,10 +1217,9 @@ sortOrder|42
 ;
 8357514868041474787
 translation|0x4376599a|0x4181999a|0x41b0cccd
-scale|0x3f7ffef4|0x3f7ffef4|0x3f7ffef4
+scale|0x41a00000|0x41a00000|0x41a00000
 ;
 12996896978716218763
-extents|0x41200000|0x41200000|0x41200000
 overrides|1
 item
 field|colorGradingTint
@@ -1229,6 +1228,6 @@ value|0x3f800000|0x00000000|0x00000000
 ;
 ;
 editor_camera
-translation|0x43800bdc|0x41b8f869|0x40c88504
-rotation|0x3ea39ce0|0xbd554fe2|0x3f6f0e7d|0x3e1bd77d
+translation|0x43553b90|0x41cb05d8|0x410d9c38
+rotation|0xbefe2841|0x3cd92596|0x3f5dcff4|0x3d3d7e89
 ;

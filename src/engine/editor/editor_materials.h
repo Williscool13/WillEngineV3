@@ -27,6 +27,9 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
  * @return The material clicked this frame, or INVALID.
  */
 Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::MaterialBrowserState& view, Engine::MaterialID current);
+
+/** BeginCombo previewing `current`: noneLabel when unset, "--" when mixed, red "Missing <id>" when the id is not registered. */
+bool BeginMaterialCombo(Engine::EngineContext* ctx, const char* label, Engine::MaterialID current, const char* noneLabel, bool bMixed = false);
 }
 
 #endif //WILL_ENGINE_EDITOR_MATERIALS_H

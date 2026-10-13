@@ -498,7 +498,7 @@ static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
     if (call.HasArg("targetX") || call.HasArg("targetY") || call.HasArg("targetZ")) {
         const glm::vec3 target{static_cast<float>(call.GetFloat("targetX", 0.0)), static_cast<float>(call.GetFloat("targetY", 0.0)), static_cast<float>(call.GetFloat("targetZ", 0.0))};
         const glm::vec3 toTarget = target - translation;
-        if (glm::dot(toTarget, toTarget) < 1e-8f) {
+        if (glm::dot(toTarget, toTarget) < POSITION_EPSILON * POSITION_EPSILON) {
             call.SetError("target equals the camera position");
             return ToolResult::Error;
         }
@@ -508,7 +508,7 @@ static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
     else if (call.HasArg("qw")) {
         const glm::quat q{static_cast<float>(call.GetFloat("qw", 1.0)), static_cast<float>(call.GetFloat("qx", 0.0)), static_cast<float>(call.GetFloat("qy", 0.0)),
                           static_cast<float>(call.GetFloat("qz", 0.0))};
-        if (glm::dot(q, q) < 1e-8f) {
+        if (glm::dot(q, q) < DIVISION_EPSILON * DIVISION_EPSILON) {
             call.SetError("rotation quaternion is zero");
             return ToolResult::Error;
         }

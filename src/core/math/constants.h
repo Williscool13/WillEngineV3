@@ -18,6 +18,15 @@ inline constexpr float SPEED_OF_SOUND = 343.0f; // m/s at 20°C
 
 inline constexpr float PI = 3.14159265359f;
 inline constexpr float TAU = 6.28318530718f;
+
+/** Metres: "moved" checks, authored sizes treated as zero. */
+inline constexpr float POSITION_EPSILON = 1e-4f;
+/** Metres: coincident or degenerate generated geometry. */
+inline constexpr float GEOMETRY_EPSILON = 1e-5f;
+/** Too short to normalize a vector built from unit vectors. */
+inline constexpr float DIRECTION_EPSILON = 1e-4f;
+/** Zero guard before dividing. */
+inline constexpr float DIVISION_EPSILON = 1e-6f;
 }
 
 using Core::Math::WORLD_UP;
@@ -27,5 +36,9 @@ using Core::Math::SPEED_OF_LIGHT;
 using Core::Math::SPEED_OF_SOUND;
 using Core::Math::PI;
 using Core::Math::TAU;
+using Core::Math::POSITION_EPSILON;
+using Core::Math::GEOMETRY_EPSILON;
+using Core::Math::DIRECTION_EPSILON;
+using Core::Math::DIVISION_EPSILON;
 
 #endif //WILL_ENGINE_CONSTANTS_H

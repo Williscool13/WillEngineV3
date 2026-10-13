@@ -8,6 +8,7 @@
 #include "spline_mesh_component.h"
 #include "static_mesh_component.h"
 #include "text3d_component.h"
+#include "core/math/constants.h"
 #include "core/math/euler.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
@@ -76,7 +77,7 @@ static Engine::Spline BuildSpiralRailingSpline(const Engine::SpiralStaircasePara
     const int steps = std::max(1, p.stepCount);
     const float stepH = p.bSpecifyStepHeight ? p.stepHeight : p.totalHeight / static_cast<float>(steps);
     const float dStep = glm::radians(p.bSpecifyDegreesPerStep ? p.degreesPerStep : p.totalSweep / static_cast<float>(steps));
-    const float heightPerRad = (dStep > 1e-6f) ? stepH / dStep : 0.0f;
+    const float heightPerRad = (dStep > DIVISION_EPSILON) ? stepH / dStep : 0.0f;
     const float totalAngle = static_cast<float>(steps) * dStep;
 
     // Sample by angular resolution (~1 control point per 6 deg of sweep) so the Catmull-Rom hugs the helix, at least one per step, capped at the spline budget.
@@ -241,7 +242,7 @@ static bool DrawExtentFaceHandles(Core::ViewFamily& viewFamily, Engine::EditCont
         unit[i] = 1.0f;
         const Vec3 axisWorld = Vec3(meshToWorld * Vec4(unit, 0.0f));
         const float axisScale = glm::length(axisWorld);
-        if (axisScale < 1e-6f) { continue; }
+        if (axisScale < DIVISION_EPSILON) { continue; }
         for (int s = 0; s < 2; ++s) {
             const bool bHigh = s == 0;
             const Vec3 outward = axisWorld / axisScale * (bHigh ? 1.0f : -1.0f);
@@ -255,7 +256,7 @@ static bool DrawExtentFaceHandles(Core::ViewFamily& viewFamily, Engine::EditCont
                                       if (bSnap) { newSize = glm::round(newSize / state->editor.snapTranslation) * state->editor.snapTranslation; }
                                       newSize = glm::max(newSize, bSnap ? state->editor.snapTranslation : 0.01f);
                                       const float delta = newSize - size[i];
-                                      if (glm::abs(delta) < 1e-6f) { return; }
+                                      if (glm::abs(delta) < GEOMETRY_EPSILON) { return; }
                                       setSize(i, newSize);
                                       bResized = true;
                                       if (!bHigh) {
@@ -801,7 +802,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragInt("Slices", &p.slices, 1, 3, 256);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Double Sided", &p.bDoubleSided)) { dirty = true; }
-                    if (p.innerRadius <= 1e-4f) { ImGui::TextDisabled("Inner radius 0 -> solid disc"); }
+                    if (p.innerRadius <= POSITION_EPSILON) { ImGui::TextDisabled("Inner radius 0 -> solid disc"); }
                 }
                 else if constexpr (std::is_same_v<T, Engine::WallParams>) {
                     ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 100.0f);
@@ -1030,13 +1031,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
         // Material selector
         {
-            const char* currentLabel = "(none)";
-            if (component.material.IsValid()) {
-                if (const Engine::Material* m = ctx->materialManager->GetMaterial(component.material)) {
-                    currentLabel = m->name.c_str();
-                }
-            }
-            if (ImGui::BeginCombo("Material", edit.IsMixed(&ProceduralMeshComponent::material) ? "--" : currentLabel, ImGuiComboFlags_HeightLarge)) {
+            if (Engine::BeginMaterialCombo(ctx, "Material", component.material, "(none)", edit.IsMixed(&ProceduralMeshComponent::material))) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     component.material = Engine::MaterialID{};
                     bCommit = true;

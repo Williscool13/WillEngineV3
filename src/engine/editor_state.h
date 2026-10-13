@@ -27,9 +27,6 @@ namespace Engine
 {
 constexpr uint32_t MAX_LOADED_SCENES = 8;
 
-enum class PhysicsDebugMode : uint8_t { Off, SensorOnly, SensorAndTag, On, Selected };
-enum class LightDebugDrawMode : uint8_t { None, Selected, All };
-
 struct RuntimeSceneMetadata
 {
     StringID sceneId;
@@ -86,10 +83,6 @@ struct EditorState
 
     /** Bookmark bar row: 0 cam presets, 1 scene slots, 2 recordings. */
     int32_t bookmarkMode{0};
-
-    PhysicsDebugMode physicsDebugMode{PhysicsDebugMode::SensorOnly};
-    LightDebugDrawMode lightDebugDrawMode{LightDebugDrawMode::Selected};
-    bool bShowLightSprites{true};
 
     // Scene management
     Core::InlineVector<RuntimeSceneMetadata, 8> loadedScenes{};

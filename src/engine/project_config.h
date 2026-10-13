@@ -20,6 +20,29 @@ namespace Engine
 static constexpr int MAX_CAMERA_PRESETS = 9;
 static constexpr int MAX_SCENE_SLOTS = 9;
 
+enum class LightDebugDrawMode : uint8_t { None, Selected, All };
+
+/** Editor object types with viewport sprites and debug draws. */
+enum EditorObjectBits : uint32_t
+{
+    EDITOR_OBJECT_AREA_LIGHT = 1u << 0,
+    EDITOR_OBJECT_SPHERE_LIGHT = 1u << 1,
+    EDITOR_OBJECT_DIRECTIONAL_LIGHT = 1u << 2,
+    EDITOR_OBJECT_REFLECTION_PROBE = 1u << 3,
+    EDITOR_OBJECT_DDGI_VOLUME = 1u << 4,
+    EDITOR_OBJECT_POST_PROCESS_VOLUME = 1u << 5,
+    EDITOR_OBJECT_ALL = (1u << 6) - 1u,
+};
+
+/** Physics bodies drawn: the union of every set bit. */
+enum PhysicsDebugBits : uint32_t
+{
+    PHYSICS_DEBUG_SENSORS = 1u << 0,
+    PHYSICS_DEBUG_TAGGED = 1u << 1,
+    PHYSICS_DEBUG_SELECTED = 1u << 2,
+    PHYSICS_DEBUG_ALL_BODIES = 1u << 3,
+};
+
 struct CameraPreset
 {
     bool bSet{false};
@@ -66,7 +89,11 @@ struct ProjectConfig
 
     /** World-space wireframe line widths, one field per debug-draw category. */
     float reflectionProbeLineWidth{0.02f};
-    bool bDrawPostProcessVolumes{false};
+
+    uint32_t editorSpriteMask{EDITOR_OBJECT_ALL};
+    uint32_t editorDebugDrawMask{EDITOR_OBJECT_ALL};
+    LightDebugDrawMode editorDebugDrawMode{LightDebugDrawMode::Selected};
+    uint32_t editorPhysicsDebugMask{PHYSICS_DEBUG_SENSORS};
 
     /** Camera projection. Aspect is viewport-derived, far is infinite (reverse-Z). */
     float gameCameraFovDegrees{70.0f};

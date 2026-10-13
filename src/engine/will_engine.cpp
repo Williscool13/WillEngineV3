@@ -1233,6 +1233,9 @@ void WillEngine::EditorImgui()
                         mips = header->bGenMips;
                         flipY = header->bGenFlipY;
                     }
+                    if (stem.View().starts_with("sprite_")) {
+                        flipY = false;
+                    }
                     assetGenerator->RequestTextureGenerateFromFile(entry.sourcePath, output, mips, format, flipY);
                     break;
                 }

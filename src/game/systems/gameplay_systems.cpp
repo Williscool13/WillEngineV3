@@ -7,6 +7,7 @@
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "core/math/constants.h"
 #include "core/time/time_frame.h"
 #include "engine/engine_api.h"
 #include "game/fwd_components.h"
@@ -123,7 +124,7 @@ void UpdateRotateInPlace(Engine::EngineContext* ctx, Engine::EngineState* state)
         auto& transform = view.get<Component::TransformComponent>(entity);
 
         const float axisLen = glm::length(rotator.axis);
-        if (axisLen < 1e-5f || rotator.speedDegrees == 0.0f) {
+        if (axisLen < DIVISION_EPSILON || rotator.speedDegrees == 0.0f) {
             continue;
         }
 

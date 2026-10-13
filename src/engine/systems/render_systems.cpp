@@ -1210,124 +1210,65 @@ void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* st
 void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    if (!state->editor.bShowLightSprites) { return; }
+    const uint32_t mask = state->projectConfig.editorSpriteMask;
+    const entt::registry& registry = state->registry;
     Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
-
-    auto areaView = state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>();
-    for (auto [entity, light, transform] : areaView.each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
-        }
+    auto push = [&](entt::entity entity, const Vec3& position, const Vec4& color, uint32_t textureIndex) {
+        const auto* stable = registry.try_get<Component::StableIdComponent>(entity);
         sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation,
+            .worldPosition = position,
             .pixelSize = 0.5f,
-            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
-            .stableId = stableId,
-            .textureIndex = SPRITE_AREA_LIGHT_BINDLESS_INDEX,
+            .color = color,
+            .stableId = stable != nullptr ? stable->id.id : uint64_t{0},
+            .textureIndex = textureIndex,
             .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
             .billboard = true,
         });
+    };
+
+    if (mask & Engine::EDITOR_OBJECT_AREA_LIGHT) {
+        for (auto [entity, light, transform] : registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation, {light.color.r, light.color.g, light.color.b, 1.0f}, SPRITE_AREA_LIGHT_BINDLESS_INDEX);
+        }
     }
-
-    auto sphereView = state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>();
-    for (auto [entity, light, transform] : sphereView.each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
+    if (mask & Engine::EDITOR_OBJECT_SPHERE_LIGHT) {
+        for (auto [entity, light, transform] : registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation, {light.color.r, light.color.g, light.color.b, 1.0f}, SPRITE_POINT_LIGHT_BINDLESS_INDEX);
         }
-        sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation,
-            .pixelSize = 0.5f,
-            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
-            .stableId = stableId,
-            .textureIndex = SPRITE_POINT_LIGHT_BINDLESS_INDEX,
-            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
-            .billboard = true,
-        });
     }
-
-    auto dirView = state->registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>();
-    for (auto [entity, light, transform] : dirView.each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
+    if (mask & Engine::EDITOR_OBJECT_DIRECTIONAL_LIGHT) {
+        for (auto [entity, light, transform] : registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation, {light.color.r, light.color.g, light.color.b, 1.0f}, SPRITE_DIRECTIONAL_LIGHT_BINDLESS_INDEX);
         }
-        sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation,
-            .pixelSize = 0.5f,
-            .color = {light.color.r, light.color.g, light.color.b, 1.0f},
-            .stableId = stableId,
-            .textureIndex = SPRITE_DIRECTIONAL_LIGHT_BINDLESS_INDEX,
-            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
-            .billboard = true,
-        });
     }
-
-    auto probeView = state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
-    for (auto [entity, probe, transform] : probeView.each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
+    if (mask & Engine::EDITOR_OBJECT_REFLECTION_PROBE) {
+        for (auto [entity, probe, transform] : registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation + transform.rotation * probe.captureOffset, Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f), SPRITE_REFLECTION_PROBE_BINDLESS_INDEX);
         }
-        sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation + transform.rotation * probe.captureOffset,
-            .pixelSize = 0.5f,
-            .color = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f),
-            .stableId = stableId,
-            .textureIndex = SPRITE_REFLECTION_PROBE_BINDLESS_INDEX,
-            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
-            .billboard = true,
-        });
     }
-
-    auto volumeView = state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
-    for (auto [entity, volume, transform] : volumeView.each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
+    if (mask & Engine::EDITOR_OBJECT_DDGI_VOLUME) {
+        for (auto [entity, volume, transform] : registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation, Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f), SPRITE_DDGI_VOLUME_BINDLESS_INDEX);
         }
-        sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation,
-            .pixelSize = 0.5f,
-            .color = Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f),
-            .stableId = stableId,
-            .textureIndex = SPRITE_DDGI_VOLUME_BINDLESS_INDEX,
-            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
-            .billboard = true,
-        });
     }
-
-    for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
-        uint64_t stableId = 0;
-        if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-            stableId = stable->id.id;
+    if (mask & Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME) {
+        for (auto [entity, volume, transform] : registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation, {0.7f, 0.4f, 1.0f, 1.0f}, SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX);
         }
-        sprites.PushBack(Core::Sprite{
-            .worldPosition = transform.translation,
-            .pixelSize = 0.5f,
-            .color = {0.7f, 0.4f, 1.0f, 1.0f},
-            .stableId = stableId,
-            .textureIndex = SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX,
-            .samplerIndex = ASSET_SAMPLER_NEAREST_BINDLESS_INDEX,
-            .billboard = true,
-        });
     }
 }
 
 void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    const Engine::LightDebugDrawMode mode = state->editor.lightDebugDrawMode;
-    const bool bProbeDebugDraw = state->lighting.reflectionProbe.bDebugDraw;
-    const bool bVolumeDebugDraw = state->lighting.ddgi.bDebugDrawVolumes;
-    const bool bPostProcessVolumeDebugDraw = state->projectConfig.bDrawPostProcessVolumes;
-    if (mode == Engine::LightDebugDrawMode::None && !bProbeDebugDraw && !bVolumeDebugDraw && !bPostProcessVolumeDebugDraw) { return; }
+    const Engine::LightDebugDrawMode mode = state->projectConfig.editorDebugDrawMode;
+    const uint32_t typeMask = mode == Engine::LightDebugDrawMode::None ? 0u : state->projectConfig.editorDebugDrawMask;
+    if (typeMask == 0) { return; }
 
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
 
-    auto shouldDraw = [&](entt::entity entity) {
-        if (mode == Engine::LightDebugDrawMode::None) { return false; }
+    auto shouldDraw = [&](entt::entity entity, uint32_t typeBit) {
+        if (!(typeMask & typeBit)) { return false; }
         return mode == Engine::LightDebugDrawMode::All || state->editor.selectedEntities.Contains(entity);
     };
 
@@ -1362,7 +1303,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     };
 
     for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>().each()) {
-        if (!shouldDraw(entity)) { continue; }
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_AREA_LIGHT)) { continue; }
         const Vec3 center = transform.translation;
         const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
         const Vec3 up = transform.rotation * Vec3(0.0f, 1.0f, 0.0f);
@@ -1416,7 +1357,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>().each()) {
-        if (!shouldDraw(entity)) { continue; }
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_SPHERE_LIGHT)) { continue; }
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {transform.translation, light.radius * transform.scale.x, editColor, 0.02f});
@@ -1426,26 +1367,26 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>().each()) {
-        if (!shouldDraw(entity)) { continue; }
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_DIRECTIONAL_LIGHT)) { continue; }
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
     }
 
     for (auto [entity, volume, transform] : state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>().each()) {
-        if (!bVolumeDebugDraw && !shouldDraw(entity)) { continue; }
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_DDGI_VOLUME)) { continue; }
         constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
         const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
         Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
     for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
-        if (!bPostProcessVolumeDebugDraw && !shouldDraw(entity)) { continue; }
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME)) { continue; }
         Component::PostProcessVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
-        if (!bProbeDebugDraw && !shouldDraw(entity)) { continue; }
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_REFLECTION_PROBE)) { continue; }
 
         const Vec4 volumeColor = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f);
         constexpr Vec4 captureColor{1.0f, 0.8f, 0.3f, 1.0f};

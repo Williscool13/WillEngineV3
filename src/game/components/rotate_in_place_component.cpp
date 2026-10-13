@@ -8,6 +8,7 @@
 #include <glm/geometric.hpp>
 #include <imgui.h>
 
+#include "core/math/constants.h"
 #include "render/interface/render_interface.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_editor.h"
@@ -43,7 +44,7 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
 
             const glm::vec3 center = transform->translation;
             const float axisLen = glm::length(component.axis);
-            const glm::vec3 localAxis = axisLen > 1e-5f ? component.axis / axisLen : glm::vec3(0.0f, 1.0f, 0.0f);
+            const glm::vec3 localAxis = axisLen > DIVISION_EPSILON ? component.axis / axisLen : glm::vec3(0.0f, 1.0f, 0.0f);
             const glm::vec3 worldAxis = component.bWorldSpace ? localAxis : transform->rotation * localAxis;
 
             DEBUG_ADD_ARROW(viewFamily.debugArrows, Core::DebugArrow{

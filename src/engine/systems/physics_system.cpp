@@ -233,42 +233,37 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
 {
     ZoneScoped;
 #ifdef WDEBUG
-    using PhysicsDebugMode = Engine::PhysicsDebugMode;
-    if (state->editor.physicsDebugMode == PhysicsDebugMode::Off) { return; }
+    const uint32_t mask = state->projectConfig.editorPhysicsDebugMask;
+    if (mask == 0) { return; }
 
     auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
     filter.Clear();
 
-    ctx->physicsSystem->SetDebugDrawForceLowestLOD(state->editor.physicsDebugMode == PhysicsDebugMode::On);
+    const bool bAllBodies = (mask & Engine::PHYSICS_DEBUG_ALL_BODIES) != 0;
+    ctx->physicsSystem->SetDebugDrawForceLowestLOD(bAllBodies);
 
-    if (state->editor.physicsDebugMode == PhysicsDebugMode::On) {
-        auto view = state->registry.view<Component::PhysicsBodyComponent>();
-        for (const auto& [entity, physicsBody] : view.each()) {
+    if (bAllBodies) {
+        for (const auto& [entity, physicsBody] : state->registry.view<Component::PhysicsBodyComponent>().each()) {
             filter.AddBody(physicsBody.bodyID);
-        }
-    }
-    else if (state->editor.physicsDebugMode == PhysicsDebugMode::SensorOnly) {
-        auto view = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
-        for (const auto& [entity, physicsBody, bodyDesc] : view.each()) {
-            if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
-        }
-    }
-    else if (state->editor.physicsDebugMode == PhysicsDebugMode::Selected) {
-        for (entt::entity entity : state->editor.selectedEntities) {
-            if (auto* physicsBody = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-                filter.AddBody(physicsBody->bodyID);
-            }
         }
     }
     else {
-        // SensorAndTag
-        auto sensorView = state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>();
-        for (const auto& [entity, physicsBody, bodyDesc] : sensorView.each()) {
-            if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+        if (mask & Engine::PHYSICS_DEBUG_SENSORS) {
+            for (const auto& [entity, physicsBody, bodyDesc] : state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>().each()) {
+                if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+            }
         }
-        auto tagView = state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>();
-        for (const auto& [entity, physicsBody] : tagView.each()) {
-            filter.AddBody(physicsBody.bodyID);
+        if (mask & Engine::PHYSICS_DEBUG_TAGGED) {
+            for (const auto& [entity, physicsBody] : state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>().each()) {
+                filter.AddBody(physicsBody.bodyID);
+            }
+        }
+        if (mask & Engine::PHYSICS_DEBUG_SELECTED) {
+            for (entt::entity entity : state->editor.selectedEntities) {
+                if (auto* physicsBody = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
+                    filter.AddBody(physicsBody->bodyID);
+                }
+            }
         }
     }
 

@@ -429,13 +429,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
         // Material selector
         {
-            const char* currentLabel = "(none)";
-            if (component.material.IsValid()) {
-                if (const Engine::Material* m = ctx->materialManager->GetMaterial(component.material)) {
-                    currentLabel = m->name.c_str();
-                }
-            }
-            if (ImGui::BeginCombo("Material##spline", edit.IsMixed(&SplineMeshComponent::material) ? "--" : currentLabel, ImGuiComboFlags_HeightLarge)) {
+            if (Engine::BeginMaterialCombo(ctx, "Material##spline", component.material, "(none)", edit.IsMixed(&SplineMeshComponent::material))) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     component.material = Engine::MaterialID{};
                     dirty = true;

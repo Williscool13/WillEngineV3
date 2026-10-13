@@ -430,14 +430,14 @@ void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* stat
             }
             else {
                 for (int a = 0; a < 3; ++a) {
-                    if (glm::abs(tf->translation[a] - firstTrans[a]) > 1e-4f) {
+                    if (glm::abs(tf->translation[a] - firstTrans[a]) > POSITION_EPSILON) {
                         sameTrans[a] = false;
                     }
                 }
                 if (glm::dot(firstRot, tf->rotation) < 0.9999f) {
                     allSameRot = false;
                 }
-                if (glm::any(glm::epsilonNotEqual(firstScale, tf->scale, 1e-4f))) {
+                if (glm::any(glm::epsilonNotEqual(firstScale, tf->scale, POSITION_EPSILON))) {
                     allSameScale = false;
                 }
             }
@@ -1136,7 +1136,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::ClearActiveID();
             if (state->editor.selectedEntities.Size() == 1) {
                 if (auto* tf = state->registry.try_get<Component::TransformComponent>(state->editor.selectedEntities[0])) {
-                    const bool scaleIsUniform = glm::epsilonEqual(tf->scale.x, tf->scale.y, 1e-5f) && glm::epsilonEqual(tf->scale.y, tf->scale.z, 1e-5f);
+                    const bool scaleIsUniform = glm::epsilonEqual(tf->scale.x, tf->scale.y, POSITION_EPSILON) && glm::epsilonEqual(tf->scale.y, tf->scale.z, POSITION_EPSILON);
                     state->editor.bUniformScaleMode = scaleIsUniform;
                 }
             }
@@ -1204,32 +1204,92 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
         DrawBookmarks(ctx, state);
 
-        // Right-aligned controls: sprite checkbox + light debug combo + physics debug combo
+        // Right-aligned controls: sprite, debug draw and physics debug combos
         {
-            static constexpr const char* kLightDebugLabels[] = {"None", "Selected", "All"};
-            static constexpr const char* kPhysicsDebugLabels[] = {"Off", "Sensor Only", "Sensor + Tag", "On", "Selected"};
-            int lightMode = static_cast<int>(state->editor.lightDebugDrawMode);
-            int physicsMode = static_cast<int>(state->editor.physicsDebugMode);
-            constexpr float checkW = 16.0f;
-            constexpr float lightComboW = 72.0f;
-            constexpr float physicsComboW = 110.0f;
+            struct FlagItem
+            {
+                const char* label;
+                uint32_t bit;
+            };
+            static constexpr FlagItem kObjectTypes[] = {
+                {"Area Lights", Engine::EDITOR_OBJECT_AREA_LIGHT},
+                {"Sphere Lights", Engine::EDITOR_OBJECT_SPHERE_LIGHT},
+                {"Directional Lights", Engine::EDITOR_OBJECT_DIRECTIONAL_LIGHT},
+                {"Reflection Probes", Engine::EDITOR_OBJECT_REFLECTION_PROBE},
+                {"DDGI Volumes", Engine::EDITOR_OBJECT_DDGI_VOLUME},
+                {"Post Process Volumes", Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME},
+            };
+            static constexpr FlagItem kPhysicsTypes[] = {
+                {"Sensors", Engine::PHYSICS_DEBUG_SENSORS},
+                {"Tagged", Engine::PHYSICS_DEBUG_TAGGED},
+                {"Selected", Engine::PHYSICS_DEBUG_SELECTED},
+                {"All Bodies", Engine::PHYSICS_DEBUG_ALL_BODIES},
+            };
+            static constexpr const char* kDebugDrawModes[] = {"None##mode", "Selected##mode", "All##mode"};
+            constexpr uint32_t physicsAll = Engine::PHYSICS_DEBUG_SENSORS | Engine::PHYSICS_DEBUG_TAGGED | Engine::PHYSICS_DEBUG_SELECTED | Engine::PHYSICS_DEBUG_ALL_BODIES;
+
+            Engine::ProjectConfig& config = state->projectConfig;
+            bool bChanged = false;
+            auto flagCheckboxes = [&bChanged](uint32_t& mask, uint32_t all, const auto& items) {
+                if (ImGui::SmallButton("All")) {
+                    mask = all;
+                    bChanged = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton("None")) {
+                    mask = 0;
+                    bChanged = true;
+                }
+                for (const FlagItem& item : items) {
+                    bChanged |= ImGui::CheckboxFlags(item.label, &mask, item.bit);
+                }
+            };
+
+            constexpr float comboW = 84.0f;
             constexpr float spacing = 4.0f;
-            const float totalW = checkW + spacing + lightComboW + spacing + physicsComboW;
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - totalW);
-            ImGui::Checkbox("##light_sprites", &state->editor.bShowLightSprites);
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Show light sprite icons in viewport"); }
-            ImGui::SameLine(0.0f, spacing);
-            ImGui::SetNextItemWidth(lightComboW);
-            if (ImGui::Combo("##light_debug", &lightMode, kLightDebugLabels, IM_ARRAYSIZE(kLightDebugLabels))) {
-                state->editor.lightDebugDrawMode = static_cast<Engine::LightDebugDrawMode>(lightMode);
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - (3.0f * comboW + 2.0f * spacing));
+
+            ImGui::SetNextItemWidth(comboW);
+            const uint32_t spriteMask = config.editorSpriteMask;
+            if (ImGui::BeginCombo("##sprites", spriteMask == Engine::EDITOR_OBJECT_ALL ? "Sprites" : spriteMask == 0 ? "No Sprites" : "Sprites*")) {
+                flagCheckboxes(config.editorSpriteMask, Engine::EDITOR_OBJECT_ALL, kObjectTypes);
+                ImGui::EndCombo();
             }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Light debug draws: None / Selected entity only / All lights in scene"); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Viewport sprite icons per type"); }
+
             ImGui::SameLine(0.0f, spacing);
-            ImGui::SetNextItemWidth(physicsComboW);
-            if (ImGui::Combo("##physics_debug", &physicsMode, kPhysicsDebugLabels, IM_ARRAYSIZE(kPhysicsDebugLabels))) {
-                state->editor.physicsDebugMode = static_cast<Engine::PhysicsDebugMode>(physicsMode);
+            ImGui::SetNextItemWidth(comboW);
+            const bool bDebugAllTypes = config.editorDebugDrawMask == Engine::EDITOR_OBJECT_ALL;
+            const char* debugPreview = config.editorDebugDrawMode == Engine::LightDebugDrawMode::None ? "No Gizmos"
+                                       : config.editorDebugDrawMode == Engine::LightDebugDrawMode::All ? (bDebugAllTypes ? "Gizmos: All" : "Gizmos: All*")
+                                       : (bDebugAllTypes ? "Gizmos: Sel" : "Gizmos: Sel*");
+            if (ImGui::BeginCombo("##debug_draw", debugPreview)) {
+                for (int32_t i = 0; i < IM_ARRAYSIZE(kDebugDrawModes); ++i) {
+                    if (ImGui::RadioButton(kDebugDrawModes[i], static_cast<int32_t>(config.editorDebugDrawMode) == i)) {
+                        config.editorDebugDrawMode = static_cast<Engine::LightDebugDrawMode>(i);
+                        bChanged = true;
+                    }
+                    ImGui::SameLine();
+                }
+                ImGui::NewLine();
+                ImGui::Separator();
+                flagCheckboxes(config.editorDebugDrawMask, Engine::EDITOR_OBJECT_ALL, kObjectTypes);
+                ImGui::EndCombo();
             }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics debug draw: Off / Sensor Only / Sensor + Tag / On (all) / Selected"); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Light and volume gizmos (ranges, bounds): none, selected entities or all, per type"); }
+
+            ImGui::SameLine(0.0f, spacing);
+            ImGui::SetNextItemWidth(comboW);
+            const uint32_t physicsMask = config.editorPhysicsDebugMask;
+            if (ImGui::BeginCombo("##physics_debug", physicsMask == 0 ? "No Physics" : (physicsMask & Engine::PHYSICS_DEBUG_ALL_BODIES) ? "Physics: All" : "Physics*")) {
+                flagCheckboxes(config.editorPhysicsDebugMask, physicsAll, kPhysicsTypes);
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics bodies drawn: the union of the checked sets"); }
+
+            if (bChanged) {
+                Engine::WriteProjectConfig(config, state->allocator);
+            }
         }
     }
     ImGui::End();
@@ -1376,7 +1436,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                             if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid) {
                                 const float g = state->editor.snapTranslation;
                                 for (int axis = 0; axis < 3; ++axis) {
-                                    if (glm::abs(translation[axis] - transform->translation[axis]) > 1e-4f) {
+                                    if (glm::abs(translation[axis] - transform->translation[axis]) > POSITION_EPSILON) {
                                         translation[axis] = glm::round(translation[axis] / g) * g;
                                     }
                                     else {
@@ -1459,7 +1519,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                                                             : Component::ComputeWorldTransform(state->registry, reference).translation;
                 const bool bGrid = state->editor.bSnapEnabled && state->editor.bSnapWorldGrid && state->editor.snapTranslation > 0.0f;
                 for (int axis = 0; axis < 3; ++axis) {
-                    if (glm::abs(delta[axis]) <= 1e-4f) {
+                    if (glm::abs(delta[axis]) <= POSITION_EPSILON) {
                         delta[axis] = 0.0f;
                     }
                     else if (bGrid) {
@@ -1545,7 +1605,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     if (state->editor.bSnapEnabled && state->editor.bSnapWorldGrid) {
                         const float g = state->editor.snapTranslation;
                         for (int axis = 0; axis < 3; ++axis) {
-                            if (glm::abs(newT[axis] - s_prevTranslation[axis]) > 1e-4f) {
+                            if (glm::abs(newT[axis] - s_prevTranslation[axis]) > POSITION_EPSILON) {
                                 newT[axis] = glm::round(newT[axis] / g) * g;
                             }
                             else {

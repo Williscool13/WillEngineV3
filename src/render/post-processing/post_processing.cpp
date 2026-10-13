@@ -18,6 +18,7 @@
 #include "render/shaders/constants_interop.h"
 #include "render/shaders/push_constant_interop.h"
 #include "core/containers/inline_string.h"
+#include "core/math/constants.h"
 #include "render/render_utils.h"
 
 namespace Render
@@ -468,7 +469,7 @@ RDGTexture PPMotionBlur(PostProcessContext& ctx, RDGTexture input)
     float depthScale = ctx.config.motionBlurDepthScale;
 
     float velocityScale = ctx.config.motionBlurVelocityScale;
-    if (ctx.config.motionBlurTargetFps > 0.0f && ctx.deltaTime > 1e-6f) {
+    if (ctx.config.motionBlurTargetFps > 0.0f && ctx.deltaTime > DIVISION_EPSILON) {
         velocityScale /= ctx.deltaTime * ctx.config.motionBlurTargetFps;
     }
     velocityScale *= 0.5f;

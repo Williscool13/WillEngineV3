@@ -388,7 +388,6 @@ void Serialize(const Core::ReflectionProbeConfiguration& p, TextWriter& w)
 {
     w.Key("bEnabled", p.bEnabled);
     w.Key("intensity", p.intensity);
-    w.Key("bDebugDraw", p.bDebugDraw);
     w.Key("bBruteForcePick", p.bBruteForcePick);
 }
 
@@ -396,7 +395,6 @@ void Deserialize(const TextReader& r, Core::ReflectionProbeConfiguration& p)
 {
     p.bEnabled = r.Bool("bEnabled", p.bEnabled);
     p.intensity = r.Float("intensity", p.intensity);
-    p.bDebugDraw = r.Bool("bDebugDraw", p.bDebugDraw);
     p.bBruteForcePick = r.Bool("bBruteForcePick", p.bBruteForcePick);
 }
 

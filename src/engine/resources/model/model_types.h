@@ -17,6 +17,7 @@
 #include "engine/asset_manager_types.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
+#include "core/math/constants.h"
 #include "core/types/math.h"
 #include "engine/reflection/reflection.h"
 
@@ -185,7 +186,7 @@ inline bool StaircaseHasSideWalls(const StaircaseParams& p)
 inline float StaircaseLineHeight(const StaircaseParams& p, float z)
 {
     const float stepDepth = StaircaseTotalDepth(p) / static_cast<float>(glm::max(p.stepCount, 1));
-    return StaircaseStepHeight(p) * z / glm::max(stepDepth, 1e-6f);
+    return StaircaseStepHeight(p) * z / glm::max(stepDepth, DIVISION_EPSILON);
 }
 
 /** Underside height at depth z: the floor, or for a slab slabThickness below the riser feet, stopping at the floor. */
@@ -204,10 +205,10 @@ inline int32_t StaircaseUndersideBreaks(const StaircaseParams& p, float z0, floa
     int32_t count = 0;
     out[count++] = z0;
     if (StaircaseIsSlab(p)) {
-        const float run = StaircaseTotalDepth(p) / static_cast<float>(glm::max(p.stepCount, 1)) / glm::max(StaircaseStepHeight(p), 1e-6f);
+        const float run = StaircaseTotalDepth(p) / static_cast<float>(glm::max(p.stepCount, 1)) / glm::max(StaircaseStepHeight(p), DIVISION_EPSILON);
         const float kinks[2] = {p.slabThickness * run, p.totalHeight * run};
         for (const float kink : kinks) {
-            if (kink > out[count - 1] + 1e-5f && kink < z1 - 1e-5f) { out[count++] = kink; }
+            if (kink > out[count - 1] + GEOMETRY_EPSILON && kink < z1 - GEOMETRY_EPSILON) { out[count++] = kink; }
         }
     }
     out[count++] = z1;
@@ -769,10 +770,10 @@ inline float TerraceRampHeight(const TerraceParams& p, float run, float d)
 {
     const float top = p.baseHeight + p.stepRise * static_cast<float>(p.stepCount);
     if (p.direction == TerraceDirection::Down) {
-        if (run <= 1e-6f) { return p.baseHeight; }
+        if (run <= DIVISION_EPSILON) { return p.baseHeight; }
         return glm::clamp(top - p.stepRise * (d / run - 1.0f), p.baseHeight, top);
     }
-    if (run <= 1e-6f) { return top; }
+    if (run <= DIVISION_EPSILON) { return top; }
     return glm::min(top, p.baseHeight + p.stepRise * (1.0f + d / run));
 }
 
@@ -808,7 +809,7 @@ void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
         std::sort(out, out + c);
         int u = 0;
         for (int i = 0; i < c; ++i) {
-            if (u == 0 || out[i] - out[u - 1] > 1e-5f) { out[u++] = out[i]; }
+            if (u == 0 || out[i] - out[u - 1] > GEOMETRY_EPSILON) { out[u++] = out[i]; }
         }
         return u;
     };
@@ -842,8 +843,8 @@ void TerraceRampPieces(const TerraceParams& p, Emit&& emit)
             bool bPos = false;
             for (int c = 0; c < 4; ++c) {
                 s[c] = bBothInset ? TerraceInsetX(p, cell[c].x) - TerraceInsetZ(p, cell[c].y) : 0.0f;
-                bNeg |= s[c] < -1e-6f;
-                bPos |= s[c] > 1e-6f;
+                bNeg |= s[c] < -GEOMETRY_EPSILON;
+                bPos |= s[c] > GEOMETRY_EPSILON;
             }
             if (!bNeg || !bPos) {
                 lift(cell, 4);
@@ -1038,7 +1039,7 @@ inline CofferedSlabArc CofferedSlabArcOf(const CofferedSlabParams& p)
 {
     CofferedSlabArc arc{};
     const float arcRadians = glm::radians(glm::clamp(p.arcDegrees, 0.0f, 180.0f));
-    if (arcRadians < 1e-4f) { return arc; }
+    if (arcRadians < DIRECTION_EPSILON) { return arc; }
     const float sx = glm::max(p.sizeX, 0.01f);
     arc.anglePerMetre = arcRadians / sx;
     arc.radius = sx / arcRadians;

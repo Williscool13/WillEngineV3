@@ -493,7 +493,6 @@ struct DDGIParams
     float edgeBlendCells{3.0f};
     bool bScaleBiasPerCascade{true};
     bool bLocalVolumes{true};
-    bool bDebugDrawVolumes{false};
     bool bCascadeSampling{true};
     bool bWorldVolumeGridCull{true};
     int32_t maxResidentWorldVolumes{100};
@@ -557,7 +556,6 @@ struct ReflectionProbeConfiguration
 {
     bool bEnabled{true};
     float intensity{1.0f};
-    bool bDebugDraw{false};
     bool bBruteForcePick{false};
 
     bool operator==(const ReflectionProbeConfiguration&) const = default;

@@ -46,7 +46,10 @@ ProjectConfig ReadProjectConfig()
 
     config.resolutionScale = r.Float("resolutionScale", config.resolutionScale);
     config.reflectionProbeLineWidth = r.Float("reflectionProbeLineWidth", config.reflectionProbeLineWidth);
-    config.bDrawPostProcessVolumes = r.Bool("bDrawPostProcessVolumes", config.bDrawPostProcessVolumes);
+    config.editorSpriteMask = static_cast<uint32_t>(r.Int("editorSpriteMask", static_cast<int32_t>(config.editorSpriteMask)));
+    config.editorDebugDrawMask = static_cast<uint32_t>(r.Int("editorDebugDrawMask", static_cast<int32_t>(config.editorDebugDrawMask)));
+    config.editorDebugDrawMode = static_cast<LightDebugDrawMode>(r.Int("editorDebugDrawMode", static_cast<int32_t>(config.editorDebugDrawMode)));
+    config.editorPhysicsDebugMask = static_cast<uint32_t>(r.Int("editorPhysicsDebugMask", static_cast<int32_t>(config.editorPhysicsDebugMask)));
 
     config.gameCameraFovDegrees = r.Float("gameCameraFovDegrees", config.gameCameraFovDegrees);
     config.gameCameraNearPlane = r.Float("gameCameraNearPlane", config.gameCameraNearPlane);
@@ -101,7 +104,10 @@ bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
     w.EndBlock();
     w.Key("resolutionScale", config.resolutionScale);
     w.Key("reflectionProbeLineWidth", config.reflectionProbeLineWidth);
-    w.Key("bDrawPostProcessVolumes", config.bDrawPostProcessVolumes);
+    w.Key("editorSpriteMask", static_cast<int32_t>(config.editorSpriteMask));
+    w.Key("editorDebugDrawMask", static_cast<int32_t>(config.editorDebugDrawMask));
+    w.Key("editorDebugDrawMode", static_cast<int32_t>(config.editorDebugDrawMode));
+    w.Key("editorPhysicsDebugMask", static_cast<int32_t>(config.editorPhysicsDebugMask));
     w.Key("gameCameraFovDegrees", config.gameCameraFovDegrees);
     w.Key("gameCameraNearPlane", config.gameCameraNearPlane);
     w.Key("editorCameraFovDegrees", config.editorCameraFovDegrees);

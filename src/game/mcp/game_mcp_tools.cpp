@@ -17,6 +17,11 @@
 #include "engine/components/core_components.h"
 #include "engine/components/scene_components.h"
 #include "engine/components/common/stable_id_component.h"
+#include "engine/components/render/procedural_mesh_component.h"
+#include "engine/components/render/spline_mesh_component.h"
+#include "engine/components/render/static_mesh_primitive_component.h"
+#include "engine/components/render/text3d_component.h"
+#include "engine/material_manager.h"
 #include "game/fwd_components.h"
 #include "engine/console/console.h"
 #include "engine/editor/playtest_system.h"
@@ -153,7 +158,27 @@ static void WriteTransform(Call& call, const char* key, const Vec3& translation,
     call.End();
 }
 
-static void WriteEntityDetail(Engine::EngineState* state, Call& call, const entt::entity entity)
+static void WriteAuthoredMaterial(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
+{
+    const entt::registry& registry = state->registry;
+    Engine::MaterialID id{};
+    if (const auto* c = registry.try_get<Component::ProceduralMeshComponent>(entity)) { id = c->material; }
+    else if (const auto* c = registry.try_get<Component::SplineMeshComponent>(entity)) { id = c->material; }
+    else if (const auto* c = registry.try_get<Component::Text3DComponent>(entity)) { id = c->material; }
+    else if (const auto* c = registry.try_get<Component::StaticMeshPrimitiveComponent>(entity)) { id = c->materialOverride; }
+    if (!id.IsValid()) {
+        call.SetNull("material");
+        return;
+    }
+    const Engine::Material* material = ctx->materialManager->GetMaterial(id);
+    call.BeginObject("material");
+    call.SetString("id", Engine::MCP::HexId(id.id).c_str());
+    if (material) { call.SetString("name", material->name.c_str()); } else { call.SetNull("name"); }
+    call.SetBool("missing", material == nullptr);
+    call.End();
+}
+
+static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
 {
     const entt::registry& registry = state->registry;
     const auto* stable = registry.try_get<Component::StableIdComponent>(entity);
@@ -170,6 +195,7 @@ static void WriteEntityDetail(Engine::EngineState* state, Call& call, const entt
     if (local) { WriteTransform(call, "localTransform", local->translation, local->rotation, local->scale); } else { call.SetNull("localTransform"); }
     if (world) { WriteTransform(call, "worldTransform", world->translation, world->rotation, world->scale); } else { call.SetNull("worldTransform"); }
     if (hierarchy && hierarchy->parentStableId.IsValid()) { call.SetString("parentStableId", Engine::MCP::HexId(hierarchy->parentStableId.id).c_str()); } else { call.SetNull("parentStableId"); }
+    WriteAuthoredMaterial(ctx, state, call, entity);
 
     call.BeginArray("components");
     const Engine::ComponentRegistry& components = state->componentRegistry;
@@ -192,18 +218,18 @@ static entt::entity FindByStableIdArg(Engine::EngineState* state, Call& call, co
     return found && state->registry.valid(*found) ? *found : entt::null;
 }
 
-static ToolResult GetEntity(Engine::EngineContext*, Engine::EngineState* state, Call& call)
+static ToolResult GetEntity(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
 {
     const entt::entity entity = FindByStableIdArg(state, call, "stableId");
     if (entity == entt::null) {
         call.SetError("No live entity with that stableId; expected 16 hex digits as returned by query_scene");
         return ToolResult::Error;
     }
-    WriteEntityDetail(state, call, entity);
+    WriteEntityDetail(ctx, state, call, entity);
     return ToolResult::Complete;
 }
 
-static ToolResult FindEntities(Engine::EngineContext*, Engine::EngineState* state, Call& call)
+static ToolResult FindEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
 {
     const std::string_view needle = call.GetString("nameContains", "");
     const int64_t limit = std::clamp<int64_t>(call.GetInt("limit", FIND_DEFAULT_LIMIT), 1, FIND_MAX_LIMIT);
@@ -214,7 +240,7 @@ static ToolResult FindEntities(Engine::EngineContext*, Engine::EngineState* stat
         if (!name.name.Contains(needle, Core::CaseSensitivity::Insensitive)) { continue; }
         if (matched++ >= limit) { continue; }
         call.PushObject();
-        WriteEntityDetail(state, call, entity);
+        WriteEntityDetail(ctx, state, call, entity);
         call.End();
     }
     call.End();
@@ -310,7 +336,7 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
         Engine::SetParent(state, entity, parent);
     }
 
-    WriteEntityDetail(state, call, entity);
+    WriteEntityDetail(ctx, state, call, entity);
     return ToolResult::Complete;
 }
 

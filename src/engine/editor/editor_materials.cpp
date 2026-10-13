@@ -14,6 +14,7 @@
 #include "imgui.h"
 #include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
+#include "core/containers/inline_string.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
 #include "engine/editor_state.h"
@@ -387,6 +388,23 @@ static MaterialListResult DrawMaterialEntries(Engine::EngineState* state, Engine
 
     unwindTo(0);
     return result;
+}
+
+bool BeginMaterialCombo(Engine::EngineContext* ctx, const char* label, Engine::MaterialID current, const char* noneLabel, bool bMixed)
+{
+    const Engine::Material* material = current.IsValid() ? ctx->materialManager->GetMaterial(current) : nullptr;
+    const bool bMissing = !bMixed && current.IsValid() && material == nullptr;
+    const Core::InlineString<160> preview = bMixed ? Core::InlineString<160>("--")
+                                            : bMissing ? Core::InlineString<160>::Format("Missing %016llx", static_cast<unsigned long long>(current.id))
+                                            : Core::InlineString<160>(material != nullptr ? material->name.c_str() : noneLabel);
+    if (bMissing) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+    }
+    const bool bOpen = ImGui::BeginCombo(label, preview.c_str(), ImGuiComboFlags_HeightLarge);
+    if (bMissing) {
+        ImGui::PopStyleColor();
+    }
+    return bOpen;
 }
 
 Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::MaterialBrowserState& view, Engine::MaterialID current)

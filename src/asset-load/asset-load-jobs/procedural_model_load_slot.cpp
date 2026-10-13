@@ -5,6 +5,7 @@
 #include "procedural_model_load_slot.h"
 
 #include "asset-load/asset_load_config.h"
+#include "core/math/constants.h"
 #include "core/overloaded.h"
 #include "engine/resources/model/static_model.h"
 #include "engine/spline/spline_frames.h"
@@ -396,9 +397,9 @@ bool ProceduralModelLoadSlot::FinalizeGeometry(Core::Span<const Engine::FullVert
 
     // Compute bounds for position quantization and rendering
     Engine::MeshBounds bounds = CalculateMeshBounds(remappedVertices);
-    if (bounds.aabbExtents.x < 1e-6f) { bounds.aabbExtents.x = 1.0f; }
-    if (bounds.aabbExtents.y < 1e-6f) { bounds.aabbExtents.y = 1.0f; }
-    if (bounds.aabbExtents.z < 1e-6f) { bounds.aabbExtents.z = 1.0f; }
+    if (bounds.aabbExtents.x < DIVISION_EPSILON) { bounds.aabbExtents.x = 1.0f; }
+    if (bounds.aabbExtents.y < DIVISION_EPSILON) { bounds.aabbExtents.y = 1.0f; }
+    if (bounds.aabbExtents.z < DIVISION_EPSILON) { bounds.aabbExtents.z = 1.0f; }
 
     // Fill rawData
     auto vertexOffset = static_cast<uint32_t>(rawData.vertices.Size());
@@ -532,9 +533,9 @@ bool ProceduralModelLoadSlot::FinalizeGeometryGroups(Core::Span<const Engine::Fu
         ReorderIndicesByMeshlets(Core::Span<uint32_t>(gb.indices.Data(), gb.indices.Size()), gb.meshlets.Data(), gb.meshletCount, gb.meshletVertices.Data(), gb.meshletTriangles.Data());
 
         gb.bounds = CalculateMeshBounds(gb.verts);
-        if (gb.bounds.aabbExtents.x < 1e-6f) { gb.bounds.aabbExtents.x = 1.0f; }
-        if (gb.bounds.aabbExtents.y < 1e-6f) { gb.bounds.aabbExtents.y = 1.0f; }
-        if (gb.bounds.aabbExtents.z < 1e-6f) { gb.bounds.aabbExtents.z = 1.0f; }
+        if (gb.bounds.aabbExtents.x < DIVISION_EPSILON) { gb.bounds.aabbExtents.x = 1.0f; }
+        if (gb.bounds.aabbExtents.y < DIVISION_EPSILON) { gb.bounds.aabbExtents.y = 1.0f; }
+        if (gb.bounds.aabbExtents.z < DIVISION_EPSILON) { gb.bounds.aabbExtents.z = 1.0f; }
 
         totalVerts += gb.verts.Size();
         totalIndices += groupIdxCount;
@@ -627,7 +628,7 @@ constexpr int32_t MAX_CONVEX_PLANES = 24;
 static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, Vec3 setbackA, Vec3 setbackB, float depth, int32_t axis)
 {
     const float k = glm::dot(a.n, b.n);
-    if (depth <= 1e-5f || glm::abs(k) > 0.9999f || planeCount >= MAX_CONVEX_PLANES) { return; }
+    if (depth <= GEOMETRY_EPSILON || glm::abs(k) > 0.9999f || planeCount >= MAX_CONVEX_PLANES) { return; }
     const Vec3 edgeDir = glm::normalize(glm::cross(a.n, b.n));
     const Vec3 edgePoint = ((a.d - k * b.d) * a.n + (b.d - k * a.d) * b.n) / (1.0f - k * k);
     Vec3 n = glm::normalize(glm::cross(edgeDir, setbackA - setbackB));
@@ -643,7 +644,7 @@ static void AppendBoxEdgeChamfers(const ConvexPlane* faces, ConvexPlane* planes,
         Vec3 w{0.0f};
         w[axis] = bHigh ? -1.0f : 1.0f;
         const float off = glm::dot(face.n, w);
-        if (glm::abs(face.n.y) > 1e-6f && glm::abs(off) > 1e-6f) { w.y -= off / face.n.y; }
+        if (glm::abs(face.n.y) > DIVISION_EPSILON && glm::abs(off) > GEOMETRY_EPSILON) { w.y -= off / face.n.y; }
         return w;
     };
     for (int32_t c = 0; c < 3; c++) {
@@ -672,7 +673,7 @@ static void BuildConvexFaces(const ConvexPlane* planes, int32_t planeCount, floa
             const Vec3 nij = glm::cross(planes[i].n, planes[j].n);
             for (int32_t k = j + 1; k < planeCount; k++) {
                 const float det = glm::dot(nij, planes[k].n);
-                if (glm::abs(det) < 1e-6f) { continue; }
+                if (glm::abs(det) < DIVISION_EPSILON) { continue; }
                 const Vec3 pt = (planes[i].d * glm::cross(planes[j].n, planes[k].n) + planes[j].d * glm::cross(planes[k].n, planes[i].n) + planes[k].d * nij) / det;
 
                 bool bInside = true;
@@ -771,7 +772,7 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
         const float maxDepth = 0.5f * glm::min(size[a], size[b]);
         for (int32_t i = 0; i < 4; i++) {
             const float depth = glm::clamp(chamfers[c][i], 0.0f, maxDepth);
-            if (depth <= 1e-5f) { continue; }
+            if (depth <= GEOMETRY_EPSILON) { continue; }
             const bool highA = (i & 1) != 0;
             const bool highB = (i >> 1) != 0;
             Vec3 n{0.0f};
@@ -786,7 +787,7 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
         }
     }
 
-    const float eps = 1e-5f * glm::max(1.0f, glm::max(size.x, glm::max(size.y, size.z)));
+    const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(size.x, glm::max(size.y, size.z)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1046,7 +1047,7 @@ bool ProceduralModelLoadSlot::GenerateRing(const Engine::RingParams& p)
     const int N = std::max(3, p.slices);
     const float ro = std::max(0.01f, p.outerRadius);
     const float ri = glm::clamp(p.innerRadius, 0.0f, ro - 0.001f);
-    const bool bDisc = ri <= 1e-4f;
+    const bool bDisc = ri <= POSITION_EPSILON;
     const auto pi = glm::pi<float>();
 
     const int faces = p.bDoubleSided ? 2 : 1;
@@ -1144,7 +1145,7 @@ bool ProceduralModelLoadSlot::GenerateWall(const Engine::WallParams& p)
     for (int32_t i = 0; i < count; i++) {
         const Engine::WallOpening& o = p.openings[i];
         const Rect r{glm::clamp(o.x, 0.0f, sx), glm::clamp(o.y, 0.0f, sy), glm::clamp(o.x + o.w, 0.0f, sx), glm::clamp(o.y + o.h, 0.0f, sy)};
-        if (r.x1 - r.x0 > 1e-5f && r.y1 - r.y0 > 1e-5f) { holes[holeCount++] = r; }
+        if (r.x1 - r.x0 > GEOMETRY_EPSILON && r.y1 - r.y0 > GEOMETRY_EPSILON) { holes[holeCount++] = r; }
     }
 
     // Full-span cuts so cells share corners exactly (no T-junctions)
@@ -1153,7 +1154,7 @@ bool ProceduralModelLoadSlot::GenerateWall(const Engine::WallParams& p)
     int xn = 0, yn = 0;
     auto insertCut = [](float* arr, int& n, float v) {
         for (int i = 0; i < n; i++) {
-            if (glm::abs(arr[i] - v) < 1e-5f) { return; }
+            if (glm::abs(arr[i] - v) < GEOMETRY_EPSILON) { return; }
             if (v < arr[i]) {
                 for (int j = n; j > i; j--) { arr[j] = arr[j - 1]; }
                 arr[i] = v;
@@ -1302,7 +1303,7 @@ bool ProceduralModelLoadSlot::GenerateLattice(const Engine::LatticeParams& p)
     auto addMember = [&](Vec3 a, Vec3 b, float t) {
         const Vec3 seg = b - a;
         const float len = glm::length(seg);
-        if (len < 1e-5f) { return; }
+        if (len < GEOMETRY_EPSILON) { return; }
         const Vec3 fwd = seg / len;
         const Vec3 ref = glm::abs(fwd.y) < 0.99f ? Vec3(0, 1, 0) : Vec3(1, 0, 0);
         const Vec3 right = glm::normalize(glm::cross(ref, fwd));
@@ -1375,7 +1376,7 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
     // Front profile breakpoints (x, z), left to right; valleys at z=base, plateaus at base+depth
     Core::Vector<Vec2> prof(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     auto addPoint = [&](float x, float z) {
-        if (prof.Size() > 0 && glm::abs(prof[prof.Size() - 1].x - x) < 1e-6f && glm::abs(prof[prof.Size() - 1].y - z) < 1e-6f) { return; }
+        if (prof.Size() > 0 && glm::abs(prof[prof.Size() - 1].x - x) < GEOMETRY_EPSILON && glm::abs(prof[prof.Size() - 1].y - z) < GEOMETRY_EPSILON) { return; }
         prof.PushBack({x, z});
     };
     addPoint(0.0f, base);
@@ -1419,7 +1420,7 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
         const Vec2 a = prof[s], b = prof[s + 1];
         const float dx = b.x - a.x, dz = b.y - a.y;
         const float segLen = glm::sqrt(dx * dx + dz * dz);
-        if (segLen < 1e-6f) { continue; }
+        if (segLen < GEOMETRY_EPSILON) { continue; }
         const Vec3 n = Vec3(-dz, 0.0f, dx) / segLen;
         const Vec3 t = Vec3(dx, 0.0f, dz) / segLen;
         addQuad(n, t,
@@ -1441,7 +1442,7 @@ bool ProceduralModelLoadSlot::GenerateCorrugatedPanel(const Engine::CorrugatedPa
     // Caps: one vertical strip per profile segment, back line to profile
     for (size_t s = 0; s + 1 < prof.Size(); s++) {
         const Vec2 a = prof[s], b = prof[s + 1];
-        if (b.x - a.x < 1e-6f) { continue; }
+        if (b.x - a.x < GEOMETRY_EPSILON) { continue; }
         addQuad({0, 1, 0}, {0, 0, 1},
                 {a.x, sy, 0}, {a.x, sy, a.y}, {b.x, sy, b.y}, {b.x, sy, 0},
                 {a.x, 0}, {a.x, a.y}, {b.x, b.y}, {b.x, 0});
@@ -1484,7 +1485,7 @@ bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p
     const float hole = Engine::TerraceHoleInset(p, Engine::TerraceRun(p));
     const Engine::TerraceRect outer = Engine::TerraceLevelRect(p, Engine::TerraceRun(p), 0);
     auto onHoleEdge = [&](const Vec3& a) {
-        return !p.bFloor && glm::abs(glm::min(Engine::TerraceInsetX(p, a.x), Engine::TerraceInsetZ(p, a.z)) - hole) < 1e-5f;
+        return !p.bFloor && glm::abs(glm::min(Engine::TerraceInsetX(p, a.x), Engine::TerraceInsetZ(p, a.z)) - hole) < GEOMETRY_EPSILON;
     };
 
     Engine::TerraceRampPieces(p, [&](const Vec3* v, int count) {
@@ -1494,7 +1495,7 @@ bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p
         for (int c = 0; c < count; ++c) {
             uv[c] = {v[c].x, v[c].z};
             centroid += v[c];
-            bSolid |= v[c].y > 1e-6f;
+            bSolid |= v[c].y > GEOMETRY_EPSILON;
         }
         centroid /= static_cast<float>(count);
         if (bSolid) {
@@ -1511,9 +1512,9 @@ bool ProceduralModelLoadSlot::GenerateTerraceRamp(const Engine::TerraceParams& p
         for (int c = 0; c < count; ++c) {
             const Vec3 a = v[c];
             const Vec3 b = v[(c + 1) % count];
-            if (a.y <= 1e-6f && b.y <= 1e-6f) { continue; }
-            const bool bOuter = (a.x <= outer.x0 + 1e-5f && b.x <= outer.x0 + 1e-5f) || (a.x >= outer.x1 - 1e-5f && b.x >= outer.x1 - 1e-5f)
-                || (a.z <= outer.z0 + 1e-5f && b.z <= outer.z0 + 1e-5f) || (a.z >= outer.z1 - 1e-5f && b.z >= outer.z1 - 1e-5f);
+            if (a.y <= GEOMETRY_EPSILON && b.y <= GEOMETRY_EPSILON) { continue; }
+            const bool bOuter = (a.x <= outer.x0 + GEOMETRY_EPSILON && b.x <= outer.x0 + GEOMETRY_EPSILON) || (a.x >= outer.x1 - GEOMETRY_EPSILON && b.x >= outer.x1 - GEOMETRY_EPSILON)
+                || (a.z <= outer.z0 + GEOMETRY_EPSILON && b.z <= outer.z0 + GEOMETRY_EPSILON) || (a.z >= outer.z1 - GEOMETRY_EPSILON && b.z >= outer.z1 - GEOMETRY_EPSILON);
             if (!bOuter && !(onHoleEdge(a) && onHoleEdge(b))) { continue; }
             const Vec3 away = (a + b) * 0.5f - centroid;
             const Vec3 n = glm::abs(away.x) > glm::abs(away.z) ? Vec3(glm::sign(away.x), 0, 0) : Vec3(0, 0, glm::sign(away.z));
@@ -1535,7 +1536,7 @@ bool ProceduralModelLoadSlot::GeneratePyramid(const Engine::PyramidParams& p)
 
     Vec3 c[8];
     Engine::PyramidCorners(p, c);
-    const bool bPoint = p.topScale <= 1e-4f;
+    const bool bPoint = p.topScale <= POSITION_EPSILON;
     const Vec3 center{0.0f, glm::max(p.height, 0.001f) * 0.5f, 0.0f};
 
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1704,7 +1705,7 @@ bool ProceduralModelLoadSlot::GenerateSlantedBeam(const Engine::SlantedBeamParam
     const ConvexPlane faces[6] = {planes[0], planes[1], planes[2], planes[3], planes[4], planes[5]};
     AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, thickness, len});
 
-    const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(thickness + glm::abs(p.rise), len)));
+    const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(sx, glm::max(thickness + glm::abs(p.rise), len)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1728,7 +1729,7 @@ bool ProceduralModelLoadSlot::GeneratePilaster(const Engine::PilasterParams& p)
         const float y1 = y0 + h;
         glm::vec2 bottom, top;
         Engine::PilasterSegmentSizes(p, i, bottom, top);
-        const bool bEmpty = h <= 1e-4f || glm::max(bottom.x, top.x) <= 1e-4f || glm::max(bottom.y, top.y) <= 1e-4f;
+        const bool bEmpty = h <= POSITION_EPSILON || glm::max(bottom.x, top.x) <= POSITION_EPSILON || glm::max(bottom.y, top.y) <= POSITION_EPSILON;
         if (!bEmpty) {
             const Vec3 sideN = glm::normalize(Vec3(h, 0.5f * (bottom.x - top.x), 0.0f));
             const Vec3 frontN = glm::normalize(Vec3(0.0f, bottom.y - top.y, h));
@@ -1741,7 +1742,7 @@ bool ProceduralModelLoadSlot::GeneratePilaster(const Engine::PilasterParams& p)
             planes[4] = {frontN, glm::dot(frontN, Vec3(0.0f, y0, bottom.y)), {1, 0, 0}, 0.0f};
             planes[5] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, 0.0f};
 
-            const float eps = 1e-5f * glm::max(1.0f, glm::max(y1, glm::max(bottom.x, bottom.y)));
+            const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(y1, glm::max(bottom.x, bottom.y)));
             corners.Clear();
             BuildConvexFaces(planes, 6, eps, corners, vertices, indices);
         }
@@ -1780,7 +1781,7 @@ bool ProceduralModelLoadSlot::GenerateCofferedSlab(const Engine::CofferedSlabPar
         std::sort(out.Data(), out.Data() + out.Size());
         size_t unique = 1;
         for (size_t i = 1; i < out.Size(); ++i) {
-            if (out[i] - out[unique - 1] > 1e-5f) { out[unique++] = out[i]; }
+            if (out[i] - out[unique - 1] > GEOMETRY_EPSILON) { out[unique++] = out[i]; }
         }
         while (out.Size() > unique) { out.PopBack(); }
     };
@@ -1926,7 +1927,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
         std::ranges::sort(v);
         size_t n = 0;
         for (size_t i = 0; i < v.Size(); ++i) {
-            if (n == 0 || v[i] - v[n - 1] > 1e-5f) { v[n++] = v[i]; }
+            if (n == 0 || v[i] - v[n - 1] > GEOMETRY_EPSILON) { v[n++] = v[i]; }
         }
         v.Resize(n);
     };
@@ -1992,7 +1993,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
             n += glm::cross(v[c], v[(c + 1) % count]);
             uv[c] = {v[c].x, v[c].z};
         }
-        if (glm::dot(n, n) < 1e-16f) { return; }
+        if (glm::dot(n, n) < DIVISION_EPSILON * DIVISION_EPSILON) { return; }
         n = glm::normalize(n.y < 0.0f ? -n : n);
         AppendTerracePolygon(vertices, indices, n, {1, 0, 0}, v, uv, count);
     };
@@ -2004,7 +2005,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
             const auto ci = static_cast<int64_t>(i);
             const auto cj = static_cast<int64_t>(j);
             const Vec3 top[4] = {{x0, topAt(ci, cj, i, j), z0}, {x1, topAt(ci, cj, i + 1, j), z0}, {x1, topAt(ci, cj, i + 1, j + 1), z1}, {x0, topAt(ci, cj, i, j + 1), z1}};
-            if (glm::abs(top[0].y + top[2].y - top[1].y - top[3].y) < 1e-6f) {
+            if (glm::abs(top[0].y + top[2].y - top[1].y - top[3].y) < GEOMETRY_EPSILON) {
                 addTop(top, 4);
             }
             else if (glm::abs(top[0].y - top[2].y) > glm::abs(top[1].y - top[3].y)) {
@@ -2024,7 +2025,7 @@ bool ProceduralModelLoadSlot::GenerateTerrace(const Engine::TerraceParams& p)
     }
 
     auto addWall = [&](Vec3 a, Vec3 b, float la, float lb, float ha, float hb, Vec3 n) {
-        if (glm::abs(ha - la) < 1e-6f && glm::abs(hb - lb) < 1e-6f) { return; }
+        if (glm::abs(ha - la) < GEOMETRY_EPSILON && glm::abs(hb - lb) < GEOMETRY_EPSILON) { return; }
         const bool bAlongZ = n.x != 0.0f;
         const Vec3 v[4] = {{a.x, la, a.z}, {b.x, lb, b.z}, {b.x, hb, b.z}, {a.x, ha, a.z}};
         Vec2 uv[4];
@@ -2335,7 +2336,7 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
         AppendBoxEdgeChamfers(undersideFaces, planes, planeCount, bUndersidePresent, undersideChamfers, {sx, top, sz});
     }
 
-    const float eps = 1e-5f * glm::max(1.0f, glm::max(sx, glm::max(top, sz)));
+    const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(sx, glm::max(top, sz)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -2371,7 +2372,7 @@ bool ProceduralModelLoadSlot::GenerateCone(const Engine::ConeParams& p)
         const Vec3 pos = {px * r, pz * h, -py * r};
         vertices[i].position = pos;
         const float xzRadius = sqrtf(pos.x * pos.x + pos.z * pos.z);
-        if (xzRadius > 1e-6f) {
+        if (xzRadius > DIVISION_EPSILON) {
             vertices[i].normal = glm::normalize(Vec3{h * pos.x / xzRadius, r, h * pos.z / xzRadius});
         }
         else {
@@ -2528,8 +2529,8 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
 
     // Returns true if pt lies on the arc (within tolerance)
     auto isOnArc = [&](Vec2 pt) -> bool {
-        if (hA <= 0.0f || arcR < 1e-6f) return false;
-        return fabsf(glm::length(pt - effectiveArcCen) - arcR) < 1e-4f;
+        if (hA <= 0.0f || arcR < GEOMETRY_EPSILON) return false;
+        return fabsf(glm::length(pt - effectiveArcCen) - arcR) < POSITION_EPSILON;
     };
 
     // Perimeter walls: flat edges use edge-perpendicular normal; arc edges use smooth radial normals.
@@ -2537,7 +2538,7 @@ bool ProceduralModelLoadSlot::GenerateDoor(const Engine::DoorParams& p)
         const Vec2 A = poly[i];
         const Vec2 B = poly[(i + 1) % M];
         const float edgeLen = glm::length(B - A);
-        if (edgeLen < 1e-6f) { continue; }
+        if (edgeLen < GEOMETRY_EPSILON) { continue; }
 
         Vec3 nA, nB;
         if (isOnArc(A) && isOnArc(B)) {
@@ -3149,7 +3150,7 @@ bool ProceduralModelLoadSlot::GenerateSpiralStaircase(const Engine::SpiralStairc
 
     // Stair mode emits flat treads (constant height per step); ramp mode replaces them with a continuous helicoid slab whose top tracks angle.
     const bool bRamp = p.bRamp;
-    const float heightPerRad = stepH / std::max(dStep, 1e-6f);
+    const float heightPerRad = stepH / std::max(dStep, DIVISION_EPSILON);
     auto topAtAngle = [&](float a) { return a * heightPerRad; };
 
     auto topNrm = [&](float a, float r) -> Vec3 {
@@ -3257,10 +3258,10 @@ static void ProfileOutline(const Core::Vector<SplineProfilePoint>& ring, Core::V
     const int n = static_cast<int>(ring.Size());
     for (int i = 0; i < n; i++) {
         const Vec2 cur = ring[i].pos;
-        if (!outline.IsEmpty() && glm::distance(cur, outline.Back()) < 1e-6f) { continue; }
+        if (!outline.IsEmpty() && glm::distance(cur, outline.Back()) < GEOMETRY_EPSILON) { continue; }
         outline.PushBack(cur);
     }
-    while (outline.Size() >= 2 && glm::distance(outline.Back(), outline[0]) < 1e-6f) {
+    while (outline.Size() >= 2 && glm::distance(outline.Back(), outline[0]) < GEOMETRY_EPSILON) {
         outline.RemoveAt(outline.Size() - 1);
     }
 }
@@ -3317,7 +3318,7 @@ static void BuildSplineProfile(const Engine::SplineParams& p, Core::Vector<Splin
             const Vec2 b = corners[(i + 1) % n];
             Vec2 dir = b - a;
             const float len = glm::length(dir);
-            if (len < 1e-8f) { continue; }
+            if (len < DIVISION_EPSILON) { continue; }
             dir /= len;
             push(a, {dir.y, -dir.x});
             push(b, {dir.y, -dir.x});
@@ -3477,8 +3478,8 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     // Horizontal frame from the twist-free tangent (fwd = horizontalized tangent, across = perpendicular), so railing rails/posts stay square to the path without picking up the parallel-transport roll.
     auto horizAxes = [&](const Frame& f, Vec3& across, Vec3& fwd) {
         fwd = f.tangent - worldUp * glm::dot(f.tangent, worldUp);
-        if (glm::length(fwd) < 1e-4f) { fwd = f.rRight - worldUp * glm::dot(f.rRight, worldUp); }
-        fwd = (glm::length(fwd) < 1e-4f) ? Vec3{0.0f, 0.0f, 1.0f} : glm::normalize(fwd);
+        if (glm::length(fwd) < DIRECTION_EPSILON) { fwd = f.rRight - worldUp * glm::dot(f.rRight, worldUp); }
+        fwd = (glm::length(fwd) < DIRECTION_EPSILON) ? Vec3{0.0f, 0.0f, 1.0f} : glm::normalize(fwd);
         across = glm::normalize(glm::cross(worldUp, fwd));
     };
 

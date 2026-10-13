@@ -170,13 +170,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     ImGui::EndDisabled();
 
     {
-        const char* currentLabel = "(none)";
-        if (comp.material.IsValid()) {
-            if (const Engine::Material* m = ctx->materialManager->GetMaterial(comp.material)) {
-                currentLabel = m->name.c_str();
-            }
-        }
-        if (ImGui::BeginCombo("Material", edit.IsMixed(&Text3DComponent::material) ? "--" : currentLabel, ImGuiComboFlags_HeightLarge)) {
+        if (Engine::BeginMaterialCombo(ctx, "Material", comp.material, "(none)", edit.IsMixed(&Text3DComponent::material))) {
             if (ImGui::Selectable("(none)", !comp.material.IsValid())) {
                 edit.Set(&Text3DComponent::material, Engine::MaterialID{});
             }

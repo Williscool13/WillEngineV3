@@ -308,17 +308,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::PushID(slot.origIdx);
 
                     Engine::MaterialID current = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(slot.origIdx)) : Engine::MaterialID::INVALID;
-                    const char* currentLabel = "__synthesized__";
-                    if (current.IsValid()) {
-                        if (const Engine::Material* m = ctx->materialManager->GetMaterial(current)) {
-                            currentLabel = m->name.c_str();
-                        }
-                    }
-
                     ImGui::Text("%s", slot.name.c_str());
                     ImGui::SameLine();
 
-                    if (ImGui::BeginCombo("##override", currentLabel, ImGuiComboFlags_HeightLarge)) {
+                    if (Engine::BeginMaterialCombo(ctx, "##override", current, "__synthesized__")) {
                         if (ImGui::Selectable("__synthesized__", !current.IsValid())) {
                             if (current.IsValid()) {
                                 pendingChangeIdx = slot.origIdx;

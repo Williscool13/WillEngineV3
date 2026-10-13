@@ -9,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "core/containers/inline_vector.h"
+#include "core/math/constants.h"
 #include "engine/resources/font/font.h"
 #include "engine/resources/font/text3d_layout.h"
 
@@ -24,10 +25,10 @@ static Quat SegmentBoxRotation(const Vec3& dir, const Vec3& rRight, const Vec3& 
 {
     Vec3 z = dir;
     Vec3 x = rRight - z * glm::dot(rRight, z);
-    if (glm::length(x) < 1e-4f) {
+    if (glm::length(x) < DIRECTION_EPSILON) {
         x = rUp - z * glm::dot(rUp, z);
     }
-    if (glm::length(x) < 1e-4f) {
+    if (glm::length(x) < DIRECTION_EPSILON) {
         return Quat(1.0f, 0.0f, 0.0f, 0.0f);
     }
     x = glm::normalize(x);
@@ -49,8 +50,8 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
     const Vec3 worldUp{0.0f, 1.0f, 0.0f};
     auto horizAxes = [&](const SplineFrame& f, Vec3& across, Vec3& fwd) {
         fwd = f.tangent - worldUp * glm::dot(f.tangent, worldUp);
-        if (glm::length(fwd) < 1e-4f) { fwd = f.rRight - worldUp * glm::dot(f.rRight, worldUp); }
-        fwd = (glm::length(fwd) < 1e-4f) ? Vec3{0.0f, 0.0f, 1.0f} : glm::normalize(fwd);
+        if (glm::length(fwd) < DIRECTION_EPSILON) { fwd = f.rRight - worldUp * glm::dot(f.rRight, worldUp); }
+        fwd = (glm::length(fwd) < DIRECTION_EPSILON) ? Vec3{0.0f, 0.0f, 1.0f} : glm::normalize(fwd);
         across = glm::normalize(glm::cross(worldUp, fwd));
     };
 
@@ -85,7 +86,7 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
             const Vec3 c1 = laneCenter(frames[nextRing], laneOff);
             const Vec3 seg = c1 - c0;
             const float len = glm::length(seg);
-            if (len < 1e-5f) { continue; }
+            if (len < GEOMETRY_EPSILON) { continue; }
             const Vec3 dir = seg / len;
             const Vec3 mid = (c0 + c1) * 0.5f;
 
@@ -98,8 +99,8 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
                 // Capsule axis is local Y; orient Y along the segment.
                 Vec3 y = dir;
                 Vec3 x = frames[i].rRight - y * glm::dot(frames[i].rRight, y);
-                if (glm::length(x) < 1e-4f) { x = frames[i].rUp - y * glm::dot(frames[i].rUp, y); }
-                x = glm::length(x) < 1e-4f ? Vec3{1.0f, 0.0f, 0.0f} : glm::normalize(x);
+                if (glm::length(x) < DIRECTION_EPSILON) { x = frames[i].rUp - y * glm::dot(frames[i].rUp, y); }
+                x = glm::length(x) < DIRECTION_EPSILON ? Vec3{1.0f, 0.0f, 0.0f} : glm::normalize(x);
                 const Vec3 z = glm::normalize(glm::cross(x, y));
                 x = glm::cross(y, z);
                 prim.rotation = BasisToQuat(x, y, z);
@@ -129,10 +130,10 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
             const Vec3 centerB = laneCenter(frames[i], laneB) + p.crossPlankHeight * worldUp;
             const Vec3 acrossVec = centerB - centerA;
             const float acrossLen = glm::length(acrossVec);
-            if (acrossLen < 1e-5f) { continue; }
+            if (acrossLen < GEOMETRY_EPSILON) { continue; }
             const Vec3 xAxis = acrossVec / acrossLen; // plank long axis (lane A -> lane B)
             Vec3 zAxis = fwd - xAxis * glm::dot(fwd, xAxis);
-            zAxis = glm::length(zAxis) < 1e-4f ? fwd : glm::normalize(zAxis);
+            zAxis = glm::length(zAxis) < DIRECTION_EPSILON ? fwd : glm::normalize(zAxis);
             const Vec3 yAxis = glm::normalize(glm::cross(zAxis, xAxis)); // thickness (~world up)
 
             SplineColliderPrimitive prim{};
@@ -178,7 +179,7 @@ static void HullPyramid(const PyramidParams& p, Core::Vector<Vec3>& out)
 {
     Vec3 c[8];
     PyramidCorners(p, c);
-    const int count = p.topScale <= 1e-4f ? 5 : 8;
+    const int count = p.topScale <= POSITION_EPSILON ? 5 : 8;
     out.Reserve(out.Size() + count);
     for (int i = 0; i < count; ++i) { out.PushBack(c[i]); }
 }
@@ -214,7 +215,7 @@ static void HullWedge(const WedgeParams& p, Core::Vector<Vec3>& out)
     else {
         profile[count++] = {sz, 0.0f};
     }
-    const bool bFloorFoot = !WedgeIsSlab(p) || p.slabThickness > b + 1e-6f;
+    const bool bFloorFoot = !WedgeIsSlab(p) || p.slabThickness > b + GEOMETRY_EPSILON;
     if (bFloorFoot && b > 0.0f) { profile[count++] = {0.0f, 0.0f}; }
     out.Reserve(out.Size() + static_cast<size_t>(count) * 2);
     for (int i = 0; i < count; ++i) {
@@ -269,7 +270,7 @@ static void PushCapsulePrim(const Vec3& a, const Vec3& b, float radius, Core::Ve
 {
     const Vec3 seg = b - a;
     const float len = glm::length(seg);
-    if (len < 1e-6f) { return; }
+    if (len < GEOMETRY_EPSILON) { return; }
     const Vec3 y = seg / len; // capsule axis is local Y
     const Vec3 ref = (std::abs(y.x) < 0.9f) ? Vec3(1.0f, 0.0f, 0.0f) : Vec3(0.0f, 0.0f, 1.0f);
     const Vec3 x = glm::normalize(glm::cross(ref, y));
@@ -355,7 +356,7 @@ static void CompoundSpiralStaircase(const SpiralStaircaseParams& p, Core::Vector
     const float stepH = std::max(0.001f, p.bSpecifyStepHeight ? p.stepHeight : p.totalHeight / static_cast<float>(steps));
     const float thick = glm::clamp(p.treadThickness, 0.001f, stepH);
     const float dStep = glm::radians(p.bSpecifyDegreesPerStep ? p.degreesPerStep : p.totalSweep / static_cast<float>(steps));
-    const float heightPerRad = stepH / std::max(dStep, 1e-6f);
+    const float heightPerRad = stepH / std::max(dStep, DIVISION_EPSILON);
     const int subdiv = seg; // one hull per arc-segment so the inner/outer edges facet along the arc, matching the render tread (ramp mode also needs this for the helicoid slope)
     out.Reserve(out.Size() + static_cast<size_t>(steps) * subdiv + 1);
     outPositions.Reserve(outPositions.Size() + static_cast<size_t>(steps) * subdiv * 8);
@@ -442,7 +443,7 @@ static void CompoundRing(const RingParams& p, Core::Vector<SplineColliderPrimiti
     const float ro = std::max(0.01f, p.outerRadius);
     const float ri = glm::clamp(p.innerRadius, 0.0f, ro - 0.001f);
     const float hh = 0.02f;
-    if (ri <= 1e-4f) {
+    if (ri <= POSITION_EPSILON) {
         SplineColliderPrimitive col{};
         col.type = SplineColliderPrimitiveType::Cylinder;
         col.radius = ro;
@@ -514,7 +515,7 @@ static void CompoundArch(const ArchParams& p, Core::Vector<SplineColliderPrimiti
         const float radialLen = glm::length(radial2);
         const Vec2 tang2 = ((outerC[i + 1] + innerC[i + 1]) - (outerC[i] + innerC[i])) * 0.5f;
         const float tangLen = glm::length(tang2);
-        if (radialLen < 1e-5f || tangLen < 1e-5f) { continue; }
+        if (radialLen < GEOMETRY_EPSILON || tangLen < GEOMETRY_EPSILON) { continue; }
         const Vec3 xAxis(glm::normalize(radial2), 0.0f);
         const Vec3 yAxis = glm::cross(zAxis, xAxis); // in-plane, perpendicular to radial (unit)
         PushBoxPrim(Vec3(center2.x, center2.y, depth * 0.5f), Vec3(radialLen * 0.5f, tangLen * 0.5f, depth * 0.5f), BasisToQuat(xAxis, yAxis, zAxis), out);
@@ -530,7 +531,7 @@ static void CompoundArch(const ArchParams& p, Core::Vector<SplineColliderPrimiti
             const float radialLen = glm::length(radial2);
             const Vec2 tang2 = B - A;
             const float tangLen = glm::length(tang2);
-            if (radialLen < 1e-5f || tangLen < 1e-5f) { return; }
+            if (radialLen < GEOMETRY_EPSILON || tangLen < GEOMETRY_EPSILON) { return; }
             const Vec3 xAxis(glm::normalize(radial2), 0.0f);
             const Vec3 yAxis = glm::cross(zAxis, xAxis);
             PushBoxPrim(Vec3(center2.x, center2.y, depth * 0.5f), Vec3(radialLen * 0.5f, tangLen * 0.5f, depth * 0.5f), BasisToQuat(xAxis, yAxis, zAxis), out);
@@ -643,7 +644,7 @@ static void CompoundWall(const WallParams& p, Core::Vector<SplineColliderPrimiti
     for (int32_t i = 0; i < count; i++) {
         const WallOpening& o = p.openings[i];
         const Rect r{glm::clamp(o.x, 0.0f, sx), glm::clamp(o.y, 0.0f, sy), glm::clamp(o.x + o.w, 0.0f, sx), glm::clamp(o.y + o.h, 0.0f, sy)};
-        if (r.x1 - r.x0 > 1e-5f && r.y1 - r.y0 > 1e-5f) { holes[holeCount++] = r; }
+        if (r.x1 - r.x0 > GEOMETRY_EPSILON && r.y1 - r.y0 > GEOMETRY_EPSILON) { holes[holeCount++] = r; }
     }
 
     constexpr int MAX_CUTS = 2 + 2 * WallParams::MAX_OPENINGS;
@@ -651,7 +652,7 @@ static void CompoundWall(const WallParams& p, Core::Vector<SplineColliderPrimiti
     int xn = 0, yn = 0;
     auto insertCut = [](float* arr, int& n, float v) {
         for (int i = 0; i < n; i++) {
-            if (glm::abs(arr[i] - v) < 1e-5f) { return; }
+            if (glm::abs(arr[i] - v) < GEOMETRY_EPSILON) { return; }
             if (v < arr[i]) {
                 for (int j = n; j > i; j--) { arr[j] = arr[j - 1]; }
                 arr[i] = v;
@@ -733,7 +734,7 @@ static void CompoundLattice(const LatticeParams& p, Core::Vector<SplineColliderP
     auto addMember = [&](Vec3 a, Vec3 b, float t) {
         const Vec3 seg = b - a;
         const float len = glm::length(seg);
-        if (len < 1e-5f) { return; }
+        if (len < GEOMETRY_EPSILON) { return; }
         const Vec3 y = seg / len;
         const Vec3 ref = (std::abs(y.y) < 0.99f) ? Vec3(0.0f, 1.0f, 0.0f) : Vec3(1.0f, 0.0f, 0.0f);
         const Vec3 x = glm::normalize(glm::cross(ref, y));
@@ -809,7 +810,7 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
 {
     const float run = TerraceRun(p);
     const float top = p.baseHeight + p.stepRise * static_cast<float>(p.stepCount);
-    if (top <= 1e-5f) { return; }
+    if (top <= GEOMETRY_EPSILON) { return; }
     const TerraceRect outer = TerraceLevelRect(p, run, 0);
 
     if (!p.bFloor) {
@@ -825,7 +826,7 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
         };
         auto addPoint = [&](int side, const Vec3& q) {
             for (const Vec3& e : points[side]) {
-                if (glm::distance(e, q) < 1e-5f) { return; }
+                if (glm::distance(e, q) < GEOMETRY_EPSILON) { return; }
             }
             if (points[side].Size() < points[side].GetCapacity()) { points[side].PushBack(q); }
         };
@@ -849,7 +850,7 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
         Core::InlineVector<Vec3, 512> points;
         auto addPoint = [&](const Vec3& v) {
             for (const Vec3& q : points) {
-                if (glm::distance(q, v) < 1e-5f) { return; }
+                if (glm::distance(q, v) < GEOMETRY_EPSILON) { return; }
             }
             if (points.Size() < points.GetCapacity()) { points.PushBack(v); }
         };
@@ -871,7 +872,7 @@ static void CompoundTerraceRamp(const TerraceParams& p, Core::Vector<SplineColli
         slab.position = Vec3((outer.x0 + outer.x1) * 0.5f, p.baseHeight * 0.5f, (outer.z0 + outer.z1) * 0.5f);
         out.PushBack(slab);
     }
-    if (run <= 1e-6f) { return; }
+    if (run <= DIVISION_EPSILON) { return; }
 
     auto addWedge = [&](int32_t side) {
         const bool bAlongX = side == TERRACE_SIDE_NEG_X || side == TERRACE_SIDE_POS_X;
@@ -903,7 +904,7 @@ static void CompoundTerrace(const TerraceParams& p, Core::Vector<SplineColliderP
     const int32_t levels = TerraceLevelCount(p);
     const float run = TerraceRun(p);
     auto addBox = [&](float x0, float z0, float x1, float z1, float h) {
-        if (x1 - x0 <= 1e-5f || z1 - z0 <= 1e-5f || h <= 0.0f) { return; }
+        if (x1 - x0 <= GEOMETRY_EPSILON || z1 - z0 <= GEOMETRY_EPSILON || h <= 0.0f) { return; }
         SplineColliderPrimitive prim{};
         prim.type = SplineColliderPrimitiveType::Box;
         prim.halfExtents = Vec3((x1 - x0) * 0.5f, h * 0.5f, (z1 - z0) * 0.5f);
@@ -934,7 +935,7 @@ static void CompoundPilaster(const PilasterParams& p, Core::Vector<SplineCollide
         const float y1 = y0 + h;
         glm::vec2 bottom, top;
         PilasterSegmentSizes(p, i, bottom, top);
-        if (h > 1e-4f && glm::max(bottom.x, top.x) > 1e-4f && glm::max(bottom.y, top.y) > 1e-4f) {
+        if (h > POSITION_EPSILON && glm::max(bottom.x, top.x) > POSITION_EPSILON && glm::max(bottom.y, top.y) > POSITION_EPSILON) {
             if (!p.bLoft || bottom == top) {
                 PushBoxPrim(Vec3(0.0f, y0 + 0.5f * h, 0.5f * bottom.y), Vec3(0.5f * bottom.x, 0.5f * h, 0.5f * bottom.y), Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
             }
@@ -1255,7 +1256,7 @@ bool BuildText3DColliderPrimitives(const Font& font, const Text3DParams& params,
         const float y0 = (placements[p].penY + g.planeBottom) * scale;
         const float y1 = (placements[p].penY + g.planeTop) * scale;
         const Vec3 he((x1 - x0) * 0.5f, (y1 - y0) * 0.5f, halfDepth);
-        if (he.x > 1e-5f && he.y > 1e-5f && he.z > 1e-5f) {
+        if (he.x > GEOMETRY_EPSILON && he.y > GEOMETRY_EPSILON && he.z > GEOMETRY_EPSILON) {
             Vec3 center((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, 0.0f);
             Quat rotation(1.0f, 0.0f, 0.0f, 0.0f);
             if (params.bendRadius != 0.0f) {

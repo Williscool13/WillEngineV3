@@ -53,7 +53,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         if (bOverride) {
             glm::vec3 overrideForward = camOverride.mode == Engine::CameraOverride::Mode::Held ? camOverride.rotation * WORLD_FORWARD : character->GetInterpolatedPosition() - camOverride.translation;
             overrideForward.y = 0.0f;
-            if (glm::length(overrideForward) > 1e-4f) {
+            if (glm::length(overrideForward) > DIRECTION_EPSILON) {
                 forward = glm::normalize(overrideForward);
             }
         }
@@ -83,7 +83,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     }
     else if (camOverride.mode == Engine::CameraOverride::Mode::Track) {
         const glm::vec3 toPlayer = characterPos - camOverride.translation;
-        const glm::vec3 forward = glm::length(toPlayer) > 1e-4f ? glm::normalize(toPlayer) : camOverride.rotation * WORLD_FORWARD;
+        const glm::vec3 forward = glm::length(toPlayer) > POSITION_EPSILON ? glm::normalize(toPlayer) : camOverride.rotation * WORLD_FORWARD;
         viewData = Engine::BuildPerspectiveView(camOverride.translation, forward, WORLD_UP, aspectRatio, fov, nearPlane);
     }
     else {
@@ -105,7 +105,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         const glm::vec3 f = glm::normalize(viewData.cameraForward);
         glm::vec3 right = glm::cross(f, WORLD_UP);
         const float rightLen = glm::length(right);
-        if (rightLen > 1e-4f) {
+        if (rightLen > DIRECTION_EPSILON) {
             right /= rightLen;
             const glm::vec3 up = glm::cross(right, f);
             transform.rotation = glm::normalize(glm::quat_cast(glm::mat3(right, up, -f)));

@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "core/math/constants.h"
+
 namespace Engine
 {
 bool SampleSplineFrames(const Spline& spline, int segmentsPerSpan, float rollAngle, Core::Vector<SplineFrame>& out)
@@ -46,7 +48,7 @@ bool SampleSplineFrames(const Spline& spline, int segmentsPerSpan, float rollAng
 
         const int nextSpan = bClosed ? (span + 1) % N : span + 1;
         glm::vec3 tang = spline.EvaluateTangent(span, nextSpan, t);
-        if (glm::length(tang) < 1e-6f) { tang = i == 0 ? glm::vec3{0, 0, 1} : out[i - 1].tangent; }
+        if (glm::length(tang) < DIVISION_EPSILON) { tang = i == 0 ? glm::vec3{0, 0, 1} : out[i - 1].tangent; }
         float roll;
         if (spline.mode == SplineMode::Linear) {
             roll = glm::mix(getRollCP(span), getRollCP(nextSpan), t);
@@ -68,7 +70,7 @@ bool SampleSplineFrames(const Spline& spline, int segmentsPerSpan, float rollAng
         for (int i = 1; i < totalRings; i++) {
             glm::vec3 axis = glm::cross(out[i - 1].tangent, out[i].tangent);
             float axisLen = glm::length(axis);
-            if (axisLen < 1e-6f) {
+            if (axisLen < DIVISION_EPSILON) {
                 out[i].right = out[i - 1].right;
             }
             else {

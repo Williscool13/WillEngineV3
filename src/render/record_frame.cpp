@@ -412,9 +412,12 @@ void RenderThread::RecordFrameSetup(FrameContext& ctx, VkCommandBuffer cmd, VkCo
                                       : renderGraph->CreateTexture(LIT_COLOR_PREOVERLAY, texture2D(COLOR_ATTACHMENT_FORMAT), std::nullopt, true);
     }
 
-    const VersionSource luminanceSource = renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh;
-    ctx.scene.luminance = renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, luminanceSource, 0,
-                                                             VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT).Current();
+    // Written only by post-processing, which needs bCanRender
+    if (ctx.bCanRender) {
+        const VersionSource luminanceSource = renderGraph->ResourceHasVersion("luminance_buffer"_sid, 0) ? VersionSource::NoShiftReadWrite : VersionSource::Fresh;
+        ctx.scene.luminance = renderGraph->CreateVersionedBuffer("luminance_buffer"_sid, sizeof(float), 0, luminanceSource, 0,
+                                                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT).Current();
+    }
 
     targets.shadows = renderGraph->CreateTexture("shadows_resolve_target"_sid, texture2D(VK_FORMAT_R16G16_UNORM), {std::nullopt}, true);
 

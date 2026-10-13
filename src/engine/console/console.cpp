@@ -301,8 +301,9 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->scene.currentSceneName.c_str()).c_str());
     });
 
-    Register(state, Origin::Engine, "rescan", "Rescan assets and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "rescan", "Rescan assets, materials and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->rescan.bResources = true;
+        ctx->rescan.bMaterials.store(true, std::memory_order_release);
         Print(state, "  rescan queued");
     });
 

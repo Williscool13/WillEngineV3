@@ -38,6 +38,7 @@
 #include "core/memory/memory_manager.h"
 #include "core/string_id.h"
 #include "core/time/frame_stamp.h"
+#include "core/math/constants.h"
 #include "core/math/math_helpers.h"
 #include "engine/logging/engine_log.h"
 #include "render/pipelines/pipeline_manager.h"
@@ -1194,7 +1195,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     for (const auto& arrow : viewFamily.debugArrows) {
         glm::vec3 dir = arrow.end - arrow.start;
         const float len = glm::length(dir);
-        if (len < 1e-6f) { continue; }
+        if (len < DIVISION_EPSILON) { continue; }
         dir /= len;
 
         const glm::vec3 perp1 = glm::normalize(glm::cross(dir, glm::abs(dir.y) < 0.99f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f)));

@@ -35,6 +35,15 @@
 
 namespace Engine
 {
+static bool AuthoredMaterialExists(const entt::registry& registry, const MaterialManager* materialManager, entt::entity entity, MaterialID material)
+{
+    if (!material.IsValid()) { return false; }
+    if (materialManager->DoesMutableMaterialExist(material)) { return true; }
+    const auto* name = registry.try_get<Component::NameComponent>(entity);
+    LOG_WARN(Engine, "'{}' references material {:016x}, which does not exist; drawing the fallback material", name != nullptr ? name->name.c_str() : "(unnamed)", material.id);
+    return false;
+}
+
 void ConnectRenderObservers(entt::registry& registry)
 {
     registry.on_construct<Component::TransformComponent>().connect<&Component::TransformComponent::OnConstruct>();
@@ -694,14 +703,8 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                 }
                 else {
                     Engine::MaterialID materialOverride = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(primitive.materialIndex)) : Engine::MaterialID::INVALID;
-                    if (materialOverride.IsValid()) {
-                        if (materialManager->DoesMutableMaterialExist(materialOverride)) {
-                            matID = materialOverride;
-                        }
-                        else {
-                            matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
-                            LOG_WARN(Engine, "Mesh was resolved with a material override that does not exist in the registry.");
-                        }
+                    if (AuthoredMaterialExists(state->registry, materialManager, entity, materialOverride)) {
+                        matID = materialOverride;
                     }
                     else {
                         matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
@@ -830,7 +833,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         };
 
         Engine::MaterialID matID;
-        if (meshComponent.materialOverride.IsValid() && materialManager->DoesMutableMaterialExist(meshComponent.materialOverride)) {
+        if (AuthoredMaterialExists(state->registry, materialManager, entity, meshComponent.materialOverride)) {
             matID = meshComponent.materialOverride;
         }
         else if (targetPrim->materialIndex == -1) {
@@ -931,7 +934,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
-        if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
+        if (AuthoredMaterialExists(state->registry, ctx->materialManager, entity, meshComponent.material)) {
             matID = meshComponent.material;
         }
         releaseExisting();
@@ -1121,7 +1124,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
-        if (meshComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(meshComponent.material)) {
+        if (AuthoredMaterialExists(state->registry, ctx->materialManager, entity, meshComponent.material)) {
             matID = meshComponent.material;
         }
         releaseExisting();
@@ -1211,7 +1214,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
-        if (textComponent.material.IsValid() && ctx->materialManager->DoesMutableMaterialExist(textComponent.material)) {
+        if (AuthoredMaterialExists(state->registry, ctx->materialManager, entity, textComponent.material)) {
             matID = textComponent.material;
         }
         state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
