@@ -505,7 +505,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 1024);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
                 }
@@ -568,7 +568,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 1024);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
                 }
@@ -628,7 +628,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 1024);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 }
                 else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||

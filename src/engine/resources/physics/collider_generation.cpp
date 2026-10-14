@@ -400,7 +400,7 @@ static void CompoundSpiralStaircase(const SpiralStaircaseParams& p, Core::Vector
 // Ring of boxes approximating the annular wall; mirrors GeneratePipe (centered Y).
 static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimitive>& out)
 {
-    const int N = glm::clamp(p.slices, 3, 32);
+    const int N = glm::clamp(p.slices, 3, 128);
     const float ro = std::max(0.01f, p.outerRadius);
     const float ri = std::max(0.001f, std::min(p.innerRadius, ro - 0.001f));
     const float hh = p.height * 0.5f;
