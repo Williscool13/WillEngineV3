@@ -2732,82 +2732,9 @@ bool ProceduralModelLoadSlot::GenerateHemisphere(const Engine::HemisphereParams&
 {
     ZoneScopedN("GenerateHemisphere");
 
-    const int N = std::max(3, p.slices);
-    const int HR = std::max(2, p.stacks);
-    const float r = p.radius;
-    const float pi = glm::pi<float>();
-
-    // verts: 1 pole + HR*(N+1) rings + 1 cap center + N cap ring; indices: 6*N*HR
-    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 2 + HR * (N + 1) + N);
-    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 6 * N * HR);
-    {
-        Engine::FullVertex v{};
-        v.position = {0, r, 0};
-        v.normal = {0, 1, 0};
-        v.uv = {0.5f, 1.0f};
-        v.tangent = {1, 0, 0, 1};
-        v.color = {1, 1, 1, 1};
-        vertices.PushBack(v);
-    }
-    const uint32_t pole = 0;
-
-    Core::HeapArray<uint32_t> ringBase(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, HR + 1);
-    for (int i = 1; i <= HR; i++) {
-        const float phi = pi * 0.5f * (1.0f - static_cast<float>(i) / HR);
-        ringBase[i] = static_cast<uint32_t>(vertices.Size());
-        const float ringR = r * cosf(phi);
-        const float ringY = r * sinf(phi);
-        const float nY = sinf(phi), nXZ = cosf(phi);
-        for (int j = 0; j <= N; j++) {
-            const float angle = static_cast<float>(j) / N * 2.0f * pi;
-            Engine::FullVertex v{};
-            v.position = {cosf(angle) * ringR, ringY, sinf(angle) * ringR};
-            v.normal = {cosf(angle) * nXZ, nY, sinf(angle) * nXZ};
-            v.uv = {static_cast<float>(j) / N, static_cast<float>(HR - i) / HR};
-            v.tangent = {-sinf(angle), 0, cosf(angle), 1.0f};
-            v.color = {1, 1, 1, 1};
-            vertices.PushBack(v);
-        }
-    }
-
-    for (int j = 0; j < N; j++) {
-        const uint32_t tri[] = {pole, ringBase[1] + (uint32_t)j + 1, ringBase[1] + (uint32_t)j};
-        indices.Append(tri, tri + 3);
-    }
-
-    for (int i = 1; i < HR; i++) {
-        for (int j = 0; j < N; j++) {
-            uint32_t a0 = ringBase[i] + j, a1 = ringBase[i] + j + 1;
-            uint32_t b0 = ringBase[i + 1] + j, b1 = ringBase[i + 1] + j + 1;
-            const uint32_t quad[] = {a0, a1, b0, b0, a1, b1};
-            indices.Append(quad, quad + 6);
-        }
-    }
-
-    uint32_t capBase = static_cast<uint32_t>(vertices.Size()); {
-        Engine::FullVertex cv{};
-        cv.position = {0, 0, 0};
-        cv.normal = {0, -1, 0};
-        cv.uv = {0.5f, 0.5f};
-        cv.tangent = {1, 0, 0, 1};
-        cv.color = {1, 1, 1, 1};
-        vertices.PushBack(cv);
-    }
-    for (int j = 0; j < N; j++) {
-        const float angle = static_cast<float>(j) / N * 2.0f * pi;
-        Engine::FullVertex v{};
-        v.position = {cosf(angle) * r, 0.0f, sinf(angle) * r};
-        v.normal = {0, -1, 0};
-        v.uv = {cosf(angle) * 0.5f + 0.5f, sinf(angle) * 0.5f + 0.5f};
-        v.tangent = {1, 0, 0, 1};
-        v.color = {1, 1, 1, 1};
-        vertices.PushBack(v);
-    }
-    for (int j = 0; j < N; j++) {
-        const uint32_t tri[] = {capBase, capBase + 1 + (uint32_t)j, capBase + 1 + (uint32_t)((j + 1) % N)};
-        indices.Append(tri, tri + 3);
-    }
-
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (!GenerateHemisphereGeometry(p, vertices, indices)) { return false; }
     return FinalizeGeometry(vertices, indices);
 }
 

@@ -37,15 +37,15 @@ Engine::Vertex CompressVertex(const Engine::FullVertex& fullVertex, const Engine
     outVertex.pos1 = pz;
 
     Vec2 octN = OctEncode(glm::normalize(fullVertex.normal));
-    uint32_t nx = static_cast<uint8_t>(static_cast<int8_t>(meshopt_quantizeSnorm(octN.x, 8)));
-    uint32_t ny = static_cast<uint8_t>(static_cast<int8_t>(meshopt_quantizeSnorm(octN.y, 8)));
-    outVertex.normalOct = nx | (ny << 8);
+    uint32_t nx = static_cast<uint16_t>(static_cast<int16_t>(meshopt_quantizeSnorm(octN.x, 16)));
+    uint32_t ny = static_cast<uint16_t>(static_cast<int16_t>(meshopt_quantizeSnorm(octN.y, 16)));
+    outVertex.normalOct = nx | (ny << 16);
 
     Vec2 octT = OctEncode(Vec3(fullVertex.tangent));
-    uint32_t tx = static_cast<uint8_t>(static_cast<int8_t>(meshopt_quantizeSnorm(octT.x, 8)));
-    uint32_t ty = static_cast<uint8_t>(static_cast<int8_t>(meshopt_quantizeSnorm(octT.y, 8)));
+    uint32_t tx = static_cast<uint32_t>(meshopt_quantizeSnorm(octT.x, 15)) & 0x7FFFu;
+    uint32_t ty = static_cast<uint32_t>(meshopt_quantizeSnorm(octT.y, 15)) & 0x7FFFu;
     uint32_t ts = fullVertex.tangent.w > 0.f ? 1u : 0u;
-    outVertex.tangentOct = tx | (ty << 8) | (ts << 16);
+    outVertex.tangentOct = tx | (ty << 15) | (ts << 30);
 
     uint32_t tu = meshopt_quantizeHalf(fullVertex.uv.x);
     uint32_t tv = meshopt_quantizeHalf(fullVertex.uv.y);

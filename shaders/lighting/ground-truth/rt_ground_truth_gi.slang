@@ -200,7 +200,7 @@ void ComputeRTGroundTruthGI(uint3 dtid : SV_DispatchThreadID, uniform RTGroundTr
             rayDir.y = -rayDir.y;
             background = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, 0).rgb;
         }
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background * scene.preExposure, 1.0);
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background * pc.iblIntensity * scene.preExposure, 1.0);
         return;
     }
 

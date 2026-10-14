@@ -273,13 +273,14 @@ static void HullHemisphere(const HemisphereParams& p, Core::Vector<Vec3>& out)
     // Dome base at y=0 (radius r), pole at y=r (matches GenerateHemisphere).
     const int slices = glm::clamp(p.slices, 3, 24);
     const float r = p.radius;
+    const float h = r * std::max(0.01f, p.heightScale);
     const int stacks = 3;
     out.Reserve(out.Size() + static_cast<size_t>(slices) * stacks + 1);
     for (int i = 0; i < stacks; i++) {
         const float phi = glm::pi<float>() * 0.5f * static_cast<float>(i) / static_cast<float>(stacks); // 0 (base) -> pi/2 (near pole)
-        HullRing(r * std::sin(phi), r * std::cos(phi), slices, out);
+        HullRing(h * std::sin(phi), r * std::cos(phi), slices, out);
     }
-    out.PushBack(Vec3(0.0f, r, 0.0f));
+    out.PushBack(Vec3(0.0f, h, 0.0f));
 }
 
 static void PushBoxPrim(const Vec3& center, const Vec3& halfExtents, const Quat& rotation, Core::Vector<SplineColliderPrimitive>& out)
@@ -1023,7 +1024,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<WedgeParams>(params)
         || std::holds_alternative<CylinderParams>(params)
         || std::holds_alternative<ConeParams>(params)
-        || std::holds_alternative<HemisphereParams>(params)
+        || (std::holds_alternative<HemisphereParams>(params) && !std::get<HemisphereParams>(params).IsHollow())
         || std::holds_alternative<SphereParams>(params)
         || std::holds_alternative<SubdividedSphereParams>(params)
         || std::holds_alternative<CapsuleParams>(params)
@@ -1191,6 +1192,7 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
         return true;
     }
     if (const auto* p = std::get_if<HemisphereParams>(&params)) {
+        if (p->IsHollow()) { return false; }
         outKind = PhysicsColliderKind::ConvexHull;
         HullHemisphere(*p, outPositions);
         return true;

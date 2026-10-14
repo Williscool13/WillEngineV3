@@ -623,7 +623,12 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                 else if constexpr (std::is_same_v<T, Engine::HemisphereParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Slices", &p.slices, 1, 3, 128);
+                    ImGui::DragFloat("Inner Radius", &p.innerRadius, 0.01f, 0.0f, p.radius, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 is a solid dome; above 0 a hollow shell (match a Pipe's radii and slices to cap it). Hollow colliders are static-only"); }
+                    ImGui::DragFloat("Height Scale", &p.heightScale, 0.01f, 0.05f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Slices", &p.slices, 1, 3, 1024);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Stacks", &p.stacks, 1, 2, 64);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();

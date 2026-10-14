@@ -120,8 +120,8 @@ struct Vertex
 {
     uint32_t pos0; // unorm16: bits[15:0]=X, bits[31:16]=Y
     uint32_t pos1; // unorm16: bits[15:0]=Z, bits[31:16]=unused
-    uint32_t normalOct; // snorm8: bits[7:0]=X, bits[15:8]=Y
-    uint32_t tangentOct; // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
+    uint32_t normalOct; // snorm16: bits[15:0]=X, bits[31:16]=Y
+    uint32_t tangentOct; // snorm15: bits[14:0]=X, bits[29:15]=Y; bit[30]=sign(0=neg,1=pos)
     uint32_t texcoord; // float16: bits[15:0]=U, bits[31:16]=V
     uint32_t color; // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
 };
@@ -358,8 +358,14 @@ struct HemisphereParams
     float radius{0.5f};
     int32_t slices{16};
     int32_t stacks{8};
+    /** 0 is a solid dome with a base cap; above 0 it is a hollow shell (outer + inner dome + base rim), concave triangle-mesh collider. */
+    float innerRadius{0.0f};
+    /** Dome height as a fraction of radius; below 1 flattens it into an elliptical cap. */
+    float heightScale{1.0f};
 
-    WILL_REFLECT(HemisphereParams, WILL_FIELD(radius), WILL_FIELD(slices), WILL_FIELD(stacks))
+    WILL_REFLECT(HemisphereParams, WILL_FIELD(radius), WILL_FIELD(slices), WILL_FIELD(stacks), WILL_FIELD(innerRadius), WILL_FIELD(heightScale))
+
+    [[nodiscard]] bool IsHollow() const { return innerRadius > POSITION_EPSILON && innerRadius < radius; }
 };
 
 struct PipeParams

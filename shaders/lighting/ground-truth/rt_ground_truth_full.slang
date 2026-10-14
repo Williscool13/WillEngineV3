@@ -445,7 +445,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
                     if (segment == 0) {
                         // Matches the pinhole path's primary-miss background exactly
                         if (pc.skyboxIndex >= 0) {
-                            radiance += assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb;
+                            radiance += assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], skyDirection, 0).rgb * pc.iblIntensity;
                         }
                     } else {
                         if (pc.skyboxIndex >= 0) {
@@ -509,7 +509,7 @@ void ComputeRTGroundTruthFull(uint3 dtid : SV_DispatchThreadID, uniform RTGround
             rayDir.y = -rayDir.y;
             background = assetCubemaps[pc.skyboxIndex].SampleLevel(assetSamplers[ASSET_SAMPLER_LINEAR_BINDLESS_INDEX], rayDir, 0).rgb;
         }
-        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background * scene.preExposure, 1.0);
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(background * pc.iblIntensity * scene.preExposure, 1.0);
         return;
     }
 

@@ -110,8 +110,8 @@ SHADER_PUBLIC struct VertexPosition
 
 SHADER_PUBLIC struct VertexAttribute
 {
-    SHADER_PUBLIC uint32_t normalOct; // snorm8: bits[7:0]=X, bits[15:8]=Y
-    SHADER_PUBLIC uint32_t tangentOct; // snorm8: bits[7:0]=X, bits[15:8]=Y; bit[16]=sign(0=neg,1=pos)
+    SHADER_PUBLIC uint32_t normalOct; // snorm16: bits[15:0]=X, bits[31:16]=Y
+    SHADER_PUBLIC uint32_t tangentOct; // snorm15: bits[14:0]=X, bits[29:15]=Y; bit[30]=sign(0=neg,1=pos)
     SHADER_PUBLIC uint32_t texcoord; // float16: bits[15:0]=U, bits[31:16]=V
     SHADER_PUBLIC uint32_t color; // unorm8: bits[7:0]=R, bits[15:8]=G, bits[23:16]=B, bits[31:24]=A
 };

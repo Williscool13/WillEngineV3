@@ -402,8 +402,86 @@ bool GenerateBowlGeometry(const Engine::BowlParams& p, Core::TlsfAllocator& scra
     return !outVertices.IsEmpty() && !outIndices.IsEmpty();
 }
 
+bool GenerateHemisphereGeometry(const Engine::HemisphereParams& p, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices)
+{
+    const int N = std::max(3, p.slices);
+    const int HR = std::max(2, p.stacks);
+    const float ro = std::max(0.001f, p.radius);
+    const float hs = std::max(0.01f, p.heightScale);
+    const float pi = glm::pi<float>();
+    const bool bHollow = p.IsHollow();
+
+    auto vert = [](Vec3 pos, Vec3 normal, Vec2 uv, Vec3 tangent) {
+        Engine::FullVertex v{};
+        v.position = pos;
+        v.normal = normal;
+        v.uv = uv;
+        v.tangent = {tangent.x, tangent.y, tangent.z, 1.0f};
+        v.color = {1, 1, 1, 1};
+        return v;
+    };
+
+    // Ellipsoidal dome with semi-axes (a, b): pole fan + HR rings down to the equator at y=0.
+    auto addDome = [&](float a, float b, bool bOutward) {
+        const float sign = bOutward ? 1.0f : -1.0f;
+        const auto pole = static_cast<uint32_t>(outVertices.Size());
+        outVertices.PushBack(vert({0.0f, b, 0.0f}, {0.0f, sign, 0.0f}, {0.5f, 1.0f}, {1.0f, 0.0f, 0.0f}));
+        const auto firstRing = static_cast<uint32_t>(outVertices.Size());
+        for (int i = 1; i <= HR; i++) {
+            const float phi = pi * 0.5f * (1.0f - static_cast<float>(i) / static_cast<float>(HR));
+            const Vec2 n = glm::normalize(Vec2{b * cosf(phi), a * sinf(phi)}) * sign;
+            for (int j = 0; j <= N; j++) {
+                const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
+                const float cx = cosf(angle), cz = sinf(angle);
+                outVertices.PushBack(vert({cx * a * cosf(phi), b * sinf(phi), cz * a * cosf(phi)}, {cx * n.x, n.y, cz * n.x},
+                                          {static_cast<float>(j) / static_cast<float>(N), static_cast<float>(HR - i) / static_cast<float>(HR)}, {-cz, 0.0f, cx}));
+            }
+        }
+        auto tri = [&](uint32_t x, uint32_t y, uint32_t z) {
+            const uint32_t t[] = {x, bOutward ? y : z, bOutward ? z : y};
+            outIndices.Append(t, t + 3);
+        };
+        const uint32_t ringVerts = static_cast<uint32_t>(N + 1);
+        for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+            tri(pole, firstRing + j + 1, firstRing + j);
+        }
+        for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(HR); i++) {
+            for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+                const uint32_t a0 = firstRing + i * ringVerts + j, a1 = a0 + 1;
+                const uint32_t b0 = a0 + ringVerts, b1 = b0 + 1;
+                tri(a0, a1, b0);
+                tri(b0, a1, b1);
+            }
+        }
+    };
+
+    addDome(ro, ro * hs, true);
+
+    // Base: a disc on the solid dome, the rim between the two shells on the hollow one. Faces -Y.
+    const float ri = bHollow ? p.innerRadius : 0.0f;
+    if (bHollow) {
+        // Inner shell keeps the wall thickness at the crown too.
+        addDome(ri, std::max(0.001f, ro * hs - (ro - ri)), false);
+    }
+    const auto baseStart = static_cast<uint32_t>(outVertices.Size());
+    for (int j = 0; j <= N; j++) {
+        const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
+        const float cx = cosf(angle), cz = sinf(angle);
+        outVertices.PushBack(vert({cx * ro, 0.0f, cz * ro}, {0.0f, -1.0f, 0.0f}, {cx * 0.5f + 0.5f, cz * 0.5f + 0.5f}, {1.0f, 0.0f, 0.0f}));
+        outVertices.PushBack(vert({cx * ri, 0.0f, cz * ri}, {0.0f, -1.0f, 0.0f}, {cx * 0.5f * ri / ro + 0.5f, cz * 0.5f * ri / ro + 0.5f}, {1.0f, 0.0f, 0.0f}));
+    }
+    for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+        const uint32_t o0 = baseStart + 2 * j, i0 = o0 + 1, o1 = o0 + 2, i1 = o0 + 3;
+        const uint32_t t[] = {i0, o0, o1, i0, o1, i1};
+        outIndices.Append(t, t + 6);
+    }
+
+    return !outVertices.IsEmpty() && !outIndices.IsEmpty();
+}
+
 bool GenerateNonAnalyticProceduralGeometry(const Engine::ProceduralParams& params, Core::TlsfAllocator& scratch, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices)
 {
+    if (const auto* p = std::get_if<Engine::HemisphereParams>(&params); p != nullptr && p->IsHollow()) { return GenerateHemisphereGeometry(*p, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::KleinBottleParams>(&params)) { return GenerateKleinBottleGeometry(*p, scratch, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::TrefoilKnotParams>(&params)) { return GenerateTrefoilKnotGeometry(*p, scratch, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::CurvedRampParams>(&params)) { return GenerateCurvedRampGeometry(*p, scratch, outVertices, outIndices); }

@@ -169,21 +169,21 @@ float3 DecodePosition(VertexPosition v, float3 minBounds, float3 extent)
 
 float3 DecodeNormal(VertexAttribute v)
 {
-    float nx = float(int((v.normalOct & 0xFF) << 24) >> 24) / 127.0;
-    float ny = float(int((v.normalOct >> 8 & 0xFF) << 24) >> 24) / 127.0;
+    float nx = float(int(v.normalOct << 16) >> 16) / 32767.0;
+    float ny = float(int(v.normalOct) >> 16) / 32767.0;
     return OctDecode(float2(nx, ny));
 }
 
 float3 DecodeTangent(VertexAttribute v)
 {
-    float tx = float(int((v.tangentOct & 0xFF) << 24) >> 24) / 127.0;
-    float ty = float(int((v.tangentOct >> 8 & 0xFF) << 24) >> 24) / 127.0;
+    float tx = float(int(v.tangentOct << 17) >> 17) / 16383.0;
+    float ty = float(int(v.tangentOct << 2) >> 17) / 16383.0;
     return OctDecode(float2(tx, ty));
 }
 
 float DecodeTangentSign(VertexAttribute v)
 {
-    return bool(v.tangentOct >> 16 & 1) ? 1.0 : -1.0;
+    return bool(v.tangentOct >> 30 & 1) ? 1.0 : -1.0;
 }
 
 float2 DecodeUV(VertexAttribute v)
@@ -209,12 +209,12 @@ float3 InterpolatePosition(float3 bary, VertexPosition v0, VertexPosition v1, Ve
 
 InterpolatedVertex InterpolateVertex(float3 bary, VertexAttribute v0, VertexAttribute v1, VertexAttribute v2, float4x4 mv)
 {
-    // Normal: snorm8 packed as normalOct=[_:_:Y:X], sign-extended via shift
+    // Normal: snorm16 packed as normalOct=[Y:X], sign-extended via shift
     float3 n0 = DecodeNormal(v0);
     float3 n1 = DecodeNormal(v1);
     float3 n2 = DecodeNormal(v2);
 
-    // Tangent: snorm8 packed as tangentOct=[sign:_:Y:X], sign-extended via shift
+    // Tangent: snorm15 packed as tangentOct=[sign:Y:X], sign-extended via shift
     float3 t0 = DecodeTangent(v0);
     float3 t1 = DecodeTangent(v1);
     float3 t2 = DecodeTangent(v2);
