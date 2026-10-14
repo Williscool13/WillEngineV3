@@ -72,7 +72,7 @@ void ComputeShadingDefaultLit(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThrea
     uint4 gbufferOne = uint4(
         PackNormalOct16(shadingNormal),
         PackMotionVectors(shadingInputs.velocity),
-        PackPBR(roughness, metallic),
+        PackPBR(roughness, metallic, N),
         GBUFFER1_LIT_BIT | (any(emissiveColor > float3(0.0)) ? GBUFFER1_EMISSIVE_BIT : 0u) | ((data.instance.flags & INSTANCE_FLAG_MOTION_BLUR) == 0u ? GBUFFER1_NO_MOTION_BLUR_BIT : 0u)
         | ((data.instance.flags & INSTANCE_FLAG_CAMERA_MOTION_BLUR) == 0u ? GBUFFER1_NO_CAMERA_MOTION_BLUR_BIT : 0u) | PackViewZDelta(shadingInputs.viewZDelta)
     );

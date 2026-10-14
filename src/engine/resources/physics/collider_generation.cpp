@@ -76,10 +76,11 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
     const int stitchCount = bClosed ? totalRings : totalRings - 1;
     size_t primBound = laneOffsets.Size() * static_cast<size_t>(stitchCount);
     if (p.railing.bEnabled && p.railing.lanes.Size() == 2 && p.bCrossPlanks) { primBound += static_cast<size_t>(stitchCount / std::max(1, p.crossPlankInterval)) + 1; }
-    if (p.railing.bEnabled && p.railing.bPosts) { primBound += static_cast<size_t>(totalRings / std::max(1, p.railing.postInterval)) + 1; }
+    if (p.railing.bEnabled && p.railing.bPosts) { primBound += static_cast<size_t>(static_cast<float>(totalRings) / p.railing.PostSpacing()) + 1; }
     out.Reserve(out.Size() + primBound);
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
         const Vec2 laneOff = laneOffsets[rail];
+        const Vec2 laneScale = p.railing.bEnabled ? p.railing.LaneScale(static_cast<size_t>(rail)) : Vec2{1.0f, 1.0f};
         for (int i = 0; i < stitchCount; i++) {
             const int nextRing = bClosed ? (i + 1) % totalRings : i + 1;
             const Vec3 c0 = laneCenter(frames[i], laneOff);
@@ -94,7 +95,7 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
             prim.position = mid;
             if (bTube) {
                 prim.type = SplineColliderPrimitiveType::Capsule;
-                prim.radius = p.radius;
+                prim.radius = p.radius * 0.5f * (laneScale.x + laneScale.y);
                 prim.halfHeight = len * 0.5f;
                 // Capsule axis is local Y; orient Y along the segment.
                 Vec3 y = dir;
@@ -107,7 +108,7 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
             }
             else {
                 prim.type = SplineColliderPrimitiveType::Box;
-                prim.halfExtents = Vec3(halfW, halfH, len * 0.5f);
+                prim.halfExtents = Vec3(halfW * laneScale.x, halfH * laneScale.y, len * 0.5f);
                 prim.rotation = SegmentBoxRotation(dir, frames[i].rRight, frames[i].rUp);
             }
             out.PushBack(prim);
@@ -147,29 +148,48 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
 
     // Vertical posts (balusters), plumb along world up.
     if (p.railing.bEnabled && p.railing.bPosts) {
-        const int postInterval = std::max(1, p.railing.postInterval);
         const float pb = p.railing.postBottom;
         const float pt = p.railing.postTop;
-        const float railWidth = bTube ? 2.0f * p.radius : std::max(p.profile.width, p.profile.height);
+        const float railWidth = (bTube ? 2.0f * p.radius : std::max(p.profile.width, p.profile.height)) * p.railing.MinLaneScale();
         const float hw = std::max(0.001f, std::min(p.railing.postSize.x, railWidth)) * 0.5f;
         const float hd = std::max(0.001f, std::min(p.railing.postSize.y, railWidth)) * 0.5f;
+        const bool bRound = p.railing.postShape != SplinePostShape::Box;
 
-        for (int i = 0; i < totalRings; i += postInterval) {
-            const SplineFrame& f = frames[i];
+        const float postSpacing = p.railing.PostSpacing();
+        const float lastRing = static_cast<float>(totalRings - 1);
+        const float postEnd = bClosed ? static_cast<float>(totalRings) - POSITION_EPSILON : lastRing + POSITION_EPSILON;
+        for (int k = 0; static_cast<float>(k) * postSpacing < postEnd; k++) {
+            const float t = static_cast<float>(k) * postSpacing;
+            const SplineFrame f = LerpSplineFrame(frames, t, bClosed);
             Vec3 u, w;
             horizAxes(f, u, w);
             Vec3 postBase = f.pos + (p.railing.lateralOffset + p.railing.postLateral) * u;
+            const float tuck = bRound ? hw : hd;
             if (!bClosed && totalRings > 1) {
-                if (i == 0) { postBase += hd * glm::normalize(frames[1].pos - frames[0].pos); }
-                else if (i == totalRings - 1) { postBase += hd * glm::normalize(frames[totalRings - 2].pos - frames[totalRings - 1].pos); }
+                if (k == 0) { postBase += tuck * glm::normalize(frames[1].pos - frames[0].pos); }
+                else if (std::abs(t - lastRing) < POSITION_EPSILON) { postBase += tuck * glm::normalize(frames[totalRings - 2].pos - frames[totalRings - 1].pos); }
             }
             const float halfY = std::max(0.001f, std::abs(pt - pb) * 0.5f);
 
             SplineColliderPrimitive prim{};
-            prim.type = SplineColliderPrimitiveType::Box;
             prim.position = postBase + (pb + pt) * 0.5f * worldUp;
-            prim.halfExtents = Vec3(hw, halfY, hd);
             prim.rotation = BasisToQuat(u, worldUp, w);
+            switch (p.railing.postShape) {
+                case SplinePostShape::Box:
+                    prim.type = SplineColliderPrimitiveType::Box;
+                    prim.halfExtents = Vec3(hw, halfY, hd);
+                    break;
+                case SplinePostShape::Cylinder:
+                    prim.type = SplineColliderPrimitiveType::Cylinder;
+                    prim.radius = hw;
+                    prim.halfHeight = halfY;
+                    break;
+                case SplinePostShape::Capsule:
+                    prim.type = SplineColliderPrimitiveType::Capsule;
+                    prim.radius = std::min(hw, halfY);
+                    prim.halfHeight = std::max(0.001f, halfY - prim.radius);
+                    break;
+            }
             out.PushBack(prim);
         }
     }
@@ -237,9 +257,15 @@ static void HullCone(const ConeParams& p, Core::Vector<Vec3>& out)
 {
     // Base at y=0, apex at y=height (matches GenerateCone).
     const int slices = glm::clamp(p.slices, 3, 32);
-    out.Reserve(out.Size() + slices + 1);
+    out.Reserve(out.Size() + slices * 2);
     HullRing(0.0f, p.radius, slices, out);
-    out.PushBack(Vec3(0.0f, p.height, 0.0f));
+    const float topRadius = std::min(p.topRadius, p.radius);
+    if (topRadius > POSITION_EPSILON) {
+        HullRing(p.height, topRadius, slices, out);
+    }
+    else {
+        out.PushBack(Vec3(0.0f, p.height, 0.0f));
+    }
 }
 
 static void HullHemisphere(const HemisphereParams& p, Core::Vector<Vec3>& out)

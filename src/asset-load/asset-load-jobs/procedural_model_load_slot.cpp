@@ -2353,6 +2353,62 @@ bool ProceduralModelLoadSlot::GenerateCone(const Engine::ConeParams& p)
     const float r = p.radius;
     const float h = p.height;
 
+    const float rt = std::min(p.topRadius, r);
+    if (rt > POSITION_EPSILON) {
+        Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+        Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+        auto vert = [](Vec3 pos, Vec3 normal, Vec2 uv, Vec3 tangent) {
+            Engine::FullVertex v{};
+            v.position = pos;
+            v.normal = normal;
+            v.uv = uv;
+            v.tangent = {tangent.x, tangent.y, tangent.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            return v;
+        };
+
+        const auto sideBase = static_cast<uint32_t>(vertices.Size());
+        for (int j = 0; j <= N; j++) {
+            const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * glm::pi<float>();
+            const Vec3 dir{cosf(angle), 0.0f, sinf(angle)};
+            const Vec3 normal = glm::normalize(h * dir + Vec3{0.0f, r - rt, 0.0f});
+            const Vec3 tangent{-dir.z, 0.0f, dir.x};
+            const float u = static_cast<float>(j) / static_cast<float>(N);
+            vertices.PushBack(vert(dir * r, normal, {u, 0.0f}, tangent));
+            vertices.PushBack(vert(dir * rt + Vec3{0.0f, h, 0.0f}, normal, {u, 1.0f}, tangent));
+        }
+        for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+            const uint32_t b0 = sideBase + 2 * j, t0 = b0 + 1, b1 = b0 + 2, t1 = b0 + 3;
+            indices.PushBack(b0);
+            indices.PushBack(t0);
+            indices.PushBack(b1);
+            indices.PushBack(b1);
+            indices.PushBack(t0);
+            indices.PushBack(t1);
+        }
+
+        auto addCap = [&](float y, float radius, bool bTop) {
+            const auto capBase = static_cast<uint32_t>(vertices.Size());
+            const Vec3 normal{0.0f, bTop ? 1.0f : -1.0f, 0.0f};
+            vertices.PushBack(vert({0.0f, y, 0.0f}, normal, {0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}));
+            for (int j = 0; j < N; j++) {
+                const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * glm::pi<float>();
+                vertices.PushBack(vert({cosf(angle) * radius, y, sinf(angle) * radius}, normal, {cosf(angle) * 0.5f + 0.5f, sinf(angle) * 0.5f + 0.5f}, {1.0f, 0.0f, 0.0f}));
+            }
+            for (int j = 0; j < N; j++) {
+                const uint32_t a = capBase + 1 + j;
+                const uint32_t b = capBase + 1 + (j + 1) % N;
+                indices.PushBack(capBase);
+                indices.PushBack(bTop ? b : a);
+                indices.PushBack(bTop ? a : b);
+            }
+        };
+        if (p.bTopCapped) { addCap(h, rt, true); }
+        if (p.bCapped) { addCap(0.0f, r, false); }
+
+        return FinalizeGeometry(vertices, indices);
+    }
+
     // par_shapes cone: Z-up, Z=0 base (radius=1), Z=1 apex (radius=0), no cap.
     // Smooth lateral normal: n = normalize(h*cx, r, h*cz) where (cx,cz) is the XZ unit direction.
     par_shapes_mesh* m = par_shapes_create_cone(N, 1);
@@ -3542,6 +3598,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
         const Vec2 laneOff = laneOffsets[rail];
+        const Vec2 laneScale = p.railing.bEnabled ? p.railing.LaneScale(static_cast<size_t>(rail)) : Vec2{1.0f, 1.0f};
         const auto baseVertex = static_cast<uint32_t>(vertices.Size());
 
         for (int i = 0; i < meshRingCount; i++) {
@@ -3552,11 +3609,14 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             const float vCoord = (meshRingCount > 1) ? static_cast<float>(i) / static_cast<float>(meshRingCount - 1) : 0.0f;
             for (int j = 0; j < ringSize; j++) {
                 const SplineProfilePoint& pp = ring[j];
-                Vec3 offset = laneOffset + pp.pos.x * f.rRight + pp.pos.y * f.rUp;
+                const Vec2 pos = pp.pos * laneScale;
+                // Normals take the inverse scale so a stretched profile still shades as its own shape.
+                const Vec2 normal = pp.normal / laneScale;
+                Vec3 offset = laneOffset + pos.x * f.rRight + pos.y * f.rUp;
                 if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
                 Engine::FullVertex v{};
                 v.position = f.pos + offset;
-                v.normal = glm::normalize(pp.normal.x * f.rRight + pp.normal.y * f.rUp);
+                v.normal = glm::normalize(normal.x * f.rRight + normal.y * f.rUp);
                 v.uv = {static_cast<float>(j) / static_cast<float>(ringSize), vCoord};
                 v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
                 v.color = {1, 1, 1, 1};
@@ -3589,7 +3649,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
                 const Vec3 center = laneCenter(f, laneOff);
                 const auto capBase = static_cast<uint32_t>(vertices.Size());
                 for (int k = 0; k < outlineSize; k++) {
-                    const Vec2& o = capOutline[k];
+                    const Vec2 o = capOutline[k] * laneScale;
                     Engine::FullVertex v{};
                     v.position = center + o.x * f.rRight + o.y * f.rUp;
                     v.normal = capNormal;
@@ -3679,11 +3739,10 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
 
     // Vertical posts (balusters) at ring intervals, centered on the path, extruded postBottom->postTop along world up (plumb, independent of path slope/roll).
     if (p.railing.bEnabled && p.railing.bPosts) {
-        const int postInterval = std::max(1, p.railing.postInterval);
         const float pb = p.railing.postBottom;
         const float pt = p.railing.postTop;
         // Clamp the post cross-section to the rail width so a post never pokes out from under the rail (authoritative; the editor mirrors this).
-        const float railWidth = (p.profile.type == Engine::SplineProfileType::Tube) ? 2.0f * p.radius : std::max(p.profile.width, p.profile.height);
+        const float railWidth = ((p.profile.type == Engine::SplineProfileType::Tube) ? 2.0f * p.radius : std::max(p.profile.width, p.profile.height)) * p.railing.MinLaneScale();
         const float hw = std::max(0.001f, std::min(p.railing.postSize.x, railWidth)) * 0.5f;
         const float hd = std::max(0.001f, std::min(p.railing.postSize.y, railWidth)) * 0.5f;
 
@@ -3713,16 +3772,108 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             }
         };
 
-        for (int i = 0; i < totalRings; i += postInterval) {
-            const Frame& f = frames[i];
+        const bool bRound = p.railing.postShape != Engine::SplinePostShape::Box;
+        const float postRadius = hw;
+        const int postSides = std::clamp(p.railing.postSides, 3, 64);
+
+        // Revolved around world up; profile entries are (radius, height) with (radial, up) normals, joined to the previous entry when bJoin.
+        struct PostProfilePoint
+        {
+            float radius;
+            float height;
+            Vec2 normal;
+            bool bJoin;
+        };
+        Core::InlineVector<PostProfilePoint, 48> postProfile{};
+        if (bRound) {
+            const float lo = std::min(pb, pt);
+            const float hi = std::max(pb, pt);
+            if (p.railing.postShape == Engine::SplinePostShape::Cylinder) {
+                postProfile.PushBack({0.0f, lo, {0.0f, -1.0f}, false});
+                postProfile.PushBack({postRadius, lo, {0.0f, -1.0f}, true});
+                postProfile.PushBack({postRadius, lo, {1.0f, 0.0f}, false});
+                postProfile.PushBack({postRadius, hi, {1.0f, 0.0f}, true});
+                postProfile.PushBack({postRadius, hi, {0.0f, 1.0f}, false});
+                postProfile.PushBack({0.0f, hi, {0.0f, 1.0f}, true});
+            }
+            else {
+                const float r = std::min(postRadius, (hi - lo) * 0.5f);
+                const float bottomCenter = lo + r;
+                const float topCenter = hi - r;
+                const int hemiSteps = std::max(2, postSides / 4);
+                // Poles get exactly zero radius so their collapsed triangles are exactly degenerate.
+                for (int k = 0; k <= hemiSteps; k++) {
+                    const float phi = -0.5f * glm::pi<float>() + 0.5f * glm::pi<float>() * static_cast<float>(k) / static_cast<float>(hemiSteps);
+                    postProfile.PushBack({k == 0 ? 0.0f : r * std::cos(phi), bottomCenter + r * std::sin(phi), {std::cos(phi), std::sin(phi)}, k > 0});
+                }
+                for (int k = 0; k <= hemiSteps; k++) {
+                    const float phi = 0.5f * glm::pi<float>() * static_cast<float>(k) / static_cast<float>(hemiSteps);
+                    postProfile.PushBack({k == hemiSteps ? 0.0f : r * std::cos(phi), topCenter + r * std::sin(phi), {std::cos(phi), std::sin(phi)}, true});
+                }
+            }
+        }
+
+        auto addRoundPost = [&](Vec3 base, Vec3 u, Vec3 w) {
+            const uint32_t ringVerts = static_cast<uint32_t>(postSides + 1);
+            const auto first = static_cast<uint32_t>(vertices.Size());
+            const float vScale = postProfile.Size() > 1 ? 1.0f / static_cast<float>(postProfile.Size() - 1) : 0.0f;
+            for (size_t k = 0; k < postProfile.Size(); k++) {
+                const PostProfilePoint& pp = postProfile[k];
+                for (int j = 0; j <= postSides; j++) {
+                    const float theta = 2.0f * glm::pi<float>() * static_cast<float>(j) / static_cast<float>(postSides);
+                    const Vec3 radial = std::cos(theta) * u + std::sin(theta) * w;
+                    const Vec3 around = -std::sin(theta) * u + std::cos(theta) * w;
+                    Engine::FullVertex v{};
+                    v.position = base + pp.height * worldUp + pp.radius * radial;
+                    v.normal = glm::normalize(pp.normal.x * radial + pp.normal.y * worldUp);
+                    v.uv = {static_cast<float>(j) / static_cast<float>(postSides), static_cast<float>(k) * vScale};
+                    v.tangent = {around.x, around.y, around.z, 1.0f};
+                    v.color = {1, 1, 1, 1};
+                    vertices.PushBack(v);
+                }
+            }
+            auto emitTri = [&](uint32_t a, uint32_t b, uint32_t c) {
+                const Vec3 e1 = vertices[b].position - vertices[a].position;
+                const Vec3 e2 = vertices[c].position - vertices[a].position;
+                const Vec3 n = glm::cross(e1, e2);
+                // Relative, so thin pole triangles on small or finely sliced posts survive; only collapsed ones are dropped.
+                if (glm::dot(n, n) <= 1e-12f * glm::dot(e1, e1) * glm::dot(e2, e2)) { return; }
+                const bool bFlip = glm::dot(n, vertices[a].normal + vertices[b].normal + vertices[c].normal) < 0.0f;
+                indices.PushBack(a);
+                indices.PushBack(bFlip ? c : b);
+                indices.PushBack(bFlip ? b : c);
+            };
+            for (size_t k = 1; k < postProfile.Size(); k++) {
+                if (!postProfile[k].bJoin) { continue; }
+                const uint32_t lower = first + static_cast<uint32_t>(k - 1) * ringVerts;
+                const uint32_t upper = first + static_cast<uint32_t>(k) * ringVerts;
+                for (uint32_t j = 0; j < static_cast<uint32_t>(postSides); j++) {
+                    emitTri(lower + j, lower + j + 1, upper + j + 1);
+                    emitTri(lower + j, upper + j + 1, upper + j);
+                }
+            }
+        };
+
+        const Core::Span<const Frame> frameSpan(frames.Data(), frames.Size());
+        const float postSpacing = p.railing.PostSpacing();
+        const float lastRing = static_cast<float>(totalRings - 1);
+        const float postEnd = bClosed ? static_cast<float>(totalRings) - POSITION_EPSILON : lastRing + POSITION_EPSILON;
+        for (int k = 0; static_cast<float>(k) * postSpacing < postEnd; k++) {
+            const float t = static_cast<float>(k) * postSpacing;
+            const Frame f = Engine::LerpSplineFrame(frameSpan, t, bClosed);
             // Plumb baluster: extrude along world up; cross-section axes come from the tangent so the prism stays vertical and square to the path (no parallel-transport twist).
             Vec3 u, w;
             horizAxes(f, u, w);
             Vec3 postBase = f.pos + (p.railing.lateralOffset + p.railing.postLateral) * u;
             // Tuck end posts inward by half their depth so they sit flush with the open rail's end caps instead of straddling them.
+            const float tuck = bRound ? postRadius : hd;
             if (!bClosed && totalRings > 1) {
-                if (i == 0) { postBase += hd * glm::normalize(frames[1].pos - frames[0].pos); }
-                else if (i == totalRings - 1) { postBase += hd * glm::normalize(frames[totalRings - 2].pos - frames[totalRings - 1].pos); }
+                if (k == 0) { postBase += tuck * glm::normalize(frames[1].pos - frames[0].pos); }
+                else if (std::abs(t - lastRing) < POSITION_EPSILON) { postBase += tuck * glm::normalize(frames[totalRings - 2].pos - frames[totalRings - 1].pos); }
+            }
+            if (bRound) {
+                addRoundPost(postBase, u, w);
+                continue;
             }
             const Vec3 cBot = postBase + pb * worldUp;
             const Vec3 cTop = postBase + pt * worldUp;

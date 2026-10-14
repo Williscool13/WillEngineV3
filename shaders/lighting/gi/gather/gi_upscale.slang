@@ -77,7 +77,7 @@ void ComputeGIUpscale(uniform GIUpscalePushConstant pc, uint3 dtid : SV_Dispatch
     const float historyRatio = scene.preExposure / scene.prevPreExposure;
     float3 centerNormal = UnpackNormalOct16(gt1.r);
     float3 worldN = normalize(mul((float3x3)scene.invView, centerNormal));
-    float3 guideNormal = GIGatherGuideNormal(scene, pc.depthIndex, int2(pixel), pc.renderExtent, centerNormal);
+    float3 guideNormal = GIGatherGuideNormal(gt1.b, centerNormal);
     rdgStorageFloat4[pc.guideNormalOutIndex][pixel] = float4(guideNormal, 1.0);
 
     float3 evalN = worldN;

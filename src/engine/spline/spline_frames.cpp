@@ -92,4 +92,29 @@ bool SampleSplineFrames(const Spline& spline, int segmentsPerSpan, float rollAng
 
     return true;
 }
+
+SplineFrame LerpSplineFrame(Core::Span<const SplineFrame> frames, float t, bool bClosed)
+{
+    const int count = static_cast<int>(frames.Size());
+    const int i0 = std::clamp(static_cast<int>(t), 0, count - 1);
+    const float f = t - static_cast<float>(i0);
+    const int i1 = bClosed ? (i0 + 1) % count : std::min(i0 + 1, count - 1);
+    if (f <= 0.0f || i1 == i0) { return frames[i0]; }
+
+    const SplineFrame& a = frames[i0];
+    const SplineFrame& b = frames[i1];
+    auto blendDir = [f](const glm::vec3& x, const glm::vec3& y) {
+        const glm::vec3 d = glm::mix(x, y, f);
+        return glm::length(d) < DIRECTION_EPSILON ? x : glm::normalize(d);
+    };
+    SplineFrame out{};
+    out.pos = glm::mix(a.pos, b.pos, f);
+    out.tangent = blendDir(a.tangent, b.tangent);
+    out.right = blendDir(a.right, b.right);
+    out.up = blendDir(a.up, b.up);
+    out.rRight = blendDir(a.rRight, b.rRight);
+    out.rUp = blendDir(a.rUp, b.rUp);
+    out.roll = glm::mix(a.roll, b.roll, f);
+    return out;
+}
 } // Engine

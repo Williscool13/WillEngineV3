@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "spline.h"
+#include "core/containers/span.h"
 #include "core/containers/vector.h"
 
 namespace Engine
@@ -37,6 +38,9 @@ struct SplineFrame
  * @return
  */
 bool SampleSplineFrames(const Spline& spline, int segmentsPerSpan, float rollAngle, Core::Vector<SplineFrame>& out);
+
+/** Frame at fractional ring index `t`, linearly blended between the neighbouring rings; wraps on closed splines. */
+SplineFrame LerpSplineFrame(Core::Span<const SplineFrame> frames, float t, bool bClosed);
 } // Engine
 
 #endif //WILL_ENGINE_SPLINE_FRAMES_H

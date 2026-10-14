@@ -182,35 +182,48 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             auto& rail = component.railing;
             ImGui::DragFloat("Lateral Offset", &rail.lateralOffset, 0.01f, -50.0f, 50.0f);
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
-            ImGui::SeparatorText("Lanes (lateral, vertical)");
-            if (ImGui::SmallButton("2-Rail")) {
+            ImGui::SeparatorText("Lanes (lateral, vertical | width x, height x)");
+            auto setLanes = [&rail](std::initializer_list<Vec2> lanes, std::initializer_list<Vec2> scales) {
                 rail.lanes.Clear();
-                rail.lanes.PushBack(Vec2{0.0f, 1.0f});
-                rail.lanes.PushBack(Vec2{0.0f, 0.5f});
+                rail.laneScales.Clear();
+                for (const Vec2& lane : lanes) { rail.lanes.PushBack(lane); }
+                for (const Vec2& scale : scales) { rail.laneScales.PushBack(scale); }
+            };
+            if (ImGui::SmallButton("2-Rail")) {
+                setLanes({{0.0f, 1.0f}, {0.0f, 0.5f}}, {{1.0f, 1.0f}, {0.6f, 0.6f}});
                 dirty = true;
             }
             ImGui::SameLine();
             if (ImGui::SmallButton("3-Rail")) {
-                rail.lanes.Clear();
-                rail.lanes.PushBack(Vec2{0.0f, 1.0f});
-                rail.lanes.PushBack(Vec2{0.0f, 0.66f});
-                rail.lanes.PushBack(Vec2{0.0f, 0.33f});
+                setLanes({{0.0f, 1.0f}, {0.0f, 0.66f}, {0.0f, 0.33f}}, {{1.0f, 1.0f}, {0.6f, 0.6f}, {0.6f, 0.6f}});
                 dirty = true;
             }
             ImGui::SameLine();
             if (ImGui::SmallButton("Dual")) {
-                rail.lanes.Clear();
-                rail.lanes.PushBack(Vec2{-0.5f, 0.0f});
-                rail.lanes.PushBack(Vec2{0.5f, 0.0f});
+                setLanes({{-0.5f, 0.0f}, {0.5f, 0.0f}}, {{1.0f, 1.0f}, {1.0f, 1.0f}});
                 dirty = true;
             }
 
+            auto padLaneScales = [&rail] {
+                while (rail.laneScales.Size() < rail.lanes.Size()) { rail.laneScales.PushBack(Vec2{1.0f, 1.0f}); }
+            };
+            const float laneFieldWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x * 2.0f) * 0.5f;
             int laneToRemove = -1;
             for (int li = 0; li < static_cast<int>(rail.lanes.Size()); li++) {
                 ImGui::PushID(2000 + li);
                 float lane2[2] = {rail.lanes[li].x, rail.lanes[li].y};
+                ImGui::SetNextItemWidth(laneFieldWidth);
                 if (ImGui::DragFloat2("##lane", lane2, 0.01f, -50.0f, 50.0f)) {
                     rail.lanes[li] = Vec2{lane2[0], lane2[1]};
+                }
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::SameLine();
+                const Vec2 laneScale = rail.LaneScale(static_cast<size_t>(li));
+                float scale2[2] = {laneScale.x, laneScale.y};
+                ImGui::SetNextItemWidth(laneFieldWidth);
+                if (ImGui::DragFloat2("##lanescale", scale2, 0.01f, 0.01f, 10.0f, "%.2fx", ImGuiSliderFlags_AlwaysClamp)) {
+                    padLaneScales();
+                    rail.laneScales[li] = Vec2{scale2[0], scale2[1]};
                 }
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 ImGui::SameLine();
@@ -218,11 +231,16 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 ImGui::PopID();
             }
             if (laneToRemove >= 0) {
+                padLaneScales();
                 rail.lanes.RemoveAt(static_cast<size_t>(laneToRemove));
+                rail.laneScales.RemoveAt(static_cast<size_t>(laneToRemove));
                 dirty = true;
             }
             if (rail.lanes.Size() < 8 && ImGui::SmallButton("Add Lane")) {
+                padLaneScales();
+                const Vec2 scale = rail.lanes.IsEmpty() ? Vec2{1.0f, 1.0f} : rail.LaneScale(rail.lanes.Size() - 1);
                 rail.lanes.PushBack(Vec2{0.0f, 0.0f});
+                rail.laneScales.PushBack(scale);
                 dirty = true;
             }
 
@@ -244,19 +262,39 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             if (rail.bPosts) {
                 ImGui::DragInt("Post Interval", &rail.postInterval, 1, 1, 64);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::DragInt("Posts Per Interval", &rail.postsPerInterval, 1, 1, 64);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Posts every Post Interval / Posts Per Interval rings; above 1 places posts between rings"); }
                 ImGui::DragFloat("Post Bottom", &rail.postBottom, 0.01f, -10.0f, 10.0f);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 ImGui::DragFloat("Post Top", &rail.postTop, 0.01f, -10.0f, 10.0f);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
                 // Cap post cross-section at the rail width so the post never pokes out from under the rail it meets.
-                const float railWidth = (component.profile.type == Engine::SplineProfileType::Tube)
-                                            ? 2.0f * component.radius
-                                            : std::max(component.profile.width, component.profile.height);
-                float postSize[2] = {std::min(rail.postSize.x, railWidth), std::min(rail.postSize.y, railWidth)};
-                if (ImGui::DragFloat2("Post Size", postSize, 0.005f, 0.001f, railWidth, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
-                    rail.postSize = Vec2{postSize[0], postSize[1]};
+                const float railWidth = ((component.profile.type == Engine::SplineProfileType::Tube)
+                                             ? 2.0f * component.radius
+                                             : std::max(component.profile.width, component.profile.height)) * rail.MinLaneScale();
+                const char* postShapeNames[] = {"Box", "Cylinder", "Capsule"};
+                int postShapeInt = static_cast<int>(rail.postShape);
+                if (ImGui::Combo("Post Shape", &postShapeInt, postShapeNames, IM_ARRAYSIZE(postShapeNames))) {
+                    rail.postShape = static_cast<Engine::SplinePostShape>(postShapeInt);
+                    dirty = true;
                 }
-                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                if (rail.postShape == Engine::SplinePostShape::Box) {
+                    float postSize[2] = {std::min(rail.postSize.x, railWidth), std::min(rail.postSize.y, railWidth)};
+                    if (ImGui::DragFloat2("Post Size", postSize, 0.005f, 0.001f, railWidth, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        rail.postSize = Vec2{postSize[0], postSize[1]};
+                    }
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
+                else {
+                    float diameter = std::min(rail.postSize.x, railWidth);
+                    if (ImGui::DragFloat("Post Diameter", &diameter, 0.005f, 0.001f, railWidth, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                        rail.postSize.x = diameter;
+                    }
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragInt("Post Sides", &rail.postSides, 1, 3, 64);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                }
                 ImGui::DragFloat("Post Lateral", &rail.postLateral, 0.01f, -50.0f, 50.0f);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
             }

@@ -294,10 +294,15 @@ struct ConeParams
     float radius{0.5f};
     float height{2.0f};
     int32_t slices{16};
+    /** Closes the base. */
     bool bCapped{true};
-    uint8_t _pad0[3]{};
+    /** Closes the cut tip; only used when topRadius is above 0. */
+    bool bTopCapped{true};
+    uint8_t _pad0[2]{};
+    /** 0 is a pointed apex; above 0 the tip is cut flat (a frustum). */
+    float topRadius{0.0f};
 
-    WILL_REFLECT(ConeParams, WILL_FIELD(radius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(bCapped))
+    WILL_REFLECT(ConeParams, WILL_FIELD(radius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(bCapped), WILL_FIELD(bTopCapped), WILL_FIELD(topRadius))
 };
 
 /**
@@ -438,6 +443,13 @@ struct SplineProfile
     WILL_REFLECT(SplineProfile, WILL_FIELD(type), WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(cornerRadius), WILL_FIELD(cornerSegments), WILL_FIELD(thickness))
 };
 
+enum class SplinePostShape : uint8_t
+{
+    Box = 0,
+    Cylinder = 1,
+    Capsule = 2,
+};
+
 struct SplineRailing
 {
     bool bEnabled{false};
@@ -446,12 +458,40 @@ struct SplineRailing
     int32_t postInterval{4};
     float postBottom{0.0f};
     float postTop{1.0f};
+    /** Box: width x depth. Cylinder/Capsule: x is the diameter. */
     Vec2 postSize{0.05f, 0.05f};
     float postLateral{0.0f};
     float lateralOffset{0.0f};
+    SplinePostShape postShape{SplinePostShape::Box};
+    int32_t postSides{12};
+    /** Posts per postInterval rings; spacing is postInterval / postsPerInterval rings, so above 1 places posts between rings. */
+    int32_t postsPerInterval{1};
+    /** Per-lane (width, height) multiplier on the profile, parallel to lanes; a missing entry is 1. */
+    Core::InlineVector<Vec2, 8> laneScales{};
 
     WILL_REFLECT(SplineRailing, WILL_FIELD(bEnabled), WILL_FIELD(lanes), WILL_FIELD(bPosts), WILL_FIELD(postInterval), WILL_FIELD(postBottom), WILL_FIELD(postTop),
-                 WILL_FIELD(postSize), WILL_FIELD(postLateral), WILL_FIELD(lateralOffset))
+                 WILL_FIELD(postSize), WILL_FIELD(postLateral), WILL_FIELD(lateralOffset), WILL_FIELD(postShape), WILL_FIELD(postSides), WILL_FIELD(postsPerInterval),
+                 WILL_FIELD(laneScales))
+
+    /** Ring-index step between posts. */
+    [[nodiscard]] float PostSpacing() const { return static_cast<float>(std::max(1, postInterval)) / static_cast<float>(std::clamp(postsPerInterval, 1, 64)); }
+
+    [[nodiscard]] Vec2 LaneScale(size_t lane) const
+    {
+        const Vec2 s = lane < laneScales.Size() ? laneScales[lane] : Vec2{1.0f, 1.0f};
+        return glm::max(s, Vec2{0.01f, 0.01f});
+    }
+
+    /** Smallest scale component over all lanes, so posts clamp to the narrowest rail they meet. */
+    [[nodiscard]] float MinLaneScale() const
+    {
+        float m = 1.0f;
+        for (size_t i = 0; i < lanes.Size(); i++) {
+            const Vec2 s = LaneScale(i);
+            m = i == 0 ? std::min(s.x, s.y) : std::min(m, std::min(s.x, s.y));
+        }
+        return m;
+    }
 };
 
 struct SplineParams

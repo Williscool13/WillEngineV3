@@ -307,11 +307,20 @@ float3 UnpackEmissiveRGBE(uint p)
 }
 
 // PBR: roughness (15-bit) + metalness (1-bit, binary) packed into R32
-uint PackPBR(float roughness, float metallic)
+/** Bits 0-14 roughness, 15-30 the interpolated vertex normal (oct 8+8, before normal mapping), 31 metallic. */
+uint PackPBR(float roughness, float metallic, float3 vertexNormal)
 {
     uint r = uint(saturate(roughness) * 32767.0 + 0.5);
     uint m = metallic >= 0.5 ? 1u : 0u;
-    return r | (m << 31);
+    float2 oct = OctEncode(vertexNormal) * 0.5 + 0.5;
+    uint n = uint(saturate(oct.x) * 255.0 + 0.5) | (uint(saturate(oct.y) * 255.0 + 0.5) << 8);
+    return r | (n << 15) | (m << 31);
+}
+
+float3 UnpackVertexNormal(uint p)
+{
+    uint n = (p >> 15) & 0xFFFF;
+    return OctDecode(float2(float(n & 0xFF), float(n >> 8)) / 255.0 * 2.0 - 1.0);
 }
 
 void UnpackPBR(uint p, out float roughness, out float metallic)

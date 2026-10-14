@@ -1072,6 +1072,12 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
+/** A railing with no lanes and no posts generates nothing; cross planks need two lanes. */
+static bool SplineHasGeometry(const Engine::SplineParams& params)
+{
+    return !params.railing.bEnabled || !params.railing.lanes.IsEmpty() || params.railing.bPosts;
+}
+
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadPendingTag>();
@@ -1079,9 +1085,15 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
+    auto emptied = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (auto [entity, meshComponent] : view.each()) {
-        if (started.Size() >= budget) { break; }
-        const Engine::StaticModelHandle handle = ctx->assetManager->LoadSplineModel(Component::ToSplineParams(meshComponent));
+        if (started.Size() + emptied.Size() >= budget) { break; }
+        const Engine::SplineParams params = Component::ToSplineParams(meshComponent);
+        if (!SplineHasGeometry(params)) {
+            emptied.PushBack(entity);
+            continue;
+        }
+        const Engine::StaticModelHandle handle = ctx->assetManager->LoadSplineModel(params);
         if (!handle.IsValid()) { continue; }
         StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);
@@ -1089,6 +1101,10 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     for (const entt::entity entity : started) {
         state->registry.remove<Component::SplineMeshLoadPendingTag>(entity);
         state->registry.emplace_or_replace<Component::SplineMeshLoadingTag>(entity);
+    }
+    for (const entt::entity entity : emptied) {
+        state->registry.remove<Component::SplineMeshLoadPendingTag>(entity);
+        state->registry.remove<Component::MeshRuntime>(entity);
     }
 }
 

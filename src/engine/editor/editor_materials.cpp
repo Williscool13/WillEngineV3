@@ -64,6 +64,28 @@ static int CompareNoCase(const char* a, const char* b)
     return static_cast<int>(static_cast<unsigned char>(*a)) - static_cast<int>(static_cast<unsigned char>(*b));
 }
 
+/** Segment-wise, case-insensitive; at each level subfolders sort before the materials directly in it. */
+static int CompareGroupsFoldersFirst(const char* a, const char* b)
+{
+    while (true) {
+        while (*a == '/') { ++a; }
+        while (*b == '/') { ++b; }
+        if (*a == '\0' || *b == '\0') { return (*a == '\0') - (*b == '\0'); }
+        const char* aEnd = strchr(a, '/');
+        const char* bEnd = strchr(b, '/');
+        const size_t aLen = aEnd ? static_cast<size_t>(aEnd - a) : strlen(a);
+        const size_t bLen = bEnd ? static_cast<size_t>(bEnd - b) : strlen(b);
+        for (size_t i = 0; i < std::min(aLen, bLen); ++i) {
+            const int ca = std::tolower(static_cast<unsigned char>(a[i]));
+            const int cb = std::tolower(static_cast<unsigned char>(b[i]));
+            if (ca != cb) { return ca - cb; }
+        }
+        if (aLen != bLen) { return aLen < bLen ? -1 : 1; }
+        a += aLen;
+        b += bLen;
+    }
+}
+
 static bool MatchesSearch(const char* name, const char* search)
 {
     if (search[0] == '\0') { return true; }
@@ -227,7 +249,7 @@ static void BuildMaterialEntries(Engine::EngineContext* ctx, const Engine::Mater
     }
 
     std::ranges::sort(out, [&view](const MaterialListEntry& a, const MaterialListEntry& b) {
-        const int groupCmp = CompareNoCase(a.group.c_str(), b.group.c_str());
+        const int groupCmp = CompareGroupsFoldersFirst(a.group.c_str(), b.group.c_str());
         if (groupCmp != 0) { return groupCmp < 0; }
         switch (view.sort) {
             case Engine::MaterialSort::Usage:

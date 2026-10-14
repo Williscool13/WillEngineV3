@@ -81,10 +81,13 @@ public float GIGatherNoisiness(float relativeVariance)
     return saturate((sqrt(max(relativeVariance, 0.0)) - GI_GATHER_NOISE_LO) / (GI_GATHER_NOISE_HI - GI_GATHER_NOISE_LO));
 }
 
-/** Depth normal, not shading normal: normal maps make neighbours disagree on flat surfaces and starve the filters. */
-public float3 GIGatherGuideNormal(SceneData scene, uint depthIndex, int2 px, uint2 renderExtent, float3 viewShadingNormal)
+/**
+ * Interpolated vertex normal, not shading normal: normal maps make neighbours disagree on flat surfaces and starve the filters.
+ * Not the depth normal either: that is per facet and splits smooth low-poly surfaces into islands.
+ */
+public float3 GIGatherGuideNormal(uint packedPBR, float3 viewShadingNormal)
 {
-    float3 n = GIGatherDepthNormal(scene, depthIndex, px, renderExtent);
+    float3 n = UnpackVertexNormal(packedPBR);
     return dot(n, viewShadingNormal) < 0.0 ? -n : n;
 }
 

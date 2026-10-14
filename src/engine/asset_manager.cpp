@@ -443,7 +443,11 @@ static uint64_t HashSplineParams(const SplineParams& params)
     h.Add(params.railing.postSize);
     h.Add(params.railing.postLateral);
     h.Add(params.railing.lateralOffset);
+    h.Add(params.railing.postShape);
+    h.Add(params.railing.postSides);
+    h.Add(params.railing.postsPerInterval);
     h.Add(params.railing.lanes.Data(), params.railing.lanes.Size() * sizeof(Vec2));
+    for (size_t i = 0; i < params.railing.lanes.Size(); i++) { h.Add(params.railing.LaneScale(i)); }
     return h.Finish();
 }
 

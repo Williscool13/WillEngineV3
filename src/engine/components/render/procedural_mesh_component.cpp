@@ -568,9 +568,16 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Height", &p.height, 0.01f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Top Radius", &p.topRadius, 0.01f, 0.0f, p.radius, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 is a pointed tip; above 0 cuts the tip flat"); }
                     ImGui::DragInt("Slices", &p.slices, 1, 3, 1024);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    if (ImGui::Checkbox("Capped", &p.bCapped)) { dirty = true; }
+                    if (ImGui::Checkbox("Bottom Cap", &p.bCapped)) { dirty = true; }
+                    ImGui::SameLine();
+                    ImGui::BeginDisabled(p.topRadius <= 0.0f);
+                    if (ImGui::Checkbox("Top Cap", &p.bTopCapped)) { dirty = true; }
+                    ImGui::EndDisabled();
                 }
                 else if constexpr (std::is_same_v<T, Engine::DoorParams>) {
                     ImGui::DragFloat("Width", &p.width, 0.01f, 0.01f, 100.0f);
