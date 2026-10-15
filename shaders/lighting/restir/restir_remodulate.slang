@@ -1,6 +1,7 @@
 import common_interop;
 import push_constant_interop;
 import constants_interop;
+import flags_interop;
 import bindless_declarations;
 import shader_functions;
 import pbr_functions;
@@ -56,6 +57,18 @@ void ComputeReSTIRRemodulate(uniform ReSTIRRemodulatePushConstant pc, uint3 dtid
 
     const uint4 gt1 = rdgTexturesUInt4[pc.gbufferOneIndex].Load(int3(pixel, 0));
     if ((gt1.w & 1u) == 0u) {
+        return;
+    }
+    if ((gt1.w & (GBUFFER1_BLACK_BIT | GBUFFER1_UNLIT_BIT)) != 0u) {
+        if (pc.screenDiffuseOutIndex != ~0x0u) {
+            rdgStorageFloat4[pc.screenDiffuseOutIndex][pixel] = float4(0.0, 0.0, 0.0, 1.0);
+        }
+        float3 unlitColor = float3(0.0);
+        if ((gt1.w & GBUFFER1_UNLIT_BIT) != 0u) {
+            const uint2 unlitGt2 = rdgTexturesUInt2[pc.gbufferTwoIndex].Load(int3(pixel, 0));
+            unlitColor = UnpackAlbedoRGBA8(unlitGt2.r).rgb + UnpackEmissiveRGBE(unlitGt2.g) * pc.sceneData[pc.sceneDataIndex].preExposure;
+        }
+        rdgStorageFloat4[pc.outputIndex][pixel] = float4(unlitColor, 1.0);
         return;
     }
 

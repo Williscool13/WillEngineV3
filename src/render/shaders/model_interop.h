@@ -148,7 +148,7 @@ SHADER_PUBLIC struct MaterialProperties
     SHADER_PUBLIC uint32_t shadingBucketIndex;
     SHADER_PUBLIC uint32_t lightingBucketIndex;
     SHADER_PUBLIC uint32_t uvMode; // MATERIAL_UV_*
-    SHADER_PUBLIC uint32_t padding2;
+    SHADER_PUBLIC uint32_t lightingFlags;
 
     // Base PBR properties
     SHADER_PUBLIC float4 colorFactor;

@@ -379,7 +379,9 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
                 const Engine::RenderMaterial material = materialManager->GetRenderMaterial(entry.id);
                 props = material.props;
                 props.shadingBucketIndex = slot;
-                props.lightingBucketIndex = pipelineManager->GetLightingShaderIndex(pipelineManager->ResolveLightingShaderForMode(material.lightingShader, lightingMode));
+                const StringID lightingShader = pipelineManager->ResolveLightingShaderForMode(material.lightingShader, lightingMode);
+                props.lightingBucketIndex = pipelineManager->GetLightingShaderIndex(lightingShader);
+                props.lightingFlags = lightingShader == "default_black"_sid ? GBUFFER1_BLACK_BIT : lightingShader == "default_unlit"_sid ? GBUFFER1_UNLIT_BIT : 0u;
             }
             vf.materialRuns.PushBack(Core::DirtyRun{offset, count});
         });

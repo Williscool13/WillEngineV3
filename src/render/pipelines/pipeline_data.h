@@ -28,6 +28,7 @@ enum class LightingShaderType : uint8_t
 {
     Default = 0,
     ReSTIR,
+    Any,
 };
 
 struct LightingPipelineInfo

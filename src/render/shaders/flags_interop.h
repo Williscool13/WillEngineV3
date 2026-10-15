@@ -17,11 +17,13 @@ using uint = uint32_t;
 #define SHADER_CONST constexpr inline
 #endif // __SLANG__
 
-// gbuffer_one.w bit layout: bits 0-3 = flags below, bits 4-15 free, bits 16-31 = packed viewZ delta (PackViewZDelta).
+// gbuffer_one.w bit layout: bits 0-5 = flags below, bits 6-15 free, bits 16-31 = packed viewZ delta (PackViewZDelta).
 SHADER_PUBLIC SHADER_CONST uint GBUFFER1_LIT_BIT = 0x1u;
 SHADER_PUBLIC SHADER_CONST uint GBUFFER1_EMISSIVE_BIT = 0x2u;
 SHADER_PUBLIC SHADER_CONST uint GBUFFER1_NO_MOTION_BLUR_BIT = 0x4u;
 SHADER_PUBLIC SHADER_CONST uint GBUFFER1_NO_CAMERA_MOTION_BLUR_BIT = 0x8u;
+SHADER_PUBLIC SHADER_CONST uint GBUFFER1_BLACK_BIT = 0x10u;
+SHADER_PUBLIC SHADER_CONST uint GBUFFER1_UNLIT_BIT = 0x20u;
 
 // Instance::flags bits (model_interop.h)
 SHADER_PUBLIC SHADER_CONST uint INSTANCE_FLAG_MOTION_BLUR = 0x1u;

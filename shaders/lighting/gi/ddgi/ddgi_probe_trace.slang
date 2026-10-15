@@ -121,7 +121,7 @@ void ComputeDDGIProbeTrace(uint3 dtid: SV_DispatchThreadID, uniform DDGIProbeTra
 
             if (!bCacheRead) {
                 uint neeSeed = SeedRng(uint2(probeIndex, rayIndex), pc.frameIndex, 0x1E5CACEu);
-                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), bMirror, hitWorldPos, direction, neeSeed, 0.75 * hitT);
+                radiance = ShadeProbeRayHitNEE(pc, instance, q.CommittedPrimitiveIndex(), q.CommittedTriangleBarycentrics(), bMirror, hitWorldPos, direction, neeSeed);
             }
 
             // Firefly clamp

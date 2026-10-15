@@ -4,6 +4,7 @@ import constants_interop;
 import model_interop;
 import pbr_functions;
 import visibility_lighting_common;
+import restir_common;
 
 import bindless_declarations;
 import bucket_dispatch_common;
@@ -18,6 +19,12 @@ void ComputeLightingUnlit(uniform VisibilityLightingPushConstant pc, uint3 gid :
 
     float depth = rdgTexturesFloat[pc.depthIndex].Load(int3(pixel, 0)).r;
     if (depth <= 0.0) {
+        return;
+    }
+
+    if (pc.secondaryOutputImageIndex != ~0x0u) {
+        WriteZeroDemodulatedLighting(pc.primaryOutputImageIndex, pc.secondaryOutputImageIndex, pc.diffuseRatioIndex, pixel, pc.renderExtent,
+                                     pc.activeCheckerboardField, pc.bFullRateResolve != 0u, pc.bCheckerboardPacked != 0u);
         return;
     }
 

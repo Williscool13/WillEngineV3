@@ -71,7 +71,7 @@ static GatherHitSurface DecodeGatherHit(GIGatherPushConstant pc, Instance instan
 }
 
 /** Scaled by bounceIntensity to match what ShadeRadianceCacheCell feeds the cache. */
-static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, float hitT, ReflectionProbeBlend probeBlend)
+static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, float3 normal, float3 direction, ReflectionProbeBlend probeBlend)
 {
     float3 indirectDiffuse = float3(0.0);
     float giW = 0.0;
@@ -80,7 +80,7 @@ static float3 ResolveWorldIndirect(GIGatherPushConstant pc, float3 hitWorldPos, 
     }
     if (pc.bCascadesValid != 0) {
         float edgeFade;
-        float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, normal, direction, pc.ddgiCascades, 0.75 * hitT, edgeFade);
+        float4 gi = DDGISampleIrradianceCascaded(hitWorldPos, normal, direction, pc.ddgiCascades, 0.0, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
         giW = gi.w;
     }
@@ -118,7 +118,7 @@ static float3 ResolveHitFallback(GIGatherPushConstant pc, float3 cameraWorldPos,
             probeBlend = PickReflectionProbeBinned(hitWorldPos, pc.reflectionProbes, pc.reflectionProbeCount, pc.worldGridProbeGrid, cameraWorldPos);
         }
         // Deliberately no light loop at fallback hits. V = N, as the cache cell it stands in for.
-        radiance = hit.diffuseColor * OrenNayarDirectionalAlbedo(1.0, hit.roughness) * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, hitT, probeBlend);
+        radiance = hit.diffuseColor * OrenNayarDirectionalAlbedo(1.0, hit.roughness) * ResolveWorldIndirect(pc, hitWorldPos, hit.normal, direction, probeBlend);
         tier = GI_GATHER_TIER_PROBE;
         if (probeBlend.indexA >= 0 && probeBlend.coverage > 0.5) {
             tier = GI_GATHER_TIER_BAKED;

@@ -261,7 +261,8 @@ uint32_t PipelineManager::GetLightingShaderIndex(StringID pipelineId) const
 StringID PipelineManager::ResolveLightingShaderForMode(StringID pipelineId, Core::LightingMode mode) const
 {
     const LightingShaderType requiredType = RequiredLightingShaderType(mode);
-    if (GetLightingShaderType(pipelineId) == requiredType) { return pipelineId; }
+    const LightingShaderType type = GetLightingShaderType(pipelineId);
+    if (type == requiredType || type == LightingShaderType::Any) { return pipelineId; }
     return requiredType == LightingShaderType::ReSTIR ? "default_pbr_restir"_sid : "default_pbr"_sid;
 }
 
@@ -276,7 +277,7 @@ Core::ArenaFixedVector<StringID> PipelineManager::GetLightingPipelinesForMode(Co
     const LightingShaderType requiredType = RequiredLightingShaderType(mode);
     Core::ArenaFixedVector<StringID> matching(&arena, lightingPipelines.Size());
     for (const LightingPipelineInfo& info : lightingPipelines) {
-        if (info.type == requiredType) { matching.PushBack(info.id); }
+        if (info.type == requiredType || info.type == LightingShaderType::Any) { matching.PushBack(info.id); }
     }
     return matching;
 }
@@ -519,7 +520,10 @@ void PipelineManager::RegisterPipelines()
     RegisterLightingPipeline("default_toon_restir"_sid, LightingShaderType::ReSTIR);
     RegisterComputePipeline("default_unlit"_sid, src / "lighting_unlit.spv", "ComputeLightingUnlit",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
-    RegisterLightingPipeline("default_unlit"_sid, LightingShaderType::Default);
+    RegisterLightingPipeline("default_unlit"_sid, LightingShaderType::Any);
+    RegisterComputePipeline("default_black"_sid, src / "lighting_black.spv", "ComputeLightingBlack",
+                            sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
+    RegisterLightingPipeline("default_black"_sid, LightingShaderType::Any);
     RegisterComputePipeline("lighting_ground_truth"_sid, src / "lighting_ground_truth.spv", "ComputeLightingGroundTruth",
                             sizeof(VisibilityLightingPushConstant), PipelineCategory::Critical);
 

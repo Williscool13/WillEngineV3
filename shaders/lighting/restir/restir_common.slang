@@ -83,6 +83,32 @@ public void WriteDiffuseRatio(uint index, uint2 pixel, uint2 renderExtent, uint 
     }
 }
 
+public void WriteZeroDemodulatedLighting(uint diffuseIndex, uint specularIndex, uint diffuseRatioIndex, uint2 pixel, uint2 renderExtent, uint field, bool bFullRate, bool bPacked)
+{
+    bool bHole = field != 0u && !IsActiveCheckerboardPixel(int2(pixel), false, field);
+    if (bHole && !bFullRate) {
+        return;
+    }
+
+    uint2 writeCoord = (field != 0u && !bFullRate && bPacked) ? PixelPosToReservoirPos(pixel, field) : pixel;
+    rdgStorageFloat4[diffuseIndex][writeCoord] = float4(0.0);
+    rdgStorageFloat4[specularIndex][writeCoord] = float4(0.0);
+    WriteDiffuseRatio(diffuseRatioIndex, pixel, renderExtent, field, bFullRate, 0.0, 0.0);
+
+    if (field != 0u && !bFullRate && !bPacked) {
+        int2 o = OppositeFieldPixel(pixel, field);
+        if (o.x >= 0 && o.x < int(renderExtent.x)) {
+            rdgStorageFloat4[diffuseIndex][uint2(o)] = float4(0.0);
+            rdgStorageFloat4[specularIndex][uint2(o)] = float4(0.0);
+        }
+        if ((renderExtent.x & 1u) != 0u && pixel.x == renderExtent.x - 2u && ((pixel.y + field) & 1u) == 1u) {
+            uint2 orphan = uint2(renderExtent.x - 1u, pixel.y);
+            rdgStorageFloat4[diffuseIndex][orphan] = float4(0.0);
+            rdgStorageFloat4[specularIndex][orphan] = float4(0.0);
+        }
+    }
+}
+
 public struct LightView
 {
     public float3 center;

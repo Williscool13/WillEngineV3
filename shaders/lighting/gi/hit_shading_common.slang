@@ -205,7 +205,7 @@ static float3 ShadeLocalLightsRIS(WorldGridPunctualLights worldGridLights, Light
 }
 
 /** Keep matched to ShadeRadianceCacheCell so cache-miss fallbacks agree with the cells they stand in for. */
-public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, float3 worldPosition, float3 rayDirection, uint rngSeed, float maxBias)
+public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instance, uint triangleIndex, float2 barycentrics, bool bMirror, float3 worldPosition, float3 rayDirection, uint rngSeed)
 {
     Primitive primitive = pc.primitiveBuffer[instance.primitiveIndex];
 
@@ -283,7 +283,7 @@ public float3 ShadeProbeRayHitNEE(DDGIProbeTracePushConstant pc, Instance instan
     float giW = 0.0;
     if ((pc.previousBaseCellZFlags & (1u << 16u)) != 0u) {
         float edgeFade;
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, maxBias, edgeFade);
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, rayDirection, pc.previousCascades, 0.0, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
         giW = gi.w;
     }
@@ -566,7 +566,7 @@ public float3 ShadeRadianceCacheCell(RadianceCacheShadePushConstant pc, Instance
     float giW = 0.0;
     if (pc.bFeedbackValid != 0) {
         float edgeFade;
-        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, -RADIANCE_CACHE_CELL_SIZE_BASE, edgeFade);
+        float4 gi = DDGISampleIrradianceCascaded(worldPosition, N, -N, pc.previousCascades, 0.0, edgeFade);
         indirectDiffuse = gi.rgb * pc.bounceIntensity * gi.w + indirectDiffuse * (1.0 - max(gi.w, edgeFade));
         giW = gi.w;
     }

@@ -12,7 +12,7 @@ static const int GI_DENOISE_TILE_RADIUS = GI_DENOISE_RADIUS * GI_DENOISE_MAX_STR
 static const int GI_DENOISE_GROUP = 16;
 static const int GI_DENOISE_TILE = GI_DENOISE_GROUP + 2 * GI_DENOISE_TILE_RADIUS;
 static const float GI_DENOISE_PLANE_DIST_SIGMA = 0.01;
-static const float GI_DENOISE_NORMAL_POWER = 32.0;
+static const float GI_DENOISE_NORMAL_POWER = 8.0;
 static const float GI_DENOISE_HITT_SENSITIVITY = 3.0;
 static const float GI_DENOISE_HITT_FAR_METERS = 8.0;
 // Sky visibility is geometry only (sky light is applied after), so it takes a wider kernel than the radiance.
