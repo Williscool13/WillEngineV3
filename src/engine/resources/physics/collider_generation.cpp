@@ -427,17 +427,17 @@ static void CompoundSpiralStaircase(const SpiralStaircaseParams& p, Core::Vector
 // Ring of boxes approximating the annular wall; mirrors GeneratePipe (centered Y).
 static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimitive>& out)
 {
-    const int N = glm::clamp(p.slices, 3, 128);
+    const int N = glm::clamp(p.SweepSegments(), 1, 128);
     const float ro = std::max(0.01f, p.outerRadius);
     const float ri = std::max(0.001f, std::min(p.innerRadius, ro - 0.001f));
     const float hh = p.height * 0.5f;
     const float midR = (ri + ro) * 0.5f;
-    const float twoPi = 2.0f * glm::pi<float>();
+    const float sweep = glm::radians(p.ClampedSweepDegrees());
     const Vec3 up(0.0f, 1.0f, 0.0f);
     out.Reserve(out.Size() + N);
     for (int j = 0; j < N; j++) {
-        const float a0 = twoPi * static_cast<float>(j) / static_cast<float>(N);
-        const float a1 = twoPi * static_cast<float>(j + 1) / static_cast<float>(N);
+        const float a0 = sweep * static_cast<float>(j) / static_cast<float>(N);
+        const float a1 = sweep * static_cast<float>(j + 1) / static_cast<float>(N);
         const float am = (a0 + a1) * 0.5f;
         const Vec3 radial(std::cos(am), 0.0f, std::sin(am));
         const Vec3 tangent(-std::sin(am), 0.0f, std::cos(am));
@@ -1031,7 +1031,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<PlaneParams>(params)
         || std::holds_alternative<StaircaseParams>(params)
         || std::holds_alternative<SpiralStaircaseParams>(params)
-        || std::holds_alternative<PipeParams>(params)
+        || (std::holds_alternative<PipeParams>(params) && !std::get<PipeParams>(params).IsSloped())
         || std::holds_alternative<TorusParams>(params)
         || std::holds_alternative<RingParams>(params)
         || std::holds_alternative<ArchParams>(params)
@@ -1120,6 +1120,7 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
         return true;
     }
     if (const auto* p = std::get_if<PipeParams>(&params)) {
+        if (p->IsSloped()) { return false; }
         outKind = PhysicsColliderKind::Compound;
         CompoundPipe(*p, outPrimitives);
         return true;

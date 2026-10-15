@@ -215,14 +215,18 @@ inline int32_t StaircaseUndersideBreaks(const StaircaseParams& p, float z0, floa
     return count;
 }
 
+/** 1 is a flat bevel; more segments round the chamfered edge into an arc tangent to both faces. */
+inline constexpr int32_t MAX_CHAMFER_SEGMENTS = 8;
+
 struct BoxParams
 {
     float sizeX{1.0f}, sizeY{1.0f}, sizeZ{1.0f};
     float chamferX[4]{};
     float chamferY[4]{};
     float chamferZ[4]{};
+    int32_t chamferSegments{1};
 
-    WILL_REFLECT(BoxParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ))
+    WILL_REFLECT(BoxParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ), WILL_FIELD(chamferSegments))
 };
 
 struct CylinderParams
@@ -279,9 +283,10 @@ struct WedgeParams
     float chamferY[4]{};
     float chamferZ[4]{};
     float slabThickness{0.0f};
+    int32_t chamferSegments{1};
 
     WILL_REFLECT(WedgeParams, WILL_FIELD(sizeX), WILL_FIELD(sizeY), WILL_FIELD(sizeZ), WILL_FIELD(baseHeight), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ),
-                 WILL_FIELD(slabThickness))
+                 WILL_FIELD(slabThickness), WILL_FIELD(chamferSegments))
 };
 
 inline bool WedgeIsSlab(const WedgeParams& p)
@@ -374,8 +379,27 @@ struct PipeParams
     float innerRadius{0.3f};
     float height{2.0f};
     int32_t slices{16};
+    /** How far the inner edge sits below the outer edge; the top and bottom slope straight between them (concave triangle-mesh collider, static-only). */
+    float innerDrop{0.0f};
+    /** Flat band in from the outer edge before the slope starts. */
+    float lipWidth{0.0f};
+    /** Degrees of arc from +X toward +Z; below 360 the open ends are capped. Slices stay per full circle, so partial arcs share a full pipe's facets. */
+    float sweepDegrees{360.0f};
+    /** One normal per facet instead of smooth radial normals, so low slice counts shade as flat panels. */
+    bool bFlatShaded{false};
+    uint8_t _pad0[3]{};
 
-    WILL_REFLECT(PipeParams, WILL_FIELD(outerRadius), WILL_FIELD(innerRadius), WILL_FIELD(height), WILL_FIELD(slices))
+    WILL_REFLECT(PipeParams, WILL_FIELD(outerRadius), WILL_FIELD(innerRadius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(innerDrop), WILL_FIELD(lipWidth),
+                 WILL_FIELD(sweepDegrees), WILL_FIELD(bFlatShaded))
+
+    [[nodiscard]] bool IsSloped() const { return glm::abs(innerDrop) > POSITION_EPSILON; }
+    [[nodiscard]] float ClampedSweepDegrees() const { return glm::clamp(sweepDegrees, 1.0f, 360.0f); }
+    [[nodiscard]] bool IsPartial() const { return ClampedSweepDegrees() < 360.0f - 1e-3f; }
+    /** Facets in the swept arc at the full-circle slice density, at least one. */
+    [[nodiscard]] int32_t SweepSegments() const
+    {
+        return glm::max(1, static_cast<int32_t>(glm::ceil(static_cast<float>(glm::max(3, slices)) * ClampedSweepDegrees() / 360.0f - 1e-3f)));
+    }
 };
 
 struct TetrahedronParams
@@ -949,8 +973,10 @@ struct SlantedBeamParams
     float chamferX[4]{};
     float chamferY[4]{};
     float chamferZ[4]{};
+    int32_t chamferSegments{1};
 
-    WILL_REFLECT(SlantedBeamParams, WILL_FIELD(sizeX), WILL_FIELD(length), WILL_FIELD(rise), WILL_FIELD(thickness), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ))
+    WILL_REFLECT(SlantedBeamParams, WILL_FIELD(sizeX), WILL_FIELD(length), WILL_FIELD(rise), WILL_FIELD(thickness), WILL_FIELD(chamferX), WILL_FIELD(chamferY), WILL_FIELD(chamferZ),
+                 WILL_FIELD(chamferSegments))
 };
 
 /** Low end corners then high end corners, each counter-clockwise from the pivot looking down +Z. */

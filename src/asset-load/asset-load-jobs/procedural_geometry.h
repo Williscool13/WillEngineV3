@@ -20,6 +20,7 @@ bool GenerateCurvedRampGeometry(const Engine::CurvedRampParams& p, Core::TlsfAll
 bool GenerateBowlGeometry(const Engine::BowlParams& p, Core::TlsfAllocator& scratch, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices);
 /** Solid or hollow; only the hollow form is non-analytic, but the render slot builds both here. */
 bool GenerateHemisphereGeometry(const Engine::HemisphereParams& p, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices);
+bool GeneratePipeGeometry(const Engine::PipeParams& p, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices);
 
 /** Dispatches to the matching exotic generator; returns false for analytic/monostate types (those have primitive/analytic colliders and never reach here). */
 bool GenerateNonAnalyticProceduralGeometry(const Engine::ProceduralParams& params, Core::TlsfAllocator& scratch, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices);

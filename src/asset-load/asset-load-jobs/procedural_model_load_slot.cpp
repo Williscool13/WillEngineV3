@@ -621,24 +621,71 @@ struct ConvexPlane
     float d;
     Vec3 t;
     float uOffset;
+    /** Rounded-chamfer chord: vertex normals blend from arcN0 at arcP0 to arcN1 at arcP1 instead of the flat n. */
+    bool bArc{false};
+    Vec3 arcP0{0.0f};
+    Vec3 arcP1{0.0f};
+    Vec3 arcN0{0.0f};
+    Vec3 arcN1{0.0f};
 };
-constexpr int32_t MAX_CONVEX_PLANES = 24;
+// 7 faces (wedge with underside) plus every box edge chamfered twice (wedge top and underside sets) at full rounding.
+constexpr int32_t MAX_CONVEX_PLANES = 7 + 24 * Engine::MAX_CHAMFER_SEGMENTS;
 
-/** Adds the plane through the shared edge moved depth along setbackA on face a and along setbackB on face b. axis picks the tangent's sign. */
-static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, Vec3 setbackA, Vec3 setbackB, float depth, int32_t axis)
+/**
+ * Cuts the shared edge back depth along setbackA on face a and setbackB on face b. One segment is a flat bevel; more follow a conic arc
+ * tangent to both faces (circular when the setbacks match) with one chord plane per segment. axis picks the tangent's sign.
+ */
+static void AppendEdgeChamfer(ConvexPlane* planes, int32_t& planeCount, const ConvexPlane& a, const ConvexPlane& b, Vec3 setbackA, Vec3 setbackB, float depth, int32_t axis,
+                              int32_t segments)
 {
     const float k = glm::dot(a.n, b.n);
-    if (depth <= GEOMETRY_EPSILON || glm::abs(k) > 0.9999f || planeCount >= MAX_CONVEX_PLANES) { return; }
+    segments = glm::clamp(segments, 1, Engine::MAX_CHAMFER_SEGMENTS);
+    if (depth <= GEOMETRY_EPSILON || glm::abs(k) > 0.9999f || planeCount + segments > MAX_CONVEX_PLANES) { return; }
     const Vec3 edgeDir = glm::normalize(glm::cross(a.n, b.n));
     const Vec3 edgePoint = ((a.d - k * b.d) * a.n + (b.d - k * a.d) * b.n) / (1.0f - k * k);
-    Vec3 n = glm::normalize(glm::cross(edgeDir, setbackA - setbackB));
-    if (glm::dot(n, a.n + b.n) < 0.0f) { n = -n; }
-    const ConvexPlane chamfer{n, glm::dot(n, edgePoint + setbackA * depth), edgeDir[axis] < 0.0f ? -edgeDir : edgeDir, 0.0f};
-    planes[planeCount++] = chamfer;
+    const Vec3 tangent = edgeDir[axis] < 0.0f ? -edgeDir : edgeDir;
+    const Vec3 pa = edgePoint + setbackA * depth;
+    const Vec3 pb = edgePoint + setbackB * depth;
+    const Vec3 outward = a.n + b.n;
+
+    auto chordPlane = [&](Vec3 p0, Vec3 p1) {
+        Vec3 n = glm::normalize(glm::cross(edgeDir, p1 - p0));
+        if (glm::dot(n, outward) < 0.0f) { n = -n; }
+        return ConvexPlane{n, glm::dot(n, p0), tangent, 0.0f};
+    };
+    if (segments == 1) {
+        planes[planeCount++] = chordPlane(pa, pb);
+        return;
+    }
+
+    // Rational quadratic Bezier pa -> edgePoint -> pb; weight cos(half the turn) makes it a circular arc for equal setbacks.
+    const float w = glm::sqrt(glm::max(0.5f * (1.0f + k), 0.0f));
+    auto arc = [&](float t) {
+        const float b0 = (1.0f - t) * (1.0f - t), b1 = 2.0f * t * (1.0f - t) * w, b2 = t * t;
+        return (b0 * pa + b1 * edgePoint + b2 * pb) / (b0 + b1 + b2);
+    };
+    auto arcNormal = [&](int32_t i) {
+        if (i == 0) { return a.n; }
+        if (i == segments) { return b.n; }
+        const float t = static_cast<float>(i) / static_cast<float>(segments);
+        Vec3 n = glm::normalize(glm::cross(edgeDir, arc(t + 1e-3f) - arc(t - 1e-3f)));
+        return glm::dot(n, outward) < 0.0f ? -n : n;
+    };
+    for (int32_t i = 0; i < segments; i++) {
+        const Vec3 p0 = arc(static_cast<float>(i) / static_cast<float>(segments));
+        const Vec3 p1 = arc(static_cast<float>(i + 1) / static_cast<float>(segments));
+        ConvexPlane chord = chordPlane(p0, p1);
+        chord.bArc = true;
+        chord.arcP0 = p0;
+        chord.arcP1 = p1;
+        chord.arcN0 = arcNormal(i);
+        chord.arcN1 = arcNormal(i + 1);
+        planes[planeCount++] = chord;
+    }
 }
 
 /** faces[0..5] are the +X -X +Y -Y +Z -Z faces of a box sheared in Y; chamfers use BoxParams' edge layout, depth measured along the box axes. */
-static void AppendBoxEdgeChamfers(const ConvexPlane* faces, ConvexPlane* planes, int32_t& planeCount, const bool* bPresent, const float* const* chamfers, Vec3 size)
+static void AppendBoxEdgeChamfers(const ConvexPlane* faces, ConvexPlane* planes, int32_t& planeCount, const bool* bPresent, const float* const* chamfers, Vec3 size, int32_t segments)
 {
     auto setbackOn = [](const ConvexPlane& face, int32_t axis, bool bHigh) {
         Vec3 w{0.0f};
@@ -659,7 +706,7 @@ static void AppendBoxEdgeChamfers(const ConvexPlane* faces, ConvexPlane* planes,
             if (!bPresent[faceA] || !bPresent[faceB]) { continue; }
             const Vec3 setbackA = setbackOn(faces[faceA], b, bHighB);
             const Vec3 setbackB = setbackOn(faces[faceB], a, bHighA);
-            AppendEdgeChamfer(planes, planeCount, faces[faceA], faces[faceB], setbackA, setbackB, glm::clamp(chamfers[c][i], 0.0f, maxDepth), c);
+            AppendEdgeChamfer(planes, planeCount, faces[faceA], faces[faceB], setbackA, setbackB, glm::clamp(chamfers[c][i], 0.0f, maxDepth), c, segments);
         }
     }
 }
@@ -691,7 +738,8 @@ static void BuildConvexFaces(const ConvexPlane* planes, int32_t planeCount, floa
         }
     }
 
-    constexpr int32_t MAX_FACE_VERTS = 32;
+    // A face bordered by four rounded edges carries every arc point of each.
+    constexpr int32_t MAX_FACE_VERTS = 8 + 4 * (Engine::MAX_CHAMFER_SEGMENTS + 1) * 2;
     for (int32_t i = 0; i < planeCount; i++) {
         const ConvexPlane& plane = planes[i];
         const Vec3 bitangent = glm::cross(plane.n, plane.t);
@@ -732,6 +780,11 @@ static void BuildConvexFaces(const ConvexPlane* planes, int32_t planeCount, floa
             Engine::FullVertex v{};
             v.position = face[m];
             v.normal = plane.n;
+            if (plane.bArc) {
+                const Vec3 chord = plane.arcP1 - plane.arcP0;
+                const float s = glm::clamp(glm::dot(face[m] - plane.arcP0, chord) / glm::max(glm::dot(chord, chord), DIVISION_EPSILON), 0.0f, 1.0f);
+                v.normal = glm::normalize(glm::mix(plane.arcN0, plane.arcN1, s));
+            }
             v.uv = {glm::dot(face[m], plane.t) + plane.uOffset, glm::dot(face[m], bitangent)};
             v.tangent = {plane.t.x, plane.t.y, plane.t.z, 1.0f};
             v.color = {1, 1, 1, 1};
@@ -765,27 +818,9 @@ bool ProceduralModelLoadSlot::GenerateBox(const Engine::BoxParams& p)
     planes[planeCount++] = {{0, 0, -1}, 0.0f, {-1, 0, 0}, size.x};
 
     const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
-    const float invSqrt2 = 1.0f / glm::sqrt(2.0f);
-    for (int32_t c = 0; c < 3; c++) {
-        const int32_t a = c == 0 ? 1 : 0;
-        const int32_t b = c == 2 ? 1 : 2;
-        const float maxDepth = 0.5f * glm::min(size[a], size[b]);
-        for (int32_t i = 0; i < 4; i++) {
-            const float depth = glm::clamp(chamfers[c][i], 0.0f, maxDepth);
-            if (depth <= GEOMETRY_EPSILON) { continue; }
-            const bool highA = (i & 1) != 0;
-            const bool highB = (i >> 1) != 0;
-            Vec3 n{0.0f};
-            n[a] = highA ? invSqrt2 : -invSqrt2;
-            n[b] = highB ? invSqrt2 : -invSqrt2;
-            Vec3 edge{0.0f};
-            edge[a] = highA ? size[a] : 0.0f;
-            edge[b] = highB ? size[b] : 0.0f;
-            Vec3 t{0.0f};
-            t[c] = 1.0f;
-            planes[planeCount++] = {n, glm::dot(n, edge) - depth * invSqrt2, t, 0.0f};
-        }
-    }
+    const bool bPresent[6] = {true, true, true, true, true, true};
+    const ConvexPlane faces[6] = {planes[0], planes[1], planes[2], planes[3], planes[4], planes[5]};
+    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, size, p.chamferSegments);
 
     const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(size.x, glm::max(size.y, size.z)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -1703,7 +1738,7 @@ bool ProceduralModelLoadSlot::GenerateSlantedBeam(const Engine::SlantedBeamParam
     const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
     const bool bPresent[6] = {true, true, true, true, true, true};
     const ConvexPlane faces[6] = {planes[0], planes[1], planes[2], planes[3], planes[4], planes[5]};
-    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, thickness, len});
+    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, thickness, len}, p.chamferSegments);
 
     const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(sx, glm::max(thickness + glm::abs(p.rise), len)));
     Core::Vector<Vec3> corners(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
@@ -2327,13 +2362,13 @@ bool ProceduralModelLoadSlot::GenerateWedge(const Engine::WedgeParams& p)
     const float* chamfers[3] = {p.chamferX, p.chamferY, p.chamferZ};
     const ConvexPlane faces[6] = {planes[0], planes[1], planes[2], planes[3], planes[4], planes[5]};
     const bool bPresent[6] = {true, true, true, !bFloating, true, bBase};
-    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, top, sz});
+    AppendBoxEdgeChamfers(faces, planes, planeCount, bPresent, chamfers, {sx, top, sz}, p.chamferSegments);
     if (bSlab) {
         const ConvexPlane undersideFaces[6] = {faces[0], faces[1], faces[2], underside, faces[4], faces[5]};
         const bool bUndersidePresent[6] = {true, true, false, true, true, bFloating};
         const float noChamfer[4] = {};
         const float* undersideChamfers[3] = {p.chamferX, noChamfer, p.chamferZ};
-        AppendBoxEdgeChamfers(undersideFaces, planes, planeCount, bUndersidePresent, undersideChamfers, {sx, top, sz});
+        AppendBoxEdgeChamfers(undersideFaces, planes, planeCount, bUndersidePresent, undersideChamfers, {sx, top, sz}, p.chamferSegments);
     }
 
     const float eps = GEOMETRY_EPSILON * glm::max(1.0f, glm::max(sx, glm::max(top, sz)));
@@ -2742,114 +2777,9 @@ bool ProceduralModelLoadSlot::GeneratePipe(const Engine::PipeParams& p)
 {
     ZoneScopedN("GeneratePipe");
 
-    const int N = std::max(3, p.slices);
-    const float ro = std::max(0.01f, p.outerRadius);
-    const float ri = std::max(0.001f, std::min(p.innerRadius, ro - 0.001f));
-    const float h = p.height;
-    const float hh = h * 0.5f;
-    const auto pi = glm::pi<float>();
-
-    // 4 ring sections × (N+1)*2 verts = 8*(N+1); 4 sections × N*6 = 24*N indices
-    Core::HeapArray<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 8 * (N + 1));
-    Core::HeapArray<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel, 24 * N);
-    size_t vi = 0, ii = 0;
-
-    auto addRingQuads = [&](float radius, bool outward) {
-        // Outer or inner side cylinder wall
-        auto base = static_cast<uint32_t>(vi);
-        for (int j = 0; j <= N; j++) {
-            const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
-            const float cx = cosf(angle), cz = sinf(angle);
-            Vec3 n = outward ? Vec3{cx, 0, cz} : Vec3{-cx, 0, -cz};
-            for (int k = 0; k < 2; k++) {
-                Engine::FullVertex v{};
-                v.position = {cx * radius, k == 0 ? -hh : hh, cz * radius};
-                v.normal = n;
-                v.uv = {static_cast<float>(j) / static_cast<float>(N), k == 0 ? 0.0f : 1.0f};
-                v.tangent = {-cz, 0, cx, 1.0f};
-                v.color = {1, 1, 1, 1};
-                vertices[vi++] = v;
-            }
-        }
-        for (int j = 0; j < N; j++) {
-            uint32_t a0 = base + j * 2, a1 = base + j * 2 + 1;
-            uint32_t b0 = base + (j + 1) * 2, b1 = base + (j + 1) * 2 + 1;
-            if (outward) {
-                // Outer: CCW from outside
-                indices[ii++] = a0; indices[ii++] = a1; indices[ii++] = b0;
-                indices[ii++] = a1; indices[ii++] = b1; indices[ii++] = b0;
-            }
-            else {
-                // Inner: CCW from inside
-                indices[ii++] = a0; indices[ii++] = b0; indices[ii++] = a1;
-                indices[ii++] = a1; indices[ii++] = b0; indices[ii++] = b1;
-            }
-        }
-    };
-
-    addRingQuads(ro, true); // outer wall
-    addRingQuads(ri, false); // inner wall
-
-    // Top annular cap (+Y): fan from outer ring to inner ring
-    {
-        auto base = static_cast<uint32_t>(vi);
-        for (int j = 0; j <= N; j++) {
-            const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
-            const float cx = cosf(angle), cz = sinf(angle);
-            // Outer edge vertex
-            Engine::FullVertex vo{};
-            vo.position = {cx * ro, hh, cz * ro};
-            vo.normal = {0, 1, 0};
-            vo.uv = {-cx * ro, cz * ro};
-            vo.tangent = {-1, 0, 0, 1};
-            vo.color = {1, 1, 1, 1};
-            vertices[vi++] = vo;
-            // Inner edge vertex
-            Engine::FullVertex vinner{};
-            vinner.position = {cx * ri, hh, cz * ri};
-            vinner.normal = {0, 1, 0};
-            vinner.uv = {-cx * ri, cz * ri};
-            vinner.tangent = {-1, 0, 0, 1};
-            vinner.color = {1, 1, 1, 1};
-            vertices[vi++] = vinner;
-        }
-        for (int j = 0; j < N; j++) {
-            uint32_t oa = base + j * 2, oi = base + j * 2 + 1;
-            uint32_t na = base + (j + 1) * 2, ni = base + (j + 1) * 2 + 1;
-            indices[ii++] = oa; indices[ii++] = oi; indices[ii++] = na;
-            indices[ii++] = oi; indices[ii++] = ni; indices[ii++] = na;
-        }
-    }
-
-    // Bottom annular cap (-Y): reversed winding
-    {
-        auto base = static_cast<uint32_t>(vi);
-        for (int j = 0; j <= N; j++) {
-            const float angle = static_cast<float>(j) / static_cast<float>(N) * 2.0f * pi;
-            const float cx = cosf(angle), cz = sinf(angle);
-            Engine::FullVertex vo{};
-            vo.position = {cx * ro, -hh, cz * ro};
-            vo.normal = {0, -1, 0};
-            vo.uv = {cx * ro, cz * ro};
-            vo.tangent = {1, 0, 0, 1};
-            vo.color = {1, 1, 1, 1};
-            vertices[vi++] = vo;
-            Engine::FullVertex vinner{};
-            vinner.position = {cx * ri, -hh, cz * ri};
-            vinner.normal = {0, -1, 0};
-            vinner.uv = {cx * ri, cz * ri};
-            vinner.tangent = {1, 0, 0, 1};
-            vinner.color = {1, 1, 1, 1};
-            vertices[vi++] = vinner;
-        }
-        for (int j = 0; j < N; j++) {
-            uint32_t oa = base + j * 2, oi = base + j * 2 + 1;
-            uint32_t na = base + (j + 1) * 2, ni = base + (j + 1) * 2 + 1;
-            indices[ii++] = oa; indices[ii++] = na; indices[ii++] = oi;
-            indices[ii++] = oi; indices[ii++] = na; indices[ii++] = ni;
-        }
-    }
-
+    Core::Vector<Engine::FullVertex> vertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+    if (!GeneratePipeGeometry(p, vertices, indices)) { return false; }
     return FinalizeGeometry(vertices, indices);
 }
 

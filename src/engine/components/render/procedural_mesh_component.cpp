@@ -157,7 +157,7 @@ static Engine::ProceduralParams DefaultProceduralParams(size_t index, std::index
     return params;
 }
 
-static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ)
+static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ, int32_t* segments)
 {
     bool dirty = false;
     float* edges[3] = {chamferX, chamferY, chamferZ};
@@ -174,6 +174,9 @@ static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ)
         }
     }
     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::DragInt("Chamfer Segments", segments, 0.1f, 1, Engine::MAX_CHAMFER_SEGMENTS, "%d", ImGuiSliderFlags_AlwaysClamp);
+    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("1 is a flat bevel; more rounds each chamfered edge into an arc"); }
 
     auto applyPreset = [&](uint32_t mask) {
         const float presetDepth = depth > 0.0f ? depth : 0.02f;
@@ -498,7 +501,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     drawSizeField("##bsy", &p.sizeY, Editor::COLOR_AXIS_Y); ImGui::SameLine(0, innerSpacing);
                     drawSizeField("##bsz", &p.sizeZ, Editor::COLOR_AXIS_Z);
 
-                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
+                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ, &p.chamferSegments);
                 }
                 else if constexpr (std::is_same_v<T, Engine::CylinderParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
@@ -561,7 +564,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Underside Thickness", &p.slabThickness, 0.005f, 0.0f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 fills solid to the floor; above 0 the wedge is a slab this thick with a sloped underside"); }
-                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
+                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ, &p.chamferSegments);
                 }
                 else if constexpr (std::is_same_v<T, Engine::ConeParams>) {
                     ImGui::DragFloat("Radius", &p.radius, 0.01f, 0.01f, 50.0f);
@@ -642,6 +645,19 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragInt("Slices", &p.slices, 1, 3, 1024);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    ImGui::DragFloat("Sweep", &p.sweepDegrees, 0.5f, 1.0f, 360.0f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Arc from +X toward +Z; below 360 the ends are capped. Slices are per full circle"); }
+                    if (ImGui::Checkbox("Flat Shaded", &p.bFlatShaded)) { dirty = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("One normal per facet instead of a smooth round surface"); }
+                    ImGui::DragFloat("Inner Drop", &p.innerDrop, 0.01f, -100.0f, 100.0f);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Inner edge sits this far below the outer edge; top and bottom slope straight between them. Sloped colliders are static-only"); }
+                    ImGui::BeginDisabled(!p.IsSloped());
+                    ImGui::DragFloat("Lip Width", &p.lipWidth, 0.01f, 0.0f, p.outerRadius, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Flat band in from the outer edge before the slope starts"); }
+                    ImGui::EndDisabled();
                 }
                 else if constexpr (std::is_same_v<T, Engine::TetrahedronParams> ||
                                    std::is_same_v<T, Engine::OctahedronParams> ||
@@ -960,7 +976,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     ImGui::DragFloat("Thickness", &p.thickness, 0.005f, 0.01f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Measured vertically; the end faces are this tall"); }
-                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ);
+                    dirty |= DrawChamferEditor(p.chamferX, p.chamferY, p.chamferZ, &p.chamferSegments);
                 }
                 else if constexpr (std::is_same_v<T, Engine::PilasterParams>) {
                     ImGui::DragInt("Segments", &p.segmentCount, 0.05f, 1, Engine::MAX_PILASTER_SEGMENTS);

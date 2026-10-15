@@ -53,6 +53,9 @@ void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* sta
  */
 entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> entities);
 
+/** Creates an empty entity at the parent's origin, in the parent's folder, and selects it. */
+entt::entity CreateChildEntity(Engine::EngineState* state, entt::entity parent);
+
 void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount);
 
 void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);

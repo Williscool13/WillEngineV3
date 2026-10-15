@@ -331,6 +331,25 @@ entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* stat
     return group;
 }
 
+entt::entity CreateChildEntity(Engine::EngineState* state, entt::entity parent)
+{
+    auto& registry = state->registry;
+    if (!registry.valid(parent) || !registry.all_of<Component::TransformComponent>(parent) || !state->scene.currentSceneId.IsValid()) { return entt::null; }
+
+    const entt::entity child = CreateSceneEntity(state);
+    if (const auto* folder = registry.try_get<Component::EntityFolderComponent>(parent)) {
+        registry.get<Component::EntityFolderComponent>(child).folderId = folder->folderId;
+    }
+    SetParent(state, child, parent);
+    registry.get<Component::TransformComponent>(child) = Component::TransformComponent{};
+    registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+
+    const entt::entity selection[] = {child};
+    SelectOnly(state, selection);
+    MarkSceneModified(state, state->scene.currentSceneId);
+    return child;
+}
+
 void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3&, int transformCount)
 {
     auto& entities = state->editor.selectedEntities;

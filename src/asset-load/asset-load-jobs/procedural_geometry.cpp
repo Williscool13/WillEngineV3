@@ -479,9 +479,135 @@ bool GenerateHemisphereGeometry(const Engine::HemisphereParams& p, Core::Vector<
     return !outVertices.IsEmpty() && !outIndices.IsEmpty();
 }
 
+bool GeneratePipeGeometry(const Engine::PipeParams& p, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices)
+{
+    const int N = p.SweepSegments();
+    const float sweep = glm::radians(p.ClampedSweepDegrees());
+    const float ro = std::max(0.01f, p.outerRadius);
+    const float ri = std::max(0.001f, std::min(p.innerRadius, ro - 0.001f));
+    const float hh = p.height * 0.5f;
+    const float drop = p.IsSloped() ? p.innerDrop : 0.0f;
+    const float slopeStart = drop != 0.0f ? glm::clamp(ro - std::max(p.lipWidth, 0.0f), std::min(ri + 0.01f, ro), ro) : ro;
+
+    auto vert = [](Vec3 pos, Vec3 normal, Vec2 uv, Vec3 tangent) {
+        Engine::FullVertex v{};
+        v.position = pos;
+        v.normal = normal;
+        v.uv = uv;
+        v.tangent = {tangent.x, tangent.y, tangent.z, 1.0f};
+        v.color = {1, 1, 1, 1};
+        return v;
+    };
+    auto ringAngle = [&](int j) { return static_cast<float>(j) / static_cast<float>(N) * sweep; };
+
+    auto addWall = [&](float radius, float yBottom, float yTop, bool bOutward) {
+        const auto base = static_cast<uint32_t>(outVertices.Size());
+        for (int j = 0; j <= N; j++) {
+            const float cx = cosf(ringAngle(j)), cz = sinf(ringAngle(j));
+            const Vec3 n = bOutward ? Vec3{cx, 0, cz} : Vec3{-cx, 0, -cz};
+            const float u = static_cast<float>(j) / static_cast<float>(N);
+            outVertices.PushBack(vert({cx * radius, yBottom, cz * radius}, n, {u, 0.0f}, {-cz, 0, cx}));
+            outVertices.PushBack(vert({cx * radius, yTop, cz * radius}, n, {u, 1.0f}, {-cz, 0, cx}));
+        }
+        for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+            const uint32_t a0 = base + j * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
+            if (bOutward) {
+                const uint32_t t[] = {a0, a1, b0, a1, b1, b0};
+                outIndices.Append(t, t + 6);
+            }
+            else {
+                const uint32_t t[] = {a0, b0, a1, a1, b0, b1};
+                outIndices.Append(t, t + 6);
+            }
+        }
+    };
+
+    // Annular band from rOuter at yOuter to rInner at yInner; top faces +Y, bottom faces -Y.
+    auto addBand = [&](float rOuter, float yOuter, float rInner, float yInner, bool bTop) {
+        if (rOuter - rInner <= POSITION_EPSILON) { return; }
+        const float slope = (yOuter - yInner) / (rOuter - rInner);
+        const auto base = static_cast<uint32_t>(outVertices.Size());
+        for (int j = 0; j <= N; j++) {
+            const float cx = cosf(ringAngle(j)), cz = sinf(ringAngle(j));
+            const Vec3 radial{cx, 0.0f, cz};
+            const Vec3 n = glm::normalize(Vec3{0.0f, 1.0f, 0.0f} - slope * radial) * (bTop ? 1.0f : -1.0f);
+            const Vec3 axis = bTop ? Vec3{-1.0f, 0.0f, 0.0f} : Vec3{1.0f, 0.0f, 0.0f};
+            const Vec3 tangent = glm::normalize(axis - n * glm::dot(axis, n));
+            const float uSign = bTop ? -1.0f : 1.0f;
+            outVertices.PushBack(vert({cx * rOuter, yOuter, cz * rOuter}, n, {uSign * cx * rOuter, cz * rOuter}, tangent));
+            outVertices.PushBack(vert({cx * rInner, yInner, cz * rInner}, n, {uSign * cx * rInner, cz * rInner}, tangent));
+        }
+        for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+            const uint32_t oa = base + j * 2, oi = oa + 1, na = oa + 2, ni = oa + 3;
+            if (bTop) {
+                const uint32_t t[] = {oa, oi, na, oi, ni, na};
+                outIndices.Append(t, t + 6);
+            }
+            else {
+                const uint32_t t[] = {oa, na, oi, oi, na, ni};
+                outIndices.Append(t, t + 6);
+            }
+        }
+    };
+
+    addWall(ro, -hh, hh, true);
+    addWall(ri, -hh - drop, hh - drop, false);
+    for (const float y : {hh, -hh}) {
+        const bool bTop = y > 0.0f;
+        addBand(ro, y, slopeStart, y, bTop);
+        addBand(slopeStart, y, ri, y - drop, bTop);
+    }
+
+    if (p.IsPartial()) {
+        // Flat quad in the radial plane at angle; profile corners given as (radius, y), wound to face along n.
+        auto addCapQuad = [&](float angle, Vec3 n, const Vec2 (&profile)[4]) {
+            const float cx = cosf(angle), cz = sinf(angle);
+            Vec3 pos[4];
+            for (int k = 0; k < 4; k++) { pos[k] = {cx * profile[k].x, profile[k].y, cz * profile[k].x}; }
+            if (glm::dot(glm::cross(pos[1] - pos[0], pos[2] - pos[0]), n) < 0.0f) {
+                std::swap(pos[1], pos[3]);
+            }
+            const Vec3 tangent{cx, 0.0f, cz};
+            const auto base = static_cast<uint32_t>(outVertices.Size());
+            for (const Vec3& q : pos) { outVertices.PushBack(vert(q, n, {glm::dot(q, tangent), q.y}, tangent)); }
+            const uint32_t t[] = {base, base + 1, base + 2, base, base + 2, base + 3};
+            outIndices.Append(t, t + 6);
+        };
+        // Split at the lip so each piece is convex.
+        const Vec2 lip[4] = {{ro, -hh}, {ro, hh}, {slopeStart, hh}, {slopeStart, -hh}};
+        const Vec2 slope[4] = {{slopeStart, -hh}, {slopeStart, hh}, {ri, hh - drop}, {ri, -hh - drop}};
+        for (const float angle : {0.0f, sweep}) {
+            const Vec3 n = angle == 0.0f ? Vec3{0.0f, 0.0f, -1.0f} : Vec3{-sinf(angle), 0.0f, cosf(angle)};
+            if (ro - slopeStart > POSITION_EPSILON) { addCapQuad(angle, n, lip); }
+            addCapQuad(angle, n, slope);
+        }
+    }
+
+    // Every quad is planar, so unwelding per triangle gives each facet one normal.
+    if (p.bFlatShaded) {
+        const Core::Vector<Engine::FullVertex> welded(outVertices);
+        outVertices.Clear();
+        outVertices.Reserve(outIndices.Size());
+        for (size_t i = 0; i + 2 < outIndices.Size(); i += 3) {
+            const Engine::FullVertex tri[3] = {welded[outIndices[i]], welded[outIndices[i + 1]], welded[outIndices[i + 2]]};
+            const Vec3 n = glm::normalize(glm::cross(tri[1].position - tri[0].position, tri[2].position - tri[0].position));
+            for (Engine::FullVertex v : tri) {
+                const Vec3 t = Vec3(v.tangent);
+                v.normal = n;
+                v.tangent = Vec4(glm::normalize(t - n * glm::dot(t, n)), v.tangent.w);
+                outVertices.PushBack(v);
+            }
+        }
+        for (size_t i = 0; i < outIndices.Size(); i++) { outIndices[i] = static_cast<uint32_t>(i); }
+    }
+
+    return !outVertices.IsEmpty() && !outIndices.IsEmpty();
+}
+
 bool GenerateNonAnalyticProceduralGeometry(const Engine::ProceduralParams& params, Core::TlsfAllocator& scratch, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices)
 {
     if (const auto* p = std::get_if<Engine::HemisphereParams>(&params); p != nullptr && p->IsHollow()) { return GenerateHemisphereGeometry(*p, outVertices, outIndices); }
+    if (const auto* p = std::get_if<Engine::PipeParams>(&params); p != nullptr && p->IsSloped()) { return GeneratePipeGeometry(*p, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::KleinBottleParams>(&params)) { return GenerateKleinBottleGeometry(*p, scratch, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::TrefoilKnotParams>(&params)) { return GenerateTrefoilKnotGeometry(*p, scratch, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::CurvedRampParams>(&params)) { return GenerateCurvedRampGeometry(*p, scratch, outVertices, outIndices); }

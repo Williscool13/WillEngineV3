@@ -178,7 +178,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         StringID newSubfolderParent{};
         entt::entity reparentFolderEntity = entt::null;
         StringID reparentFolderTo{};
-        enum class EntityMenuAction { None, Group, Rename, Copy, Paste, Duplicate, Delete };
+        enum class EntityMenuAction { None, Group, CreateChild, Rename, Copy, Paste, Duplicate, Delete };
         EntityMenuAction entityAction = EntityMenuAction::None;
         // Applied next frame to the picked folder, or with no folder to the selection.
         static int32_t pendingExpandAll = -1;
@@ -401,6 +401,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (bRowSelectable && ImGui::BeginPopupContextItem("entity_ctx")) {
                 const size_t count = state->editor.selectedEntities.Size();
                 if (ImGui::MenuItem(count > 1 ? "Group Under New Entity" : "Parent Under New Entity")) { entityAction = EntityMenuAction::Group; }
+                if (ImGui::MenuItem("Create Child Entity", nullptr, false, count == 1)) { entityAction = EntityMenuAction::CreateChild; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Rename", "F2", false, count == 1)) { entityAction = EntityMenuAction::Rename; }
                 if (ImGui::MenuItem("Copy", "Ctrl+C")) { entityAction = EntityMenuAction::Copy; }
@@ -848,6 +849,9 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         switch (entityAction) {
             case EntityMenuAction::Group:
                 GroupEntities(ctx, state, state->editor.selectedEntities);
+                break;
+            case EntityMenuAction::CreateChild:
+                CreateChildEntity(state, state->editor.selectedEntities[0]);
                 break;
             case EntityMenuAction::Rename: {
                 const entt::entity target = state->editor.selectedEntities[0];
