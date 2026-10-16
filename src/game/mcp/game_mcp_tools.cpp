@@ -49,6 +49,16 @@ static const char* InputContextName(const Engine::InputContext context)
     return "Unknown";
 }
 
+static const char* RunModeName(const Engine::RunMode mode)
+{
+    switch (mode) {
+        case Engine::RunMode::Edit: return "Edit";
+        case Engine::RunMode::Simulate: return "Simulate";
+        case Engine::RunMode::Play: return "Play";
+    }
+    return "Unknown";
+}
+
 static bool AnythingPending(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     return Engine::CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending;
@@ -84,6 +94,7 @@ static ToolResult GetEngineStatus(Engine::EngineContext* ctx, Engine::EngineStat
     call.SetString("sceneName", state->scene.currentSceneName.c_str());
     call.SetInt("stableEntityCount", static_cast<int64_t>(state->stableIdToEntityMap.Size()));
     call.SetString("inputContext", InputContextName(state->inputContext));
+    call.SetString("runMode", RunModeName(state->runMode));
     call.SetBool("physicsEnabled", state->physics.bEnabled);
     call.SetBool("playtestActive", state->playtest.bActive || !state->playtest.pendingPath.IsEmpty());
     call.SetString("playtestOutputDir", state->playtest.outputDir.c_str());

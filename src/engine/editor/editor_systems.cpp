@@ -85,7 +85,7 @@ void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 
 void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId)
 {
-    if (!ctx->bGameLoaded || IsPlaying(state) || !ctx->assetManager->GetSceneCache().Contains(sceneId)) { return; }
+    if (!ctx->bGameLoaded || IsRunning(state) || !ctx->assetManager->GetSceneCache().Contains(sceneId)) { return; }
     SaveSceneToFile(sceneId, state, ctx->assetManager, ctx);
     state->editor.modifiedScenes.RemoveFirst(sceneId);
 }
@@ -540,7 +540,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
                     editorT.rotation = gameT.rotation;
                 }
             }
-            else {
+            else if (state->inputContext == Engine::InputContext::Menu) {
                 PlayStop(ctx, state);
             }
         }
@@ -1166,11 +1166,16 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        if (IsPlaying(state)) {
+        if (IsSimulating(state)) {
+            if (ImGui::Button("Stop Simulate")) {
+                SimulateStop(ctx, state);
+            }
+        }
+        else if (IsPlaying(state)) {
             if (ImGui::Button("Stop")) {
                 PlayStop(ctx, state);
             }
-            if (state->inputContext != Engine::InputContext::Gameplay) {
+            if (state->inputContext == Engine::InputContext::Menu) {
                 ImGui::SameLine();
                 if (ImGui::Button("Enter Game")) {
                     state->inputContext = Engine::InputContext::Gameplay;
@@ -1187,6 +1192,10 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
                 stuckCount = FindStaticBodiesUnderMovers(state, stuckBodies);
                 if (stuckCount == 0) { PlayStart(ctx, state); }
                 else { ImGui::OpenPopup("Hierarchy Problems"); }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Simulate")) {
+                SimulateStart(ctx, state);
             }
             ImGui::EndDisabled();
             if (ImGui::BeginPopupModal("Hierarchy Problems", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {

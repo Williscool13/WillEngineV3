@@ -72,14 +72,14 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
 
 #if WILL_EDITOR
     graph.Add("UpdatePhysicsEditor", [](EngineContext* ctx, EngineState* state) {
-        if (state->inputContext == InputContext::Editor) { UpdatePhysicsEditor(ctx, state); }
+        if (state->runMode == RunMode::Edit && state->inputContext == InputContext::Editor) { UpdatePhysicsEditor(ctx, state); }
     });
     graph.Add("UpdateEditorCamera", [](EngineContext* ctx, EngineState* state) {
         if (state->inputContext != InputContext::Gameplay) { UpdateEditorCamera(ctx, state); }
     });
 #else
     graph.Add("PlayStart", [](EngineContext* ctx, EngineState* state) {
-        if (state->inputContext == InputContext::Editor && ctx->bGameLoaded) { PlayStart(ctx, state); }
+        if (state->runMode == RunMode::Edit && ctx->bGameLoaded) { PlayStart(ctx, state); }
     });
 #endif
 

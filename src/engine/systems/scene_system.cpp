@@ -437,8 +437,12 @@ bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, 
     if (!ctx->assetManager->GetSceneCache().Find(sceneId)) { return false; }
 
     const bool bWasPlaying = IsPlaying(state);
+    const bool bWasSimulating = IsSimulating(state);
     if (bWasPlaying) {
         PlayStop(ctx, state);
+    }
+    if (bWasSimulating) {
+        SimulateStop(ctx, state);
     }
 
     Core::InlineVector<StringID, 8> scenesToUnload;
@@ -455,6 +459,9 @@ bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, 
 
     if (bWasPlaying) {
         PlayStart(ctx, state);
+    }
+    if (bWasSimulating) {
+        SimulateStart(ctx, state);
     }
     return result.bSuccess;
 }
@@ -720,14 +727,14 @@ void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* s
     auto& registry = state->registry;
     if (registry.view<Component::DirtyTransformTag>().empty()) { return; }
 
-    const bool bPlaying = IsPlaying(state);
-    if (bPlaying) {
+    const bool bRunning = IsRunning(state);
+    if (bRunning) {
         RejectStaticTransformWrites(state);
     }
     EnsureHierarchyOrder(state);
     for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
         if (!registry.valid(node.parent) || !registry.all_of<Component::DirtyTransformTag>(node.parent)) { continue; }
-        if (bPlaying && registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { continue; }
+        if (bRunning && registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { continue; }
         registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
     }
 }
@@ -995,28 +1002,13 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
     }
 }
 
-void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (!ctx->bGameLoaded) {
-        LOG_WARN(Engine, "Play refused: game.dll is not loaded");
-        return;
-    }
-
     entt::entity stuck[16];
     const uint32_t stuckCount = FindStaticBodiesUnderMovers(state, stuck);
     for (uint32_t i = 0; i < std::min(stuckCount, static_cast<uint32_t>(std::size(stuck))); ++i) {
         const auto* name = state->registry.try_get<Component::NameComponent>(stuck[i]);
         LOG_WARN(Physics, "Static body '{}' is under a kinematic or dynamic body and will not follow it; make it kinematic", name ? name->name.c_str() : "Unnamed");
-    }
-
-    ZoneScoped; {
-        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
-        auto camEntity = camView.front();
-        if (camEntity != entt::null) {
-            const auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
-            state->editor.pieCameraTranslation = transform.translation;
-            state->editor.pieCameraRotation = transform.rotation;
-        }
     }
 
 #if WILL_EDITOR
@@ -1038,7 +1030,45 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
     LockStaticTransforms(state);
+}
 
+static void RestorePIESnapshot(Engine::EngineState* state)
+{
+#if WILL_EDITOR
+    Core::InlineVector<StringID, 8> scenesToUnload;
+    for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
+        scenesToUnload.PushBack(scene.sceneId);
+    }
+    UnloadScenes(state, scenesToUnload);
+    DeserializeAll(state, state->editor.pieSnapshot);
+    state->editor.pieSnapshot = {};
+#endif
+}
+
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    if (!ctx->bGameLoaded) {
+        LOG_WARN(Engine, "Play refused: game.dll is not loaded");
+        return;
+    }
+    if (IsSimulating(state)) {
+        SimulateStop(ctx, state);
+    }
+
+    {
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camEntity = camView.front();
+        if (camEntity != entt::null) {
+            const auto& transform = state->registry.get<Component::TransformComponent>(camEntity);
+            state->editor.pieCameraTranslation = transform.translation;
+            state->editor.pieCameraRotation = transform.rotation;
+        }
+    }
+
+    BeginPIESession(ctx, state);
+
+    state->runMode = Engine::RunMode::Play;
     state->inputContext = Engine::InputContext::Gameplay;
     ctx->setCursorHiddenFn(true);
     state->editor.selectedEntities.Clear();
@@ -1055,16 +1085,9 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
         ctx->playStopFn(ctx, state);
     }
 
-#if WILL_EDITOR
-    Core::InlineVector<StringID, 8> scenesToUnload;
-    for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
-        scenesToUnload.PushBack(scene.sceneId);
-    }
-    UnloadScenes(state, scenesToUnload);
-    DeserializeAll(state, state->editor.pieSnapshot);
-    state->editor.pieSnapshot = {};
-#endif
+    RestorePIESnapshot(state);
 
+    state->runMode = Engine::RunMode::Edit;
     state->inputContext = Engine::InputContext::Editor;
     ctx->setCursorHiddenFn(false); {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
@@ -1074,6 +1097,47 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
             transform.translation = state->editor.pieCameraTranslation;
             transform.rotation = state->editor.pieCameraRotation;
             state->requests.RequestRenderReset(Core::RenderReset::Cut);
+        }
+    }
+}
+
+void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    if (!ctx->bGameLoaded) {
+        LOG_WARN(Engine, "Simulate refused: game.dll is not loaded");
+        return;
+    }
+    if (IsRunning(state)) { return; }
+
+    BeginPIESession(ctx, state);
+    for (size_t i = state->editor.selectedEntities.Size(); i-- > 0;) {
+        if (!state->registry.valid(state->editor.selectedEntities[i])) {
+            state->editor.selectedEntities.RemoveAt(i);
+        }
+    }
+    state->runMode = Engine::RunMode::Simulate;
+}
+
+void SimulateStop(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    if (!IsSimulating(state)) { return; }
+
+    Core::InlineVector<StringID, 64> selectedIds;
+    for (entt::entity e : state->editor.selectedEntities) {
+        if (const auto* stable = state->registry.try_get<Component::StableIdComponent>(e); stable && !selectedIds.IsFull()) {
+            selectedIds.PushBack(stable->id);
+        }
+    }
+
+    RestorePIESnapshot(state);
+    state->runMode = Engine::RunMode::Edit;
+
+    state->editor.selectedEntities.Clear();
+    for (const StringID id : selectedIds) {
+        if (const entt::entity* e = state->stableIdToEntityMap.Find(id)) {
+            state->editor.selectedEntities.PushBack(*e);
         }
     }
 }

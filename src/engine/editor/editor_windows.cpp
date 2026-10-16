@@ -65,7 +65,7 @@ static bool IsSceneLoaded(const EngineState* state, StringID sceneId)
 static void DrawFileMenu(EngineContext* ctx, EngineState* state)
 {
     const StringID current = state->scene.currentSceneId;
-    const bool bCanSave = ctx->bGameLoaded && !IsPlaying(state);
+    const bool bCanSave = ctx->bGameLoaded && !IsRunning(state);
 
     ImGui::BeginDisabled(!bCanSave || !IsSceneLoaded(state, current));
     if (ImGui::MenuItem(Core::InlineString<160>::Format("Save '%s'", state->scene.currentSceneName.c_str()).c_str(), "Ctrl+S")) {
@@ -117,7 +117,7 @@ static void DrawQuitPrompt(EngineContext* ctx, EngineState* state)
         state->requests.bRequestedQuit = true;
         ImGui::CloseCurrentPopup();
     };
-    const bool bCanSave = ctx->bGameLoaded && !IsPlaying(state);
+    const bool bCanSave = ctx->bGameLoaded && !IsRunning(state);
     ImGui::BeginDisabled(!bCanSave);
     if (ImGui::Button("Save All and Quit")) {
         SaveModifiedScenes(ctx, state);

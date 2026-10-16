@@ -709,11 +709,13 @@ bool AssetManager::IsModelFrozen(ModelID modelId) const
     return false;
 }
 
-PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& params)
+PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& params, bool bHollow)
 {
+    const bool bHollowMesh = bHollow && CanBuildHollowSplineCollider(params);
+    const PhysicsColliderKind kind = bHollowMesh ? PhysicsColliderKind::TriangleMesh : PhysicsColliderKind::Compound;
     HashBuilder h;
     h.Add(HashSplineParams(params));
-    h.Add(static_cast<uint8_t>(PhysicsColliderKind::Compound));
+    h.Add(static_cast<uint8_t>(kind));
 
     PhysicsColliderID colliderId{h.Finish()};
 
@@ -749,8 +751,9 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
     collider.selfHandle = handle;
     collider.name = Core::InlineString<128>::Format("Spline Collider %d", splineColliderCounter++);
     collider.colliderId = colliderId;
-    collider.kind = PhysicsColliderKind::Compound;
+    collider.kind = kind;
     collider.splineParams = &splineParamsPool[paramsSlot];
+    collider.bSplineHollow = bHollowMesh;
     collider.refCount = 1;
     collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
 

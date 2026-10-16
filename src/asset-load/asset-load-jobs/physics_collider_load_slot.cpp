@@ -161,6 +161,21 @@ bool PhysicsColliderLoadSlot::Build()
         Core::Vector<Engine::SplineFrame> frames(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         if (!Engine::SampleSplineFrames(sp.spline, sp.segmentsPerSpan, sp.rollAngle, frames)) { return false; }
 
+        if (c->bSplineHollow) {
+            Core::Vector<Vec3> positions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
+            Engine::BuildHollowSplineColliderMesh(sp, Core::Span<const Engine::SplineFrame>(frames.Data(), frames.Size()), &memoryManager->AssetsScratch(), positions, indices);
+            if (positions.IsEmpty() || indices.IsEmpty()) { return false; }
+
+            c->kind = Engine::PhysicsColliderKind::TriangleMesh;
+            c->positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::Physics, positions.Size());
+            for (size_t i = 0; i < positions.Size(); ++i) { c->positions[i] = positions[i]; }
+            c->indices = Core::HeapArray<uint32_t>(&memoryManager->Assets(), Core::AllocTag::Physics, indices.Size());
+            for (size_t i = 0; i < indices.Size(); ++i) { c->indices[i] = indices[i]; }
+            c->bounds = ComputeBounds(Core::Span<Vec3>(c->positions.Data(), c->positions.Size()));
+            return true;
+        }
+
         Core::Vector<Engine::SplineColliderPrimitive> prims(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         Engine::BuildSplineColliderPrimitives(sp, Core::Span<const Engine::SplineFrame>(frames.Data(), frames.Size()), prims);
         if (prims.IsEmpty()) { return false; }

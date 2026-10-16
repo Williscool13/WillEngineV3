@@ -16,6 +16,7 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "engine/components/physics/physics_body_component.h"
+#include "engine/systems/scene_system.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/Shape/StaticCompoundShape.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -50,7 +51,7 @@ void DisconnectPhysicsObservers(entt::registry& registry)
 
 void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->inputContext != InputContext::Gameplay) { return; }
+    if (!IsPhysicsStepping(state)) { return; }
     if (state->physics.bEnabled) {
         PhysicsUpdate(ctx, state);
     }
@@ -494,7 +495,8 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
                 handle = ctx->assetManager->LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
             }
             else if (!collider->splineParams.spline.points.IsEmpty()) {
-                handle = ctx->assetManager->LoadSplineCollider(collider->splineParams);
+                const bool bHollow = collider->bSplineHollow && bodyDesc.motionType != Component::PhysicsMotionType::Dynamic;
+                handle = ctx->assetManager->LoadSplineCollider(collider->splineParams, bHollow);
             }
             else if (collider->text3DSource.IsValid()) {
                 const Component::Text3DShapeSource& t = collider->text3DSource;

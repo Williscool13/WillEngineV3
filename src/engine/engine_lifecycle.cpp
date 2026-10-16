@@ -116,6 +116,7 @@ void HotReloadSave(EngineContext* ctx, EngineState* state)
     if (IsPlaying(state)) {
         PlayStop(ctx, state);
     }
+    SimulateStop(ctx, state);
 
     {
         auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();

@@ -138,9 +138,10 @@ public: // Physics colliders (CPU-only, analytic)
     /**
      * Loads (or dedups) a Compound collider built analytically from a spline. Keyed by hash(spline) x kind.
      * @param params
+     * @param bHollow a TriangleMesh of the open tube surface instead; ignored unless CanBuildHollowSplineCollider
      * @return
      */
-    PhysicsColliderHandle LoadSplineCollider(const SplineParams& params);
+    PhysicsColliderHandle LoadSplineCollider(const SplineParams& params, bool bHollow);
 
 
     /**

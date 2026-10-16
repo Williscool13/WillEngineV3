@@ -228,11 +228,30 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-/** True while a PIE session (Gameplay or its paused Menu) is active. Not just "!= Editor" - Console is a third,
- *  orthogonal modal state that can overlay either Editor or a play session, so it must not count as "playing". */
+void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+void SimulateStop(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 inline bool IsPlaying(const Engine::EngineState* state)
 {
-    return state->inputContext == Engine::InputContext::Gameplay || state->inputContext == Engine::InputContext::Menu;
+    return state->runMode == Engine::RunMode::Play;
+}
+
+inline bool IsSimulating(const Engine::EngineState* state)
+{
+    return state->runMode == Engine::RunMode::Simulate;
+}
+
+/** Play or Simulate: in the editor the scene runs from the PIE snapshot and is restored on stop, so saves and authoring are refused. */
+inline bool IsRunning(const Engine::EngineState* state)
+{
+    return state->runMode != Engine::RunMode::Edit;
+}
+
+/** Physics steps during Gameplay and throughout Simulate. */
+inline bool IsPhysicsStepping(const Engine::EngineState* state)
+{
+    return state->inputContext == Engine::InputContext::Gameplay || IsSimulating(state);
 }
 } // Engine
 

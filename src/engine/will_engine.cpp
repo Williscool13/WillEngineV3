@@ -52,6 +52,7 @@
 #include "render/gpu_dispatcher.h"
 #include "render/resource_manager.h"
 #include "render/pipelines/pipeline_manager.h"
+#include "systems/scene_system.h"
 
 #if WILL_EDITOR
 #include "editor/asset-generation/asset_generator.h"
@@ -1462,7 +1463,7 @@ void WillEngine::Run()
 
             // Tick when render can take a snapshot or the next fixed physics step is due; the timestep-length fallback keeps housekeeping alive while render stalls.
             float waitSeconds = Physics::PHYSICS_TIMESTEP;
-            if (engineState->inputContext == InputContext::Gameplay && engineState->physics.bEnabled) {
+            if (IsPhysicsStepping(engineState) && engineState->physics.bEnabled) {
                 const float untilStep = Physics::PHYSICS_TIMESTEP - engineState->physics.deltaTimeAccumulator;
                 waitSeconds = untilStep > 0.0f ? std::min(untilStep, waitSeconds) : 0.0f;
             }

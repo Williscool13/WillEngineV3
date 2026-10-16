@@ -31,7 +31,7 @@ static void ApplyRenderTransform(PhysicsShapeDesc& shape, const glm::vec3& scale
     shape.rotation = renderRotation * shape.rotation;
 }
 
-// A concave collider source: a non-analytic procedural (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp) or a precise Text3D. Only a triangle mesh, so it cannot back a dynamic body.
+// A concave collider source: a non-analytic procedural (Klein Bottle, Trefoil Knot, Bowl, Curved Ramp), a precise model or Text3D, or a hollow spline tube. Only a triangle mesh, so it cannot back a dynamic body.
 static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
 {
     const auto* collider = std::get_if<ColliderShape>(&shape.geometry);
@@ -41,6 +41,9 @@ static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
     }
     if (collider->meshSourceModelId.IsValid()) {
         return collider->bMeshPrecise;
+    }
+    if (!collider->splineParams.spline.points.IsEmpty()) {
+        return collider->bSplineHollow && Engine::CanBuildHollowSplineCollider(collider->splineParams);
     }
     return collider->text3DSource.IsValid() && collider->text3DSource.bPrecise;
 }
@@ -358,6 +361,16 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 else if (!collider->splineParams.spline.points.IsEmpty()) {
                     ImGui::Text("Mesh Source: Procedural Spline");
                     bHasAny = true;
+
+                    const bool bHollowEligible = Engine::CanBuildHollowSplineCollider(collider->splineParams);
+                    ImGui::BeginDisabled(bIsDynamic || !bHollowEligible);
+                    bAnyChange |= ImGui::Checkbox("Hollow (Triangle Mesh)", &collider->bSplineHollow);
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        if (!bHollowEligible) { ImGui::SetTooltip("Only a Tube profile without railing can be hollow."); }
+                        else if (bIsDynamic) { ImGui::SetTooltip("A hollow tube is a concave triangle mesh and cannot back a dynamic body."); }
+                        else { ImGui::SetTooltip("Collide with the open tube surface so things can travel inside it, instead of solid capsules."); }
+                    }
+                    ImGui::EndDisabled();
                 }
                 else if (collider->text3DSource.IsValid()) {
                     ImGui::Text("Mesh Source: 3D Text");
@@ -385,6 +398,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         collider->proceduralRepeat = {};
                         collider->splineParams.spline.points.Clear();
                         collider->text3DSource = {};
+                        collider->bSplineHollow = false;
                         bAnyChange = true;
                     }
                 }

@@ -1630,7 +1630,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             if (Widgets::SliderFloat("Probe Line Width##authoring", &state->projectConfig.reflectionProbeLineWidth, 0.005f, 0.1f, {.format = "%.3f", .tooltip = "World-space width of reflection probe, DDGI world volume and post process volume wireframes.", .reset = true, .resetTo = 0.02})) {
                 Engine::WriteProjectConfig(state->projectConfig, state->allocator);
             }
-            ImGui::BeginDisabled(IsPlaying(state));
+            ImGui::BeginDisabled(IsRunning(state));
             if (Widgets::Button("Assign Mobility##assignmobility")) {
                 gLastMobilityAssign = AssignMobility(state);
                 gbMobilityAssigned = true;

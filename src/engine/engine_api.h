@@ -294,6 +294,8 @@ struct SceneState
     int32_t currentCheckpointPriority{INT32_MIN};
 };
 
+enum class RunMode : uint8_t { Edit, Simulate, Play };
+
 struct EngineState
 {
     EngineState() = default;
@@ -303,6 +305,7 @@ struct EngineState
     ~EngineState() = default;
 
     InputContext inputContext{InputContext::Editor};
+    RunMode runMode{RunMode::Edit};
     FrameRequests requests{};
 
     const Core::TimeFrame* timeFrame{nullptr};

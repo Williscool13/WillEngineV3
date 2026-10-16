@@ -182,7 +182,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
     const bool bLoaded = IsLoaded(state, sceneId);
     const bool bActive = sceneId == state->scene.currentSceneId;
     const bool bModified = state->editor.modifiedScenes.Contains(sceneId);
-    const bool bCanSave = ctx->bGameLoaded && !IsPlaying(state);
+    const bool bCanSave = ctx->bGameLoaded && !IsRunning(state);
 
     if (!bLoaded) { ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]); }
     const Core::InlineString<192> label = Core::InlineString<192>::Format("%s%s##scene%llu", meta.sceneName.c_str(), bModified ? " *" : "", static_cast<unsigned long long>(sceneId.id));

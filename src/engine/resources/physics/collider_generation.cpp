@@ -195,6 +195,96 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
     }
 }
 
+bool CanBuildHollowSplineCollider(const SplineParams& params)
+{
+    return params.profile.type == SplineProfileType::Tube && !params.railing.bEnabled;
+}
+
+void BuildHollowSplineColliderMesh(const SplineParams& p, Core::Span<const SplineFrame> frames, Core::TlsfAllocator* scratch, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices)
+{
+    const int totalRings = static_cast<int>(frames.Size());
+    if (totalRings < 2) { return; }
+
+    const bool bClosed = p.spline.bClosed;
+    const int segs = std::max(1, p.segmentsPerSpan);
+    const int sides = std::max(3, p.sides);
+    constexpr float MITRE_SPLIT_COS = 0.866f;
+    const bool bLinear = p.spline.mode == SplineMode::Linear;
+
+    struct HollowRing
+    {
+        SplineFrame frame;
+        Vec3 mitre;
+        bool bJoinNext;
+    };
+    Core::Vector<HollowRing> rings(scratch, Core::AllocTag::Physics);
+    rings.Reserve(static_cast<size_t>(totalRings) * 2);
+    bool bWrap = bClosed;
+    HollowRing closing{};
+    bool bHasClosing = false;
+    for (int i = 0; i < totalRings; i++) {
+        HollowRing out{frames[i], Vec3(0.0f), true};
+        const bool bCorner = bLinear && i % segs == 0 && (bClosed || (i > 0 && i < totalRings - 1));
+        if (bCorner) {
+            const SplineFrame& prev = frames[(i + totalRings - 1) % totalRings];
+            const Vec3 sum = prev.tangent + frames[i].tangent;
+            if (glm::length(sum) > 1e-3f) {
+                out.mitre = glm::normalize(sum);
+                if (glm::dot(prev.tangent, frames[i].tangent) < MITRE_SPLIT_COS) {
+                    const float roll = glm::radians(p.rollAngle + frames[i].roll);
+                    HollowRing in{frames[i], out.mitre, false};
+                    in.frame.tangent = prev.tangent;
+                    in.frame.rRight = glm::cos(roll) * prev.right + glm::sin(roll) * prev.up;
+                    in.frame.rUp = -glm::sin(roll) * prev.right + glm::cos(roll) * prev.up;
+                    if (i == 0) {
+                        closing = in;
+                        bHasClosing = true;
+                    }
+                    else {
+                        rings.PushBack(in);
+                    }
+                }
+            }
+        }
+        rings.PushBack(out);
+    }
+    if (bHasClosing) {
+        rings.PushBack(closing);
+        bWrap = false;
+    }
+
+    const int ringCount = static_cast<int>(rings.Size());
+    const auto baseVertex = static_cast<uint32_t>(outPositions.Size());
+    outPositions.Reserve(outPositions.Size() + static_cast<size_t>(ringCount) * sides);
+    for (int i = 0; i < ringCount; i++) {
+        const SplineFrame& f = rings[i].frame;
+        const Vec3 mitre = rings[i].mitre;
+        const float mitreFacing = glm::dot(f.tangent, mitre);
+        for (int j = 0; j < sides; j++) {
+            const float a = glm::two_pi<float>() * static_cast<float>(j) / static_cast<float>(sides);
+            Vec3 offset = p.radius * (cosf(a) * f.rRight + sinf(a) * f.rUp);
+            if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
+            outPositions.PushBack(f.pos + offset);
+        }
+    }
+
+    outIndices.Reserve(outIndices.Size() + static_cast<size_t>(ringCount) * sides * 12);
+    for (int i = 0; i < ringCount; i++) {
+        if (!rings[i].bJoinNext) { continue; }
+        if (i == ringCount - 1 && !bWrap) { continue; }
+        const int nextRing = (i + 1) % ringCount;
+        for (int j = 0; j < sides; j++) {
+            const int jn = (j + 1) % sides;
+            const uint32_t a0 = baseVertex + i * sides + j;
+            const uint32_t a1 = baseVertex + i * sides + jn;
+            const uint32_t b0 = baseVertex + nextRing * sides + j;
+            const uint32_t b1 = baseVertex + nextRing * sides + jn;
+            const uint32_t quad[12] = {a0, a1, b0, a1, b1, b0, a0, b0, a1, a1, b0, b1};
+            for (const uint32_t index : quad) { outIndices.PushBack(index); }
+        }
+    }
+}
+
 static void HullPyramid(const PyramidParams& p, Core::Vector<Vec3>& out)
 {
     Vec3 c[8];

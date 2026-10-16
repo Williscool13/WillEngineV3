@@ -93,6 +93,7 @@ struct PhysicsColliderAsset
     std::optional<ProceduralParams> proceduralParams{};
     ProceduralRepeat proceduralRepeat{};
     const SplineParams* splineParams{nullptr};
+    bool bSplineHollow{false};
     const Text3DParams* text3DParams{nullptr};
     FontHandle text3DFontHandle{};
     bool bPreciseText3D{false};
