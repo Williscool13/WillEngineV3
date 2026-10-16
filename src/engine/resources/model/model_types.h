@@ -149,11 +149,15 @@ struct StaircaseParams
     uint8_t _pad3[2]{};
     float stepChamfer{0.0f};
     float sideWallChamfer{0.0f};
+    /** Sideways (+X) slide per step, so the flight runs on a diagonal; stepShift = step depth follows a 45 degree edge. */
+    float stepShift{0.0f};
+    /** Width at the top of the run, blending linearly from width; 0 keeps width. */
+    float endWidth{0.0f};
 
     WILL_REFLECT(StaircaseParams,WILL_FIELD(stepCount), WILL_FIELD(width), WILL_FIELD(totalDepth), WILL_FIELD(totalHeight), WILL_FIELD(bSpecifyStepHeight),
                  WILL_FIELD(stepHeight), WILL_FIELD(bIsClosed), WILL_FIELD(bSpecifyStepDepth), WILL_FIELD(stepDepth), WILL_FIELD(slabThickness),
                  WILL_FIELD(sideWallHeight), WILL_FIELD(sideWallThickness), WILL_FIELD(sideWallStart), WILL_FIELD(bSideWallNegX), WILL_FIELD(bSideWallPosX),
-                 WILL_FIELD(stepChamfer), WILL_FIELD(sideWallChamfer))
+                 WILL_FIELD(stepChamfer), WILL_FIELD(sideWallChamfer), WILL_FIELD(stepShift), WILL_FIELD(endWidth))
 };
 
 /** totalDepth, or stepCount * stepDepth when the step depth is specified. */
@@ -165,6 +169,23 @@ inline float StaircaseTotalDepth(const StaircaseParams& p)
 inline float StaircaseStepHeight(const StaircaseParams& p)
 {
     return (p.bSpecifyStepHeight && p.stepHeight > 0.0f) ? p.stepHeight : p.totalHeight / static_cast<float>(glm::max(p.stepCount, 1));
+}
+
+inline bool StaircaseIsSkewed(const StaircaseParams& p)
+{
+    return p.stepShift != 0.0f || (p.endWidth > 0.0f && p.endWidth != p.width);
+}
+
+/** Maps x of a straight flight (0..width across, side walls outside it) at run distance z onto the skewed, tapered flight; walls keep their thickness. */
+inline float StaircaseSkewX(const StaircaseParams& p, float x, float z)
+{
+    const float depth = glm::max(StaircaseTotalDepth(p), DIVISION_EPSILON);
+    const float stepDepth = depth / static_cast<float>(glm::max(p.stepCount, 1));
+    const float w = glm::mix(p.width, p.endWidth > 0.0f ? p.endWidth : p.width, glm::clamp(z / depth, 0.0f, 1.0f));
+    const float shift = p.stepShift * z / stepDepth;
+    if (x <= 0.0f) { return shift + x; }
+    if (x >= p.width) { return shift + w + (x - p.width); }
+    return shift + x * w / glm::max(p.width, DIVISION_EPSILON);
 }
 
 inline float StaircaseStepTop(const StaircaseParams& p, int32_t step)
@@ -469,6 +490,8 @@ enum class SplineProfileType : uint8_t
     LAngle = 5,
     RailHead = 6,
     Handrail = 7,
+    /** Stands on the path (y from 0 to height) with its top corners cut by cornerRadius; cornerSegments above 1 rounds the cut. */
+    Wall = 8,
 };
 
 struct SplineProfile
@@ -551,10 +574,12 @@ struct SplineParams
     SplineRailing railing{};
     /** Tube wall grown outward from radius (the bore stays radius); 0 = a single surface. Plain tubes only, no railing. */
     float tubeThickness{0.0f};
+    /** Tube sides shade flat instead of round. */
+    bool bFacetNormals{false};
 
     WILL_REFLECT(SplineParams, WILL_FIELD(spline), WILL_FIELD(radius), WILL_FIELD(rollAngle), WILL_FIELD(sides), WILL_FIELD(segmentsPerSpan), WILL_FIELD(bCaps),
                  WILL_FIELD(bCrossPlanks), WILL_FIELD(crossPlankInterval), WILL_FIELD(crossPlankHeight), WILL_FIELD(crossPlankThickness), WILL_FIELD(crossPlankLength),
-                 WILL_FIELD(profile), WILL_FIELD(railing), WILL_FIELD(tubeThickness))
+                 WILL_FIELD(profile), WILL_FIELD(railing), WILL_FIELD(tubeThickness), WILL_FIELD(bFacetNormals))
 
     [[nodiscard]] float TubeWall() const { return profile.type == SplineProfileType::Tube && !railing.bEnabled ? glm::max(tubeThickness, 0.0f) : 0.0f; }
 };

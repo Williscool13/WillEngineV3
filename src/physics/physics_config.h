@@ -32,6 +32,7 @@ inline constexpr uint32_t MAX_CONTACT_CONSTRAINTS = 32768;
 
 inline constexpr uint32_t MAX_BODY_ACTIVATION_EVENTS = 256;
 static constexpr uint32_t MAX_COLLISION_EVENTS = 8192;
+inline constexpr uint32_t MAX_CONVEYORS = 256;
 } // Physics
 
 #endif //WILL_ENGINE_PHYSICS_CONFIG_H

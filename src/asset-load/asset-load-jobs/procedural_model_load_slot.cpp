@@ -297,7 +297,7 @@ bool ProceduralModelLoadSlot::GenerateStaircase(const Engine::StaircaseParams& p
     ZoneScopedN("GenerateStaircase");
 
     if (p.stepCount <= 0) return false;
-    if (Engine::StaircaseIsSlab(p) || Engine::StaircaseHasSideWalls(p) || p.stepChamfer > 0.0f) { return GenerateStaircaseDetailed(p); }
+    if (Engine::StaircaseIsSlab(p) || Engine::StaircaseHasSideWalls(p) || p.stepChamfer > 0.0f || Engine::StaircaseIsSkewed(p)) { return GenerateStaircaseDetailed(p); }
 
     par_shapes_mesh* merged = par_shapes_create_staircase(p.stepCount, p.width, Engine::StaircaseTotalDepth(p),p.totalHeight, p.bSpecifyStepHeight ? p.stepHeight : 0.0f, p.bIsClosed ? 1 : 0);
 
@@ -1615,6 +1615,7 @@ bool ProceduralModelLoadSlot::GenerateStaircaseDetailed(const Engine::StaircaseP
     Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
 
     constexpr int MAX_POLY = 8;
+    const bool bSkewed = Engine::StaircaseIsSkewed(p);
     auto addPoly = [&](Vec3 n, const Vec3* v, int count) {
         const Vec3 absN = glm::abs(n);
         Vec2 uv[MAX_POLY];
@@ -1623,7 +1624,21 @@ bool ProceduralModelLoadSlot::GenerateStaircaseDetailed(const Engine::StaircaseP
             else if (absN.x >= absN.z) { uv[c] = {n.x > 0.0f ? -v[c].z : v[c].z, v[c].y}; }
             else { uv[c] = {n.z < 0.0f ? -v[c].x : v[c].x, v[c].y}; }
         }
-        AppendTerracePolygon(vertices, indices, n, {1, 0, 0}, v, uv, count);
+        if (!bSkewed) {
+            AppendTerracePolygon(vertices, indices, n, {1, 0, 0}, v, uv, count);
+            return;
+        }
+        Vec3 mapped[MAX_POLY];
+        Vec3 newell{0.0f};
+        for (int c = 0; c < count; ++c) { mapped[c] = {Engine::StaircaseSkewX(p, v[c].x, v[c].z), v[c].y, v[c].z}; }
+        for (int c = 0; c < count; ++c) {
+            const Vec3& a = mapped[c];
+            const Vec3& b = mapped[(c + 1) % count];
+            newell += Vec3((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y));
+        }
+        Vec3 skewedN = glm::length(newell) > DIVISION_EPSILON ? glm::normalize(newell) : n;
+        if (glm::dot(skewedN, n) < 0.0f) { skewedN = -skewedN; }
+        AppendTerracePolygon(vertices, indices, skewedN, {1, 0, 0}, mapped, uv, count);
     };
     auto addQuad = [&](Vec3 n, const Vec3 (&v)[4]) { addPoly(n, v, 4); };
 
@@ -3339,15 +3354,51 @@ static void BuildSplineProfile(const Engine::SplineParams& p, Core::Vector<Splin
             arc({0, -straight}, pi, 2.0f * pi);
             break;
         }
+        case Engine::SplineProfileType::Wall:
+        {
+            const float wallH = p.profile.height;
+            const float cr = glm::clamp(p.profile.cornerRadius, 0.0f, std::min(hw, wallH));
+            const int cs = std::max(1, p.profile.cornerSegments);
+            auto corner = [&](Vec2 ctr, float a0, float a1) {
+                if (cr <= 0.0f) { return; }
+                if (cs == 1) {
+                    const Vec2 a = ctr + cr * Vec2{cosf(a0), sinf(a0)};
+                    const Vec2 b = ctr + cr * Vec2{cosf(a1), sinf(a1)};
+                    const Vec2 n{b.y - a.y, a.x - b.x};
+                    push(a, n);
+                    push(b, n);
+                    return;
+                }
+                for (int k = 0; k <= cs; k++) {
+                    const float a = glm::mix(a0, a1, static_cast<float>(k) / static_cast<float>(cs));
+                    const Vec2 dir{cosf(a), sinf(a)};
+                    push(ctr + cr * dir, dir);
+                }
+            };
+            const float halfPi = glm::half_pi<float>();
+            push({-hw, 0.0f}, {0, -1}); push({hw, 0.0f}, {0, -1});
+            push({hw, 0.0f}, {1, 0}); push({hw, wallH - cr}, {1, 0});
+            corner({hw - cr, wallH - cr}, 0.0f, halfPi);
+            push({hw - cr, wallH}, {0, 1}); push({-hw + cr, wallH}, {0, 1});
+            corner({-hw + cr, wallH - cr}, halfPi, glm::pi<float>());
+            push({-hw, wallH - cr}, {-1, 0}); push({-hw, 0.0f}, {-1, 0});
+            break;
+        }
         case Engine::SplineProfileType::Tube:
         default:
         {
-            const int n = std::max(3, p.sides);
+            const int n = std::clamp(p.sides, 3, 64);
             const float r = p.radius;
+            Vec2 corners[64];
             for (int j = 0; j < n; j++) {
                 const float a = glm::two_pi<float>() * static_cast<float>(j) / static_cast<float>(n);
-                const Vec2 dir{cosf(a), sinf(a)};
-                push(r * dir, dir);
+                corners[j] = r * Vec2{cosf(a), sinf(a)};
+            }
+            if (p.bFacetNormals) {
+                hardEdges(corners, n);
+            }
+            else {
+                for (int j = 0; j < n; j++) { push(corners[j], corners[j]); }
             }
             break;
         }
@@ -3412,6 +3463,9 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
         return f.pos + off.x * f.rRight + off.y * f.rUp;
     };
 
+    const bool bUpright = p.profile.type == Engine::SplineProfileType::Wall;
+    auto horizontal = [&](Vec3 v) { return v - worldUp * glm::dot(v, worldUp); };
+
     // Linear corners are mitred: rings at a control point are projected onto the bisector plane, and sharp corners get one ring per side so each run keeps flat normals.
     struct MeshRing
     {
@@ -3431,7 +3485,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             const bool bCorner = bLinear && i % segs == 0 && (bClosed || (i > 0 && i < totalRings - 1));
             if (bCorner) {
                 const Frame& prev = frames[(i + totalRings - 1) % totalRings];
-                const Vec3 sum = prev.tangent + frames[i].tangent;
+                const Vec3 sum = bUpright ? horizontal(prev.tangent) + horizontal(frames[i].tangent) : prev.tangent + frames[i].tangent;
                 if (glm::length(sum) > 1e-3f) {
                     out.mitre = glm::normalize(sum);
                     if (glm::dot(prev.tangent, frames[i].tangent) < MITRE_SPLIT_COS) {
@@ -3479,19 +3533,27 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
                 const Vec3 mitre = meshRings[i].mitre;
                 const float mitreFacing = glm::dot(f.tangent, mitre);
                 const Vec3 laneOffset = laneCenter(f, laneOff) - f.pos;
+                Vec3 secRight = f.rRight, secUp = f.rUp, normalUp = f.rUp;
+                if (bUpright) {
+                    Vec3 fwd;
+                    horizAxes(f, secRight, fwd);
+                    secUp = worldUp;
+                    const Vec3 upPerp = worldUp - f.tangent * glm::dot(f.tangent, worldUp);
+                    normalUp = upPerp / glm::max(glm::dot(upPerp, upPerp), DIVISION_EPSILON);
+                }
                 const float vCoord = (meshRingCount > 1) ? static_cast<float>(i) / static_cast<float>(meshRingCount - 1) : 0.0f;
                 for (int j = 0; j < ringSize; j++) {
                     const SplineProfilePoint& pp = ring[j];
                     const Vec2 pos = pp.pos * laneScale * shellScale;
                     // Normals take the inverse scale so a stretched profile still shades as its own shape.
                     const Vec2 normal = pp.normal / laneScale * (bBore ? -1.0f : 1.0f);
-                    Vec3 offset = laneOffset + pos.x * f.rRight + pos.y * f.rUp;
+                    Vec3 offset = laneOffset + pos.x * secRight + pos.y * secUp;
                     if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
                     Engine::FullVertex v{};
                     v.position = f.pos + offset;
-                    v.normal = glm::normalize(normal.x * f.rRight + normal.y * f.rUp);
+                    v.normal = glm::normalize(normal.x * secRight + normal.y * normalUp);
                     v.uv = {static_cast<float>(j) / static_cast<float>(ringSize), vCoord};
-                    v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
+                    v.tangent = {secRight.x, secRight.y, secRight.z, 1.0f};
                     v.color = {1, 1, 1, 1};
                     vertices.PushBack(v);
                 }
@@ -3546,14 +3608,21 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
             auto addCap = [&](int ringIdx, Vec3 capNormal, bool reverse) {
                 const Frame& f = frames[ringIdx];
                 const Vec3 center = laneCenter(f, laneOff);
+                Vec3 capRight = f.rRight, capUp = f.rUp;
+                if (bUpright) {
+                    Vec3 fwd;
+                    horizAxes(f, capRight, fwd);
+                    capUp = worldUp;
+                    capNormal = glm::dot(capNormal, fwd) < 0.0f ? -fwd : fwd;
+                }
                 const auto capBase = static_cast<uint32_t>(vertices.Size());
                 for (int k = 0; k < outlineSize; k++) {
                     const Vec2 o = capOutline[k] * laneScale * outerScale;
                     Engine::FullVertex v{};
-                    v.position = center + o.x * f.rRight + o.y * f.rUp;
+                    v.position = center + o.x * capRight + o.y * capUp;
                     v.normal = capNormal;
                     v.uv = {o.x, o.y};
-                    v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
+                    v.tangent = {capRight.x, capRight.y, capRight.z, 1.0f};
                     v.color = {1, 1, 1, 1};
                     vertices.PushBack(v);
                 }

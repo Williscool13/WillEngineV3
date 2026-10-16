@@ -46,7 +46,7 @@ resolutionScale|0x3f400000
 reflectionProbeLineWidth|0x3dcccccd
 editorSpriteMask|127
 editorDebugDrawMask|127
-editorDebugDrawMode|2
+editorDebugDrawMode|1
 editorPhysicsDebugMask|5
 gameCameraFovDegrees|0x42480000
 gameCameraNearPlane|0x3dcccccd
@@ -105,8 +105,8 @@ r|0x3e20d4b7|0xbc09173b|0xbf7c74ae|0xbd5727b7
 ;
 p
 set|1
-t|0xc12c6cc1|0x406a4f94|0x412dd115
-r|0x3f6a4fda|0x3de7e933|0xbec46d6d|0x3d4269a2
+t|0x41789855|0x41844716|0xc1d4c50b
+r|0xbe73dd03|0x3cfb8f0d|0xbf767822|0xbdfe4792
 ;
 sceneSlots|9
 s

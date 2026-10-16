@@ -53,6 +53,8 @@ public:
     std::span<const DeferredCollisionEvent> GetPersistedEvents() { return contactListener.GetPersistedEvents(); }
     std::span<const DeferredRemovedEvent>   GetRemovedEvents()   { return contactListener.GetRemovedEvents(); }
 
+    ContactListener& GetContactListener() { return contactListener; }
+
     void ClearCollisionEvents()
     {
         contactListener.ClearEvents();

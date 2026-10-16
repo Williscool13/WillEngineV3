@@ -37,6 +37,7 @@ struct SplineMeshComponent
     Engine::SplineProfile profile{};
     Engine::SplineRailing railing{};
     float tubeThickness{0.0f};
+    bool bFacetNormals{false};
 
     Engine::MaterialID material{};
     glm::vec3 renderOffset{0.0f};
@@ -57,7 +58,8 @@ struct SplineMeshComponent
         WILL_FIELD(railing),
         WILL_FIELD(material),
         WILL_FIELD(renderOffset),
-        WILL_FIELD(tubeThickness))
+        WILL_FIELD(tubeThickness),
+        WILL_FIELD(bFacetNormals))
 
     static void Sanitize(SplineMeshComponent& comp);
     static bool CanAdd(const entt::registry& registry, entt::entity entity);

@@ -455,6 +455,13 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bevel on each step's front edge; mesh only, the collider stays square"); }
 
+                    ImGui::DragFloat("Step Shift", &p.stepShift, 0.005f, -100.0f, 100.0f, "%.3f m");
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Sideways slide per step, so the flight runs on a diagonal; equal to the step depth follows a 45 degree edge"); }
+                    ImGui::DragFloat("End Width", &p.endWidth, 0.005f, 0.0f, 100.0f, "%.3f m");
+                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Width at the top step, blending from Width; 0 keeps Width"); }
+
                     if (ImGui::Checkbox("Closed", &p.bIsClosed)) { dirty = true; }
 
                     ImGui::SeparatorText("Side Walls");

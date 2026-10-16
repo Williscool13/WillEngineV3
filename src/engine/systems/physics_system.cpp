@@ -70,11 +70,59 @@ void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     ResolveCollisionEvents(ctx, state);
 }
 
+static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+    auto& listener = ctx->physicsSystem->GetContactListener();
+    uint32_t count = 0;
+    for (const auto& [entity, conveyor, physicsBody, world] : state->registry.view<Component::ConveyorComponent, Component::PhysicsBodyComponent, Component::WorldTransformComponent>().each()) {
+        if (!conveyor.bEnabled || physicsBody.bodyID.IsInvalid()) { continue; }
+        if (count >= Physics::MAX_CONVEYORS) {
+            static bool bWarned = false;
+            if (!bWarned) {
+                LOG_WARN(Physics, "More than {} conveyors; the rest stand still", Physics::MAX_CONVEYORS);
+                bWarned = true;
+            }
+            break;
+        }
+
+        Physics::ConveyorSurface surface{.body = physicsBody.bodyID};
+        if (conveyor.mode == Component::ConveyorComponent::Mode::Linear) {
+            const glm::vec3 direction = world.rotation * conveyor.direction;
+            const float length = glm::length(direction);
+            if (length > 1e-6f) {
+                const glm::vec3 velocity = direction * (conveyor.speed / length);
+                surface.linearVelocity = JPH::Vec3(velocity.x, velocity.y, velocity.z);
+            }
+        }
+        else {
+            const glm::vec3 axis = world.rotation * conveyor.axis;
+            const float length = glm::length(axis);
+            if (length > 1e-6f) {
+                const glm::vec3 omega = axis * (conveyor.speed / (length * glm::max(conveyor.referenceRadius, 0.01f)));
+                surface.angularVelocity = JPH::Vec3(omega.x, omega.y, omega.z);
+                surface.centre = JPH::RVec3(world.translation.x, world.translation.y, world.translation.z);
+            }
+        }
+
+        if (bodyInterface.GetUserData(physicsBody.bodyID) != count + 1) {
+            bodyInterface.SetUserData(physicsBody.bodyID, count + 1);
+        }
+        if (listener.SetConveyor(count, surface)) {
+            WakeBodiesAround(bodyInterface, physicsBody.bodyID);
+        }
+        ++count;
+    }
+    listener.SetConveyorCount(count);
+}
+
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
     state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime;
+
+    UpdateConveyors(ctx, state);
 
     // todo: Truly teleport mechanics are a little more user-defined. Need a unified "mark movement as teleport" function that emplaces the teleport physics transform tag to allow kinematics to teleport.
     while (state->physics.deltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
@@ -371,7 +419,11 @@ static JPH::ShapeRefC CreateShapeFromCollider(const Engine::PhysicsColliderAsset
                         // Small convex radius: tread slabs are thin, so the default (0.05m) would exceed the half-thickness and fail Create.
                         JPH::ConvexHullShapeSettings s(pts, 0.001f);
                         auto r = s.Create();
-                        return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+                        if (r.HasError()) {
+                            LOG_WARN(Engine, "Convex hull sub-shape ({} points) failed: {}", prim.hullCount, r.GetError().c_str());
+                            return JPH::ShapeRefC{};
+                        }
+                        return r.Get();
                     }
                     default:
                         break;
@@ -462,17 +514,20 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
         return CreateShapeFromCollider(*collider, desc.bakedScale);
     }
 
+    auto create = [](const JPH::ShapeSettings& s) {
+        auto r = s.Create();
+        return r.HasError() ? JPH::ShapeRefC{} : r.Get();
+    };
     if (const auto* box = std::get_if<Component::BoxShape>(&desc.geometry)) {
-        JPH::BoxShapeSettings s(JPH::Vec3(box->halfExtents.x, box->halfExtents.y, box->halfExtents.z));
-        return s.Create().Get();
+        const glm::vec3 he = box->halfExtents;
+        const float convexRadius = glm::min(JPH::cDefaultConvexRadius, glm::min(he.x, glm::min(he.y, he.z)) * 0.9f);
+        return create(JPH::BoxShapeSettings(JPH::Vec3(he.x, he.y, he.z), convexRadius));
     }
     if (const auto* sphere = std::get_if<Component::SphereShape>(&desc.geometry)) {
-        JPH::SphereShapeSettings s(sphere->radius);
-        return s.Create().Get();
+        return create(JPH::SphereShapeSettings(sphere->radius));
     }
     if (const auto* capsule = std::get_if<Component::CapsuleShape>(&desc.geometry)) {
-        JPH::CapsuleShapeSettings s(capsule->halfHeight, capsule->radius);
-        return s.Create().Get();
+        return create(JPH::CapsuleShapeSettings(capsule->halfHeight, capsule->radius));
     }
     // A Collider resolves through its colliderHandle; without a valid one there is nothing to build.
     return nullptr;
@@ -650,11 +705,15 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
                     subShape
                 );
             }
-            if (!bAnyNull) { shape = compound.Create().Get(); }
+            if (!bAnyNull) {
+                auto r = compound.Create();
+                if (!r.HasError()) { shape = r.Get(); }
+            }
         }
 
         if (!shape) {
-            LOG_WARN(Engine, "Shape creation failed, skipping");
+            const auto* name = state->registry.try_get<Component::NameComponent>(entity);
+            LOG_WARN(Engine, "Shape creation failed for '{}', skipping", name ? name->name.c_str() : "Unnamed");
             resolved.PushBack(entity);
             continue;
         }

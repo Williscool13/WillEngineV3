@@ -55,11 +55,12 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
         across = glm::normalize(glm::cross(worldUp, fwd));
     };
 
+    const bool bUpright = p.profile.type == SplineProfileType::Wall;
     auto laneCenter = [&](const SplineFrame& f, Vec2 off) -> Vec3 {
-        if (p.railing.bEnabled) {
+        if (p.railing.bEnabled || bUpright) {
             Vec3 across, fwd;
             horizAxes(f, across, fwd);
-            return f.pos + (off.x + p.railing.lateralOffset) * across + off.y * worldUp;
+            return f.pos + (off.x + (p.railing.bEnabled ? p.railing.lateralOffset : 0.0f)) * across + off.y * worldUp;
         }
         return f.pos + off.x * f.rRight + off.y * f.rUp;
     };
@@ -78,9 +79,10 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
     if (p.railing.bEnabled && p.railing.lanes.Size() == 2 && p.bCrossPlanks) { primBound += static_cast<size_t>(stitchCount / std::max(1, p.crossPlankInterval)) + 1; }
     if (p.railing.bEnabled && p.railing.bPosts) { primBound += static_cast<size_t>(static_cast<float>(totalRings) / p.railing.PostSpacing()) + 1; }
     out.Reserve(out.Size() + primBound);
+    const float lift = bUpright ? halfH : 0.0f;
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
-        const Vec2 laneOff = laneOffsets[rail];
         const Vec2 laneScale = p.railing.bEnabled ? p.railing.LaneScale(static_cast<size_t>(rail)) : Vec2{1.0f, 1.0f};
+        const Vec2 laneOff = laneOffsets[rail] + Vec2{0.0f, lift * laneScale.y};
         for (int i = 0; i < stitchCount; i++) {
             const int nextRing = bClosed ? (i + 1) % totalRings : i + 1;
             const Vec3 c0 = laneCenter(frames[i], laneOff);
@@ -110,6 +112,12 @@ void BuildSplineColliderPrimitives(const SplineParams& p, Core::Span<const Splin
                 prim.type = SplineColliderPrimitiveType::Box;
                 prim.halfExtents = Vec3(halfW * laneScale.x, halfH * laneScale.y, len * 0.5f);
                 prim.rotation = SegmentBoxRotation(dir, frames[i].rRight, frames[i].rUp);
+                if (bUpright) {
+                    Vec3 across, fwd;
+                    horizAxes(frames[i], across, fwd);
+                    prim.halfExtents.y *= glm::sqrt(glm::max(1.0f - dir.y * dir.y, 0.0f));
+                    prim.rotation = SegmentBoxRotation(dir, across, worldUp);
+                }
             }
             out.PushBack(prim);
         }
@@ -444,23 +452,38 @@ static void CompoundStaircase(const StaircaseParams& p, Core::Vector<SplineColli
     const float stepDepth = StaircaseTotalDepth(p) / static_cast<float>(steps);
     const float hw = p.width * 0.5f;
     const bool bSlab = StaircaseIsSlab(p);
+    const bool bSkewed = StaircaseIsSkewed(p);
+    auto skew = [&](Vec3* points, int count) {
+        for (int c = 0; c < count; ++c) { points[c].x = StaircaseSkewX(p, points[c].x, points[c].z); }
+    };
     out.Reserve(out.Size() + steps);
     for (int i = 0; i < steps; i++) {
         const float yTop = StaircaseStepTop(p, i);
         const float zMin = static_cast<float>(i) * stepDepth;
-        if (!bSlab) {
+        if (!bSlab && !bSkewed) {
             PushBoxPrim(Vec3(hw, yTop * 0.5f, zMin + stepDepth * 0.5f), Vec3(hw, yTop * 0.5f, stepDepth * 0.5f), Quat(1.0f, 0.0f, 0.0f, 0.0f), out);
             continue;
         }
-        float breaks[4];
-        const int32_t breakCount = StaircaseUndersideBreaks(p, zMin, zMin + stepDepth, breaks);
         Vec3 points[12];
         int count = 0;
-        for (const float x : {0.0f, p.width}) {
-            points[count++] = Vec3(x, yTop, zMin);
-            points[count++] = Vec3(x, yTop, zMin + stepDepth);
-            for (int32_t k = 0; k < breakCount; ++k) { points[count++] = Vec3(x, StaircaseUndersideHeight(p, breaks[k]), breaks[k]); }
+        if (!bSlab) {
+            for (const float x : {0.0f, p.width}) {
+                for (const float z : {zMin, zMin + stepDepth}) {
+                    points[count++] = Vec3(x, 0.0f, z);
+                    points[count++] = Vec3(x, yTop, z);
+                }
+            }
         }
+        else {
+            float breaks[4];
+            const int32_t breakCount = StaircaseUndersideBreaks(p, zMin, zMin + stepDepth, breaks);
+            for (const float x : {0.0f, p.width}) {
+                points[count++] = Vec3(x, yTop, zMin);
+                points[count++] = Vec3(x, yTop, zMin + stepDepth);
+                for (int32_t k = 0; k < breakCount; ++k) { points[count++] = Vec3(x, StaircaseUndersideHeight(p, breaks[k]), breaks[k]); }
+            }
+        }
+        if (bSkewed) { skew(points, count); }
         PushHullPrim(Core::Span<const Vec3>(points, static_cast<size_t>(count)), out, outPositions);
     }
 
@@ -478,6 +501,7 @@ static void CompoundStaircase(const StaircaseParams& p, Core::Vector<SplineColli
                     points[count++] = Vec3(x, StaircaseLineHeight(p, z) + p.sideWallHeight, z);
                 }
             }
+            if (bSkewed) { skew(points, count); }
             PushHullPrim(Core::Span<const Vec3>(points, 8), out, outPositions);
         }
     };

@@ -75,6 +75,7 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
 
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::ConveyorComponent>(componentRegistry, Origin::Engine, false, false);
 
     RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, Origin::Engine, false, false);
 }

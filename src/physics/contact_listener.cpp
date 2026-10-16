@@ -61,13 +61,48 @@ void ContactListener::PushContactEvent(const JPH::Body& inBody1, const JPH::Body
     };
 }
 
+bool ContactListener::SetConveyor(uint32_t slot, const ConveyorSurface& surface)
+{
+    ConveyorSurface& current = conveyors[slot];
+    const bool bChanged = slot >= conveyorCount || current.body != surface.body || current.linearVelocity != surface.linearVelocity ||
+                          current.angularVelocity != surface.angularVelocity || current.centre != surface.centre;
+    current = surface;
+    return bChanged;
+}
+
+const ConveyorSurface* ContactListener::FindConveyor(const JPH::Body& body) const
+{
+    const uint64_t slot = body.GetUserData();
+    if (slot == 0 || slot > conveyorCount) { return nullptr; }
+    const ConveyorSurface& surface = conveyors[slot - 1];
+    return surface.body == body.GetID() ? &surface : nullptr;
+}
+
+void ContactListener::ApplyConveyors(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::ContactSettings& ioSettings) const
+{
+    if (conveyorCount == 0) { return; }
+    const ConveyorSurface* surface1 = FindConveyor(inBody1);
+    const ConveyorSurface* surface2 = FindConveyor(inBody2);
+    if (!surface1 && !surface2) { return; }
+
+    const JPH::RVec3 com1 = inBody1.GetCenterOfMassPosition();
+    auto add = [&](const ConveyorSurface& surface, float sign) {
+        ioSettings.mRelativeAngularSurfaceVelocity += sign * surface.angularVelocity;
+        ioSettings.mRelativeLinearSurfaceVelocity += sign * (surface.linearVelocity + surface.angularVelocity.Cross(JPH::Vec3(com1 - surface.centre)));
+    };
+    if (surface1) { add(*surface1, -1.0f); }
+    if (surface2) { add(*surface2, 1.0f); }
+}
+
 void ContactListener::OnContactAdded(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings)
 {
+    ApplyConveyors(inBody1, inBody2, ioSettings);
     PushContactEvent(inBody1, inBody2, inManifold, addedEvents, addedCount, addedWarnCount, "Added");
 }
 
 void ContactListener::OnContactPersisted(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings)
 {
+    ApplyConveyors(inBody1, inBody2, ioSettings);
     PushContactEvent(inBody1, inBody2, inManifold, persistedEvents, persistedCount, persistedWarnCount, "Persisted");
 }
 

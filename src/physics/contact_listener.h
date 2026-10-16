@@ -36,6 +36,15 @@ struct DeferredRemovedEvent
     JPH::BodyID body2;
 };
 
+/** World-space surface motion of a body: v(p) = linearVelocity + angularVelocity x (p - centre). The body's user data holds its slot + 1. */
+struct ConveyorSurface
+{
+    JPH::BodyID body;
+    JPH::Vec3 linearVelocity{JPH::Vec3::sZero()};
+    JPH::Vec3 angularVelocity{JPH::Vec3::sZero()};
+    JPH::RVec3 centre{JPH::RVec3::sZero()};
+};
+
 class ContactListener : public JPH::ContactListener
 {
 public:
@@ -48,6 +57,10 @@ public:
 
     void ClearEvents();
 
+    /** Written between steps only. Returns true when the slot changed, so the caller can wake what rests on it. */
+    bool SetConveyor(uint32_t slot, const ConveyorSurface& surface);
+    void SetConveyorCount(uint32_t count) { conveyorCount = count; }
+
     void OnContactAdded(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings) override;
     void OnContactPersisted(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold, JPH::ContactSettings& ioSettings) override;
     void OnContactRemoved(const JPH::SubShapeIDPair& inSubShapePair) override;
@@ -56,6 +69,12 @@ private:
     void PushContactEvent(const JPH::Body& inBody1, const JPH::Body& inBody2, const JPH::ContactManifold& inManifold,
                           Core::Array<DeferredCollisionEvent, 8192>& events,
                           std::atomic<uint32_t>& count, std::atomic<int32_t>& warnCount, const char* label);
+
+    const ConveyorSurface* FindConveyor(const JPH::Body& body) const;
+    void ApplyConveyors(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::ContactSettings& ioSettings) const;
+
+    Core::Array<ConveyorSurface, MAX_CONVEYORS> conveyors;
+    uint32_t conveyorCount{0};
 
     Core::Array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> addedEvents;
     std::atomic<uint32_t> addedCount{0};

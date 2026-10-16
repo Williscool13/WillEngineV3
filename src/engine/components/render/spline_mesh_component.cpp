@@ -45,6 +45,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     params.profile = component.profile;
     params.railing = component.railing;
     params.tubeThickness = component.tubeThickness;
+    params.bFacetNormals = component.bFacetNormals;
     return params;
 }
 
@@ -149,7 +150,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             dirty = true;
         }
 
-        const char* splineProfileNames[] = {"Tube", "Rectangle", "Rounded Rect", "I-Beam", "U-Channel", "L-Angle", "Rail Head", "Handrail"};
+        const char* splineProfileNames[] = {"Tube", "Rectangle", "Rounded Rect", "I-Beam", "U-Channel", "L-Angle", "Rail Head", "Handrail", "Wall"};
         int profileTypeInt = static_cast<int>(component.profile.type);
         ImGui::SetNextItemWidth(140.0f);
         if (ImGui::Combo("Profile##sm", &profileTypeInt, splineProfileNames, IM_ARRAYSIZE(splineProfileNames))) {
@@ -163,6 +164,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::DragInt("Sides", &component.sides, 1, 3, 64);
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            dirty |= ImGui::Checkbox("Facet Normals", &component.bFacetNormals);
             ImGui::BeginDisabled(component.railing.bEnabled);
             ImGui::DragFloat("Wall Thickness", &component.tubeThickness, 0.005f, 0.0f, 10.0f, "%.3f m");
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
@@ -178,7 +180,12 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
                 ImGui::DragFloat("Corner Radius", &component.profile.cornerRadius, 0.005f, 0.0f, 25.0f);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
             }
-            if (pt == Engine::SplineProfileType::RoundedRect || pt == Engine::SplineProfileType::Handrail) {
+            if (pt == Engine::SplineProfileType::Wall) {
+                ImGui::DragFloat("Chamfer", &component.profile.cornerRadius, 0.005f, 0.0f, 25.0f);
+                dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Cut on the two top edges; the wall stands on the path"); }
+            }
+            if (pt == Engine::SplineProfileType::RoundedRect || pt == Engine::SplineProfileType::Handrail || pt == Engine::SplineProfileType::Wall) {
                 ImGui::DragInt("Corner Segments", &component.profile.cornerSegments, 1, 1, 16);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
             }
