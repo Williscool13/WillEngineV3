@@ -86,6 +86,120 @@ float FogOpticalDepth(float originY, float dirY, float tStart, float tEnd, float
     return depth;
 }
 
+float3 FogVolumeToLocal(FogVolumeGPU v, float3 p)
+{
+    float4 h = float4(p, 1.0);
+    return float3(dot(v.worldToLocal0, h), dot(v.worldToLocal1, h), dot(v.worldToLocal2, h));
+}
+
+float3 FogVolumeDirToLocal(FogVolumeGPU v, float3 d)
+{
+    return float3(dot(v.worldToLocal0.xyz, d), dot(v.worldToLocal1.xyz, d), dot(v.worldToLocal2.xyz, d));
+}
+
+float FogVolumeFadeRamp(float inside, float width)
+{
+    return width > 0.0 ? smoothstep(0.0, 1.0, saturate(inside / width)) : 1.0;
+}
+
+/** Density multiplier at unit-space point q: edge fades times the bottom-to-top gradient, 0 outside. */
+float FogVolumeProfile(FogVolumeGPU v, float3 q)
+{
+    if (abs(q.y) >= 1.0) {
+        return 0.0;
+    }
+    float side;
+    if (v.shape == FOG_VOLUME_SHAPE_CYLINDER) {
+        float r = length(q.xz);
+        if (r >= 1.0) {
+            return 0.0;
+        }
+        side = FogVolumeFadeRamp(1.0 - r, v.fade.x);
+    } else {
+        float2 a = abs(q.xz);
+        if (any(a >= 1.0)) {
+            return 0.0;
+        }
+        side = FogVolumeFadeRamp(1.0 - a.x, v.fade.x) * FogVolumeFadeRamp(1.0 - a.y, v.fade.z);
+    }
+    float gradient = lerp(v.scales.x, v.scales.y, q.y * 0.5 + 0.5);
+    return side * FogVolumeFadeRamp(1.0 - abs(q.y), v.fade.y) * gradient;
+}
+
+/** Ray span inside the unit volume, in the caller's ray parameter (the map is affine, so local and world t agree). */
+bool FogVolumeRaySpan(FogVolumeGPU v, float3 origin, float3 dir, out float tIn, out float tOut)
+{
+    float3 o = FogVolumeToLocal(v, origin);
+    float3 d = FogVolumeDirToLocal(v, dir);
+    tIn = -1e30;
+    tOut = 1e30;
+    if (abs(d.y) > 1e-8) {
+        float t0 = (-1.0 - o.y) / d.y;
+        float t1 = (1.0 - o.y) / d.y;
+        tIn = max(tIn, min(t0, t1));
+        tOut = min(tOut, max(t0, t1));
+    } else if (abs(o.y) >= 1.0) {
+        return false;
+    }
+    if (v.shape == FOG_VOLUME_SHAPE_CYLINDER) {
+        float a = dot(d.xz, d.xz);
+        float b = dot(o.xz, d.xz);
+        float c = dot(o.xz, o.xz) - 1.0;
+        if (a > 1e-12) {
+            float disc = b * b - a * c;
+            if (disc <= 0.0) {
+                return false;
+            }
+            float s = sqrt(disc);
+            tIn = max(tIn, (-b - s) / a);
+            tOut = min(tOut, (-b + s) / a);
+        } else if (c >= 0.0) {
+            return false;
+        }
+    } else {
+        for (uint axis = 0u; axis < 3u; axis += 2u) {
+            if (abs(d[axis]) > 1e-8) {
+                float t0 = (-1.0 - o[axis]) / d[axis];
+                float t1 = (1.0 - o[axis]) / d[axis];
+                tIn = max(tIn, min(t0, t1));
+                tOut = min(tOut, max(t0, t1));
+            } else if (abs(o[axis]) >= 1.0) {
+                return false;
+            }
+        }
+    }
+    return tOut > tIn;
+}
+
+/** Transmittance through every absorbing volume along the ray from 0 to tEnd. */
+float FogVolumesTransmittance(FogVolumeGPU* volumes, uint volumeCount, float3 origin, float3 dir, float tEnd)
+{
+    float opticalDepth = 0.0;
+    for (uint i = 0u; i < volumeCount; ++i) {
+        FogVolumeGPU v = volumes[i];
+        if (v.absorption <= 0.0) {
+            continue;
+        }
+        float tIn;
+        float tOut;
+        if (!FogVolumeRaySpan(v, origin, dir, tIn, tOut)) {
+            continue;
+        }
+        tIn = max(tIn, 0.0);
+        tOut = min(tOut, tEnd);
+        if (tOut <= tIn) {
+            continue;
+        }
+        float step = (tOut - tIn) / float(VOLUMETRIC_FOG_ABSORPTION_SAMPLES);
+        float sum = 0.0;
+        for (uint s = 0u; s < VOLUMETRIC_FOG_ABSORPTION_SAMPLES; ++s) {
+            sum += FogVolumeProfile(v, FogVolumeToLocal(v, origin + dir * (tIn + (float(s) + 0.5) * step)));
+        }
+        opticalDepth += v.absorption * sum * step;
+    }
+    return exp(-opticalDepth);
+}
+
 bool FogVisible(uint tlasIndex, uint instanceMask, float3 origin, float3 direction, float tMax)
 {
     if (tlasIndex == ~0u) {
@@ -193,7 +307,26 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
     float3 worldPos = mul(scene.invView, float4(viewPos, 1.0)).xyz;
     float3 viewDir = normalize(worldPos - scene.cameraWorldPos.xyz);
 
+    // Scattering weighted per radiance term: sun sees every medium, ambient and local lights take each medium's own scale.
     float extinction = pc.albedoDensity.a * exp(-pc.heightFalloff * max(worldPos.y - pc.baseHeight, 0.0));
+    float3 sunWeight = extinction * pc.albedoDensity.rgb;
+    float3 ambientWeight = sunWeight * pc.ambientScale;
+    float3 localWeight = sunWeight;
+    for (uint i = 0u; i < pc.volumeCount; ++i) {
+        FogVolumeGPU v = pc.volumes[i];
+        if (v.albedoScattering.a <= 0.0) {
+            continue;
+        }
+        float sigma = v.albedoScattering.a * FogVolumeProfile(v, FogVolumeToLocal(v, worldPos));
+        if (!(sigma > 0.0)) {
+            continue;
+        }
+        extinction += sigma;
+        float3 scatter = sigma * v.albedoScattering.rgb;
+        sunWeight += scatter;
+        ambientWeight += scatter * v.scales.z;
+        localWeight += scatter * v.scales.w;
+    }
     if (!(extinction > 0.0)) {
         rdgStorage3DFloat4[pc.scatterOutIndex][dtid] = float4(0.0);
         return;
@@ -207,7 +340,7 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
         bCulled = float(dtid.z) > FogDepthToSlice(farthest, pc.maxDistance) + 1.5;
     }
 
-    float3 ambient = bCulled ? float3(0.0) : FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, pc.ambientScale);
+    float3 ambient = bCulled ? float3(0.0) : FogAmbientRadiance(pc.skyboxIndex, pc.iblIntensity, 1.0);
     float3 ddgi = float3(0.0);
     float ddgiCoverage = 0.0;
     if (!bCulled && pc.ddgiCascades != nullptr) {
@@ -218,7 +351,7 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
         float3 direction = float3(r * cos(2.0 * PI * u.y), r * sin(2.0 * PI * u.y), z);
         float edgeFade;
         float4 gi = DDGISampleIrradianceCascaded(worldPos, direction, viewDir, pc.ddgiCascades, 0.0, edgeFade);
-        ddgi = gi.rgb * gi.w * pc.ambientScale;
+        ddgi = gi.rgb * gi.w;
         ddgiCoverage = gi.w;
         ambient = ddgi + ambient * (1.0 - max(gi.w, edgeFade));
     }
@@ -259,15 +392,15 @@ void ComputeVolumetricFogScatter(uniform VolumetricFogScatterPushConstant pc, ui
         }
     }
 
-    float3 radiance = ambient + sunRadiance + localRadiance;
+    float3 inScatter = ambientWeight * ambient + sunWeight * sunRadiance + localWeight * localRadiance;
     switch (pc.debugMode) {
-        case FOG_DEBUG_AMBIENT: radiance = ambient; break;
-        case FOG_DEBUG_DDGI: radiance = ddgi; break;
-        case FOG_DEBUG_SUN: radiance = sunRadiance; break;
-        case FOG_DEBUG_LOCAL_LIGHTS: radiance = localRadiance; break;
+        case FOG_DEBUG_AMBIENT: inScatter = ambientWeight * ambient; break;
+        case FOG_DEBUG_DDGI: inScatter = ambientWeight * ddgi; break;
+        case FOG_DEBUG_SUN: inScatter = sunWeight * sunRadiance; break;
+        case FOG_DEBUG_LOCAL_LIGHTS: inScatter = localWeight * localRadiance; break;
         default: break;
     }
-    float4 result = float4(extinction * pc.albedoDensity.rgb * radiance * scene.preExposure, extinction);
+    float4 result = float4(inScatter * scene.preExposure, extinction);
     if (pc.debugMode == FOG_DEBUG_DDGI_COVERAGE) {
         result.rgb = extinction * float3(1.0, ddgiCoverage, ddgiCoverage);
     }
@@ -387,6 +520,17 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
 
     float4 color = rdgStorageFloat4[pc.colorIndex][pixel];
     float4 fog = float4(0.0, 0.0, 0.0, 1.0);
+
+    // Absorbing volumes act on the surface only; froxel fog in front of them stays as seen.
+    float volumeTransmittance = 1.0;
+    if (pc.volumeCount > 0u) {
+        float3 viewRay = CheapReconstructViewSpacePosition(scene.ndcToViewMul, scene.ndcToViewAdd, (float2(pixel) + 0.5) / float2(pc.renderExtent), 1.0);
+        float3 rayDir = normalize(mul(scene.invView, float4(viewRay, 0.0)).xyz);
+        float tEnd = bSky ? VOLUMETRIC_FOG_SKY_DISTANCE : viewDepth * length(viewRay);
+        volumeTransmittance = FogVolumesTransmittance(pc.volumes, pc.volumeCount, scene.cameraWorldPos.xyz, rayDir, tEnd);
+    }
+    bool bWrite = volumeTransmittance < 1.0;
+    color.rgb *= volumeTransmittance;
     // Texel s holds the fog from the near plane to the far edge of slice s.
     float slice = FogDepthToSlice(viewDepth, pc.maxDistance);
     if (slice > 0.0) {
@@ -414,6 +558,9 @@ void ComputeVolumetricFogApply(uniform VolumetricFogApplyPushConstant pc, uint3 
         }
 
         color.rgb = color.rgb * fog.a + fog.rgb;
+        bWrite = true;
+    }
+    if (bWrite) {
         rdgStorageFloat4[pc.colorIndex][pixel] = color;
     }
 

@@ -28,7 +28,7 @@ inline constexpr int32_t MAX_PHYSICS_TASKS = 2048 + TASK_BUFFER;
 inline constexpr uint32_t MAX_PHYSICS_BODIES = 65536;
 inline constexpr uint32_t PHYSICS_BODY_MUTEX_COUNT = 0;
 inline constexpr uint32_t MAX_BODY_PAIRS = 65536;
-inline constexpr uint32_t MAX_CONTACT_CONSTRAINTS = 10240;
+inline constexpr uint32_t MAX_CONTACT_CONSTRAINTS = 32768;
 
 inline constexpr uint32_t MAX_BODY_ACTIVATION_EVENTS = 256;
 static constexpr uint32_t MAX_COLLISION_EVENTS = 8192;

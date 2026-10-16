@@ -56,6 +56,14 @@ void SetupVolumetricFog(RenderGraph& graph,
     const RDGBuffer worldGridLights = worldGrid.lightGrid;
     const RDGBuffer worldGridIndices = worldGrid.indexList;
 
+    const auto volumeCount = static_cast<uint32_t>(viewFamily.fogVolumes.Size());
+    RDGBuffer volumes{};
+    if (volumeCount > 0) {
+        const HostBufferMapping mapping = graph.OpenHostBuffer("fog_volumes"_sid, VOLUMETRIC_FOG_MAX_VOLUMES * sizeof(FogVolumeGPU));
+        memcpy(mapping.data, viewFamily.fogVolumes.Data(), volumeCount * sizeof(FogVolumeGPU));
+        volumes = mapping.buffer;
+    }
+
     RenderPass& tileDepthPass = graph.AddPass("[Fog] Tile Depth"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::VolumetricFog);
     tileDepthPass.ReadSampledImage(targets.depthCopy);
     tileDepthPass.WriteStorageImage(tileDepth);
@@ -87,11 +95,14 @@ void SetupVolumetricFog(RenderGraph& graph,
         scatterPass.ReadSampledImage(scatterHistory);
     }
     scatterPass.ReadSampledImage(tileDepth);
+    if (volumeCount > 0) {
+        scatterPass.ReadBuffer(volumes);
+    }
     const bool bDDGI = bDDGIApply && ddgi.IsValid();
     if (bDDGI) { scatterPass.ReadBuffer(ddgi.cascades); }
     scatterPass.WriteStorageImage(scatter);
     scatterPass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, bDDGI, debugMode, frameIndex, skyboxIndex = viewFamily.skyboxIndex,
-            iblIntensity = viewFamily.iblIntensity, worldGridLights, worldGridIndices, ddgiCascades = ddgi.cascades, scatter, tileDepth](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            iblIntensity = viewFamily.iblIntensity, worldGridLights, worldGridIndices, ddgiCascades = ddgi.cascades, scatter, tileDepth, volumes, volumeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_scatter"_sid);
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
@@ -118,6 +129,8 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .ddgiCascades = bDDGI ? graph.GetBufferAddress(ddgiCascades) : 0,
                 .debugMode = static_cast<uint32_t>(glm::max(debugMode, 0)),
                 .tileDepthIndex = graph.GetSampledImageViewDescriptorIndex(tileDepth),
+                .volumes = volumeCount > 0 ? graph.GetBufferAddress(volumes) : 0,
+                .volumeCount = volumeCount,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (gridSize[0] + 7) / 8, (gridSize[1] + 7) / 8, VOLUMETRIC_FOG_SLICES);
@@ -172,8 +185,11 @@ void SetupVolumetricFog(RenderGraph& graph,
     if (bDebug) {
         applyPass.WriteStorageImage(debugTarget);
     }
+    if (volumeCount > 0) {
+        applyPass.ReadBuffer(volumes);
+    }
     applyPass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bPreOverlayCopy, bDebug, debugMode, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
-            preOverlay = targets.preOverlayColor, integrated, debugTarget, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            preOverlay = targets.preOverlayColor, integrated, debugTarget, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, volumes, volumeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_apply"_sid);
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
@@ -198,6 +214,8 @@ void SetupVolumetricFog(RenderGraph& graph,
                 .anisotropy = glm::clamp(fog.anisotropy, -0.95f, 0.95f),
                 .debugMode = static_cast<uint32_t>(glm::max(debugMode, 0)),
                 .debugOutIndex = bDebug ? graph.GetStorageImageViewDescriptorIndex(debugTarget) : ~0u,
+                .volumes = volumeCount > 0 ? graph.GetBufferAddress(volumes) : 0,
+                .volumeCount = volumeCount,
             };
             vkCmdPushConstants(cmd, pipeline->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
             vkCmdDispatch(cmd, (renderExtent.width + 15) / 16, (renderExtent.height + 15) / 16, 1);

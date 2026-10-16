@@ -91,7 +91,10 @@ void LockStaticTransforms(EngineState* state)
 {
     entt::registry& registry = state->registry;
     for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraComponent>).each()) {
-        if (transform.mobility != Component::Mobility::Static || IsMovedAtRuntime(state, entity)) { continue; }
+        // A Static physics body never moves while running either, whatever the mobility says, so its collider cannot be left behind.
+        const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
+        const bool bStaticBody = body != nullptr && body->motionType == Component::PhysicsMotionType::Static;
+        if ((transform.mobility != Component::Mobility::Static && !bStaticBody) || IsMovedAtRuntime(state, entity)) { continue; }
         registry.emplace_or_replace<Component::StaticTransformLockComponent>(entity, transform.translation, transform.rotation, transform.scale, false);
     }
 }
@@ -103,7 +106,7 @@ void RejectStaticTransformWrites(EngineState* state)
     for (const auto [entity, lock, transform] : view.each()) {
         if (!lock.bWarned) {
             lock.bWarned = true;
-            LOG_WARN(Engine, "{} is Static and cannot move during play; set it to Movable", EntityName(registry, entity));
+            LOG_WARN(Engine, "{} is Static (mobility or physics body) and cannot move while running; make it Movable, and Kinematic if it has a body", EntityName(registry, entity));
         }
         transform.translation = lock.translation;
         transform.rotation = lock.rotation;

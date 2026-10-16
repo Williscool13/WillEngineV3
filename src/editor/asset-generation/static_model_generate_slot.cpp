@@ -1389,39 +1389,30 @@ bool StaticModelGenerateSlot::WriteStaticModel()
     ZoneScopedN("WriteStaticModel");
 
     if (!rawModel.images.IsEmpty()) {
-        auto preferredImageFormats = Core::HeapArray<DXGI_FORMAT>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
-        for (auto& imf : preferredImageFormats) {
-            imf = DXGI_FORMAT_BC7_UNORM;
+        constexpr uint8_t ROLE_COLOR = 1, ROLE_NORMAL = 2, ROLE_METAL_ROUGH = 4, ROLE_OCCLUSION = 8, ROLE_PACKED = 16;
+        auto imageRoles = Core::HeapArray<uint8_t>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
+        for (auto& r : imageRoles) {
+            r = 0;
+        }
+        for (const auto& material : rawModel.materials) {
+            const auto& idx = material.props.textureImageIndices;
+            const auto& idx2 = material.props.textureImageIndices2;
+            if (idx.x >= 0) { imageRoles[idx.x] |= ROLE_COLOR; }
+            if (idx.w >= 0) { imageRoles[idx.w] |= ROLE_COLOR; }
+            if (idx.z >= 0) { imageRoles[idx.z] |= ROLE_NORMAL; }
+            if (idx.y >= 0) { imageRoles[idx.y] |= ROLE_METAL_ROUGH; }
+            if (idx2.x >= 0) { imageRoles[idx2.x] |= ROLE_OCCLUSION; }
+            if (idx2.y >= 0) { imageRoles[idx2.y] |= ROLE_PACKED; }
         }
 
-        for (const auto& material : rawModel.materials) {
-            // Color/emissive textures -> BC7 SRGB
-            if (material.props.textureImageIndices.x >= 0) {
-                preferredImageFormats[material.props.textureImageIndices.x] = DXGI_FORMAT_BC7_UNORM_SRGB;
-            }
-            if (material.props.textureImageIndices.w >= 0) {
-                preferredImageFormats[material.props.textureImageIndices.w] = DXGI_FORMAT_BC7_UNORM_SRGB;
-            }
-
-            // Normal map -> BC5
-            if (material.props.textureImageIndices.z >= 0) {
-                preferredImageFormats[material.props.textureImageIndices.z] = DXGI_FORMAT_BC5_UNORM;
-            }
-
-            // Metallic-roughness -> BC7 (linear)
-            if (material.props.textureImageIndices.y >= 0) {
-                preferredImageFormats[material.props.textureImageIndices.y] = DXGI_FORMAT_BC7_UNORM;
-            }
-
-            // Occlusion -> BC4
-            if (material.props.textureImageIndices2.x >= 0) {
-                preferredImageFormats[material.props.textureImageIndices2.x] = DXGI_FORMAT_BC4_UNORM;
-            }
-
-            // Packed NRM (if used) -> BC7
-            if (material.props.textureImageIndices2.y >= 0) {
-                preferredImageFormats[material.props.textureImageIndices2.y] = DXGI_FORMAT_BC7_UNORM;
-            }
+        // An image shared between roles (ORM: occlusion R + roughness G + metal B) takes the widest format any role needs.
+        auto preferredImageFormats = Core::HeapArray<DXGI_FORMAT>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetGenerator, rawModel.images.Size());
+        for (size_t i = 0; i < preferredImageFormats.Size(); ++i) {
+            const uint8_t roles = imageRoles[i];
+            if (roles & ROLE_COLOR) { preferredImageFormats[i] = DXGI_FORMAT_BC7_UNORM_SRGB; }
+            else if (roles == ROLE_NORMAL) { preferredImageFormats[i] = DXGI_FORMAT_BC5_UNORM; }
+            else if (roles == ROLE_OCCLUSION) { preferredImageFormats[i] = DXGI_FORMAT_BC4_UNORM; }
+            else { preferredImageFormats[i] = DXGI_FORMAT_BC7_UNORM; }
         }
 
 

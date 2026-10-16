@@ -429,6 +429,7 @@ static uint64_t HashSplineParams(const SplineParams& params)
     h.Add(params.crossPlankHeight);
     h.Add(params.crossPlankThickness);
     h.Add(params.crossPlankLength);
+    h.Add(params.tubeThickness);
     h.Add(params.profile.type);
     h.Add(params.profile.width);
     h.Add(params.profile.height);

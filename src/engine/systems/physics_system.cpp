@@ -18,6 +18,9 @@
 #include "engine/components/physics/physics_body_component.h"
 #include "engine/systems/scene_system.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
+#include "Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h"
+#include "Jolt/Physics/Collision/ObjectLayer.h"
+#include "Jolt/Physics/Collision/TransformedShape.h"
 #include "Jolt/Physics/Collision/Shape/StaticCompoundShape.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 #include "Jolt/Physics/Collision/Shape/CapsuleShape.h"
@@ -47,6 +50,15 @@ void DisconnectPhysicsObservers(entt::registry& registry)
 
     registry.on_construct<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnConstruct>();
     registry.on_destroy<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnDestroy>();
+}
+
+void WakeBodiesAround(JPH::BodyInterface& bodyInterface, const JPH::BodyID& bodyId)
+{
+    if (bodyId.IsInvalid()) { return; }
+    JPH::AABox bounds = bodyInterface.GetTransformedShape(bodyId).GetWorldSpaceBounds();
+    if (!bounds.IsValid()) { return; }
+    bounds.ExpandBy(JPH::Vec3::sReplicate(0.05f));
+    bodyInterface.ActivateBodiesInAABox(bounds, JPH::BroadPhaseLayerFilter{}, JPH::ObjectLayerFilter{});
 }
 
 void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -207,6 +219,10 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
         }
         else {
             state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+            // An editor drag during Simulate holds the body still; without this gravity builds velocity it releases on drop.
+            if (IsSimulating(state) && desc && desc->motionType == Component::PhysicsMotionType::Dynamic) {
+                state->registry.emplace_or_replace<Component::SetVelocityTag>(entity);
+            }
         }
     }
 }

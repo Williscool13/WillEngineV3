@@ -498,6 +498,8 @@ struct ViewFamily
 
     DirectionalLight directionalLight{};
     VolumetricFog volumetricFog{};
+    /** Camera-culled local fog volumes, nearest first. */
+    InlineVector<FogVolumeGPU, VOLUMETRIC_FOG_MAX_VOLUMES> fogVolumes{};
     uint32_t analyticLightCount{0};
     /** Only the analytic slots that changed, concatenated in lightRuns order. */
     ArenaVector<LightInfo> lightPayload{};

@@ -387,14 +387,24 @@ struct PipeParams
     float sweepDegrees{360.0f};
     /** One normal per facet instead of smooth radial normals, so low slice counts shade as flat panels. */
     bool bFlatShaded{false};
-    uint8_t _pad0[3]{};
+    /** Close the bore at that end with a plug capThickness deep (0 = the full height); both caps meeting make the pipe solid. */
+    bool bCapTop{false};
+    bool bCapBottom{false};
+    uint8_t _pad0[1]{};
+    float capThickness{0.0f};
 
     WILL_REFLECT(PipeParams, WILL_FIELD(outerRadius), WILL_FIELD(innerRadius), WILL_FIELD(height), WILL_FIELD(slices), WILL_FIELD(innerDrop), WILL_FIELD(lipWidth),
-                 WILL_FIELD(sweepDegrees), WILL_FIELD(bFlatShaded))
+                 WILL_FIELD(sweepDegrees), WILL_FIELD(bFlatShaded), WILL_FIELD(bCapTop), WILL_FIELD(bCapBottom), WILL_FIELD(capThickness))
 
     [[nodiscard]] bool IsSloped() const { return glm::abs(innerDrop) > POSITION_EPSILON; }
     [[nodiscard]] float ClampedSweepDegrees() const { return glm::clamp(sweepDegrees, 1.0f, 360.0f); }
     [[nodiscard]] bool IsPartial() const { return ClampedSweepDegrees() < 360.0f - 1e-3f; }
+    /** Plug depth per capped end, clamped so two caps never overlap; the bore is solid when they meet. */
+    [[nodiscard]] float CapDepth() const
+    {
+        const float full = glm::max(height, 0.001f);
+        return glm::clamp(capThickness > 0.0f ? capThickness : full, 0.001f, full * ((bCapTop && bCapBottom) ? 0.5f : 1.0f));
+    }
     /** Facets in the swept arc at the full-circle slice density, at least one. */
     [[nodiscard]] int32_t SweepSegments() const
     {
@@ -539,10 +549,14 @@ struct SplineParams
     float crossPlankLength{0.3f};
     SplineProfile profile{};
     SplineRailing railing{};
+    /** Tube wall grown outward from radius (the bore stays radius); 0 = a single surface. Plain tubes only, no railing. */
+    float tubeThickness{0.0f};
 
     WILL_REFLECT(SplineParams, WILL_FIELD(spline), WILL_FIELD(radius), WILL_FIELD(rollAngle), WILL_FIELD(sides), WILL_FIELD(segmentsPerSpan), WILL_FIELD(bCaps),
                  WILL_FIELD(bCrossPlanks), WILL_FIELD(crossPlankInterval), WILL_FIELD(crossPlankHeight), WILL_FIELD(crossPlankThickness), WILL_FIELD(crossPlankLength),
-                 WILL_FIELD(profile), WILL_FIELD(railing))
+                 WILL_FIELD(profile), WILL_FIELD(railing), WILL_FIELD(tubeThickness))
+
+    [[nodiscard]] float TubeWall() const { return profile.type == SplineProfileType::Tube && !railing.bEnabled ? glm::max(tubeThickness, 0.0f) : 0.0f; }
 };
 
 struct BowlParams
@@ -1057,9 +1071,19 @@ struct CofferedSlabParams
     bool bEdgeBeams{true};
     uint8_t _pad0[3]{};
     float arcDegrees{0.0f};
+    /** Annulus around the origin instead of a rectangle: cellsX becomes the sector count, cellsZ the ring count, and size and arc are ignored. Concave triangle-mesh collider, static-only. */
+    bool bPolar{false};
+    /** Ring spacing grows with radius so every coffer stays roughly square. */
+    bool bGeometricRings{true};
+    uint8_t _pad1[2]{};
+    float innerRadius{1.0f};
+    float outerRadius{3.0f};
+    /** Facets around the circle, radii at the vertices; 0 = round. */
+    int32_t polygonSides{0};
 
     WILL_REFLECT(CofferedSlabParams, WILL_FIELD(sizeX), WILL_FIELD(sizeZ), WILL_FIELD(slabThickness), WILL_FIELD(beamDepth), WILL_FIELD(beamWidth), WILL_FIELD(cellsX), WILL_FIELD(cellsZ),
-                 WILL_FIELD(twinGap), WILL_FIELD(bEdgeBeams), WILL_FIELD(arcDegrees))
+                 WILL_FIELD(twinGap), WILL_FIELD(bEdgeBeams), WILL_FIELD(arcDegrees), WILL_FIELD(bPolar), WILL_FIELD(bGeometricRings), WILL_FIELD(innerRadius), WILL_FIELD(outerRadius),
+                 WILL_FIELD(polygonSides))
 
     static void Sanitize(CofferedSlabParams& p)
     {
@@ -1072,6 +1096,9 @@ struct CofferedSlabParams
         p.cellsZ = glm::clamp(p.cellsZ, 1, 64);
         p.twinGap = glm::clamp(p.twinGap, 0.0f, p.beamWidth * 0.9f);
         p.arcDegrees = glm::clamp(p.arcDegrees, 0.0f, 180.0f);
+        p.innerRadius = glm::max(p.innerRadius, 0.0f);
+        p.outerRadius = glm::max(p.outerRadius, p.innerRadius + 0.01f);
+        p.polygonSides = p.polygonSides <= 0 ? 0 : glm::clamp(p.polygonSides, 3, 256);
     }
 };
 

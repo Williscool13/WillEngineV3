@@ -31,7 +31,8 @@ enum EditorObjectBits : uint32_t
     EDITOR_OBJECT_REFLECTION_PROBE = 1u << 3,
     EDITOR_OBJECT_DDGI_VOLUME = 1u << 4,
     EDITOR_OBJECT_POST_PROCESS_VOLUME = 1u << 5,
-    EDITOR_OBJECT_ALL = (1u << 6) - 1u,
+    EDITOR_OBJECT_FOG_VOLUME = 1u << 6,
+    EDITOR_OBJECT_ALL = (1u << 7) - 1u,
 };
 
 /** Physics bodies drawn: the union of every set bit. */

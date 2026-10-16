@@ -39,6 +39,29 @@ enum class SystemPhase : uint8_t
     PrepareFrame,
 };
 
+/** When a system runs; the graph drops nodes whose condition does not hold this frame. */
+enum class SystemWhen : uint8_t
+{
+    Always,
+    /** Edit mode in the editor: nothing is simulating. */
+    Editing,
+    /** Play or Simulate, paused or not. */
+    Running,
+    /** The world steps: Simulate, or Play with input captured. Movers, rotators, spawners. */
+    WorldRunning,
+    /** Play with input captured: the player and its rules. */
+    Gameplay,
+};
+
+/** This frame's truth for each SystemWhen, decided once by the engine. */
+struct SystemConditions
+{
+    bool bEditing{true};
+    bool bRunning{false};
+    bool bWorldRunning{false};
+    bool bGameplay{false};
+};
+
 using SystemFn = void(*)(EngineContext*, EngineState*);
 using SystemFrameFn = void(*)(EngineContext*, EngineState*, Core::FrameBuffer*);
 
@@ -78,7 +101,12 @@ public:
         bDumpPending = false;
     }
 
-    void BeginPhase(SystemPhase phase) { currentPhase = phase; }
+    /** Conditions are re-read per phase, so a run-mode change mid-frame takes effect at the next phase. */
+    void BeginPhase(SystemPhase phase, const SystemConditions& conditions_)
+    {
+        currentPhase = phase;
+        conditions = conditions_;
+    }
 
     void Add(const char* name, SystemFn fn, const AccessSet& access = {})
     {
@@ -88,6 +116,28 @@ public:
     void Add(const char* name, SystemFrameFn fn, const AccessSet& access = {})
     {
         nodes.PushBack({.name = name, .frameFn = fn, .phase = currentPhase, .access = access});
+    }
+
+    void Add(const char* name, SystemFn fn, SystemWhen when, const AccessSet& access = {})
+    {
+        if (Holds(when)) { Add(name, fn, access); }
+    }
+
+    void Add(const char* name, SystemFrameFn fn, SystemWhen when, const AccessSet& access = {})
+    {
+        if (Holds(when)) { Add(name, fn, access); }
+    }
+
+    [[nodiscard]] bool Holds(SystemWhen when) const
+    {
+        switch (when) {
+            case SystemWhen::Always: return true;
+            case SystemWhen::Editing: return conditions.bEditing;
+            case SystemWhen::Running: return conditions.bRunning;
+            case SystemWhen::WorldRunning: return conditions.bWorldRunning;
+            case SystemWhen::Gameplay: return conditions.bGameplay;
+        }
+        return false;
     }
 
     void ExecutePhase(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
@@ -235,6 +285,7 @@ private:
     bool bDumpPending{};
     bool bDumpActive{};
     Core::InlineVector<SystemNode, MAX_SYSTEM_NODES> nodes{};
+    SystemConditions conditions{};
     SystemPhase currentPhase{SystemPhase::PreUpdate};
     size_t cursor{};
 };

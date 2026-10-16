@@ -22,6 +22,7 @@
 #include "engine/components/render/spline_mesh_component.h"
 #include "engine/components/render/static_mesh_component.h"
 #include "engine/components/render/text3d_component.h"
+#include "engine/systems/render_systems.h"
 
 namespace Engine::Component
 {
@@ -111,6 +112,15 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
         }
         else {
             component.shapes.PushBack({});
+        }
+    }
+
+    // A body that moves itself is Movable by definition; the stored mobility must agree because bakes read it directly.
+    if (component.motionType != PhysicsMotionType::Static) {
+        if (auto* transform = registry.try_get<TransformComponent>(entity); transform && transform->mobility != Mobility::Movable) {
+            transform->mobility = Mobility::Movable;
+            transform->bMobilityLocked = false;
+            Engine::EvaluateInstanceRenderState(state, entity);
         }
     }
 
@@ -369,6 +379,9 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                         if (!bHollowEligible) { ImGui::SetTooltip("Only a Tube profile without railing can be hollow."); }
                         else if (bIsDynamic) { ImGui::SetTooltip("A hollow tube is a concave triangle mesh and cannot back a dynamic body."); }
                         else { ImGui::SetTooltip("Collide with the open tube surface so things can travel inside it, instead of solid capsules."); }
+                    }
+                    if (collider->bSplineHollow) {
+                        ImGui::TextDisabled("Wall: %.3f m (the spline mesh's Wall Thickness)", collider->splineParams.TubeWall());
                     }
                     ImGui::EndDisabled();
                 }

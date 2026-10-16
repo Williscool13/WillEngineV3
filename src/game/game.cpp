@@ -174,22 +174,19 @@ GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state
 {
     graph.Add("TickQuietFrames", &Game::TickQuietFrames);
 
-    if (state->inputContext == Engine::InputContext::Gameplay) {
-        graph.Add("DebugProcessPhysicsCollisions", &Game::DebugProcessPhysicsCollisions);
-        graph.Add("DebugApplyGroundForces", &Game::DebugApplyGroundForces);
+    graph.Add("UpdatePathMovers", &Game::UpdatePathMovers, Engine::SystemWhen::WorldRunning);
+    graph.Add("UpdateRotateInPlace", &Game::UpdateRotateInPlace, Engine::SystemWhen::WorldRunning);
 
-        graph.Add("UpdatePathMovers", &Game::UpdatePathMovers);
-        graph.Add("UpdateRotateInPlace", &Game::UpdateRotateInPlace);
-        graph.Add("CheckpointUpdate", &Game::CheckpointUpdate);
-        graph.Add("DeathZoneUpdate", &Game::DeathZoneUpdate);
-
-        graph.Add("PlayerControllerUpdate", [](Engine::EngineContext* ctx, Engine::EngineState* state) {
-            Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
-            if (playerController.GetCharacter()) {
-                playerController.Update(ctx, state);
-            }
-        });
-    }
+    graph.Add("DebugProcessPhysicsCollisions", &Game::DebugProcessPhysicsCollisions, Engine::SystemWhen::Gameplay);
+    graph.Add("DebugApplyGroundForces", &Game::DebugApplyGroundForces, Engine::SystemWhen::Gameplay);
+    graph.Add("CheckpointUpdate", &Game::CheckpointUpdate, Engine::SystemWhen::Gameplay);
+    graph.Add("DeathZoneUpdate", &Game::DeathZoneUpdate, Engine::SystemWhen::Gameplay);
+    graph.Add("PlayerControllerUpdate", [](Engine::EngineContext* ctx, Engine::EngineState* state) {
+        Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
+        if (playerController.GetCharacter()) {
+            playerController.Update(ctx, state);
+        }
+    }, Engine::SystemWhen::Gameplay);
 
     graph.Add("DebugUpdate", &Game::DebugUpdate);
 }

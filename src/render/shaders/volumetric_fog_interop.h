@@ -47,5 +47,25 @@ SHADER_PUBLIC SHADER_CONST float VOLUMETRIC_FOG_SKY_DISTANCE = 10000.0;
 SHADER_PUBLIC SHADER_CONST uint VOLUMETRIC_FOG_MAX_LIGHT_CANDIDATES = 8u;
 // Weight of the new jittered sample against the reprojected history.
 SHADER_PUBLIC SHADER_CONST float VOLUMETRIC_FOG_HISTORY_ALPHA = 0.05;
+SHADER_PUBLIC SHADER_CONST uint VOLUMETRIC_FOG_MAX_VOLUMES = 32u;
+// Midpoint samples per pixel through each absorbing volume; exact when no edge fade is in play.
+SHADER_PUBLIC SHADER_CONST uint VOLUMETRIC_FOG_ABSORPTION_SAMPLES = 12u;
+SHADER_PUBLIC SHADER_CONST uint FOG_VOLUME_SHAPE_BOX = 0u;
+SHADER_PUBLIC SHADER_CONST uint FOG_VOLUME_SHAPE_CYLINDER = 1u;
+
+/** Local fog volume in its unit space: box [-1,1]^3, cylinder of radius 1 around local Y over y in [-1,1]. */
+SHADER_PUBLIC struct FogVolumeGPU
+{
+    SHADER_PUBLIC float4 worldToLocal0; // rows of the world -> unit space affine map
+    SHADER_PUBLIC float4 worldToLocal1;
+    SHADER_PUBLIC float4 worldToLocal2;
+    SHADER_PUBLIC float4 albedoScattering; // rgb albedo, a scattering per metre (froxel path)
+    SHADER_PUBLIC float4 fade; // xyz edge fade width in unit space per axis (x = radial for cylinders), w unused
+    SHADER_PUBLIC float4 scales; // x density scale at local y = -1, y at y = +1, z ambient scale, w local light scale
+    SHADER_PUBLIC float absorption; // per metre (analytic per-pixel path)
+    SHADER_PUBLIC uint shape; // FOG_VOLUME_SHAPE_*
+    SHADER_PUBLIC uint _pad0;
+    SHADER_PUBLIC uint _pad1;
+};
 
 #endif //WILL_ENGINE_VOLUMETRIC_FOG_INTEROP_H

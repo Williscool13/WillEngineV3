@@ -164,14 +164,21 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
     const float resetW = bOverridden ? ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f + innerSpacing : 0.0f;
     const float mobilityW = (ImGui::GetContentRegionAvail().x - resetW) / 2.0f;
     const ImVec4 activeColor = bOverridden ? ImVec4(0.2f, 0.55f, 0.25f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+    const bool bMovesAtRuntime = !edit.IsMulti() && IsMovedAtRuntime(state, edit.Primary());
     for (int32_t i = 0; i < 2; ++i) {
         const Mobility option = static_cast<Mobility>(i);
         const bool bActive = !bMobilityMixed && component.mobility == option;
+        const bool bForbidden = option == Mobility::Static && bMovesAtRuntime;
         if (i > 0) { ImGui::SameLine(0.0f, 0.0f); }
         if (bActive) { ImGui::PushStyleColor(ImGuiCol_Button, activeColor); }
+        ImGui::BeginDisabled(bForbidden);
         if (ImGui::Button(MOBILITY_LABELS[i], ImVec2(mobilityW, 0.0f)) && !(bActive && component.bMobilityLocked)) {
             edit.Set(&TransformComponent::mobility, option);
             edit.Set(&TransformComponent::bMobilityLocked, true);
+        }
+        ImGui::EndDisabled();
+        if (bForbidden && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Moved at runtime (a kinematic or dynamic body, a mover, or a moving parent), so it is always Movable");
         }
         if (bActive) { ImGui::PopStyleColor(); }
     }

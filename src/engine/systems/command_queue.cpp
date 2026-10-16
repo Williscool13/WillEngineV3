@@ -15,6 +15,7 @@
 #include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/components/render/light_components.h"
+#include "engine/systems/physics_system.h"
 #include "engine/components/render/reflection_probe_component.h"
 #include "engine/components/render/text_component.h"
 #include "physics/physics_system.h"
@@ -52,6 +53,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
             case CommandType::BodyDestroy: {
                 const JPH::BodyID bodyId{command.payload.bodyId};
                 JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+                WakeBodiesAround(bodyInterface, bodyId);
                 bodyInterface.RemoveBody(bodyId);
                 bodyInterface.DestroyBody(bodyId);
                 break;

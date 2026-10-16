@@ -262,6 +262,50 @@ struct VolumetricFogComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
+
+/**
+ * Local participating medium sized by the entity scale (half extents, like post process volumes). Absorption darkens what is seen through it per pixel;
+ * scattering is lit haze in the froxel grid. Densities ramp linearly from bottomScale to topScale along local Y.
+ */
+struct FogVolumeComponent
+{
+    static constexpr const char* COMPONENT_NAME = "FogVolumeComponent";
+
+    enum class Shape : uint32_t
+    {
+        Box = 0,
+        Cylinder = 1,
+    };
+
+    Shape shape{Shape::Box};
+    float absorption{0.0f}; // per metre
+    float scattering{0.05f}; // per metre
+    Vec3 albedo{1.0f, 1.0f, 1.0f};
+    float edgeFade{1.0f}; // metres, sides
+    float heightFade{1.0f}; // metres, top and bottom
+    float bottomScale{1.0f};
+    float topScale{1.0f};
+    float ambientScale{1.0f};
+    float localLightScale{1.0f};
+    bool bEnabled{true};
+
+    WILL_REFLECT(FogVolumeComponent,
+        WILL_FIELD(shape),
+        WILL_FIELD(absorption, .min = 0.0f, .max = 100.0f, .speed = 0.005f),
+        WILL_FIELD(scattering, .min = 0.0f, .max = 100.0f, .speed = 0.001f),
+        WILL_FIELD(albedo),
+        WILL_FIELD(edgeFade, .min = 0.0f, .speed = 0.05f),
+        WILL_FIELD(heightFade, .min = 0.0f, .speed = 0.05f),
+        WILL_FIELD(bottomScale, .min = 0.0f, .speed = 0.01f),
+        WILL_FIELD(topScale, .min = 0.0f, .speed = 0.01f),
+        WILL_FIELD(ambientScale, .min = 0.0f, .max = 10.0f, .speed = 0.01f),
+        WILL_FIELD(localLightScale, .min = 0.0f, .max = 10.0f, .speed = 0.01f),
+        WILL_FIELD(bEnabled))
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+
+    static void DrawBounds(Core::ViewFamily& viewFamily, const FogVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected);
+};
 }
 
 #endif //WILL_ENGINE_LIGHT_COMPONENTS_H

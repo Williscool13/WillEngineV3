@@ -1791,6 +1791,12 @@ bool ProceduralModelLoadSlot::GeneratePilaster(const Engine::PilasterParams& p)
 bool ProceduralModelLoadSlot::GenerateCofferedSlab(const Engine::CofferedSlabParams& p)
 {
     ZoneScopedN("GenerateCofferedSlab");
+    if (p.bPolar) {
+        Core::Vector<Engine::FullVertex> polarVertices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+        Core::Vector<uint32_t> polarIndices(&memoryManager->AssetsScratch(), Core::AllocTag::AssetModel);
+        if (!GeneratePolarCofferedSlabGeometry(p, memoryManager->AssetsScratch(), polarVertices, polarIndices)) { return false; }
+        return FinalizeGeometry(polarVertices, polarIndices);
+    }
 
     const float sx = glm::max(p.sizeX, 0.01f);
     const float sz = glm::max(p.sizeZ, 0.01f);
@@ -3453,48 +3459,84 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
     }
     const int meshRingCount = static_cast<int>(meshRings.Size());
 
+    // A thick tube sweeps an outer shell at radius + wall and an inward-facing bore at radius.
+    const float wall = p.TubeWall();
+    const int shells = wall > 0.0f ? 2 : 1;
+    const float outerScale = wall > 0.0f ? (p.radius + wall) / glm::max(p.radius, 0.001f) : 1.0f;
+
     for (int rail = 0; rail < static_cast<int>(laneOffsets.Size()); rail++) {
         const Vec2 laneOff = laneOffsets[rail];
         const Vec2 laneScale = p.railing.bEnabled ? p.railing.LaneScale(static_cast<size_t>(rail)) : Vec2{1.0f, 1.0f};
-        const auto baseVertex = static_cast<uint32_t>(vertices.Size());
+        uint32_t shellBase[2]{};
+        for (int shell = 0; shell < shells; shell++) {
+            const bool bBore = shell == 1;
+            const float shellScale = bBore ? 1.0f : outerScale;
+            const auto baseVertex = static_cast<uint32_t>(vertices.Size());
+            shellBase[shell] = baseVertex;
 
-        for (int i = 0; i < meshRingCount; i++) {
-            const Frame& f = meshRings[i].frame;
-            const Vec3 mitre = meshRings[i].mitre;
-            const float mitreFacing = glm::dot(f.tangent, mitre);
-            const Vec3 laneOffset = laneCenter(f, laneOff) - f.pos;
-            const float vCoord = (meshRingCount > 1) ? static_cast<float>(i) / static_cast<float>(meshRingCount - 1) : 0.0f;
-            for (int j = 0; j < ringSize; j++) {
-                const SplineProfilePoint& pp = ring[j];
-                const Vec2 pos = pp.pos * laneScale;
-                // Normals take the inverse scale so a stretched profile still shades as its own shape.
-                const Vec2 normal = pp.normal / laneScale;
-                Vec3 offset = laneOffset + pos.x * f.rRight + pos.y * f.rUp;
-                if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
-                Engine::FullVertex v{};
-                v.position = f.pos + offset;
-                v.normal = glm::normalize(normal.x * f.rRight + normal.y * f.rUp);
-                v.uv = {static_cast<float>(j) / static_cast<float>(ringSize), vCoord};
-                v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
-                v.color = {1, 1, 1, 1};
-                vertices.PushBack(v);
+            for (int i = 0; i < meshRingCount; i++) {
+                const Frame& f = meshRings[i].frame;
+                const Vec3 mitre = meshRings[i].mitre;
+                const float mitreFacing = glm::dot(f.tangent, mitre);
+                const Vec3 laneOffset = laneCenter(f, laneOff) - f.pos;
+                const float vCoord = (meshRingCount > 1) ? static_cast<float>(i) / static_cast<float>(meshRingCount - 1) : 0.0f;
+                for (int j = 0; j < ringSize; j++) {
+                    const SplineProfilePoint& pp = ring[j];
+                    const Vec2 pos = pp.pos * laneScale * shellScale;
+                    // Normals take the inverse scale so a stretched profile still shades as its own shape.
+                    const Vec2 normal = pp.normal / laneScale * (bBore ? -1.0f : 1.0f);
+                    Vec3 offset = laneOffset + pos.x * f.rRight + pos.y * f.rUp;
+                    if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
+                    Engine::FullVertex v{};
+                    v.position = f.pos + offset;
+                    v.normal = glm::normalize(normal.x * f.rRight + normal.y * f.rUp);
+                    v.uv = {static_cast<float>(j) / static_cast<float>(ringSize), vCoord};
+                    v.tangent = {f.rRight.x, f.rRight.y, f.rRight.z, 1.0f};
+                    v.color = {1, 1, 1, 1};
+                    vertices.PushBack(v);
+                }
+            }
+
+            for (int i = 0; i < meshRingCount; i++) {
+                if (!meshRings[i].bJoinNext) { continue; }
+                if (i == meshRingCount - 1 && !bWrap) { continue; }
+                const int nextRing = (i + 1) % meshRingCount;
+                for (int j = 0; j < ringSize; j++) {
+                    const int jn = (j + 1) % ringSize;
+                    const uint32_t a0 = baseVertex + i * ringSize + j, a1 = baseVertex + i * ringSize + jn;
+                    const uint32_t b0 = baseVertex + nextRing * ringSize + j, b1 = baseVertex + nextRing * ringSize + jn;
+                    const uint32_t outward[6] = {a0, a1, b0, a1, b1, b0};
+                    const uint32_t inward[6] = {a0, b0, a1, a1, b0, b1};
+                    const uint32_t* quad = bBore ? inward : outward;
+                    for (int k = 0; k < 6; k++) { indices.PushBack(quad[k]); }
+                }
             }
         }
 
-        for (int i = 0; i < meshRingCount; i++) {
-            if (!meshRings[i].bJoinNext) { continue; }
-            if (i == meshRingCount - 1 && !bWrap) { continue; }
-            const int nextRing = (i + 1) % meshRingCount;
-            for (int j = 0; j < ringSize; j++) {
-                const int jn = (j + 1) % ringSize;
-                uint32_t a0 = baseVertex + i * ringSize + j, a1 = baseVertex + i * ringSize + jn;
-                uint32_t b0 = baseVertex + nextRing * ringSize + j, b1 = baseVertex + nextRing * ringSize + jn;
-                indices.PushBack(a0);
-                indices.PushBack(a1);
-                indices.PushBack(b0);
-                indices.PushBack(a1);
-                indices.PushBack(b1);
-                indices.PushBack(b0);
+        // Open ends of a thick tube: an annulus from the bore out to the outer shell, facing along the path.
+        if (shells == 2 && !p.bCaps && !bClosed) {
+            for (const int ringIdx : {0, meshRingCount - 1}) {
+                const Vec3 n = meshRings[ringIdx].frame.tangent * (ringIdx == 0 ? -1.0f : 1.0f);
+                const Vec3 t = meshRings[ringIdx].frame.rRight;
+                for (int j = 0; j < ringSize; j++) {
+                    const int jn = (j + 1) % ringSize;
+                    Vec3 q[4] = {
+                        vertices[shellBase[1] + ringIdx * ringSize + j].position, vertices[shellBase[1] + ringIdx * ringSize + jn].position,
+                        vertices[shellBase[0] + ringIdx * ringSize + jn].position, vertices[shellBase[0] + ringIdx * ringSize + j].position,
+                    };
+                    if (glm::dot(glm::cross(q[1] - q[0], q[2] - q[0]), n) < 0.0f) { std::swap(q[1], q[3]); }
+                    const auto rimBase = static_cast<uint32_t>(vertices.Size());
+                    for (const Vec3& pos : q) {
+                        Engine::FullVertex v{};
+                        v.position = pos;
+                        v.normal = n;
+                        v.uv = {glm::dot(pos, t), glm::dot(pos, glm::cross(n, t))};
+                        v.tangent = {t.x, t.y, t.z, 1.0f};
+                        v.color = {1, 1, 1, 1};
+                        vertices.PushBack(v);
+                    }
+                    for (const uint32_t k : {0u, 1u, 2u, 0u, 2u, 3u}) { indices.PushBack(rimBase + k); }
+                }
             }
         }
 
@@ -3506,7 +3548,7 @@ bool ProceduralModelLoadSlot::GenerateSpline(const Engine::SplineParams& p)
                 const Vec3 center = laneCenter(f, laneOff);
                 const auto capBase = static_cast<uint32_t>(vertices.Size());
                 for (int k = 0; k < outlineSize; k++) {
-                    const Vec2 o = capOutline[k] * laneScale;
+                    const Vec2 o = capOutline[k] * laneScale * outerScale;
                     Engine::FullVertex v{};
                     v.position = center + o.x * f.rRight + o.y * f.rUp;
                     v.normal = capNormal;

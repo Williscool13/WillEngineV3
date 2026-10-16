@@ -16,6 +16,9 @@
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
+#include "core/containers/inline_string.h"
+#include "engine/components/physics/physics_body_desc.h"
+#include "engine/components/physics/physics_shape_helpers.h"
 #include "engine/spline/spline.h"
 #include "engine/editor/editor_materials.h"
 #include "engine/editor/editor_gizmo_helpers.h"
@@ -41,6 +44,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     params.crossPlankLength = component.crossPlankLength;
     params.profile = component.profile;
     params.railing = component.railing;
+    params.tubeThickness = component.tubeThickness;
     return params;
 }
 
@@ -89,6 +93,19 @@ void Component::SplineMeshComponent::OnEditCommit(entt::registry& registry, entt
 {
     registry.remove<SplineMeshLoadingTag>(entity);
     registry.emplace_or_replace<SplineMeshLoadPendingTag>(entity);
+
+    // Spline colliders carry a copy of the mesh's spline; keep it in step so the collider follows edits.
+    auto* body = registry.try_get<PhysicsBodyDesc>(entity);
+    if (body == nullptr) { return; }
+    const auto& component = registry.get<SplineMeshComponent>(entity);
+    bool bResynced = false;
+    for (PhysicsShapeDesc& shape : body->shapes) {
+        auto* collider = std::get_if<ColliderShape>(&shape.geometry);
+        if (collider == nullptr || collider->splineParams.spline.points.IsEmpty()) { continue; }
+        FillSplineParams(collider->splineParams, component);
+        bResynced = true;
+    }
+    if (bResynced) { PhysicsBodyDesc::RequestRebuild(registry, entity); }
 }
 
 Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
@@ -146,6 +163,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::DragInt("Sides", &component.sides, 1, 3, 64);
             dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::BeginDisabled(component.railing.bEnabled);
+            ImGui::DragFloat("Wall Thickness", &component.tubeThickness, 0.005f, 0.0f, 10.0f, "%.3f m");
+            dirty |= ImGui::IsItemDeactivatedAfterEdit();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) { ImGui::SetTooltip("Grown outward from Radius, so the bore stays Radius; open ends get rims. A hollow collider uses the same wall. 0 = a single surface"); }
+            ImGui::EndDisabled();
         }
         else {
             ImGui::DragFloat("Width", &component.profile.width, 0.01f, 0.001f, 50.0f);
@@ -300,12 +322,16 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             }
         }
 
-        ImGui::SeparatorText("Control Points");
-
         int pointToRemove = -1;
         int pointToSwap = -1;
         const int cpCount = static_cast<int>(component.spline.points.Size());
-        for (int i = 0; i < cpCount; i++) {
+        const auto pointsHeader = Core::InlineString<64>::Format("Control Points (%d)###splinecps", cpCount);
+        const bool bShowPoints = ImGui::CollapsingHeader(pointsHeader.c_str());
+        if (!bShowPoints) {
+            editPointIdx = -1;
+            hasGizmoClaim = false;
+        }
+        for (int i = 0; bShowPoints && i < cpCount; i++) {
             ImGui::PushID(i);
             const bool isEditing = (editPointIdx == i);
 
@@ -368,7 +394,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         }
 
         ImGui::BeginDisabled(component.spline.points.IsFull());
-        if (ImGui::Button("Add Point")) {
+        if (bShowPoints && ImGui::Button("Add Point")) {
             const Engine::SplinePoint last = component.spline.points.Back();
             const glm::vec3 prev = component.spline.points.Size() >= 2
                                        ? component.spline.points[component.spline.points.Size() - 2].pos
@@ -448,7 +474,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
         }
 
         // Debug: draw control polygon and point spheres
-        {
+        if (bShowPoints) {
             constexpr glm::vec4 kLineColor{0.3f, 0.7f, 1.0f, 1.0f};
             constexpr glm::vec4 kPointColor{0.5f, 0.9f, 1.0f, 1.0f};
             constexpr glm::vec4 kEditColor{1.0f, 0.7f, 0.1f, 1.0f};

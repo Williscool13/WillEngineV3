@@ -2454,6 +2454,8 @@ SHADER_PUBLIC struct VolumetricFogScatterPushConstant
     SHADER_PUBLIC SHADER_PTR(DDGICascadeSetGPU) ddgiCascades;
     SHADER_PUBLIC uint32_t debugMode;
     SHADER_PUBLIC uint32_t tileDepthIndex;
+    SHADER_PUBLIC SHADER_PTR(FogVolumeGPU) volumes;
+    SHADER_PUBLIC uint32_t volumeCount;
 };
 
 SHADER_PUBLIC struct VolumetricFogTileDepthPushConstant
@@ -2504,6 +2506,8 @@ SHADER_PUBLIC struct VolumetricFogApplyPushConstant
     SHADER_PUBLIC float anisotropy;
     SHADER_PUBLIC uint32_t debugMode;
     SHADER_PUBLIC uint32_t debugOutIndex;
+    SHADER_PUBLIC SHADER_PTR(FogVolumeGPU) volumes;
+    SHADER_PUBLIC uint32_t volumeCount;
 };
 
 SHADER_PUBLIC struct ShadowInstanceCullPushConstant

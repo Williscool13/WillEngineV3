@@ -1183,6 +1183,68 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
+void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
+    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    const Vec3 cameraPos = vf.mainView.currentViewData.cameraPos;
+    const float froxelReach = vf.volumetricFog.bEnabled ? vf.volumetricFog.maxDistance : Core::VolumetricFog{}.maxDistance;
+
+    struct Candidate
+    {
+        FogVolumeGPU gpu;
+        float distance;
+    };
+    Core::InlineVector<Candidate, VOLUMETRIC_FOG_MAX_VOLUMES> picked;
+    for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::FogVolumeComponent, Component::WorldTransformComponent>().each()) {
+        if (!volume.bEnabled) { continue; }
+        const float absorption = glm::max(volume.absorption, 0.0f);
+        const float scattering = glm::max(volume.scattering, 0.0f);
+        if (absorption <= 0.0f && scattering <= 0.0f) { continue; }
+
+        const Vec3 half = glm::max(glm::abs(worldTransform.scale), Vec3(1e-3f));
+        const float boundRadius = glm::length(half);
+        const float distance = glm::max(glm::length(worldTransform.translation - cameraPos) - boundRadius, 0.0f);
+        // Absorption is per pixel at any distance; scattering lives only inside the froxel grid.
+        if (absorption <= 0.0f && distance > froxelReach) { continue; }
+
+        const bool bCylinder = volume.shape == Component::FogVolumeComponent::Shape::Cylinder;
+        FogVolumeGPU gpu{};
+        Vec4* rows[3] = {&gpu.worldToLocal0, &gpu.worldToLocal1, &gpu.worldToLocal2};
+        for (int axis = 0; axis < 3; ++axis) {
+            Vec3 basis{0.0f};
+            basis[axis] = 1.0f;
+            const Vec3 row = (worldTransform.rotation * basis) / half[axis];
+            *rows[axis] = Vec4(row, -glm::dot(row, worldTransform.translation));
+        }
+        const float sideFade = glm::max(volume.edgeFade, 0.0f);
+        const float heightFade = glm::max(volume.heightFade, 0.0f) / half.y;
+        gpu.fade = bCylinder ? Vec4(sideFade / glm::min(half.x, half.z), heightFade, 0.0f, 0.0f) : Vec4(sideFade / half.x, heightFade, sideFade / half.z, 0.0f);
+        gpu.albedoScattering = Vec4(glm::clamp(volume.albedo, Vec3(0.0f), Vec3(1.0f)), scattering);
+        gpu.scales = Vec4(glm::max(volume.bottomScale, 0.0f), glm::max(volume.topScale, 0.0f), glm::max(volume.ambientScale, 0.0f), glm::max(volume.localLightScale, 0.0f));
+        gpu.absorption = absorption;
+        gpu.shape = bCylinder ? FOG_VOLUME_SHAPE_CYLINDER : FOG_VOLUME_SHAPE_BOX;
+
+        if (picked.IsFull()) {
+            if (distance >= picked.Back().distance) { continue; }
+            picked.PopBack();
+        }
+        picked.PushBack({gpu, distance});
+        for (size_t i = picked.Size() - 1; i > 0 && picked[i - 1].distance > picked[i].distance; --i) {
+            std::swap(picked[i - 1], picked[i]);
+        }
+    }
+
+    if (picked.IsEmpty()) { return; }
+    for (const Candidate& c : picked) {
+        vf.fogVolumes.PushBack(c.gpu);
+    }
+    if (!vf.volumetricFog.bEnabled) {
+        vf.volumetricFog.density = 0.0f;
+        vf.volumetricFog.bEnabled = true;
+    }
+}
+
 void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
@@ -1256,6 +1318,11 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
     if (mask & Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME) {
         for (auto [entity, volume, transform] : registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
             push(entity, transform.translation, {0.7f, 0.4f, 1.0f, 1.0f}, SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX);
+        }
+    }
+    if (mask & Engine::EDITOR_OBJECT_FOG_VOLUME) {
+        for (auto [entity, volume, transform] : registry.view<Component::FogVolumeComponent, Component::WorldTransformComponent>().each()) {
+            push(entity, transform.translation, {0.55f, 0.75f, 0.85f, 1.0f}, SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX);
         }
     }
 }
@@ -1385,6 +1452,11 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME)) { continue; }
         Component::PostProcessVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
+    }
+
+    for (auto [entity, volume, transform] : state->registry.view<Component::FogVolumeComponent, Component::WorldTransformComponent>().each()) {
+        if (!shouldDraw(entity, Engine::EDITOR_OBJECT_FOG_VOLUME)) { continue; }
+        Component::FogVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
     for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {

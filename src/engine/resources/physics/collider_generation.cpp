@@ -200,7 +200,7 @@ bool CanBuildHollowSplineCollider(const SplineParams& params)
     return params.profile.type == SplineProfileType::Tube && !params.railing.bEnabled;
 }
 
-void BuildHollowSplineColliderMesh(const SplineParams& p, Core::Span<const SplineFrame> frames, Core::TlsfAllocator* scratch, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices)
+void BuildHollowSplineColliderMesh(const SplineParams& p, Core::Span<const SplineFrame> frames, float thickness, Core::TlsfAllocator* scratch, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices)
 {
     const int totalRings = static_cast<int>(frames.Size());
     if (totalRings < 2) { return; }
@@ -254,19 +254,31 @@ void BuildHollowSplineColliderMesh(const SplineParams& p, Core::Span<const Splin
     }
 
     const int ringCount = static_cast<int>(rings.Size());
+    const float wall = glm::max(thickness, 0.0f);
+    const int shells = wall > 0.0f ? 2 : 1;
     const auto baseVertex = static_cast<uint32_t>(outPositions.Size());
-    outPositions.Reserve(outPositions.Size() + static_cast<size_t>(ringCount) * sides);
-    for (int i = 0; i < ringCount; i++) {
-        const SplineFrame& f = rings[i].frame;
-        const Vec3 mitre = rings[i].mitre;
-        const float mitreFacing = glm::dot(f.tangent, mitre);
-        for (int j = 0; j < sides; j++) {
-            const float a = glm::two_pi<float>() * static_cast<float>(j) / static_cast<float>(sides);
-            Vec3 offset = p.radius * (cosf(a) * f.rRight + sinf(a) * f.rUp);
-            if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
-            outPositions.PushBack(f.pos + offset);
+    outPositions.Reserve(outPositions.Size() + static_cast<size_t>(ringCount) * sides * shells);
+    for (int shell = 0; shell < shells; shell++) {
+        const float radius = p.radius + (shell == 1 ? wall : 0.0f);
+        for (int i = 0; i < ringCount; i++) {
+            const SplineFrame& f = rings[i].frame;
+            const Vec3 mitre = rings[i].mitre;
+            const float mitreFacing = glm::dot(f.tangent, mitre);
+            for (int j = 0; j < sides; j++) {
+                const float a = glm::two_pi<float>() * static_cast<float>(j) / static_cast<float>(sides);
+                Vec3 offset = radius * (cosf(a) * f.rRight + sinf(a) * f.rUp);
+                if (mitreFacing > 1e-3f) { offset -= f.tangent * (glm::dot(offset, mitre) / mitreFacing); }
+                outPositions.PushBack(f.pos + offset);
+            }
         }
     }
+    auto vertex = [&](int shell, int ring, int side) { return baseVertex + static_cast<uint32_t>((shell * ringCount + ring) * sides + side); };
+    // Winds each quad to face n, so the result does not depend on the handedness of the frame basis.
+    auto addQuad = [&](uint32_t q0, uint32_t q1, uint32_t q2, uint32_t q3, const Vec3& n) {
+        const Vec3 face = glm::cross(outPositions[q1] - outPositions[q0], outPositions[q2] - outPositions[q0]);
+        if (glm::dot(face, n) < 0.0f) { std::swap(q1, q3); }
+        for (const uint32_t index : {q0, q1, q2, q0, q2, q3}) { outIndices.PushBack(index); }
+    };
 
     outIndices.Reserve(outIndices.Size() + static_cast<size_t>(ringCount) * sides * 12);
     for (int i = 0; i < ringCount; i++) {
@@ -275,12 +287,23 @@ void BuildHollowSplineColliderMesh(const SplineParams& p, Core::Span<const Splin
         const int nextRing = (i + 1) % ringCount;
         for (int j = 0; j < sides; j++) {
             const int jn = (j + 1) % sides;
-            const uint32_t a0 = baseVertex + i * sides + j;
-            const uint32_t a1 = baseVertex + i * sides + jn;
-            const uint32_t b0 = baseVertex + nextRing * sides + j;
-            const uint32_t b1 = baseVertex + nextRing * sides + jn;
-            const uint32_t quad[12] = {a0, a1, b0, a1, b1, b0, a0, b0, a1, a1, b0, b1};
-            for (const uint32_t index : quad) { outIndices.PushBack(index); }
+            const Vec3 radial = outPositions[vertex(0, i, j)] - rings[i].frame.pos;
+            if (shells == 1) {
+                addQuad(vertex(0, i, j), vertex(0, i, jn), vertex(0, nextRing, jn), vertex(0, nextRing, j), radial);
+                addQuad(vertex(0, i, j), vertex(0, i, jn), vertex(0, nextRing, jn), vertex(0, nextRing, j), -radial);
+                continue;
+            }
+            addQuad(vertex(0, i, j), vertex(0, i, jn), vertex(0, nextRing, jn), vertex(0, nextRing, j), -radial);
+            addQuad(vertex(1, i, j), vertex(1, i, jn), vertex(1, nextRing, jn), vertex(1, nextRing, j), radial);
+        }
+    }
+    if (shells == 2 && !bWrap) {
+        for (const int i : {0, ringCount - 1}) {
+            const Vec3 n = rings[i].frame.tangent * (i == 0 ? -1.0f : 1.0f);
+            for (int j = 0; j < sides; j++) {
+                const int jn = (j + 1) % sides;
+                addQuad(vertex(0, i, j), vertex(0, i, jn), vertex(1, i, jn), vertex(1, i, j), n);
+            }
         }
     }
 }
@@ -515,7 +538,7 @@ static void CompoundSpiralStaircase(const SpiralStaircaseParams& p, Core::Vector
 }
 
 // Ring of boxes approximating the annular wall; mirrors GeneratePipe (centered Y).
-static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimitive>& out)
+static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
 {
     const int N = glm::clamp(p.SweepSegments(), 1, 128);
     const float ro = std::max(0.01f, p.outerRadius);
@@ -534,6 +557,32 @@ static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimiti
         const Vec3 center(midR * std::cos(am), 0.0f, midR * std::sin(am));
         const float halfTang = std::max(0.001f, midR * std::sin((a1 - a0) * 0.5f));
         PushBoxPrim(center, Vec3((ro - ri) * 0.5f, hh, halfTang), BasisToQuat(radial, up, tangent), out);
+    }
+
+    const float capDepth = p.CapDepth();
+    for (const bool bTop : {true, false}) {
+        if (!(bTop ? p.bCapTop : p.bCapBottom)) { continue; }
+        const float y0 = bTop ? hh - capDepth : -hh;
+        const float y1 = bTop ? hh : -hh + capDepth;
+        if (!p.IsPartial()) {
+            SplineColliderPrimitive plug{};
+            plug.type = SplineColliderPrimitiveType::Cylinder;
+            plug.radius = ri;
+            plug.halfHeight = 0.5f * (y1 - y0);
+            plug.position = Vec3(0.0f, 0.5f * (y0 + y1), 0.0f);
+            out.PushBack(plug);
+            continue;
+        }
+        // A partial plug is one wedge per facet so its open ends match the render caps.
+        for (int j = 0; j < N; j++) {
+            const float a0 = sweep * static_cast<float>(j) / static_cast<float>(N);
+            const float a1 = sweep * static_cast<float>(j + 1) / static_cast<float>(N);
+            const Vec3 wedge[6] = {
+                {0.0f, y0, 0.0f}, {ri * std::cos(a0), y0, ri * std::sin(a0)}, {ri * std::cos(a1), y0, ri * std::sin(a1)},
+                {0.0f, y1, 0.0f}, {ri * std::cos(a0), y1, ri * std::sin(a0)}, {ri * std::cos(a1), y1, ri * std::sin(a1)},
+            };
+            PushHullPrim(Core::Span<const Vec3>(wedge, 6), out, outPositions);
+        }
     }
 }
 
@@ -1133,7 +1182,7 @@ bool CanBuildProceduralCollider(const ProceduralParams& params)
         || std::holds_alternative<PyramidParams>(params)
         || std::holds_alternative<SlantedBeamParams>(params)
         || std::holds_alternative<PilasterParams>(params)
-        || std::holds_alternative<CofferedSlabParams>(params)
+        || (std::holds_alternative<CofferedSlabParams>(params) && !std::get<CofferedSlabParams>(params).bPolar)
         || std::holds_alternative<TetrahedronParams>(params)
         || std::holds_alternative<OctahedronParams>(params)
         || std::holds_alternative<IcosahedronParams>(params)
@@ -1212,7 +1261,7 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
     if (const auto* p = std::get_if<PipeParams>(&params)) {
         if (p->IsSloped()) { return false; }
         outKind = PhysicsColliderKind::Compound;
-        CompoundPipe(*p, outPrimitives);
+        CompoundPipe(*p, outPrimitives, outPositions);
         return true;
     }
     if (const auto* p = std::get_if<TorusParams>(&params)) {
@@ -1255,7 +1304,7 @@ bool BuildProceduralCollider(const ProceduralParams& params, PhysicsColliderKind
         CompoundPilaster(*p, outPrimitives, outPositions);
         return true;
     }
-    if (const auto* p = std::get_if<CofferedSlabParams>(&params)) {
+    if (const auto* p = std::get_if<CofferedSlabParams>(&params); p != nullptr && !p->bPolar) {
         outKind = PhysicsColliderKind::Compound;
         CompoundCofferedSlab(*p, outPrimitives);
         return true;

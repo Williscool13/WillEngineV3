@@ -34,6 +34,8 @@ void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);
 void MarkPhysicsTransformsDirty(Engine::EngineState* state);
+/** Activates every body overlapping this body's bounds; moving or removing a body does not wake what rests on it by itself. */
+void WakeBodiesAround(JPH::BodyInterface& bodyInterface, const JPH::BodyID& bodyId);
 void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state);
 void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);

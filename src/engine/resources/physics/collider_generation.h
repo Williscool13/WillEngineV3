@@ -26,9 +26,10 @@ bool CanBuildHollowSplineCollider(const SplineParams& params);
 
 /**
  * Builds the open-ended tube surface of a Tube spline as a triangle mesh, rings laid out like the render sweep (same angles, Linear corners mitred).
- * Every quad is emitted with both windings so it collides from inside and outside. Appends to the out vectors.
+ * thickness 0: one surface with both windings so it collides from inside and outside. Above 0: a closed shell from the visible radius out to radius + thickness, with annular rims on open ends.
+ * Appends to the out vectors.
  */
-void BuildHollowSplineColliderMesh(const SplineParams& params, Core::Span<const SplineFrame> frames, Core::TlsfAllocator* scratch, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices);
+void BuildHollowSplineColliderMesh(const SplineParams& params, Core::Span<const SplineFrame> frames, float thickness, Core::TlsfAllocator* scratch, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices);
 
 /** True if the procedural type has an analytic collider builder (else the caller falls back to the render-mesh physics path). */
 bool CanBuildProceduralCollider(const ProceduralParams& params);

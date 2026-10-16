@@ -164,7 +164,7 @@ bool PhysicsColliderLoadSlot::Build()
         if (c->bSplineHollow) {
             Core::Vector<Vec3> positions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
             Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
-            Engine::BuildHollowSplineColliderMesh(sp, Core::Span<const Engine::SplineFrame>(frames.Data(), frames.Size()), &memoryManager->AssetsScratch(), positions, indices);
+            Engine::BuildHollowSplineColliderMesh(sp, Core::Span<const Engine::SplineFrame>(frames.Data(), frames.Size()), sp.TubeWall(), &memoryManager->AssetsScratch(), positions, indices);
             if (positions.IsEmpty() || indices.IsEmpty()) { return false; }
 
             c->kind = Engine::PhysicsColliderKind::TriangleMesh;

@@ -10,6 +10,7 @@
 #include <glm/gtc/constants.hpp>
 
 #include "core/containers/heap_array.h"
+#include "core/math/constants.h"
 #include "par/par_shapes.h"
 #include "tracy/Tracy.hpp"
 
@@ -550,12 +551,45 @@ bool GeneratePipeGeometry(const Engine::PipeParams& p, Core::Vector<Engine::Full
         }
     };
 
+    // Pie over the swept arc at the bore radius; faces +Y when bUp.
+    auto addDisc = [&](float radius, float y, bool bUp) {
+        const Vec3 n{0.0f, bUp ? 1.0f : -1.0f, 0.0f};
+        const Vec3 tangent{bUp ? -1.0f : 1.0f, 0.0f, 0.0f};
+        const float uSign = bUp ? -1.0f : 1.0f;
+        const auto centre = static_cast<uint32_t>(outVertices.Size());
+        outVertices.PushBack(vert({0.0f, y, 0.0f}, n, {0.0f, 0.0f}, tangent));
+        for (int j = 0; j <= N; j++) {
+            const float cx = cosf(ringAngle(j)), cz = sinf(ringAngle(j));
+            outVertices.PushBack(vert({cx * radius, y, cz * radius}, n, {uSign * cx * radius, cz * radius}, tangent));
+        }
+        for (uint32_t j = 0; j < static_cast<uint32_t>(N); j++) {
+            const uint32_t a = centre + 1 + j, b = a + 1;
+            const uint32_t t[] = {centre, bUp ? b : a, bUp ? a : b};
+            outIndices.Append(t, t + 3);
+        }
+    };
+
+    const float boreBottom = -hh - drop;
+    const float boreTop = hh - drop;
+    const float capDepth = p.CapDepth();
+    const float wallBottom = p.bCapBottom ? boreBottom + capDepth : boreBottom;
+    const float wallTop = p.bCapTop ? boreTop - capDepth : boreTop;
+    const bool bOpenBore = wallTop - wallBottom > POSITION_EPSILON;
+
     addWall(ro, -hh, hh, true);
-    addWall(ri, -hh - drop, hh - drop, false);
+    if (bOpenBore) { addWall(ri, wallBottom, wallTop, false); }
     for (const float y : {hh, -hh}) {
         const bool bTop = y > 0.0f;
         addBand(ro, y, slopeStart, y, bTop);
         addBand(slopeStart, y, ri, y - drop, bTop);
+    }
+    if (p.bCapTop) {
+        addDisc(ri, boreTop, true);
+        if (bOpenBore) { addDisc(ri, wallTop, false); }
+    }
+    if (p.bCapBottom) {
+        addDisc(ri, boreBottom, false);
+        if (bOpenBore) { addDisc(ri, wallBottom, true); }
     }
 
     if (p.IsPartial()) {
@@ -580,6 +614,14 @@ bool GeneratePipeGeometry(const Engine::PipeParams& p, Core::Vector<Engine::Full
             const Vec3 n = angle == 0.0f ? Vec3{0.0f, 0.0f, -1.0f} : Vec3{-sinf(angle), 0.0f, cosf(angle)};
             if (ro - slopeStart > POSITION_EPSILON) { addCapQuad(angle, n, lip); }
             addCapQuad(angle, n, slope);
+            if (p.bCapTop) {
+                const Vec2 plug[4] = {{0.0f, wallTop}, {ri, wallTop}, {ri, boreTop}, {0.0f, boreTop}};
+                addCapQuad(angle, n, plug);
+            }
+            if (p.bCapBottom) {
+                const Vec2 plug[4] = {{0.0f, boreBottom}, {ri, boreBottom}, {ri, wallBottom}, {0.0f, wallBottom}};
+                addCapQuad(angle, n, plug);
+            }
         }
     }
 
@@ -604,8 +646,197 @@ bool GeneratePipeGeometry(const Engine::PipeParams& p, Core::Vector<Engine::Full
     return !outVertices.IsEmpty() && !outIndices.IsEmpty();
 }
 
+bool GeneratePolarCofferedSlabGeometry(const Engine::CofferedSlabParams& p, Core::TlsfAllocator& scratch, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices)
+{
+    const float ri = glm::max(p.innerRadius, 0.0f);
+    const float ro = glm::max(p.outerRadius, ri + 0.01f);
+    const float depth = glm::max(p.beamDepth, 0.0f);
+    const float top = depth + glm::max(p.slabThickness, 0.001f);
+    const int32_t sectors = glm::clamp(p.cellsX, 1, 64);
+    const int32_t rings = glm::clamp(p.cellsZ, 1, 64);
+    const int32_t sides = p.polygonSides > 0 ? glm::clamp(p.polygonSides, 3, 256) : glm::max(64, sectors * 4);
+    const float halfW = glm::max(p.beamWidth, 0.001f) * 0.5f;
+    const float halfGap = glm::min(glm::max(p.twinGap, 0.0f), p.beamWidth * 0.9f) * 0.5f;
+    const float turn = static_cast<float>(sides);
+    const float facetChord = 2.0f * glm::sin(glm::pi<float>() / turn);
+
+    // u runs 0..sides around the circle, one unit per facet, radii on the facet vertices; f picks the facet so u = f + 1 lands exactly on its end vertex.
+    auto facetOf = [&](float u) { return glm::clamp(static_cast<int32_t>(glm::floor(u)), 0, sides - 1); };
+    auto point = [&](int32_t f, float u, float r, float y) {
+        const float a0 = static_cast<float>(f) / turn * glm::two_pi<float>();
+        const float a1 = static_cast<float>(f + 1) / turn * glm::two_pi<float>();
+        const float t = u - static_cast<float>(f);
+        return Vec3(r * glm::mix(glm::cos(a0), glm::cos(a1), t), y, r * glm::mix(glm::sin(a0), glm::sin(a1), t));
+    };
+    auto facetNormal = [&](int32_t f) {
+        const float a = (static_cast<float>(f) + 0.5f) / turn * glm::two_pi<float>();
+        return Vec3(glm::cos(a), 0.0f, glm::sin(a));
+    };
+
+    auto addBand = [](Core::Vector<glm::vec2>& out, float c, float hw, float hg, float lo, float hi) {
+        const glm::vec2 band{glm::max(c - hw, lo), glm::min(c + hw, hi)};
+        if (hg > 0.0f) {
+            if (glm::min(c - hg, band.y) > band.x) { out.PushBack({band.x, glm::min(c - hg, band.y)}); }
+            if (band.y > glm::max(c + hg, band.x)) { out.PushBack({glm::max(c + hg, band.x), band.y}); }
+        }
+        else if (band.y > band.x) {
+            out.PushBack(band);
+        }
+    };
+    auto inBands = [](const glm::vec2* bands, size_t count, float v) {
+        for (size_t i = 0; i < count; ++i) {
+            if (v > bands[i].x && v < bands[i].y) { return true; }
+        }
+        return false;
+    };
+    auto sortUnique = [](float* v, size_t count) {
+        std::sort(v, v + count);
+        size_t unique = count > 0 ? 1 : 0;
+        for (size_t i = 1; i < count; ++i) {
+            if (v[i] - v[unique - 1] > GEOMETRY_EPSILON) { v[unique++] = v[i]; }
+        }
+        return unique;
+    };
+
+    Core::Vector<glm::vec2> ringBands(&scratch, Core::AllocTag::AssetModel);
+    if (depth > 0.0f) {
+        const bool bGeometric = p.bGeometricRings && ri > 0.01f;
+        for (int32_t i = 0; i <= rings; ++i) {
+            if (!p.bEdgeBeams && (i == 0 || i == rings)) { continue; }
+            const float s = static_cast<float>(i) / static_cast<float>(rings);
+            addBand(ringBands, bGeometric ? ri * glm::pow(ro / ri, s) : glm::mix(ri, ro, s), halfW, halfGap, ri, ro);
+        }
+    }
+    Core::Vector<float> rs(&scratch, Core::AllocTag::AssetModel);
+    rs.PushBack(ri);
+    rs.PushBack(ro);
+    for (const glm::vec2& band : ringBands) {
+        rs.PushBack(band.x);
+        rs.PushBack(band.y);
+    }
+    const size_t radialBreaks = sortUnique(rs.Data(), rs.Size());
+    while (rs.Size() > radialBreaks) { rs.PopBack(); }
+    const size_t rows = rs.Size() - 1;
+
+    // Per row: radial beam bands in u (width held in metres at the row's mid radius, so beams taper slightly within a row) and the u breaks they make.
+    struct RowRange
+    {
+        size_t bandStart;
+        size_t bandCount;
+        size_t breakStart;
+        size_t breakCount;
+    };
+    Core::Vector<RowRange> rowRanges(&scratch, Core::AllocTag::AssetModel);
+    Core::Vector<glm::vec2> sectorBands(&scratch, Core::AllocTag::AssetModel);
+    Core::Vector<float> breaks(&scratch, Core::AllocTag::AssetModel);
+    for (size_t j = 0; j < rows; ++j) {
+        RowRange range{sectorBands.Size(), 0, breaks.Size(), 0};
+        const float unitsPerMetre = 1.0f / (0.5f * (rs[j] + rs[j + 1]) * facetChord);
+        if (depth > 0.0f) {
+            for (int32_t k = 0; k < sectors; ++k) {
+                const float c = turn * static_cast<float>(k) / static_cast<float>(sectors);
+                for (const float shift : {0.0f, turn, -turn}) {
+                    addBand(sectorBands, c + shift, halfW * unitsPerMetre, halfGap * unitsPerMetre, 0.0f, turn);
+                }
+            }
+        }
+        range.bandCount = sectorBands.Size() - range.bandStart;
+        for (int32_t f = 0; f <= sides; ++f) { breaks.PushBack(static_cast<float>(f)); }
+        for (size_t i = range.bandStart; i < sectorBands.Size(); ++i) {
+            breaks.PushBack(sectorBands[i].x);
+            breaks.PushBack(sectorBands[i].y);
+        }
+        range.breakCount = sortUnique(breaks.Data() + range.breakStart, breaks.Size() - range.breakStart);
+        while (breaks.Size() > range.breakStart + range.breakCount) { breaks.PopBack(); }
+        rowRanges.PushBack(range);
+    }
+    auto bottomAt = [&](size_t row, float u) {
+        const RowRange& range = rowRanges[row];
+        const bool bRingBeam = inBands(ringBands.Data(), ringBands.Size(), 0.5f * (rs[row] + rs[row + 1]));
+        return bRingBeam || inBands(sectorBands.Data() + range.bandStart, range.bandCount, u) ? 0.0f : depth;
+    };
+
+    auto addQuad = [&](const Vec3& n, Vec3 q0, Vec3 q1, Vec3 q2, Vec3 q3) {
+        if (glm::dot(glm::cross(q1 - q0, q2 - q0), n) < 0.0f) { std::swap(q1, q3); }
+        const Vec3 t = glm::abs(n.y) > 0.5f ? Vec3(n.y > 0.0f ? -1.0f : 1.0f, 0.0f, 0.0f) : glm::normalize(Vec3(n.z, 0.0f, -n.x));
+        const Vec3 b = glm::cross(n, t);
+        const auto base = static_cast<uint32_t>(outVertices.Size());
+        for (const Vec3& q : {q0, q1, q2, q3}) {
+            Engine::FullVertex v{};
+            v.position = q;
+            v.normal = n;
+            v.uv = {glm::dot(q, t), glm::dot(q, b)};
+            v.tangent = {t.x, t.y, t.z, 1.0f};
+            v.color = {1, 1, 1, 1};
+            outVertices.PushBack(v);
+        }
+        for (const uint32_t k : {0u, 1u, 2u, 0u, 2u, 3u}) { outIndices.PushBack(base + k); }
+    };
+
+    for (int32_t f = 0; f < sides; ++f) {
+        const float u0 = static_cast<float>(f);
+        addQuad({0, 1, 0}, point(f, u0, ri, top), point(f, u0 + 1.0f, ri, top), point(f, u0 + 1.0f, ro, top), point(f, u0, ro, top));
+    }
+    for (size_t j = 0; j < rows; ++j) {
+        const float* b = breaks.Data() + rowRanges[j].breakStart;
+        const size_t segs = rowRanges[j].breakCount - 1;
+        const float r0 = rs[j];
+        const float r1 = rs[j + 1];
+        for (size_t i = 0; i < segs; ++i) {
+            const float uMid = 0.5f * (b[i] + b[i + 1]);
+            const int32_t f = facetOf(uMid);
+            const float y = bottomAt(j, uMid);
+            addQuad({0, -1, 0}, point(f, b[i], r0, y), point(f, b[i + 1], r0, y), point(f, b[i + 1], r1, y), point(f, b[i], r1, y));
+        }
+        // Radial beam sides face the coffer, whose underside is higher; the wrap closes u = 0 against the last segment.
+        for (size_t i = 0; i < segs; ++i) {
+            const size_t prev = (i + segs - 1) % segs;
+            const float ya = bottomAt(j, 0.5f * (b[prev] + b[prev + 1]));
+            const float yb = bottomAt(j, 0.5f * (b[i] + b[i + 1]));
+            if (ya == yb) { continue; }
+            const float u = b[i];
+            const int32_t f = facetOf(0.5f * (b[i] + b[i + 1]));
+            const Vec3 radial = point(f, u, r1, 0.0f) - point(f, u, r0, 0.0f);
+            const Vec3 along = point(f, b[i + 1], r1, 0.0f) - point(f, u, r1, 0.0f);
+            Vec3 n = glm::normalize(glm::cross(Vec3(0.0f, 1.0f, 0.0f), radial));
+            if ((glm::dot(n, along) > 0.0f) != (yb > ya)) { n = -n; }
+            const float lo = glm::min(ya, yb);
+            const float hi = glm::max(ya, yb);
+            addQuad(n, point(f, u, r0, lo), point(f, u, r1, lo), point(f, u, r1, hi), point(f, u, r0, hi));
+        }
+    }
+    // Ring-beam sides plus the inner and outer edges, split on both neighbouring rows' breaks; the hole and the outside count as solid up to the top.
+    Core::Vector<float> merged(&scratch, Core::AllocTag::AssetModel);
+    for (size_t j = 0; j <= rows; ++j) {
+        merged.Clear();
+        if (j > 0) {
+            const float* b = breaks.Data() + rowRanges[j - 1].breakStart;
+            merged.Append(b, b + rowRanges[j - 1].breakCount);
+        }
+        if (j < rows) {
+            const float* b = breaks.Data() + rowRanges[j].breakStart;
+            merged.Append(b, b + rowRanges[j].breakCount);
+        }
+        const size_t count = sortUnique(merged.Data(), merged.Size());
+        const float r = rs[j];
+        for (size_t i = 0; i + 1 < count; ++i) {
+            const float uMid = 0.5f * (merged[i] + merged[i + 1]);
+            const float yIn = j > 0 ? bottomAt(j - 1, uMid) : top;
+            const float yOut = j < rows ? bottomAt(j, uMid) : top;
+            if (yIn == yOut) { continue; }
+            const int32_t f = facetOf(uMid);
+            const Vec3 n = facetNormal(f) * (yOut > yIn ? 1.0f : -1.0f);
+            const float lo = glm::min(yIn, yOut);
+            const float hi = glm::max(yIn, yOut);
+            addQuad(n, point(f, merged[i], r, lo), point(f, merged[i + 1], r, lo), point(f, merged[i + 1], r, hi), point(f, merged[i], r, hi));
+        }
+    }
+    return !outIndices.IsEmpty();
+}
+
 bool GenerateNonAnalyticProceduralGeometry(const Engine::ProceduralParams& params, Core::TlsfAllocator& scratch, Core::Vector<Engine::FullVertex>& outVertices, Core::Vector<uint32_t>& outIndices)
 {
+    if (const auto* p = std::get_if<Engine::CofferedSlabParams>(&params); p != nullptr && p->bPolar) { return GeneratePolarCofferedSlabGeometry(*p, scratch, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::HemisphereParams>(&params); p != nullptr && p->IsHollow()) { return GenerateHemisphereGeometry(*p, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::PipeParams>(&params); p != nullptr && p->IsSloped()) { return GeneratePipeGeometry(*p, outVertices, outIndices); }
     if (const auto* p = std::get_if<Engine::KleinBottleParams>(&params)) { return GenerateKleinBottleGeometry(*p, scratch, outVertices, outIndices); }

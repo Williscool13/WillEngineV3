@@ -4,17 +4,26 @@ import procedural_texture_declarations;
 
 // Measurements are in 512 px tile units, tones are sRGB, linearised on write.
 static const float REF_SIZE = 512.0;
-static const float FILL_SRGB = 0.64;
-static const float GROUT_SRGB = 0.32;
-static const float MARK_SRGB = 0.90;
-static const float VIGNETTE_SRGB = 0.04;
+static const float FILL_SRGB = 0.80;
+static const float GROUT_SRGB = 0.44;
+static const float MARK_SRGB = 0.98;
+static const float MINOR_SRGB = 0.93;
+static const float HAIRLINE_SRGB = 0.72;
+static const float VIGNETTE_SRGB = 0.025;
 static const float NOISE_SRGB = 0.015;
 static const float GROUT_PX = 4.0;
-static const float BRACKET_INSET_PX = 18.0;
-static const float BRACKET_ARM_PX = 44.0;
 static const float BRACKET_THICK_PX = 3.0;
-static const float TICK_LEN_PX = 14.0;
-static const float TICK_THICK_PX = 3.0;
+static const float TICK_LEN_PX = 18.0;
+static const float TICK_THICK_PX = 4.5;
+static const float MINOR_STEP_PX = REF_SIZE / 10.0;
+static const float MINOR_LEN_PX = 9.0;
+static const float MINOR_THICK_PX = 2.5;
+// Bracket arms run from the ruler strip to the first 10 cm tick, so tick + grout + arms outline a 10 cm box.
+static const float BRACKET_INSET_PX = GROUT_PX * 0.5 + MINOR_LEN_PX;
+static const float BRACKET_ARM_PX = MINOR_STEP_PX + MINOR_THICK_PX * 0.5 - BRACKET_INSET_PX;
+static const float CROSS_ARM_PX = 18.0;
+static const float CROSS_THICK_PX = 4.5;
+static const float HAIRLINE_THICK_PX = 1.5;
 
 float hash(float2 p)
 {
@@ -72,17 +81,29 @@ void ComputeGreybox(uniform ProceduralTextureBasePushConstant pc, uint3 tid : SV
     float vignette = dot(fromCentre, fromCentre) * 0.5;
     float tone = FILL_SRGB + (noise - 0.5) * 2.0 * NOISE_SRGB - vignette * VIGNETTE_SRGB;
 
-    float2 armOrigin = float2(BRACKET_INSET_PX, BRACKET_INSET_PX);
     float2 armH = float2(BRACKET_ARM_PX, BRACKET_THICK_PX) * 0.5;
     float2 armV = float2(BRACKET_THICK_PX, BRACKET_ARM_PX) * 0.5;
-    float bracket = max(BoxCoverage(abs(q - (armOrigin + armH)), armH, aa), BoxCoverage(abs(q - (armOrigin + armV)), armV, aa));
+    float bracket = max(BoxCoverage(abs(q - float2(BRACKET_INSET_PX + armH.x, BRACKET_INSET_PX)), armH, aa), BoxCoverage(abs(q - float2(BRACKET_INSET_PX, BRACKET_INSET_PX + armV.y)), armV, aa));
 
     float2 tickH = float2(TICK_THICK_PX, TICK_LEN_PX) * 0.5;
     float tickTop = BoxCoverage(abs(float2(q.x, q.y) - float2(REF_SIZE * 0.5, GROUT_PX * 0.5 + tickH.y)), tickH, aa);
     float tickSide = BoxCoverage(abs(float2(q.y, q.x) - float2(REF_SIZE * 0.5, GROUT_PX * 0.5 + tickH.y)), tickH, aa);
     float tick = max(tickTop, tickSide);
 
-    tone = lerp(tone, MARK_SRGB, max(bracket, tick));
+    float2 crossH = float2(CROSS_ARM_PX, CROSS_THICK_PX) * 0.5;
+    float2 fromMid = abs(p - REF_SIZE * 0.5);
+    float cross = max(BoxCoverage(fromMid, crossH, aa), BoxCoverage(fromMid, crossH.yx, aa));
+    float hairline = max(Coverage(fromMid.x, HAIRLINE_THICK_PX * 0.5, aa), Coverage(fromMid.y, HAIRLINE_THICK_PX * 0.5, aa));
+
+    float2 toMinor = abs(p - round(p / MINOR_STEP_PX) * MINOR_STEP_PX);
+    float2 minorH = float2(MINOR_THICK_PX, MINOR_LEN_PX) * 0.5;
+    float minorTop = BoxCoverage(abs(float2(toMinor.x, q.y - (GROUT_PX * 0.5 + minorH.y))), minorH, aa);
+    float minorSide = BoxCoverage(abs(float2(toMinor.y, q.x - (GROUT_PX * 0.5 + minorH.y))), minorH, aa);
+    float minor = max(minorTop, minorSide);
+
+    tone = lerp(tone, HAIRLINE_SRGB, hairline);
+    tone = lerp(tone, MINOR_SRGB, minor);
+    tone = lerp(tone, MARK_SRGB, max(max(bracket, tick), cross));
     tone = lerp(tone, GROUT_SRGB, Coverage(min(q.x, q.y), GROUT_PX * 0.5, aa));
 
     float albedo = SrgbToLinear(saturate(tone));

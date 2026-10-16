@@ -187,6 +187,16 @@ static void ImGuiFree(void* ptr, void* userData)
     static_cast<Core::MemoryManager*>(userData)->GeneralFree(ptr);
 }
 
+static SystemConditions CurrentSystemConditions(const EngineState* state)
+{
+    return {
+        .bEditing = state->runMode == RunMode::Edit,
+        .bRunning = state->runMode != RunMode::Edit,
+        .bWorldRunning = IsPhysicsStepping(state),
+        .bGameplay = state->inputContext == InputContext::Gameplay,
+    };
+}
+
 static void SystemGraphDumpSink(EngineState* state, const char* line)
 {
     Console::Print(state, line);
@@ -1677,19 +1687,19 @@ void WillEngine::Run()
             systemGraph.BeginFrame();
             {
                 ZoneScopedN("PreUpdate");
-                systemGraph.BeginPhase(SystemPhase::PreUpdate);
+                systemGraph.BeginPhase(SystemPhase::PreUpdate, CurrentSystemConditions(engineState));
                 CollectPreUpdate(engineContext, engineState, systemGraph);
                 systemGraph.ExecutePhase(engineContext, engineState, nullptr);
             }
             {
                 ZoneScopedN("GameUpdate");
-                systemGraph.BeginPhase(SystemPhase::GameUpdate);
+                systemGraph.BeginPhase(SystemPhase::GameUpdate, CurrentSystemConditions(engineState));
                 gameFunctions.gameCollect(engineContext, engineState, systemGraph);
                 systemGraph.ExecutePhase(engineContext, engineState, nullptr);
             }
             {
                 ZoneScopedN("PostUpdate");
-                systemGraph.BeginPhase(SystemPhase::PostUpdate);
+                systemGraph.BeginPhase(SystemPhase::PostUpdate, CurrentSystemConditions(engineState));
                 CollectPostUpdate(engineContext, engineState, systemGraph);
                 systemGraph.ExecutePhase(engineContext, engineState, nullptr);
             }
@@ -1845,7 +1855,7 @@ void WillEngine::Run()
                     ZoneScopedN("PrepareFrame");
                     engineState->timeFrame = &engineState->renderTimeFrame;
                     Core::FrameBuffer* frameBuffer = engineRenderSynchronization->GetCurrentFrameBuffer();
-                    systemGraph.BeginPhase(SystemPhase::PrepareFrame);
+                    systemGraph.BeginPhase(SystemPhase::PrepareFrame, CurrentSystemConditions(engineState));
                     CollectPrepareFrame(engineContext, engineState, systemGraph);
                     systemGraph.ExecutePhase(engineContext, engineState, frameBuffer);
                     gameFunctions.gamePrepareFrame(engineContext, engineState, frameBuffer);

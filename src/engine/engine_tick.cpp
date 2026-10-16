@@ -71,9 +71,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("PropagateDirtyTransforms", &PropagateDirtyTransforms);
 
 #if WILL_EDITOR
-    graph.Add("UpdatePhysicsEditor", [](EngineContext* ctx, EngineState* state) {
-        if (state->runMode == RunMode::Edit && state->inputContext == InputContext::Editor) { UpdatePhysicsEditor(ctx, state); }
-    });
+    graph.Add("UpdatePhysicsEditor", &UpdatePhysicsEditor, SystemWhen::Editing);
     graph.Add("UpdateEditorCamera", [](EngineContext* ctx, EngineState* state) {
         if (state->inputContext != InputContext::Gameplay) { UpdateEditorCamera(ctx, state); }
     });
@@ -116,9 +114,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("PhysicsBodyCreationResolve", &PhysicsBodyCreationResolve);
 
     graph.Add("MarkRenderTransformsDirty", &MarkRenderTransformsDirty);
-    graph.Add("MarkPhysicsTransformsDirty", [](EngineContext* ctx, EngineState* state) {
-        if (state->inputContext != InputContext::Editor) { MarkPhysicsTransformsDirty(state); }
-    });
+    graph.Add("MarkPhysicsTransformsDirty", [](EngineContext* ctx, EngineState* state) { MarkPhysicsTransformsDirty(state); }, SystemWhen::Running);
 
     graph.Add("PostUpdateCleanup", &PostUpdateCleanup);
 }
@@ -244,6 +240,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         .writes = {"viewFamily.ddgiVolumes"_sid},
     });
     graph.Add("ApplyPostProcessVolumes", &ApplyPostProcessVolumes);
+    graph.Add("GatherFogVolumes", &GatherFogVolumes);
     graph.Add("ClearVerifyStores", [](EngineContext* ctx, EngineState* state) {
         state->debug.bVerifyStoresOnce = false;
     });

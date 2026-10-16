@@ -650,6 +650,14 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Arc from +X toward +Z; below 360 the ends are capped. Slices are per full circle"); }
                     if (ImGui::Checkbox("Flat Shaded", &p.bFlatShaded)) { dirty = true; }
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("One normal per facet instead of a smooth round surface"); }
+                    if (ImGui::Checkbox("Cap Top", &p.bCapTop)) { dirty = true; }
+                    ImGui::SameLine();
+                    if (ImGui::Checkbox("Cap Bottom", &p.bCapBottom)) { dirty = true; }
+                    if (p.bCapTop || p.bCapBottom) {
+                        ImGui::DragFloat("Cap Thickness", &p.capThickness, 0.005f, 0.0f, 100.0f, p.capThickness > 0.0f ? "%.3f" : "full");
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Depth of the plug closing the bore; 0 fills the whole height. Two caps meeting make the pipe solid"); }
+                    }
                     ImGui::DragFloat("Inner Drop", &p.innerDrop, 0.01f, -100.0f, 100.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Inner edge sits this far below the outer edge; top and bottom slope straight between them. Sloped colliders are static-only"); }
@@ -998,14 +1006,33 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     }
                 }
                 else if constexpr (std::is_same_v<T, Engine::CofferedSlabParams>) {
-                    ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 200.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 200.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Cells X", &p.cellsX, 0.05f, 1, 64);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    ImGui::DragInt("Cells Z", &p.cellsZ, 0.05f, 1, 64);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    if (ImGui::Checkbox("Polar", &p.bPolar)) { dirty = true; }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Annulus around the origin: radial beams and ring beams around a hole. Triangle-mesh collider, static only"); }
+                    if (p.bPolar) {
+                        ImGui::DragFloat("Inner Radius", &p.innerRadius, 0.01f, 0.0f, 500.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragFloat("Outer Radius", &p.outerRadius, 0.01f, 0.01f, 500.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragInt("Sides", &p.polygonSides, 0.1f, 0, 256);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Facets around the circle, radii on the vertices (16 matches a 16-slice pipe); 0 = round"); }
+                        ImGui::DragInt("Sectors", &p.cellsX, 0.05f, 1, 64);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragInt("Rings", &p.cellsZ, 0.05f, 1, 64);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        if (ImGui::Checkbox("Geometric Rings", &p.bGeometricRings)) { dirty = true; }
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Ring spacing grows with radius so coffers stay roughly square; off = even spacing"); }
+                    }
+                    else {
+                        ImGui::DragFloat("Size X", &p.sizeX, 0.01f, 0.01f, 200.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragFloat("Size Z", &p.sizeZ, 0.01f, 0.01f, 200.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragInt("Cells X", &p.cellsX, 0.05f, 1, 64);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        ImGui::DragInt("Cells Z", &p.cellsZ, 0.05f, 1, 64);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                    }
                     ImGui::DragFloat("Slab Thickness", &p.slabThickness, 0.005f, 0.001f, 10.0f);
                     dirty |= ImGui::IsItemDeactivatedAfterEdit();
                     ImGui::DragFloat("Beam Depth", &p.beamDepth, 0.005f, 0.0f, 10.0f);
@@ -1018,9 +1045,11 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Splits every beam into two with a slot this wide; 0 = single beams"); }
                     if (ImGui::Checkbox("Edge Beams", &p.bEdgeBeams)) { dirty = true; }
                     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Beams along the slab's outer edges; off leaves the outer coffers open"); }
-                    ImGui::DragFloat("Arc (deg)", &p.arcDegrees, 0.5f, 0.0f, 180.0f);
-                    dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bends the slab across X into a barrel vault, beams inside; 0 = flat, 180 = half cylinder. Springing edges stay on y = 0"); }
+                    if (!p.bPolar) {
+                        ImGui::DragFloat("Arc (deg)", &p.arcDegrees, 0.5f, 0.0f, 180.0f);
+                        dirty |= ImGui::IsItemDeactivatedAfterEdit();
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Bends the slab across X into a barrel vault, beams inside; 0 = flat, 180 = half cylinder. Springing edges stay on y = 0"); }
+                    }
                 }
             }, component.params);
 

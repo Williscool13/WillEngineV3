@@ -12,7 +12,9 @@
 #include "engine/components/core_components.h"
 #include "engine/components/render_components.h"
 #include "engine/include/engine_context.h"
+#include "engine/input/engine_actions.h"
 #include "engine/asset_manager.h"
+#include "render/interface/render_interface.h"
 #include "render/types/render_types.h"
 
 namespace Engine
@@ -501,6 +503,152 @@ Engine::ComponentEditorResult Component::VolumetricFogComponent::DrawEditor(Core
     }
 
     return {.bRequestRemoval = remove};
+}
+
+// World-space face handles. Plain drag moves one face with the opposite face fixed; Shift scales X and Z together about the centre, Ctrl scales all axes together.
+static void DrawFogVolumeFaceHandles(Core::ViewFamily& viewFamily, EditContext& edit, entt::entity entity)
+{
+    auto* ctx = edit.Registry().ctx().get<Engine::EngineContext*>();
+    Engine::EngineState* state = edit.State();
+    const entt::registry& registry = edit.Registry();
+    const auto& vd = viewFamily.mainView.currentViewData;
+    const Vec4 viewport{
+        static_cast<float>(ctx->windowContext.viewportOffsetX),
+        static_cast<float>(ctx->windowContext.viewportOffsetY),
+        static_cast<float>(ctx->windowContext.viewportWidth),
+        static_cast<float>(ctx->windowContext.viewportHeight),
+    };
+
+    const Transform world = Component::ComputeWorldTransform(registry, entity);
+    const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
+    const Transform parentWorld = node && registry.valid(node->parent) ? Component::ComputeWorldTransform(registry, node->parent) : Transform{};
+
+    const Vec3 center = world.translation;
+    const Quat rot = world.rotation;
+    const Vec3 half = glm::abs(world.scale);
+    const Vec3 axes[3] = {rot * Vec3(1.0f, 0.0f, 0.0f), rot * Vec3(0.0f, 1.0f, 0.0f), rot * Vec3(0.0f, 0.0f, 1.0f)};
+    const ImU32 colors[3] = {Editor::COLOR_AXIS_X, Editor::COLOR_AXIS_Y, Editor::COLOR_AXIS_Z};
+    for (int i = 0; i < 3; ++i) {
+        for (int s = 0; s < 2; ++s) {
+            const Vec3 outward = s == 0 ? axes[i] : -axes[i];
+            Editor::AxisDotHandle(Editor::DotHandleId::FOG_VOLUME_BOUNDS_BASE + i * 2 + s, center + outward * half[i], outward,
+                                  vd.view, vd.proj, viewport, vd.cameraPos, state,
+                                  [&](Vec3 newPt) {
+                                      const ImGuiIO& io = ImGui::GetIO();
+                                      Transform target = world;
+                                      target.scale = half;
+                                      if (io.KeyCtrl) {
+                                          target.scale = half * (glm::max(0.05f, glm::dot(newPt - center, outward)) / half[i]);
+                                      }
+                                      else if (io.KeyShift && i != 1) {
+                                          const float newHalf = glm::max(0.05f, glm::dot(newPt - center, outward));
+                                          target.scale.x = newHalf;
+                                          target.scale.z = newHalf;
+                                      }
+                                      else {
+                                          const Vec3 opposite = center - outward * half[i];
+                                          const float newHalf = glm::max(0.05f, glm::dot(newPt - opposite, outward) * 0.5f);
+                                          target.scale[i] = newHalf;
+                                          target.translation = opposite + outward * newHalf;
+                                      }
+                                      const Transform local = Component::ComposeLocalFromWorld(parentWorld, target);
+                                      edit.Preview<Component::TransformComponent>([&](Component::TransformComponent& t) {
+                                          t.translation = local.translation;
+                                          t.scale = local.scale;
+                                      });
+                                  },
+                                  colors[i]);
+        }
+    }
+}
+
+Engine::ComponentEditorResult Component::FogVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
+{
+    entt::registry& registry = edit.Registry();
+    const entt::entity entity = edit.Primary();
+    static entt::entity editEntity = entt::null;
+    static bool bEditing = false;
+
+    if (editEntity != entity || edit.IsMulti()) {
+        editEntity = entity;
+        bEditing = false;
+    }
+
+    Engine::EngineState* state = edit.State();
+    if (bEditing) {
+        state->editor.bExclusiveGizmoActive = true;
+        const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+        if (!popupOpen && state->input.GetActionState(Actions::ACTION_ESCAPE).down) {
+            bEditing = false;
+        }
+    }
+
+    bool open = ImGui::CollapsingHeader("Fog Volume", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    bool remove = ImGui::SmallButton("X##deletefogvolume");
+    ImGui::PopStyleColor();
+
+    if (open) {
+        static constexpr const char* SHAPE_LABELS[] = {"Box", "Cylinder"};
+        EditWidgets::Checkbox(edit, "Enabled##fv", &FogVolumeComponent::bEnabled);
+        EditWidgets::Combo(edit, "Shape##fv", &FogVolumeComponent::shape, SHAPE_LABELS, 2);
+        ImGui::PushStyleColor(ImGuiCol_Button, bEditing ? Editor::BUTTON_EDITING : Editor::BUTTON_IDLE);
+        ImGui::BeginDisabled(edit.IsMulti() || ((state->editor.bExclusiveGizmoActive || state->editor.bExclusiveGizmoActivePrev) && !bEditing));
+        if (ImGui::Button(bEditing ? "Done##fv" : "Edit Bounds##fv")) {
+            bEditing = !bEditing;
+        }
+        ImGui::EndDisabled();
+        ImGui::PopStyleColor();
+        EditWidgets::DragFloat(edit, "Absorption##fv", &FogVolumeComponent::absorption, 0.005f, 0.0f, 100.0f, "%.4f");
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Darkens what is seen through the volume, per metre. Exact per pixel, no froxel leaking."); }
+        EditWidgets::DragFloat(edit, "Scattering##fv", &FogVolumeComponent::scattering, 0.001f, 0.0f, 100.0f, "%.4f");
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Lit haze per metre, through the froxel grid. Needs Max Distance of the global fog (128 m without one)."); }
+        EditWidgets::ColorEdit3(edit, "Albedo##fv", &FogVolumeComponent::albedo);
+        EditWidgets::DragFloat(edit, "Edge Fade##fv", &FogVolumeComponent::edgeFade, 0.05f, 0.0f, 1000.0f, "%.2f m");
+        EditWidgets::DragFloat(edit, "Height Fade##fv", &FogVolumeComponent::heightFade, 0.05f, 0.0f, 1000.0f, "%.2f m");
+        EditWidgets::DragFloat(edit, "Bottom Scale##fv", &FogVolumeComponent::bottomScale, 0.01f, 0.0f, 100.0f);
+        EditWidgets::DragFloat(edit, "Top Scale##fv", &FogVolumeComponent::topScale, 0.01f, 0.0f, 100.0f);
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Density multipliers at the bottom and top faces; the volume ramps linearly between them."); }
+        EditWidgets::DragFloat(edit, "Ambient Scale##fv", &FogVolumeComponent::ambientScale, 0.01f, 0.0f, 10.0f);
+        EditWidgets::DragFloat(edit, "Local Light Scale##fv", &FogVolumeComponent::localLightScale, 0.01f, 0.0f, 10.0f);
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 on both ambient and local lights leaves only sun shafts, so a partial volume shows no seam."); }
+    }
+
+    if (bEditing && registry.all_of<TransformComponent>(entity)) {
+        DrawFogVolumeFaceHandles(viewFamily, edit, entity);
+        const Transform world = ComputeWorldTransform(registry, entity);
+        DrawBounds(viewFamily, edit.Get<FogVolumeComponent>(), world.translation, world.rotation, world.scale, state->projectConfig.reflectionProbeLineWidth, true);
+    }
+
+    return {.bRequestRemoval = remove};
+}
+
+void Component::FogVolumeComponent::DrawBounds(Core::ViewFamily& viewFamily, const FogVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected)
+{
+    constexpr Vec4 color{0.55f, 0.75f, 0.85f, 1.0f};
+    constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
+    const Vec4 drawColor = volume.bEnabled ? color : disabledColor;
+    const Vec3 half = glm::abs(scale);
+    if (volume.shape == Shape::Box) {
+        DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, half, rotation, drawColor, lineWidth});
+        return;
+    }
+    constexpr int SEGMENTS = 32;
+    const Vec3 right = rotation * Vec3(half.x, 0.0f, 0.0f);
+    const Vec3 up = rotation * Vec3(0.0f, half.y, 0.0f);
+    const Vec3 forward = rotation * Vec3(0.0f, 0.0f, half.z);
+    for (int i = 0; i < SEGMENTS; ++i) {
+        const float a0 = static_cast<float>(i) / SEGMENTS * 2.0f * LIGHT_PI;
+        const float a1 = static_cast<float>(i + 1) / SEGMENTS * 2.0f * LIGHT_PI;
+        const Vec3 d0 = glm::cos(a0) * right + glm::sin(a0) * forward;
+        const Vec3 d1 = glm::cos(a1) * right + glm::sin(a1) * forward;
+        DEBUG_ADD_LINE(viewFamily.debugLines, {center + up + d0, center + up + d1, drawColor, lineWidth});
+        DEBUG_ADD_LINE(viewFamily.debugLines, {center - up + d0, center - up + d1, drawColor, lineWidth});
+        if (i % (bSelected ? 4 : 8) == 0) {
+            DEBUG_ADD_LINE(viewFamily.debugLines, {center - up + d0, center + up + d0, drawColor, lineWidth});
+        }
+    }
 }
 
 void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)

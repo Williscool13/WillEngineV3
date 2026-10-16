@@ -1246,6 +1246,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
                 {"Reflection Probes", Engine::EDITOR_OBJECT_REFLECTION_PROBE},
                 {"DDGI Volumes", Engine::EDITOR_OBJECT_DDGI_VOLUME},
                 {"Post Process Volumes", Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME},
+                {"Fog Volumes", Engine::EDITOR_OBJECT_FOG_VOLUME},
             };
             static constexpr FlagItem kPhysicsTypes[] = {
                 {"Sensors", Engine::PHYSICS_DEBUG_SENSORS},

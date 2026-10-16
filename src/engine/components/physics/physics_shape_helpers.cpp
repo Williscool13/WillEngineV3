@@ -29,6 +29,7 @@ void FillSplineParams(Engine::SplineParams& out, const SplineMeshComponent& splm
     out.crossPlankThickness = splm.crossPlankThickness;
     out.crossPlankLength = splm.crossPlankLength;
     out.railing = splm.railing;
+    out.tubeThickness = splm.tubeThickness;
 }
 
 PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, const Engine::ProceduralRepeat& repeat, const glm::vec3& scale)
@@ -74,7 +75,13 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
 
 void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
 {
+    // Re-fitting keeps the collision choices made on the old source.
     ColliderShape collider{};
+    if (const auto* previous = std::get_if<ColliderShape>(&shape.geometry)) {
+        collider.bMeshPrecise = previous->bMeshPrecise;
+        collider.bSplineHollow = previous->bSplineHollow;
+        collider.text3DSource.bPrecise = previous->text3DSource.bPrecise;
+    }
     shape.bakedScale = scale;
 
     glm::vec3 renderOffset{0.0f};
