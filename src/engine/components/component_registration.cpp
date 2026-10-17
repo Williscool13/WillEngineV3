@@ -11,6 +11,8 @@
 #include "engine/components/core_components.h"
 #include "engine/components/debug_gizmo_component.h"
 #include "engine/components/editor_components.h"
+#include "engine/components/motion/path_mover_component.h"
+#include "engine/components/motion/rotate_in_place_component.h"
 #include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/components/render/procedural_mesh_component.h"
@@ -76,6 +78,8 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::PhysicsBodyDesc>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::DrawPhysicsDebugTag>(componentRegistry, Origin::Engine, false, false);
     RegisterComponent<Component::ConveyorComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::PathMoverComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, Origin::Engine, false, false);
 
     RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, Origin::Engine, false, false);
 }

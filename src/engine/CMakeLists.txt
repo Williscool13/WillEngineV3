@@ -154,6 +154,10 @@ add_library(engine STATIC
         components/scene_components.h
         components/common/stable_id_component.cpp
         components/common/stable_id_component.h
+        components/motion/path_mover_component.cpp
+        components/motion/path_mover_component.h
+        components/motion/rotate_in_place_component.cpp
+        components/motion/rotate_in_place_component.h
         components/physics/physics_body_component.cpp
         components/physics/physics_body_component.h
         components/physics/physics_body_desc.cpp
@@ -192,6 +196,8 @@ add_library(engine STATIC
         systems/command_queue.h
         systems/common_systems.cpp
         systems/common_systems.h
+        systems/motion_systems.cpp
+        systems/motion_systems.h
         systems/physics_system.cpp
         systems/physics_system.h
         systems/render_systems.cpp

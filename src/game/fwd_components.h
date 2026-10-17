@@ -6,7 +6,6 @@
 #define WILL_ENGINE_GAME_FWD_COMPONENTS_H
 
 #include "engine/components/fwd_components.h"
-#include "game/components/debug_components.h"
 
 namespace Game::Component
 {

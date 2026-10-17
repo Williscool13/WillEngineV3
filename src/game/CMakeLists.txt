@@ -1,13 +1,7 @@
 set(GAME_SOURCES
         game.cpp
-        game_state.h
 
         fwd_components.h
-
-        systems/debug_system.cpp
-        systems/debug_system.h
-        systems/gameplay_systems.cpp
-        systems/gameplay_systems.h
 
         mcp/game_mcp_tools.cpp
         mcp/game_mcp_tools.h
@@ -15,36 +9,38 @@ set(GAME_SOURCES
         logging/game_log_category.h
         logging/game_log.h
 
-        components/component_registration.cpp
-        components/component_registration.h
-        components/debug_components.h
-
-        components/checkpoint_component.cpp
-        components/checkpoint_component.h
-        components/death_zone_component.cpp
-        components/death_zone_component.h
-        components/player_spawn_component.cpp
-        components/player_spawn_component.h
-        components/path_mover_component.cpp
-        components/path_mover_component.h
-        components/rotate_in_place_component.cpp
-        components/rotate_in_place_component.h
-
+        ballance/ballance.cpp
+        ballance/ballance.h
         ballance/fwd_components.h
-        ballance/components/breakable_component.h
-        ballance/systems/breakable_systems.cpp
-        ballance/systems/breakable_systems.h
+        ballance/state.h
 
-        gameplay/player/character.cpp
-        gameplay/player/character.h
-        gameplay/camera/gameplay_camera.cpp
-        gameplay/camera/gameplay_camera.h
-        gameplay/player/physics_character.cpp
-        gameplay/player/physics_character.h
-        gameplay/player/physics_player_controller.cpp
-        gameplay/player/physics_player_controller.h
-        gameplay/player/player_controller.cpp
-        gameplay/player/player_controller.h
+        ballance/breakable/breakable_component.h
+        ballance/breakable/breakable_systems.cpp
+        ballance/breakable/breakable_systems.h
+
+        ballance/checkpoint/checkpoint_component.cpp
+        ballance/checkpoint/checkpoint_component.h
+        ballance/checkpoint/checkpoint_systems.cpp
+        ballance/checkpoint/checkpoint_systems.h
+        ballance/checkpoint/death_zone_component.cpp
+        ballance/checkpoint/death_zone_component.h
+        ballance/checkpoint/player_spawn_component.cpp
+        ballance/checkpoint/player_spawn_component.h
+
+        ballance/debug/debug_components.h
+        ballance/debug/debug_system.cpp
+        ballance/debug/debug_system.h
+
+        ballance/player/character.cpp
+        ballance/player/character.h
+        ballance/player/gameplay_camera.cpp
+        ballance/player/gameplay_camera.h
+        ballance/player/physics_character.cpp
+        ballance/player/physics_character.h
+        ballance/player/physics_player_controller.cpp
+        ballance/player/physics_player_controller.h
+        ballance/player/player_controller.cpp
+        ballance/player/player_controller.h
 
         input/game_actions.h
         input/input_action_registry.cpp

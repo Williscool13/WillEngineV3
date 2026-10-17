@@ -1,0 +1,17 @@
+//
+// Created by William on 2026-10-17.
+//
+
+#ifndef WILL_ENGINE_MOTION_SYSTEMS_H
+#define WILL_ENGINE_MOTION_SYSTEMS_H
+
+namespace Engine
+{
+struct EngineContext;
+struct EngineState;
+
+void UpdatePathMovers(EngineContext* ctx, EngineState* state);
+void UpdateRotateInPlace(EngineContext* ctx, EngineState* state);
+} // Engine
+
+#endif //WILL_ENGINE_MOTION_SYSTEMS_H

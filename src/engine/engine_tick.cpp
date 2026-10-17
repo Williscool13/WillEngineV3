@@ -24,6 +24,7 @@
 #include "engine/editor/probe_bake_system.h"
 #include "engine/systems/camera_system.h"
 #include "engine/systems/common_systems.h"
+#include "engine/systems/motion_systems.h"
 #include "engine/systems/physics_system.h"
 #include "engine/systems/render_systems.h"
 #include "engine/systems/scene_system.h"
@@ -56,6 +57,9 @@ void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph
 #endif
 
     graph.Add("PhysicsPreUpdate", &PhysicsPreUpdate);
+
+    graph.Add("UpdatePathMovers", &UpdatePathMovers, SystemWhen::WorldRunning);
+    graph.Add("UpdateRotateInPlace", &UpdateRotateInPlace, SystemWhen::WorldRunning);
 }
 
 static void TickQuietFrames(EngineContext* ctx, EngineState* state)

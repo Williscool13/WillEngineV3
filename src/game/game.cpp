@@ -17,19 +17,13 @@
 #include "ImGuizmo.h"
 #include "audio/audio_manager.h"
 
-#include "fwd_components.h"
-#include "components/component_registration.h"
-#include "components/player_spawn_component.h"
 #include "input/input_action_registry.h"
 #include "engine/logging/engine_log.h"
 #include "engine/logging/engine_logger.h"
-#include "systems/debug_system.h"
-#include "game_state.h"
 #include "mcp/game_mcp_tools.h"
 #include "logging/game_log_category.h"
-#include "gameplay/player/physics_player_controller.h"
-#include "systems/gameplay_systems.h"
-#include "ballance/systems/breakable_systems.h"
+#include "ballance/ballance.h"
+#include "ballance/state.h"
 #include "clay/clay.h"
 
 #ifndef GAME_STATIC
@@ -73,42 +67,18 @@ static void RegisterDllEngineHooks(Engine::EngineContext* ctx)
 }
 #endif
 
-static void GamePlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f};
-    int32_t bestPriority = INT32_MIN;
-    auto spawnView = state->registry.view<Game::Component::PlayerSpawnComponent, Game::Component::TransformComponent>();
-    for (auto entity : spawnView) {
-        auto& spawn = spawnView.get<Game::Component::PlayerSpawnComponent>(entity);
-        if (spawn.priority > bestPriority) {
-            bestPriority = spawn.priority;
-            spawnPosition = spawnView.get<Game::Component::TransformComponent>(entity).translation + spawn.offset;
-        }
-    }
-
-    ctx->GetGameState<Game::GameState>()->playerController.Initialize(state, ctx, spawnPosition);
-}
-
-static void GamePlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
-    if (playerController.GetCharacter()) {
-        playerController.Shutdown(ctx->physicsSystem);
-    }
-}
-
 extern "C"
 {
 GAME_API size_t GameGetStateSize()
 {
-    return sizeof(Game::GameState);
+    return sizeof(Ballance::State);
 }
 
 GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     SPDLOG_TRACE("Game Start Up");
 
-    new(ctx->gameState) Game::GameState();
+    new(ctx->gameState) Ballance::State();
 }
 
 GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -118,15 +88,14 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 #endif
 
     Audio::AudioManager::RegisterAudio();
-    Game::RegisterGameComponents(state->componentRegistry);
+    Ballance::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
-    Game::ConnectGameplayObservers(state->registry);
-    Ballance::ConnectBreakableObservers(state->registry);
+    Ballance::ConnectObservers(state->registry);
 
-    ctx->playStartFn = GamePlayStart;
-    ctx->playStopFn = GamePlayStop;
+    ctx->playStartFn = Ballance::PlayStart;
+    ctx->playStopFn = Ballance::PlayStop;
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;
@@ -136,8 +105,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    Game::DisconnectGameplayObservers(state->registry);
-    Ballance::DisconnectBreakableObservers(state->registry);
+    Ballance::DisconnectObservers(state->registry);
 
     ctx->playStartFn = {};
     ctx->playStopFn = {};
@@ -156,15 +124,14 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     RegisterDllEngineHooks(ctx);
 #endif
 
-    Game::RegisterGameComponents(state->componentRegistry);
+    Ballance::RegisterComponents(state->componentRegistry);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
-    Game::ConnectGameplayObservers(state->registry);
-    Ballance::ConnectBreakableObservers(state->registry);
+    Ballance::ConnectObservers(state->registry);
 
-    ctx->playStartFn = GamePlayStart;
-    ctx->playStopFn = GamePlayStop;
+    ctx->playStartFn = Ballance::PlayStart;
+    ctx->playStopFn = Ballance::PlayStop;
 
 #if DEBUG
     gInternStringFn = ctx->internStringFn;
@@ -176,31 +143,12 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 
 GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph)
 {
-    graph.Add("Ballance/AcquireBreakableAssets", &Ballance::AcquireBreakableAssets);
-
-    graph.Add("UpdatePathMovers", &Game::UpdatePathMovers, Engine::SystemWhen::WorldRunning);
-    graph.Add("UpdateRotateInPlace", &Game::UpdateRotateInPlace, Engine::SystemWhen::WorldRunning);
-    graph.Add("Ballance/UpdateSelfDestruct", &Ballance::UpdateSelfDestruct, Engine::SystemWhen::WorldRunning);
-
-    graph.Add("DebugProcessPhysicsCollisions", &Game::DebugProcessPhysicsCollisions, Engine::SystemWhen::Gameplay);
-    graph.Add("DebugApplyGroundForces", &Game::DebugApplyGroundForces, Engine::SystemWhen::Gameplay);
-    graph.Add("CheckpointUpdate", &Game::CheckpointUpdate, Engine::SystemWhen::Gameplay);
-    graph.Add("DeathZoneUpdate", &Game::DeathZoneUpdate, Engine::SystemWhen::Gameplay);
-    graph.Add("PlayerControllerUpdate", [](Engine::EngineContext* ctx, Engine::EngineState* state) {
-        Game::PhysicsPlayerController& playerController = ctx->GetGameState<Game::GameState>()->playerController;
-        if (playerController.GetCharacter()) {
-            playerController.Update(ctx, state);
-        }
-    }, Engine::SystemWhen::Gameplay);
-
-    graph.Add("DebugUpdate", &Game::DebugUpdate);
+    Ballance::CollectSystems(graph);
 }
 
 GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
-#ifdef WDEBUG
-    Game::DebugRender(ctx, state, frameBuffer);
-#endif
+    Ballance::PrepareFrame(ctx, state, frameBuffer);
 }
 
 GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -224,7 +172,7 @@ GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* stat
 {
     SPDLOG_TRACE("Game Shutdown");
 
-    ctx->GetGameState<Game::GameState>()->~GameState();
+    ctx->GetGameState<Ballance::State>()->~State();
 
     ImGuizmo::DestroyContext();
 }
