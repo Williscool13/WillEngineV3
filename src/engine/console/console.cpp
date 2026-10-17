@@ -21,6 +21,7 @@
 #include "engine/systems/scene_system.h"
 #include "engine/systems/system_graph.h"
 #include "engine/ui/ui_zindex.h"
+#include "physics/physics_system.h"
 
 namespace Engine::Console
 {
@@ -353,7 +354,16 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, config.bLimitFps ? Core::InlineString<64>::Format("  fpsmax %d", config.frameLimitTarget).c_str() : "  fpsmax uncapped");
     });
 
-    Register(state, Origin::Engine, "pick", "Print the entity, primitive and material under the mouse cursor", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "physics_timescale", "`physics_timescale <x>` runs physics x times faster (0.1-64, at most 64 steps a frame) to settle a scene; prints the awake body count",
+             [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+        if (args.Size() > 1) {
+            state->physics.timeScale = std::clamp(std::strtof(args[1], nullptr), 0.1f, 64.0f);
+        }
+        const uint32_t awake = ctx->physicsSystem->GetPhysicsSystem().GetNumActiveBodies(JPH::EBodyType::RigidBody);
+        Print(state, Core::InlineString<96>::Format("  physics_timescale %.2f, %u bodies awake", state->physics.timeScale, awake).c_str());
+    });
+
+    Register(state, Origin::Engine, "pick","Print the entity, primitive and material under the mouse cursor", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         const float u = (state->input.mousePositionAbsolute.x - static_cast<float>(ctx->windowContext.viewportOffsetX)) / static_cast<float>(ctx->windowContext.viewportWidth);
         const float v = (state->input.mousePositionAbsolute.y - static_cast<float>(ctx->windowContext.viewportOffsetY)) / static_cast<float>(ctx->windowContext.viewportHeight);
         if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {

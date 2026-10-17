@@ -68,6 +68,7 @@ struct PhysicsState
 
     float deltaTimeAccumulator = 0.0f;
     float interpolationAlpha = 0.0f;
+    float timeScale = 1.0f;
     bool bEnabled = true;
     uint64_t stepCount = 0;
     Core::Map<JPH::BodyID, entt::entity> bodyToEntity;
@@ -199,6 +200,7 @@ struct LocalShadowDebugState
     bool bDrawViews{false};
     bool bRedrawnOnly{false};
     bool bFreeze{false};
+    bool bDrawCasterChangeBodies{false};
 };
 
 struct ActivePostProcessVolume
@@ -284,6 +286,9 @@ struct AssetLoadState
 
     int32_t pendingProceduralWaitCount{0};
     std::chrono::steady_clock::time_point proceduralWaitLastActivity{};
+
+    /** Consecutive frames with no asset or entity load in flight. */
+    int32_t quietFrames{0};
 };
 
 struct SceneState

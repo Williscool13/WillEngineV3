@@ -625,19 +625,29 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             return !overrides || !overrides->primitiveBlacklist.Contains(ordinal);
         };
 
+        const uint32_t rootNode = meshComponent.nodeIndex < nodes.Size() ? meshComponent.nodeIndex : ~0u;
+        auto inSubtree = [&](uint32_t n) -> bool {
+            for (uint32_t i = n; i != ~0u; i = nodes[i].parent) {
+                if (i == rootNode) { return true; }
+            }
+            return rootNode == ~0u;
+        };
+        const glm::mat4 rootInverse = rootNode != ~0u ? glm::inverse(ComposeNodeModelSpace(nodes, rootNode)) : glm::mat4(1.0f);
+
         uint32_t totalPrimitives = 0;
         uint32_t contributingNodes = 0;
 
         //
         {
             uint32_t ordinal = 0;
-            for (size_t n = 0; n < nodes.Size(); ++n) {
+            for (uint32_t n = 0; n < nodes.Size(); ++n) {
                 const uint32_t mi = nodes[n].meshIndex;
                 if (mi == ~0u || mi >= meshes.Size()) { continue; }
                 const size_t nodePrimCount = meshes[mi].primitiveProperties.Size();
+                const bool bNodeIn = inSubtree(n);
                 uint32_t nodeIncluded = 0;
                 for (size_t j = 0; j < nodePrimCount; ++j) {
-                    if (included(ordinal)) {
+                    if (bNodeIn && included(ordinal)) {
                         ++totalPrimitives;
                         ++nodeIncluded;
                     }
@@ -683,13 +693,14 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             const uint32_t mi = nodes[n].meshIndex;
             if (mi == ~0u || mi >= meshes.Size()) { continue; }
 
-            const glm::mat4 nodeModelSpace = ComposeNodeModelSpace(nodes, n);
+            const glm::mat4 nodeModelSpace = rootInverse * ComposeNodeModelSpace(nodes, n);
             Engine::MeshInformation& mesh = meshes[mi];
+            const bool bNodeIn = inSubtree(n);
 
             bool bNodeSlotAssigned = false;
             for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
                 const uint32_t thisOrdinal = ordinal++;
-                if (!included(thisOrdinal)) { continue; }
+                if (!bNodeIn || !included(thisOrdinal)) { continue; }
                 if (!bNodeSlotAssigned) {
                     ++nodeModelSlot;
                     bNodeSlotAssigned = true;

@@ -89,6 +89,7 @@ struct PhysicsColliderAsset
 
     // Source spec (exactly one populated). Mirrors StaticModel; the disk source (model/font) freeze-gates hot-reload.
     Engine::ModelID sourceModelId{};
+    uint32_t sourceNodeIndex{~0u};
     Core::Path source{};
     std::optional<ProceduralParams> proceduralParams{};
     ProceduralRepeat proceduralRepeat{};

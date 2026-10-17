@@ -29,6 +29,7 @@
 #include "logging/game_log_category.h"
 #include "gameplay/player/physics_player_controller.h"
 #include "systems/gameplay_systems.h"
+#include "ballance/systems/breakable_systems.h"
 #include "clay/clay.h"
 
 #ifndef GAME_STATIC
@@ -122,6 +123,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
     Game::ConnectGameplayObservers(state->registry);
+    Ballance::ConnectBreakableObservers(state->registry);
 
     ctx->playStartFn = GamePlayStart;
     ctx->playStopFn = GamePlayStop;
@@ -135,6 +137,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     Game::DisconnectGameplayObservers(state->registry);
+    Ballance::DisconnectBreakableObservers(state->registry);
 
     ctx->playStartFn = {};
     ctx->playStopFn = {};
@@ -158,6 +161,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
     Game::ConnectGameplayObservers(state->registry);
+    Ballance::ConnectBreakableObservers(state->registry);
 
     ctx->playStartFn = GamePlayStart;
     ctx->playStopFn = GamePlayStop;
@@ -172,10 +176,11 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 
 GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph)
 {
-    graph.Add("TickQuietFrames", &Game::TickQuietFrames);
+    graph.Add("Ballance/AcquireBreakableAssets", &Ballance::AcquireBreakableAssets);
 
     graph.Add("UpdatePathMovers", &Game::UpdatePathMovers, Engine::SystemWhen::WorldRunning);
     graph.Add("UpdateRotateInPlace", &Game::UpdateRotateInPlace, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateSelfDestruct", &Ballance::UpdateSelfDestruct, Engine::SystemWhen::WorldRunning);
 
     graph.Add("DebugProcessPhysicsCollisions", &Game::DebugProcessPhysicsCollisions, Engine::SystemWhen::Gameplay);
     graph.Add("DebugApplyGroundForces", &Game::DebugApplyGroundForces, Engine::SystemWhen::Gameplay);

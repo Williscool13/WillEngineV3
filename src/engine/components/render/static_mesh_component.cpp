@@ -214,6 +214,29 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             return finish({.bRequestRemoval = remove});
         }
 
+        if (modelMeta && modelMeta->nodes.Size() > 1) {
+            const char* nodePreview = edit.IsMixed(&StaticMeshComponent::nodeIndex) ? "--" : component.nodeIndex < modelMeta->nodes.Size() ? modelMeta->nodes[component.nodeIndex].name.c_str() : "(whole model)";
+            if (ImGui::BeginCombo("Node", nodePreview, ImGuiComboFlags_HeightLarge)) {
+                if (ImGui::Selectable("(whole model)", component.nodeIndex == ~0u) && component.nodeIndex != ~0u) {
+                    component.nodeIndex = ~0u;
+                    bCommit = true;
+                }
+                for (uint32_t n = 0; n < modelMeta->nodes.Size(); ++n) {
+                    ImGui::PushID(static_cast<int>(n));
+                    const float indent = static_cast<float>(modelMeta->nodes[n].depth) * 10.0f;
+                    if (indent > 0.0f) { ImGui::Indent(indent); }
+                    if (ImGui::Selectable(modelMeta->nodes[n].name.c_str(), component.nodeIndex == n) && component.nodeIndex != n) {
+                        component.nodeIndex = n;
+                        bCommit = true;
+                    }
+                    if (indent > 0.0f) { ImGui::Unindent(indent); }
+                    ImGui::PopID();
+                }
+                ImGui::EndCombo();
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Draws only this node and its descendants, with the node's origin at the entity"); }
+        }
+
         if (!runtime || !runtime->modelHandle.IsValid()) {
             if (registry.any_of<StaticMeshLoadPendingTag, StaticMeshLoadingTag>(entity)) {
                 ImGui::Text("Loading Model...");

@@ -30,6 +30,11 @@ set(GAME_SOURCES
         components/rotate_in_place_component.cpp
         components/rotate_in_place_component.h
 
+        ballance/fwd_components.h
+        ballance/components/breakable_component.h
+        ballance/systems/breakable_systems.cpp
+        ballance/systems/breakable_systems.h
+
         gameplay/player/character.cpp
         gameplay/player/character.h
         gameplay/camera/gameplay_camera.cpp

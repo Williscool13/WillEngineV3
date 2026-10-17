@@ -16,9 +16,6 @@ struct GameState
 {
     /** Live only between PlayStart and PlayStop; GetCharacter() is null when no PIE player exists. */
     PhysicsPlayerController playerController;
-
-    /** Consecutive frames with no asset or entity load in flight. Read by the MCP status tool. */
-    int32_t quietFrames{0};
 };
 } // Game
 

@@ -58,6 +58,17 @@ void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph
     graph.Add("PhysicsPreUpdate", &PhysicsPreUpdate);
 }
 
+static void TickQuietFrames(EngineContext* ctx, EngineState* state)
+{
+    int32_t& quiet = state->assetLoad.quietFrames;
+    if (CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending) {
+        quiet = 0;
+    }
+    else if (quiet < INT32_MAX) {
+        quiet++;
+    }
+}
+
 static void PostUpdateCleanup(EngineContext* ctx, EngineState* state)
 {
     state->registry.clear<Component::DirtyTransformTag>();
@@ -112,6 +123,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("PhysicsMeshLoadResolve", &PhysicsMeshLoadResolve);
     graph.Add("PhysicsShapeCreationResolve", &PhysicsShapeCreationResolve);
     graph.Add("PhysicsBodyCreationResolve", &PhysicsBodyCreationResolve);
+    graph.Add("TickQuietFrames", &TickQuietFrames);
 
     graph.Add("MarkRenderTransformsDirty", &MarkRenderTransformsDirty);
     graph.Add("MarkPhysicsTransformsDirty", [](EngineContext* ctx, EngineState* state) { MarkPhysicsTransformsDirty(state); }, SystemWhen::Running);

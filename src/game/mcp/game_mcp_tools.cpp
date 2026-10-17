@@ -12,7 +12,6 @@
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/mcp/mcp_tool.h"
-#include "game/game_state.h"
 #include "engine/components/common_components.h"
 #include "engine/components/core_components.h"
 #include "engine/components/scene_components.h"
@@ -26,80 +25,23 @@
 #include "engine/console/console.h"
 #include "engine/editor/playtest_system.h"
 #include "engine/systems/scene_system.h"
+#include "engine/components/physics/physics_body_component.h"
+#include "physics/physics_system.h"
+
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 
 namespace Game
 {
 using Engine::MCP::Call;
 using Engine::MCP::ToolResult;
 
-static constexpr int32_t SETTLED_QUIET_FRAMES = 30;
 static constexpr int64_t FIND_DEFAULT_LIMIT = 20;
 static constexpr int64_t FIND_MAX_LIMIT = 200;
 static constexpr size_t MAX_COMMAND_OUTPUT_LINES = 64;
-
-static const char* InputContextName(const Engine::InputContext context)
-{
-    switch (context) {
-        case Engine::InputContext::Editor: return "Editor";
-        case Engine::InputContext::Menu: return "Menu";
-        case Engine::InputContext::Gameplay: return "Gameplay";
-        case Engine::InputContext::Console: return "Console";
-        case Engine::InputContext::ProbeBake: return "ProbeBake";
-    }
-    return "Unknown";
-}
-
-static const char* RunModeName(const Engine::RunMode mode)
-{
-    switch (mode) {
-        case Engine::RunMode::Edit: return "Edit";
-        case Engine::RunMode::Simulate: return "Simulate";
-        case Engine::RunMode::Play: return "Play";
-    }
-    return "Unknown";
-}
-
-static bool AnythingPending(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    return Engine::CountLoadingEntities(state) > 0 || ctx->assetManager->HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending;
-}
-
-void TickQuietFrames(Engine::EngineContext* ctx, Engine::EngineState* state)
-{
-    int32_t& quiet = ctx->GetGameState<GameState>()->quietFrames;
-    if (AnythingPending(ctx, state)) {
-        quiet = 0;
-    }
-    else if (quiet < INT32_MAX) {
-        quiet++;
-    }
-}
-
-static ToolResult GetEngineStatus(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
-{
-    const Core::TimeFrame t = ctx->publishedTimeFrame.Get();
-    const int32_t quiet = ctx->GetGameState<GameState>()->quietFrames;
-
-    call.SetFloat("gameFps", t.gameFps);
-    call.SetFloat("renderFps", t.renderFps);
-    call.SetBool("settled", quiet >= SETTLED_QUIET_FRAMES);
-    call.SetInt("quietFrames", quiet);
-    call.SetInt("settledThresholdFrames", SETTLED_QUIET_FRAMES);
-    call.SetInt("loadingEntities", static_cast<int64_t>(Engine::CountLoadingEntities(state)));
-    call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
-    call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
-    call.SetBool("rescanResources", ctx->rescan.bResources);
-    call.SetBool("screenshotInFlight", ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot || state->requests.screenshotBurstRemaining > 0);
-    call.SetString("sceneId", Engine::MCP::HexId(state->scene.currentSceneId.id).c_str());
-    call.SetString("sceneName", state->scene.currentSceneName.c_str());
-    call.SetInt("stableEntityCount", static_cast<int64_t>(state->stableIdToEntityMap.Size()));
-    call.SetString("inputContext", InputContextName(state->inputContext));
-    call.SetString("runMode", RunModeName(state->runMode));
-    call.SetBool("physicsEnabled", state->physics.bEnabled);
-    call.SetBool("playtestActive", state->playtest.bActive || !state->playtest.pendingPath.IsEmpty());
-    call.SetString("playtestOutputDir", state->playtest.outputDir.c_str());
-    return ToolResult::Complete;
-}
 
 static ToolResult ExecConsoleCommand(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
 {
@@ -189,6 +131,83 @@ static void WriteAuthoredMaterial(Engine::EngineContext* ctx, Engine::EngineStat
     call.End();
 }
 
+static void WriteVec3(Call& call, const char* key, const JPH::Vec3 v)
+{
+    call.BeginArray(key);
+    call.PushFloat(v.GetX());
+    call.PushFloat(v.GetY());
+    call.PushFloat(v.GetZ());
+    call.End();
+}
+
+static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
+{
+    const auto* body = state->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    if (!body || body->bodyID.IsInvalid()) {
+        call.SetNull("physics");
+        return;
+    }
+    JPH::PhysicsSystem& physics = ctx->physicsSystem->GetPhysicsSystem();
+    const JPH::BodyInterface& bodyInterface = physics.GetBodyInterface();
+    const JPH::BodyID id = body->bodyID;
+
+    call.BeginObject("physics");
+    const JPH::EMotionType motionType = bodyInterface.GetMotionType(id);
+    call.SetString("motionType", motionType == JPH::EMotionType::Static ? "Static" : motionType == JPH::EMotionType::Kinematic ? "Kinematic" : "Dynamic");
+    call.SetBool("awake", bodyInterface.IsActive(id));
+    call.SetInt("objectLayer", static_cast<int64_t>(bodyInterface.GetObjectLayer(id)));
+    WriteVec3(call, "linearVelocity", bodyInterface.GetLinearVelocity(id));
+    WriteVec3(call, "angularVelocity", bodyInterface.GetAngularVelocity(id));
+
+    constexpr size_t MAX_TOUCHING = 16;
+    const JPH::TransformedShape shape = bodyInterface.GetTransformedShape(id);
+    JPH::CollideShapeSettings settings;
+    settings.mMaxSeparationDistance = 0.01f;
+    JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+    const JPH::IgnoreSingleBodyFilter ignoreSelf(id);
+    physics.GetNarrowPhaseQuery().CollideShape(shape.mShape, shape.GetShapeScale(), shape.GetCenterOfMassTransform(), settings, shape.GetCenterOfMassTransform().GetTranslation(),
+                                               collector, {}, {}, ignoreSelf);
+
+    struct Touch
+    {
+        JPH::BodyID body;
+        uint32_t contacts{0};
+        Core::InlineVector<JPH::SubShapeID, 16> subShapes{};
+        float maxPenetration{-1e30f};
+    };
+    Core::InlineVector<Touch, MAX_TOUCHING> touches;
+    for (const JPH::CollideShapeResult& hit : collector.mHits) {
+        Touch* touch = nullptr;
+        for (Touch& t : touches) {
+            if (t.body == hit.mBodyID2) { touch = &t; }
+        }
+        if (!touch) {
+            if (touches.IsFull()) { continue; }
+            touches.PushBack({.body = hit.mBodyID2});
+            touch = &touches[touches.Size() - 1];
+        }
+        if (!touch->subShapes.Contains(hit.mSubShapeID2) && !touch->subShapes.IsFull()) { touch->subShapes.PushBack(hit.mSubShapeID2); }
+        ++touch->contacts;
+        touch->maxPenetration = std::max(touch->maxPenetration, hit.mPenetrationDepth);
+    }
+    call.BeginArray("touching");
+    for (const Touch& touch : touches) {
+        call.PushObject();
+        const entt::entity* other = state->physics.bodyToEntity.Find(touch.body);
+        const auto* otherStable = other ? state->registry.try_get<Component::StableIdComponent>(*other) : nullptr;
+        const auto* otherName = other ? state->registry.try_get<Component::NameComponent>(*other) : nullptr;
+        if (otherStable) { call.SetString("stableId", Engine::MCP::HexId(otherStable->id.id).c_str()); } else { call.SetNull("stableId"); }
+        call.SetString("name", otherName ? otherName->name.c_str() : "");
+        call.SetBool("awake", bodyInterface.IsActive(touch.body));
+        call.SetInt("contacts", touch.contacts);
+        call.SetInt("subShapes", static_cast<int64_t>(touch.subShapes.Size()));
+        call.SetFloat("maxPenetration", touch.maxPenetration);
+        call.End();
+    }
+    call.End();
+    call.End();
+}
+
 static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
 {
     const entt::registry& registry = state->registry;
@@ -207,6 +226,7 @@ static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* s
     if (world) { WriteTransform(call, "worldTransform", world->translation, world->rotation, world->scale); } else { call.SetNull("worldTransform"); }
     if (hierarchy && hierarchy->parentStableId.IsValid()) { call.SetString("parentStableId", Engine::MCP::HexId(hierarchy->parentStableId.id).c_str()); } else { call.SetNull("parentStableId"); }
     WriteAuthoredMaterial(ctx, state, call, entity);
+    WritePhysicsState(ctx, state, call, entity);
 
     call.BeginArray("components");
     const Engine::ComponentRegistry& components = state->componentRegistry;
@@ -356,16 +376,6 @@ void RegisterMCPTools(Engine::EngineState* state)
     using Engine::MCP::RegisterTool;
 
     RegisterTool(state, {
-        .id = "get_engine_status"_sid,
-        .name = "get_engine_status",
-        .description = "Readiness of the running scene: settled (no loads in flight for 30 frames), loading entity count, pending asset work, current scene, input context. Poll this after any mutation before trusting a screenshot or query.",
-        .inputSchemaJson = nullptr,
-        .invoke = &GetEngineStatus,
-        .origin = Engine::Origin::Game,
-        .bNeedsDrain = true,
-    });
-
-    RegisterTool(state, {
         .id = "exec_console_command"_sid,
         .name = "exec_console_command",
         .description = "Runs one line in the in-game developer console exactly as if typed, and returns the lines it printed. Use list_console_commands to discover commands.",
@@ -388,7 +398,8 @@ void RegisterMCPTools(Engine::EngineState* state)
     RegisterTool(state, {
         .id = "get_entity"_sid,
         .name = "get_entity",
-        .description = "Full detail for one entity by stable id: name, scene, local and world transform, parent, component names.",
+        .description = "Full detail for one entity by stable id: name, scene, local and world transform, parent, component names, and for a physics body its motion type, "
+                       "awake state, velocities and every body within 1 cm of it (contacts, distinct sub-shapes touched, deepest penetration).",
         .inputSchemaJson = R"({"type":"object","required":["stableId"],"properties":{"stableId":{"type":"string","description":"16 hex digits from query_scene"}}})",
         .invoke = &GetEntity,
         .origin = Engine::Origin::Game,

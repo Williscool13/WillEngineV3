@@ -958,6 +958,8 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::SameLine();
             Widgets::Checkbox("Redrawn Only##localshadow", &state->debug.localShadow.bRedrawnOnly, "Only the views whose tile is redrawn this frame; a static scene draws none.");
             Widgets::Checkbox("Freeze##localshadow", &state->debug.localShadow.bFreeze, "Holds the shadowed lights and their views so they can be inspected from elsewhere.");
+            Widgets::Checkbox("Caster Change Bodies##localshadow", &state->debug.localShadow.bDrawCasterChangeBodies,
+                              "Draws the physics shape of every mesh whose bounds are being rewritten (the caster changes), up to a few frames after it last moved. Meshes without a body are not drawn.");
             const Engine::LocalShadowSelection& selection = state->localShadowSelection;
             ImGui::Text("Shadowed: %u lights, %d/%d views, %d redrawn, %u caster changes", selection.lightCount, std::popcount(selection.activeTiles), state->lighting.localShadows.viewBudget,
                         std::popcount(selection.dirtyTiles), selection.boundsChangeCount);

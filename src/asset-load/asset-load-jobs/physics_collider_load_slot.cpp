@@ -4,6 +4,8 @@
 
 #include "physics_collider_load_slot.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <tracy/Tracy.hpp>
 
 #include "meshoptimizer/src/meshoptimizer.h"
@@ -18,6 +20,7 @@
 #include "engine/resources/model/model_format.h"
 #include "engine/resources/physics/collider_generation.h"
 #include "engine/resources/physics/physics_collider_asset.h"
+#include "engine/serialization/serialization.h"
 #include "engine/spline/spline_frames.h"
 #include "platform/file_utils.h"
 #include "procedural_geometry.h"
@@ -60,7 +63,17 @@ static void SimplifyColliderMesh(Core::Span<const Vec3> positions, Core::Span<co
 /**
  * Reads a .wsmesh from disk (CPU-only: no GPU upload, no BLAS) and produces a simplified physics geometry: full-fidelity positions dequantized per primitive, then meshopt_simplify. ConvexHull consumers use positions only; TriangleMesh uses positions+indices.
  */
-static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryManager* mm, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices)
+static glm::mat4 ColliderNodeModelSpace(const Core::HeapArray<Engine::Node>& nodes, uint32_t nodeIndex)
+{
+    glm::mat4 m(1.0f);
+    for (uint32_t n = nodeIndex; n != ~0u; n = nodes[n].parent) {
+        const Engine::Node& node = nodes[n];
+        m = glm::translate(glm::mat4(1.0f), node.localTranslation) * glm::mat4_cast(node.localRotation) * glm::scale(glm::mat4(1.0f), node.localScale) * m;
+    }
+    return m;
+}
+
+static bool ReadModelColliderGeometry(const Core::Path& source, uint32_t nodeIndex, Core::MemoryManager* mm, Core::Vector<Vec3>& outPositions, Core::Vector<uint32_t>& outIndices)
 {
     ZoneScopedN("ReadModelColliderGeometry");
 
@@ -70,6 +83,8 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
     Core::HeapArray<Engine::Vertex> vertices{};
     Core::HeapArray<uint32_t> indices{};
     Core::HeapArray<Primitive> primitives{};
+    Core::HeapArray<Engine::MeshInformation> meshes{};
+    Core::HeapArray<Engine::Node> nodes{};
 
     {
         Platform::ScopedFileMapping map(source, true);
@@ -92,9 +107,62 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
         readArray(vertices, header.vertexOffset, header.vertexCount);
         readArray(indices, header.indexOffset, header.indexCount);
         readArray(primitives, header.primitiveOffset, header.primitiveCount);
+
+        if (nodeIndex != ~0u) {
+            if (nodeIndex >= header.nodeCount || header.meshCount == 0) { return false; }
+            meshes = Core::HeapArray<Engine::MeshInformation>(&mm->AssetsScratch(), Core::AllocTag::Physics, header.meshCount);
+            const uint8_t* meshPtr = body.Data() + header.meshOffset;
+            for (uint32_t i = 0; i < header.meshCount; ++i) { Engine::ReadMeshInformation(meshPtr, meshes[i]); }
+
+            const uint64_t nodeDataStart = header.dataOffset + header.compressedBodySize;
+            if (nodeDataStart > map.size) { return false; }
+            nodes = Core::HeapArray<Engine::Node>(&mm->AssetsScratch(), Core::AllocTag::Physics, header.nodeCount);
+            const uint8_t* nodePtr = map.data + nodeDataStart;
+            for (uint32_t i = 0; i < header.nodeCount; ++i) { Engine::ReadNode(nodePtr, nodes[i]); }
+        }
     }
 
     if (vertices.IsEmpty() || indices.IsEmpty() || primitives.IsEmpty()) { return false; }
+
+    auto primitiveIndexEnd = [&](size_t pi) { return pi + 1 < primitives.Size() ? primitives[pi + 1].indexOffset : static_cast<uint32_t>(indices.Size()); };
+
+    if (nodeIndex != ~0u) {
+        const glm::mat4 rootInverse = glm::inverse(ColliderNodeModelSpace(nodes, nodeIndex));
+        Core::Vector<Vec3> nodePositions(&mm->AssetsScratch(), Core::AllocTag::Physics);
+        Core::Vector<uint32_t> nodeIndices(&mm->AssetsScratch(), Core::AllocTag::Physics);
+        for (uint32_t n = 0; n < nodes.Size(); ++n) {
+            bool bInSubtree = false;
+            for (uint32_t i = n; i != ~0u && !bInSubtree; i = nodes[i].parent) { bInSubtree = i == nodeIndex; }
+            const uint32_t mi = nodes[n].meshIndex;
+            if (!bInSubtree || mi >= meshes.Size()) { continue; }
+
+            const glm::mat4 toRoot = rootInverse * ColliderNodeModelSpace(nodes, n);
+            for (const Engine::PrimitiveProperty& property : meshes[mi].primitiveProperties) {
+                if (property.index >= primitives.Size()) { continue; }
+                const Primitive& prim = primitives[property.index];
+                const Vec3 boundsMin = prim.boundingBoxMin;
+                const Vec3 boundsExtents = prim.boundingBoxMax - prim.boundingBoxMin;
+                const uint32_t indexStart = prim.indexOffset;
+                const uint32_t indexEnd = primitiveIndexEnd(property.index);
+
+                uint32_t vertMin = UINT32_MAX, vertMax = 0;
+                for (uint32_t ii = indexStart; ii < indexEnd; ++ii) {
+                    vertMin = std::min(vertMin, indices[ii]);
+                    vertMax = std::max(vertMax, indices[ii]);
+                }
+                if (vertMin > vertMax) { continue; }
+
+                const uint32_t base = static_cast<uint32_t>(nodePositions.Size());
+                for (uint32_t vi = vertMin; vi <= vertMax; ++vi) {
+                    nodePositions.PushBack(Vec3(toRoot * glm::vec4(AssetLoad::DequantizeVertexPosition(vertices[vi], boundsMin, boundsExtents), 1.0f)));
+                }
+                for (uint32_t ii = indexStart; ii < indexEnd; ++ii) { nodeIndices.PushBack(base + indices[ii] - vertMin); }
+            }
+        }
+        if (nodePositions.IsEmpty()) { return false; }
+        SimplifyColliderMesh(Core::Span<const Vec3>(nodePositions.Data(), nodePositions.Size()), Core::Span<const uint32_t>(nodeIndices.Data(), nodeIndices.Size()), mm, outPositions, outIndices);
+        return true;
+    }
 
     Core::HeapArray<Vec3> allPositions(&mm->AssetsScratch(), Core::AllocTag::Physics, vertices.Size());
     for (size_t pi = 0; pi < primitives.Size(); ++pi) {
@@ -103,7 +171,7 @@ static bool ReadModelColliderGeometry(const Core::Path& source, Core::MemoryMana
         const Vec3 boundsExtents = prim.boundingBoxMax - prim.boundingBoxMin;
 
         const size_t indexStart = prim.indexOffset;
-        const size_t indexEnd = pi + 1 < primitives.Size() ? primitives[pi + 1].indexOffset : indices.Size();
+        const size_t indexEnd = primitiveIndexEnd(pi);
 
         uint32_t vertMin = UINT32_MAX, vertMax = 0;
         for (size_t ii = indexStart; ii < indexEnd; ++ii) {
@@ -280,7 +348,7 @@ bool PhysicsColliderLoadSlot::Build()
     if (c->sourceModelId.IsValid()) {
         Core::Vector<Vec3> positions(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
         Core::Vector<uint32_t> indices(&memoryManager->AssetsScratch(), Core::AllocTag::Physics);
-        if (!ReadModelColliderGeometry(c->source, memoryManager, positions, indices)) { return false; }
+        if (!ReadModelColliderGeometry(c->source, c->sourceNodeIndex, memoryManager, positions, indices)) { return false; }
         if (positions.IsEmpty()) { return false; }
 
         c->positions = Core::HeapArray<Vec3>(&memoryManager->Assets(), Core::AllocTag::Physics, positions.Size());

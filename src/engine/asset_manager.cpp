@@ -822,11 +822,14 @@ PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParam
     return handle;
 }
 
-PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind)
+PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind, uint32_t nodeIndex)
 {
     if (!modelCache.Contains(sourceModelId)) {
         LOG_ERROR(Asset, "Model '{}' not found in registry for collider", sourceModelId.id);
         return PhysicsColliderHandle::INVALID;
+    }
+    if (nodeIndex != ~0u && nodeIndex >= modelCache[sourceModelId].nodes.Size()) {
+        nodeIndex = ~0u;
     }
 
     HashBuilder h;
@@ -834,6 +837,9 @@ PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceMode
     h.Add(static_cast<uint8_t>(kind));
     constexpr uint8_t domain = 2;
     h.Add(domain);
+    if (nodeIndex != ~0u) {
+        h.Add(nodeIndex);
+    }
 
     PhysicsColliderID colliderId{h.Finish()};
 
@@ -862,6 +868,7 @@ PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceMode
     collider.colliderId = colliderId;
     collider.kind = kind;
     collider.sourceModelId = sourceModelId;
+    collider.sourceNodeIndex = nodeIndex;
     collider.source = modelCache[sourceModelId].source;
     collider.refCount = 1;
     collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;

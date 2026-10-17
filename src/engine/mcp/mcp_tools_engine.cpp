@@ -33,6 +33,7 @@ static constexpr int64_t ASSET_QUERY_DEFAULT_LIMIT = 50;
 static constexpr int64_t ASSET_QUERY_MAX_LIMIT = 500;
 static constexpr int64_t SCENE_QUERY_DEFAULT_LIMIT = 100;
 static constexpr int64_t SCENE_QUERY_MAX_LIMIT = 1000;
+static constexpr int32_t SETTLED_QUIET_FRAMES = 30;
 
 struct Page
 {
@@ -705,8 +706,66 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
     return ToolResult::Complete;
 }
 
+static const char* InputContextName(const InputContext context)
+{
+    switch (context) {
+        case InputContext::Editor: return "Editor";
+        case InputContext::Menu: return "Menu";
+        case InputContext::Gameplay: return "Gameplay";
+        case InputContext::Console: return "Console";
+        case InputContext::ProbeBake: return "ProbeBake";
+    }
+    return "Unknown";
+}
+
+static const char* RunModeName(const RunMode mode)
+{
+    switch (mode) {
+        case RunMode::Edit: return "Edit";
+        case RunMode::Simulate: return "Simulate";
+        case RunMode::Play: return "Play";
+    }
+    return "Unknown";
+}
+
+static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& call)
+{
+    const Core::TimeFrame t = ctx->publishedTimeFrame.Get();
+    const int32_t quiet = state->assetLoad.quietFrames;
+
+    call.SetFloat("gameFps", t.gameFps);
+    call.SetFloat("renderFps", t.renderFps);
+    call.SetBool("settled", quiet >= SETTLED_QUIET_FRAMES);
+    call.SetInt("quietFrames", quiet);
+    call.SetInt("settledThresholdFrames", SETTLED_QUIET_FRAMES);
+    call.SetInt("loadingEntities", static_cast<int64_t>(CountLoadingEntities(state)));
+    call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
+    call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
+    call.SetBool("rescanResources", ctx->rescan.bResources);
+    call.SetBool("screenshotInFlight", ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot || state->requests.screenshotBurstRemaining > 0);
+    call.SetString("sceneId", HexId(state->scene.currentSceneId.id).c_str());
+    call.SetString("sceneName", state->scene.currentSceneName.c_str());
+    call.SetInt("stableEntityCount", static_cast<int64_t>(state->stableIdToEntityMap.Size()));
+    call.SetString("inputContext", InputContextName(state->inputContext));
+    call.SetString("runMode", RunModeName(state->runMode));
+    call.SetBool("physicsEnabled", state->physics.bEnabled);
+    call.SetBool("playtestActive", state->playtest.bActive || !state->playtest.pendingPath.IsEmpty());
+    call.SetString("playtestOutputDir", state->playtest.outputDir.c_str());
+    return ToolResult::Complete;
+}
+
 void RegisterEngineTools(EngineState* state)
 {
+    RegisterTool(state, {
+        .id = "get_engine_status"_sid,
+        .name = "get_engine_status",
+        .description = "Readiness of the running scene: settled (no loads in flight for 30 frames), loading entity count, pending asset work, current scene, input context. Poll this after any mutation before trusting a screenshot or query.",
+        .inputSchemaJson = nullptr,
+        .invoke = &GetEngineStatus,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
     RegisterTool(state, {
         .id = "run_play"_sid,
         .name = "run_play",

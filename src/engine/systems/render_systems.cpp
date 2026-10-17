@@ -65,6 +65,17 @@ static glm::quat NlerpPose(const glm::quat& a, glm::quat b, float t)
     return glm::normalize(glm::lerp(a, b, t));
 }
 
+static void InterpolatedPose(const Component::DynamicPhysicsBodyComponent& physics, float alpha, glm::vec3& outTranslation, glm::quat& outRotation)
+{
+    if (physics.previousPosition == physics.currentPosition && physics.previousRotation == physics.currentRotation) {
+        outTranslation = physics.currentPosition;
+        outRotation = physics.currentRotation;
+        return;
+    }
+    outTranslation = glm::mix(physics.previousPosition, physics.currentPosition, alpha);
+    outRotation = NlerpPose(physics.previousRotation, physics.currentRotation, alpha);
+}
+
 void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
@@ -82,8 +93,12 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     // Roots, physics (interpolated Jolt pose)
     for (auto [entity, physics, local, world] : registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::WorldTransformComponent>(
              entt::exclude<Component::HierarchyComponent>).each()) {
-        world.translation = glm::mix(physics.previousPosition, physics.currentPosition, alpha);
-        world.rotation = NlerpPose(physics.previousRotation, physics.currentRotation, alpha);
+        glm::vec3 translation;
+        glm::quat rotation;
+        InterpolatedPose(physics, alpha, translation, rotation);
+        if (translation == world.translation && rotation == world.rotation && local.scale == world.scale) { continue; }
+        world.translation = translation;
+        world.rotation = rotation;
         world.scale = local.scale;
         registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
     }
@@ -108,17 +123,24 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         }
 
         auto* physics = registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
-        const bool selfDirty = physics || registry.all_of<Component::MultiframeDirtyComponent>(entity);
-        const bool parentDirty = registry.all_of<Component::MultiframeDirtyComponent>(node.parent);
+        glm::vec3 physicsTranslation{};
+        glm::quat physicsRotation{};
+        bool bPhysicsMoved = false;
+        if (physics) {
+            InterpolatedPose(*physics, alpha, physicsTranslation, physicsRotation);
+            bPhysicsMoved = physicsTranslation != world.translation || physicsRotation != world.rotation || local.scale != world.scale;
+        }
+        const bool selfDirty = bPhysicsMoved || registry.all_of<Component::MultiframeDirtyComponent>(entity);
+        const bool parentDirty = !physics && registry.all_of<Component::MultiframeDirtyComponent>(node.parent);
         if (!selfDirty && !parentDirty) { continue; }
-        if (!registry.all_of<Component::MultiframeDirtyComponent>(entity)) {
+        if (bPhysicsMoved || !registry.all_of<Component::MultiframeDirtyComponent>(entity)) {
             registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
         }
 
         // Physics (interpolated Jolt pose)
         if (physics) {
-            world.translation = glm::mix(physics->previousPosition, physics->currentPosition, alpha);
-            world.rotation = NlerpPose(physics->previousRotation, physics->currentRotation, alpha);
+            world.translation = physicsTranslation;
+            world.rotation = physicsRotation;
             world.scale = local.scale;
         }
         else {

@@ -31,7 +31,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
     assert(componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
     componentRegistry.registry.PushBack({
         typeId,
-        T::COMPONENT_NAME,
+        ComponentName<T>(),
         [](const entt::registry& reg, entt::entity e, Engine::TextWriter& w) {
             SerializeFields(reg.get<T>(e), w);
         },
@@ -101,7 +101,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
     assert(componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
     componentRegistry.registry.PushBack({
         typeId,
-        T::COMPONENT_NAME,
+        ComponentName<T>(),
         [](const entt::registry&, entt::entity, Engine::TextWriter&) {},
         [](entt::registry& reg, entt::entity e, const Engine::TextReader&) {
             (void) reg.get_or_emplace<T>(e);

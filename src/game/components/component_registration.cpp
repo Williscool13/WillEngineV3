@@ -5,6 +5,7 @@
 #include "component_registration.h"
 
 #include "engine/components/component_registration.h"
+#include "game/ballance/components/breakable_component.h"
 #include "game/components/debug_components.h"
 #include "game/components/checkpoint_component.h"
 #include "game/components/death_zone_component.h"
@@ -25,5 +26,8 @@ void RegisterGameComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::PathMoverComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, Engine::Origin::Game, false, false);
+
+    Engine::RegisterComponent<Ballance::Component::BreakableComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Ballance::Component::SelfDestructComponent>(componentRegistry, Engine::Origin::Game, false, false);
 }
 } // Game

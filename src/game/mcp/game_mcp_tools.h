@@ -14,8 +14,6 @@ struct EngineState;
 namespace Game
 {
 void RegisterMCPTools(Engine::EngineState* state);
-
-void TickQuietFrames(Engine::EngineContext* ctx, Engine::EngineState* state);
 } // Game
 
 #endif //WILL_ENGINE_GAME_MCP_TOOLS_H

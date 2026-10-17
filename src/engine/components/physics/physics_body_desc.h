@@ -87,10 +87,11 @@ struct ColliderShape
     Engine::SplineParams splineParams{};
     Text3DShapeSource text3DSource{};
     bool bSplineHollow{false};
+    uint32_t meshSourceNodeIndex{~0u};
 
     WILL_REFLECT(ColliderShape, WILL_FIELD(meshSourceModelId), WILL_FIELD(bMeshPrecise, .key = "meshPrecise"),
                  WILL_FIELD(proceduralParams, .key = "proceduralType"), WILL_FIELD(proceduralRepeat), WILL_FIELD(splineParams), WILL_FIELD(text3DSource),
-                 WILL_FIELD(bSplineHollow, .key = "splineHollow"))
+                 WILL_FIELD(bSplineHollow, .key = "splineHollow"), WILL_FIELD(meshSourceNodeIndex, .key = "meshSourceNode"))
 
     [[nodiscard]] bool HasSource() const
     {

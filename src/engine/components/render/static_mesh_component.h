@@ -27,13 +27,15 @@ struct StaticMeshComponent
     StringID lightingShaderOverride{};
     Vec3 renderOffset{0.0f};
     Quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t nodeIndex{~0u};
 
     WILL_REFLECT(StaticMeshComponent,
         WILL_FIELD(modelId),
         WILL_FIELD(shadingShaderOverride),
         WILL_FIELD(lightingShaderOverride),
         WILL_FIELD(renderOffset),
-        WILL_FIELD(renderRotation))
+        WILL_FIELD(renderRotation),
+        WILL_FIELD(nodeIndex))
 
     static bool CanAdd(const entt::registry& registry, entt::entity entity);
     static void OnConstruct(entt::registry& registry, entt::entity entity);

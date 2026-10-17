@@ -16,6 +16,7 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "engine/components/physics/physics_body_component.h"
+#include "engine/components/render_components.h"
 #include "engine/systems/scene_system.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 #include "Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h"
@@ -120,7 +121,11 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
-    state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime;
+    state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime * state->physics.timeScale;
+    if (state->physics.timeScale > 1.0f) {
+        constexpr float MAX_FAST_FORWARD_STEPS = 64.0f;
+        state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, MAX_FAST_FORWARD_STEPS * Physics::PHYSICS_TIMESTEP);
+    }
 
     UpdateConveyors(ctx, state);
 
@@ -160,14 +165,18 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         // Set velocity
         auto velocityView = state->registry.view<Component::PhysicsBodyComponent, Component::SetVelocityTag>();
-        for (const auto& [entity, physicsBody, tag] : velocityView.each()) {
-            bodyInterface.SetLinearAndAngularVelocity(
-                physicsBody.bodyID,
-                JPH::Vec3(tag.linearVelocity.x, tag.linearVelocity.y, tag.linearVelocity.z),
-                JPH::Vec3(tag.angularVelocity.x, tag.angularVelocity.y, tag.angularVelocity.z)
-            );
+        if (velocityView.size_hint() > 0) {
+            auto applied = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), velocityView.size_hint());
+            for (const auto& [entity, physicsBody, tag] : velocityView.each()) {
+                bodyInterface.SetLinearAndAngularVelocity(
+                    physicsBody.bodyID,
+                    JPH::Vec3(tag.linearVelocity.x, tag.linearVelocity.y, tag.linearVelocity.z),
+                    JPH::Vec3(tag.angularVelocity.x, tag.angularVelocity.y, tag.angularVelocity.z)
+                );
+                applied.PushBack(entity);
+            }
+            for (const entt::entity entity : applied) { state->registry.remove<Component::SetVelocityTag>(entity); }
         }
-        state->registry.clear<Component::SetVelocityTag>();
 
         auto saveView = state->registry.view<Component::DynamicPhysicsBodyComponent>();
         for (auto [entity, dynamic] : saveView.each()) {
@@ -299,10 +308,17 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     ZoneScoped;
 #ifdef WDEBUG
     const uint32_t mask = state->projectConfig.editorPhysicsDebugMask;
-    if (mask == 0) { return; }
+    const bool bCasterChanges = state->debug.localShadow.bDrawCasterChangeBodies;
+    if (mask == 0 && !bCasterChanges) { return; }
 
     auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
     filter.Clear();
+
+    if (bCasterChanges) {
+        for (const auto& [entity, runtime, dirty, physicsBody] : state->registry.view<Component::MeshRuntime, Component::MultiframeDirtyComponent, Component::PhysicsBodyComponent>().each()) {
+            filter.AddBody(physicsBody.bodyID);
+        }
+    }
 
     const bool bAllBodies = (mask & Engine::PHYSICS_DEBUG_ALL_BODIES) != 0;
     ctx->physicsSystem->SetDebugDrawForceLowestLOD(bAllBodies);
@@ -560,7 +576,7 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
 
                 const bool bWantsMesh = collider->bMeshPrecise && bodyDesc.motionType != Component::PhysicsMotionType::Dynamic;
                 const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
-                handle = ctx->assetManager->LoadModelCollider(collider->meshSourceModelId, kind);
+                handle = ctx->assetManager->LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
             }
             else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
                 handle = ctx->assetManager->LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);

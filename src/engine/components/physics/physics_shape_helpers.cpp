@@ -88,6 +88,7 @@ void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, Physics
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
     if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
         collider.meshSourceModelId = sm->modelId;
+        collider.meshSourceNodeIndex = sm->nodeIndex;
         renderOffset = sm->renderOffset;
         renderRotation = sm->renderRotation;
     }

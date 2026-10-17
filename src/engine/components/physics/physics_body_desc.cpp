@@ -341,7 +341,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 const size_t idx = collider->proceduralParams.index();
 
                 if (meta) {
-                    ImGui::Text("Mesh Source: %s", meta->name.c_str());
+                    if (collider->meshSourceNodeIndex < meta->nodes.Size()) {
+                        ImGui::Text("Mesh Source: %s / %s", meta->name.c_str(), meta->nodes[collider->meshSourceNodeIndex].name.c_str());
+                    }
+                    else {
+                        ImGui::Text("Mesh Source: %s", meta->name.c_str());
+                    }
                     bHasAny = true;
 
                     ImGui::BeginDisabled(bIsDynamic);
@@ -407,6 +412,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                     ImGui::PopStyleColor();
                     if (bShouldClearMesh) {
                         collider->meshSourceModelId = Engine::ModelID::INVALID;
+                        collider->meshSourceNodeIndex = ~0u;
                         collider->proceduralParams = std::monostate{};
                         collider->proceduralRepeat = {};
                         collider->splineParams.spline.points.Clear();

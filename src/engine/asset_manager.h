@@ -150,12 +150,13 @@ public: // Physics colliders (CPU-only, analytic)
     PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params, const ProceduralRepeat& repeat = {});
 
     /**
-     * Loads (or dedups) a collider read from an imported model's .wsmesh geometry (CPU-only, simplified). ConvexHull for dynamic bodies, TriangleMesh for static. Keyed by hash(modelId) x kind; freeze-gate on the source ModelID at the call site.
+     * Loads (or dedups) a collider read from an imported model's .wsmesh geometry (CPU-only, simplified). ConvexHull for dynamic bodies, TriangleMesh for static. Keyed by hash(modelId, nodeIndex) x kind; freeze-gate on the source ModelID at the call site.
      * @param sourceModelId
      * @param kind
+     * @param nodeIndex ~0u for the whole model; otherwise that node and its descendants, in the node's local space
      * @return
      */
-    PhysicsColliderHandle LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind);
+    PhysicsColliderHandle LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind, uint32_t nodeIndex = ~0u);
 
     /**
      * Loads (or dedups) a collider for extruded 3D text: one Box per glyph from the glyph plane bounds (Compound), or with @p bPrecise, the exact extruded glyph mesh simplified into a concave TriangleMesh. Takes a generation-scoped font ref (released when the collider finalizes); freeze-gate on the FontID at the call site.
