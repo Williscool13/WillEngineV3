@@ -437,6 +437,8 @@ static uint64_t HashSplineParams(const SplineParams& params)
     h.Add(params.profile.cornerRadius);
     h.Add(params.profile.cornerSegments);
     h.Add(params.profile.thickness);
+    h.Add(params.profile.wallChamfer);
+    h.Add(params.profile.wallChamferEdge);
     h.Add(params.railing.bEnabled);
     h.Add(params.railing.bPosts);
     h.Add(params.railing.postInterval);

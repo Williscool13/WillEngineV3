@@ -561,26 +561,26 @@ static void CompoundSpiralStaircase(const SpiralStaircaseParams& p, Core::Vector
     }
 }
 
-// Ring of boxes approximating the annular wall; mirrors GeneratePipe (centered Y).
 static void CompoundPipe(const PipeParams& p, Core::Vector<SplineColliderPrimitive>& out, Core::Vector<Vec3>& outPositions)
 {
     const int N = glm::clamp(p.SweepSegments(), 1, 128);
     const float ro = std::max(0.01f, p.outerRadius);
     const float ri = std::max(0.001f, std::min(p.innerRadius, ro - 0.001f));
     const float hh = p.height * 0.5f;
-    const float midR = (ri + ro) * 0.5f;
     const float sweep = glm::radians(p.ClampedSweepDegrees());
-    const Vec3 up(0.0f, 1.0f, 0.0f);
     out.Reserve(out.Size() + N);
     for (int j = 0; j < N; j++) {
         const float a0 = sweep * static_cast<float>(j) / static_cast<float>(N);
         const float a1 = sweep * static_cast<float>(j + 1) / static_cast<float>(N);
-        const float am = (a0 + a1) * 0.5f;
-        const Vec3 radial(std::cos(am), 0.0f, std::sin(am));
-        const Vec3 tangent(-std::sin(am), 0.0f, std::cos(am));
-        const Vec3 center(midR * std::cos(am), 0.0f, midR * std::sin(am));
-        const float halfTang = std::max(0.001f, midR * std::sin((a1 - a0) * 0.5f));
-        PushBoxPrim(center, Vec3((ro - ri) * 0.5f, hh, halfTang), BasisToQuat(radial, up, tangent), out);
+        Vec3 facet[8];
+        int count = 0;
+        for (const float y : {-hh, hh}) {
+            for (const float r : {ri, ro}) {
+                facet[count++] = {r * std::cos(a0), y, r * std::sin(a0)};
+                facet[count++] = {r * std::cos(a1), y, r * std::sin(a1)};
+            }
+        }
+        PushHullPrim(Core::Span<const Vec3>(facet, 8), out, outPositions);
     }
 
     const float capDepth = p.CapDepth();

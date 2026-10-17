@@ -61,8 +61,9 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
  */
 void SetupClusterGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, const SceneResources& scene, const GPUDebugLines& lines, uint32_t sceneIndex, float clusterZNear, float clusterZFar);
 
-/** debugLevel < 0 draws every cascade tinted by level; >= 0 draws only that cascade, untinted. */
 void SetupWorldGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, const SceneResources& scene, const GPUDebugLines& lines, uint32_t sceneIndex, int32_t debugLevel);
+
+void SetupEmissiveRangeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const SceneResources& scene, const GPUDebugLines& lines, uint32_t mode);
 } // Render
 
 #endif //WILL_ENGINE_DEBUG_PASSES_H

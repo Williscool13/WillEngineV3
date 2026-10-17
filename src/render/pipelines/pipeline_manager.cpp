@@ -561,6 +561,8 @@ void PipelineManager::RegisterPipelines()
                             sizeof(ClusterGridDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gpu_debug_world_grid"_sid, src / "gpu_debug_world_grid.spv", "ComputeGPUDebugWorldGrid",
                             sizeof(WorldGridDebugPushConstant), PipelineCategory::Critical);
+    RegisterComputePipeline("gpu_debug_emissive_range"_sid, src / "gpu_debug_emissive_range.spv", "ComputeGPUDebugEmissiveRange",
+                            sizeof(EmissiveRangeDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("gpu_debug_radiance_cache"_sid, src / "gpu_debug_radiance_cache.spv", "ComputeGPUDebugRadianceCache",
                             sizeof(RadianceCacheDebugPushConstant), PipelineCategory::Critical);
     RegisterComputePipeline("ddgi_probe_debug"_sid, src / "ddgi_probe_debug.spv", "ComputeDDGIProbeDebug",

@@ -770,6 +770,16 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     render.worldGridDebugLevel = worldGridLevelChoice - 1;
                 }
             }
+            if (Widgets::PassFilter("Emissive Ranges")) {
+                const char* emissiveRangeLabels[] = {"Off", "Emitters", "Meshlets"};
+                int emissiveRangeChoice = static_cast<int>(render.emissiveRangeDebug);
+                ImGui::SetNextItemWidth(120.0f);
+                if (Widgets::Combo("Emissive Ranges##GPUDebug", &emissiveRangeChoice, emissiveRangeLabels, static_cast<int>(std::size(emissiveRangeLabels)),
+                                   "Orange: the range-padded AABB light binning tests world grid and ReGIR cells against (bounds + Emissive Range Multiplier * sqrt(emitter power)). White: the unpadded bounds. "
+                                   "Emitters draws one box per emissive primitive, Meshlets one per emissive meshlet.")) {
+                    render.emissiveRangeDebug = static_cast<uint32_t>(emissiveRangeChoice);
+                }
+            }
 
             Widgets::Checkbox("Probe Preview##GPUDebug", &state->debug.bProbePreview,
                               "Draws a sphere at every reflection probe's capture position, shaded from its cubemap (disabled probes included if their content is loaded). Specular samples the roughness-selected prefilter mip along the mirror reflection vector; Irradiance samples the diffuse mip along the normal.");

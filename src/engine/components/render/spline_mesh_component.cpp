@@ -183,7 +183,19 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
             if (pt == Engine::SplineProfileType::Wall) {
                 ImGui::DragFloat("Chamfer", &component.profile.cornerRadius, 0.005f, 0.0f, 25.0f);
                 dirty |= ImGui::IsItemDeactivatedAfterEdit();
-                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Cut on the two top edges; the wall stands on the path"); }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("The wall stands on the path"); }
+                const char* chamferSides[] = {"Both", "Left", "Right"};
+                int sides = static_cast<int>(component.profile.wallChamfer);
+                if (ImGui::Combo("Chamfer Sides", &sides, chamferSides, IM_ARRAYSIZE(chamferSides))) {
+                    component.profile.wallChamfer = static_cast<Engine::SplineWallChamfer>(sides);
+                    dirty = true;
+                }
+                const char* chamferEdges[] = {"Top", "Bottom", "Both"};
+                int edges = static_cast<int>(component.profile.wallChamferEdge);
+                if (ImGui::Combo("Chamfer Edges", &edges, chamferEdges, IM_ARRAYSIZE(chamferEdges))) {
+                    component.profile.wallChamferEdge = static_cast<Engine::SplineWallChamferEdge>(edges);
+                    dirty = true;
+                }
             }
             if (pt == Engine::SplineProfileType::RoundedRect || pt == Engine::SplineProfileType::Handrail || pt == Engine::SplineProfileType::Wall) {
                 ImGui::DragInt("Corner Segments", &component.profile.cornerSegments, 1, 1, 16);

@@ -47,7 +47,7 @@ reflectionProbeLineWidth|0x3dcccccd
 editorSpriteMask|127
 editorDebugDrawMask|127
 editorDebugDrawMode|1
-editorPhysicsDebugMask|5
+editorPhysicsDebugMask|1
 gameCameraFovDegrees|0x42480000
 gameCameraNearPlane|0x3dcccccd
 editorCameraFovDegrees|0x427fe4e0

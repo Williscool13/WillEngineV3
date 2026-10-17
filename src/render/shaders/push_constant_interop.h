@@ -744,6 +744,16 @@ SHADER_PUBLIC struct WorldGridDebugPushConstant
     SHADER_PUBLIC uint32_t pad0;
 };
 
+SHADER_PUBLIC struct EmissiveRangeDebugPushConstant
+{
+    SHADER_PUBLIC SHADER_PTR(GPUDebugDrawArgs) args;
+    SHADER_PUBLIC SHADER_PTR(DebugLineSegment) segmentBuffer;
+    SHADER_PUBLIC SHADER_PTR(LightData) lightData;
+    /** 1 = per emitter, 2 = per meshlet. */
+    SHADER_PUBLIC uint32_t mode;
+    SHADER_PUBLIC uint32_t pad0;
+};
+
 SHADER_PUBLIC struct RadianceCacheCarryForwardPushConstant
 {
     SHADER_PUBLIC SHADER_PTR(uint) prevEntries;

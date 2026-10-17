@@ -581,6 +581,8 @@ struct DebugRenderParams
     bool bClusterGridDebug{false};
     bool bWorldGridDebug{false};
     int32_t worldGridDebugLevel{0};
+    /** 0 off, 1 per emitter, 2 per meshlet. */
+    uint32_t emissiveRangeDebug{0};
     bool bReGIRCursorCell{false};
     bool bWorldGridCursorCell{false};
     uint32_t pickRequestId{0};

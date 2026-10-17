@@ -490,8 +490,22 @@ enum class SplineProfileType : uint8_t
     LAngle = 5,
     RailHead = 6,
     Handrail = 7,
-    /** Stands on the path (y from 0 to height) with its top corners cut by cornerRadius; cornerSegments above 1 rounds the cut. */
+    /** Stands on the path (y from 0 to height) with the corners picked by wallChamfer and wallChamferEdge cut by cornerRadius; cornerSegments above 1 rounds the cut. */
     Wall = 8,
+};
+
+enum class SplineWallChamfer : uint8_t
+{
+    Both = 0,
+    Left = 1,
+    Right = 2,
+};
+
+enum class SplineWallChamferEdge : uint8_t
+{
+    Top = 0,
+    Bottom = 1,
+    Both = 2,
 };
 
 struct SplineProfile
@@ -502,8 +516,11 @@ struct SplineProfile
     float cornerRadius{0.08f};
     int32_t cornerSegments{3};
     float thickness{0.05f};
+    SplineWallChamfer wallChamfer{SplineWallChamfer::Both};
+    SplineWallChamferEdge wallChamferEdge{SplineWallChamferEdge::Top};
 
-    WILL_REFLECT(SplineProfile, WILL_FIELD(type), WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(cornerRadius), WILL_FIELD(cornerSegments), WILL_FIELD(thickness))
+    WILL_REFLECT(SplineProfile, WILL_FIELD(type), WILL_FIELD(width), WILL_FIELD(height), WILL_FIELD(cornerRadius), WILL_FIELD(cornerSegments), WILL_FIELD(thickness),
+                 WILL_FIELD(wallChamfer), WILL_FIELD(wallChamferEdge))
 };
 
 enum class SplinePostShape : uint8_t

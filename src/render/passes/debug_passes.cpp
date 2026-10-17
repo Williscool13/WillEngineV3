@@ -334,4 +334,36 @@ void SetupWorldGridDebug(RenderGraph& graph, PipelineManager* pipelineManager, c
     }
 #endif
 }
+
+void SetupEmissiveRangeDebug(RenderGraph& graph, PipelineManager* pipelineManager, const SceneResources& scene, const GPUDebugLines& lines, uint32_t mode)
+{
+    ZoneScoped;
+#ifdef WDEBUG
+    if (!lines.IsValid() || !scene.lightData.IsValid() || mode == 0) {
+        return;
+    }
+
+    RenderPass& pass = graph.AddPass("Emissive Range Debug"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::Debug);
+    pass.ReadWriteBuffer(lines.args);
+    pass.WriteBuffer(lines.segments);
+    pass.ReadBuffer(scene.lightData);
+    pass.Execute([&scene, pipelineManager, mode, args = lines.args, segments = lines.segments](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+        const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gpu_debug_emissive_range"_sid);
+        if (!pipelineEntry) {
+            return;
+        }
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
+
+        EmissiveRangeDebugPushConstant pc{
+            .args = graph.GetBufferAddress(args),
+            .segmentBuffer = graph.GetBufferAddress(segments),
+            .lightData = graph.GetBufferAddress(scene.lightData),
+            .mode = mode,
+        };
+        vkCmdPushConstants(cmd, pipelineEntry->layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
+        const uint32_t count = mode == 1 ? static_cast<uint32_t>(MAX_EMISSIVE_MESHES) : static_cast<uint32_t>(MAX_EMISSIVE_MESHLETS);
+        vkCmdDispatch(cmd, (count + 63u) / 64u, 1, 1);
+    });
+#endif
+}
 } // Render

@@ -465,6 +465,9 @@ void RenderThread::RecordSceneServices(FrameContext& ctx)
             SetupWorldGridDebug(*renderGraph, pipelineManager, scene, ctx.gpuDebugLines, 0, frameBuffer.debug.worldGridDebugLevel);
         }
     }
+    if (frameBuffer.debug.bEnableGPUDebug && !frameBuffer.debug.bLockGPUDebug) {
+        SetupEmissiveRangeDebug(*renderGraph, pipelineManager, scene, ctx.gpuDebugLines, frameBuffer.debug.emissiveRangeDebug);
+    }
 
     if (ctx.features.ddgi != DDGIUsage::Off) {
         RecordDDGI(ctx, ddgiCascades);

@@ -3357,13 +3357,22 @@ static void BuildSplineProfile(const Engine::SplineParams& p, Core::Vector<Splin
         case Engine::SplineProfileType::Wall:
         {
             const float wallH = p.profile.height;
-            const float cr = glm::clamp(p.profile.cornerRadius, 0.0f, std::min(hw, wallH));
+            const Engine::SplineWallChamferEdge edge = p.profile.wallChamferEdge;
+            const float cr = glm::clamp(p.profile.cornerRadius, 0.0f, std::min(hw, edge == Engine::SplineWallChamferEdge::Both ? 0.5f * wallH : wallH));
+            const float crL = p.profile.wallChamfer == Engine::SplineWallChamfer::Right ? 0.0f : cr;
+            const float crR = p.profile.wallChamfer == Engine::SplineWallChamfer::Left ? 0.0f : cr;
+            const bool bTop = edge != Engine::SplineWallChamferEdge::Bottom;
+            const bool bBottom = edge != Engine::SplineWallChamferEdge::Top;
+            const float tL = bTop ? crL : 0.0f;
+            const float tR = bTop ? crR : 0.0f;
+            const float bL = bBottom ? crL : 0.0f;
+            const float bR = bBottom ? crR : 0.0f;
             const int cs = std::max(1, p.profile.cornerSegments);
-            auto corner = [&](Vec2 ctr, float a0, float a1) {
-                if (cr <= 0.0f) { return; }
+            auto corner = [&](Vec2 ctr, float r, float a0, float a1) {
+                if (r <= 0.0f) { return; }
                 if (cs == 1) {
-                    const Vec2 a = ctr + cr * Vec2{cosf(a0), sinf(a0)};
-                    const Vec2 b = ctr + cr * Vec2{cosf(a1), sinf(a1)};
+                    const Vec2 a = ctr + r * Vec2{cosf(a0), sinf(a0)};
+                    const Vec2 b = ctr + r * Vec2{cosf(a1), sinf(a1)};
                     const Vec2 n{b.y - a.y, a.x - b.x};
                     push(a, n);
                     push(b, n);
@@ -3372,16 +3381,18 @@ static void BuildSplineProfile(const Engine::SplineParams& p, Core::Vector<Splin
                 for (int k = 0; k <= cs; k++) {
                     const float a = glm::mix(a0, a1, static_cast<float>(k) / static_cast<float>(cs));
                     const Vec2 dir{cosf(a), sinf(a)};
-                    push(ctr + cr * dir, dir);
+                    push(ctr + r * dir, dir);
                 }
             };
             const float halfPi = glm::half_pi<float>();
-            push({-hw, 0.0f}, {0, -1}); push({hw, 0.0f}, {0, -1});
-            push({hw, 0.0f}, {1, 0}); push({hw, wallH - cr}, {1, 0});
-            corner({hw - cr, wallH - cr}, 0.0f, halfPi);
-            push({hw - cr, wallH}, {0, 1}); push({-hw + cr, wallH}, {0, 1});
-            corner({-hw + cr, wallH - cr}, halfPi, glm::pi<float>());
-            push({-hw, wallH - cr}, {-1, 0}); push({-hw, 0.0f}, {-1, 0});
+            push({-hw + bL, 0.0f}, {0, -1}); push({hw - bR, 0.0f}, {0, -1});
+            corner({hw - bR, bR}, bR, -halfPi, 0.0f);
+            push({hw, bR}, {1, 0}); push({hw, wallH - tR}, {1, 0});
+            corner({hw - tR, wallH - tR}, tR, 0.0f, halfPi);
+            push({hw - tR, wallH}, {0, 1}); push({-hw + tL, wallH}, {0, 1});
+            corner({-hw + tL, wallH - tL}, tL, halfPi, glm::pi<float>());
+            push({-hw, wallH - tL}, {-1, 0}); push({-hw, bL}, {-1, 0});
+            corner({-hw + bL, bL}, bL, glm::pi<float>(), 1.5f * glm::pi<float>());
             break;
         }
         case Engine::SplineProfileType::Tube:
