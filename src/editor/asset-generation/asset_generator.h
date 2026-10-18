@@ -2,11 +2,11 @@
 #define WILL_ENGINE_ASSET_GENERATOR_H
 
 #include <atomic>
-#include <random>
 #include <semaphore>
 #include <thread>
 
 #include "core/containers/inline_path.h"
+#include "core/math/random.h"
 #include "core/memory/concurrent_queue_traits.h"
 #include "core/threading/semaphore.h"
 #include "engine/core/environment_map_id.h"
@@ -282,10 +282,10 @@ private:
     Render::GPUDispatcher* gpuDispatcher;
     enki::TaskScheduler* scheduler{};
 
-    std::mt19937_64 modelIdRng{std::random_device{}()};
-    std::mt19937_64 textureIdRng{std::random_device{}()};
-    std::mt19937_64 environmentMapIdRng{std::random_device{}()};
-    std::mt19937_64 fontIdRng{std::random_device{}()};
+    Core::Random modelIdRng{};
+    Core::Random textureIdRng{};
+    Core::Random environmentMapIdRng{};
+    Core::Random fontIdRng{};
 
     Core::Array<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateTasks;
     Core::LockFreeHandleAllocator<StaticModelGenerateSlot, MODEL_GENERATION_JOB_COUNT> modelGenerateAllocator;

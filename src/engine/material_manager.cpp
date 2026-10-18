@@ -526,8 +526,7 @@ void MaterialManager::CreateMaterial(std::string_view name, std::string_view sub
     mat.props = GetDefaultMaterialProperties();
     mat.fragmentShader = GetDefaultMaterialFragmentShader();
     mat.lightingShader = GetDefaultMaterialLightingShader();
-    std::uniform_real_distribution dist(0.0f, 1.0f);
-    mat.props.colorFactor = {dist(mutableIdRng), dist(mutableIdRng), dist(mutableIdRng), 1.0f}; // todo
+    mat.props.colorFactor = {mutableIdRng.Float(), mutableIdRng.Float(), mutableIdRng.Float(), 1.0f}; // todo
     mat.sourcePath = matPath;
 
     WMaterialHeader header{};

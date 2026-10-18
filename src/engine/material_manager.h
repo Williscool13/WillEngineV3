@@ -6,10 +6,10 @@
 #define WILL_ENGINE_MATERIAL_MANAGER_H
 #include <chrono>
 #include <cstdint>
-#include <random>
 
 #include "resources/material/material.h"
 #include "resources/text_material/text_material.h"
+#include "core/math/random.h"
 #include "core/string_id.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"
@@ -175,12 +175,12 @@ private:
     int32_t pendingMaterialRetireLogCount{0};
     std::chrono::steady_clock::time_point materialRetireLastActivity{};
 
-    std::mt19937_64 mutableIdRng{std::random_device{}()};
+    Core::Random mutableIdRng{};
 
     Core::FixedMap<TextMaterialID, TextMaterial> textMaterials;
     Core::FixedMap<StringID, TextMaterialID> nameToTextMaterialMap;
 
-    std::mt19937_64 textMaterialIdRng{std::random_device{}()};
+    Core::Random textMaterialIdRng{};
 };
 }
 

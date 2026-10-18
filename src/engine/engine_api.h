@@ -17,6 +17,7 @@
 #include "core/containers/inline_vector.h"
 #include "core/containers/map.h"
 #include "core/containers/vector.h"
+#include "core/math/random.h"
 #include "core/types/math.h"
 #include "engine/core/hash.h"
 #include "engine/core/action_handle.h"
@@ -323,7 +324,7 @@ struct EngineState
      * Note: Do not use directly, timeFrame will be replaced with this in the render frame function.
      */
     Core::TimeFrame renderTimeFrame{};
-    std::mt19937_64 rng{std::random_device{}()};
+    Core::Random rng{};
 
     CommandQueue commandQueue{};
     entt::registry registry;

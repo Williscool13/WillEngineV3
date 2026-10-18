@@ -55,6 +55,8 @@ add_library(core STATIC
         memory/linear_allocator.h
         math/math_helpers.cpp
         math/math_helpers.h
+        math/random.cpp
+        math/random.h
         memory/lock_free_handle_allocator.cpp
         memory/lock_free_handle_allocator.h
         string_id.cpp

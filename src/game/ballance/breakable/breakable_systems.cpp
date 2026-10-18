@@ -5,7 +5,6 @@
 #include "breakable_systems.h"
 
 #include <cmath>
-#include <random>
 
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -149,15 +148,6 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
     const Engine::ModelID brokenModelId = breakable->brokenModelId;
     const float scatterSpeed = breakable->scatterSpeed;
     const float scatterSpin = breakable->scatterSpin;
-    std::uniform_real_distribution<float> unit(-1.0f, 1.0f);
-    std::uniform_real_distribution<float> spinScale(0.5f, 1.0f);
-    auto randomSpin = [&]() -> glm::vec3 {
-        glm::vec3 axis;
-        do {
-            axis = {unit(state->rng), unit(state->rng), unit(state->rng)};
-        } while (glm::dot(axis, axis) > 1.0f || glm::dot(axis, axis) < 1e-4f);
-        return glm::normalize(axis) * (scatterSpin * spinScale(state->rng));
-    };
 
     const Transform world = Component::ComputeWorldTransform(registry, entity);
     const glm::mat4 worldMatrix = world.GetMatrix();
@@ -224,7 +214,7 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
         const int thin = extent.x <= extent.y && extent.x <= extent.z ? 0 : (extent.y <= extent.z ? 1 : 2);
         glm::vec3 thinAxis(0.0f);
         thinAxis[thin] = 1.0f;
-        const glm::vec3 spin = LimitAlignment(randomSpin(), rotation * thinAxis, MAX_THIN_AXIS_SPIN_ALIGNMENT);
+        const glm::vec3 spin = LimitAlignment(state->rng.UnitVector() * (scatterSpin * state->rng.Range(0.5f, 1.0f)), rotation * thinAxis, MAX_THIN_AXIS_SPIN_ALIGNMENT);
 
         const glm::vec3 offset = position - centerOfMass;
         const float offsetLength = glm::length(offset);

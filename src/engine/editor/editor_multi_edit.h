@@ -5,11 +5,10 @@
 #ifndef WILL_ENGINE_EDITOR_MULTI_EDIT_H
 #define WILL_ENGINE_EDITOR_MULTI_EDIT_H
 
-#include <random>
-
 #include "imgui.h"
 
 #include "core/containers/inline_string.h"
+#include "core/math/random.h"
 
 namespace Engine::MultiEdit
 {
@@ -32,14 +31,14 @@ FieldResult ScalarField(const char* id, ImU32 axisColor, float uniformValue, boo
 bool ContainsNameToken(const char* s);
 
 /** Expands `{S}` to the 0-based selection index and `{R(a,b)}` to a random int in [a,b); anything else is copied as is. */
-void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, std::mt19937_64& rng);
+void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, Core::Random& rng);
 
 /**
  * Evaluates a transform-field expression for one entity: + - * / with the usual precedence, parentheses and unary minus over
  * number | x (current value) | S (0-based selection index) | R(a,b) (random float in [a,b)). A leading * or / applies to x.
  * Returns false (leaving out untouched) on malformed input, division by zero or a non-finite result.
  */
-bool EvaluateFloatField(const char* expr, float currentValue, int index, std::mt19937_64& rng, float& out);
+bool EvaluateFloatField(const char* expr, float currentValue, int index, Core::Random& rng, float& out);
 }
 
 #endif //WILL_ENGINE_EDITOR_MULTI_EDIT_H

@@ -58,20 +58,6 @@ static void SkipWs(const char*& p)
     while (*p == ' ' || *p == '\t') { ++p; }
 }
 
-static float RandomFloat(float a, float b, std::mt19937_64& rng)
-{
-    if (!(b > a)) { return a; }
-    std::uniform_real_distribution<float> dist(a, b);
-    return dist(rng);
-}
-
-static int RandomInt(int a, int b, std::mt19937_64& rng)
-{
-    if (b <= a) { return a; }
-    std::uniform_int_distribution<int> dist(a, b - 1);
-    return dist(rng);
-}
-
 /** Parses `R(a,b)` starting at p (positioned on the paren); a and b are plain literals. */
 static bool ParseRandomArgs(const char*& p, float& a, float& b)
 {
@@ -98,7 +84,7 @@ struct ExprContext
 {
     float x;
     int index;
-    std::mt19937_64& rng;
+    Core::Random& rng;
 };
 
 static bool ParseSum(const char*& p, const ExprContext& c, float& out);
@@ -122,7 +108,7 @@ static bool ParsePrimary(const char*& p, const ExprContext& c, float& out)
     }
     const float x = c.x;
     const int index = c.index;
-    std::mt19937_64& rng = c.rng;
+    Core::Random& rng = c.rng;
     if (*p == 'x' || *p == 'X') {
         out = x;
         ++p;
@@ -137,7 +123,7 @@ static bool ParsePrimary(const char*& p, const ExprContext& c, float& out)
         ++p;
         float a, b;
         if (!ParseRandomArgs(p, a, b)) { return false; }
-        out = RandomFloat(a, b, rng);
+        out = rng.Range(a, b);
         return true;
     }
     char* end = nullptr;
@@ -183,7 +169,7 @@ static bool ParseSum(const char*& p, const ExprContext& c, float& out)
     return ParsePrimary(p, c, out) && ParseProductTail(p, c, out) && ParseSumTail(p, c, out);
 }
 
-bool EvaluateFloatField(const char* expr, float currentValue, int index, std::mt19937_64& rng, float& out)
+bool EvaluateFloatField(const char* expr, float currentValue, int index, Core::Random& rng, float& out)
 {
     const ExprContext c{currentValue, index, rng};
     const char* p = expr;
@@ -234,7 +220,7 @@ bool ContainsNameToken(const char* s)
     return false;
 }
 
-void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, std::mt19937_64& rng)
+void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int index, Core::Random& rng)
 {
     dst.Clear();
     const char* p = templ;
@@ -243,7 +229,7 @@ void ExpandNameTemplate(Core::InlineString<128>& dst, const char* templ, int ind
         bool bRandom;
         float a, b;
         if (MatchNameToken(p, end, bRandom, a, b)) {
-            dst.Append(bRandom ? RandomInt(static_cast<int>(a), static_cast<int>(b), rng) : index);
+            dst.Append(bRandom ? rng.Range(static_cast<int32_t>(a), static_cast<int32_t>(b)) : index);
             p = end;
             continue;
         }

@@ -5,10 +5,9 @@
 #ifndef WILL_ENGINE_STABLE_ID_COMPONENT_H
 #define WILL_ENGINE_STABLE_ID_COMPONENT_H
 
-#include <random>
-
 #include <entt/entt.hpp>
 
+#include "core/math/random.h"
 #include "core/string_id.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
@@ -36,7 +35,7 @@ struct StableIdComponent
     StringID id;
     uint64_t sortOrder{0};
 
-    static StringID Generate(std::mt19937_64& rng)
+    static StringID Generate(Core::Random& rng)
     {
         return StringID(rng());
     }
