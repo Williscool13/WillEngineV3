@@ -10,7 +10,7 @@ e
 fps|117
 ;
 e
-console|view gi_gather_resolved
+console|r.view gi_gather_resolved
 ;
 e
 cam|held
@@ -35,5 +35,5 @@ e
 capture|resolvedpose_postturn
 ;
 e
-console|view off
+console|r.view off
 ;

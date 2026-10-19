@@ -10,10 +10,10 @@ e
 fps|30
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
-console|view gi_gather_resolved
+console|r.view gi_gather_resolved
 ;
 e
 cam|held
@@ -406,7 +406,7 @@ e
 capture|gi_4s
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 cam|held
@@ -799,5 +799,5 @@ e
 capture|final_4s
 ;
 e
-console|gtao 1
+console|r.gtao 1
 ;

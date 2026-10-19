@@ -10,7 +10,7 @@ e
 fps|129
 ;
 e
-console|view relax_spec_illum
+console|r.view relax_spec_illum
 ;
 e
 cam|held
@@ -1091,7 +1091,7 @@ e
 capture|sprev_136
 ;
 e
-console|view relax_diff_fast
+console|r.view relax_diff_fast
 ;
 e
 cam|held
@@ -2172,7 +2172,7 @@ e
 capture|fprev_136
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 cam|held
@@ -3253,5 +3253,5 @@ e
 capture|prev_136
 ;
 e
-console|view off
+console|r.view off
 ;

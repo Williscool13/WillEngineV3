@@ -13,7 +13,7 @@ e
 fps|30
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 play|1
@@ -25,7 +25,7 @@ e
 capture|still
 ;
 e
-console|view relax_diff_illum
+console|r.view relax_diff_illum
 ;
 e
 wait|2
@@ -34,7 +34,7 @@ e
 capture|still_diff
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -48,7 +48,7 @@ capture|roll
 frames|6
 ;
 e
-console|view relax_diff_illum
+console|r.view relax_diff_illum
 ;
 e
 wait|2
@@ -58,7 +58,7 @@ capture|roll_diff
 frames|6
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -72,7 +72,7 @@ capture|rest
 frames|3
 ;
 e
-console|view relax_diff_illum
+console|r.view relax_diff_illum
 ;
 e
 wait|2
@@ -82,8 +82,8 @@ capture|rest_diff
 frames|3
 ;
 e
-console|view off
+console|r.view off
 ;
 e
-console|gtao 1
+console|r.gtao 1
 ;

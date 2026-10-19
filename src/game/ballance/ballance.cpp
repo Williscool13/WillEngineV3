@@ -39,6 +39,11 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterComponent<Component::SelfDestructComponent>(componentRegistry, Engine::Origin::Game, false, false);
 }
 
+void RegisterCommands(Engine::EngineState* state)
+{
+    RegisterBreakableCommands(state);
+}
+
 void ConnectObservers(entt::registry& registry)
 {
     ConnectCheckpointObservers(registry);

@@ -15,7 +15,7 @@ translation|0xc1159899|0x3ed05818|0x412a84d5
 rotation|0x3f024f70|0xbb2d839d|0xbf5c5935|0xbb928d6a
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 wait|150

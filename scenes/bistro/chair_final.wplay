@@ -10,7 +10,7 @@ e
 fps|30
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 cam|held
@@ -1031,5 +1031,5 @@ e
 wait|1
 ;
 e
-console|view off
+console|r.view off
 ;

@@ -15,13 +15,13 @@ e
 fps|30
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 profile|ReSTIR ConfStrong
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 play|1
@@ -33,7 +33,7 @@ e
 capture|rest
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|2
@@ -42,7 +42,7 @@ e
 capture|rest_conf
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -63,7 +63,7 @@ capture|roll
 frames|6
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|2
@@ -73,7 +73,7 @@ capture|roll_conf
 frames|6
 ;
 e
-console|view restir_signal
+console|r.view restir_signal
 ;
 e
 wait|2
@@ -83,7 +83,7 @@ capture|roll_signal
 frames|3
 ;
 e
-console|view restir_gradient
+console|r.view restir_gradient
 ;
 e
 wait|2
@@ -93,7 +93,7 @@ capture|roll_grad
 frames|3
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -113,5 +113,5 @@ e
 capture|rest2
 ;
 e
-console|gtao 1
+console|r.gtao 1
 ;

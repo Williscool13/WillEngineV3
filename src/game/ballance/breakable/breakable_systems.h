@@ -15,6 +15,8 @@ struct EngineState;
 
 namespace Ballance
 {
+void RegisterBreakableCommands(Engine::EngineState* state);
+
 void ConnectBreakableObservers(entt::registry& registry);
 void DisconnectBreakableObservers(entt::registry& registry);
 

@@ -7,7 +7,7 @@ event_count 286
 end_header
 events|286
 e
-console|view off
+console|r.view off
 ;
 e
 fps|115
@@ -1260,5 +1260,5 @@ e
 capture|final_s960
 ;
 e
-console|view off
+console|r.view off
 ;

@@ -15,6 +15,8 @@
 #include "core/containers/arena_fixed_vector.h"
 #include "core/time/time_frame.h"
 #include "engine/asset_manager.h"
+#include "engine/components/camera_components.h"
+#include "engine/console/console.h"
 #include "engine/engine_api.h"
 #include "engine/components/common_components.h"
 #include "engine/components/physics/physics_body_component.h"
@@ -67,6 +69,39 @@ static void ReleaseBreakableRuntime(Engine::AssetManager* assetManager, Componen
 static void DropBreakableRuntime(entt::registry& registry, entt::entity entity)
 {
     registry.remove<Component::BreakableRuntime>(entity);
+}
+
+static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>)
+{
+    constexpr float RADIUS = 10.0f;
+    if (!Engine::IsRunning(state)) {
+        Engine::Console::Print(state, "  b.crate.break: needs play or simulate");
+        return;
+    }
+    const auto* camera = state->registry.try_get<Component::CameraComponent>(state->renderedCamera);
+    if (!camera) {
+        Engine::Console::Print(state, "  b.crate.break: no rendered camera");
+        return;
+    }
+    const glm::vec3 origin = camera->currentViewData.cameraPos;
+
+    auto view = state->registry.view<Component::BreakableComponent>();
+    auto nearby = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::max(view.size(), size_t{1}));
+    for (const entt::entity entity : view) {
+        if (glm::distance(Component::ComputeWorldTransform(state->registry, entity).translation, origin) <= RADIUS) {
+            nearby.PushBack(entity);
+        }
+    }
+    uint32_t broken = 0;
+    for (const entt::entity entity : nearby) {
+        if (Break(ctx, state, entity)) { ++broken; }
+    }
+    Engine::Console::Print(state, Core::InlineString<256>::Format("  broke %u of %zu breakables within %.0f m", broken, nearby.Size(), RADIUS).c_str());
+}
+
+void RegisterBreakableCommands(Engine::EngineState* state)
+{
+    Engine::Console::Register(state, Engine::Origin::Game, "b.crate.break", "Breaks every breakable within 10 m of the camera (play or simulate)", &BreakNearCamera);
 }
 
 void ConnectBreakableObservers(entt::registry& registry)

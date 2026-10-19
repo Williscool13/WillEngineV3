@@ -89,6 +89,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     Audio::AudioManager::RegisterAudio();
     Ballance::RegisterComponents(state->componentRegistry);
+    Ballance::RegisterCommands(state);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
@@ -125,6 +126,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 #endif
 
     Ballance::RegisterComponents(state->componentRegistry);
+    Ballance::RegisterCommands(state);
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);

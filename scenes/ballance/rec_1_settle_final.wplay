@@ -10,7 +10,7 @@ e
 fps|117
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 cam|held
@@ -2804,5 +2804,5 @@ e
 capture|final_s960
 ;
 e
-console|view off
+console|r.view off
 ;

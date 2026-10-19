@@ -10,10 +10,10 @@ e
 fps|15
 ;
 e
-console|framerate_scale 1
+console|r.framerate_scale 1
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 cam|preset
@@ -3686,8 +3686,8 @@ e
 wait|1
 ;
 e
-console|view off
+console|r.view off
 ;
 e
-console|framerate_scale auto
+console|r.framerate_scale auto
 ;

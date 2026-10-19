@@ -23,6 +23,7 @@ class SystemGraph;
 namespace Ballance
 {
 void RegisterComponents(Engine::ComponentRegistry& componentRegistry);
+void RegisterCommands(Engine::EngineState* state);
 void ConnectObservers(entt::registry& registry);
 void DisconnectObservers(entt::registry& registry);
 void CollectSystems(Engine::SystemGraph& graph);

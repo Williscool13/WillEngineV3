@@ -15,7 +15,7 @@ e
 fps|30
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 play|1
@@ -63,5 +63,5 @@ e
 capture|rest
 ;
 e
-console|gtao 1
+console|r.gtao 1
 ;

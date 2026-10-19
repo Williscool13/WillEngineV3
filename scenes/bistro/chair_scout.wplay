@@ -10,7 +10,7 @@ e
 fps|30
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 cam|held
@@ -1058,5 +1058,5 @@ e
 capture|final_c108
 ;
 e
-console|view off
+console|r.view off
 ;

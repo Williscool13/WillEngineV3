@@ -191,18 +191,18 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, l.c_str());
     });
 
-    Register(state, Origin::Engine, "render_reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "r.reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
         state->requests.RequestRenderReset(Core::RenderReset::Flush);
     });
 
-    Register(state, Origin::Engine, "gtao", "`gtao 0|1` toggles ambient occlusion", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "r.gtao", "`r.gtao 0|1` toggles ambient occlusion", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() > 1) {
             state->lighting.gtaoConfig.bEnabled = args[1][0] != '0';
         }
         Print(state, state->lighting.gtaoConfig.bEnabled ? "  gtao on" : "  gtao off");
     });
 
-    Register(state, Origin::Engine, "gi_deconstruct", "`gi_deconstruct <0-7>` GI deconstruct mode (1 cache cell id, 2 cache radiance, 3 ddgi cheb, 4 ddgi margin, 5 ddgi coverage, 6 ddgi irradiance, 7 volume coverage, 8 ddgi cascade); pair with `view gi_deconstruct_target`",
+    Register(state, Origin::Engine, "r.gi_deconstruct", "`r.gi_deconstruct <0-7>` GI deconstruct mode (1 cache cell id, 2 cache radiance, 3 ddgi cheb, 4 ddgi margin, 5 ddgi coverage, 6 ddgi irradiance, 7 volume coverage, 8 ddgi cascade); pair with `r.view gi_deconstruct_target`",
              [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
                  if (args.Size() > 1) {
                      state->debug.render.giDeconstructMode = std::clamp(static_cast<int32_t>(std::strtol(args[1], nullptr, 10)), 0, 8);
@@ -210,7 +210,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
                  Print(state, Core::InlineString<64>::Format("  gi_deconstruct %d", state->debug.render.giDeconstructMode).c_str());
              });
 
-    Register(state, Origin::Engine, "diag", "`diag <zone> 0|1` shows a Diagnostics window readout (radiance_cache, regir, regir_cursor, world_grid_cursor, emissive, stores); no args lists every zone",
+    Register(state, Origin::Engine, "r.diag", "`r.diag <zone> 0|1` shows a Diagnostics window readout (radiance_cache, regir, regir_cursor, world_grid_cursor, emissive, stores); no args lists every zone",
              [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
                  struct DiagZone
                  {
@@ -240,10 +240,10 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
                      Print(state, Core::InlineString<64>::Format("  %s %s", zone.name, *zone.flag ? "on" : "off").c_str());
                      return;
                  }
-                 Print(state, "  usage: diag <radiance_cache|regir|regir_cursor|world_grid_cursor|emissive|stores> 0|1");
+                 Print(state, "  usage: r.diag <radiance_cache|regir|regir_cursor|world_grid_cursor|emissive|stores> 0|1");
              });
 
-    Register(state, Origin::Engine, "groundtruth", "`groundtruth off|di|gi|full [spp]` switches the path-traced reference and restarts its accumulation", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "r.groundtruth", "`r.groundtruth off|di|gi|full [spp]` switches the path-traced reference and restarts its accumulation", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         static constexpr const char* MODE_NAMES[] = {"off", "di", "gi", "full"};
         Engine::LightingState& lighting = state->lighting;
         if (args.Size() > 1) {
@@ -254,7 +254,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
                 bMatched = true;
             }
             if (!bMatched) {
-                Print(state, "  usage: groundtruth off|di|gi|full [spp]");
+                Print(state, "  usage: r.groundtruth off|di|gi|full [spp]");
                 return;
             }
             if (args.Size() > 2) {
@@ -265,10 +265,10 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<64>::Format("  groundtruth %s, %d spp", MODE_NAMES[static_cast<uint32_t>(lighting.groundTruthMode)], lighting.groundTruthSpp).c_str());
     });
 
-    Register(state, Origin::Engine, "cam", "`cam <1-9>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "w.cam", "`w.cam <1-9>` jumps the editor camera to a saved bookmark (shift-click a Cam slot to save)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
         if (slot < 0 || slot >= Engine::MAX_CAMERA_PRESETS) {
-            Print(state, "  usage: cam <1-9>");
+            Print(state, "  usage: w.cam <1-9>");
             return;
         }
         const Engine::CameraPreset& preset = state->projectConfig.cameraPresets[slot];
@@ -289,10 +289,10 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<64>::Format("  cam %d", slot + 1).c_str());
     });
 
-    Register(state, Origin::Engine, "scene", "`scene <1-9>` unloads everything and loads a saved scene slot (shift-click a scene slot to bind)", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "w.scene", "`w.scene <1-9>` unloads everything and loads a saved scene slot (shift-click a scene slot to bind)", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
         const int32_t slot = args.Size() > 1 ? static_cast<int32_t>(std::strtol(args[1], nullptr, 10)) - 1 : -1;
         if (slot < 0 || slot >= Engine::MAX_SCENE_SLOTS) {
-            Print(state, "  usage: scene <1-9>");
+            Print(state, "  usage: w.scene <1-9>");
             return;
         }
         if (!LoadSceneSlot(ctx, state, slot)) {
@@ -302,13 +302,13 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->scene.currentSceneName.c_str()).c_str());
     });
 
-    Register(state, Origin::Engine, "rescan", "Rescan assets, materials and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "w.rescan", "Rescan assets, materials and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->rescan.bResources = true;
         ctx->rescan.bMaterials.store(true, std::memory_order_release);
         Print(state, "  rescan queued");
     });
 
-    Register(state, Origin::Engine, "record", "`record <name>` records the editor camera into <name>.wplay beside the current scene until `record stop`", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "w.record", "`w.record <name>` records the editor camera into <name>.wplay beside the current scene until `w.record stop`", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() < 2) {
             Print(state, state->cameraRecorder.bActive ? Core::InlineString<192>::Format("  recording '%s', %d frames", state->cameraRecorder.name.c_str(), static_cast<int32_t>(state->cameraRecorder.samples.Size())).c_str() : "  usage: record <name> | record stop");
             return;
@@ -326,7 +326,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         }
     });
 
-    Register(state, Origin::Engine, "framerate_scale", "`framerate_scale <x>|auto` overrides the fps / 60 history scale (0.25-4)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "r.framerate_scale", "`r.framerate_scale <x>|auto` overrides the fps / 60 history scale (0.25-4)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() > 1) {
             const float value = std::strtof(args[1], nullptr);
             state->debug.render.framerateScaleOverride = value > 0.0f ? std::clamp(value, 0.25f, 4.0f) : 0.0f;
@@ -335,14 +335,14 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, scale > 0.0f ? Core::InlineString<64>::Format("  framerate_scale %.2f", scale).c_str() : "  framerate_scale auto");
     });
 
-    Register(state, Origin::Engine, "asyncqueue", "`asyncqueue <0|1>` 0 runs every async pass on the graphics queue so profiler pass timings stop overlapping", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "r.asyncqueue", "`r.asyncqueue <0|1>` 0 runs every async pass on the graphics queue so profiler pass timings stop overlapping", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() > 1) {
             state->debug.render.bDisableAsyncCompute = std::strtol(args[1], nullptr, 10) == 0;
         }
         Print(state, state->debug.render.bDisableAsyncCompute ? "  asyncqueue 0 (all passes on graphics)" : "  asyncqueue 1");
     });
 
-    Register(state, Origin::Engine, "fpsmax", "`fpsmax <n>` caps the frame rate (15-240); 0 = uncapped", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "w.fpsmax", "`w.fpsmax <n>` caps the frame rate (15-240); 0 = uncapped", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         Engine::ProjectConfig& config = state->projectConfig;
         if (args.Size() > 1) {
             const int32_t value = static_cast<int32_t>(std::strtol(args[1], nullptr, 10));
@@ -354,7 +354,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, config.bLimitFps ? Core::InlineString<64>::Format("  fpsmax %d", config.frameLimitTarget).c_str() : "  fpsmax uncapped");
     });
 
-    Register(state, Origin::Engine, "physics_timescale", "`physics_timescale <x>` runs physics x times faster (0.1-64, at most 64 steps a frame) to settle a scene; prints the awake body count",
+    Register(state, Origin::Engine, "w.physics_timescale", "`w.physics_timescale <x>` runs physics x times faster (0.1-64, at most 64 steps a frame) to settle a scene; prints the awake body count",
              [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() > 1) {
             state->physics.timeScale = std::clamp(std::strtof(args[1], nullptr), 0.1f, 64.0f);
@@ -363,7 +363,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, Core::InlineString<96>::Format("  physics_timescale %.2f, %u bodies awake", state->physics.timeScale, awake).c_str());
     });
 
-    Register(state, Origin::Engine, "pick","Print the entity, primitive and material under the mouse cursor", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "w.pick", "Print the entity, primitive and material under the mouse cursor", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         const float u = (state->input.mousePositionAbsolute.x - static_cast<float>(ctx->windowContext.viewportOffsetX)) / static_cast<float>(ctx->windowContext.viewportWidth);
         const float v = (state->input.mousePositionAbsolute.y - static_cast<float>(ctx->windowContext.viewportOffsetY)) / static_cast<float>(ctx->windowContext.viewportHeight);
         if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {
@@ -383,7 +383,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, "  quitting");
     });
 
-    Register(state, Origin::Engine, "view", "`view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
+    Register(state, Origin::Engine, "r.view", "`r.view <rdg texture>|off [transform id] [depth|stencil]` shows a render graph texture in the debug visualizer (ids = DebugTransformationType, e.g. 20 = Generate W)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
         if (args.Size() <= 1) {
             static constexpr const char* COMMON_VIEWS[] = {
                 "  intermediate_one 52 - demodulated diffuse (denoised); 52 = tonemap, HDR lighting targets clip to white without it",
@@ -422,12 +422,12 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->debug.resourceName.IsEmpty() ? "  view off" : Core::InlineString<256>::Format("  view %s", state->debug.resourceName.c_str()).c_str());
     });
 
-    Register(state, Origin::Engine, "system_graph_dump", "Print the next frame's SystemGraph waves and access sets", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "w.system_graph_dump", "Print the next frame's SystemGraph waves and access sets", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->systemGraph->RequestDump();
         Print(state, "  dumping next frame");
     });
 
-    Register(state, Origin::Engine, "log_rdg", "Log the next frame's render graph", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "r.log_rdg", "Log the next frame's render graph", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
         state->requests.bLogRDG = true;
         Print(state, "  logging next render frame");
     });

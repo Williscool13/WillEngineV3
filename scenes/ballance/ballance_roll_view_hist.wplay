@@ -15,7 +15,7 @@ e
 fps|30
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 play|1
@@ -45,7 +45,7 @@ capture|base_roll
 frames|12
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|1
@@ -55,7 +55,7 @@ capture|base_conf
 frames|2
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -79,7 +79,7 @@ e
 profile|ReSTIR RelaxHistFix0
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 wait|60
@@ -106,7 +106,7 @@ capture|histfix0_roll
 frames|12
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|1
@@ -116,7 +116,7 @@ capture|histfix0_conf
 frames|2
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -140,7 +140,7 @@ e
 profile|ReSTIR RelaxHistFix2
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 wait|60
@@ -167,7 +167,7 @@ capture|histfix2_roll
 frames|12
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|1
@@ -177,7 +177,7 @@ capture|histfix2_conf
 frames|2
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -201,7 +201,7 @@ e
 profile|ReSTIR RelaxStride4
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 wait|60
@@ -228,7 +228,7 @@ capture|stride4_roll
 frames|12
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|1
@@ -238,7 +238,7 @@ capture|stride4_conf
 frames|2
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -262,7 +262,7 @@ e
 profile|ReSTIR RelaxStride8
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 wait|60
@@ -289,7 +289,7 @@ capture|stride8_roll
 frames|12
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|1
@@ -299,7 +299,7 @@ capture|stride8_conf
 frames|2
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -323,7 +323,7 @@ e
 profile|ReSTIR
 ;
 e
-console|gtao 0
+console|r.gtao 0
 ;
 e
 wait|60
@@ -350,7 +350,7 @@ capture|base2_roll
 frames|12
 ;
 e
-console|view restir_confidence
+console|r.view restir_confidence
 ;
 e
 wait|1
@@ -360,7 +360,7 @@ capture|base2_conf
 frames|2
 ;
 e
-console|view off
+console|r.view off
 ;
 e
 action|Move
@@ -384,5 +384,5 @@ e
 capture|final_rest
 ;
 e
-console|gtao 1
+console|r.gtao 1
 ;

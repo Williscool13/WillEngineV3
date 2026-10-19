@@ -10,7 +10,7 @@ e
 fps|117
 ;
 e
-console|view gi_gather_sh_r
+console|r.view gi_gather_sh_r
 ;
 e
 cam|held
@@ -1415,5 +1415,5 @@ e
 capture|drift_h1800
 ;
 e
-console|view off
+console|r.view off
 ;
