@@ -5,23 +5,13 @@
 #ifndef WILL_ENGINE_COMPONENT_TYPES_H
 #define WILL_ENGINE_COMPONENT_TYPES_H
 #include <array>
-#include <concepts>
 
 #include "core/string_id.h"
+#include "engine/components/component_traits.h"
 
 
 namespace Engine
 {
-template<typename T>
-concept NamedComponent = requires {
-    { T::COMPONENT_NAME } -> std::convertible_to<const char*>;
-};
-
-template<typename T>
-concept DomainComponent = NamedComponent<T> && requires {
-    { T::COMPONENT_DOMAIN } -> std::convertible_to<const char*>;
-};
-
 template<DomainComponent T>
 struct QualifiedComponentName
 {

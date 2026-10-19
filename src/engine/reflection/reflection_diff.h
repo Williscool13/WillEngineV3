@@ -93,6 +93,32 @@ void ApplyDiff(V& target, const V& before, const V& after)
         if (!DeepEqual(before, after)) { target = after; }
     }
 }
+
+template<typename V>
+void PropagateDiff(V& target, const V& before, const V& after)
+{
+    if constexpr (Reflected<V>) {
+        ForEachField<V>([&](const auto& f) { PropagateDiff(target.*f.member, before.*f.member, after.*f.member); });
+    }
+    else if constexpr (IsVariant<V>::value) {
+        if (before.index() != after.index() || target.index() != before.index()) {
+            if (DeepEqual(target, before)) { target = after; }
+            return;
+        }
+        std::visit([&](auto& t) {
+            using Alt = std::decay_t<decltype(t)>;
+            PropagateDiff(t, std::get<Alt>(before), std::get<Alt>(after));
+        }, target);
+    }
+    else if constexpr (std::is_array_v<V>) {
+        for (size_t i = 0; i < std::extent_v<V>; ++i) {
+            PropagateDiff(target[i], before[i], after[i]);
+        }
+    }
+    else {
+        if (!DeepEqual(before, after) && DeepEqual(target, before)) { target = after; }
+    }
+}
 }
 
 #endif //WILL_ENGINE_REFLECTION_DIFF_H

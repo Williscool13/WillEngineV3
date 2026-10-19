@@ -91,6 +91,14 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
 
 void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager);
 
+bool IsEditingPrefab(Engine::EngineState* state);
+
+entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, StringID prefabId, const glm::vec3& position);
+
+void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+void StopPrefabEdit(Engine::EngineState* state);
+
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, const glm::vec3& offset = {});
 
 /**

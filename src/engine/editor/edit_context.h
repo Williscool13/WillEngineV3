@@ -21,13 +21,6 @@ namespace Engine
 {
 struct EngineState;
 
-template<typename C>
-concept HasOnEditPreview = requires(entt::registry& r, entt::entity e) { C::OnEditPreview(r, e); };
-
-/** Also runs after undo/redo, which never call OnEditPreview, so it must cover everything OnEditPreview does. */
-template<typename C>
-concept HasOnEditCommit = requires(entt::registry& r, entt::entity e) { C::OnEditCommit(r, e); };
-
 template<typename V>
 void AssignValue(V& dst, const V& src)
 {

@@ -839,51 +839,49 @@ void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Tr
     registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
 }
 
-void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
+static Engine::ComponentEntry* FindPrefabComponentEntry(Engine::ComponentRegistry& componentRegistry, std::string_view opener)
 {
-    if (!ctx->bGameLoaded) {
-        LOG_WARN(Engine, "Prefab save refused: game.dll is not loaded, game components would be lost");
-        return;
+    uint64_t typeId = 0;
+    std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
+    const size_t* index = componentRegistry.registryMapping.Find(StringID{typeId});
+    if (index == nullptr) {
+        LOG_WARN(Engine, "Prefab component key {} matches no registered component; skipped", typeId);
+        return nullptr;
     }
+    Engine::ComponentEntry& entry = componentRegistry.registry[*index];
+    return entry.bInstanceOnly ? nullptr : &entry;
+}
 
-    // todo: Fix this to:
-    //  Compare all existing prefabs and check their components. If their component fields are precisely the same as the src prefab, then replace it with new
-    Core::Vector<std::byte> body(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
-    Engine::TextWriter w(body);
+static void ApplyPrefabBody(Engine::EngineState* state, const Engine::WPrefabData& prefab, entt::entity entity, bool bOnlyMissing)
+{
+    prefab.Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
+        Engine::ComponentEntry* entry = FindPrefabComponentEntry(state->componentRegistry, opener);
+        if (!entry || (bOnlyMissing && entry->has(state->registry, entity))) { return; }
+        entry->deserialize(state->registry, entity, compReader);
+    });
+}
+
+static uint32_t WritePrefabBody(Engine::EngineState* state, entt::entity entity, Engine::TextWriter& w)
+{
+    auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+    const glm::vec3 translation = transform ? transform->translation : glm::vec3(0.0f);
+    if (transform) { transform->translation = glm::vec3(0.0f); }
+
     uint32_t componentCount = 0;
-
     for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
-        if (entry.has(state->registry, entity)) {
-            w.BeginBlock(entry.typeId.id);
-            entry.serialize(state->registry, entity, w);
-            w.EndBlock();
-            componentCount++;
-        }
+        if (entry.bInstanceOnly || !entry.has(state->registry, entity)) { continue; }
+        w.BeginBlock(entry.typeId.id);
+        entry.serialize(state->registry, entity, w);
+        w.EndBlock();
+        componentCount++;
     }
 
-    Core::Path path;
-    uint64_t prefabId = 0;
-    bool isNewPrefab = true;
+    if (transform) { transform->translation = translation; }
+    return componentCount;
+}
 
-    auto* prefabInstance = state->registry.try_get<Component::PrefabInstanceComponent>(entity);
-    if (prefabInstance) {
-        const auto* meta = assetManager->GetPrefabMetadata(StringID{prefabInstance->prefabId});
-        if (meta) {
-            path = meta->source;
-            prefabId = prefabInstance->prefabId.id;
-            isNewPrefab = false;
-        }
-    }
-
-    if (isNewPrefab) {
-        Core::InlineString s{prefabName};
-        s.ToLower();
-        s.Replace(' ', '_');
-        s.Append(".wprefab");
-        path = Platform::GetAssetPath() / "prefabs" / s.c_str();
-        prefabId = state->rng();
-    }
-
+static bool WritePrefabFile(Engine::EngineContext* ctx, const Core::Path& path, uint64_t prefabId, std::string_view prefabName, const Core::Vector<std::byte>& body, uint32_t componentCount)
+{
     uint64_t contentVersion = 1;
     if (Platform::FileExists(path)) {
         if (auto existing = Engine::ReadWPrefabHeader(path)) {
@@ -904,14 +902,40 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     out.Append(body.Data(), body.Data() + body.Size());
     if (!Platform::WriteFile(path, out.Data(), out.Size())) {
         LOG_ERROR(Engine, "Failed to write prefab file '{}'", path.c_str());
+        return false;
+    }
+    return true;
+}
+
+void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName)
+{
+    if (!ctx->bGameLoaded) {
+        LOG_WARN(Engine, "Prefab save refused: game.dll is not loaded, game components would be lost");
+        return;
+    }
+    if (state->registry.all_of<Component::PrefabInstanceComponent>(entity) || entity == state->editor.editingPrefabEntity) {
+        LOG_WARN(Engine, "Prefab save refused: the entity already belongs to a prefab, edit that prefab instead");
         return;
     }
 
-    state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, StringID{prefabId});
-
-    if (isNewPrefab) {
-        ctx->rescan.bResources = true;
+    Core::InlineString s{prefabName};
+    s.ToLower();
+    s.Replace(' ', '_');
+    s.Append(".wprefab");
+    const Core::Path path = Platform::GetAssetPath() / "prefabs" / s.c_str();
+    if (Platform::FileExists(path)) {
+        LOG_WARN(Engine, "Prefab save refused: '{}' already exists", path.c_str());
+        return;
     }
+
+    Core::Vector<std::byte> body(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Engine::TextWriter w(body);
+    const uint32_t componentCount = WritePrefabBody(state, entity, w);
+    const uint64_t prefabId = state->rng();
+    if (!WritePrefabFile(ctx, path, prefabId, prefabName, body, componentCount)) { return; }
+
+    state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, StringID{prefabId});
+    ctx->rescan.bResources = true;
     LOG_INFO(Engine, "Saved prefab '{}' to '{}'", prefabName, path.c_str());
 }
 
@@ -930,28 +954,10 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
         return entt::null;
     }
 
-    entt::entity entity = state->registry.create();
-    prefabData->Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
-        uint64_t typeId = 0;
-        std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
-        const size_t* index = state->componentRegistry.registryMapping.Find(StringID{typeId});
-        if (index == nullptr) {
-            LOG_WARN(Engine, "Prefab component key {} matches no registered component; dropped on spawn", typeId);
-            return;
-        }
-        state->componentRegistry.registry[*index].deserialize(state->registry, entity, compReader);
-    });
-
-    if (auto* transform = state->registry.try_get<Component::TransformComponent>(entity)) {
-        transform->translation = spawnPosition;
-    }
-
-    state->registry.emplace<Component::SceneComponent>(entity, state->scene.currentSceneId);
+    const entt::entity entity = CreateSceneEntity(state);
+    ApplyPrefabBody(state, *prefabData, entity, false);
+    state->registry.get<Component::TransformComponent>(entity).translation = spawnPosition;
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
-
-    if (auto* stable = state->registry.try_get<Component::StableIdComponent>(entity)) {
-        stable->sortOrder = HighestSortOrderInScene(state->registry, state->scene.currentSceneId) + 1;
-    }
 
     LOG_INFO(Engine, "Spawned prefab '{}' as entity {}", meta->prefabName.c_str(), entt::to_integral(entity));
     return entity;
@@ -985,21 +991,130 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
             cacheIt = &prefabCache.Emplace(prefabInst.prefabId, std::move(*prefabData));
         }
 
-        cacheIt->Body().ForEachBlock([&](std::string_view opener, const Engine::TextReader& compReader) {
-            uint64_t typeId = 0;
-            std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
-            const size_t* index = state->componentRegistry.registryMapping.Find(StringID{typeId});
-            if (index == nullptr) {
-                LOG_WARN(Engine, "Prefab component key {} matches no registered component; skipped", typeId);
-                return;
-            }
-
-            Engine::ComponentEntry& entry = state->componentRegistry.registry[*index];
-            if (!entry.has(state->registry, entity)) {
-                entry.deserialize(state->registry, entity, compReader);
-            }
-        });
+        ApplyPrefabBody(state, *cacheIt, entity, true);
     }
+}
+
+bool IsEditingPrefab(Engine::EngineState* state)
+{
+    if (state->editor.editingPrefabEntity != entt::null && !state->registry.valid(state->editor.editingPrefabEntity)) {
+        state->editor.editingPrefabEntity = entt::null;
+        state->editor.editingPrefabId = {};
+    }
+    return state->editor.editingPrefabEntity != entt::null;
+}
+
+entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, StringID prefabId, const glm::vec3& position)
+{
+    if (!ctx->bGameLoaded || IsRunning(state) || IsEditingPrefab(state)) {
+        LOG_WARN(Engine, "Prefab edit refused: needs the game loaded, edit mode, and no other prefab edit open");
+        return entt::null;
+    }
+    const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabId);
+    if (!meta) {
+        LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
+        return entt::null;
+    }
+    auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), &ctx->memoryManager->AssetsScratch());
+    if (!prefabData) {
+        LOG_ERROR(Engine, "Failed to read prefab file '{}'", meta->source.c_str());
+        return entt::null;
+    }
+
+    const entt::entity entity = CreateSceneEntity(state);
+    state->registry.emplace<Component::DoNotSerializeTag>(entity);
+    ApplyPrefabBody(state, *prefabData, entity, false);
+    state->registry.get<Component::TransformComponent>(entity).translation = position;
+
+    state->editor.editingPrefabId = prefabId;
+    state->editor.editingPrefabEntity = entity;
+    LOG_INFO(Engine, "Editing prefab '{}'", meta->prefabName.c_str());
+    return entity;
+}
+
+void StopPrefabEdit(Engine::EngineState* state)
+{
+    if (!IsEditingPrefab(state)) { return; }
+    const entt::entity entity = state->editor.editingPrefabEntity;
+    state->editor.selectedEntities.RemoveFirst(entity);
+    state->registry.destroy(entity);
+    state->editor.editingPrefabEntity = entt::null;
+    state->editor.editingPrefabId = {};
+}
+
+/** Pushes the old -> new prefab change into one instance; components it overrode, added or removed are left alone. */
+static bool PropagatePrefabChange(Engine::EngineState* state, entt::entity entity, const Engine::TextReader& oldBody, const Engine::TextReader& newBody,
+                                  Core::Vector<std::byte>& fragment)
+{
+    bool bChanged = false;
+    newBody.ForEachBlock([&](std::string_view opener, const Engine::TextReader& after) {
+        Engine::ComponentEntry* entry = FindPrefabComponentEntry(state->componentRegistry, opener);
+        if (!entry) { return; }
+        const Engine::TextReader before = oldBody.Block(Core::ShortString(opener).c_str());
+        if (entry->has(state->registry, entity)) {
+            if (before.IsValid() && entry->propagate && entry->propagate(state->registry, entity, before, after)) {
+                if (entry->typeId == TypeSID<Component::TransformComponent>()) {
+                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                }
+                bChanged = true;
+            }
+        }
+        else if (!before.IsValid()) {
+            entry->deserialize(state->registry, entity, after);
+            bChanged = true;
+        }
+    });
+    oldBody.ForEachBlock([&](std::string_view opener, const Engine::TextReader& before) {
+        Engine::ComponentEntry* entry = FindPrefabComponentEntry(state->componentRegistry, opener);
+        if (!entry || newBody.Block(Core::ShortString(opener).c_str()).IsValid() || !entry->has(state->registry, entity)) { return; }
+        fragment.Clear();
+        Engine::TextWriter fw(fragment);
+        entry->serialize(state->registry, entity, fw);
+        if (std::string_view(reinterpret_cast<const char*>(fragment.Data()), fragment.Size()) == before.Span()) {
+            entry->remove(state->registry, entity);
+            bChanged = true;
+        }
+    });
+    return bChanged;
+}
+
+void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    if (!IsEditingPrefab(state)) { return; }
+    const StringID prefabId = state->editor.editingPrefabId;
+    const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabId);
+    if (!meta) {
+        LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
+        return;
+    }
+    const Core::Path path = meta->source;
+    const Core::InlineString<128> prefabName = meta->prefabName;
+
+    auto oldData = Engine::ReadWPrefab(path.c_str(), &ctx->memoryManager->AssetsScratch());
+    if (!oldData) {
+        LOG_ERROR(Engine, "Failed to read prefab file '{}'", path.c_str());
+        return;
+    }
+
+    Core::Vector<std::byte> body(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    Engine::TextWriter w(body);
+    const uint32_t componentCount = WritePrefabBody(state, state->editor.editingPrefabEntity, w);
+    if (!WritePrefabFile(ctx, path, prefabId.id, prefabName.c_str(), body, componentCount)) { return; }
+
+    const Engine::TextReader newBody(body.Data(), body.Size());
+    Core::Vector<std::byte> fragment(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    uint32_t updated = 0;
+    auto view = state->registry.view<Component::PrefabInstanceComponent>();
+    for (auto entity : view) {
+        if (view.get<Component::PrefabInstanceComponent>(entity).prefabId != prefabId) { continue; }
+        if (!PropagatePrefabChange(state, entity, oldData->Body(), newBody, fragment)) { continue; }
+        ++updated;
+        if (const auto* sc = state->registry.try_get<Component::SceneComponent>(entity); sc && !state->editor.modifiedScenes.Contains(sc->sceneId)) {
+            state->editor.modifiedScenes.PushBack(sc->sceneId);
+        }
+    }
+
+    LOG_INFO(Engine, "Applied prefab '{}', {} loaded instances updated", prefabName.c_str(), updated);
 }
 
 static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -1014,20 +1129,6 @@ static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* sta
 #if WILL_EDITOR
     state->editor.pieSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
 #endif
-    {
-        auto view = state->registry.view<Component::PrefabInstanceComponent>();
-        if (view.size() > 0) {
-            auto masterPrefabs = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size());
-            for (auto entity : view) {
-                if (view.get<Component::PrefabInstanceComponent>(entity).bMasterPrefab) {
-                    masterPrefabs.PushBack(entity);
-                }
-            }
-            for (auto entity : masterPrefabs) {
-                state->registry.destroy(entity);
-            }
-        }
-    }
 
     LockStaticTransforms(state);
 }
@@ -1050,6 +1151,10 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
     ZoneScoped;
     if (!ctx->bGameLoaded) {
         LOG_WARN(Engine, "Play refused: game.dll is not loaded");
+        return;
+    }
+    if (IsEditingPrefab(state)) {
+        LOG_WARN(Engine, "Play refused: stop editing the prefab first");
         return;
     }
     if (IsSimulating(state)) {
@@ -1109,6 +1214,10 @@ void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         return;
     }
     if (IsRunning(state)) { return; }
+    if (IsEditingPrefab(state)) {
+        LOG_WARN(Engine, "Simulate refused: stop editing the prefab first");
+        return;
+    }
 
     BeginPIESession(ctx, state);
     for (size_t i = state->editor.selectedEntities.Size(); i-- > 0;) {

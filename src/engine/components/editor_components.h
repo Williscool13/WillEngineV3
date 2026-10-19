@@ -20,6 +20,7 @@ namespace Engine::Component
 struct EntityFolderComponent
 {
     static constexpr const char* COMPONENT_NAME = "EntityFolderComponent";
+    static constexpr bool INSTANCE_ONLY = true;
 
     /**
      * Immediate containing folder, referencing a SceneFolderComponent::folderId.

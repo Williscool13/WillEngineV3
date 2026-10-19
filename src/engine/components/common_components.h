@@ -36,15 +36,12 @@ struct DoNotSerializeTag
 struct PrefabInstanceComponent
 {
     static constexpr const char* COMPONENT_NAME = "PrefabInstanceComponent";
+    static constexpr bool INSTANCE_ONLY = true;
 
     StringID prefabId;
-    bool bMasterPrefab{false};
 
     WILL_REFLECT(PrefabInstanceComponent,
-        WILL_FIELD(prefabId),
-        WILL_FIELD(bMasterPrefab))
-
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+        WILL_FIELD(prefabId))
 };
 }
 

@@ -118,6 +118,7 @@ inline glm::mat4 GetMatrix(const WorldTransformComponent& transform)
 struct HierarchyComponent
 {
     static constexpr const char* COMPONENT_NAME = "HierarchyComponent";
+    static constexpr bool INSTANCE_ONLY = true;
 
     entt::entity parent{entt::null};
     StringID parentStableId;

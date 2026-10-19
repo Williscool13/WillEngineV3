@@ -97,6 +97,9 @@ struct EditorState
     Vec3 pieCameraTranslation{};
     Quat pieCameraRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
+    StringID editingPrefabId{};
+    entt::entity editingPrefabEntity{entt::null};
+
     // Entity selection
     Core::Vector<entt::entity> selectedEntities{};
     Core::Vector<entt::entity> prevSelectedEntities{};

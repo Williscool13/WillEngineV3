@@ -38,6 +38,7 @@ using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::regis
 using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, EditContext&, const char*);
 using RestoreFn = void(*)(entt::registry&, entt::entity, const TextReader&);
 using FillDefaultsFn =void(*)(const TextReader&, TextWriter&);
+using PropagateFn = bool(*)(entt::registry&, entt::entity, const TextReader&, const TextReader&);
 
 struct ComponentEntry
 {
@@ -66,8 +67,11 @@ struct ComponentEntry
     // Undo/redo: copies snapshot fields onto the live component, then OnEditCommit
     RestoreFn restore{};
     FillDefaultsFn fillDefaults{};
+    /** Writes each field that changed between before and after where the live component still holds before; true if anything changed. */
+    PropagateFn propagate{};
 
     bool bMovesEntity{false};
+    bool bInstanceOnly{false};
 };
 
 struct ComponentRegistry

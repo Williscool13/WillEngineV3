@@ -16,12 +16,6 @@
 
 namespace Engine
 {
-template<typename T>
-concept TagComponent = std::is_empty_v<T>;
-
-template<typename T>
-concept DataComponent = !std::is_empty_v<T>;
-
 template<DataComponent T> requires NamedComponent<T>
 void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin origin, bool hidden, bool hideInInspector)
 {
@@ -89,7 +83,25 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         SerializeFields(comp, w);
     };
 
+    componentRegistry.registry[index].propagate = [](entt::registry& reg, entt::entity e, const Engine::TextReader& before, const Engine::TextReader& after) -> bool {
+        T b{};
+        T a{};
+        DeserializeFields(b, before);
+        DeserializeFields(a, after);
+        if (DeepEqual(b, a)) { return false; }
+        T& live = reg.get<T>(e);
+        T updated = live;
+        PropagateDiff(updated, b, a);
+        if (DeepEqual(updated, live)) { return false; }
+        ForEachField<T>([&live, &updated](const auto& f) { AssignValue(live.*f.member, updated.*f.member); });
+        if constexpr (HasOnEditCommit<T>) {
+            T::OnEditCommit(reg, e);
+        }
+        return true;
+    };
+
     componentRegistry.registry[index].bMovesEntity = MovesEntity<T>;
+    componentRegistry.registry[index].bInstanceOnly = InstanceOnly<T>;
     componentRegistry.registryMapping[typeId] = index;
 }
 

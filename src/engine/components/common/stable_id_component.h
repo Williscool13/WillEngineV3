@@ -29,6 +29,7 @@ namespace Engine::Component
 struct StableIdComponent
 {
     static constexpr const char* COMPONENT_NAME = "StableIdComponent";
+    static constexpr bool INSTANCE_ONLY = true;
 
     static constexpr uint64_t NO_ID = 1234567890;
 

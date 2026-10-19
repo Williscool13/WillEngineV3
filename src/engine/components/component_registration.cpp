@@ -49,7 +49,7 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
 
     RegisterComponent<Component::NameComponent>(componentRegistry, Origin::Engine, true, false);
     RegisterComponent<Component::StableIdComponent>(componentRegistry, Origin::Engine, true, true);
-    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, Origin::Engine, false, false);
+    RegisterComponent<Component::PrefabInstanceComponent>(componentRegistry, Origin::Engine, true, true);
     RegisterComponent<Component::EntityFolderComponent>(componentRegistry, Origin::Engine, true, true);
     RegisterComponent<Component::SceneFolderComponent>(componentRegistry, Origin::Engine, true, false);
 

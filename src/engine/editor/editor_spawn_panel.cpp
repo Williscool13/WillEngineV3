@@ -99,31 +99,28 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
 
         ImGui::SeparatorText("Prefab");
 
+        const bool bEditingPrefab = IsEditingPrefab(state);
+        if (bEditingPrefab) {
+            const auto* editMeta = ctx->assetManager->GetPrefabMetadata(state->editor.editingPrefabId);
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Editing prefab: %s", editMeta ? editMeta->prefabName.c_str() : "?");
+            if (ImGui::Button("Apply##edit")) { ApplyPrefabEdit(ctx, state); }
+            ImGui::SameLine();
+            if (ImGui::Button("Stop Editing##edit")) { StopPrefabEdit(state); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Changes since the last Apply are dropped"); }
+            ImGui::Separator();
+        }
+
         const bool hasOneSelected = state->editor.selectedEntities.Size() == 1;
+        const entt::entity selected = hasOneSelected ? state->editor.selectedEntities[0] : entt::null;
+        const bool bCanSaveAsPrefab = hasOneSelected && !state->registry.all_of<Component::PrefabInstanceComponent>(selected) && selected != state->editor.editingPrefabEntity;
         static char prefabName[128] = "New Prefab";
 
-        Component::PrefabInstanceComponent* prefabInst = hasOneSelected ? state->registry.try_get<Component::PrefabInstanceComponent>(state->editor.selectedEntities[0]) : nullptr;
-        const bool isExistingPrefab = prefabInst != nullptr;
-
-        const bool isMasterPrefab = isExistingPrefab && prefabInst->bMasterPrefab;
-
-        if (isExistingPrefab) {
-            const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
-            if (meta) {
-                strncpy_s(prefabName, meta->prefabName.c_str(), sizeof(prefabName) - 1);
-            }
-        }
-
         ImGui::SetNextItemWidth(-1);
-        ImGui::BeginDisabled(!hasOneSelected);
-        ImGui::BeginDisabled(isExistingPrefab);
+        ImGui::BeginDisabled(!bCanSaveAsPrefab || !ctx->bGameLoaded);
         ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
-        ImGui::EndDisabled();
-        ImGui::BeginDisabled((isExistingPrefab && !isMasterPrefab) || !ctx->bGameLoaded);
-        if (ImGui::Button(isExistingPrefab ? "Save Prefab" : "Save as Prefab")) {
-            SaveEntityAsPrefab(state, ctx->assetManager, ctx, state->editor.selectedEntities[0], prefabName);
+        if (ImGui::Button("Save as Prefab")) {
+            SaveEntityAsPrefab(state, ctx->assetManager, ctx, selected, prefabName);
         }
-        ImGui::EndDisabled();
         ImGui::EndDisabled();
 
         const auto& prefabCache = ctx->assetManager->GetPrefabCache();
@@ -163,6 +160,13 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
                 MarkSceneModified(state, state->scene.currentSceneId);
             }
         }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(bEditingPrefab || IsRunning(state) || !ctx->bGameLoaded);
+        if (ImGui::Button("Edit Prefab")) {
+            const entt::entity copy = BeginPrefabEdit(ctx, state, prefabList[selectedPrefab].id, spawnPos);
+            if (copy != entt::null) { SelectOnly(state, copy); }
+        }
+        ImGui::EndDisabled();
         ImGui::SameLine(); {
             const StringID selectedPrefabId = prefabList.IsEmpty() ? StringID{} : prefabList[selectedPrefab].id;
             bool prefabInUse = false;

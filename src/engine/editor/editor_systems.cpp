@@ -1341,7 +1341,41 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
                 ImGui::TextDisabled("(order: %llu)", stable->sortOrder);
             }
 
-            DrawComponentPanels(state, frameBuffer);
+            if (entity == state->editor.editingPrefabEntity && IsEditingPrefab(state)) {
+                const auto* meta = ctx->assetManager->GetPrefabMetadata(state->editor.editingPrefabId);
+                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Editing prefab: %s", meta ? meta->prefabName.c_str() : "?");
+                if (ImGui::Button("Apply")) { ApplyPrefabEdit(ctx, state); }
+                ImGui::SameLine();
+                if (ImGui::Button("Stop Editing")) { StopPrefabEdit(state); }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Changes since the last Apply are dropped"); }
+                ImGui::Separator();
+            }
+            else if (const auto* prefabInst = state->registry.try_get<Component::PrefabInstanceComponent>(entity)) {
+                const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
+                ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "Prefab: %s", meta ? meta->prefabName.c_str() : prefabInst->prefabId.ToString());
+                ImGui::BeginDisabled(!meta || IsEditingPrefab(state) || IsRunning(state) || !ctx->bGameLoaded);
+                if (ImGui::Button("Edit Prefab")) {
+                    const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
+                    const entt::entity copy = BeginPrefabEdit(ctx, state, prefabInst->prefabId, viewData.cameraPos + glm::normalize(viewData.cameraForward) * 5.0f);
+                    if (copy != entt::null) {
+                        state->editor.selectedFolders.Clear();
+                        state->editor.selectedEntities.Clear();
+                        state->editor.selectedEntities.PushBack(copy);
+                    }
+                }
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                if (ImGui::Button("Unpack")) {
+                    state->registry.remove<Component::PrefabInstanceComponent>(entity);
+                    MarkEntitiesModified(state, state->editor.selectedEntities);
+                }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Detach from the prefab; the entity keeps its components and stops receiving prefab changes"); }
+                ImGui::Separator();
+            }
+
+            if (state->editor.selectedEntities.Size() == 1) {
+                DrawComponentPanels(state, frameBuffer);
+            }
 
             ImGui::Spacing();
             ImGui::SetNextWindowSize(ImVec2(250, 0));

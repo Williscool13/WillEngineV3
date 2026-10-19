@@ -290,11 +290,10 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             ImGui::SameLine();
 
-            const auto* prefabInst2 = state->registry.try_get<Component::PrefabInstanceComponent>(e.entity);
-            const bool isPrefab = prefabInst2 != nullptr;
-            const bool isMasterPrefab2 = isPrefab && prefabInst2->bMasterPrefab;
+            const bool isPrefabEdit = e.entity == state->editor.editingPrefabEntity;
+            const bool isPrefab = isPrefabEdit || state->registry.all_of<Component::PrefabInstanceComponent>(e.entity);
 
-            if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+            if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, isPrefabEdit ? ImVec4(1.0f, 0.75f, 0.3f, 1.0f) : ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
 
             bool bRowSelectable = false;
             if (state->editor.renamingEntity == e.entity) {
@@ -317,8 +316,8 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             else {
                 bool selected = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), e.entity) != state->editor.selectedEntities.end();
                 char uniqueLabel[256];
-                if (isMasterPrefab2) {
-                    snprintf(uniqueLabel, sizeof(uniqueLabel), "[M] %s##sel", e.label);
+                if (isPrefabEdit) {
+                    snprintf(uniqueLabel, sizeof(uniqueLabel), "[Editing] %s##sel", e.label);
                 }
                 else {
                     snprintf(uniqueLabel, sizeof(uniqueLabel), "%s##sel", e.label);
