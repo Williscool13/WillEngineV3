@@ -30,6 +30,7 @@
 #include "game/ballance/fwd_components.h"
 #include "game/ballance/breakable/breakable_component.h"
 #include "physics/physics_system.h"
+#include "physics/layers/layer_interface.h"
 
 namespace Ballance
 {
@@ -234,7 +235,8 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
             .mass = shardMass,
             .friction = friction,
             .restitution = restitution,
-            .motionQuality = JPH::EMotionQuality::LinearCast,
+            .motionQuality = JPH::EMotionQuality::Discrete,
+            .layerOverride = Physics::Layers::DEBRIS,
         };
         shardDesc.shapes.PushBack(Component::PhysicsShapeDesc{.geometry = Component::ColliderShape{.meshSourceModelId = brokenModelId, .meshSourceNodeIndex = n}, .bakedScale = scale});
         registry.emplace<Component::PhysicsBodyDesc>(shard, shardDesc);

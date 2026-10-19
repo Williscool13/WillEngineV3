@@ -35,13 +35,15 @@ enum EditorObjectBits : uint32_t
     EDITOR_OBJECT_ALL = (1u << 7) - 1u,
 };
 
-/** Physics bodies drawn: the union of every set bit. */
+/** Physics bodies drawn: the union of every set bit, except SLEEP_COLOR which only recolors them. */
 enum PhysicsDebugBits : uint32_t
 {
     PHYSICS_DEBUG_SENSORS = 1u << 0,
     PHYSICS_DEBUG_TAGGED = 1u << 1,
     PHYSICS_DEBUG_SELECTED = 1u << 2,
     PHYSICS_DEBUG_ALL_BODIES = 1u << 3,
+    PHYSICS_DEBUG_AWAKE = 1u << 4,
+    PHYSICS_DEBUG_SLEEP_COLOR = 1u << 5,
 };
 
 struct CameraPreset

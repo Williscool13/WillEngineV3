@@ -151,10 +151,18 @@ PhysicsSystem::~PhysicsSystem()
 
 void PhysicsSystem::Step(float deltaTime)
 {
-    physicsSystem.Update(deltaTime, PHYSICS_COLLISION_STEPS, &tempAllocator, jobSystem);
+    const auto error = static_cast<uint32_t>(physicsSystem.Update(deltaTime, PHYSICS_COLLISION_STEPS, &tempAllocator, jobSystem));
+    const uint32_t newErrors = error & ~reportedUpdateErrors;
+    if (newErrors != 0) {
+        reportedUpdateErrors |= newErrors;
+        SPDLOG_WARN("[PhysicsSystem::Step] Jolt dropped work this step (first occurrence):{}{}{}; bodies may interpenetrate",
+                    (newErrors & static_cast<uint32_t>(JPH::EPhysicsUpdateError::ManifoldCacheFull)) ? " manifold cache full" : "",
+                    (newErrors & static_cast<uint32_t>(JPH::EPhysicsUpdateError::BodyPairCacheFull)) ? " body pair cache full" : "",
+                    (newErrors & static_cast<uint32_t>(JPH::EPhysicsUpdateError::ContactConstraintsFull)) ? " contact constraints full" : "");
+    }
 }
 
-void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter)
+void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter, bool bSleepColor)
 {
 #if JPH_DEBUG_RENDERER
     debugRenderer->SetViewFamily(viewFamily);
@@ -162,7 +170,7 @@ void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter)
     JPH::BodyManager::DrawSettings settings;
     settings.mDrawShape = true;
     settings.mDrawShapeWireframe = true;
-    settings.mDrawShapeColor = JPH::BodyManager::EShapeColor::InstanceColor;
+    settings.mDrawShapeColor = bSleepColor ? JPH::BodyManager::EShapeColor::SleepColor : JPH::BodyManager::EShapeColor::InstanceColor;
 
     if (bUseFilter) {
         physicsSystem.DrawBodies(settings, debugRenderer, debugDrawFilter);

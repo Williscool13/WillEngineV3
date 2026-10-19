@@ -25,7 +25,7 @@ class ExcludePlayerLayerFilter : public JPH::ObjectLayerFilter
 public:
     bool ShouldCollide(JPH::ObjectLayer inLayer) const override
     {
-        return inLayer != Physics::Layers::PLAYER && inLayer != Physics::Layers::SENSOR;
+        return inLayer != Physics::Layers::PLAYER && inLayer != Physics::Layers::SENSOR && inLayer != Physics::Layers::DEBRIS;
     }
 };
 static Core::ViewData BuildViewData(glm::vec3 cameraPos, glm::vec3 focusPoint, float aspectRatio, float fovRadians, float nearPlane)

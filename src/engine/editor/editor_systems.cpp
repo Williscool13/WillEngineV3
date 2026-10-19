@@ -1253,9 +1253,10 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
                 {"Tagged", Engine::PHYSICS_DEBUG_TAGGED},
                 {"Selected", Engine::PHYSICS_DEBUG_SELECTED},
                 {"All Bodies", Engine::PHYSICS_DEBUG_ALL_BODIES},
+                {"Awake", Engine::PHYSICS_DEBUG_AWAKE},
             };
             static constexpr const char* kDebugDrawModes[] = {"None##mode", "Selected##mode", "All##mode"};
-            constexpr uint32_t physicsAll = Engine::PHYSICS_DEBUG_SENSORS | Engine::PHYSICS_DEBUG_TAGGED | Engine::PHYSICS_DEBUG_SELECTED | Engine::PHYSICS_DEBUG_ALL_BODIES;
+            constexpr uint32_t physicsAll = Engine::PHYSICS_DEBUG_SENSORS | Engine::PHYSICS_DEBUG_TAGGED | Engine::PHYSICS_DEBUG_SELECTED | Engine::PHYSICS_DEBUG_ALL_BODIES | Engine::PHYSICS_DEBUG_AWAKE;
 
             Engine::ProjectConfig& config = state->projectConfig;
             bool bChanged = false;
@@ -1312,6 +1313,13 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
             const uint32_t physicsMask = config.editorPhysicsDebugMask;
             if (ImGui::BeginCombo("##physics_debug", physicsMask == 0 ? "No Physics" : (physicsMask & Engine::PHYSICS_DEBUG_ALL_BODIES) ? "Physics: All" : "Physics*")) {
                 flagCheckboxes(config.editorPhysicsDebugMask, physicsAll, kPhysicsTypes);
+                ImGui::Separator();
+                bool bSleepColor = (config.editorPhysicsDebugMask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0;
+                if (ImGui::Checkbox("Colour by sleep", &bSleepColor)) {
+                    config.editorPhysicsDebugMask ^= Engine::PHYSICS_DEBUG_SLEEP_COLOR;
+                    bChanged = true;
+                }
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Colour the drawn bodies by Jolt's sleep state instead of per body"); }
                 ImGui::EndCombo();
             }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Physics bodies drawn: the union of the checked sets"); }

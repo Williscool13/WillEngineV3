@@ -16,6 +16,8 @@ bool ObjectLayerPairFilterImpl::ShouldCollide(JPH::ObjectLayer inLayer1, JPH::Ob
     // PLAYER collides with everything except other PLAYERs
     if (inLayer1 == Layers::PLAYER && inLayer2 == Layers::PLAYER)
         return false;
+    if (inLayer1 == Layers::DEBRIS && inLayer2 == Layers::DEBRIS)
+        return false;
 
     // SENSOR only collides with PLAYER
     if (inLayer1 == Layers::SENSOR || inLayer2 == Layers::SENSOR) {

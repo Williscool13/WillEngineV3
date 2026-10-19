@@ -73,7 +73,7 @@ public:
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }
     void SetDebugDrawForceLowestLOD(bool bForce) const { debugRenderer->SetForceLowestLOD(bForce); }
 #endif
-    void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true);
+    void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true, bool bSleepColor = false);
 
     // Must be called before any Jolt allocation; safe to call from game DLL on load.
     static void RegisterAllocators(Core::MemoryManager& memoryManager);
@@ -89,6 +89,7 @@ private:
     PhysicsJobSystem* jobSystem{};
     PhysicsTempAllocator tempAllocator{};
     JPH::PhysicsSystem physicsSystem;
+    uint32_t reportedUpdateErrors{0};
 
     BPLayerInterfaceImpl broadPhaseLayerInterface;
     ObjectVsBroadPhaseLayerFilterImpl objectVsBroadPhaseLayerFilter;

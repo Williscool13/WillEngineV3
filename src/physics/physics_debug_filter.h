@@ -28,9 +28,12 @@ public:
 
     [[nodiscard]] bool ShouldDraw(const JPH::Body& inBody) const override
     {
+        if (bDrawAwake && inBody.IsActive()) { return true; }
         return !bodiesToDraw.IsEmpty() &&
                std::ranges::find(bodiesToDraw, inBody.GetID()) != bodiesToDraw.end();
     }
+
+    void SetDrawAwake(bool bDraw) { bDrawAwake = bDraw; }
 
     void AddBody(const JPH::BodyID bodyId)
     {
@@ -50,10 +53,12 @@ public:
     void Clear()
     {
         bodiesToDraw.Clear();
+        bDrawAwake = false;
     }
 
 private:
     Core::Vector<JPH::BodyID> bodiesToDraw;
+    bool bDrawAwake{false};
 };
 
 } // Physics

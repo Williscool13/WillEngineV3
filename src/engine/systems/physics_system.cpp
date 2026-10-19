@@ -122,17 +122,42 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     ZoneScoped;
     auto* physics = ctx->physicsSystem;
     state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime * state->physics.timeScale;
-    if (state->physics.timeScale > 1.0f) {
-        constexpr float MAX_FAST_FORWARD_STEPS = 64.0f;
-        state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, MAX_FAST_FORWARD_STEPS * Physics::PHYSICS_TIMESTEP);
-    }
+    const uint32_t maxSteps = state->physics.timeScale > 1.0f ? Physics::MAX_TIMESCALE_STEPS_PER_FRAME : Physics::MAX_PHYSICS_STEPS_PER_FRAME;
+    state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, static_cast<float>(maxSteps) * Physics::PHYSICS_TIMESTEP);
+    const uint32_t stepCount = static_cast<uint32_t>(state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP);
 
     UpdateConveyors(ctx, state);
+    if (stepCount == 0) {
+        state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
+        return;
+    }
+
+    auto& bodyInterface = physics->GetBodyInterface();
+
+    // Movers advance once per frame; each step moves its kinematic body a 1/stepCount slice of the way, so it arrives on the last step at its real speed.
+    struct KinematicMove
+    {
+        JPH::BodyID bodyID;
+        glm::vec3 startPosition;
+        glm::quat startRotation;
+        Transform target;
+    };
+    auto kinematicView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformTag>();
+    auto kinematicMoves = Core::ArenaFixedVector<KinematicMove>(&ctx->gameplayArena.Get(), std::max(kinematicView.size_hint(), size_t{1}));
+    for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
+        const JPH::RVec3 p = bodyInterface.GetPosition(physicsBody.bodyID);
+        const JPH::Quat r = bodyInterface.GetRotation(physicsBody.bodyID);
+        kinematicMoves.PushBack({
+            .bodyID = physicsBody.bodyID,
+            .startPosition = {static_cast<float>(p.GetX()), static_cast<float>(p.GetY()), static_cast<float>(p.GetZ())},
+            .startRotation = {r.GetW(), r.GetX(), r.GetY(), r.GetZ()},
+            .target = Component::ComputeWorldTransform(state->registry, entity),
+        });
+    }
+    state->registry.clear<Component::DirtyKinematicPhysicsTransformTag>();
 
     // todo: Truly teleport mechanics are a little more user-defined. Need a unified "mark movement as teleport" function that emplaces the teleport physics transform tag to allow kinematics to teleport.
-    while (state->physics.deltaTimeAccumulator >= Physics::PHYSICS_TIMESTEP) {
-        auto& bodyInterface = physics->GetBodyInterface();
-
+    for (uint32_t step = 0; step < stepCount; ++step) {
         // Teleport
         auto teleportView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::TeleportPhysicsTransformTag>();
         for (const auto& [entity, physicsBody, transform] : teleportView.each()) {
@@ -151,17 +176,12 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         state->registry.clear<Component::TeleportPhysicsTransformTag>();
 
         // Kinematic
-        auto kinematicView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformTag>();
-        for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
-            const Transform world = Component::ComputeWorldTransform(state->registry, entity);
-            bodyInterface.MoveKinematic(
-                physicsBody.bodyID,
-                JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
-                JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
-                Physics::PHYSICS_TIMESTEP
-            );
+        const float t = static_cast<float>(step + 1) / static_cast<float>(stepCount);
+        for (const KinematicMove& move : kinematicMoves) {
+            const glm::vec3 position = glm::mix(move.startPosition, move.target.translation, t);
+            const glm::quat rotation = glm::slerp(move.startRotation, move.target.rotation, t);
+            bodyInterface.MoveKinematic(move.bodyID, JPH::RVec3(position.x, position.y, position.z), JPH::Quat(rotation.x, rotation.y, rotation.z, rotation.w), Physics::PHYSICS_TIMESTEP);
         }
-        state->registry.clear<Component::DirtyKinematicPhysicsTransformTag>();
 
         // Set velocity
         auto velocityView = state->registry.view<Component::PhysicsBodyComponent, Component::SetVelocityTag>();
@@ -346,9 +366,10 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
                 }
             }
         }
+        filter.SetDrawAwake((mask & Engine::PHYSICS_DEBUG_AWAKE) != 0);
     }
 
-    ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily);
+    ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
 #endif
 }
 
@@ -380,6 +401,7 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
     }
 
     settings.mFriction = desc.friction;
+    settings.mRestitution = desc.restitution;
     settings.mMotionQuality = desc.motionQuality;
     settings.mEnhancedInternalEdgeRemoval = desc.bEnhancedInternalEdgeRemoval;
     settings.mIsSensor = desc.bIsSensor;
