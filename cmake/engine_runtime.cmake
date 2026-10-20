@@ -22,14 +22,21 @@ find_program(WILL_DUMPBIN dumpbin HINTS ${WILL_LINKER_DIR} NO_DEFAULT_PATH REQUI
 
 set(ENGINE_RUNTIME_DEF ${CMAKE_BINARY_DIR}/generated/engine-runtime.def)
 set(ENGINE_RUNTIME_DEF_GENERATOR ${CMAKE_SOURCE_DIR}/src/engine/tools/gen_engine_def.py)
-set(ENGINE_RUNTIME_LIBRARY_FILES)
+# The object files go through a list file: there are too many for one command line
+set(ENGINE_RUNTIME_OBJECTS)
 foreach (library ${ENGINE_RUNTIME_LIBRARIES})
-    list(APPEND ENGINE_RUNTIME_LIBRARY_FILES $<TARGET_FILE:${library}>)
+    list(APPEND ENGINE_RUNTIME_OBJECTS $<TARGET_OBJECTS:${library}>)
+    # Prebuilt objects listed as sources (bc7e.obj from ISPC) are not in TARGET_OBJECTS
+    get_target_property(library_sources ${library} SOURCES)
+    list(FILTER library_sources INCLUDE REGEX "\\.obj$")
+    list(APPEND ENGINE_RUNTIME_OBJECTS ${library_sources})
 endforeach ()
+set(ENGINE_RUNTIME_OBJECT_LIST ${CMAKE_BINARY_DIR}/generated/engine-runtime-objects-$<CONFIG>.txt)
+file(GENERATE OUTPUT ${ENGINE_RUNTIME_OBJECT_LIST} CONTENT "$<JOIN:${ENGINE_RUNTIME_OBJECTS},\n>\n")
 
 add_custom_command(
         OUTPUT ${ENGINE_RUNTIME_DEF}
-        COMMAND ${Python3_EXECUTABLE} ${ENGINE_RUNTIME_DEF_GENERATOR} ${WILL_DUMPBIN} ${ENGINE_RUNTIME_DEF} engine-runtime.dll ${ENGINE_RUNTIME_LIBRARY_FILES}
+        COMMAND ${Python3_EXECUTABLE} ${ENGINE_RUNTIME_DEF_GENERATOR} ${WILL_DUMPBIN} ${ENGINE_RUNTIME_DEF} engine-runtime.dll ${ENGINE_RUNTIME_OBJECT_LIST}
         DEPENDS ${ENGINE_RUNTIME_DEF_GENERATOR} ${ENGINE_RUNTIME_LIBRARIES}
         COMMENT "Generating engine-runtime exports"
         VERBATIM

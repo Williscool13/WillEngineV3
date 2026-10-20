@@ -15,9 +15,6 @@
 #ifdef WDEBUG
 void DBG_InternString(uint64_t hash, const char* str);
 const char* DBG_ResolveStringId(uint64_t hash);
-
-extern void (*gInternStringFn)(uint64_t, const char*);
-extern const char* (*gResolveStringIdFn)(uint64_t);
 #endif // WDEBUG
 
 struct StringID

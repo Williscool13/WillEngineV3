@@ -9,6 +9,9 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # We can make the assumption users have support for this w/ the GPU target of SM 6.6
 if (MSVC)
     add_compile_options(/arch:AVX2 /fp:contract)
+    # Release also writes a PDB so packaged crash dumps resolve to file and line; /OPT keeps the code /DEBUG would otherwise change
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo,Release>:ProgramDatabase>")
+    add_link_options($<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF>)
 else ()
     add_compile_options(-march=x86-64-v3)
 endif ()

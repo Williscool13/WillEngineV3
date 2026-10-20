@@ -25,8 +25,7 @@ struct GameBuild
     /** First build only: runs vcvars64.bat once and keeps its environment, so later builds skip its ~1 s. */
     bool bCapturingEnvironment{false};
     Core::Vector<char> environment;
-    /** The watcher saw the new DLL mid-build. */
-    bool bReloadHeld{false};
+    bool bEngineLocked{false};
 
     Platform::ChildProcess process;
     Core::Vector<char> pending;
@@ -36,11 +35,11 @@ struct GameBuild
 void RegisterGameBuildCommands(EngineState* state, GameBuild* build);
 
 /** Called by the DLL watcher before it reloads; true means skip this reload. */
-bool HoldGameReload(GameBuild& build);
+bool HoldGameReload(const GameBuild& build);
 
 /**
  * Forwards build output to the console; call once a frame.
- * @return true when a reload held during the build should run now
+ * @return true when the build succeeded and game.dll should reload now
  */
 bool PollGameBuild(EngineState* state, GameBuild& build);
 }

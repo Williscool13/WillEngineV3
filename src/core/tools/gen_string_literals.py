@@ -23,7 +23,7 @@ immediately rather than silently mis-sorting the table.
 A literal this script fails to collect resolves to "unknown" at runtime. That is the same
 degradation the old fixed-size intern buffer had on overflow, so missing one is not a crash.
 """
-import argparse
+import json
 import os
 import re
 import sys
@@ -42,8 +42,9 @@ def strip_comments(text):
     return re.sub(r"//[^\n]*", "", out)
 
 
-def collect(roots):
+def collect(roots, cache):
     literals = set()
+    seen = set()
     for root in roots:
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d != "extern"]
@@ -51,10 +52,17 @@ def collect(roots):
                 if not filename.endswith(SOURCE_EXTS):
                     continue
                 path = os.path.join(dirpath, filename)
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    text = strip_comments(f.read())
-                literals.update(SID_LITERAL.findall(text))
-                literals.update(COMPONENT_NAME.findall(text))
+                stat = os.stat(path)
+                seen.add(path)
+                entry = cache.get(path)
+                if entry is None or entry[0] != stat.st_mtime_ns or entry[1] != stat.st_size:
+                    with open(path, "r", encoding="utf-8", errors="replace") as f:
+                        text = strip_comments(f.read())
+                    entry = [stat.st_mtime_ns, stat.st_size, SID_LITERAL.findall(text) + COMPONENT_NAME.findall(text)]
+                    cache[path] = entry
+                literals.update(entry[2])
+    for path in [p for p in cache if p not in seen]:
+        del cache[path]
     literals.discard("")
     # Sorted by hash so the table is binary-searchable as emitted. The C++ side asserts this
     # ordering at startup, so a drift between xxh3.py and the engine's XXH3 fails loudly.
@@ -81,23 +89,47 @@ def emit(literals):
     return "\n".join(lines)
 
 
+def parse_args(argv):
+    # Not argparse: on Python 3.14 it imports shutil and bz2, which is most of this script's run time
+    roots, output, list_only = [], None, False
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--root" and i + 1 < len(argv):
+            roots.append(argv[i + 1])
+            i += 2
+            continue
+        if argv[i] == "--list":
+            list_only = True
+        else:
+            output = argv[i]
+        i += 1
+    if not roots:
+        sys.exit("usage: gen_string_literals.py [output.cpp] --root <dir> [--root <dir> ...] [--list]")
+    return roots, output, list_only
+
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("output", nargs="?")
-    parser.add_argument("--root", action="append", required=True, help="source root to scan; repeatable")
-    parser.add_argument("--list", action="store_true", help="print the collected literals instead of writing")
-    args = parser.parse_args()
+    roots, output, list_only = parse_args(sys.argv[1:])
 
-    literals = collect(args.root)
-
-    if args.list or args.output is None:
+    if list_only or output is None:
+        literals = collect(roots, {})
         for lit in literals:
             print(lit)
         print("--- {} unique literals".format(len(literals)), file=sys.stderr)
         return
 
+    out_path = output
+    cache_path = out_path + ".cache.json"
+    cache = {}
+    if os.path.exists(cache_path):
+        with open(cache_path, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+    literals = collect(roots, cache)
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(cache, f)
+
     text = emit(literals)
-    out_path = args.output
 
     # Only rewrite when the content actually changes, so an unchanged run does not retrigger the build.
     if os.path.exists(out_path):

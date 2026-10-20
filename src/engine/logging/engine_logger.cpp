@@ -53,14 +53,6 @@ void EngineLogger::Shutdown() const
     spdlog::drop_all();
 }
 
-void EngineLogger::RegisterLoggersForDLL(LogCategory defaultCategory) const
-{
-    for (auto& cat : categoryLoggers) {
-        if (cat) spdlog::register_or_replace(cat);
-    }
-    spdlog::set_default_logger(categoryLoggers[static_cast<int>(defaultCategory)]);
-}
-
 spdlog::logger* EngineLogger::RegisterGameSubCategory(const char* name)
 {
     if (const auto existing = spdlog::get(name)) {

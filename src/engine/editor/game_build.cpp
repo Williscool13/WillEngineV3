@@ -34,7 +34,9 @@ static void PrintLines(EngineState* state, GameBuild& build, bool bFlush)
         if (data[i] != '\n') { continue; }
         size_t end = i;
         if (end > start && data[end - 1] == '\r') { --end; }
-        Console::Print(state, Core::InlineString<256>(std::string_view(data + start, end - start)).c_str());
+        const std::string_view line(data + start, end - start);
+        if (line.find("LNK1104") != std::string_view::npos && line.find("engine-runtime.dll") != std::string_view::npos) { build.bEngineLocked = true; }
+        Console::Print(state, Core::InlineString<256>(line).c_str());
         start = i + 1;
     }
     if (bFlush && start < build.pending.Size()) {
@@ -97,9 +99,9 @@ void RegisterGameBuildCommands(EngineState* state, GameBuild* build)
                               Console::Print(state, "  w.build_game: a build is already running");
                               return;
                           }
-                          build->bReloadHeld = false;
                           build->startTime = std::chrono::steady_clock::now();
                           build->bBuilding = true;
+                          build->bEngineLocked = false;
                           if (!build->environment.IsEmpty()) {
                               if (StartBuild(state, *build)) { Console::Print(state, "  w.build_game: building..."); }
                               return;
@@ -117,13 +119,9 @@ void RegisterGameBuildCommands(EngineState* state, GameBuild* build)
                       });
 }
 
-bool HoldGameReload(GameBuild& build)
+bool HoldGameReload(const GameBuild& build)
 {
-    if (build.bBuilding) {
-        build.bReloadHeld = true;
-        return true;
-    }
-    return false;
+    return build.bBuilding;
 }
 
 bool PollGameBuild(EngineState* state, GameBuild& build)
@@ -159,13 +157,11 @@ bool PollGameBuild(EngineState* state, GameBuild& build)
 
     if (exitCode != 0) {
         Console::Print(state, Core::InlineString<256>::Format("  w.build_game: build failed (exit %u) after %.1f s", exitCode, seconds).c_str());
-        build.bReloadHeld = false;
+        if (build.bEngineLocked) { Console::Print(state, "  w.build_game: engine code changed, and this editor holds engine-runtime.dll; close the editor and rebuild"); }
         return false;
     }
 
     Console::Print(state, Core::InlineString<256>::Format("  w.build_game: built in %.1f s; game.dll reloads if it changed", seconds).c_str());
-    const bool bReload = build.bReloadHeld;
-    build.bReloadHeld = false;
-    return bReload;
+    return true;
 }
 }

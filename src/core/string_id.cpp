@@ -12,9 +12,6 @@
 
 #ifdef WDEBUG
 
-void (*gInternStringFn)(uint64_t, const char*) = nullptr;
-const char* (*gResolveStringIdFn)(uint64_t) = nullptr;
-
 static constexpr size_t INTERN_BUFFER_SIZE = 1024 * 1024;
 static constexpr size_t INTERN_TABLE_CAP = 65536;
 static char gInternBuffer[INTERN_BUFFER_SIZE];
@@ -27,10 +24,6 @@ void DBG_InternString(uint64_t hash, const char* str)
 {
     if (hash == 0) { return; }
     if (Core::FindStringLiteral(hash)) { return; }
-    if (gInternStringFn) {
-        gInternStringFn(hash, str);
-        return;
-    }
 
     size_t i = hash & (INTERN_TABLE_CAP - 1);
     for (size_t probes = 0; probes < INTERN_TABLE_CAP; ++probes) {
@@ -86,7 +79,6 @@ StringID::StringID(const char* str, size_t len)
 const char* StringID::ToString() const
 {
     if (const char* literal = Core::FindStringLiteral(id)) { return literal; }
-    if (gResolveStringIdFn) { return gResolveStringIdFn(id); }
     return DBG_ResolveStringId(id);
 }
 

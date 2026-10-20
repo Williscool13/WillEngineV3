@@ -41,6 +41,9 @@ public:
 
     DllLoadResponse Reload();
 
+    /** The DLL on disk was rewritten since it was loaded. */
+    bool HasChanged() const;
+
     template<typename FuncType>
     FuncType GetFunction(const char* functionName)
     {

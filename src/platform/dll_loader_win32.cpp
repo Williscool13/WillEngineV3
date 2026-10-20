@@ -69,6 +69,12 @@ void DllLoader::Unload()
     }
 }
 
+bool DllLoader::HasChanged() const
+{
+    const uint64_t currentWriteTime = GetFileWriteTime(originalPath.c_str());
+    return currentWriteTime != 0 && currentWriteTime != lastWriteTime;
+}
+
 DllLoadResponse DllLoader::Reload()
 {
     uint64_t currentWriteTime = GetFileWriteTime(originalPath.c_str());

@@ -235,8 +235,6 @@ struct EngineContext
 
     // Global Fn
     //   Defined by engine called by game
-    void (*internStringFn)(uint64_t, const char*); // debug only
-    const char* (*resolveStringIdFn)(uint64_t);    // debug only
     Core::InlineFunction<void(bool)> setCursorHiddenFn;
     Core::InlineFunction<void(bool)> setTextInputActiveFn;
     /** System clipboard (Platform/clipboard.h) bound to the engine window; privateFormat may be null. */
@@ -248,10 +246,6 @@ struct EngineContext
     Core::InlineFunction<void(EngineContext*, EngineState*)> playStopFn;
 
     // Imgui
-    ImGuiContext* imguiContext;
-    void* (*imguiAllocFn)(size_t, void*){nullptr};
-    void  (*imguiFreeFn)(void*, void*){nullptr};
-    void* imguiAllocUserData{nullptr};
     bool bImguiKeyboardCaptured = false;
     bool bImguiMouseCaptured = false;
     bool bImGuiWantsTextInput = false;
@@ -259,9 +253,6 @@ struct EngineContext
     // ImGui texture preview (routed through engine DLL where Vulkan fn ptrs are loaded) handles are opaque uint64_t (VkSampler, VkImageView, VkDescriptorSet)
     Core::InlineFunction<uint64_t(uint64_t, uint64_t)> addImguiTextureFn;
     Core::InlineFunction<void(uint64_t)> removeImguiTextureFn;
-
-    // Clay
-    Clay_Context* clayContext{nullptr};
 
     uint64_t currentRenderFrame{0};
     EngineFrameStatus frameStatus{};

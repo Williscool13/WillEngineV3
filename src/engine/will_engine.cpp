@@ -517,11 +517,6 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #if LOGGING_ENABLED
         engineContext->engineLogger = engineLogger;
 #endif
-        engineContext->imguiContext = ImGui::GetCurrentContext();
-        engineContext->imguiAllocFn = ImGuiAlloc;
-        engineContext->imguiFreeFn = ImGuiFree;
-        engineContext->imguiAllocUserData = &memoryManager;
-        engineContext->clayContext = Clay_GetCurrentContext();
         engineContext->windowContext.windowWidth = w;
         engineContext->windowContext.windowHeight = h;
         engineContext->windowContext.viewportWidth = w;
@@ -594,10 +589,6 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             self->imguiClipboardText.PushBack('\0');
             return self->imguiClipboardText.Data();
         };
-#if DEBUG
-        engineContext->internStringFn = [](uint64_t hash, const char* str) { DBG_InternString(hash, str); };
-        engineContext->resolveStringIdFn = [](uint64_t hash) { return DBG_ResolveStringId(hash); };
-#endif
         engineContext->addImguiTextureFn = [](uint64_t sampler, uint64_t imageView) -> uint64_t {
             VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(
                 reinterpret_cast<VkSampler>(sampler),
@@ -699,6 +690,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #if WILL_EDITOR && !GAME_STATIC
 void WillEngine::HotReloadGame()
 {
+    if (!gameDll.HasChanged()) { return; }
     HotReloadSave(engineContext, engineState);
     gameFunctions.gameHotReloadSave(engineContext, engineState);
     engineState->registry = entt::registry{};

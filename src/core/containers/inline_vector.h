@@ -62,12 +62,15 @@ public:
     {
         assert(size_ > 0 && "InlineVector underflow");
         --size_;
+        ResetSlot(size_);
     }
 
     T PopBackValue()
     {
         assert(size_ > 0 && "InlineVector underflow");
-        return std::move(data_[--size_]);
+        T value = std::move(data_[--size_]);
+        ResetSlot(size_);
+        return value;
     }
 
     void RemoveAt(size_t index)
@@ -82,6 +85,7 @@ public:
             }
         }
         --size_;
+        ResetSlot(size_);
     }
 
     // O(n) linear scan
@@ -123,9 +127,16 @@ public:
             data_[index] = std::move(data_[size_ - 1]);
         }
         --size_;
+        ResetSlot(size_);
     }
 
-    void Clear() { size_ = 0; }
+    void Clear()
+    {
+        for (size_t i = 0; i < size_; ++i) {
+            ResetSlot(i);
+        }
+        size_ = 0;
+    }
 
     T& operator[](size_t i)
     {
@@ -177,6 +188,12 @@ public:
     const T* end() const { return data_ + size_; }
 
 private:
+    /** A slot past the end keeps its old value until overwritten, so a removed InlineFunction would keep pointing into an unloaded game DLL. */
+    void ResetSlot(size_t i)
+    {
+        if constexpr (!std::is_trivially_copyable_v<T> && std::is_move_assignable_v<T>) { data_[i] = T{}; }
+    }
+
     T data_[N]{};
     size_t size_{};
 };

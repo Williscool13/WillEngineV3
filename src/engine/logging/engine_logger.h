@@ -26,8 +26,6 @@ public:
     spdlog::logger* GetLogger(LogCategory cat) { return categoryLoggers[static_cast<int>(cat)].get(); }
     ImGuiSink* GetImGuiSink() const { return imguiSink; }
 
-    void RegisterLoggersForDLL(LogCategory defaultCategory) const;
-
     /** Registers a Game sub-category logger (e.g. "Player", "UI"). Asserts name doesn't collide with an engine LogCategory. */
     spdlog::logger* RegisterGameSubCategory(const char* name);
 
