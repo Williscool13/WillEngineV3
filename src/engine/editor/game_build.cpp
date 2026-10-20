@@ -7,11 +7,9 @@
 #include <cstring>
 #include <string_view>
 
-#include "core/containers/inline_path.h"
 #include "core/containers/inline_string.h"
 #include "engine/engine_api.h"
 #include "engine/console/console.h"
-#include "platform/file_utils.h"
 
 namespace Engine
 {
@@ -26,12 +24,6 @@ static constexpr const char* BUILD_DIR = "";
 static constexpr const char* CMAKE = "";
 static constexpr const char* VCVARS = "";
 #endif
-
-/** Build-tree relative; every library linked into both will-engine.exe and game.dll. */
-static constexpr const char* ENGINE_LIBRARIES[] = {
-    "src/core/core.lib", "src/platform/platform.lib", "src/utils/utils.lib", "src/physics/physics.lib", "src/audio/audio.lib",
-    "src/asset-load/asset-load.lib", "src/render/render.lib", "src/engine/engine.lib", "Jolt.lib", "imgui.lib", "imguizmo.lib",
-};
 
 static void PrintLines(EngineState* state, GameBuild& build, bool bFlush)
 {
@@ -54,17 +46,6 @@ static void PrintLines(EngineState* state, GameBuild& build, bool bFlush)
         memmove(build.pending.Data(), build.pending.Data() + start, rest);
         build.pending.Resize(rest);
     }
-}
-
-/** The first engine library rebuilt after the running exe was linked, or nullptr. */
-static const char* NewerEngineLibrary()
-{
-    const Core::Path buildDir(BUILD_DIR);
-    const uint64_t exeTime = Platform::GetFileWriteTime((buildDir / "will-engine.exe").c_str());
-    for (const char* library : ENGINE_LIBRARIES) {
-        if (Platform::GetFileWriteTime((buildDir / library).c_str()) > exeTime) { return library; }
-    }
-    return nullptr;
 }
 
 static bool StartBuild(EngineState* state, GameBuild& build)
@@ -106,8 +87,8 @@ void RegisterGameBuildCommands(EngineState* state, GameBuild* build)
     build->pending = Core::Vector<char>(state->allocator);
     build->environment = Core::Vector<char>(state->allocator);
     Console::Register(state, Origin::Engine, "w.build_game",
-                      "`w.build_game [force]` rebuilds game.dll in this editor's build tree and hot-reloads it, unless engine libraries changed under this exe (force reloads anyway)",
-                      [build](EngineContext*, EngineState* state, Core::Span<const char*> args) {
+                      "`w.build_game` rebuilds game.dll in this editor's build tree and hot-reloads it; engine changes fail to link while the editor holds engine-runtime.dll",
+                      [build](EngineContext*, EngineState* state, Core::Span<const char*>) {
                           if (!GAME_BUILD_AVAILABLE) {
                               Console::Print(state, "  w.build_game: this build has no build tree to rebuild from");
                               return;
@@ -116,7 +97,6 @@ void RegisterGameBuildCommands(EngineState* state, GameBuild* build)
                               Console::Print(state, "  w.build_game: a build is already running");
                               return;
                           }
-                          build->bForce = args.Size() > 1 && strcmp(args[1], "force") == 0;
                           build->bReloadHeld = false;
                           build->startTime = std::chrono::steady_clock::now();
                           build->bBuilding = true;
@@ -137,14 +117,10 @@ void RegisterGameBuildCommands(EngineState* state, GameBuild* build)
                       });
 }
 
-bool HoldGameReload(EngineState* state, GameBuild& build)
+bool HoldGameReload(GameBuild& build)
 {
     if (build.bBuilding) {
         build.bReloadHeld = true;
-        return true;
-    }
-    if (build.bReloadBlocked) {
-        Console::Print(state, "  game.dll changed but reload is off: engine libraries are newer than this exe; restart the editor");
         return true;
     }
     return false;
@@ -187,16 +163,6 @@ bool PollGameBuild(EngineState* state, GameBuild& build)
         return false;
     }
 
-    if (const char* library = NewerEngineLibrary(); library && !build.bForce) {
-        build.bReloadBlocked = true;
-        Console::Print(state, Core::InlineString<256>::Format(
-            "  w.build_game: built in %.1f s but NOT reloaded: %s is newer than this exe, so game.dll carries a different engine. Restart the editor, or `w.build_game force`",
-            seconds, library).c_str());
-        build.bReloadHeld = false;
-        return false;
-    }
-
-    build.bReloadBlocked = false;
     Console::Print(state, Core::InlineString<256>::Format("  w.build_game: built in %.1f s; game.dll reloads if it changed", seconds).c_str());
     const bool bReload = build.bReloadHeld;
     build.bReloadHeld = false;

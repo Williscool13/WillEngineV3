@@ -79,15 +79,17 @@ else()
             $<TARGET_FILE:game>
             $<TARGET_FILE_DIR:will-engine>
     )
-    add_custom_command(TARGET game POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
-            $<TARGET_PDB_FILE:game>
-            $<TARGET_FILE_DIR:will-engine>
-    )
 endif()
 
 target_include_directories(game PRIVATE ${GAME_INCLUDE_DIRS})
-target_link_libraries(game PUBLIC ${GAME_LIBRARIES})
+if (NOT WILL_ENGINE_GAME_STATIC)
+    target_link_libraries(game PRIVATE engine-runtime Jolt SDL3::SDL3)
+    if (WILL_ENGINE_ENABLE_PROFILER)
+        target_link_libraries(game PRIVATE tracy_interface)
+    endif ()
+else ()
+    target_link_libraries(game PUBLIC ${GAME_LIBRARIES})
+endif ()
 
 # Engine and third-party headers
 target_precompile_headers(game PRIVATE game_pch.h)

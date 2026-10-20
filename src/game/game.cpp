@@ -26,47 +26,6 @@
 #include "ballance/state.h"
 #include "clay/clay.h"
 
-#ifndef GAME_STATIC
-#include <enkiTS/src/TaskScheduler.h>
-#include "meshoptimizer/src/meshoptimizer.h"
-#include "par/par_shapes_ext.h"
-#include "asset-load/asset-load-jobs/text3d_geometry.h"
-#include "core/memory/concurrent_queue_traits.h"
-#include "core/memory/memory_manager.h"
-
-static Core::MemoryManager* gDllMemory = nullptr;
-
-static void* DllMeshoptAlloc(size_t size)
-{
-    return gDllMemory->AssetsScratch().Alloc(size, Core::AllocTag::Meshopt);
-}
-
-static void DllMeshoptFree(void* ptr)
-{
-    gDllMemory->AssetsScratch().Free(ptr);
-}
-
-static void RegisterDllEngineHooks(Engine::EngineContext* ctx)
-{
-    if (ctx->engineLogger) {
-        ctx->engineLogger->RegisterLoggersForDLL(Engine::LogCategory::Game);
-    }
-
-    ImGui::SetCurrentContext(ctx->imguiContext);
-    ImGui::SetAllocatorFunctions(ctx->imguiAllocFn, ctx->imguiFreeFn, ctx->imguiAllocUserData);
-    Clay_SetCurrentContext(ctx->clayContext);
-
-    ctx->physicsSystem->RegisterPhysics();
-    ctx->scheduler->RegisterExternalTaskThread();
-
-    gDllMemory = ctx->memoryManager;
-    meshopt_setAllocator(DllMeshoptAlloc, DllMeshoptFree);
-    par_shapes_set_allocator(&ctx->memoryManager->AssetsScratch());
-    AssetLoad::SetEarcutAllocator(&ctx->memoryManager->AssetsScratch());
-    Core::SetConcurrentQueueAllocator(&ctx->memoryManager->General(), Core::AllocTag::Queue);
-}
-#endif
-
 extern "C"
 {
 GAME_API size_t GameGetStateSize()
@@ -83,10 +42,6 @@ GAME_API void GameStartup(Engine::EngineContext* ctx, Engine::EngineState* state
 
 GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-#ifndef GAME_STATIC
-    RegisterDllEngineHooks(ctx);
-#endif
-
     Audio::AudioManager::RegisterAudio();
     Ballance::RegisterComponents(state->componentRegistry);
     Ballance::RegisterCommands(state);
@@ -97,11 +52,6 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     ctx->playStartFn = Ballance::PlayStart;
     ctx->playStopFn = Ballance::PlayStop;
-
-#if DEBUG
-    gInternStringFn = ctx->internStringFn;
-    gResolveStringIdFn = ctx->resolveStringIdFn;
-#endif
 }
 
 GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -110,21 +60,10 @@ GAME_API void GameHotReloadSave(Engine::EngineContext* ctx, Engine::EngineState*
 
     ctx->playStartFn = {};
     ctx->playStopFn = {};
-
-#ifndef GAME_STATIC
-    if (ctx->scheduler) {
-        ctx->scheduler->DeRegisterExternalTaskThread();
-    }
-    ctx->physicsSystem->UnregisterPhysics();
-#endif
 }
 
 GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-#ifndef GAME_STATIC
-    RegisterDllEngineHooks(ctx);
-#endif
-
     Ballance::RegisterComponents(state->componentRegistry);
     Ballance::RegisterCommands(state);
     Game::RegisterInputActions(state->input);
@@ -134,11 +73,6 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
 
     ctx->playStartFn = Ballance::PlayStart;
     ctx->playStopFn = Ballance::PlayStop;
-
-#if DEBUG
-    gInternStringFn = ctx->internStringFn;
-    gResolveStringIdFn = ctx->resolveStringIdFn;
-#endif
 }
 }
 
@@ -161,13 +95,6 @@ GAME_API void GameUnload(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ctx->playStartFn = {};
     ctx->playStopFn = {};
-
-#ifndef GAME_STATIC
-    if (ctx->scheduler) {
-        ctx->scheduler->DeRegisterExternalTaskThread();
-    }
-    ctx->physicsSystem->UnregisterPhysics();
-#endif
 }
 
 GAME_API void GameShutdown(Engine::EngineContext* ctx, Engine::EngineState* state)

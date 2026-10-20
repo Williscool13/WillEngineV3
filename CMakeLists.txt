@@ -77,6 +77,10 @@ if (WILL_ENGINE_DEBUG)
     add_compile_definitions(WDEBUG)
     add_compile_definitions(JPH_DEBUG_RENDERER)
 endif ()
+
+if (NOT MSVC AND NOT WILL_ENGINE_GAME_STATIC)
+    message(FATAL_ERROR "Hot-reload builds need MSVC (engine-runtime.def comes from dumpbin); set WILL_ENGINE_GAME_STATIC=ON")
+endif ()
 # Build =======================================
 if (NOT WILL_ENGINE_BUILD_EDITOR AND WILL_ENGINE_NO_CONSOLE AND WIN32)
     add_executable(will-engine WIN32 main.cpp)
@@ -89,7 +93,11 @@ target_include_directories(will-engine PRIVATE
         ${CMAKE_SOURCE_DIR}/extern
 )
 
-target_link_libraries(will-engine PUBLIC engine)
+if (NOT WILL_ENGINE_GAME_STATIC)
+    target_link_libraries(will-engine PRIVATE engine-runtime SDL3::SDL3)
+else ()
+    target_link_libraries(will-engine PUBLIC engine)
+endif ()
 if (MSVC)
     target_link_options(will-engine PRIVATE $<$<CONFIG:Debug>:/INCREMENTAL:NO>)
 endif ()
@@ -186,7 +194,11 @@ set(USE_LZCNT ON)
 set(USE_TZCNT ON)
 set(USE_F16C ON)
 set(USE_FMADD ON)
+if (NOT WILL_ENGINE_GAME_STATIC)
+    set(BUILD_SHARED_LIBS ON)
+endif ()
 include("${PHYSICS_REPO_ROOT}/Jolt/Jolt.cmake")
+unset(BUILD_SHARED_LIBS)
 target_include_directories(Jolt PUBLIC
         ${PHYSICS_REPO_ROOT}
 )
@@ -439,3 +451,7 @@ add_custom_command(TARGET will-engine POST_BUILD
         $<TARGET_FILE:tracy>
         $<TARGET_FILE_DIR:will-engine>
 )
+
+if (NOT WILL_ENGINE_GAME_STATIC)
+    include(cmake/engine_runtime.cmake)
+endif ()

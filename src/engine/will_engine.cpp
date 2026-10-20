@@ -667,7 +667,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     auto gameDirectory = Platform::GetExecutablePath();
     if (Platform::FileExists(gameDirectory)) {
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
-            if (!HoldGameReload(engineState, gameBuild)) { HotReloadGame(); }
+            if (!HoldGameReload(gameBuild)) { HotReloadGame(); }
         }, 2.0f, "game.dll");
     }
     else {

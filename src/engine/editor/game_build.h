@@ -16,9 +16,8 @@ namespace Engine
 struct EngineState;
 
 /**
- * Rebuilds game.dll in the build tree this editor was built from. The DLL watcher's reload is held while it builds; afterwards it is
- * released only when no engine library the game links is newer than the running exe, since that DLL would carry a different engine.
- * (A ninja dry run cannot answer this: CONFIGURE_DEPENDS globs make every dry run stop at a pretend CMake re-run.)
+ * Rebuilds game.dll in the build tree this editor was built from, holding the DLL watcher's reload until the build ends.
+ * An engine change cannot slip in: the running editor holds engine-runtime.dll, so a build that must relink it fails.
  */
 struct GameBuild
 {
@@ -26,11 +25,8 @@ struct GameBuild
     /** First build only: runs vcvars64.bat once and keeps its environment, so later builds skip its ~1 s. */
     bool bCapturingEnvironment{false};
     Core::Vector<char> environment;
-    bool bForce{false};
     /** The watcher saw the new DLL mid-build. */
     bool bReloadHeld{false};
-    /** Engine libraries changed under this exe; reloads stay off until a clean w.build_game or a restart. */
-    bool bReloadBlocked{false};
 
     Platform::ChildProcess process;
     Core::Vector<char> pending;
@@ -40,7 +36,7 @@ struct GameBuild
 void RegisterGameBuildCommands(EngineState* state, GameBuild* build);
 
 /** Called by the DLL watcher before it reloads; true means skip this reload. */
-bool HoldGameReload(EngineState* state, GameBuild& build);
+bool HoldGameReload(GameBuild& build);
 
 /**
  * Forwards build output to the console; call once a frame.
