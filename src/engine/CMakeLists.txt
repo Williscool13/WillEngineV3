@@ -238,6 +238,8 @@ add_library(engine STATIC
         editor/editor_gizmo_helpers.h
         editor/playtest_system.cpp
         editor/playtest_system.h
+        editor/game_build.cpp
+        editor/game_build.h
         editor/probe_bake_system.cpp
         editor/probe_bake_system.h
         editor/shadow_bake_system.cpp
@@ -279,6 +281,16 @@ if(WILL_ENGINE_GAME_STATIC)
 endif()
 
 target_compile_definitions(engine PRIVATE ENGINE_EXPORTS)
+
+# w.build_game console command
+if(MSVC AND NOT WILL_ENGINE_GAME_STATIC AND CMAKE_GENERATOR MATCHES "^Ninja$")
+    string(REGEX REPLACE "/Tools/MSVC/.*$" "" WILL_MSVC_VC_DIR "${CMAKE_CXX_COMPILER}")
+    set(WILL_VCVARS64 "${WILL_MSVC_VC_DIR}/Auxiliary/Build/vcvars64.bat")
+    if(EXISTS "${WILL_VCVARS64}")
+        set_source_files_properties(editor/game_build.cpp PROPERTIES COMPILE_DEFINITIONS
+                "WILL_GAME_BUILD_DIR=\"${CMAKE_BINARY_DIR}\";WILL_GAME_BUILD_CMAKE=\"${CMAKE_COMMAND}\";WILL_GAME_BUILD_VCVARS=\"${WILL_VCVARS64}\"")
+    endif()
+endif()
 
 if(WILL_ENGINE_BUILD_EDITOR)
     target_link_libraries(engine PUBLIC editor)

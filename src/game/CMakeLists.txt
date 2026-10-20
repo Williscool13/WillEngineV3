@@ -1,5 +1,6 @@
 set(GAME_SOURCES
         game.cpp
+        game_pch.h
 
         fwd_components.h
 
@@ -87,3 +88,6 @@ endif()
 
 target_include_directories(game PRIVATE ${GAME_INCLUDE_DIRS})
 target_link_libraries(game PUBLIC ${GAME_LIBRARIES})
+
+# Engine and third-party headers
+target_precompile_headers(game PRIVATE game_pch.h)

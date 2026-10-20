@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 4.0)
 project(will-engine)
 
 set(CMAKE_CXX_STANDARD 23)
+# No C++20 modules; scanning would add a dependency scan and dyndep step to every changed file
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # x86-64-v3 baseline (AVX2/FMA/F16C/BMI)
 # We can make the assumption users have support for this w/ the GPU target of SM 6.6

@@ -12,6 +12,7 @@
 #include "engine/include/automation_config.h"
 #include "engine/include/frame_sync.h"
 #include "engine/include/game_interface.h"
+#include "engine/editor/game_build.h"
 #include "engine/systems/system_graph.h"
 #include "render/interface/render_interface.h"
 #include "core/containers/array.h"
@@ -115,6 +116,9 @@ public:
 
 private:
     void EditorImgui();
+#if WILL_EDITOR && !GAME_STATIC
+    void HotReloadGame();
+#endif
 
 private: // Windowing
     SDL_Window* window{};
@@ -158,6 +162,9 @@ private: // Game DLL
 #ifndef GAME_STATIC
     Platform::DllLoader gameDll{};
     Platform::DirectoryWatcher gameDllWatcher{};
+#if WILL_EDITOR
+    GameBuild gameBuild{};
+#endif
 #endif
     Platform::DirectoryWatcher shaderWatcher{};
 #if WILL_EDITOR

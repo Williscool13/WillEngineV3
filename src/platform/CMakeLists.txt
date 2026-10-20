@@ -9,6 +9,7 @@ add_library(platform STATIC
         virtual_memory.h
         tcp_socket.h
         clipboard.h
+        child_process.h
 )
 
 if(WIN32)
@@ -22,6 +23,7 @@ if(WIN32)
             virtual_memory_win32.cpp
             tcp_socket_win32.cpp
             clipboard_win32.cpp
+            child_process_win32.cpp
             paths.cpp
     )
     target_link_libraries(platform PUBLIC

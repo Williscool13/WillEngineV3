@@ -542,6 +542,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
                               assetGenerator->GenerateBlueNoiseTexture(Platform::GetAssetPath() / "textures/blue_noise.wtexture");
                               Console::Print(state, "  blue noise generated, restart to load it");
                           });
+#if !GAME_STATIC
+        RegisterGameBuildCommands(engineState, &gameBuild);
+#endif
 #endif
         engineContext->audioManager = audioManager;
         engineContext->physicsSystem = physicsSystem;
@@ -664,52 +667,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     auto gameDirectory = Platform::GetExecutablePath();
     if (Platform::FileExists(gameDirectory)) {
         gameDllWatcher.Start(gameDirectory.c_str(), [&]() {
-            HotReloadSave(engineContext, engineState);
-            gameFunctions.gameHotReloadSave(engineContext, engineState);
-            engineState->registry = entt::registry{};
-            MCP::ClearGameTools(engineState);
-            ClearGameComponents(engineState->componentRegistry);
-            ClearGameInputActions(engineState->input);
-            Console::ClearGameCommands(engineState);
-
-            auto reloadResponse = gameDll.Reload();
-
-            engineState->registry.ctx().emplace<EngineContext*>(engineContext);
-            engineState->registry.ctx().emplace<EngineState*>(engineState);
-            ConnectEngineObservers(engineState->registry);
-
-            switch (reloadResponse) {
-                case Platform::DllLoadResponse::Loaded:
-                    SPDLOG_DEBUG("Game lib was hot-reloaded");
-                // Fallthrough
-                case Platform::DllLoadResponse::NoChanges:
-                    gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
-                    gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
-                    gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
-                    gameFunctions.gameCollect = gameDll.GetFunction<Core::GameCollectFunc>("GameCollect");
-                    gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
-                    gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
-                    gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
-                    gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
-                    gameFunctions.gameHotReloadSave = gameDll.GetFunction<Core::GameHotReloadSaveFunc>("GameHotReloadSave");
-                    gameFunctions.gameHotReloadLoad = gameDll.GetFunction<Core::GameHotReloadLoadFunc>("GameHotReloadLoad");
-                    break;
-                case Platform::DllLoadResponse::FailedToLoad:
-                    gameFunctions.Stub();
-                    SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
-                    break;
-            }
-
-            engineContext->bGameLoaded = reloadResponse != Platform::DllLoadResponse::FailedToLoad;
-            if (engineContext->bGameLoaded) {
-                const size_t reloadedStateSize = gameFunctions.gameGetStateSize();
-                ENGINE_ASSERT(Engine, reloadedStateSize == engineContext->gameStateSize, "GameState size changed across hot reload ({} -> {} bytes) - layout changed, full restart required", engineContext->gameStateSize, reloadedStateSize);
-            }
-
-            // Reconnect observers and restore snapshot; skips default scene load.
-            gameFunctions.gameHotReloadLoad(engineContext, engineState);
-            HotReloadRestore(engineContext, engineState);
-            LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
+            if (!HoldGameReload(engineState, gameBuild)) { HotReloadGame(); }
         }, 2.0f, "game.dll");
     }
     else {
@@ -737,6 +695,58 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     }
 #endif
 }
+
+#if WILL_EDITOR && !GAME_STATIC
+void WillEngine::HotReloadGame()
+{
+    HotReloadSave(engineContext, engineState);
+    gameFunctions.gameHotReloadSave(engineContext, engineState);
+    engineState->registry = entt::registry{};
+    MCP::ClearGameTools(engineState);
+    ClearGameComponents(engineState->componentRegistry);
+    ClearGameInputActions(engineState->input);
+    Console::ClearGameCommands(engineState);
+
+    auto reloadResponse = gameDll.Reload();
+
+    engineState->registry.ctx().emplace<EngineContext*>(engineContext);
+    engineState->registry.ctx().emplace<EngineState*>(engineState);
+    ConnectEngineObservers(engineState->registry);
+
+    switch (reloadResponse) {
+        case Platform::DllLoadResponse::Loaded:
+            SPDLOG_DEBUG("Game lib was hot-reloaded");
+        // Fallthrough
+        case Platform::DllLoadResponse::NoChanges:
+            gameFunctions.gameGetStateSize = gameDll.GetFunction<Core::GameGetStateSizeFunc>("GameGetStateSize");
+            gameFunctions.gameStartup = gameDll.GetFunction<Core::GameStartUpFunc>("GameStartup");
+            gameFunctions.gameLoad = gameDll.GetFunction<Core::GameLoadFunc>("GameLoad");
+            gameFunctions.gameCollect = gameDll.GetFunction<Core::GameCollectFunc>("GameCollect");
+            gameFunctions.gamePrepareFrame = gameDll.GetFunction<Core::GamePrepareFrameFunc>("GamePrepareFrame");
+            gameFunctions.gameEndFrame = gameDll.GetFunction<Core::GameEndFrameFunc>("GameEndFrame");
+            gameFunctions.gameUnload = gameDll.GetFunction<Core::GameUnloadFunc>("GameUnload");
+            gameFunctions.gameShutdown = gameDll.GetFunction<Core::GameShutdownFunc>("GameShutdown");
+            gameFunctions.gameHotReloadSave = gameDll.GetFunction<Core::GameHotReloadSaveFunc>("GameHotReloadSave");
+            gameFunctions.gameHotReloadLoad = gameDll.GetFunction<Core::GameHotReloadLoadFunc>("GameHotReloadLoad");
+            break;
+        case Platform::DllLoadResponse::FailedToLoad:
+            gameFunctions.Stub();
+            SPDLOG_DEBUG("Game lib failed to be hot-reloaded");
+            break;
+    }
+
+    engineContext->bGameLoaded = reloadResponse != Platform::DllLoadResponse::FailedToLoad;
+    if (engineContext->bGameLoaded) {
+        const size_t reloadedStateSize = gameFunctions.gameGetStateSize();
+        ENGINE_ASSERT(Engine, reloadedStateSize == engineContext->gameStateSize, "GameState size changed across hot reload ({} -> {} bytes) - layout changed, full restart required", engineContext->gameStateSize, reloadedStateSize);
+    }
+
+    // Reconnect observers and restore snapshot; skips default scene load.
+    gameFunctions.gameHotReloadLoad(engineContext, engineState);
+    HotReloadRestore(engineContext, engineState);
+    LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
+}
+#endif
 
 #if WILL_EDITOR
 static uint32_t PendingGenerationCount(const Editor::AssetGenerator* gen, bool bActiveOnly)
@@ -1554,6 +1564,9 @@ void WillEngine::Run()
 
 #if !GAME_STATIC
         gameDllWatcher.Poll();
+#if WILL_EDITOR
+        if (PollGameBuild(engineState, gameBuild)) { HotReloadGame(); }
+#endif
 #endif
 #if WILL_EDITOR
         sceneWatcher.Poll();
