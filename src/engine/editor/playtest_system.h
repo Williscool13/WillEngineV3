@@ -14,6 +14,7 @@
 #include "core/containers/inline_vector.h"
 #include "core/containers/vector.h"
 #include "engine/core/action_handle.h"
+#include "engine/launch/launch_args.h"
 #include "engine/profiles/profile_library.h"
 #include "render/interface/render_interface.h"
 
@@ -26,6 +27,10 @@ enum class InputContext : uint8_t;
 
 namespace Engine
 {
+inline constexpr Args::ArgDesc ARG_PLAY = Args::StringArg("play", "", ".wplay run script; arms it at startup");
+inline constexpr Args::ArgDesc ARG_OUT = Args::StringArg("out", "", "capture PNG output directory, empty means <UserData>/screenshots/<run>/<timestamp>");
+inline constexpr Args::ArgDesc ARG_EXIT = Args::BoolArg("exit", "quit when the --play run finishes");
+
 struct CameraOverride
 {
     enum class Mode : uint8_t

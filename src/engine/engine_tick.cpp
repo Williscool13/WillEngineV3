@@ -128,6 +128,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("PhysicsShapeCreationResolve", &PhysicsShapeCreationResolve);
     graph.Add("PhysicsBodyCreationResolve", &PhysicsBodyCreationResolve);
     graph.Add("TickQuietFrames", &TickQuietFrames);
+    graph.Add("RunLaunchExec", &Args::RunLaunchExec);
 
     graph.Add("MarkRenderTransformsDirty", &MarkRenderTransformsDirty);
     graph.Add("MarkPhysicsTransformsDirty", [](EngineContext* ctx, EngineState* state) { MarkPhysicsTransformsDirty(state); }, SystemWhen::Running);

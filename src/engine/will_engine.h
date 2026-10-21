@@ -9,10 +9,10 @@
 #include <SDL3/SDL.h>
 #include <enkiTS/src/TaskScheduler.h>
 
-#include "engine/include/automation_config.h"
 #include "engine/include/frame_sync.h"
 #include "engine/include/game_interface.h"
 #include "engine/editor/game_build.h"
+#include "engine/launch/launch_args.h"
 #include "engine/systems/system_graph.h"
 #include "render/interface/render_interface.h"
 #include "core/containers/array.h"
@@ -77,6 +77,7 @@ class RenderThread;
 
 namespace Engine
 {
+inline constexpr Args::ArgDesc ARG_NO_REBAR = Args::BoolArg("no-rebar", "report no resizable BAR, forcing per frame data through the staged upload path");
 
 static constexpr Core::Array<const char*, 64> TASK_THREAD_NAMES{
     "TaskThread0", "TaskThread1", "TaskThread2", "TaskThread3",
@@ -106,7 +107,7 @@ public:
 
     ~WillEngine();
 
-    void Initialize(Utils::Logger* logger, const AutomationConfig& automation = {});
+    void Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs);
 
     void Run();
 

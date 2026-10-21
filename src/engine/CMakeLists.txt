@@ -128,6 +128,9 @@ add_library(engine STATIC
 
         console/console.cpp
         console/console.h
+        launch/engine_args.cpp
+        launch/launch_args.cpp
+        launch/launch_args.h
         ui/ui.cpp
         ui/ui.h
         ui/ui_zindex.h

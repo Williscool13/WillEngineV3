@@ -2,7 +2,7 @@
 
 ## Live engine access (MCP)
 
-Editor builds run an MCP server on `http://127.0.0.1:8787/mcp` (`--mcp-port <n>` to change it). It is registered as `will-engine` in `.mcp.json`. When the editor is running, use these tools before asking the user to check something by hand.
+Editor builds run an MCP server on `http://127.0.0.1:8787/mcp` (`--mcp-port=<n>` to change it; `--help` lists every launch argument in `engine.log`). It is registered as `will-engine` in `.mcp.json`. When the editor is running, use these tools before asking the user to check something by hand.
 
 - `get_engine_status` - readiness. Poll it after any mutation; `settled` means nothing has loaded for 30 frames.
 - `get_frame_timings` - CPU and GPU frame timing, culling and pipeline counters. Safe to poll.

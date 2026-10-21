@@ -252,7 +252,7 @@ WillEngine::WillEngine(Platform::CrashHandler* crashHandler_)
 
 WillEngine::~WillEngine() = default;
 
-void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& automation)
+void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
 {
     ZoneScoped;
 
@@ -295,6 +295,9 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     engineLogger = new(memoryManager.PersistentAllocRaw(sizeof(EngineLogger), Core::AllocTag::EngineLogger)) EngineLogger(memoryManager);
     engineLogger->Init(logger);
 #endif
+
+    Args::RegisterEngineArgs(*launchArgs);
+    const bool bPlayRun = Args::Has(*launchArgs, ARG_PLAY);
 
     tracy::SetThreadName("EngineThread");
     Platform::SetThreadName("EngineThread");
@@ -350,7 +353,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 
         SDL_DisplayID targetDisplay = SDL_GetPrimaryDisplay();
         SDL_WindowFlags extraFlags = SDL_WINDOW_MAXIMIZED;
-        if (automation.IsPlayRun()) {
+        if (bPlayRun) {
             // 1. Scripted runs render unattended
             // 2. Don't yank focus from the user
             // 3. Prefer a secondary monitor
@@ -377,7 +380,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
             rect.w, rect.h,
             SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | extraFlags);
 
-        if (automation.IsPlayRun()) {
+        if (bPlayRun) {
             SDL_SetWindowPosition(window, rect.x, rect.y);
         }
         SDL_ShowWindow(window);
@@ -399,7 +402,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     //
     {
         ZoneScopedN("CreateRenderThread");
-        Render::VulkanContext::bForceNoREBAR = automation.bForceNoREBAR;
+        Render::VulkanContext::bForceNoREBAR = Args::GetBool(*launchArgs, ARG_NO_REBAR);
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
         engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync(memoryManager);
         renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
@@ -502,7 +505,7 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
 #if WILL_EDITOR
         ReadEditorWindowConfig(engineState);
 #endif
-        engineState->automation = automation;
+        engineState->launchArgs = launchArgs;
         engineState->lighting.aaConfig = engineState->projectConfig.aaConfig;
         if (!engineState->projectConfig.activeLightingProfile.IsEmpty()) {
             Profiles::LightingProfileBundle bundle = Profiles::CaptureLightingProfile(*engineState);
@@ -650,6 +653,11 @@ void WillEngine::Initialize(Utils::Logger* logger, const AutomationConfig& autom
     ConnectEngineObservers(engineState->registry);
     LoadUIFont(engineContext, engineState);
     gameFunctions.gameLoad(engineContext, engineState);
+    Args::Validate(*launchArgs);
+    if (Args::GetBool(*launchArgs, Args::ARG_HELP)) {
+        Args::LogHelp(*launchArgs);
+        engineState->requests.bRequestedQuit = true;
+    }
     LoadStartupScene(engineContext, engineState);
     LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
 
@@ -698,6 +706,7 @@ void WillEngine::HotReloadGame()
     ClearGameComponents(engineState->componentRegistry);
     ClearGameInputActions(engineState->input);
     Console::ClearGameCommands(engineState);
+    Args::ClearGameArgs(*engineState->launchArgs);
 
     auto reloadResponse = gameDll.Reload();
 
@@ -735,6 +744,7 @@ void WillEngine::HotReloadGame()
 
     // Reconnect observers and restore snapshot; skips default scene load.
     gameFunctions.gameHotReloadLoad(engineContext, engineState);
+    Args::Validate(*engineState->launchArgs);
     HotReloadRestore(engineContext, engineState);
     LoadAndApplyInputConfig(engineState->input, engineState->projectConfig);
 }
@@ -1418,7 +1428,7 @@ void WillEngine::Run()
     renderThread->Start();
 
 #if WILL_EDITOR
-    mcpServer->Start(engineState->automation.mcpPort > 0 ? engineState->automation.mcpPort : MCP::DEFAULT_PORT, engineContext, engineState);
+    mcpServer->Start(Args::GetInt(*engineState->launchArgs, MCP::ARG_MCP_PORT), engineContext, engineState);
 #endif
 
     timeManager->Reset();

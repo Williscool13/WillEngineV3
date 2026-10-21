@@ -78,18 +78,20 @@ void LoadStartupScene(EngineContext* ctx, EngineState* state)
     const auto& sceneCache = ctx->assetManager->GetSceneCache();
     StringID startupScene = state->projectConfig.defaultScene;
     bool bExplicit = false;
-    if (!state->automation.sceneOverride.IsEmpty()) {
+    const char* sceneOverride = Args::GetString(*state->launchArgs, ARG_SCENE);
+    const char* playPath = Args::GetString(*state->launchArgs, ARG_PLAY);
+    if (sceneOverride[0] != '\0') {
         startupScene = {};
         bExplicit = true;
         for (const auto& pair : sceneCache) {
-            if (pair.value.sceneName == state->automation.sceneOverride.c_str()) {
+            if (pair.value.sceneName == sceneOverride) {
                 startupScene = pair.key;
                 break;
             }
         }
     }
-    else if (state->automation.IsPlayRun()) {
-        if (const auto header = ReadWPlayHeader(Core::Path(state->automation.playPath.c_str()))) {
+    else if (playPath[0] != '\0') {
+        if (const auto header = ReadWPlayHeader(Core::Path(playPath))) {
             startupScene = StringID{header->sceneId};
             bExplicit = true;
         }
@@ -100,7 +102,7 @@ void LoadStartupScene(EngineContext* ctx, EngineState* state)
 
     if (!sceneCache.Contains(startupScene)) {
         if (bExplicit) {
-            LOG_ERROR(Engine, "Startup scene '{}' ({:x}) not found in the scene cache", state->automation.sceneOverride.c_str(), startupScene.id);
+            LOG_ERROR(Engine, "Startup scene '{}' ({:x}) not found in the scene cache", sceneOverride, startupScene.id);
         }
         return;
     }

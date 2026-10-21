@@ -954,7 +954,7 @@ def _next_content_version(path, content_version):
 
 
 def write_play(path, name, scene_id, events, content_version=None):
-    """Run script for `will-engine.exe --play <path>` or the scene browser's Run button. `scene_id` is the target
+    """Run script for `will-engine.exe --play=<path>` or the scene browser's Run button. `scene_id` is the target
     .wscene's header id; keep the .wplay beside its scene. Vector args are hex floats; rotation is [w,x,y,z]."""
     import wtext_serialize
     events = list(events)

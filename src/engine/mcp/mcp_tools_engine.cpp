@@ -33,7 +33,6 @@ static constexpr int64_t ASSET_QUERY_DEFAULT_LIMIT = 50;
 static constexpr int64_t ASSET_QUERY_MAX_LIMIT = 500;
 static constexpr int64_t SCENE_QUERY_DEFAULT_LIMIT = 100;
 static constexpr int64_t SCENE_QUERY_MAX_LIMIT = 1000;
-static constexpr int32_t SETTLED_QUIET_FRAMES = 30;
 
 struct Page
 {
@@ -735,9 +734,9 @@ static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& 
 
     call.SetFloat("gameFps", t.gameFps);
     call.SetFloat("renderFps", t.renderFps);
-    call.SetBool("settled", quiet >= SETTLED_QUIET_FRAMES);
+    call.SetBool("settled", quiet >= AssetLoadState::SETTLED_QUIET_FRAMES);
     call.SetInt("quietFrames", quiet);
-    call.SetInt("settledThresholdFrames", SETTLED_QUIET_FRAMES);
+    call.SetInt("settledThresholdFrames", AssetLoadState::SETTLED_QUIET_FRAMES);
     call.SetInt("loadingEntities", static_cast<int64_t>(CountLoadingEntities(state)));
     call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
     call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);

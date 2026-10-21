@@ -200,10 +200,13 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
     frameBuffer->screenshotPath = {};
 
     if (!bActive) {
-        if (pendingPath.IsEmpty() && !bCliConsumed && state->automation.IsPlayRun()) {
-            pendingPath = state->automation.playPath;
+        if (pendingPath.IsEmpty() && !bCliConsumed) {
             bCliConsumed = true;
-            bCliRun = true;
+            const char* playPath = Args::GetString(*state->launchArgs, ARG_PLAY);
+            if (playPath[0] != '\0') {
+                pendingPath = Core::InlineString<512>(playPath);
+                bCliRun = true;
+            }
         }
         if (pendingPath.IsEmpty() || ProbeBakeActive(state)) {
             return;
@@ -216,7 +219,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         const Core::InlineString<512> path = pendingPath;
         pendingPath.Clear();
         if (!LoadPlayFile(path.c_str(), events, runName)) {
-            if (bCliRun && state->automation.bExitWhenDone) {
+            if (bCliRun && Args::GetBool(*state->launchArgs, ARG_EXIT)) {
                 state->requests.bRequestedQuit = true;
             }
             bCliRun = false;
@@ -224,7 +227,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         }
 
         const Core::InlineString<128> stem{Core::Path(path.c_str()).Stem()};
-        outputDir = state->automation.outputDir;
+        outputDir = Core::InlineString<512>(Args::GetString(*state->launchArgs, ARG_OUT));
         if (outputDir.IsEmpty()) {
             outputDir = Core::InlineString<512>((Platform::GetUserDataPath() / "screenshots" / stem.c_str() / LocalTimestamp().c_str()).c_str());
         }
@@ -276,7 +279,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         LOG_INFO(Engine, "Run '{}' {}: {} capture(s) -> {}", runName.c_str(), outcome, captureCount, outputDir.c_str());
         bActive = false;
         phase = Phase::Idle;
-        if (bCliRun && state->automation.bExitWhenDone) {
+        if (bCliRun && Args::GetBool(*state->launchArgs, ARG_EXIT)) {
             state->requests.bRequestedQuit = true;
         }
         bCliRun = false;

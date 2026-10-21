@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <thread>
 
+#include "engine/launch/launch_args.h"
+
 namespace Core
 {
 class MemoryManager;
@@ -25,6 +27,7 @@ struct EngineState;
 namespace Engine::MCP
 {
 inline constexpr int32_t DEFAULT_PORT = 8787;
+inline constexpr Args::ArgDesc ARG_MCP_PORT = Args::IntArg("mcp-port", DEFAULT_PORT, "MCP listen port; editor builds only");
 
 struct ServerImpl;
 

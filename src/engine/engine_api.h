@@ -28,7 +28,7 @@
 #include "render/interface/render_interface.h"
 #include "physics/physics_config.h"
 #include "resources/scene/scene.h"
-#include "include/automation_config.h"
+#include "engine/launch/launch_args.h"
 #include "project_config.h"
 #include "engine/input/input_frame.h"
 #include "engine/input/action_state.h"
@@ -277,6 +277,8 @@ struct FrameRequests
 
 struct AssetLoadState
 {
+    static constexpr int32_t SETTLED_QUIET_FRAMES = 30;
+
     Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
     Core::InlineVector<FontID, 16> pendingHotReloadFontIds{};
     Core::InlineVector<TextureID, 16> pendingHotReloadTextureIds{};
@@ -364,7 +366,7 @@ struct EngineState
     CameraRecorder cameraRecorder{};
     Console::ConsoleState console{};
     ProjectConfig projectConfig{};
-    AutomationConfig automation{};
+    Args::LaunchArgs* launchArgs{nullptr};
 };
 
 class EngineAPI

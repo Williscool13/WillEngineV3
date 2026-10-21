@@ -1,8 +1,5 @@
 #include "src/engine/will_engine.h"
 
-#include <cstring>
-#include <cstdlib>
-
 #include <spdlog/spdlog.h>
 
 #include "platform/crash_handler.h"
@@ -16,48 +13,12 @@
 #include <tracy/Tracy.hpp>
 #endif
 
-/**
- * --scene <name>   load this scene (by name, the .wscene file stem) instead of the .wplay header's scene or projectConfig.defaultScene
- * --play <file>    .wplay run script; arms it at startup
- * --out <dir>      capture PNG output directory (default <UserData>/screenshots/<run>/<timestamp>)
- * --exit           quit when the run finishes
- * --no-rebar       report no resizable BAR, forcing per frame data through the staged upload path
- * --mcp-port <n>   MCP listen port; editor builds only, defaults to 8787
- */
-static Engine::AutomationConfig ParseLaunchArgs(int argc, char* argv[])
-{
-    Engine::AutomationConfig automation{};
-    for (int i = 1; i < argc; i++) {
-        const char* value = i + 1 < argc ? argv[i + 1] : "";
-        if (strcmp(argv[i], "--scene") == 0) {
-            automation.sceneOverride = Core::InlineString<256>(value);
-            i++;
-        }
-        else if (strcmp(argv[i], "--play") == 0) {
-            automation.playPath = Core::InlineString<512>(value);
-            i++;
-        }
-        else if (strcmp(argv[i], "--out") == 0) {
-            automation.outputDir = Core::InlineString<512>(value);
-            i++;
-        }
-        else if (strcmp(argv[i], "--exit") == 0) {
-            automation.bExitWhenDone = true;
-        }
-        else if (strcmp(argv[i], "--no-rebar") == 0) {
-            automation.bForceNoREBAR = true;
-        }
-        else if (strcmp(argv[i], "--mcp-port") == 0) {
-            automation.mcpPort = atoi(value);
-            i++;
-        }
-    }
-    return automation;
-}
-
 int main(int argc, char* argv[])
 {
     Platform::CrashHandler crashHandler(Platform::GetCrashPath().c_str());
+
+    static Engine::Args::LaunchArgs launchArgs;
+    Engine::Args::Parse(launchArgs, argc, argv);
 
     Utils::Logger* _logger = nullptr;
 #if LOGGING_ENABLED
@@ -71,7 +32,7 @@ int main(int argc, char* argv[])
 
     {
         Engine::WillEngine we{&crashHandler};
-        we.Initialize(_logger, ParseLaunchArgs(argc, argv));
+        we.Initialize(_logger, &launchArgs);
         we.Run();
         we.Cleanup();
     }

@@ -27,7 +27,7 @@ if (-not $playFile) { throw "run script not found: $Play.wplay under scenes\" }
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $outDir = Join-Path $repo "captures\$Play\$stamp"
 
-$argList = @("--play", $playFile, "--out", $outDir, "--exit")
+$argList = @("--play=$playFile", "--out=$outDir", "--exit")
 
 Write-Host "run: $Play -> $outDir"
 # game.dll and the crash/shader-watch paths resolve relative to the working directory
