@@ -13,7 +13,7 @@
 #include "engine/systems/camera_system.h"
 #include "game/ballance/fwd_components.h"
 #include "game/input/game_actions.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 namespace Ballance
 {
@@ -70,7 +70,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         jumpRequested = state->input.GetActionState(Game::Actions::ACTION_JUMP).pressed;
     }
 
-    character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsSystem);
+    character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsWorld);
 
     // Camera always updates (even when cursor released, so the view doesn't freeze)
     glm::vec3 characterPos = character->GetInterpolatedPosition();
@@ -91,7 +91,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
             characterPos, lookYaw, lookPitch,
             cameraParams, aspectRatio,
             fov, nearPlane,
-            deltaTime, cameraState, ctx->physicsSystem
+            deltaTime, cameraState, ctx->physicsWorld
         );
     }
 
@@ -113,9 +113,9 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     }
 }
 
-void PhysicsPlayerController::Shutdown(Physics::PhysicsSystem* physicsSystem)
+void PhysicsPlayerController::Shutdown(Physics::PhysicsWorld* physicsWorld)
 {
-    character->Shutdown(physicsSystem);
+    character->Shutdown(physicsWorld);
     character.reset();
 }
 } // Ballance

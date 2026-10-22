@@ -41,7 +41,7 @@
 #include "logging/engine_logger.h"
 #include "mcp/mcp_server.h"
 #include "mcp/mcp_tools_engine.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 #include "platform/clipboard.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
@@ -449,8 +449,8 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
 
     //
     {
-        ZoneScopedN("CreatePhysicsSystem");
-        physicsSystem = new(memoryManager.PhysicsAllocRaw(sizeof(Physics::PhysicsSystem), 64)) Physics::PhysicsSystem(memoryManager, scheduler);
+        ZoneScopedN("CreatePhysicsWorld");
+        physicsWorld = new(memoryManager.PhysicsAllocRaw(sizeof(Physics::PhysicsWorld), 64)) Physics::PhysicsWorld(memoryManager, scheduler);
     }
 
 
@@ -545,7 +545,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
 #endif
 #endif
         engineContext->audioManager = audioManager;
-        engineContext->physicsSystem = physicsSystem;
+        engineContext->physicsWorld = physicsWorld;
         engineContext->scheduler = scheduler;
         engineContext->systemGraph = &systemGraph;
         systemGraph.SetDumpSink(&SystemGraphDumpSink);
@@ -1992,8 +1992,8 @@ void WillEngine::Cleanup()
 #endif
 
     {
-        ZoneScopedN("PhysicsSystemDestroy");
-        physicsSystem->~PhysicsSystem();
+        ZoneScopedN("PhysicsWorldDestroy");
+        physicsWorld->~PhysicsWorld();
     }
     {
         ZoneScopedN("MaterialManagerDestroy");

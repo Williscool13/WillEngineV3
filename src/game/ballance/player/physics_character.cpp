@@ -13,14 +13,14 @@
 #include "game/ballance/fwd_components.h"
 #include "game/logging/game_log.h"
 #include "engine/systems/scene_system.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 namespace Ballance
 {
 void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition)
 {
     engineState = gameState;
-    physicsSystem = ctx->physicsSystem;
+    physicsWorld = ctx->physicsWorld;
 
     constexpr StringID WOODEN_BALL_PREFAB_ID{4933586796549546436};
     entity = Engine::SpawnPrefab(engineState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
@@ -33,20 +33,20 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
     engineState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
 }
 
-void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* inPhysicsSystem)
+void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* inPhysicsWorld)
 {
     auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return;
     const auto bodyId = physicsBody->bodyID;
 
-    grounded = CheckGrounded(inPhysicsSystem);
+    grounded = CheckGrounded(inPhysicsWorld);
 
     if (glm::length(moveInput) > 0.001f) {
         // cross(up, moveDir) gives the torque axis that rolls the ball in moveDir
         const float rollTorque = torqueStrength * rollSpeedMultiplier * deltaTime;
         Vec3 torque(moveInput.z * rollTorque, 0.0f, -moveInput.x * rollTorque);
 
-        const Vec3 angVel = inPhysicsSystem->GetAngularVelocity(bodyId);
+        const Vec3 angVel = inPhysicsWorld->GetAngularVelocity(bodyId);
         float angSpeedSq = glm::dot(angVel, angVel);
         if (angSpeedSq > maxAngularSpeed * maxAngularSpeed * 0.64f) {
             float ratio = 1.0f - (angSpeedSq / (maxAngularSpeed * maxAngularSpeed));
@@ -54,23 +54,23 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
             torque *= ratio;
         }
 
-        inPhysicsSystem->AddTorque(bodyId, torque);
+        inPhysicsWorld->AddTorque(bodyId, torque);
     }
 
     if (jumpRequested && grounded) {
-        inPhysicsSystem->AddImpulse(bodyId, Vec3(0.0f, jumpImpulse, 0.0f));
+        inPhysicsWorld->AddImpulse(bodyId, Vec3(0.0f, jumpImpulse, 0.0f));
         WLOG_INFO(Player, "Jump");
     }
 }
 
-void PhysicsCharacter::Shutdown(Physics::PhysicsSystem* inPhysicsSystem)
+void PhysicsCharacter::Shutdown(Physics::PhysicsWorld* inPhysicsWorld)
 {
     if (engineState && engineState->registry.valid(entity)) {
         engineState->registry.destroy(entity);
     }
     entity = entt::null;
     engineState = nullptr;
-    physicsSystem = nullptr;
+    physicsWorld = nullptr;
 }
 
 glm::vec3 PhysicsCharacter::GetPosition() const
@@ -90,10 +90,10 @@ glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
 
 glm::vec3 PhysicsCharacter::GetLinearVelocity() const
 {
-    if (!physicsSystem) return {};
+    if (!physicsWorld) return {};
     auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return {};
-    return physicsSystem->GetLinearVelocity(physicsBody->bodyID);
+    return physicsWorld->GetLinearVelocity(physicsBody->bodyID);
 }
 
 bool PhysicsCharacter::IsGrounded() const
@@ -101,14 +101,14 @@ bool PhysicsCharacter::IsGrounded() const
     return grounded;
 }
 
-bool PhysicsCharacter::CheckGrounded(Physics::PhysicsSystem* inPhysicsSystem) const
+bool PhysicsCharacter::CheckGrounded(Physics::PhysicsWorld* inPhysicsWorld) const
 {
     auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return false;
 
     // Cast ray downward from center of sphere, slightly past the bottom
     Physics::CastHit hit;
-    const Vec3 bodyPos = inPhysicsSystem->GetPosition(physicsBody->bodyID);
-    return inPhysicsSystem->CastRay(bodyPos, Vec3(0.0f, -(sphereRadius + 0.15f), 0.0f), hit, physicsBody->bodyID);
+    const Vec3 bodyPos = inPhysicsWorld->GetPosition(physicsBody->bodyID);
+    return inPhysicsWorld->CastRay(bodyPos, Vec3(0.0f, -(sphereRadius + 0.15f), 0.0f), hit, physicsBody->bodyID);
 }
 } // Ballance

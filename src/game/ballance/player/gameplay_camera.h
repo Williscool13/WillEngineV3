@@ -10,7 +10,7 @@
 
 namespace Physics
 {
-class PhysicsSystem;
+class PhysicsWorld;
 }
 
 namespace Ballance::Camera
@@ -53,7 +53,7 @@ Core::ViewData ComputeOrbitCameraSwept(
     float nearPlane,
     float deltaTime,
     OrbitCameraState& state,
-    Physics::PhysicsSystem* physicsSystem
+    Physics::PhysicsWorld* physicsWorld
 );
 
 Core::ViewData ComputeFixedFollowCamera(

@@ -36,16 +36,12 @@ set(GAME_SOURCES
         ballance/debug/debug_system.cpp
         ballance/debug/debug_system.h
 
-        ballance/player/character.cpp
-        ballance/player/character.h
         ballance/player/gameplay_camera.cpp
         ballance/player/gameplay_camera.h
         ballance/player/physics_character.cpp
         ballance/player/physics_character.h
         ballance/player/physics_player_controller.cpp
         ballance/player/physics_player_controller.h
-        ballance/player/player_controller.cpp
-        ballance/player/player_controller.h
 
         input/game_actions.h
         input/input_action_registry.cpp
@@ -87,7 +83,7 @@ endif()
 
 target_include_directories(game PRIVATE ${GAME_INCLUDE_DIRS})
 if (NOT WILL_ENGINE_GAME_STATIC)
-    target_link_libraries(game PRIVATE engine-runtime Jolt SDL3::SDL3)
+    target_link_libraries(game PRIVATE engine-runtime SDL3::SDL3)
     if (WILL_ENGINE_ENABLE_PROFILER)
         target_link_libraries(game PRIVATE tracy_interface)
     endif ()

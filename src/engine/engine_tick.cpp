@@ -30,7 +30,7 @@
 #include "engine/systems/scene_system.h"
 #include "engine/systems/system_graph.h"
 #include "engine/ui/ui.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 #include "render/interface/render_interface.h"
 
 namespace Engine
@@ -76,8 +76,8 @@ static void TickQuietFrames(EngineContext* ctx, EngineState* state)
 static void PostUpdateCleanup(EngineContext* ctx, EngineState* state)
 {
     state->registry.clear<Component::DirtyTransformTag>();
-    ctx->physicsSystem->ClearCollisionEvents();
-    ctx->physicsSystem->ClearActivationEvents();
+    ctx->physicsWorld->ClearCollisionEvents();
+    ctx->physicsWorld->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();
 }
 

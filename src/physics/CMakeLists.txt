@@ -2,15 +2,18 @@ add_library(physics STATIC
         physics_job_system.cpp
         physics_job_system.h
         physics_config.h
-        physics_system.cpp
-        physics_system.h
+        physics_world.cpp
+        physics_world.h
         layers/layer_interface.cpp
         layers/layer_interface.h
         contact_listener.cpp
         contact_listener.h
         body_activation_listener.cpp
         body_activation_listener.h
+        body_handle.h
         body_user_data.h
+        physics_layers.h
+        jolt_world.h
         layers/broad_phase_layer_interface.cpp
         layers/broad_phase_layer_interface.h
         layers/object_vs_broad_phase_layer_filter.cpp
@@ -35,6 +38,7 @@ target_link_libraries(physics PUBLIC
         core
         render # for debug rendering
         fmt::fmt
-        Jolt
         enkiTS
 )
+
+target_link_libraries(physics PRIVATE Jolt)

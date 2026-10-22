@@ -5,10 +5,9 @@
 #ifndef WILL_ENGINE_PHYSICS_BODY_COMPONENT_H
 #define WILL_ENGINE_PHYSICS_BODY_COMPONENT_H
 
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyID.h>
 #include <entt/entt.hpp>
 
+#include "physics/body_handle.h"
 #include "physics/body_user_data.h"
 
 namespace Engine::Component
@@ -16,7 +15,7 @@ namespace Engine::Component
 /** The body's user data owner is this entity (BodyUserData), set when the body is created. */
 struct PhysicsBodyComponent
 {
-    JPH::BodyID bodyID;
+    Physics::BodyHandle bodyID;
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
@@ -40,7 +39,7 @@ inline entt::entity EntityFromBodyUserData(const entt::registry& registry, uint6
 inline const PhysicsBodyComponent* FindBody(const entt::registry& registry, entt::entity entity)
 {
     const auto* body = entity != entt::null ? registry.try_get<PhysicsBodyComponent>(entity) : nullptr;
-    return body && !body->bodyID.IsInvalid() ? body : nullptr;
+    return body && body->bodyID.IsValid() ? body : nullptr;
 }
 }
 

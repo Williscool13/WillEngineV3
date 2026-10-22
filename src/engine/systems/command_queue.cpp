@@ -15,10 +15,14 @@
 #include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/components/render/light_components.h"
-#include "engine/systems/physics_system.h"
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Body/BodyID.h>
+
+#include "engine/systems/physics_integration.h"
 #include "engine/components/render/reflection_probe_component.h"
 #include "engine/components/render/text_component.h"
-#include "physics/physics_system.h"
+#include "physics/jolt_world.h"
+#include "physics/physics_world.h"
 
 namespace Engine
 {
@@ -52,7 +56,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
             }
             case CommandType::BodyDestroy: {
                 const JPH::BodyID bodyId{command.payload.bodyId};
-                JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+                JPH::BodyInterface& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
                 WakeBodiesAround(bodyInterface, bodyId);
                 bodyInterface.RemoveBody(bodyId);
                 bodyInterface.DestroyBody(bodyId);

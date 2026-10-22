@@ -8,8 +8,6 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyInterface.h>
 #include <imgui.h>
 #include <tracy/Tracy.hpp>
 #include <spdlog/spdlog.h>
@@ -22,6 +20,6 @@
 #include "engine/components/physics/physics_body_component.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/systems/scene_system.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 #endif //WILL_ENGINE_GAME_PCH_H

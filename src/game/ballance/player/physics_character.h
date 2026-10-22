@@ -19,7 +19,7 @@ class AssetManager;
 
 namespace Physics
 {
-class PhysicsSystem;
+class PhysicsWorld;
 }
 
 namespace Ballance
@@ -28,8 +28,8 @@ class PhysicsCharacter
 {
 public:
     void Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition);
-    void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsSystem* physicsSystem);
-    void Shutdown(Physics::PhysicsSystem* physicsSystem);
+    void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* physicsWorld);
+    void Shutdown(Physics::PhysicsWorld* physicsWorld);
 
     [[nodiscard]] entt::entity GetEntity() const { return entity; }
     [[nodiscard]] glm::vec3 GetPosition() const;
@@ -38,10 +38,10 @@ public:
     [[nodiscard]] bool IsGrounded() const;
 
 private:
-    bool CheckGrounded(Physics::PhysicsSystem* physicsSystem) const;
+    bool CheckGrounded(Physics::PhysicsWorld* physicsWorld) const;
 
     Engine::EngineState* engineState{nullptr};
-    Physics::PhysicsSystem* physicsSystem{nullptr};
+    Physics::PhysicsWorld* physicsWorld{nullptr};
     entt::entity entity{entt::null};
 
     float sphereRadius{0.5f};

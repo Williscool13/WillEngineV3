@@ -16,7 +16,7 @@
 #include "game/ballance/debug/debug_components.h"
 #include "game/ballance/fwd_components.h"
 #include "game/input/game_actions.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 #include "platform/paths.h"
 
 namespace Ballance
@@ -61,7 +61,7 @@ void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* sta
     ZoneScoped;
     auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyComponent>();
     for (const auto& [entity, body] : view.each()) {
-        ctx->physicsSystem->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
+        ctx->physicsWorld->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
     }
 }
 

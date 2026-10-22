@@ -105,7 +105,6 @@ add_library(engine STATIC
         spline/spline.cpp
         spline/spline_frames.cpp
         spline/spline_frames.h
-        core/hash.h
         include/frame_sync.cpp
         logging/engine_assert.h
         resources/font/font.h
@@ -145,7 +144,6 @@ add_library(engine STATIC
         components/component_registration.h
         components/component_traits.h
         components/camera_components.h
-        components/character_components.h
         components/common_components.cpp
         components/common_components.h
         components/core_components.cpp
@@ -172,6 +170,7 @@ add_library(engine STATIC
         components/physics/physics_components.h
         components/physics/physics_shape_helpers.cpp
         components/physics/physics_shape_helpers.h
+        components/physics/physics_shape_runtime.h
         components/render/light_components.cpp
         components/render/light_components.h
         components/render/local_ddgi_volume_component.cpp
@@ -211,6 +210,7 @@ add_library(engine STATIC
         systems/render_systems_assets.cpp
         systems/render_systems_helpers.cpp
         systems/render_systems_helpers.h
+        systems/physics_integration.h
         systems/scene_system.cpp
         systems/scene_system.h
         systems/system_graph.h
@@ -266,6 +266,8 @@ target_include_directories(engine PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/extern
 )
+
+target_link_libraries(engine PRIVATE Jolt)
 
 target_link_libraries(engine PUBLIC
         core

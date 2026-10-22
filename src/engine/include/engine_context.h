@@ -38,7 +38,7 @@ class AudioManager;
 
 namespace Physics
 {
-class PhysicsSystem;
+class PhysicsWorld;
 }
 
 namespace Render
@@ -231,7 +231,7 @@ struct EngineContext
     MaterialManager* materialManager{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
     Audio::AudioManager* audioManager{nullptr};
-    Physics::PhysicsSystem* physicsSystem{nullptr};
+    Physics::PhysicsWorld* physicsWorld{nullptr};
 
     // Global Fn
     //   Defined by engine called by game

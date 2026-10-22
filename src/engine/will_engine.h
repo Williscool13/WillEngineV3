@@ -39,7 +39,7 @@ class AudioManager;
 
 namespace Physics
 {
-class PhysicsSystem;
+class PhysicsWorld;
 }
 
 namespace Engine
@@ -146,7 +146,7 @@ private: // Main Systems
     AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager{};
     AssetManager* assetManager{};
     MaterialManager* materialManager{};
-    Physics::PhysicsSystem* physicsSystem{};
+    Physics::PhysicsWorld* physicsWorld{};
 #if WILL_EDITOR
     Editor::AssetGenerator* assetGenerator{};
     bool bQuitPendingGeneration{false};

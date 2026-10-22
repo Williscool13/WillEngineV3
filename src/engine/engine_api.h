@@ -8,8 +8,6 @@
 
 #include <chrono>
 #include <entt/entt.hpp>
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyID.h>
 #include <imgui.h>
 #include <ImGuizmo.h>
 
@@ -19,7 +17,6 @@
 #include "core/containers/vector.h"
 #include "core/math/random.h"
 #include "core/types/math.h"
-#include "engine/core/hash.h"
 #include "engine/core/action_handle.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/core/font_id.h"

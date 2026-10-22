@@ -25,7 +25,7 @@
 #include "game/ballance/breakable/breakable_systems.h"
 #include "game/ballance/crusher/crusher_component.h"
 #include "game/logging/game_log.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 namespace Ballance
 {
@@ -56,7 +56,7 @@ static Core::ArenaFixedVector<CrateHit> FindCrates(Engine::EngineContext* ctx, E
     for (const entt::entity entity : entities) {
         const auto* body = Component::FindBody(state->registry, entity);
         if (!body || !state->registry.all_of<Component::BreakableComponent>(entity)) { continue; }
-        crates.PushBack({entity, ctx->physicsSystem->GetWorldBounds(body->bodyID).Transformed(toLocal)});
+        crates.PushBack({entity, ctx->physicsWorld->GetWorldBounds(body->bodyID).Transformed(toLocal)});
     }
     return crates;
 }
@@ -96,10 +96,10 @@ static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineSt
     const Mat4 toWorld = Component::ComputeWorldTransform(registry, pusher).GetMatrix();
     const Mat4 toLocal = glm::inverse(toWorld);
 
-    const Physics::PhysicsSystem* physics = ctx->physicsSystem;
+    const Physics::PhysicsWorld* physics = ctx->physicsWorld;
     AABB sweep;
     for (const auto& [entity, hierarchy, body] : registry.view<Component::HierarchyComponent, Component::PhysicsBodyComponent>().each()) {
-        if (hierarchy.parent != pusher || body.bodyID.IsInvalid()) { continue; }
+        if (hierarchy.parent != pusher || !body.bodyID.IsValid()) { continue; }
         sweep.Encapsulate(physics->GetWorldBounds(body.bodyID).Transformed(toLocal));
     }
     if (!sweep.IsValid()) { return; }
@@ -147,7 +147,7 @@ static void StretchArm(Engine::EngineContext* ctx, entt::registry& registry, ent
     const auto* armBody = Component::FindBody(registry, arm);
     auto* transform = armBody ? registry.try_get<Component::TransformComponent>(arm) : nullptr;
     if (!transform) { return; }
-    const AABB bounds = ctx->physicsSystem->GetLocalBounds(armBody->bodyID);
+    const AABB bounds = ctx->physicsWorld->GetLocalBounds(armBody->bodyID);
     const float length = bounds.max.y - bounds.min.y;
     if (length <= 1e-4f) { return; }
     const float scale = 1.0f + drop / length;
@@ -163,7 +163,7 @@ static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state
     const auto* headBody = Component::FindBody(registry, head);
     if (!headBody) { return; }
 
-    const Physics::PhysicsSystem* physics = ctx->physicsSystem;
+    const Physics::PhysicsWorld* physics = ctx->physicsWorld;
     const Mat4 toHead = glm::inverse(physics->GetCenterOfMassTransform(headBody->bodyID));
     const AABB headLocal = physics->GetLocalBounds(headBody->bodyID);
     const AABB headWorld = physics->GetWorldBounds(headBody->bodyID);

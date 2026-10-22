@@ -11,7 +11,7 @@
 #include "../render/interface/render_interface.h"
 #include "engine/input/input_frame.h"
 #include "engine/engine_api.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 #include "imgui.h"
 #include "ImGuizmo.h"

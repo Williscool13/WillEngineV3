@@ -23,7 +23,7 @@
 #include "game/ballance/crusher/crusher_systems.h"
 #include "game/ballance/debug/debug_components.h"
 #include "game/ballance/debug/debug_system.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 namespace Ballance
 {
@@ -106,7 +106,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     PhysicsPlayerController& playerController = ctx->GetGameState<State>()->playerController;
     if (playerController.GetCharacter()) {
-        playerController.Shutdown(ctx->physicsSystem);
+        playerController.Shutdown(ctx->physicsWorld);
     }
 }
 } // Ballance

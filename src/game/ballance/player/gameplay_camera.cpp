@@ -8,8 +8,8 @@
 
 #include "core/math/constants.h"
 #include "engine/systems/camera_system.h"
-#include "physics/physics_system.h"
-#include "physics/layers/layer_interface.h"
+#include "physics/physics_world.h"
+#include "physics/physics_layers.h"
 
 namespace Ballance::Camera
 {
@@ -57,7 +57,7 @@ Core::ViewData ComputeOrbitCameraSwept(
     float nearPlane,
     float deltaTime,
     OrbitCameraState& state,
-    Physics::PhysicsSystem* physicsSystem)
+    Physics::PhysicsWorld* physicsWorld)
 {
     if (!state.initialized) {
         state.currentDistance = params.distance;
@@ -69,14 +69,14 @@ Core::ViewData ComputeOrbitCameraSwept(
 
     float allowedDistance = params.distance;
 
-    if (physicsSystem) {
+    if (physicsWorld) {
         // Sphere cast from focus point toward desired camera position
         glm::vec3 castDir = -direction * params.distance + right * params.sideOffset;
         float castLength = glm::length(castDir);
         if (castLength > 0.001f) {
             constexpr uint32_t IGNORED_LAYERS = Physics::Layers::Bit(Physics::Layers::PLAYER) | Physics::Layers::Bit(Physics::Layers::SENSOR) | Physics::Layers::Bit(Physics::Layers::DEBRIS);
             Physics::CastHit hit;
-            if (physicsSystem->CastSphere(params.probeRadius, focusPoint, castDir, hit, {}, IGNORED_LAYERS)) {
+            if (physicsWorld->CastSphere(params.probeRadius, focusPoint, castDir, hit, {}, IGNORED_LAYERS)) {
                 float hitDistance = hit.fraction * castLength;
                 // Map back to orbit distance (approximate, since sideOffset skews the cast)
                 allowedDistance = glm::max(hitDistance * (params.distance / castLength), params.minDistance);

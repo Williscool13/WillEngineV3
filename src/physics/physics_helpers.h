@@ -15,6 +15,8 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "Jolt/Core/Color.h"
+#include "Jolt/Physics/Body/BodyID.h"
+#include "body_handle.h"
 #include "core/types/aabb.h"
 
 namespace Physics::PhysicsHelpers
@@ -59,6 +61,16 @@ inline JPH::Quat ToJolt(const glm::quat& q)
 inline JPH::Mat44 ToJolt(const glm::mat4& m)
 {
     return JPH::Mat44::sLoadFloat4x4(reinterpret_cast<const JPH::Float4*>(&m));
+}
+
+inline JPH::BodyID ToJolt(BodyHandle body)
+{
+    return JPH::BodyID(body.value);
+}
+
+inline BodyHandle ToHandle(JPH::BodyID body)
+{
+    return BodyHandle{body.GetIndexAndSequenceNumber()};
 }
 
 inline AABB ToGLM(const JPH::AABox& b)

@@ -17,6 +17,7 @@
 #include "engine/logging/engine_log.h"
 #include "engine/components/fwd_components.h"
 #include "engine/components/common_components.h"
+#include "engine/components/physics/physics_shape_runtime.h"
 #include "engine/components/render/procedural_mesh_component.h"
 #include "engine/components/render/spline_mesh_component.h"
 #include "engine/components/render/module_mesh_component.h"

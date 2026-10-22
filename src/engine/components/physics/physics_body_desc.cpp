@@ -9,6 +9,7 @@
 #include "physics_body_component.h"
 #include "physics_components.h"
 #include "physics_shape_helpers.h"
+#include "physics_shape_runtime.h"
 #include "engine/components/component_editor.h"
 #include "engine/editor/editor_gizmo_helpers.h"
 
@@ -236,14 +237,14 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         const char* qualityTypes[] = {"Discrete", "LinearCast"};
         int currentQuality = static_cast<int>(component.motionQuality);
         if (ImGui::Combo("Motion Quality", &currentQuality, qualityTypes, IM_ARRAYSIZE(qualityTypes))) {
-            component.motionQuality = static_cast<JPH::EMotionQuality>(currentQuality);
+            component.motionQuality = static_cast<PhysicsMotionQuality>(currentQuality);
             bCommit = true;
         }
 
         int layer = static_cast<int>(component.layerOverride);
-        if (layer == 0xFFFF) layer = -1;
+        if (layer == NO_LAYER_OVERRIDE) layer = -1;
         if (ImGui::InputInt("Layer Override", &layer)) {
-            component.layerOverride = layer < 0 ? JPH::ObjectLayer(0xFFFF) : JPH::ObjectLayer(layer);
+            component.layerOverride = layer < 0 ? NO_LAYER_OVERRIDE : static_cast<uint16_t>(layer);
             bCommit = true;
         }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("-1 = auto (derived from motion type)"); }

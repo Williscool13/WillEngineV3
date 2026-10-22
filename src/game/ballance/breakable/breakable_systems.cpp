@@ -27,8 +27,8 @@
 #include "engine/systems/scene_system.h"
 #include "game/ballance/fwd_components.h"
 #include "game/ballance/breakable/breakable_component.h"
-#include "physics/physics_system.h"
-#include "physics/layers/layer_interface.h"
+#include "physics/physics_world.h"
+#include "physics/physics_layers.h"
 
 namespace Ballance
 {
@@ -190,9 +190,9 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
     glm::vec3 angularVelocity{0.0f};
     glm::vec3 centerOfMass = world.translation;
     if (const auto* body = Component::FindBody(registry, entity)) {
-        linearVelocity = ctx->physicsSystem->GetLinearVelocity(body->bodyID);
-        angularVelocity = ctx->physicsSystem->GetAngularVelocity(body->bodyID);
-        centerOfMass = ctx->physicsSystem->GetCenterOfMassPosition(body->bodyID);
+        linearVelocity = ctx->physicsWorld->GetLinearVelocity(body->bodyID);
+        angularVelocity = ctx->physicsWorld->GetAngularVelocity(body->bodyID);
+        centerOfMass = ctx->physicsWorld->GetCenterOfMassPosition(body->bodyID);
     }
 
     const auto* desc = registry.try_get<Component::PhysicsBodyDesc>(entity);

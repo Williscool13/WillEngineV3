@@ -3,7 +3,11 @@
 //
 
 #include "physics_system.h"
-#include "physics/physics_system.h"
+#include "physics_integration.h"
+#include "physics/physics_helpers.h"
+#include "physics/physics_layers.h"
+#include "physics/jolt_world.h"
+#include "physics/physics_world.h"
 
 #include <tracy/Tracy.hpp>
 
@@ -16,6 +20,7 @@
 #include "engine/engine_api.h"
 #include "engine/logging/engine_log.h"
 #include "engine/components/physics/physics_body_component.h"
+#include "engine/components/physics/physics_shape_runtime.h"
 #include "engine/components/render_components.h"
 #include "engine/systems/scene_system.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
@@ -35,6 +40,9 @@
 
 namespace Engine
 {
+using Physics::PhysicsHelpers::ToJolt;
+using Physics::PhysicsHelpers::ToHandle;
+
 void ConnectPhysicsObservers(entt::registry& registry)
 {
     registry.on_construct<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnConstruct>();
@@ -71,11 +79,11 @@ void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-    auto& listener = ctx->physicsSystem->GetContactListener();
+    auto& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
+    auto& listener = ctx->physicsWorld->Jolt().GetContactListener();
     uint32_t count = 0;
     for (const auto& [entity, conveyor, physicsBody, world] : state->registry.view<Component::ConveyorComponent, Component::PhysicsBodyComponent, Component::WorldTransformComponent>().each()) {
-        if (!conveyor.bEnabled || physicsBody.bodyID.IsInvalid()) { continue; }
+        if (!conveyor.bEnabled || !physicsBody.bodyID.IsValid()) { continue; }
         if (count >= Physics::MAX_CONVEYORS) {
             static bool bWarned = false;
             if (!bWarned) {
@@ -85,7 +93,7 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
             break;
         }
 
-        Physics::ConveyorSurface surface{.body = physicsBody.bodyID};
+        Physics::ConveyorSurface surface{.body = ToJolt(physicsBody.bodyID)};
         if (conveyor.mode == Component::ConveyorComponent::Mode::Linear) {
             const glm::vec3 direction = world.rotation * conveyor.direction;
             const float length = glm::length(direction);
@@ -105,7 +113,7 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
         }
 
         if (listener.SetConveyor(count, surface)) {
-            WakeBodiesAround(bodyInterface, physicsBody.bodyID);
+            WakeBodiesAround(bodyInterface, surface.body);
         }
         ++count;
     }
@@ -115,7 +123,7 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto* physics = ctx->physicsSystem;
+    auto* physics = ctx->physicsWorld;
     state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime * state->physics.timeScale;
     const uint32_t maxSteps = state->physics.timeScale > 1.0f ? Physics::MAX_TIMESCALE_STEPS_PER_FRAME : Physics::MAX_PHYSICS_STEPS_PER_FRAME;
     state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, static_cast<float>(maxSteps) * Physics::PHYSICS_TIMESTEP);
@@ -127,7 +135,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         return;
     }
 
-    auto& bodyInterface = physics->GetBodyInterface();
+    auto& bodyInterface = physics->Jolt().GetBodyInterface();
 
     // Movers advance once per frame; each step moves its kinematic body a 1/stepCount slice of the way, so it arrives on the last step at its real speed.
     struct KinematicMove
@@ -141,7 +149,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (stoppedView.size_hint() > 0) {
         auto stopped = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), stoppedView.size_hint());
         for (const auto& [entity, physicsBody] : stoppedView.each()) {
-            if (!physicsBody.bodyID.IsInvalid()) { bodyInterface.SetLinearAndAngularVelocity(physicsBody.bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero()); }
+            if (physicsBody.bodyID.IsValid()) { bodyInterface.SetLinearAndAngularVelocity(ToJolt(physicsBody.bodyID), JPH::Vec3::sZero(), JPH::Vec3::sZero()); }
             stopped.PushBack(entity);
         }
         for (const entt::entity entity : stopped) { state->registry.remove<Component::MovingKinematicTag>(entity); }
@@ -151,10 +159,11 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto kinematicMoves = Core::ArenaFixedVector<KinematicMove>(&ctx->gameplayArena.Get(), std::max(kinematicView.size_hint(), size_t{1}));
     for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
         state->registry.emplace_or_replace<Component::MovingKinematicTag>(entity);
-        const JPH::RVec3 p = bodyInterface.GetPosition(physicsBody.bodyID);
-        const JPH::Quat r = bodyInterface.GetRotation(physicsBody.bodyID);
+        const JPH::BodyID bodyID = ToJolt(physicsBody.bodyID);
+        const JPH::RVec3 p = bodyInterface.GetPosition(bodyID);
+        const JPH::Quat r = bodyInterface.GetRotation(bodyID);
         kinematicMoves.PushBack({
-            .bodyID = physicsBody.bodyID,
+            .bodyID = bodyID,
             .startPosition = {static_cast<float>(p.GetX()), static_cast<float>(p.GetY()), static_cast<float>(p.GetZ())},
             .startRotation = {r.GetW(), r.GetX(), r.GetY(), r.GetZ()},
             .target = Component::ComputeWorldTransform(state->registry, entity),
@@ -169,7 +178,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         for (const auto& [entity, physicsBody, transform] : teleportView.each()) {
             const Transform world = Component::ComputeWorldTransform(state->registry, entity);
             bodyInterface.SetPositionAndRotation(
-                physicsBody.bodyID,
+                ToJolt(physicsBody.bodyID),
                 JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
                 JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
                 JPH::EActivation::Activate
@@ -195,7 +204,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             auto applied = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), velocityView.size_hint());
             for (const auto& [entity, physicsBody, tag] : velocityView.each()) {
                 bodyInterface.SetLinearAndAngularVelocity(
-                    physicsBody.bodyID,
+                    ToJolt(physicsBody.bodyID),
                     JPH::Vec3(tag.linearVelocity.x, tag.linearVelocity.y, tag.linearVelocity.z),
                     JPH::Vec3(tag.angularVelocity.x, tag.angularVelocity.y, tag.angularVelocity.z)
                 );
@@ -214,8 +223,8 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         auto dynamicView = state->registry.view<Component::DynamicPhysicsBodyComponent, Component::PhysicsBodyComponent, Component::TransformComponent>();
         for (auto [entity, dynamic, physicsBody, transform] : dynamicView.each()) {
-            JPH::RVec3 pos = bodyInterface.GetPosition(physicsBody.bodyID);
-            JPH::Quat rot = bodyInterface.GetRotation(physicsBody.bodyID);
+            JPH::RVec3 pos = bodyInterface.GetPosition(ToJolt(physicsBody.bodyID));
+            JPH::Quat rot = bodyInterface.GetRotation(ToJolt(physicsBody.bodyID));
 
             const glm::vec3 worldPosition(pos.GetX(), pos.GetY(), pos.GetZ());
             const glm::quat worldRotation(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
@@ -245,10 +254,10 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box)
 {
     Core::Arena* arena = &ctx->gameplayArena.Get();
-    const auto bodies = ctx->physicsSystem->QueryBodiesInBox(arena, box);
+    const auto bodies = ctx->physicsWorld->QueryBodiesInBox(arena, box);
     auto entities = Core::ArenaFixedVector<entt::entity>(arena, std::max(bodies.Size(), size_t{1}));
-    for (const JPH::BodyID& body : bodies) {
-        const entt::entity entity = Component::EntityFromBodyUserData(state->registry, ctx->physicsSystem->GetUserData(body));
+    for (const Physics::BodyHandle body : bodies) {
+        const entt::entity entity = Component::EntityFromBodyUserData(state->registry, ctx->physicsWorld->GetUserData(body));
         if (entity != entt::null) { entities.PushBack(entity); }
     }
     return entities;
@@ -257,8 +266,9 @@ Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* c
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     const entt::registry& registry = state->registry;
+    Physics::JoltWorld& world = ctx->physicsWorld->Jolt();
     state->physics.resolvedAddedEvents.Clear();
-    for (const auto& event : ctx->physicsSystem->GetAddedEvents()) {
+    for (const auto& event : world.GetAddedEvents()) {
         state->physics.resolvedAddedEvents.PushBack({
             Component::EntityFromBodyUserData(registry, event.userData1),
             Component::EntityFromBodyUserData(registry, event.userData2),
@@ -269,7 +279,7 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     state->physics.resolvedPersistedEvents.Clear();
-    for (const auto& event : ctx->physicsSystem->GetPersistedEvents()) {
+    for (const auto& event : world.GetPersistedEvents()) {
         state->physics.resolvedPersistedEvents.PushBack({
             Component::EntityFromBodyUserData(registry, event.userData1),
             Component::EntityFromBodyUserData(registry, event.userData2),
@@ -280,10 +290,10 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     state->physics.resolvedRemovedEvents.Clear();
-    for (const auto& event : ctx->physicsSystem->GetRemovedEvents()) {
+    for (const auto& event : world.GetRemovedEvents()) {
         state->physics.resolvedRemovedEvents.PushBack({
-            Component::EntityFromBodyUserData(registry, ctx->physicsSystem->GetUserData(event.body1)),
-            Component::EntityFromBodyUserData(registry, ctx->physicsSystem->GetUserData(event.body2)),
+            Component::EntityFromBodyUserData(registry, world.GetBodyInterface().GetUserData(event.body1)),
+            Component::EntityFromBodyUserData(registry, world.GetBodyInterface().GetUserData(event.body2)),
         });
     }
 }
@@ -320,12 +330,12 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
 void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+    auto& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
     auto view = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyTransformTag>();
     for (const auto& [entity, physicsBody, transform] : view.each()) {
         const Transform world = Component::ComputeWorldTransform(state->registry, entity);
         bodyInterface.SetPositionAndRotation(
-            physicsBody.bodyID,
+            ToJolt(physicsBody.bodyID),
             JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
             JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
             JPH::EActivation::DontActivate);
@@ -344,51 +354,51 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     const bool bCasterChanges = state->debug.localShadow.bDrawCasterChangeBodies;
     if (mask == 0 && !bCasterChanges) { return; }
 
-    auto& filter = ctx->physicsSystem->GetDebugDrawFilter();
+    auto& filter = ctx->physicsWorld->Jolt().GetDebugDrawFilter();
     filter.Clear();
 
     if (bCasterChanges) {
         for (const auto& [entity, runtime, dirty, physicsBody] : state->registry.view<Component::MeshRuntime, Component::MultiframeDirtyComponent, Component::PhysicsBodyComponent>().each()) {
-            filter.AddBody(physicsBody.bodyID);
+            filter.AddBody(ToJolt(physicsBody.bodyID));
         }
     }
 
     const bool bAllBodies = (mask & Engine::PHYSICS_DEBUG_ALL_BODIES) != 0;
-    ctx->physicsSystem->SetDebugDrawForceLowestLOD(bAllBodies);
+    ctx->physicsWorld->Jolt().SetDebugDrawForceLowestLOD(bAllBodies);
 
     if (bAllBodies) {
         for (const auto& [entity, physicsBody] : state->registry.view<Component::PhysicsBodyComponent>().each()) {
-            filter.AddBody(physicsBody.bodyID);
+            filter.AddBody(ToJolt(physicsBody.bodyID));
         }
     }
     else {
         if (mask & Engine::PHYSICS_DEBUG_SENSORS) {
             for (const auto& [entity, physicsBody, bodyDesc] : state->registry.view<Component::PhysicsBodyComponent, Component::PhysicsBodyDesc>().each()) {
-                if (bodyDesc.bIsSensor) { filter.AddBody(physicsBody.bodyID); }
+                if (bodyDesc.bIsSensor) { filter.AddBody(ToJolt(physicsBody.bodyID)); }
             }
         }
         if (mask & Engine::PHYSICS_DEBUG_TAGGED) {
             for (const auto& [entity, physicsBody] : state->registry.view<Component::DrawPhysicsDebugTag, Component::PhysicsBodyComponent>().each()) {
-                filter.AddBody(physicsBody.bodyID);
+                filter.AddBody(ToJolt(physicsBody.bodyID));
             }
         }
         if (mask & Engine::PHYSICS_DEBUG_SELECTED) {
             for (entt::entity entity : state->editor.selectedEntities) {
                 if (auto* physicsBody = state->registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-                    filter.AddBody(physicsBody->bodyID);
+                    filter.AddBody(ToJolt(physicsBody->bodyID));
                 }
             }
         }
         filter.SetDrawAwake((mask & Engine::PHYSICS_DEBUG_AWAKE) != 0);
     }
 
-    ctx->physicsSystem->DrawDebug(&frameBuffer->mainViewFamily, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
+    ctx->physicsWorld->DrawDebug(&frameBuffer->mainViewFamily, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
 #endif
 }
 
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, const JPH::ShapeRefC& shapeRef, JPH::RVec3 position, JPH::Quat rotation,
-                                uint64_t userData, JPH::ObjectLayer layerOverride)
+                                uint64_t userData, uint16_t layerOverride)
 {
     JPH::EMotionType motionType = desc.motionType == Component::PhysicsMotionType::Static
                                       ? JPH::EMotionType::Static
@@ -397,7 +407,7 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
                                             : JPH::EMotionType::Kinematic;
 
     JPH::ObjectLayer layer;
-    if (layerOverride != static_cast<JPH::ObjectLayer>(0xFFFF)) {
+    if (layerOverride != Component::NO_LAYER_OVERRIDE) {
         layer = layerOverride;
     }
     else if (desc.bIsSensor) {
@@ -415,7 +425,7 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
 
     settings.mFriction = desc.friction;
     settings.mRestitution = desc.restitution;
-    settings.mMotionQuality = desc.motionQuality;
+    settings.mMotionQuality = static_cast<JPH::EMotionQuality>(desc.motionQuality);
     settings.mEnhancedInternalEdgeRemoval = desc.bEnhancedInternalEdgeRemoval;
     settings.mIsSensor = desc.bIsSensor;
     settings.mUserData = userData;
@@ -793,7 +803,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
     const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
 
-    JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
+    JPH::BodyInterface& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
 
     for (const auto& [entity, bodyDesc, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }
@@ -822,7 +832,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
             if (bodyDesc.restitution > 0.0f) {
                 bodyInterface.SetRestitution(bodyId, bodyDesc.restitution);
             }
-            state->registry.emplace<Component::PhysicsBodyComponent>(entity, bodyId);
+            state->registry.emplace<Component::PhysicsBodyComponent>(entity, ToHandle(bodyId));
             if (bodyDesc.motionType == Component::PhysicsMotionType::Dynamic) {
                 state->registry.emplace_or_replace<Component::DynamicPhysicsBodyComponent>(entity, world.translation, world.rotation, world.translation, world.rotation);
             }

@@ -21,7 +21,7 @@
 #include "engine/systems/scene_system.h"
 #include "engine/systems/system_graph.h"
 #include "engine/ui/ui_zindex.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 namespace Engine::Console
 {
@@ -359,7 +359,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         if (args.Size() > 1) {
             state->physics.timeScale = std::clamp(std::strtof(args[1], nullptr), 0.1f, 64.0f);
         }
-        const uint32_t awake = ctx->physicsSystem->GetPhysicsSystem().GetNumActiveBodies(JPH::EBodyType::RigidBody);
+        const uint32_t awake = ctx->physicsWorld->GetAwakeBodyCount();
         Print(state, Core::InlineString<96>::Format("  physics_timescale %.2f, %u bodies awake", state->physics.timeScale, awake).c_str());
     });
 

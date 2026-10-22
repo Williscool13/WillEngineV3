@@ -5,15 +5,11 @@
 #ifndef WILL_ENGINE_PHYSICS_BODY_DESC_H
 #define WILL_ENGINE_PHYSICS_BODY_DESC_H
 
-#include <Jolt/Jolt.h>
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 
 #include "core/containers/inline_vector.h"
-#include "Jolt/Physics/Body/MotionQuality.h"
-#include "Jolt/Physics/Collision/ObjectLayer.h"
-#include "Jolt/Physics/Collision/Shape/Shape.h"
 #include "engine/core/model_id.h"
 #include "engine/core/font_id.h"
 #include "engine/asset_manager_types.h"
@@ -31,6 +27,15 @@ enum class PhysicsMotionType : uint8_t
     Kinematic,
     Dynamic,
 };
+
+/** Same values as Jolt's EMotionQuality. */
+enum class PhysicsMotionQuality : uint8_t
+{
+    Discrete,
+    LinearCast,
+};
+
+inline constexpr uint16_t NO_LAYER_OVERRIDE = 0xFFFF;
 
 /** Identity needed to re-derive a 3D-text collision mesh on load (mirrors the component's fields). Valid when fontId is set and text is non-empty. */
 struct Text3DShapeSource
@@ -111,14 +116,6 @@ struct PhysicsShapeDesc
     WILL_REFLECT(PhysicsShapeDesc, WILL_FIELD(geometry, .key = "type"), WILL_FIELD(offset), WILL_FIELD(rotation), WILL_FIELD(bakedScale))
 };
 
-/** Runtime state derived from PhysicsBodyDesc; colliders is index-parallel to shapes and rebuilt with them. */
-struct PhysicsShapeRuntime
-{
-    Core::InlineVector<Engine::PhysicsColliderHandle, 8> colliders;
-    // potentially also store its type (e.g. compound)
-    JPH::ShapeRefC shapeRef;
-};
-
 struct PhysicsBodyDesc
 {
     static constexpr const char* COMPONENT_NAME = "PhysicsBodyDesc";
@@ -127,8 +124,9 @@ struct PhysicsBodyDesc
     float mass{1.0f};
     float friction{0.5f};
     float restitution{0.0f};
-    JPH::EMotionQuality motionQuality{JPH::EMotionQuality::Discrete};
-    JPH::ObjectLayer layerOverride{0xFFFF};
+    PhysicsMotionQuality motionQuality{PhysicsMotionQuality::Discrete};
+    /** A Physics::Layers value, or NO_LAYER_OVERRIDE to pick from the motion type. */
+    uint16_t layerOverride{NO_LAYER_OVERRIDE};
     bool bActive{true};
     bool bEnhancedInternalEdgeRemoval{false};
     bool bIsSensor{false};

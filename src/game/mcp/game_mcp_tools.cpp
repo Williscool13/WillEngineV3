@@ -26,7 +26,7 @@
 #include "engine/editor/playtest_system.h"
 #include "engine/systems/scene_system.h"
 #include "engine/components/physics/physics_body_component.h"
-#include "physics/physics_system.h"
+#include "physics/physics_world.h"
 
 namespace Game
 {
@@ -141,7 +141,7 @@ static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* s
         call.SetNull("physics");
         return;
     }
-    const Physics::PhysicsSystem* physics = ctx->physicsSystem;
+    const Physics::PhysicsWorld* physics = ctx->physicsWorld;
     const Physics::BodyState bodyState = physics->GetBodyState(body->bodyID);
 
     call.BeginObject("physics");
