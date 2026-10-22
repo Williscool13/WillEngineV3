@@ -641,8 +641,8 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
         return;
     }
     const Engine::InstanceSource& source = state->instanceStore[pick.instanceIndex];
-    const entt::entity* found = state->stableIdToEntityMap.Find(StringID(source.stableId));
-    const auto* name = found && state->registry.valid(*found) ? state->registry.try_get<Engine::Component::NameComponent>(*found) : nullptr;
+    const entt::entity found = Engine::FindEntity(state, StringID(source.stableId));
+    const auto* name = found != entt::null ? state->registry.try_get<Engine::Component::NameComponent>(found) : nullptr;
     const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
     Print(state, Core::InlineString<256>::Format("  pick: %s, primitive ordinal %u (index %u, node %u), instance %u", name ? name->name.c_str() : "(no entity)", source.modelPrimitiveOrdinal, source.primitiveIndex, source.sourceNodeIndex, pick.instanceIndex).c_str());
     if (material) {

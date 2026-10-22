@@ -4,12 +4,6 @@
 
 #include "physics_character.h"
 
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyInterface.h>
-#include <Jolt/Physics/Collision/RayCast.h>
-#include <Jolt/Physics/Collision/CastResult.h>
-#include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
-
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/components/common_components.h"
@@ -43,30 +37,28 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 {
     auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return;
-
-    auto& bodyInterface = inPhysicsSystem->GetBodyInterface();
-    JPH::BodyID bodyId = physicsBody->bodyID;
+    const auto bodyId = physicsBody->bodyID;
 
     grounded = CheckGrounded(inPhysicsSystem);
 
     if (glm::length(moveInput) > 0.001f) {
         // cross(up, moveDir) gives the torque axis that rolls the ball in moveDir
         const float rollTorque = torqueStrength * rollSpeedMultiplier * deltaTime;
-        JPH::Vec3 torque(moveInput.z * rollTorque, 0.0f, -moveInput.x * rollTorque);
+        Vec3 torque(moveInput.z * rollTorque, 0.0f, -moveInput.x * rollTorque);
 
-        JPH::Vec3 angVel = bodyInterface.GetAngularVelocity(bodyId);
-        float angSpeedSq = angVel.LengthSq();
+        const Vec3 angVel = inPhysicsSystem->GetAngularVelocity(bodyId);
+        float angSpeedSq = glm::dot(angVel, angVel);
         if (angSpeedSq > maxAngularSpeed * maxAngularSpeed * 0.64f) {
             float ratio = 1.0f - (angSpeedSq / (maxAngularSpeed * maxAngularSpeed));
             if (ratio < 0.1f) ratio = 0.1f;
             torque *= ratio;
         }
 
-        bodyInterface.AddTorque(bodyId, torque);
+        inPhysicsSystem->AddTorque(bodyId, torque);
     }
 
     if (jumpRequested && grounded) {
-        bodyInterface.AddImpulse(bodyId, JPH::Vec3(0.0f, jumpImpulse, 0.0f));
+        inPhysicsSystem->AddImpulse(bodyId, Vec3(0.0f, jumpImpulse, 0.0f));
         WLOG_INFO(Player, "Jump");
     }
 }
@@ -101,8 +93,7 @@ glm::vec3 PhysicsCharacter::GetLinearVelocity() const
     if (!physicsSystem) return {};
     auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return {};
-    JPH::Vec3 v = physicsSystem->GetBodyInterface().GetLinearVelocity(physicsBody->bodyID);
-    return {v.GetX(), v.GetY(), v.GetZ()};
+    return physicsSystem->GetLinearVelocity(physicsBody->bodyID);
 }
 
 bool PhysicsCharacter::IsGrounded() const
@@ -115,22 +106,9 @@ bool PhysicsCharacter::CheckGrounded(Physics::PhysicsSystem* inPhysicsSystem) co
     auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
     if (!physicsBody) return false;
 
-    JPH::RVec3 bodyPos = inPhysicsSystem->GetBodyInterface().GetPosition(physicsBody->bodyID);
-
     // Cast ray downward from center of sphere, slightly past the bottom
-    JPH::RRayCast ray;
-    ray.mOrigin = bodyPos;
-    ray.mDirection = JPH::Vec3(0.0f, -(sphereRadius + 0.15f), 0.0f);
-
-    JPH::RayCastResult hit;
-    JPH::IgnoreSingleBodyFilter bodyFilter(physicsBody->bodyID);
-
-    return inPhysicsSystem->GetPhysicsSystem().GetNarrowPhaseQuery().CastRay(
-        ray,
-        hit,
-        {},
-        {},
-        bodyFilter
-    );
+    Physics::CastHit hit;
+    const Vec3 bodyPos = inPhysicsSystem->GetPosition(physicsBody->bodyID);
+    return inPhysicsSystem->CastRay(bodyPos, Vec3(0.0f, -(sphereRadius + 0.15f), 0.0f), hit, physicsBody->bodyID);
 }
 } // Ballance

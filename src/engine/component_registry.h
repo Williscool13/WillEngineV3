@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 
 #include "core/containers/map.h"
+#include "core/containers/span.h"
 #include "core/containers/vector.h"
 #include "core/string_id.h"
 #include "engine/core/origin.h"
@@ -39,6 +40,8 @@ using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, EditContext&, c
 using RestoreFn = void(*)(entt::registry&, entt::entity, const TextReader&);
 using FillDefaultsFn =void(*)(const TextReader&, TextWriter&);
 using PropagateFn = bool(*)(entt::registry&, entt::entity, const TextReader&, const TextReader&);
+/** Points each EntityRef naming from[i] at to[i]. */
+using RemapEntityRefsFn = void(*)(entt::registry&, entt::entity, Core::Span<const StringID> from, Core::Span<const StringID> to);
 
 struct ComponentEntry
 {
@@ -69,6 +72,8 @@ struct ComponentEntry
     FillDefaultsFn fillDefaults{};
     /** Writes each field that changed between before and after where the live component still holds before; true if anything changed. */
     PropagateFn propagate{};
+    /** Null when the component holds no EntityRef. */
+    RemapEntityRefsFn remapEntityRefs{};
 
     bool bMovesEntity{false};
     bool bInstanceOnly{false};

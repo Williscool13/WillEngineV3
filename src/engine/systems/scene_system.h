@@ -150,6 +150,8 @@ void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Tr
 
 entt::entity CreateSceneEntity(Engine::EngineState* state);
 
+entt::entity FindEntity(const Engine::EngineState* state, StringID stableId);
+
 /** Highest sortOrder value among entities in the given scene (0 if none). */
 uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId);
 

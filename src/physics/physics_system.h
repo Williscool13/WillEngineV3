@@ -30,6 +30,33 @@ struct ViewFamily;
 
 namespace Physics
 {
+enum class MotionType : uint8_t { Static, Kinematic, Dynamic };
+
+struct CastHit
+{
+    /** Along the cast, 0 at its origin and 1 at its end. */
+    float fraction{1.0f};
+    JPH::BodyID body;
+};
+
+struct BodyState
+{
+    MotionType motionType{MotionType::Static};
+    uint16_t objectLayer{0};
+    bool bAwake{false};
+    Vec3 linearVelocity{0.0f};
+    Vec3 angularVelocity{0.0f};
+};
+
+/** Another body a body's shape is touching: contact count, distinct sub-shapes touched, and the deepest penetration. */
+struct BodyTouch
+{
+    JPH::BodyID body;
+    uint32_t contacts{0};
+    uint32_t subShapes{0};
+    float maxPenetration{-1e30f};
+};
+
 class PhysicsSystem
 {
 public:
@@ -75,6 +102,24 @@ public:
     AABB GetWorldBounds(JPH::BodyID body) const;
     AABB GetLocalBounds(JPH::BodyID body) const;
     Mat4 GetCenterOfMassTransform(JPH::BodyID body) const;
+    /** 0 once the body is gone; see BodyUserData. */
+    uint64_t GetUserData(JPH::BodyID body) const;
+
+    Vec3 GetPosition(JPH::BodyID body) const;
+    Vec3 GetCenterOfMassPosition(JPH::BodyID body) const;
+    Vec3 GetLinearVelocity(JPH::BodyID body) const;
+    Vec3 GetAngularVelocity(JPH::BodyID body) const;
+    BodyState GetBodyState(JPH::BodyID body) const;
+    bool IsAwake(JPH::BodyID body) const;
+    void AddImpulse(JPH::BodyID body, const Vec3& impulse);
+    void AddTorque(JPH::BodyID body, const Vec3& torque);
+
+    /** Closest hit along origin + t * direction for t in [0, 1], skipping `ignore` and the layers in `ignoredLayers` (Layers::Bit). */
+    bool CastRay(const Vec3& origin, const Vec3& direction, CastHit& hit, JPH::BodyID ignore = {}, uint32_t ignoredLayers = 0) const;
+    /** As CastRay, sweeping a sphere. */
+    bool CastSphere(float radius, const Vec3& origin, const Vec3& direction, CastHit& hit, JPH::BodyID ignore = {}, uint32_t ignoredLayers = 0) const;
+    /** Bodies within maxSeparation of this body's shape, at most `capacity` of them. */
+    Core::ArenaFixedVector<BodyTouch> QueryTouching(Core::Arena* arena, JPH::BodyID body, float maxSeparation, size_t capacity) const;
 
 #if JPH_DEBUG_RENDERER
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }

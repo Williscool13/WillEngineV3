@@ -10,6 +10,7 @@ add_library(physics STATIC
         contact_listener.h
         body_activation_listener.cpp
         body_activation_listener.h
+        body_user_data.h
         layers/broad_phase_layer_interface.cpp
         layers/broad_phase_layer_interface.h
         layers/object_vs_broad_phase_layer_filter.cpp

@@ -4,7 +4,6 @@
 
 #include "debug_system.h"
 
-#include <Jolt/Jolt.h>
 #include <tracy/Tracy.hpp>
 
 #include "audio/audio_manager.h"
@@ -60,10 +59,9 @@ void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineSta
 void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto& bodyInterface = ctx->physicsSystem->GetBodyInterface();
     auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyComponent>();
     for (const auto& [entity, body] : view.each()) {
-        bodyInterface.AddImpulse(body.bodyID, JPH::Vec3(0, 100.0f, 0));
+        ctx->physicsSystem->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
     }
 }
 

@@ -9,8 +9,6 @@
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Body/BodyInterface.h>
 
 #include "core/containers/arena_fixed_vector.h"
 #include "core/time/time_frame.h"
@@ -191,14 +189,10 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
     glm::vec3 linearVelocity{0.0f};
     glm::vec3 angularVelocity{0.0f};
     glm::vec3 centerOfMass = world.translation;
-    if (const auto* body = registry.try_get<Component::PhysicsBodyComponent>(entity)) {
-        JPH::BodyInterface& bodyInterface = ctx->physicsSystem->GetBodyInterface();
-        const JPH::Vec3 v = bodyInterface.GetLinearVelocity(body->bodyID);
-        const JPH::Vec3 w = bodyInterface.GetAngularVelocity(body->bodyID);
-        const JPH::RVec3 c = bodyInterface.GetCenterOfMassPosition(body->bodyID);
-        linearVelocity = {v.GetX(), v.GetY(), v.GetZ()};
-        angularVelocity = {w.GetX(), w.GetY(), w.GetZ()};
-        centerOfMass = {static_cast<float>(c.GetX()), static_cast<float>(c.GetY()), static_cast<float>(c.GetZ())};
+    if (const auto* body = Component::FindBody(registry, entity)) {
+        linearVelocity = ctx->physicsSystem->GetLinearVelocity(body->bodyID);
+        angularVelocity = ctx->physicsSystem->GetAngularVelocity(body->bodyID);
+        centerOfMass = ctx->physicsSystem->GetCenterOfMassPosition(body->bodyID);
     }
 
     const auto* desc = registry.try_get<Component::PhysicsBodyDesc>(entity);
@@ -235,7 +229,6 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
             .mass = shardMass,
             .friction = friction,
             .restitution = restitution,
-            .motionQuality = JPH::EMotionQuality::Discrete,
             .layerOverride = Physics::Layers::DEBRIS,
         };
         shardDesc.shapes.PushBack(Component::PhysicsShapeDesc{.geometry = Component::ColliderShape{.meshSourceModelId = brokenModelId, .meshSourceNodeIndex = n}, .bakedScale = scale});

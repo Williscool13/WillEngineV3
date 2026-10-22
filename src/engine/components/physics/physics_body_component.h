@@ -9,15 +9,39 @@
 #include <Jolt/Physics/Body/BodyID.h>
 #include <entt/entt.hpp>
 
+#include "physics/body_user_data.h"
+
 namespace Engine::Component
 {
+/** The body's user data owner is this entity (BodyUserData), set when the body is created. */
 struct PhysicsBodyComponent
 {
     JPH::BodyID bodyID;
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
+
+static_assert(sizeof(entt::entity) == sizeof(uint32_t), "body user data stores the entity in 32 bits");
+
+inline uint64_t BodyUserDataFor(entt::entity entity)
+{
+    return Physics::BodyUserData::FromOwner(entt::to_integral(entity));
+}
+
+/** The entity that owns a body with this user data, or entt::null when it has none or that entity is gone. */
+inline entt::entity EntityFromBodyUserData(const entt::registry& registry, uint64_t userData)
+{
+    if (!Physics::BodyUserData::HasOwner(userData)) { return entt::null; }
+    const auto entity = static_cast<entt::entity>(Physics::BodyUserData::Owner(userData));
+    return registry.valid(entity) ? entity : entt::null;
+}
+
+/** The body component of an entity whose body exists, or nullptr. */
+inline const PhysicsBodyComponent* FindBody(const entt::registry& registry, entt::entity entity)
+{
+    const auto* body = entity != entt::null ? registry.try_get<PhysicsBodyComponent>(entity) : nullptr;
+    return body && !body->bodyID.IsInvalid() ? body : nullptr;
+}
 }
 
 #endif //WILL_ENGINE_PHYSICS_BODY_COMPONENT_H

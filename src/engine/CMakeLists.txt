@@ -22,6 +22,8 @@ add_library(engine STATIC
         logging/imgui_sink.h
         logging/engine_log.h
         logging/log_category.h
+        core/entity_ref.cpp
+        core/entity_ref.h
         core/environment_map_id.h
         core/material_id.h
         core/texture_id.h
@@ -227,6 +229,7 @@ add_library(engine STATIC
         editor/editor_multi_edit.h
         editor/edit_context.cpp
         editor/edit_context.h
+        editor/edit_widgets.cpp
         editor/edit_widgets.h
         editor/reflected_inspector.h
         editor/undo_stack.cpp

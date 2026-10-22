@@ -616,8 +616,7 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
     call.End();
 
     call.SetString("stableId", HexId(source.stableId).c_str());
-    const entt::entity* found = state->stableIdToEntityMap.Find(StringID(source.stableId));
-    const entt::entity entity = found && state->registry.valid(*found) ? *found : entt::null;
+    const entt::entity entity = FindEntity(state, StringID(source.stableId));
     if (entity != entt::null) {
         const auto* name = state->registry.try_get<Component::NameComponent>(entity);
         call.SetString("name", name ? name->name.c_str() : "");

@@ -9,6 +9,8 @@
 
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 
+#include "core/containers/arena_fixed_vector.h"
+#include "core/types/aabb.h"
 #include "engine/components/physics/physics_body_desc.h"
 #include "Jolt/Physics/Body/BodyInterface.h"
 
@@ -36,6 +38,8 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
 void MarkPhysicsTransformsDirty(Engine::EngineState* state);
 /** Activates every body overlapping this body's bounds; moving or removing a body does not wake what rests on it by itself. */
 void WakeBodiesAround(JPH::BodyInterface& bodyInterface, const JPH::BodyID& bodyId);
+/** Entities whose bodies' broadphase bounds touch the world box, from the gameplay arena. */
+Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box);
 void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state);
 void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
@@ -44,7 +48,7 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
 void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, const JPH::ShapeRefC& shapeRef, JPH::RVec3 position, JPH::Quat rotation,
-                                JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
+                                uint64_t userData, JPH::ObjectLayer layerOverride = JPH::ObjectLayer(0xFFFF));
 JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, Engine::AssetManager* assetManager);
 } // Engine
 

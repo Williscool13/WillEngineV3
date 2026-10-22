@@ -6,13 +6,6 @@
 
 #include <glm/gtc/quaternion.hpp>
 
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#include <Jolt/Physics/Collision/ShapeCast.h>
-#include <Jolt/Physics/Collision/CastResult.h>
-#include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
-#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
-
 #include "core/math/constants.h"
 #include "engine/systems/camera_system.h"
 #include "physics/physics_system.h"
@@ -20,14 +13,6 @@
 
 namespace Ballance::Camera
 {
-class ExcludePlayerLayerFilter : public JPH::ObjectLayerFilter
-{
-public:
-    bool ShouldCollide(JPH::ObjectLayer inLayer) const override
-    {
-        return inLayer != Physics::Layers::PLAYER && inLayer != Physics::Layers::SENSOR && inLayer != Physics::Layers::DEBRIS;
-    }
-};
 static Core::ViewData BuildViewData(glm::vec3 cameraPos, glm::vec3 focusPoint, float aspectRatio, float fovRadians, float nearPlane)
 {
     Core::ViewData vd = Engine::BuildPerspectiveView(cameraPos, focusPoint - cameraPos, WORLD_UP, aspectRatio, fovRadians, nearPlane);
@@ -86,32 +71,13 @@ Core::ViewData ComputeOrbitCameraSwept(
 
     if (physicsSystem) {
         // Sphere cast from focus point toward desired camera position
-        JPH::SphereShape probeShape(params.probeRadius);
         glm::vec3 castDir = -direction * params.distance + right * params.sideOffset;
         float castLength = glm::length(castDir);
         if (castLength > 0.001f) {
-            glm::vec3 castDirNorm = castDir / castLength;
-
-            JPH::RShapeCast shapeCast(
-                &probeShape,
-                JPH::Vec3::sReplicate(1.0f),
-                JPH::RMat44::sTranslation(JPH::RVec3(focusPoint.x, focusPoint.y, focusPoint.z)),
-                JPH::Vec3(castDirNorm.x, castDirNorm.y, castDirNorm.z) * castLength
-            );
-
-            JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
-            ExcludePlayerLayerFilter layerFilter;
-            physicsSystem->GetPhysicsSystem().GetNarrowPhaseQuery().CastShape(
-                shapeCast,
-                {},
-                JPH::RVec3::sZero(),
-                collector,
-                {},
-                layerFilter
-            );
-
-            if (collector.HadHit()) {
-                float hitDistance = collector.mHit.mFraction * castLength;
+            constexpr uint32_t IGNORED_LAYERS = Physics::Layers::Bit(Physics::Layers::PLAYER) | Physics::Layers::Bit(Physics::Layers::SENSOR) | Physics::Layers::Bit(Physics::Layers::DEBRIS);
+            Physics::CastHit hit;
+            if (physicsSystem->CastSphere(params.probeRadius, focusPoint, castDir, hit, {}, IGNORED_LAYERS)) {
+                float hitDistance = hit.fraction * castLength;
                 // Map back to orbit distance (approximate, since sideOffset skews the cast)
                 allowedDistance = glm::max(hitDistance * (params.distance / castLength), params.minDistance);
             }

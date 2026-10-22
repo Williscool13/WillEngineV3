@@ -25,6 +25,8 @@ struct DeferredCollisionEvent
 {
     JPH::BodyID body1;
     JPH::BodyID body2;
+    uint64_t userData1;
+    uint64_t userData2;
     JPH::Vec3 worldNormal;
     JPH::Vec3 contactPoint;
     float penetrationDepth;
@@ -36,7 +38,7 @@ struct DeferredRemovedEvent
     JPH::BodyID body2;
 };
 
-/** World-space surface motion of a body: v(p) = linearVelocity + angularVelocity x (p - centre). The body's user data holds its slot + 1. */
+/** World-space surface motion of a body: v(p) = linearVelocity + angularVelocity x (p - centre). The body's user data holds its slot + 1 (BodyUserData). */
 struct ConveyorSurface
 {
     JPH::BodyID body;

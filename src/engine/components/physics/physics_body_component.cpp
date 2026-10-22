@@ -11,13 +11,6 @@
 
 namespace Engine::Component
 {
-void PhysicsBodyComponent::OnConstruct(entt::registry& registry, entt::entity entity)
-{
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& physics = registry.get<PhysicsBodyComponent>(entity);
-    state->physics.bodyToEntity[physics.bodyID] = entity;
-}
-
 void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
@@ -26,7 +19,5 @@ void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity enti
     if (!physics.bodyID.IsInvalid()) {
         state->commandQueue.Push({.type = CommandType::BodyDestroy, .payload = {.bodyId = physics.bodyID.GetIndexAndSequenceNumber()}});
     }
-
-    state->physics.bodyToEntity.Remove(physics.bodyID);
 }
 }

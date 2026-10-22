@@ -15,6 +15,7 @@
 #include "imgui_internal.h"
 
 #include "core/containers/inline_string.h"
+#include "engine/core/entity_ref.h"
 #include "engine/editor/edit_context.h"
 
 /** Preview while dragging, commit on release; "--" when the selection disagrees. */
@@ -139,6 +140,19 @@ bool Combo(EditContext& edit, const char* label, E C::* member, const char* cons
             }
         }
         ImGui::EndCombo();
+    }
+    return bChanged;
+}
+
+bool EntityRefPicker(EngineState* state, const char* label, EntityRef& ref, bool bMixed);
+
+template<typename C>
+bool EntityRefField(EditContext& edit, const char* label, EntityRef C::* member)
+{
+    EntityRef v = edit.Get<C>().*member;
+    const bool bChanged = EntityRefPicker(edit.State(), label, v, edit.IsMixed(member));
+    if (bChanged) {
+        edit.Set(member, v);
     }
     return bChanged;
 }

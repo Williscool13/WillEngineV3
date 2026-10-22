@@ -28,12 +28,6 @@
 #include "engine/components/physics/physics_body_component.h"
 #include "physics/physics_system.h"
 
-#include <Jolt/Jolt.h>
-#include <Jolt/Physics/PhysicsSystem.h>
-#include <Jolt/Physics/Body/BodyFilter.h>
-#include <Jolt/Physics/Collision/CollideShape.h>
-#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
-
 namespace Game
 {
 using Engine::MCP::Call;
@@ -131,76 +125,45 @@ static void WriteAuthoredMaterial(Engine::EngineContext* ctx, Engine::EngineStat
     call.End();
 }
 
-static void WriteVec3(Call& call, const char* key, const JPH::Vec3 v)
+static void WriteVec3(Call& call, const char* key, const Vec3& v)
 {
     call.BeginArray(key);
-    call.PushFloat(v.GetX());
-    call.PushFloat(v.GetY());
-    call.PushFloat(v.GetZ());
+    call.PushFloat(v.x);
+    call.PushFloat(v.y);
+    call.PushFloat(v.z);
     call.End();
 }
 
 static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
 {
-    const auto* body = state->registry.try_get<Component::PhysicsBodyComponent>(entity);
-    if (!body || body->bodyID.IsInvalid()) {
+    const auto* body = Component::FindBody(state->registry, entity);
+    if (!body) {
         call.SetNull("physics");
         return;
     }
-    JPH::PhysicsSystem& physics = ctx->physicsSystem->GetPhysicsSystem();
-    const JPH::BodyInterface& bodyInterface = physics.GetBodyInterface();
-    const JPH::BodyID id = body->bodyID;
+    const Physics::PhysicsSystem* physics = ctx->physicsSystem;
+    const Physics::BodyState bodyState = physics->GetBodyState(body->bodyID);
 
     call.BeginObject("physics");
-    const JPH::EMotionType motionType = bodyInterface.GetMotionType(id);
-    call.SetString("motionType", motionType == JPH::EMotionType::Static ? "Static" : motionType == JPH::EMotionType::Kinematic ? "Kinematic" : "Dynamic");
-    call.SetBool("awake", bodyInterface.IsActive(id));
-    call.SetInt("objectLayer", static_cast<int64_t>(bodyInterface.GetObjectLayer(id)));
-    WriteVec3(call, "linearVelocity", bodyInterface.GetLinearVelocity(id));
-    WriteVec3(call, "angularVelocity", bodyInterface.GetAngularVelocity(id));
+    const char* MOTION_TYPES[] = {"Static", "Kinematic", "Dynamic"};
+    call.SetString("motionType", MOTION_TYPES[static_cast<uint32_t>(bodyState.motionType)]);
+    call.SetBool("awake", bodyState.bAwake);
+    call.SetInt("objectLayer", static_cast<int64_t>(bodyState.objectLayer));
+    WriteVec3(call, "linearVelocity", bodyState.linearVelocity);
+    WriteVec3(call, "angularVelocity", bodyState.angularVelocity);
 
     constexpr size_t MAX_TOUCHING = 16;
-    const JPH::TransformedShape shape = bodyInterface.GetTransformedShape(id);
-    JPH::CollideShapeSettings settings;
-    settings.mMaxSeparationDistance = 0.01f;
-    JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
-    const JPH::IgnoreSingleBodyFilter ignoreSelf(id);
-    physics.GetNarrowPhaseQuery().CollideShape(shape.mShape, shape.GetShapeScale(), shape.GetCenterOfMassTransform(), settings, shape.GetCenterOfMassTransform().GetTranslation(),
-                                               collector, {}, {}, ignoreSelf);
-
-    struct Touch
-    {
-        JPH::BodyID body;
-        uint32_t contacts{0};
-        Core::InlineVector<JPH::SubShapeID, 16> subShapes{};
-        float maxPenetration{-1e30f};
-    };
-    Core::InlineVector<Touch, MAX_TOUCHING> touches;
-    for (const JPH::CollideShapeResult& hit : collector.mHits) {
-        Touch* touch = nullptr;
-        for (Touch& t : touches) {
-            if (t.body == hit.mBodyID2) { touch = &t; }
-        }
-        if (!touch) {
-            if (touches.IsFull()) { continue; }
-            touches.PushBack({.body = hit.mBodyID2});
-            touch = &touches[touches.Size() - 1];
-        }
-        if (!touch->subShapes.Contains(hit.mSubShapeID2) && !touch->subShapes.IsFull()) { touch->subShapes.PushBack(hit.mSubShapeID2); }
-        ++touch->contacts;
-        touch->maxPenetration = std::max(touch->maxPenetration, hit.mPenetrationDepth);
-    }
     call.BeginArray("touching");
-    for (const Touch& touch : touches) {
+    for (const Physics::BodyTouch& touch : physics->QueryTouching(&ctx->gameplayArena.Get(), body->bodyID, 0.01f, MAX_TOUCHING)) {
         call.PushObject();
-        const entt::entity* other = state->physics.bodyToEntity.Find(touch.body);
-        const auto* otherStable = other ? state->registry.try_get<Component::StableIdComponent>(*other) : nullptr;
-        const auto* otherName = other ? state->registry.try_get<Component::NameComponent>(*other) : nullptr;
+        const entt::entity other = Component::EntityFromBodyUserData(state->registry, physics->GetUserData(touch.body));
+        const auto* otherStable = other != entt::null ? state->registry.try_get<Component::StableIdComponent>(other) : nullptr;
+        const auto* otherName = other != entt::null ? state->registry.try_get<Component::NameComponent>(other) : nullptr;
         if (otherStable) { call.SetString("stableId", Engine::MCP::HexId(otherStable->id.id).c_str()); } else { call.SetNull("stableId"); }
         call.SetString("name", otherName ? otherName->name.c_str() : "");
-        call.SetBool("awake", bodyInterface.IsActive(touch.body));
+        call.SetBool("awake", physics->IsAwake(touch.body));
         call.SetInt("contacts", touch.contacts);
-        call.SetInt("subShapes", static_cast<int64_t>(touch.subShapes.Size()));
+        call.SetInt("subShapes", static_cast<int64_t>(touch.subShapes));
         call.SetFloat("maxPenetration", touch.maxPenetration);
         call.End();
     }
@@ -245,8 +208,7 @@ static entt::entity FindByStableIdArg(Engine::EngineState* state, Call& call, co
     if (!Engine::MCP::ParseHexId(call.GetString(key, ""), raw)) {
         return entt::null;
     }
-    const entt::entity* found = state->stableIdToEntityMap.Find(StringID(raw));
-    return found && state->registry.valid(*found) ? *found : entt::null;
+    return Engine::FindEntity(state, StringID(raw));
 }
 
 static ToolResult GetEntity(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)

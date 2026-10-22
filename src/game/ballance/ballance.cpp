@@ -19,6 +19,8 @@
 #include "game/ballance/checkpoint/checkpoint_systems.h"
 #include "game/ballance/checkpoint/death_zone_component.h"
 #include "game/ballance/checkpoint/player_spawn_component.h"
+#include "game/ballance/crusher/crusher_component.h"
+#include "game/ballance/crusher/crusher_systems.h"
 #include "game/ballance/debug/debug_components.h"
 #include "game/ballance/debug/debug_system.h"
 #include "physics/physics_system.h"
@@ -37,6 +39,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 
     Engine::RegisterComponent<Component::BreakableComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::SelfDestructComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::CrusherComponent>(componentRegistry, Engine::Origin::Game, false, false);
 }
 
 void RegisterCommands(Engine::EngineState* state)
@@ -60,6 +63,7 @@ void CollectSystems(Engine::SystemGraph& graph)
 {
     graph.Add("Ballance/AcquireBreakableAssets", &AcquireBreakableAssets);
     graph.Add("Ballance/UpdateSelfDestruct", &UpdateSelfDestruct, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateCrushers", &UpdateCrushers, Engine::SystemWhen::WorldRunning);
 
     graph.Add("Ballance/DebugProcessPhysicsCollisions", &DebugProcessPhysicsCollisions, Engine::SystemWhen::Gameplay);
     graph.Add("Ballance/DebugApplyGroundForces", &DebugApplyGroundForces, Engine::SystemWhen::Gameplay);

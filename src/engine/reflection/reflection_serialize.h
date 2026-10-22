@@ -16,6 +16,7 @@
 
 #include "core/containers/array.h"
 #include "core/containers/inline_string.h"
+#include "engine/core/entity_ref.h"
 #include "engine/reflection/reflection.h"
 #include "engine/reflection/reflection_diff.h"
 #include "engine/serialization/text_reader.h"
@@ -155,6 +156,17 @@ struct FieldTraits<V>
     static void Write(TextWriter& w, const char* key, const V& v) { w.Key(key, static_cast<uint64_t>(v.id)); }
     static void Read(const TextReader& r, const char* key, V& v) { v = V(r.U64(key, v.id)); }
     static bool Equal(const V& a, const V& b) { return a.id == b.id; }
+};
+
+/** Written exactly like a StringID, so a StringID field can become an EntityRef without touching saved files. */
+template<>
+struct FieldTraits<EntityRef>
+{
+    static constexpr bool SUPPORTED = true;
+
+    static void Write(TextWriter& w, const char* key, const EntityRef& v) { w.Key(key, v.stableId.id); }
+    static void Read(const TextReader& r, const char* key, EntityRef& v) { v = EntityRef{StringID(r.U64(key, v.stableId.id))}; }
+    static bool Equal(const EntityRef& a, const EntityRef& b) { return a == b; }
 };
 
 template<size_t N>

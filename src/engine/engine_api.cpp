@@ -92,10 +92,6 @@ ComponentRegistry::ComponentRegistry(Core::TlsfAllocator* allocator)
     registryMapping = Core::Map<StringID, size_t>(allocator, Core::AllocTag::EngineState, 1024);
 }
 
-PhysicsState::PhysicsState(Core::TlsfAllocator* allocator)
-    : bodyToEntity(allocator, Core::AllocTag::EngineState, 64)
-{}
-
 EditorState::EditorState(Core::TlsfAllocator* allocator)
     : selectedEntities(allocator, Core::AllocTag::EngineState, 64),
       prevSelectedEntities(allocator, Core::AllocTag::EngineState, 64),
@@ -118,7 +114,6 @@ EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryMana
       componentRegistry(allocator),
       mcpTools(allocator),
       input(allocator),
-      physics(allocator),
       editor(allocator)
 {
     triLightStore.Init(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);

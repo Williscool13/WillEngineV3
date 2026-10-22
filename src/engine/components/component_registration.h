@@ -10,6 +10,7 @@
 #include "core/string_id.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
+#include "engine/reflection/reflection_entity_refs.h"
 #include "engine/reflection/reflection_serialize.h"
 #include "engine/editor/reflected_inspector.h"
 
@@ -99,6 +100,19 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         }
         return true;
     };
+
+    if constexpr (ContainsEntityRef<T>()) {
+        componentRegistry.registry[index].remapEntityRefs = [](entt::registry& reg, entt::entity e, Core::Span<const StringID> from, Core::Span<const StringID> to) {
+            ForEachEntityRef(reg.get<T>(e), [&from, &to](EntityRef& ref) {
+                for (size_t i = 0; i < from.Size(); ++i) {
+                    if (ref.stableId == from[i]) {
+                        ref = EntityRef{to[i]};
+                        return;
+                    }
+                }
+            });
+        };
+    }
 
     componentRegistry.registry[index].bMovesEntity = MovesEntity<T>;
     componentRegistry.registry[index].bInstanceOnly = InstanceOnly<T>;

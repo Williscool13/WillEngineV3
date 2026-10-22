@@ -61,6 +61,9 @@ void DrawReflectedFields(EditContext& edit)
                 edit.Set(f.member, static_cast<M>(value));
             }
         }
+        else if constexpr (std::is_same_v<M, EntityRef>) {
+            EditWidgets::EntityRefField(edit, f.name, f.member);
+        }
         else if constexpr (IdLike<M>) {
             ImGui::TextDisabled("%s: %" PRIu64, f.name, static_cast<uint64_t>((edit.Get<C>().*f.member).id));
         }

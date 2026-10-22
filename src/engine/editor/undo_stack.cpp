@@ -10,6 +10,7 @@
 #include "engine/components/common/stable_id_component.h"
 #include "engine/components/scene_components.h"
 #include "engine/editor/editor_systems.h"
+#include "engine/systems/scene_system.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
 
@@ -67,12 +68,12 @@ void UndoStack::End(EngineState* state, StringID typeId)
 
     bool bChanged = false;
     for (UndoEntry& u : pending.entries) {
-        const entt::entity* e = state->stableIdToEntityMap.Find(u.stableId);
-        if (e == nullptr || !entry->has(state->registry, *e)) { continue; }
-        u.afterOffset = AppendSnapshot(*entry, state->registry, *e, pending.data, u.afterSize);
+        const entt::entity e = FindEntity(state, u.stableId);
+        if (e == entt::null || !entry->has(state->registry, e)) { continue; }
+        u.afterOffset = AppendSnapshot(*entry, state->registry, e, pending.data, u.afterSize);
         const bool bEntityChanged = u.beforeSize != u.afterSize || memcmp(pending.data.Data() + u.beforeOffset, pending.data.Data() + u.afterOffset, u.beforeSize) != 0;
         if (bEntityChanged) {
-            if (const auto* sc = state->registry.try_get<Component::SceneComponent>(*e)) {
+            if (const auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
                 MarkSceneModified(state, sc->sceneId);
             }
         }
@@ -105,12 +106,12 @@ void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore
     if (entry == nullptr || entry->restore == nullptr) { return; }
 
     for (const UndoEntry& u : record.entries) {
-        const entt::entity* e = state->stableIdToEntityMap.Find(u.stableId);
-        if (e == nullptr || !state->registry.valid(*e) || !entry->has(state->registry, *e)) { continue; }
+        const entt::entity e = FindEntity(state, u.stableId);
+        if (e == entt::null || !entry->has(state->registry, e)) { continue; }
         const uint32_t offset = bBefore ? u.beforeOffset : u.afterOffset;
         const uint32_t size = bBefore ? u.beforeSize : u.afterSize;
-        entry->restore(state->registry, *e, TextReader(record.data.Data() + offset, size));
-        if (auto* sc = state->registry.try_get<Component::SceneComponent>(*e)) {
+        entry->restore(state->registry, e, TextReader(record.data.Data() + offset, size));
+        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
             MarkSceneModified(state, sc->sceneId);
         }
     }

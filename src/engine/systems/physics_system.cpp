@@ -40,7 +40,6 @@ void ConnectPhysicsObservers(entt::registry& registry)
     registry.on_construct<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnConstruct>();
     registry.on_destroy<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnDestroy>();
 
-    registry.on_construct<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnConstruct>();
     registry.on_destroy<Component::PhysicsBodyComponent>().connect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
@@ -49,7 +48,6 @@ void DisconnectPhysicsObservers(entt::registry& registry)
     registry.on_construct<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnConstruct>();
     registry.on_destroy<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnDestroy>();
 
-    registry.on_construct<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnConstruct>();
     registry.on_destroy<Component::PhysicsBodyComponent>().disconnect<&Component::PhysicsBodyComponent::OnDestroy>();
 }
 
@@ -106,8 +104,9 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
             }
         }
 
-        if (bodyInterface.GetUserData(physicsBody.bodyID) != count + 1) {
-            bodyInterface.SetUserData(physicsBody.bodyID, count + 1);
+        const uint64_t userData = bodyInterface.GetUserData(physicsBody.bodyID);
+        if (Physics::BodyUserData::ConveyorSlot(userData) != count + 1) {
+            bodyInterface.SetUserData(physicsBody.bodyID, Physics::BodyUserData::WithConveyorSlot(userData, count + 1));
         }
         if (listener.SetConveyor(count, surface)) {
             WakeBodiesAround(bodyInterface, physicsBody.bodyID);
@@ -247,15 +246,26 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
 }
 
+Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box)
+{
+    Core::Arena* arena = &ctx->gameplayArena.Get();
+    const auto bodies = ctx->physicsSystem->QueryBodiesInBox(arena, box);
+    auto entities = Core::ArenaFixedVector<entt::entity>(arena, std::max(bodies.Size(), size_t{1}));
+    for (const JPH::BodyID& body : bodies) {
+        const entt::entity entity = Component::EntityFromBodyUserData(state->registry, ctx->physicsSystem->GetUserData(body));
+        if (entity != entt::null) { entities.PushBack(entity); }
+    }
+    return entities;
+}
+
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
+    const entt::registry& registry = state->registry;
     state->physics.resolvedAddedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetAddedEvents()) {
-        auto it1 = state->physics.bodyToEntity.Find(event.body1);
-        auto it2 = state->physics.bodyToEntity.Find(event.body2);
         state->physics.resolvedAddedEvents.PushBack({
-            it1 != nullptr ? *it1 : entt::null,
-            it2 != nullptr ? *it2 : entt::null,
+            Component::EntityFromBodyUserData(registry, event.userData1),
+            Component::EntityFromBodyUserData(registry, event.userData2),
             {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
             {event.contactPoint.GetX(), event.contactPoint.GetY(), event.contactPoint.GetZ()},
             event.penetrationDepth
@@ -264,11 +274,9 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
 
     state->physics.resolvedPersistedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetPersistedEvents()) {
-        auto it1 = state->physics.bodyToEntity.Find(event.body1);
-        auto it2 = state->physics.bodyToEntity.Find(event.body2);
         state->physics.resolvedPersistedEvents.PushBack({
-            it1 != nullptr ? *it1 : entt::null,
-            it2 != nullptr ? *it2 : entt::null,
+            Component::EntityFromBodyUserData(registry, event.userData1),
+            Component::EntityFromBodyUserData(registry, event.userData2),
             {event.worldNormal.GetX(), event.worldNormal.GetY(), event.worldNormal.GetZ()},
             {event.contactPoint.GetX(), event.contactPoint.GetY(), event.contactPoint.GetZ()},
             event.penetrationDepth
@@ -277,11 +285,9 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
 
     state->physics.resolvedRemovedEvents.Clear();
     for (const auto& event : ctx->physicsSystem->GetRemovedEvents()) {
-        auto it1 = state->physics.bodyToEntity.Find(event.body1);
-        auto it2 = state->physics.bodyToEntity.Find(event.body2);
         state->physics.resolvedRemovedEvents.PushBack({
-            it1 != nullptr ? *it1 : entt::null,
-            it2 != nullptr ? *it2 : entt::null,
+            Component::EntityFromBodyUserData(registry, ctx->physicsSystem->GetUserData(event.body1)),
+            Component::EntityFromBodyUserData(registry, ctx->physicsSystem->GetUserData(event.body2)),
         });
     }
 }
@@ -386,7 +392,7 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
 
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, const JPH::ShapeRefC& shapeRef, JPH::RVec3 position, JPH::Quat rotation,
-                                JPH::ObjectLayer layerOverride)
+                                uint64_t userData, JPH::ObjectLayer layerOverride)
 {
     JPH::EMotionType motionType = desc.motionType == Component::PhysicsMotionType::Static
                                       ? JPH::EMotionType::Static
@@ -416,6 +422,7 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
     settings.mMotionQuality = desc.motionQuality;
     settings.mEnhancedInternalEdgeRemoval = desc.bEnhancedInternalEdgeRemoval;
     settings.mIsSensor = desc.bIsSensor;
+    settings.mUserData = userData;
 
     JPH::EActivation activation = (desc.motionType == Component::PhysicsMotionType::Static && !desc.bIsSensor)
                                       ? JPH::EActivation::DontActivate
@@ -814,7 +821,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
         const Transform world = Component::ComputeWorldTransform(state->registry, entity);
         JPH::Vec3 pos(world.translation.x, world.translation.y, world.translation.z);
         JPH::Quat rot(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w);
-        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, runtime.shapeRef, pos, rot, bodyDesc.layerOverride);
+        JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, runtime.shapeRef, pos, rot, Component::BodyUserDataFor(entity), bodyDesc.layerOverride);
         if (!bodyId.IsInvalid()) {
             if (bodyDesc.restitution > 0.0f) {
                 bodyInterface.SetRestitution(bodyId, bodyDesc.restitution);

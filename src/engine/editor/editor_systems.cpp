@@ -185,6 +185,23 @@ static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState*
     });
     if (created.IsEmpty()) { return; }
 
+    // References between the copies point at the copies; references to anything else keep their target
+    Core::ArenaVector<StringID> fromIds{&ctx->editorArena.Get(), created.Size()};
+    Core::ArenaVector<StringID> toIds{&ctx->editorArena.Get(), created.Size()};
+    for (size_t i = 0; i < created.Size(); ++i) {
+        if (const auto* stable = registry.try_get<Component::StableIdComponent>(created[i])) {
+            fromIds.PushBack(StringID{sourceIds[i]});
+            toIds.PushBack(stable->id);
+        }
+    }
+    for (const entt::entity entity : created) {
+        for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
+            if (entry.remapEntityRefs && entry.has(registry, entity)) {
+                entry.remapEntityRefs(registry, entity, fromIds, toIds);
+            }
+        }
+    }
+
     Core::ArenaVector<entt::entity> roots{&ctx->editorArena.Get(), created.Size()};
     for (size_t i = 0; i < created.Size(); ++i) {
         const entt::entity entity = created[i];
@@ -198,8 +215,8 @@ static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState*
         bool bRoot = true;
         if (auto* node = registry.try_get<Component::HierarchyComponent>(entity)) {
             const auto it = std::ranges::find(sourceIds, node->parentStableId.id);
-            const entt::entity* existing = state->stableIdToEntityMap.Find(node->parentStableId);
-            const auto* existingScene = existing && registry.valid(*existing) ? registry.try_get<Component::SceneComponent>(*existing) : nullptr;
+            const entt::entity existing = FindEntity(state, node->parentStableId);
+            const auto* existingScene = existing != entt::null ? registry.try_get<Component::SceneComponent>(existing) : nullptr;
             if (it != sourceIds.end()) {
                 const entt::entity parent = created[static_cast<size_t>(it - sourceIds.begin())];
                 node->parent = parent;
@@ -207,7 +224,7 @@ static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState*
                 bRoot = false;
             }
             else if (existingScene && existingScene->sceneId == sceneId) {
-                node->parent = *existing;
+                node->parent = existing;
             }
             else {
                 registry.remove<Component::HierarchyComponent>(entity);
@@ -625,11 +642,10 @@ static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineSt
         state->requests.bViewportClickPending = false;
 
         if (state->inputContext != Engine::InputContext::Gameplay && !ctx->bImguiMouseCaptured && !state->editor.bExclusiveGizmoActivePrev) {
-            auto it = state->stableIdToEntityMap.Find(StringID{ctx->lastKnownStableIdUnderCursor});
-            if (it != nullptr) {
+            const entt::entity clicked = FindEntity(state, StringID{ctx->lastKnownStableIdUnderCursor});
+            if (clicked != entt::null) {
                 bJustSelected = true;
                 state->editor.selectedFolders.Clear();
-                entt::entity clicked = *it;
                 if (ctrlHeld) {
                     auto pos = std::find(state->editor.selectedEntities.begin(), state->editor.selectedEntities.end(), clicked);
                     if (pos != state->editor.selectedEntities.end()) {
@@ -1766,9 +1782,9 @@ static void DrawUndoRecord(Engine::EngineState* state, const Engine::UndoRecord&
     if (ImGui::TreeNode("record", "%s  x%u", typeName, static_cast<uint32_t>(record.entries.Size()))) {
         for (uint32_t i = 0; i < record.entries.Size(); ++i) {
             const Engine::UndoEntry& u = record.entries[i];
-            const entt::entity* e = state->stableIdToEntityMap.Find(u.stableId);
-            const auto* nc = e && state->registry.valid(*e) ? state->registry.try_get<Component::NameComponent>(*e) : nullptr;
-            const char* entityName = e == nullptr ? "(entity gone)" : nc ? nc->name.c_str() : "(unnamed)";
+            const entt::entity e = FindEntity(state, u.stableId);
+            const auto* nc = e != entt::null ? state->registry.try_get<Component::NameComponent>(e) : nullptr;
+            const char* entityName = e == entt::null ? "(entity gone)" : nc ? nc->name.c_str() : "(unnamed)";
             ImGui::PushID(static_cast<int>(i));
             if (ImGui::TreeNode("entity", "%s  [%016llx]", entityName, static_cast<unsigned long long>(u.stableId.id))) {
                 const char* data = reinterpret_cast<const char*>(record.data.Data());

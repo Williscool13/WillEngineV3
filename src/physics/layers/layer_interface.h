@@ -19,7 +19,11 @@ namespace Layers
     static constexpr JPH::ObjectLayer PLAYER = 2;
     static constexpr JPH::ObjectLayer SENSOR = 3;
     static constexpr JPH::ObjectLayer DEBRIS = 4;
-    static constexpr JPH::ObjectLayer NUM_LAYERS = 5;
+    static constexpr JPH::ObjectLayer IGNORE_DEBRIS = 5;
+    static constexpr JPH::ObjectLayer NUM_LAYERS = 6;
+
+    /** For layer masks: a query given Bit(PLAYER) | Bit(SENSOR) skips both. */
+    constexpr uint32_t Bit(JPH::ObjectLayer layer) { return 1u << layer; }
 }
 
 namespace BroadPhaseLayers

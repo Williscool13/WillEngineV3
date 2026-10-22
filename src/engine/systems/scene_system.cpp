@@ -692,6 +692,13 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
     return newEntity;
 }
 
+entt::entity FindEntity(const Engine::EngineState* state, StringID stableId)
+{
+    if (!stableId.IsValid()) { return entt::null; }
+    const entt::entity* entity = state->stableIdToEntityMap.Find(stableId);
+    return entity && state->registry.valid(*entity) ? *entity : entt::null;
+}
+
 static uint16_t HierarchyDepth(const entt::registry& registry, entt::entity entity)
 {
     uint16_t depth = 0;
@@ -766,8 +773,7 @@ void ResolveHierarchyLinks(Engine::EngineState* state)
     ZoneScoped;
     auto& registry = state->registry;
     for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
-        const auto* found = node.parentStableId.IsValid() ? state->stableIdToEntityMap.Find(node.parentStableId) : nullptr;
-        node.parent = found ? *found : entt::null;
+        node.parent = FindEntity(state, node.parentStableId);
     }
     state->bHierarchyOrderDirty = true;
 }
@@ -1245,8 +1251,8 @@ void SimulateStop(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     state->editor.selectedEntities.Clear();
     for (const StringID id : selectedIds) {
-        if (const entt::entity* e = state->stableIdToEntityMap.Find(id)) {
-            state->editor.selectedEntities.PushBack(*e);
+        if (const entt::entity e = FindEntity(state, id); e != entt::null) {
+            state->editor.selectedEntities.PushBack(e);
         }
     }
 }

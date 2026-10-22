@@ -63,16 +63,11 @@ namespace Engine
 {
 struct PhysicsState
 {
-    PhysicsState() = default;
-    explicit PhysicsState(Core::TlsfAllocator* allocator);
-    ~PhysicsState() = default;
-
     float deltaTimeAccumulator = 0.0f;
     float interpolationAlpha = 0.0f;
     float timeScale = 1.0f;
     bool bEnabled = true;
     uint64_t stepCount = 0;
-    Core::Map<JPH::BodyID, entt::entity> bodyToEntity;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedAddedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedPersistedEvents;
     Core::InlineVector<ResolvedCollisionEvent, Physics::MAX_COLLISION_EVENTS> resolvedRemovedEvents;

@@ -12,11 +12,13 @@ namespace Game
 enum class LogCategory
 {
     Player,
+    Crusher,
     Count
 };
 
 inline constexpr const char* GAME_LOGGER_CATEGORY_NAMES[] = {
-    "Player"
+    "Player",
+    "Crusher"
 };
 
 inline void RegisterLogCategories(Engine::EngineLogger* logger)

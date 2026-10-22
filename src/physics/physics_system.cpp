@@ -7,9 +7,16 @@
 #include <algorithm>
 #include <cstdarg>
 #include <Jolt/RegisterTypes.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
@@ -17,7 +24,9 @@
 #include "contact_listener.h"
 #include "physics_helpers.h"
 #include "physics_job_system.h"
+#include "layers/layer_interface.h"
 #include "core/containers/inline_string.h"
+#include "core/containers/inline_vector.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
 
 
@@ -190,6 +199,136 @@ AABB PhysicsSystem::GetLocalBounds(JPH::BodyID body) const
 Mat4 PhysicsSystem::GetCenterOfMassTransform(JPH::BodyID body) const
 {
     return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetCenterOfMassTransform(body));
+}
+
+uint64_t PhysicsSystem::GetUserData(JPH::BodyID body) const
+{
+    return physicsSystem.GetBodyInterface().GetUserData(body);
+}
+
+Vec3 PhysicsSystem::GetPosition(JPH::BodyID body) const
+{
+    return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetPosition(body));
+}
+
+Vec3 PhysicsSystem::GetCenterOfMassPosition(JPH::BodyID body) const
+{
+    return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetCenterOfMassPosition(body));
+}
+
+Vec3 PhysicsSystem::GetLinearVelocity(JPH::BodyID body) const
+{
+    return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetLinearVelocity(body));
+}
+
+Vec3 PhysicsSystem::GetAngularVelocity(JPH::BodyID body) const
+{
+    return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetAngularVelocity(body));
+}
+
+BodyState PhysicsSystem::GetBodyState(JPH::BodyID body) const
+{
+    const JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
+    const JPH::EMotionType motionType = bodyInterface.GetMotionType(body);
+    return {
+        .motionType = motionType == JPH::EMotionType::Static ? MotionType::Static : motionType == JPH::EMotionType::Kinematic ? MotionType::Kinematic : MotionType::Dynamic,
+        .objectLayer = bodyInterface.GetObjectLayer(body),
+        .bAwake = bodyInterface.IsActive(body),
+        .linearVelocity = PhysicsHelpers::ToGLM(bodyInterface.GetLinearVelocity(body)),
+        .angularVelocity = PhysicsHelpers::ToGLM(bodyInterface.GetAngularVelocity(body)),
+    };
+}
+
+bool PhysicsSystem::IsAwake(JPH::BodyID body) const
+{
+    return physicsSystem.GetBodyInterface().IsActive(body);
+}
+
+void PhysicsSystem::AddImpulse(JPH::BodyID body, const Vec3& impulse)
+{
+    physicsSystem.GetBodyInterface().AddImpulse(body, PhysicsHelpers::ToJolt(impulse));
+}
+
+void PhysicsSystem::AddTorque(JPH::BodyID body, const Vec3& torque)
+{
+    physicsSystem.GetBodyInterface().AddTorque(body, PhysicsHelpers::ToJolt(torque));
+}
+
+class IgnoredLayersFilter final : public JPH::ObjectLayerFilter
+{
+public:
+    explicit IgnoredLayersFilter(uint32_t ignored) : ignored(ignored) {}
+
+    bool ShouldCollide(JPH::ObjectLayer layer) const override { return (ignored & Layers::Bit(layer)) == 0; }
+
+private:
+    uint32_t ignored;
+};
+
+bool PhysicsSystem::CastRay(const Vec3& origin, const Vec3& direction, CastHit& hit, JPH::BodyID ignore, uint32_t ignoredLayers) const
+{
+    const JPH::RRayCast ray{PhysicsHelpers::ToJoltR(origin), PhysicsHelpers::ToJolt(direction)};
+    JPH::RayCastResult result;
+    const IgnoredLayersFilter layerFilter(ignoredLayers);
+    const JPH::IgnoreSingleBodyFilter bodyFilter(ignore);
+    if (!physicsSystem.GetNarrowPhaseQuery().CastRay(ray, result, {}, layerFilter, bodyFilter)) { return false; }
+    hit = {result.mFraction, result.mBodyID};
+    return true;
+}
+
+bool PhysicsSystem::CastSphere(float radius, const Vec3& origin, const Vec3& direction, CastHit& hit, JPH::BodyID ignore, uint32_t ignoredLayers) const
+{
+    JPH::SphereShape sphere(radius);
+    sphere.SetEmbedded();
+    const JPH::RShapeCast cast(&sphere, JPH::Vec3::sReplicate(1.0f), JPH::RMat44::sTranslation(PhysicsHelpers::ToJoltR(origin)), PhysicsHelpers::ToJolt(direction));
+    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+    const IgnoredLayersFilter layerFilter(ignoredLayers);
+    const JPH::IgnoreSingleBodyFilter bodyFilter(ignore);
+    physicsSystem.GetNarrowPhaseQuery().CastShape(cast, {}, JPH::RVec3::sZero(), collector, {}, layerFilter, bodyFilter);
+    if (!collector.HadHit()) { return false; }
+    hit = {collector.mHit.mFraction, collector.mHit.mBodyID2};
+    return true;
+}
+
+Core::ArenaFixedVector<BodyTouch> PhysicsSystem::QueryTouching(Core::Arena* arena, JPH::BodyID body, float maxSeparation, size_t capacity) const
+{
+    constexpr size_t MAX_SUB_SHAPES = 16;
+    struct Touch
+    {
+        BodyTouch touch;
+        Core::InlineVector<JPH::SubShapeID, MAX_SUB_SHAPES> subShapes{};
+    };
+
+    const JPH::TransformedShape shape = physicsSystem.GetBodyInterface().GetTransformedShape(body);
+    JPH::CollideShapeSettings settings;
+    settings.mMaxSeparationDistance = maxSeparation;
+    JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+    const JPH::IgnoreSingleBodyFilter ignoreSelf(body);
+    physicsSystem.GetNarrowPhaseQuery().CollideShape(shape.mShape, shape.GetShapeScale(), shape.GetCenterOfMassTransform(), settings, shape.GetCenterOfMassTransform().GetTranslation(),
+                                                     collector, {}, {}, ignoreSelf);
+
+    auto touches = Core::ArenaFixedVector<Touch>(arena, std::max(capacity, size_t{1}));
+    for (const JPH::CollideShapeResult& hit : collector.mHits) {
+        Touch* touch = nullptr;
+        for (Touch& t : touches) {
+            if (t.touch.body == hit.mBodyID2) { touch = &t; }
+        }
+        if (!touch) {
+            if (touches.Size() >= capacity) { continue; }
+            touches.PushBack({.touch = {.body = hit.mBodyID2}});
+            touch = &touches[touches.Size() - 1];
+        }
+        if (!touch->subShapes.Contains(hit.mSubShapeID2) && !touch->subShapes.IsFull()) { touch->subShapes.PushBack(hit.mSubShapeID2); }
+        ++touch->touch.contacts;
+        touch->touch.maxPenetration = std::max(touch->touch.maxPenetration, hit.mPenetrationDepth);
+    }
+
+    auto out = Core::ArenaFixedVector<BodyTouch>(arena, std::max(touches.Size(), size_t{1}));
+    for (Touch& t : touches) {
+        t.touch.subShapes = static_cast<uint32_t>(t.subShapes.Size());
+        out.PushBack(t.touch);
+    }
+    return out;
 }
 
 void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter, bool bSleepColor)

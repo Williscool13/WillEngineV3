@@ -19,6 +19,10 @@ set(GAME_SOURCES
         ballance/breakable/breakable_systems.cpp
         ballance/breakable/breakable_systems.h
 
+        ballance/crusher/crusher_component.h
+        ballance/crusher/crusher_systems.cpp
+        ballance/crusher/crusher_systems.h
+
         ballance/checkpoint/checkpoint_component.cpp
         ballance/checkpoint/checkpoint_component.h
         ballance/checkpoint/checkpoint_systems.cpp

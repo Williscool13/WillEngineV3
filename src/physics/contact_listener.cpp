@@ -4,6 +4,7 @@
 
 #include "contact_listener.h"
 
+#include "body_user_data.h"
 #include "spdlog/spdlog.h"
 
 namespace Physics
@@ -55,6 +56,8 @@ void ContactListener::PushContactEvent(const JPH::Body& inBody1, const JPH::Body
     events[idx] = {
         inBody1.GetID(),
         inBody2.GetID(),
+        inBody1.GetUserData(),
+        inBody2.GetUserData(),
         inManifold.mWorldSpaceNormal,
         inManifold.GetWorldSpaceContactPointOn1(0),
         inManifold.mPenetrationDepth
@@ -72,7 +75,7 @@ bool ContactListener::SetConveyor(uint32_t slot, const ConveyorSurface& surface)
 
 const ConveyorSurface* ContactListener::FindConveyor(const JPH::Body& body) const
 {
-    const uint64_t slot = body.GetUserData();
+    const uint32_t slot = BodyUserData::ConveyorSlot(body.GetUserData());
     if (slot == 0 || slot > conveyorCount) { return nullptr; }
     const ConveyorSurface& surface = conveyors[slot - 1];
     return surface.body == body.GetID() ? &surface : nullptr;
