@@ -777,7 +777,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                         if (modelHandle.IsValid()) {
                             if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {
                                 if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
-                                    Engine::AABB aabb = model->bounds.aabb;
+                                    AABB aabb = model->bounds.aabb;
                                     // Single primitive instead of whole model
                                     if (const auto* prim = state->registry.try_get<Component::StaticMeshPrimitiveComponent>(target)) {
                                         uint32_t ordinal = 0;
@@ -789,7 +789,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                                             const auto& props = meshes[mi].primitiveProperties;
                                             if (prim->primitiveOrdinal >= ordinal && prim->primitiveOrdinal < ordinal + props.Size()) {
                                                 const Engine::PrimitiveProperty& p = props[prim->primitiveOrdinal - ordinal];
-                                                aabb = Engine::AABB{p.boundingBoxMin, p.boundingBoxMax};
+                                                aabb = AABB{p.boundingBoxMin, p.boundingBoxMax};
                                                 break;
                                             }
                                             ordinal += static_cast<uint32_t>(props.Size());

@@ -35,6 +35,9 @@ struct StaticFollowWarnedTag
 struct DirtyKinematicPhysicsTransformTag
 {};
 
+struct MovingKinematicTag
+{};
+
 struct PendingPhysicsMeshTag
 {};
 

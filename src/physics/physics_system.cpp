@@ -4,13 +4,18 @@
 
 #include "physics_system.h"
 
+#include <algorithm>
 #include <cstdarg>
 #include <Jolt/RegisterTypes.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <fmt/format.h>
 #include <spdlog/spdlog.h>
 
 #include "body_activation_listener.h"
 #include "contact_listener.h"
+#include "physics_helpers.h"
 #include "physics_job_system.h"
 #include "core/containers/inline_string.h"
 #include "Jolt/Physics/Body/BodyCreationSettings.h"
@@ -160,6 +165,31 @@ void PhysicsSystem::Step(float deltaTime)
                     (newErrors & static_cast<uint32_t>(JPH::EPhysicsUpdateError::BodyPairCacheFull)) ? " body pair cache full" : "",
                     (newErrors & static_cast<uint32_t>(JPH::EPhysicsUpdateError::ContactConstraintsFull)) ? " contact constraints full" : "");
     }
+}
+
+Core::ArenaFixedVector<JPH::BodyID> PhysicsSystem::QueryBodiesInBox(Core::Arena* arena, const AABB& box) const
+{
+    JPH::AllHitCollisionCollector<JPH::CollideShapeBodyCollector> collector;
+    physicsSystem.GetBroadPhaseQuery().CollideAABox(PhysicsHelpers::ToJolt(box), collector);
+    auto bodies = Core::ArenaFixedVector<JPH::BodyID>(arena, std::max(collector.mHits.size(), size_t{1}));
+    for (const JPH::BodyID& id : collector.mHits) { bodies.PushBack(id); }
+    return bodies;
+}
+
+AABB PhysicsSystem::GetWorldBounds(JPH::BodyID body) const
+{
+    return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetTransformedShape(body).GetWorldSpaceBounds());
+}
+
+AABB PhysicsSystem::GetLocalBounds(JPH::BodyID body) const
+{
+    const JPH::RefConst<JPH::Shape> shape = physicsSystem.GetBodyInterface().GetShape(body);
+    return shape ? PhysicsHelpers::ToGLM(shape->GetLocalBounds()) : AABB{};
+}
+
+Mat4 PhysicsSystem::GetCenterOfMassTransform(JPH::BodyID body) const
+{
+    return PhysicsHelpers::ToGLM(physicsSystem.GetBodyInterface().GetCenterOfMassTransform(body));
 }
 
 void PhysicsSystem::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter, bool bSleepColor)

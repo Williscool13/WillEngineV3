@@ -18,7 +18,9 @@
 #include "layers/broad_phase_layer_interface.h"
 #include "layers/object_layer_pair_filter.h"
 #include "layers/object_vs_broad_phase_layer_filter.h"
+#include "core/containers/arena_fixed_vector.h"
 #include "core/memory/memory_manager.h"
+#include "core/types/aabb.h"
 
 namespace Core
 {
@@ -68,6 +70,11 @@ public:
     JPH::BodyInterface& GetBodyInterface() { return physicsSystem.GetBodyInterface(); }
     JPH::PhysicsSystem& GetPhysicsSystem() { return physicsSystem; }
     JPH::TempAllocator& GetTempAllocator() { return tempAllocator; }
+
+    Core::ArenaFixedVector<JPH::BodyID> QueryBodiesInBox(Core::Arena* arena, const AABB& box) const;
+    AABB GetWorldBounds(JPH::BodyID body) const;
+    AABB GetLocalBounds(JPH::BodyID body) const;
+    Mat4 GetCenterOfMassTransform(JPH::BodyID body) const;
 
 #if JPH_DEBUG_RENDERER
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }

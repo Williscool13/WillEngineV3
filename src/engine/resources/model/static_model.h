@@ -15,6 +15,7 @@
 #include "TaskScheduler.h"
 #include "../../../render/interface/render_interface.h"
 #include "asset-load/asset_load_types.h"
+#include "core/types/aabb.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_path.h"
 #include "core/containers/inline_vector.h"
@@ -27,17 +28,6 @@ struct BoundingSphere
 {
     Vec3 center{0.f};
     float radius{0.f};
-};
-
-struct AABB
-{
-    Vec3 min{FLT_MAX, FLT_MAX, FLT_MAX};
-    Vec3 max{-FLT_MAX, -FLT_MAX, -FLT_MAX};
-
-    Vec3 Center() const { return (min + max) * 0.5f; }
-    Vec3 HalfExtents() const { return (max - min) * 0.5f; }
-    float SurfaceArea() const { glm::vec3 d = max - min; return 2.f * (d.x * d.y + d.y * d.z + d.z * d.x); }
-    float Volume() const { glm::vec3 d = max - min; return d.x * d.y * d.z; }
 };
 
 struct OBB

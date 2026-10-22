@@ -9,11 +9,13 @@
 #include <Jolt/Math/Vec3.h>
 #include <Jolt/Math/Quat.h>
 #include <Jolt/Math/Mat44.h>
+#include <Jolt/Geometry/AABox.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include "Jolt/Core/Color.h"
+#include "core/types/aabb.h"
 
 namespace Physics::PhysicsHelpers
 {
@@ -57,6 +59,16 @@ inline JPH::Quat ToJolt(const glm::quat& q)
 inline JPH::Mat44 ToJolt(const glm::mat4& m)
 {
     return JPH::Mat44::sLoadFloat4x4(reinterpret_cast<const JPH::Float4*>(&m));
+}
+
+inline AABB ToGLM(const JPH::AABox& b)
+{
+    return AABB{ToGLM(b.mMin), ToGLM(b.mMax)};
+}
+
+inline JPH::AABox ToJolt(const AABB& b)
+{
+    return JPH::AABox(ToJolt(b.min), ToJolt(b.max));
 }
 
 inline JPH::Color ToJolt(const glm::vec4& c)

@@ -142,9 +142,20 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         glm::quat startRotation;
         Transform target;
     };
+    auto stoppedView = state->registry.view<Component::PhysicsBodyComponent, Component::MovingKinematicTag>(entt::exclude<Component::DirtyKinematicPhysicsTransformTag>);
+    if (stoppedView.size_hint() > 0) {
+        auto stopped = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), stoppedView.size_hint());
+        for (const auto& [entity, physicsBody] : stoppedView.each()) {
+            if (!physicsBody.bodyID.IsInvalid()) { bodyInterface.SetLinearAndAngularVelocity(physicsBody.bodyID, JPH::Vec3::sZero(), JPH::Vec3::sZero()); }
+            stopped.PushBack(entity);
+        }
+        for (const entt::entity entity : stopped) { state->registry.remove<Component::MovingKinematicTag>(entity); }
+    }
+
     auto kinematicView = state->registry.view<Component::PhysicsBodyComponent, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformTag>();
     auto kinematicMoves = Core::ArenaFixedVector<KinematicMove>(&ctx->gameplayArena.Get(), std::max(kinematicView.size_hint(), size_t{1}));
     for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
+        state->registry.emplace_or_replace<Component::MovingKinematicTag>(entity);
         const JPH::RVec3 p = bodyInterface.GetPosition(physicsBody.bodyID);
         const JPH::Quat r = bodyInterface.GetRotation(physicsBody.bodyID);
         kinematicMoves.PushBack({
