@@ -38,7 +38,7 @@ struct DeferredRemovedEvent
     JPH::BodyID body2;
 };
 
-/** World-space surface motion of a body: v(p) = linearVelocity + angularVelocity x (p - centre). The body's user data holds its slot + 1 (BodyUserData). */
+/** World-space surface motion of a body: v(p) = linearVelocity + angularVelocity x (p - centre). */
 struct ConveyorSurface
 {
     JPH::BodyID body;
@@ -76,6 +76,8 @@ private:
     void ApplyConveyors(const JPH::Body& inBody1, const JPH::Body& inBody2, JPH::ContactSettings& ioSettings) const;
 
     Core::Array<ConveyorSurface, MAX_CONVEYORS> conveyors;
+    /** conveyors[i].body, packed so the per-contact scan stays in a cache line or two. */
+    Core::Array<JPH::BodyID, MAX_CONVEYORS> conveyorBodies;
     uint32_t conveyorCount{0};
 
     Core::Array<DeferredCollisionEvent, MAX_COLLISION_EVENTS> addedEvents;

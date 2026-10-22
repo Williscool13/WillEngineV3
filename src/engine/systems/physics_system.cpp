@@ -104,10 +104,6 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
             }
         }
 
-        const uint64_t userData = bodyInterface.GetUserData(physicsBody.bodyID);
-        if (Physics::BodyUserData::ConveyorSlot(userData) != count + 1) {
-            bodyInterface.SetUserData(physicsBody.bodyID, Physics::BodyUserData::WithConveyorSlot(userData, count + 1));
-        }
         if (listener.SetConveyor(count, surface)) {
             WakeBodiesAround(bodyInterface, physicsBody.bodyID);
         }
