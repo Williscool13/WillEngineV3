@@ -229,7 +229,9 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
             .mass = shardMass,
             .friction = friction,
             .restitution = restitution,
+            .motionQuality = Component::PhysicsMotionQuality::LinearCast,
             .layerOverride = Physics::Layers::DEBRIS,
+            .bEnhancedInternalEdgeRemoval = true,
         };
         shardDesc.shapes.PushBack(Component::PhysicsShapeDesc{.geometry = Component::ColliderShape{.meshSourceModelId = brokenModelId, .meshSourceNodeIndex = n}, .bakedScale = scale});
         registry.emplace<Component::PhysicsBodyDesc>(shard, shardDesc);
