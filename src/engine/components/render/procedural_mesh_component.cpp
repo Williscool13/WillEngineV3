@@ -32,28 +32,28 @@ void ProceduralMeshComponent::OnConstruct(entt::registry& registry, entt::entity
 void ProceduralMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
-    registry.remove<ProceduralMeshLoadPendingTag>(entity);
-    registry.remove<ProceduralMeshLoadingTag>(entity);
-    registry.remove<RenderTransformComponent>(entity);
+    registry.remove<ProceduralMeshLoadRequest>(entity);
+    registry.remove<ProceduralMeshLoadingFlag>(entity);
+    registry.remove<RenderTransformRuntime>(entity);
 }
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    registry.remove<ProceduralMeshLoadingTag>(entity);
+    registry.remove<ProceduralMeshLoadingFlag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
-        registry.emplace_or_replace<ProceduralMeshLoadPendingTag>(entity);
+        registry.emplace_or_replace<ProceduralMeshLoadRequest>(entity);
     }
     else {
         registry.remove<MeshRuntime>(entity);
-        registry.remove<ProceduralMeshLoadPendingTag>(entity);
+        registry.remove<ProceduralMeshLoadRequest>(entity);
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 }
 
@@ -112,7 +112,7 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, entt::registry
     ct.translation = glm::vec3{0.0f};
     ct.rotation = glm::quat{1.0f, 0.0f, 0.0f, 0.0f};
     ct.scale = glm::vec3{1.0f};
-    registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+    registry.emplace_or_replace<Component::DirtyTransformRequest>(child);
 
     Component::SplineMeshComponent rc{};
     rc.spline = BuildSpiralRailingSpline(p, radius, railHeight);
@@ -137,10 +137,10 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, entt::registry
 void Component::ProceduralMeshComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
     const auto& component = registry.get<ProceduralMeshComponent>(entity);
-    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+    if (auto* rt = registry.try_get<RenderTransformRuntime>(entity)) {
         rt->renderOffset = component.renderOffset;
         rt->renderRotation = component.renderRotation;
-        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -348,7 +348,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
     if (open) {
         if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_ALL)) {
-            edit.ForEachTarget<ProceduralMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ProceduralMeshLoadingTag>(e); });
+            edit.ForEachTarget<ProceduralMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ProceduralMeshLoadingFlag>(e); });
         }
 
         static constexpr const char* shapeNames[] = {
@@ -1171,7 +1171,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     if (bEditingOffset) {
         auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
-            const auto& world = registry.get<WorldTransformComponent>(entity);
+            const auto& world = registry.get<WorldTransformRuntime>(entity);
             const Mat4 entityMat = GetMatrix(world);
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 pivotWorld = Vec3(entityMat * Vec4(component.renderOffset, 1.0f));
@@ -1220,8 +1220,8 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
     edit.PreviewDiff(before, component);
     // Only once the previous build has landed, so a fast drag cannot starve the mesh of updates.
-    if (bFaceResized && !registry.any_of<ProceduralMeshLoadPendingTag, ProceduralMeshLoadingTag>(entity)) {
-        registry.emplace<ProceduralMeshLoadPendingTag>(entity);
+    if (bFaceResized && !registry.any_of<ProceduralMeshLoadRequest, ProceduralMeshLoadingFlag>(entity)) {
+        registry.emplace<ProceduralMeshLoadRequest>(entity);
     }
     if (bCommit || bFaceReleased) {
         edit.Commit<ProceduralMeshComponent>();

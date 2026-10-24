@@ -101,7 +101,7 @@ void SaveModifiedScenes(Engine::EngineContext* ctx, Engine::EngineState* state)
 void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities)
 {
     for (auto e : entities) {
-        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+        if (auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
             MarkSceneModified(state, sc->sceneId);
         }
     }
@@ -179,7 +179,7 @@ static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState*
                 state->componentRegistry.registry[*index].deserialize(registry, entity, compReader);
             }
         });
-        registry.emplace_or_replace<Component::SceneComponent>(entity, sceneId);
+        registry.emplace_or_replace<Component::SceneRuntime>(entity, sceneId);
         created.PushBack(entity);
         sourceIds.PushBack(entityReader.Block(stableKey.c_str()).U64("id"));
     });
@@ -216,7 +216,7 @@ static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState*
         if (auto* node = registry.try_get<Component::HierarchyComponent>(entity)) {
             const auto it = std::ranges::find(sourceIds, node->parentStableId.id);
             const entt::entity existing = FindEntity(state, node->parentStableId);
-            const auto* existingScene = existing != entt::null ? registry.try_get<Component::SceneComponent>(existing) : nullptr;
+            const auto* existingScene = existing != entt::null ? registry.try_get<Component::SceneRuntime>(existing) : nullptr;
             if (it != sourceIds.end()) {
                 const entt::entity parent = created[static_cast<size_t>(it - sourceIds.begin())];
                 node->parent = parent;
@@ -359,7 +359,7 @@ entt::entity CreateChildEntity(Engine::EngineState* state, entt::entity parent)
     }
     SetParent(state, child, parent);
     registry.get<Component::TransformComponent>(child) = Component::TransformComponent{};
-    registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+    registry.emplace_or_replace<Component::DirtyTransformRequest>(child);
 
     const entt::entity selection[] = {child};
     SelectOnly(state, selection);
@@ -1551,8 +1551,8 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                         default:
                             break;
                     }
-                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
-                    if (auto* sc = state->registry.try_get<Component::SceneComponent>(entity)) {
+                    state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
+                    if (auto* sc = state->registry.try_get<Component::SceneRuntime>(entity)) {
                         MarkSceneModified(state, sc->sceneId);
                     }
                 }
@@ -1601,7 +1601,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                 if (!bWasDragging) {
                     bWasDragging = true;
                     for (auto e : state->editor.selectedEntities) {
-                        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+                        if (auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
                             MarkSceneModified(state, sc->sceneId);
                         }
                     }
@@ -1638,9 +1638,9 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                         transform->translation = Component::ComposeLocalFromWorld(parentWorld, world).translation;
                     }
 
-                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                    state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
                     if (state->inputContext != Engine::InputContext::Editor) {
-                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformRequest>(entity);
                     }
                 }
             }
@@ -1684,7 +1684,7 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     s_prevTranslation = multiGizmoCentroid;
                     s_wasDragging = true;
                     for (auto e : state->editor.selectedEntities) {
-                        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+                        if (auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
                             MarkSceneModified(state, sc->sceneId);
                         }
                     }
@@ -1730,9 +1730,9 @@ static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& vie
                     transform->translation = local.translation;
                     transform->rotation = local.rotation;
 
-                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                    state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
                     if (state->inputContext != Engine::InputContext::Editor) {
-                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(entity);
+                        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformRequest>(entity);
                     }
                 }
             }

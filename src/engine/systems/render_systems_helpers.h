@@ -13,7 +13,7 @@ struct EngineState;
 namespace Engine
 {
 #ifdef WDEBUG
-/** Catches a light mutated without marking MultiframeDirtyComponent, which nothing else would notice until the light looked wrong. No-op unless DebugState::bVerifyStoresOnce is raised. */
+/** Catches a light mutated without marking MultiframeDirtyRequest, which nothing else would notice until the light looked wrong. No-op unless DebugState::bVerifyStoresOnce is raised. */
 void VerifyAnalyticLightStore(Engine::EngineState* state);
 
 /**

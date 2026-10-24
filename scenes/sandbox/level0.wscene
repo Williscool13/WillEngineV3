@@ -1,7 +1,7 @@
 wscene
 version 2 1
 id 13079833564594591779
-content_version 1
+content_version 2
 entity_count 196
 end_header
 scene_id|13079833564594591779
@@ -745,8 +745,7 @@ p
 speed|0x3e4ccccd
 waitTime|0x3f800000
 ;
-bIsWaiting|1
-waitTimer|0x3e99999a
+startWait|0x3e99999a
 ;
 ;
 entity

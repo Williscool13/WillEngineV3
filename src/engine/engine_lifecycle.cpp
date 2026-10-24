@@ -26,7 +26,7 @@ void CreateCameras(EngineState* state, Vec3 editorPos, Quat editorRot)
 {
     const entt::entity editorCamera = state->registry.create();
     state->registry.emplace<Component::FreeCameraComponent>(editorCamera);
-    state->registry.emplace<Component::CameraComponent>(editorCamera);
+    state->registry.emplace<Component::CameraRuntime>(editorCamera);
     state->registry.emplace<Component::EditorCameraTag>(editorCamera);
     auto& editorCameraTransform = state->registry.emplace<Component::TransformComponent>(editorCamera);
     editorCameraTransform.translation = editorPos;
@@ -34,7 +34,7 @@ void CreateCameras(EngineState* state, Vec3 editorPos, Quat editorRot)
 
     const entt::entity gameCamera = state->registry.create();
     state->registry.emplace<Component::FreeCameraComponent>(gameCamera);
-    state->registry.emplace<Component::CameraComponent>(gameCamera);
+    state->registry.emplace<Component::CameraRuntime>(gameCamera);
     state->registry.emplace<Component::GameCameraTag>(gameCamera);
     auto& gameCameraTransform = state->registry.emplace<Component::TransformComponent>(gameCamera);
     gameCameraTransform.translation = DEFAULT_CAMERA_POS;

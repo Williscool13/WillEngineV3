@@ -59,10 +59,14 @@ struct SelfDestructComponent
     static constexpr const char* COMPONENT_NAME = "SelfDestructComponent";
 
     float delay{2.0f};
-    float elapsed{0.0f};
 
     WILL_REFLECT(SelfDestructComponent,
         WILL_FIELD(delay, .speed = 0.1f))
+};
+
+struct SelfDestructRuntime
+{
+    float elapsed{0.0f};
 };
 }
 

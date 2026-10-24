@@ -484,7 +484,7 @@ static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
 
 static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
 {
-    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
+    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraRuntime, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         call.SetError("No editor camera in the registry");

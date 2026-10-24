@@ -15,10 +15,10 @@ namespace Core { struct ViewFamily; }
 
 namespace Ballance::Component
 {
-struct DeathZoneComponent
+struct DeathZoneTag
 {
     static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
-    static constexpr const char* COMPONENT_NAME = "DeathZoneComponent";
+    static constexpr const char* COMPONENT_NAME = "DeathZoneTag";
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };

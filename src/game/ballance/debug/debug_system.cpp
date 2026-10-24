@@ -59,7 +59,7 @@ void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineSta
 void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyComponent>();
+    auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyRuntime>();
     for (const auto& [entity, body] : view.each()) {
         ctx->physicsWorld->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
     }

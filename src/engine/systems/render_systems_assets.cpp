@@ -88,8 +88,8 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::LocalDDGIVolumeComponent>().connect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
 
-    registry.on_construct<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnConstruct>();
     registry.on_destroy<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnDestroy>();
+    registry.on_destroy<Component::SkyboxRuntime>().connect<&Component::SkyboxRuntime::OnDestroy>();
 }
 
 void DisconnectRenderObservers(entt::registry& registry)
@@ -135,8 +135,8 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::LocalDDGIVolumeComponent>().disconnect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
 
-    registry.on_construct<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnConstruct>();
     registry.on_destroy<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnDestroy>();
+    registry.on_destroy<Component::SkyboxRuntime>().disconnect<&Component::SkyboxRuntime::OnDestroy>();
 }
 
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -179,10 +179,10 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (!affected) { continue; }
 
-        state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
-        state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
-        state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
-        state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
+        state->registry.remove<Component::PhysicsMeshLoadingFlag>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsMeshRequest>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsShapeCreationRequest>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsBodyCreationRequest>(entity);
     }
 
     state->assetLoad.pendingHotReloadModelIds.Clear();
@@ -239,10 +239,10 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (!affected) { continue; }
 
-        state->registry.remove<Component::PhysicsMeshLoadingTag>(entity);
-        state->registry.emplace_or_replace<Component::PendingPhysicsMeshTag>(entity);
-        state->registry.emplace_or_replace<Component::PendingPhysicsShapeCreationTag>(entity);
-        state->registry.emplace_or_replace<Component::PendingPhysicsBodyCreationTag>(entity);
+        state->registry.remove<Component::PhysicsMeshLoadingFlag>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsMeshRequest>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsShapeCreationRequest>(entity);
+        state->registry.emplace_or_replace<Component::PhysicsBodyCreationRequest>(entity);
     }
 
     state->assetLoad.pendingHotReloadFontIds.Clear();
@@ -305,7 +305,7 @@ static void PromotePendingModel(Engine::EngineContext* ctx, Component::MeshRunti
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadPendingTag>();
+    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -319,38 +319,38 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::StaticMeshLoadPendingTag>(entity);
-        state->registry.emplace_or_replace<Component::StaticMeshLoadingTag>(entity);
+        state->registry.remove<Component::StaticMeshLoadRequest>(entity);
+        state->registry.emplace_or_replace<Component::StaticMeshLoadingFlag>(entity);
     }
 }
 
 void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeLoadPendingTag>();
+    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, probe] : view.each()) {
+    for (const auto& [entity, probe, runtime] : view.each()) {
         if (started.Size() >= budget) { break; }
         if (ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
-            probe.contentHandle = ctx->assetManager->LoadProbe(Engine::ProbeID{probe.probeId});
-            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
+            runtime.contentHandle = ctx->assetManager->LoadProbe(Engine::ProbeID{probe.probeId});
+            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
         }
         else if (probe.standInEnvMap.IsValid()) {
-            probe.contentHandle = ctx->assetManager->LoadCubemap(probe.standInEnvMap);
-            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
+            runtime.contentHandle = ctx->assetManager->LoadCubemap(probe.standInEnvMap);
+            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
         }
         else {
-            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
+            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
+            state->registry.remove<Component::ReflectionProbeLoadRequest>(entity);
             continue;
         }
-        if (probe.contentHandle.IsValid()) { started.PushBack(entity); }
+        if (runtime.contentHandle.IsValid()) { started.PushBack(entity); }
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::ReflectionProbeLoadPendingTag>(entity);
-        state->registry.emplace_or_replace<Component::ReflectionProbeLoadingTag>(entity);
+        state->registry.remove<Component::ReflectionProbeLoadRequest>(entity);
+        state->registry.emplace_or_replace<Component::ReflectionProbeLoadingFlag>(entity);
     }
 }
 
@@ -362,8 +362,8 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         entt::entity owner;
     };
     Core::InlineVector<ClaimedProbeId, 64> claimedProbeIds{};
-    for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
-        if (probe.contentSource != Component::ReflectionProbeComponent::ContentSource::Baked || probe.probeId == 0) { continue; }
+    for (auto [entity, probe, runtime] : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
+        if (runtime.contentSource != Component::ReflectionProbeComponent::ContentSource::Baked || probe.probeId == 0) { continue; }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
             if (claimed.id == probe.probeId) {
@@ -373,7 +373,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         }
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
-    for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
+    for (auto [entity, probe, runtime] : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
         bool bCollision = probe.probeId == 0;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
             if (claimed.id == probe.probeId) {
@@ -395,13 +395,13 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
                 if (!bUnique) { fresh = state->rng(); }
             }
             probe.probeId = fresh;
-            if (probe.contentHandle.IsValid()) {
-                ctx->assetManager->UnloadCubemap(probe.contentHandle);
-                probe.contentHandle = Engine::CubemapHandle::INVALID;
+            if (runtime.contentHandle.IsValid()) {
+                ctx->assetManager->UnloadCubemap(runtime.contentHandle);
+                runtime.contentHandle = Engine::CubemapHandle::INVALID;
             }
-            probe.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
-            state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
+            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
+            state->registry.remove<Component::ReflectionProbeLoadingFlag>(entity);
+            state->registry.emplace_or_replace<Component::ReflectionProbeLoadRequest>(entity);
         }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -413,28 +413,28 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
 
-    for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
-        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) { continue; }
+    for (auto [entity, probe, runtime] : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
+        if (runtime.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) { continue; }
         if (!ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) { continue; }
-        if (probe.contentHandle.IsValid()) {
-            ctx->assetManager->UnloadCubemap(probe.contentHandle);
-            probe.contentHandle = Engine::CubemapHandle::INVALID;
+        if (runtime.contentHandle.IsValid()) {
+            ctx->assetManager->UnloadCubemap(runtime.contentHandle);
+            runtime.contentHandle = Engine::CubemapHandle::INVALID;
         }
-        state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
-        state->registry.emplace_or_replace<Component::ReflectionProbeLoadPendingTag>(entity);
+        state->registry.remove<Component::ReflectionProbeLoadingFlag>(entity);
+        state->registry.emplace_or_replace<Component::ReflectionProbeLoadRequest>(entity);
     }
 }
 
 void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeLoadingTag>();
+    auto view = state->registry.view<Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadingFlag>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, probe] : view.each()) {
+    for (const auto& [entity, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(runtime.contentHandle);
         if (!cubemap) {
             resolved.PushBack(entity);
             continue;
@@ -443,7 +443,7 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
         resolved.PushBack(entity);
     }
     for (const entt::entity entity : resolved) {
-        state->registry.remove<Component::ReflectionProbeLoadingTag>(entity);
+        state->registry.remove<Component::ReflectionProbeLoadingFlag>(entity);
     }
 }
 
@@ -456,7 +456,7 @@ static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity en
 static bool IsBakeStatic(const entt::registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
     const auto* transform = registry.try_get<Component::TransformComponent>(entity);
-    if (!transform || transform->mobility != Component::Mobility::Static || registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { return false; }
+    if (!transform || transform->mobility != Component::Mobility::Static || registry.all_of<Component::DynamicPhysicsBodyRuntime>(entity)) { return false; }
     const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
     return body == nullptr || body->motionType == Component::PhysicsMotionType::Static;
 }
@@ -478,7 +478,7 @@ void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity
 
     if (!runtime->range.IsValid()) { return; }
 
-    const bool bVisible = renderFlags->bVisible &&!state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+    const bool bVisible = renderFlags->bVisible &&!state->registry.all_of<Component::ProbeBakeHiddenFlag>(entity);
     const uint32_t flags = InstanceFlagsFrom(state->registry, entity, *renderFlags);
 
     const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
@@ -490,14 +490,14 @@ void EvaluateAllInstanceRenderStates(Engine::EngineState* state)
 {
     ZoneScoped;
     Engine::InstanceStore& store = state->instanceStore;
-    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
+    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenFlag>().size() > 0;
 
     for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
 
         bool bVisible = renderFlags.bVisible;
         if (bVisible && bAnyHideTags) {
-            bVisible = !state->registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+            bVisible = !state->registry.all_of<Component::ProbeBakeHiddenFlag>(entity);
         }
         const uint32_t flags = InstanceFlagsFrom(state->registry, entity, renderFlags);
 
@@ -523,7 +523,7 @@ static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& node
 
 void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::LightSurfacePendingTag>();
+    auto view = state->registry.view<Component::LightSurfaceRequest>();
     if (view.size() == 0) { return; }
 
     const Engine::Material* defaultMaterial = ctx->materialManager->GetMaterial(ctx->materialManager->GetDefaultMaterialID());
@@ -570,19 +570,19 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
         state->modelStore.SetModel(modelRange.offset, {m, m});
-        state->instanceStore.SetLightIndex(range.offset, areaLight ? areaLight->lightSlot : sphereLight->lightSlot);
+        state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(state->registry, entity));
         state->registry.emplace<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
         resolved.PushBack(entity);
     }
 
     for (const entt::entity entity : resolved) {
-        state->registry.remove<Component::LightSurfacePendingTag>(entity);
+        state->registry.remove<Component::LightSurfaceRequest>(entity);
     }
 }
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>();
+    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -739,7 +739,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         runtime->range = range;
         runtime->modelRange = modelRange;
         EvaluateInstanceRenderState(state, entity);
-        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
         resolved.PushBack(entity);
     }
 
@@ -753,13 +753,13 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::StaticMeshLoadingTag>(entity);
+        state->registry.remove<Component::StaticMeshLoadingFlag>(entity);
     }
 }
 
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadPendingTag>();
+    auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -773,14 +773,14 @@ void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::Engin
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::StaticMeshPrimitiveLoadPendingTag>(entity);
-        state->registry.emplace_or_replace<Component::StaticMeshPrimitiveLoadingTag>(entity);
+        state->registry.remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
+        state->registry.emplace_or_replace<Component::StaticMeshPrimitiveLoadingFlag>(entity);
     }
 }
 
 void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingTag>();
+    auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) { return; }
 
@@ -880,19 +880,19 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         runtime->range = range;
         runtime->modelRange = modelRange;
         EvaluateInstanceRenderState(state, entity);
-        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::StaticMeshPrimitiveLoadingTag>(entity);
+        state->registry.remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
     }
 }
 
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadPendingTag>();
+    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -905,14 +905,14 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::ProceduralMeshLoadPendingTag>(entity);
-        state->registry.emplace_or_replace<Component::ProceduralMeshLoadingTag>(entity);
+        state->registry.remove<Component::ProceduralMeshLoadRequest>(entity);
+        state->registry.emplace_or_replace<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>();
+    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -954,7 +954,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
-            state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
@@ -970,7 +970,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::ProceduralMeshLoadingTag>(entity);
+        state->registry.remove<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
@@ -1022,7 +1022,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
 
 void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadPendingTag>();
+    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1036,14 +1036,14 @@ void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::ModuleMeshLoadPendingTag>(entity);
-        state->registry.emplace_or_replace<Component::ModuleMeshLoadingTag>(entity);
+        state->registry.remove<Component::ModuleMeshLoadRequest>(entity);
+        state->registry.emplace_or_replace<Component::ModuleMeshLoadingFlag>(entity);
     }
 }
 
 void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadingTag>();
+    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1074,13 +1074,13 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
         EvaluateInstanceRenderState(state, entity);
-        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::ModuleMeshLoadingTag>(entity);
+        state->registry.remove<Component::ModuleMeshLoadingFlag>(entity);
     }
 }
 
@@ -1092,7 +1092,7 @@ static bool SplineHasGeometry(const Engine::SplineParams& params)
 
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadPendingTag>();
+    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1111,18 +1111,18 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::SplineMeshLoadPendingTag>(entity);
-        state->registry.emplace_or_replace<Component::SplineMeshLoadingTag>(entity);
+        state->registry.remove<Component::SplineMeshLoadRequest>(entity);
+        state->registry.emplace_or_replace<Component::SplineMeshLoadingFlag>(entity);
     }
     for (const entt::entity entity : emptied) {
-        state->registry.remove<Component::SplineMeshLoadPendingTag>(entity);
+        state->registry.remove<Component::SplineMeshLoadRequest>(entity);
         state->registry.remove<Component::MeshRuntime>(entity);
     }
 }
 
 void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>();
+    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1160,20 +1160,20 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
-            state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::SplineMeshLoadingTag>(entity);
+        state->registry.remove<Component::SplineMeshLoadingFlag>(entity);
     }
 }
 
 void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DGeneratePendingTag>();
+    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DGenerateRequest>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1190,7 +1190,7 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
             : Engine::StaticModelHandle::INVALID;
         if (handle.IsValid()) {
             StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
-            state->registry.emplace_or_replace<Component::Text3DLoadingTag>(entity);
+            state->registry.emplace_or_replace<Component::Text3DLoadingFlag>(entity);
         }
         else {
             state->registry.remove<Component::MeshRuntime>(entity);
@@ -1198,13 +1198,13 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
         done.PushBack(entity);
     }
     for (const entt::entity entity : done) {
-        state->registry.remove<Component::Text3DGeneratePendingTag>(entity);
+        state->registry.remove<Component::Text3DGenerateRequest>(entity);
     }
 }
 
 void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DLoadingTag>();
+    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1251,20 +1251,20 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
-            state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+            state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::Text3DLoadingTag>(entity);
+        state->registry.remove<Component::Text3DLoadingFlag>(entity);
     }
 }
 
 void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::TextFontPendingTag>();
+    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::TextFontRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1290,7 +1290,7 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::TextFontPendingTag>(entity);
+        state->registry.remove<Component::TextFontRequest>(entity);
     }
 }
 } // Engine

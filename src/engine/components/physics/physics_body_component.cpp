@@ -9,10 +9,10 @@
 
 namespace Engine::Component
 {
-void PhysicsBodyComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void PhysicsBodyRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& physics = registry.get<PhysicsBodyComponent>(entity);
+    auto& physics = registry.get<PhysicsBodyRuntime>(entity);
 
     if (physics.bodyID.IsValid()) {
         state->commandQueue.Push({.type = CommandType::BodyDestroy, .payload = {.bodyId = physics.bodyID.value}});

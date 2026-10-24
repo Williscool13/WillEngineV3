@@ -31,21 +31,27 @@ struct CaneLiftComponent
     static constexpr const char* COMPONENT_NAME = "CaneLiftComponent";
 
     float interval{2.5f};
-    /** Seconds until the next clip-on; authored to put the first one in step with a hook at the boot. */
-    float timer{0.0f};
+    /** Seconds until the first clip-on; authored to put it in step with a hook at the boot. */
+    float startDelay{0.0f};
     float releaseBoost{0.3f};
     float releaseTimeout{6.0f};
     float killHeight{-40.0f};
 
     WILL_REFLECT(CaneLiftComponent,
         WILL_FIELD(interval, .min = 0.1f, .speed = 0.01f),
-        WILL_FIELD(timer, .min = 0.0f, .speed = 0.01f),
+        WILL_FIELD(startDelay, .min = 0.0f, .speed = 0.01f),
         WILL_FIELD(releaseBoost, .speed = 0.01f),
         WILL_FIELD(releaseTimeout, .min = 0.1f, .speed = 0.1f),
         WILL_FIELD(killHeight, .speed = 0.1f))
 };
 
-/** A pooled cart of `lift`. Authored at the boot with the kinematic body it lifts with and the PathMover it runs once per trip. */
+struct CaneLiftRuntime
+{
+    /** Seconds until the next clip-on. */
+    float timer{0.0f};
+};
+
+/** A pooled cart of `lift`. Authored at the boot with the kinematic body it lifts with and the PathMover (autoStart off) it runs once per trip. */
 struct CaneCartComponent
 {
     static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
@@ -64,11 +70,9 @@ enum class CaneCartPhase : uint8_t
     Eaten,
 };
 
-/** Runtime copy of a cart's authored state, taken the first time the lift sees it, so every trip starts from the same pose, body and path. */
+/** `park` is the authored pose, taken the first time the lift sees the cart, so every trip starts from it. */
 struct CaneCartRuntime
 {
-    PathMoverComponent mover;
-    PhysicsBodyDesc body;
     Transform park;
     CaneCartPhase phase{CaneCartPhase::Idle};
     glm::vec3 releaseVelocity{0.0f};

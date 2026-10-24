@@ -21,7 +21,7 @@ namespace Engine
 static bool MovesItself(const EngineState* state, entt::entity entity)
 {
     const entt::registry& registry = state->registry;
-    if (registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { return true; }
+    if (registry.all_of<Component::DynamicPhysicsBodyRuntime>(entity)) { return true; }
     if (const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity); body && body->motionType != Component::PhysicsMotionType::Static) { return true; }
     for (const ComponentEntry& entry : state->componentRegistry.registry) {
         if (entry.bMovesEntity && entry.has(registry, entity)) { return true; }
@@ -59,7 +59,7 @@ MobilityAssignResult AssignMobility(EngineState* state)
     MobilityAssignResult result{};
     entt::registry& registry = state->registry;
 
-    for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraComponent>).each()) {
+    for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraRuntime>).each()) {
         if (transform.bMobilityLocked) {
             ++result.lockedCount;
         }
@@ -69,7 +69,7 @@ MobilityAssignResult AssignMobility(EngineState* state)
                 transform.mobility = mobility;
                 ++result.changedCount;
                 EvaluateInstanceRenderState(state, entity);
-                if (const auto* scene = registry.try_get<Component::SceneComponent>(entity)) {
+                if (const auto* scene = registry.try_get<Component::SceneRuntime>(entity)) {
                     MarkSceneModified(state, scene->sceneId);
                 }
             }
@@ -90,19 +90,19 @@ MobilityAssignResult AssignMobility(EngineState* state)
 void LockStaticTransforms(EngineState* state)
 {
     entt::registry& registry = state->registry;
-    for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraComponent>).each()) {
+    for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraRuntime>).each()) {
         // A Static physics body never moves while running either, whatever the mobility says, so its collider cannot be left behind.
         const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
         const bool bStaticBody = body != nullptr && body->motionType == Component::PhysicsMotionType::Static;
         if ((transform.mobility != Component::Mobility::Static && !bStaticBody) || IsMovedAtRuntime(state, entity)) { continue; }
-        registry.emplace_or_replace<Component::StaticTransformLockComponent>(entity, transform.translation, transform.rotation, transform.scale, false);
+        registry.emplace_or_replace<Component::StaticTransformLockRuntime>(entity, transform.translation, transform.rotation, transform.scale, false);
     }
 }
 
 void RejectStaticTransformWrites(EngineState* state)
 {
     entt::registry& registry = state->registry;
-    auto view = registry.view<Component::StaticTransformLockComponent, Component::TransformComponent, Component::DirtyTransformTag>();
+    auto view = registry.view<Component::StaticTransformLockRuntime, Component::TransformComponent, Component::DirtyTransformRequest>();
     for (const auto [entity, lock, transform] : view.each()) {
         if (!lock.bWarned) {
             lock.bWarned = true;
@@ -111,7 +111,7 @@ void RejectStaticTransformWrites(EngineState* state)
         transform.translation = lock.translation;
         transform.rotation = lock.rotation;
         transform.scale = lock.scale;
-        registry.remove<Component::DirtyTransformTag>(entity);
+        registry.remove<Component::DirtyTransformRequest>(entity);
     }
 }
 } // Engine

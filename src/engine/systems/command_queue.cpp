@@ -45,8 +45,8 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
             }
             case CommandType::PhysicsBodyRemove: {
                 if (state->registry.valid(command.entity)) {
-                    state->registry.remove<Component::PhysicsBodyComponent>(command.entity);
-                    state->registry.remove<Component::DynamicPhysicsBodyComponent>(command.entity);
+                    state->registry.remove<Component::PhysicsBodyRuntime>(command.entity);
+                    state->registry.remove<Component::DynamicPhysicsBodyRuntime>(command.entity);
                 }
                 break;
             }
@@ -80,9 +80,9 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
             }
             case CommandType::AreaLightConstruct: {
                 if (state->registry.valid(command.entity)) {
-                    if (auto* light = state->registry.try_get<Component::AreaLightComponent>(command.entity)) {
-                        if (light->lightSlot == AnalyticLightStore::INVALID_SLOT) {
-                            light->lightSlot = state->analyticLightStore.Allocate();
+                    if (auto* runtime = state->registry.try_get<Component::AreaLightRuntime>(command.entity)) {
+                        if (runtime->lightSlot == AnalyticLightStore::INVALID_SLOT) {
+                            runtime->lightSlot = state->analyticLightStore.Allocate();
                         }
                     }
                 }
@@ -90,9 +90,9 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
             }
             case CommandType::SphereLightConstruct: {
                 if (state->registry.valid(command.entity)) {
-                    if (auto* light = state->registry.try_get<Component::SphereLightComponent>(command.entity)) {
-                        if (light->lightSlot == AnalyticLightStore::INVALID_SLOT) {
-                            light->lightSlot = state->analyticLightStore.Allocate();
+                    if (auto* runtime = state->registry.try_get<Component::SphereLightRuntime>(command.entity)) {
+                        if (runtime->lightSlot == AnalyticLightStore::INVALID_SLOT) {
+                            runtime->lightSlot = state->analyticLightStore.Allocate();
                         }
                     }
                 }

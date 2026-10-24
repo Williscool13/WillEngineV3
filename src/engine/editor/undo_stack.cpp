@@ -73,7 +73,7 @@ void UndoStack::End(EngineState* state, StringID typeId)
         u.afterOffset = AppendSnapshot(*entry, state->registry, e, pending.data, u.afterSize);
         const bool bEntityChanged = u.beforeSize != u.afterSize || memcmp(pending.data.Data() + u.beforeOffset, pending.data.Data() + u.afterOffset, u.beforeSize) != 0;
         if (bEntityChanged) {
-            if (const auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+            if (const auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
                 MarkSceneModified(state, sc->sceneId);
             }
         }
@@ -111,7 +111,7 @@ void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore
         const uint32_t offset = bBefore ? u.beforeOffset : u.afterOffset;
         const uint32_t size = bBefore ? u.beforeSize : u.afterSize;
         entry->restore(state->registry, e, TextReader(record.data.Data() + offset, size));
-        if (auto* sc = state->registry.try_get<Component::SceneComponent>(e)) {
+        if (auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
             MarkSceneModified(state, sc->sceneId);
         }
     }

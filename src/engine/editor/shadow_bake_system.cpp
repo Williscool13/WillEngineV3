@@ -60,12 +60,12 @@ static bool LightForBake(EngineState* state, entt::entity entity, uint64_t& outS
 
     uint32_t slot = AnalyticLightStore::INVALID_SLOT;
     if (const auto* area = registry.try_get<Component::AreaLightComponent>(entity); area && area->shadowMode == Component::LightShadowMode::Baked) {
-        slot = area->lightSlot;
+        slot = Component::FindLightSlot(registry, entity);
         outShadowId = area->shadowId;
         outResolution = Component::ShadowBakeResolutionPixels(area->shadowBakeResolution);
     }
     else if (const auto* sphere = registry.try_get<Component::SphereLightComponent>(entity); sphere && sphere->shadowMode == Component::LightShadowMode::Baked) {
-        slot = sphere->lightSlot;
+        slot = Component::FindLightSlot(registry, entity);
         outShadowId = sphere->shadowId;
         outResolution = Component::ShadowBakeResolutionPixels(sphere->shadowBakeResolution);
     }

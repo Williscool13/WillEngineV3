@@ -79,6 +79,7 @@ void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
 
 void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity entity)
 {
+    if (registry.all_of<PhysicsSuspendedFlag>(entity)) { return; }
     auto& component = registry.get<PhysicsBodyDesc>(entity);
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = registry.ctx().get<Engine::EngineState*>();
@@ -141,18 +142,18 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
         }
     }
     if (bHasMeshShape) {
-        registry.remove<PhysicsMeshLoadingTag>(entity);
-        registry.emplace_or_replace<PendingPhysicsMeshTag>(entity);
+        registry.remove<PhysicsMeshLoadingFlag>(entity);
+        registry.emplace_or_replace<PhysicsMeshRequest>(entity);
     }
 
-    registry.emplace_or_replace<PendingPhysicsShapeCreationTag>(entity);
-    registry.emplace_or_replace<PendingPhysicsBodyCreationTag>(entity);
+    registry.emplace_or_replace<PhysicsShapeCreationRequest>(entity);
+    registry.emplace_or_replace<PhysicsBodyCreationRequest>(entity);
 }
 
 void PhysicsBodyDesc::RequestRebuild(entt::registry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
-    registry.remove<PendingPhysicsMeshTag, PhysicsMeshLoadingTag, PendingPhysicsShapeCreationTag, PendingPhysicsBodyCreationTag>(entity);
+    registry.remove<PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
@@ -163,6 +164,21 @@ void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
     registry.remove<PhysicsShapeRuntime>(entity);
     auto* state = registry.ctx().get<EngineState*>();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
+}
+
+void PhysicsBodyDesc::Suspend(entt::registry& registry, entt::entity entity)
+{
+    ReleaseColliders(registry, entity);
+    registry.remove<PhysicsShapeRuntime, PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
+    registry.emplace_or_replace<PhysicsSuspendedFlag>(entity);
+    auto* state = registry.ctx().get<EngineState*>();
+    state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
+}
+
+void PhysicsBodyDesc::Resume(entt::registry& registry, entt::entity entity)
+{
+    registry.remove<PhysicsSuspendedFlag>(entity);
+    RequestRebuild(registry, entity);
 }
 }
 
@@ -447,7 +463,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         auto renderGizmo = [&](int i, PhysicsShapeDesc& shape) {
             if (editShapeIdx != i || !transform || !hasGizmoClaim) return;
 
-            const auto& world = registry.get<WorldTransformComponent>(entity);
+            const auto& world = registry.get<WorldTransformRuntime>(entity);
             const Mat4 entityMat = glm::translate(Mat4(1.0f), world.translation) * glm::mat4_cast(world.rotation);
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 shapeCenter = Vec3(entityMat * Vec4(shape.offset, 1.0f));

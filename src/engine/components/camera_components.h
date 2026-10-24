@@ -10,7 +10,7 @@
 
 namespace Engine::Component
 {
-struct CameraComponent
+struct CameraRuntime
 {
     Core::ViewData currentViewData;
     Core::ViewData previousViewData;

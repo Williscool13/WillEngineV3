@@ -75,7 +75,7 @@ static void TickQuietFrames(EngineContext* ctx, EngineState* state)
 
 static void PostUpdateCleanup(EngineContext* ctx, EngineState* state)
 {
-    state->registry.clear<Component::DirtyTransformTag>();
+    state->registry.clear<Component::DirtyTransformRequest>();
     ctx->physicsWorld->ClearCollisionEvents();
     ctx->physicsWorld->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();
@@ -238,22 +238,22 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     });
     graph.Add("GatherLights", &GatherLights, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenTag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::WorldTransformComponent>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::WorldTransformRuntime>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
         .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid, "instanceStore.boundsChanges"_sid},
     });
     graph.Add("GatherTextRenderables", &GatherTextRenderables, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformComponent>(), TypeSID<Component::TextFontPendingTag>(), TypeSID<Component::StableIdComponent>(), "assetManager"_sid, "materialManager"_sid},
+        .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), "assetManager"_sid, "materialManager"_sid},
         .writes = {"viewFamily.text"_sid},
     });
     graph.Add("GatherReflectionProbes", &GatherReflectionProbes, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::WorldTransformComponent>(), "assetManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::WorldTransformRuntime>(), "assetManager"_sid, "engineConfig"_sid},
         .writes = {"viewFamily.probes"_sid},
     });
     graph.Add("GatherLocalDDGIVolumes", &GatherLocalDDGIVolumes, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::LocalDDGIVolumeComponent>(), TypeSID<Component::WorldTransformComponent>(), "engineConfig"_sid},
+        .reads = {TypeSID<Component::LocalDDGIVolumeComponent>(), TypeSID<Component::WorldTransformRuntime>(), "engineConfig"_sid},
         .writes = {"viewFamily.ddgiVolumes"_sid},
     });
     graph.Add("ApplyPostProcessVolumes", &ApplyPostProcessVolumes);

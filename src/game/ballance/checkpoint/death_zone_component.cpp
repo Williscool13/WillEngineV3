@@ -10,7 +10,7 @@
 
 namespace Ballance
 {
-Engine::ComponentEditorResult Component::DeathZoneComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::DeathZoneTag::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Death Zone", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

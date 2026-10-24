@@ -22,18 +22,19 @@ void UpdatePathMovers(EngineContext* ctx, EngineState* state)
     ZoneScoped;
     const float dt = state->timeFrame->deltaTime;
 
-    auto view = state->registry.view<Component::PathMoverComponent, Component::TransformComponent>();
-    for (auto entity : view) {
-        auto& mover = view.get<Component::PathMoverComponent>(entity);
-        auto& transform = view.get<Component::TransformComponent>(entity);
-
+    for (const auto& [entity, mover, transform] : state->registry.view<Component::PathMoverComponent, Component::TransformComponent>().each()) {
         if (mover.spline.points.Size() < 2) {
             continue;
         }
+        auto* run = state->registry.try_get<Component::PathMoverRuntime>(entity);
+        if (!run) {
+            if (!mover.bAutoStart) { continue; }
+            run = &state->registry.emplace<Component::PathMoverRuntime>(entity, Component::PathMoverRuntime::AtStart(mover));
+        }
 
-        if (mover.waitTimer > 0.0f) {
-            mover.waitTimer -= dt;
-            state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+        if (run->waitTimer > 0.0f) {
+            run->waitTimer -= dt;
+            state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
             continue;
         }
 
@@ -42,29 +43,29 @@ void UpdatePathMovers(EngineContext* ctx, EngineState* state)
         const auto pointCount = static_cast<int32_t>(mover.spline.points.Size());
 
         // Finished the wait
-        if (mover.bIsWaiting) {
+        if (run->bIsWaiting) {
             switch (mover.loopMode) {
                 case Component::PathLoopMode::Loop:
-                    if (mover.currentSegment >= segmentMax + 1) {
-                        mover.currentSegment = 0;
+                    if (run->currentSegment >= segmentMax + 1) {
+                        run->currentSegment = 0;
                     }
                     break;
                 case Component::PathLoopMode::PingPong:
-                    if (mover.currentSegment >= pointCount - 1) {
-                        mover.direction = -1;
+                    if (run->currentSegment >= pointCount - 1) {
+                        run->direction = -1;
                     }
-                    else if (mover.currentSegment <= 0) {
-                        mover.direction = 1;
+                    else if (run->currentSegment <= 0) {
+                        run->direction = 1;
                     }
                     break;
                 case Component::PathLoopMode::Once:
                 default:
                     break;
             }
-            mover.bIsWaiting = false;
+            run->bIsWaiting = false;
         }
 
-        int32_t targetSegment = mover.currentSegment + mover.direction;
+        int32_t targetSegment = run->currentSegment + run->direction;
         if (targetSegment >= pointCount) {
             targetSegment = 0;
         }
@@ -74,29 +75,29 @@ void UpdatePathMovers(EngineContext* ctx, EngineState* state)
 
         glm::vec3 oldPos;
         glm::quat oldRot;
-        Component::EvaluatePath(mover.spline, mover.pointSettings, mover.currentSegment, targetSegment, mover.progress, oldPos, oldRot);
+        Component::EvaluatePath(mover.spline, mover.pointSettings, run->currentSegment, targetSegment, run->progress, oldPos, oldRot);
 
         const float speed = (static_cast<size_t>(targetSegment) < mover.pointSettings.Size()) ? mover.pointSettings[targetSegment].speed : 1.0f;
         const float wait = (static_cast<size_t>(targetSegment) < mover.pointSettings.Size()) ? mover.pointSettings[targetSegment].waitTime : 0.0f;
 
-        mover.progress += speed * (dt - mover.waitTimer);
-        mover.waitTimer = 0.0f;
+        run->progress += speed * (dt - run->waitTimer);
+        run->waitTimer = 0.0f;
 
-        if (mover.progress > 1.0f) {
-            mover.bIsWaiting = true;
-            mover.waitTimer = wait - (mover.progress - 1.0f) / speed;
-            mover.currentSegment = targetSegment;
-            mover.progress = 0.0f;
+        if (run->progress > 1.0f) {
+            run->bIsWaiting = true;
+            run->waitTimer = wait - (run->progress - 1.0f) / speed;
+            run->currentSegment = targetSegment;
+            run->progress = 0.0f;
         }
 
         glm::vec3 newPos;
         glm::quat newRot;
-        Component::EvaluatePath(mover.spline, mover.pointSettings, mover.currentSegment, targetSegment, mover.progress, newPos, newRot);
+        Component::EvaluatePath(mover.spline, mover.pointSettings, run->currentSegment, targetSegment, run->progress, newPos, newRot);
 
         const glm::quat anchorRot = transform.rotation * glm::inverse(oldRot);
         transform.translation += anchorRot * (newPos - oldPos);
         transform.rotation = anchorRot * newRot;
-        state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+        state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
     }
 }
 
@@ -105,11 +106,7 @@ void UpdateRotateInPlace(EngineContext* ctx, EngineState* state)
     ZoneScoped;
     const float dt = state->timeFrame->deltaTime;
 
-    auto view = state->registry.view<Component::RotateInPlaceComponent, Component::TransformComponent>();
-    for (auto entity : view) {
-        auto& rotator = view.get<Component::RotateInPlaceComponent>(entity);
-        auto& transform = view.get<Component::TransformComponent>(entity);
-
+    for (const auto& [entity, rotator, transform] : state->registry.view<Component::RotateInPlaceComponent, Component::TransformComponent>().each()) {
         const float axisLen = glm::length(rotator.axis);
         if (axisLen < DIVISION_EPSILON || rotator.speedDegrees == 0.0f) {
             continue;
@@ -125,7 +122,7 @@ void UpdateRotateInPlace(EngineContext* ctx, EngineState* state)
             transform.rotation = glm::normalize(transform.rotation * delta);
         }
 
-        state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+        state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
     }
 }
 } // Engine

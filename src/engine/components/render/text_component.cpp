@@ -27,7 +27,7 @@ void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::en
         state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
         runtime.fontHandle = {};
     }
-    registry.remove<TextFontPendingTag>(entity);
+    registry.remove<TextFontRequest>(entity);
 }
 
 void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
@@ -39,7 +39,7 @@ void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::enti
         runtime.modelRange = state->modelStore.Allocate(1);
     }
     if (comp.fontId.IsValid()) {
-        registry.emplace_or_replace<TextFontPendingTag>(entity);
+        registry.emplace_or_replace<TextFontRequest>(entity);
     }
 }
 
@@ -58,8 +58,8 @@ void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
@@ -67,8 +67,8 @@ void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
     auto& comp = registry.get<TextComponent>(entity);
     UnloadTextComponent(comp, registry, entity);
     registry.remove<TextRuntime>(entity);
-    registry.remove<RenderTransformComponent>(entity);
-    registry.remove<MultiframeDirtyComponent>(entity);
+    registry.remove<RenderTransformRuntime>(entity);
+    registry.remove<MultiframeDirtyRequest>(entity);
 }
 
 
@@ -78,7 +78,7 @@ void TextComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     const auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
     const Engine::Font* font = runtime.fontHandle.IsValid() ? ctx->assetManager->GetFont(runtime.fontHandle) : nullptr;
-    const bool bFontCurrent = (font != nullptr && font->fontId == comp.fontId) || registry.all_of<TextFontPendingTag>(entity);
+    const bool bFontCurrent = (font != nullptr && font->fontId == comp.fontId) || registry.all_of<TextFontRequest>(entity);
     if (!bFontCurrent) {
         UnloadTextComponent(comp, registry, entity);
         LoadTextComponent(comp, registry, entity);

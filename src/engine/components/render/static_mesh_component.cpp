@@ -33,23 +33,23 @@ namespace Engine::Component
 void UnloadStaticMesh(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
-    registry.remove<StaticMeshLoadPendingTag>(entity);
-    registry.remove<StaticMeshLoadingTag>(entity);
+    registry.remove<StaticMeshLoadRequest>(entity);
+    registry.remove<StaticMeshLoadingFlag>(entity);
 }
 
 void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity)
 {
-    registry.remove<StaticMeshLoadingTag>(entity);
+    registry.remove<StaticMeshLoadingFlag>(entity);
     if (component.modelId.IsValid()) {
-        registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);
+        registry.emplace_or_replace<StaticMeshLoadRequest>(entity);
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void PruneStaticMeshOverrides(entt::registry& registry, entt::entity entity)
@@ -95,7 +95,7 @@ void StaticMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
 void StaticMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     UnloadStaticMesh(registry, entity);
-    registry.remove<RenderTransformComponent>(entity);
+    registry.remove<RenderTransformRuntime>(entity);
     registry.remove<StaticMeshOverridesComponent>(entity);
 }
 }
@@ -117,10 +117,10 @@ bool Component::StaticMeshOverridesComponent::CanAdd(const entt::registry& regis
 void Component::StaticMeshComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
     const auto& component = registry.get<StaticMeshComponent>(entity);
-    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+    if (auto* rt = registry.try_get<RenderTransformRuntime>(entity)) {
         rt->renderOffset = component.renderOffset;
         rt->renderRotation = component.renderRotation;
-        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -129,11 +129,11 @@ void Component::StaticMeshComponent::OnEditCommit(entt::registry& registry, entt
     auto& component = registry.get<StaticMeshComponent>(entity);
     if (!component.modelId.IsValid()) {
         UnloadStaticMesh(registry, entity);
-        registry.remove<RenderTransformComponent>(entity);
-        registry.remove<MultiframeDirtyComponent>(entity);
+        registry.remove<RenderTransformRuntime>(entity);
+        registry.remove<MultiframeDirtyRequest>(entity);
         return;
     }
-    if (!registry.all_of<RenderTransformComponent>(entity)) {
+    if (!registry.all_of<RenderTransformRuntime>(entity)) {
         LoadStaticMesh(component, registry, entity);
         return;
     }
@@ -144,18 +144,18 @@ void Component::StaticMeshComponent::OnEditCommit(entt::registry& registry, entt
         current = ctx->assetManager->GetModel(runtime->pendingModelHandle.IsValid() ? runtime->pendingModelHandle : runtime->modelHandle);
     }
     if (!current || current->modelId != component.modelId) {
-        registry.remove<StaticMeshLoadingTag>(entity);
-        registry.emplace_or_replace<StaticMeshLoadPendingTag>(entity);
+        registry.remove<StaticMeshLoadingFlag>(entity);
+        registry.emplace_or_replace<StaticMeshLoadRequest>(entity);
     }
     else {
-        registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+        registry.emplace_or_replace<StaticMeshLoadingFlag>(entity);
     }
     OnEditPreview(registry, entity);
 }
 
 void Component::StaticMeshOverridesComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<StaticMeshLoadingTag>(entity);
+    registry.emplace_or_replace<StaticMeshLoadingFlag>(entity);
     PruneStaticMeshOverrides(registry, entity);
 }
 
@@ -194,7 +194,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
     if (open) {
         if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_ALL)) {
-            edit.ForEachTarget<StaticMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<StaticMeshLoadingTag>(e); });
+            edit.ForEachTarget<StaticMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<StaticMeshLoadingFlag>(e); });
         }
 
         auto* runtime = registry.try_get<MeshRuntime>(entity);
@@ -238,7 +238,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         }
 
         if (!runtime || !runtime->modelHandle.IsValid()) {
-            if (registry.any_of<StaticMeshLoadPendingTag, StaticMeshLoadingTag>(entity)) {
+            if (registry.any_of<StaticMeshLoadRequest, StaticMeshLoadingFlag>(entity)) {
                 ImGui::Text("Loading Model...");
                 return finish({.bRequestRemoval = remove});
             }
@@ -467,7 +467,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
     if (bEditingOffset) {
         auto* transform = registry.try_get<TransformComponent>(entity);
         if (transform) {
-            const auto& world = registry.get<WorldTransformComponent>(entity);
+            const auto& world = registry.get<WorldTransformRuntime>(entity);
             const Mat4 entityMat = GetMatrix(world);
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 pivotWorld = Vec3(entityMat * Vec4(component.renderOffset, 1.0f));

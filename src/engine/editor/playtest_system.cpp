@@ -44,26 +44,26 @@ static constexpr int32_t SAVE_TIMEOUT_FRAMES = 300;
 
 size_t CountLoadingEntities(Engine::EngineState* state)
 {
-    return state->registry.view<Component::StaticMeshLoadingTag>().size() +
-           state->registry.view<Component::StaticMeshPrimitiveLoadingTag>().size() +
-           state->registry.view<Component::ProceduralMeshLoadingTag>().size() +
-           state->registry.view<Component::SplineMeshLoadingTag>().size() +
-           state->registry.view<Component::ModuleMeshLoadingTag>().size() +
-           state->registry.view<Component::Text3DLoadingTag>().size() +
-           state->registry.view<Component::ReflectionProbeLoadingTag>().size() +
-           state->registry.view<Component::PhysicsMeshLoadingTag>().size() +
-           state->registry.view<Component::StaticMeshLoadPendingTag>().size() +
-           state->registry.view<Component::StaticMeshPrimitiveLoadPendingTag>().size() +
-           state->registry.view<Component::ProceduralMeshLoadPendingTag>().size() +
-           state->registry.view<Component::SplineMeshLoadPendingTag>().size() +
-           state->registry.view<Component::ModuleMeshLoadPendingTag>().size() +
-           state->registry.view<Component::Text3DGeneratePendingTag>().size() +
-           state->registry.view<Component::ReflectionProbeLoadPendingTag>().size() +
-           state->registry.view<Component::PendingPhysicsMeshTag>().size() +
-           state->registry.view<Component::PendingPhysicsShapeCreationTag>().size() +
-           state->registry.view<Component::PendingPhysicsBodyCreationTag>().size() +
-           state->registry.view<Component::LightSurfacePendingTag>().size() +
-           state->registry.view<Component::TextFontPendingTag>().size();
+    return state->registry.view<Component::StaticMeshLoadingFlag>().size() +
+           state->registry.view<Component::StaticMeshPrimitiveLoadingFlag>().size() +
+           state->registry.view<Component::ProceduralMeshLoadingFlag>().size() +
+           state->registry.view<Component::SplineMeshLoadingFlag>().size() +
+           state->registry.view<Component::ModuleMeshLoadingFlag>().size() +
+           state->registry.view<Component::Text3DLoadingFlag>().size() +
+           state->registry.view<Component::ReflectionProbeLoadingFlag>().size() +
+           state->registry.view<Component::PhysicsMeshLoadingFlag>().size() +
+           state->registry.view<Component::StaticMeshLoadRequest>().size() +
+           state->registry.view<Component::StaticMeshPrimitiveLoadRequest>().size() +
+           state->registry.view<Component::ProceduralMeshLoadRequest>().size() +
+           state->registry.view<Component::SplineMeshLoadRequest>().size() +
+           state->registry.view<Component::ModuleMeshLoadRequest>().size() +
+           state->registry.view<Component::Text3DGenerateRequest>().size() +
+           state->registry.view<Component::ReflectionProbeLoadRequest>().size() +
+           state->registry.view<Component::PhysicsMeshRequest>().size() +
+           state->registry.view<Component::PhysicsShapeCreationRequest>().size() +
+           state->registry.view<Component::PhysicsBodyCreationRequest>().size() +
+           state->registry.view<Component::LightSurfaceRequest>().size() +
+           state->registry.view<Component::TextFontRequest>().size();
 }
 
 static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& outEvents, Core::InlineString<128>& outName)
@@ -155,10 +155,10 @@ static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& 
 /** bCut drops last frame's view so the move reads as a cut (zero camera motion vectors); false keeps it, so a cam event per frame renders as real camera motion. */
 static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation, bool bCut = true)
 {
-    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
+    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraRuntime, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) { return; }
-    auto [camera, transform] = camView.get<Component::CameraComponent, Component::TransformComponent>(camEntity);
+    auto [camera, transform] = camView.get<Component::CameraRuntime, Component::TransformComponent>(camEntity);
     transform.translation = translation;
     transform.rotation = rotation;
     const float aspect = static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight);

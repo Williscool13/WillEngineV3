@@ -22,14 +22,14 @@
 
 void Engine::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-    registry.emplace_or_replace<WorldTransformComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.emplace_or_replace<WorldTransformRuntime>(entity);
 }
 
 void Engine::Component::TransformComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    registry.remove<MultiframeDirtyComponent>(entity);
-    registry.remove<WorldTransformComponent>(entity);
+    registry.remove<MultiframeDirtyRequest>(entity);
+    registry.remove<WorldTransformRuntime>(entity);
 }
 
 Transform Engine::Component::ComputeWorldTransform(const entt::registry& registry, entt::entity entity)
@@ -44,12 +44,12 @@ Transform Engine::Component::ComputeWorldTransform(const entt::registry& registr
 
 void Engine::Component::TransformComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<DirtyTransformTag>(entity);
+    registry.emplace_or_replace<DirtyTransformRequest>(entity);
 }
 
 void Engine::Component::TransformComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<DirtyTransformTag>(entity);
+    registry.emplace_or_replace<DirtyTransformRequest>(entity);
     Engine::EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
 }
 

@@ -94,27 +94,39 @@ struct PathMoverComponent
     Engine::Spline spline;
     Core::InlineVector<PathPointSettings, Engine::Spline::MaxPoints> pointSettings;
     PathLoopMode loopMode{PathLoopMode::PingPong};
+    /** Where on the path the entity's authored pose sits: the segment it leaves, how far along it, and seconds it waits there first. */
+    int32_t startSegment{0};
+    float startProgress{0.0f};
+    float startWait{0.0f};
+    /** Off for a mover something else starts by emplacing its PathMoverRuntime. */
+    bool bAutoStart{true};
 
-    // Runtime state
+    WILL_REFLECT(PathMoverComponent,
+        WILL_FIELD(spline),
+        WILL_FIELD(pointSettings),
+        WILL_FIELD(loopMode),
+        WILL_FIELD(startSegment),
+        WILL_FIELD(startProgress),
+        WILL_FIELD(startWait),
+        WILL_FIELD(bAutoStart, .key = "autoStart"))
+
+    static void Sanitize(PathMoverComponent& comp);
+
+    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+};
+
+struct PathMoverRuntime
+{
     int32_t currentSegment{0};
     float progress{0.0f};
     int32_t direction{1};
     bool bIsWaiting{false};
     float waitTimer{0.0f};
 
-    WILL_REFLECT(PathMoverComponent,
-        WILL_FIELD(spline),
-        WILL_FIELD(pointSettings),
-        WILL_FIELD(loopMode),
-        WILL_FIELD(currentSegment),
-        WILL_FIELD(progress),
-        WILL_FIELD(direction),
-        WILL_FIELD(bIsWaiting),
-        WILL_FIELD(waitTimer))
-
-    static void Sanitize(PathMoverComponent& comp);
-
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static PathMoverRuntime AtStart(const PathMoverComponent& mover)
+    {
+        return {.currentSegment = mover.startSegment, .progress = mover.startProgress, .bIsWaiting = mover.startWait > 0.0f, .waitTimer = mover.startWait};
+    }
 };
 
 float ApplyEasing(EasingType type, float t);

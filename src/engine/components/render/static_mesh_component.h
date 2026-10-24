@@ -78,11 +78,11 @@ struct StaticMeshOverridesComponent
 };
 
 /** Load requested; StartStaticMeshLoads kicks the model load (when not frozen). */
-struct StaticMeshLoadPendingTag
+struct StaticMeshLoadRequest
 {};
 
 /** Model load in flight; ResolveStaticMeshLoads binds primitives once it finishes. */
-struct StaticMeshLoadingTag
+struct StaticMeshLoadingFlag
 {};
 
 void UnloadStaticMesh(entt::registry& registry, entt::entity entity);

@@ -52,13 +52,6 @@ struct CrusherComponent
     /** Seconds parked at the top before another crate can start a cycle. */
     float restTime{2.0f};
 
-    CrusherPhase phase{CrusherPhase::Waiting};
-    float phaseTime{0.0f};
-    /** Metres the head is below its parked position. */
-    float drop{0.0f};
-    /** Metres the pusher is out from its home position. */
-    float pushed{0.0f};
-
     WILL_REFLECT(CrusherComponent,
         WILL_FIELD(head),
         WILL_FIELD(arm),
@@ -72,11 +65,17 @@ struct CrusherComponent
         WILL_FIELD(pushDistance, .min = 0.0f, .speed = 0.05f),
         WILL_FIELD(pushSpeed, .min = 0.01f, .speed = 0.1f),
         WILL_FIELD(returnSpeed, .min = 0.01f, .speed = 0.1f),
-        WILL_FIELD(restTime, .min = 0.0f, .speed = 0.05f),
-        WILL_FIELD(phase),
-        WILL_FIELD(phaseTime),
-        WILL_FIELD(drop),
-        WILL_FIELD(pushed))
+        WILL_FIELD(restTime, .min = 0.0f, .speed = 0.05f))
+};
+
+struct CrusherRuntime
+{
+    CrusherPhase phase{CrusherPhase::Waiting};
+    float phaseTime{0.0f};
+    /** Metres the head is below its parked position. */
+    float drop{0.0f};
+    /** Metres the pusher is out from its home position. */
+    float pushed{0.0f};
 };
 
 /**
@@ -92,13 +91,16 @@ struct ThroatValveComponent
     int32_t openShards{320};
     float minOpenSeconds{3.0f};
 
-    bool bClosed{false};
-    float openTime{0.0f};
-
     WILL_REFLECT(ThroatValveComponent,
         WILL_FIELD(closeShards),
         WILL_FIELD(openShards),
         WILL_FIELD(minOpenSeconds, .min = 0.0f, .speed = 0.1f))
+};
+
+struct ThroatValveRuntime
+{
+    bool bClosed{false};
+    float openTime{0.0f};
 };
 
 /**
@@ -116,14 +118,17 @@ struct CrateFeederComponent
     float maxRadius{28.0f};
     int32_t maxIntact{48};
 
-    float timer{0.0f};
-
     WILL_REFLECT(CrateFeederComponent,
         WILL_FIELD(prefabId),
         WILL_FIELD(cratesPerSecond, .min = 0.0f, .speed = 0.05f),
         WILL_FIELD(minRadius, .min = 0.0f, .speed = 0.1f),
         WILL_FIELD(maxRadius, .min = 0.0f, .speed = 0.1f),
         WILL_FIELD(maxIntact))
+};
+
+struct CrateFeederRuntime
+{
+    float timer{0.0f};
 };
 }
 

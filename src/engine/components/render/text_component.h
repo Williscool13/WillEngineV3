@@ -61,9 +61,9 @@ struct TextRuntime
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
-struct TextFontPendingTag
+struct TextFontRequest
 {
-    static constexpr const char* COMPONENT_NAME = "TextFontPendingTag";
+    static constexpr const char* COMPONENT_NAME = "TextFontRequest";
 };
 
 void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);

@@ -213,11 +213,10 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
     switch (phase) {
         case Phase::Idle:
         {
-            for (auto [entity, probe] : state->registry.view<Component::ReflectionProbeComponent>().each()) {
-                if (!probe.bBakeRequested) { continue; }
-                probe.bBakeRequested = false;
+            for (const entt::entity entity : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeBakeRequest>()) {
                 if (!bakeQueue.Contains(entity) && !bakeQueue.IsFull()) { bakeQueue.PushBack(entity); }
             }
+            state->registry.clear<Component::ReflectionProbeBakeRequest>();
 
             if (state->shadowBake.IsBusy()) { break; }
 
@@ -267,7 +266,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
             settleFrames = glm::max(1, state->projectConfig.probeBake.settleFrames);
 
-            const Component::WorldTransformComponent* worldTransform = state->registry.try_get<Component::WorldTransformComponent>(probeEntity);
+            const Component::WorldTransformRuntime* worldTransform = state->registry.try_get<Component::WorldTransformRuntime>(probeEntity);
             const Component::ReflectionProbeComponent* probe = state->registry.try_get<Component::ReflectionProbeComponent>(probeEntity);
             if (!worldTransform || !probe) {
                 Cancel(ctx, state);
@@ -462,14 +461,15 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 if (!state->registry.valid(awaited.entity) || !state->registry.all_of<Component::ReflectionProbeComponent>(awaited.entity)) { continue; }
                 stillPending.PushBack(awaited);
 
-                const Component::ReflectionProbeComponent& probe = state->registry.get<Component::ReflectionProbeComponent>(awaited.entity);
+                const auto* runtime = state->registry.try_get<Component::ReflectionProbeRuntime>(awaited.entity);
                 const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{awaited.probeId});
                 bool bReady = info != nullptr
                     && info->contentVersion >= awaited.expectedVersion
-                    && probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked
-                    && probe.contentHandle.IsValid();
+                    && runtime != nullptr
+                    && runtime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked
+                    && runtime->contentHandle.IsValid();
                 if (bReady) {
-                    const Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+                    const Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(runtime->contentHandle);
                     bReady = cubemap != nullptr && cubemap->loadState == Render::Cubemap::LoadState::Loaded;
                 }
                 if (!bReady) { bAllReady = false; }

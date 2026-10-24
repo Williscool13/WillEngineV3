@@ -44,11 +44,11 @@ struct ProceduralMeshComponent
 };
 
 /** Generation requested; StartProceduralMeshLoads kicks the model build. */
-struct ProceduralMeshLoadPendingTag
+struct ProceduralMeshLoadRequest
 {};
 
 /** Model build in flight; ResolveProceduralMeshLoads binds it once finished. */
-struct ProceduralMeshLoadingTag
+struct ProceduralMeshLoadingFlag
 {};
 
 void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);

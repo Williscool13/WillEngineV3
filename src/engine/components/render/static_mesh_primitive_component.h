@@ -48,10 +48,10 @@ struct StaticMeshPrimitiveComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
-struct StaticMeshPrimitiveLoadPendingTag
+struct StaticMeshPrimitiveLoadRequest
 {};
 
-struct StaticMeshPrimitiveLoadingTag
+struct StaticMeshPrimitiveLoadingFlag
 {};
 
 void UnloadStaticMeshPrimitive(entt::registry& registry, entt::entity entity);

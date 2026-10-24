@@ -27,7 +27,7 @@ struct EngineState;
 
 namespace Engine::Component
 {
-struct MultiframeDirtyComponent
+struct MultiframeDirtyRequest
 {
     // FRAME_BUFFER_COUNT to update all 3 host buffers. +1 for prevModeLmatrix
     int32_t counter{Core::FRAME_BUFFER_COUNT + 1};
@@ -73,9 +73,9 @@ enum RenderFlagToggle : uint32_t
  */
 bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles);
 
-struct RenderTransformComponent
+struct RenderTransformRuntime
 {
-    static constexpr const char* COMPONENT_NAME = "RenderTransformComponent";
+    static constexpr const char* COMPONENT_NAME = "RenderTransformRuntime";
 
     glm::mat4 modelMatrix;
     glm::mat4 previousMatrix;

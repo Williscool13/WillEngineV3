@@ -23,7 +23,7 @@ static constexpr float LIGHT_PI = 3.14159265358979f;
 
 static Vec3 EditorLightScale(entt::registry& registry, entt::entity entity)
 {
-    const auto* world = registry.try_get<Component::WorldTransformComponent>(entity);
+    const auto* world = registry.try_get<Component::WorldTransformRuntime>(entity);
     return world ? world->scale : Vec3{1.0f, 1.0f, 1.0f};
 }
 
@@ -86,34 +86,35 @@ static void ClaimShadowId(entt::registry& registry, entt::entity entity, Compone
 
 void Component::AreaLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void Component::AreaLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
     auto& light = registry.get<AreaLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
-    registry.emplace_or_replace<LightSurfacePendingTag>(entity);
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<LightSurfaceRequest>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void Component::SphereLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void Component::SphereLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
     auto& light = registry.get<SphereLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
-static void DrawShadowBakeControls(EditContext& edit, uint32_t lightSlot, uint64_t shadowId)
+static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
 {
     entt::registry& registry = edit.Registry();
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    const uint32_t lightSlot = FindLightSlot(registry, edit.Primary());
 
     const AssetManager::ShadowMapInfo* info = ctx->assetManager->GetShadowMapInfo(shadowId);
     if (info == nullptr) {
@@ -197,11 +198,11 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
             EditWidgets::Combo(edit, "Bake Resolution##al", &AreaLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
             EditWidgets::Checkbox(edit, "Moving Object Shadows##al", &AreaLightComponent::bMovingObjectShadows);
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Movable objects inside the light still cast shadows, from a small dynamic map drawn only while something moves in range. Off: baked shadows only, no runtime cost."); }
-            DrawShadowBakeControls(edit, comp.lightSlot, comp.shadowId);
+            DrawShadowBakeControls(edit, comp.shadowId);
         }
     }
 
-    const auto* transform = registry.try_get<WorldTransformComponent>(entity);
+    const auto* transform = registry.try_get<WorldTransformRuntime>(entity);
     if (transform && bEditing) {
         const auto& comp = edit.Get<AreaLightComponent>();
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -307,26 +308,31 @@ void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& light = registry.get<AreaLightComponent>(entity);
-    light.lightSlot = AnalyticLightStore::INVALID_SLOT;
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
+    registry.emplace_or_replace<AreaLightRuntime>(entity);
     state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-    registry.emplace_or_replace<LightSurfacePendingTag>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.emplace_or_replace<LightSurfaceRequest>(entity);
+}
+
+template<typename LightRuntime>
+static void ReleaseLightRuntime(entt::registry& registry, entt::entity entity)
+{
+    auto* runtime = registry.try_get<LightRuntime>(entity);
+    if (!runtime) { return; }
+    if (runtime->bakedShadow.IsValid()) {
+        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(runtime->bakedShadow);
+    }
+    if (runtime->lightSlot != AnalyticLightStore::INVALID_SLOT) {
+        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime->lightSlot}});
+    }
+    registry.remove<LightRuntime>(entity);
 }
 
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& light = registry.get<AreaLightComponent>(entity);
-    if (light.bakedShadow.IsValid()) {
-        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(light.bakedShadow);
-        light.bakedShadow = TextureArrayHandle::INVALID;
-    }
-    if (light.lightSlot != AnalyticLightStore::INVALID_SLOT) {
-        state->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = light.lightSlot}});
-        light.lightSlot = AnalyticLightStore::INVALID_SLOT;
-    }
-    registry.remove<LightSurfacePendingTag>(entity);
+    ReleaseLightRuntime<AreaLightRuntime>(registry, entity);
+    registry.remove<LightSurfaceRequest>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
 
@@ -355,7 +361,7 @@ Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::
             EditWidgets::Combo(edit, "Bake Resolution##sl", &SphereLightComponent::shadowBakeResolution, SHADOW_BAKE_RESOLUTION_LABELS, 4);
             EditWidgets::Checkbox(edit, "Moving Object Shadows##sl", &SphereLightComponent::bMovingObjectShadows);
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Movable objects inside the light still cast shadows, from a small dynamic map drawn only while something moves in range. Off: baked shadows only, no runtime cost."); }
-            DrawShadowBakeControls(edit, comp.lightSlot, comp.shadowId);
+            DrawShadowBakeControls(edit, comp.shadowId);
         }
     }
 
@@ -396,26 +402,17 @@ void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& light = registry.get<SphereLightComponent>(entity);
-    light.lightSlot = AnalyticLightStore::INVALID_SLOT;
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
+    registry.emplace_or_replace<SphereLightRuntime>(entity);
     state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
-    registry.emplace_or_replace<LightSurfacePendingTag>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.emplace_or_replace<LightSurfaceRequest>(entity);
 }
 
 void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& light = registry.get<SphereLightComponent>(entity);
-    if (light.bakedShadow.IsValid()) {
-        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(light.bakedShadow);
-        light.bakedShadow = TextureArrayHandle::INVALID;
-    }
-    if (light.lightSlot != AnalyticLightStore::INVALID_SLOT) {
-        state->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = light.lightSlot}});
-        light.lightSlot = AnalyticLightStore::INVALID_SLOT;
-    }
-    registry.remove<LightSurfacePendingTag>(entity);
+    ReleaseLightRuntime<SphereLightRuntime>(registry, entity);
+    registry.remove<LightSurfaceRequest>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
 
@@ -439,11 +436,7 @@ void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::e
 
 void Component::SkyboxComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<SkyboxComponent>(entity);
-    if (comp.handle.IsValid()) {
-        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadCubemap(comp.handle);
-        comp.handle = Engine::CubemapHandle::INVALID;
-    }
+    registry.remove<SkyboxRuntime>(entity);
 }
 
 Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
@@ -651,18 +644,16 @@ void Component::FogVolumeComponent::DrawBounds(Core::ViewFamily& viewFamily, con
     }
 }
 
-void Component::SkyboxComponent::OnConstruct(entt::registry& registry, entt::entity entity)
-{
-    registry.get<SkyboxComponent>(entity).handle = Engine::CubemapHandle::INVALID;
-}
-
 void Component::SkyboxComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<SkyboxComponent>(entity);
-    if (comp.handle.IsValid()) {
-        auto* state = registry.ctx().get<Engine::EngineState*>();
-        state->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = comp.handle}});
-        comp.handle = Engine::CubemapHandle::INVALID;
+    registry.remove<SkyboxRuntime>(entity);
+}
+
+void Component::SkyboxRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    const auto& runtime = registry.get<SkyboxRuntime>(entity);
+    if (runtime.handle.IsValid()) {
+        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.handle}});
     }
 }
 } // Engine

@@ -29,13 +29,13 @@ namespace Ballance
 /** Fraction of the dissolve after which the body shrinks away; it is under the surface by then. */
 static constexpr float SHRINK_START = 0.8f;
 
-struct LavaDestroyedTag
+struct LavaDestroyedFlag
 {};
 
 void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees)
 {
     entt::registry& registry = state->registry;
-    if (registry.all_of<Component::DissolvingComponent>(entity)) { return; }
+    if (registry.all_of<Component::DissolvingRuntime>(entity)) { return; }
     auto& transform = registry.get<Component::TransformComponent>(entity);
     transform.mobility = Component::Mobility::Movable;
 
@@ -55,7 +55,7 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
     glm::vec3 axis = state->rng.UnitVector();
     axis.y = 0.0f;
     const float axisLength = glm::length(axis);
-    registry.emplace<Component::DissolvingComponent>(entity, Component::DissolvingComponent{
+    registry.emplace<Component::DissolvingRuntime>(entity, Component::DissolvingRuntime{
         .startTranslation = transform.translation,
         .startRotation = transform.rotation,
         .startScale = transform.scale,
@@ -65,7 +65,7 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
         .tiltRadians = glm::radians(tiltDegrees) * state->rng.Range(0.3f, 1.0f),
         .duration = duration,
     });
-    registry.remove<Component::PhysicsBodyDesc>(entity);
+    if (registry.all_of<Component::PhysicsBodyDesc>(entity)) { Component::PhysicsBodyDesc::Suspend(registry, entity); }
 }
 
 void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -83,9 +83,9 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state)
         for (const auto [lavaEntity, other] : {std::pair{event.e1, event.e2}, std::pair{event.e2, event.e1}}) {
             if (lavaEntity == entt::null || other == entt::null || other == playerEntity) { continue; }
             const auto* lava = registry.try_get<Component::LavaComponent>(lavaEntity);
-            if (!lava || registry.all_of<Component::DissolvingComponent>(other)) { continue; }
+            if (!lava || registry.all_of<Component::DissolvingRuntime>(other)) { continue; }
             const auto* desc = registry.try_get<Component::PhysicsBodyDesc>(other);
-            if (!desc || desc->motionType != Component::PhysicsMotionType::Dynamic) { continue; }
+            if (!desc || Component::EffectiveMotionType(registry, other, *desc) != Component::PhysicsMotionType::Dynamic) { continue; }
             const auto* body = Component::FindBody(registry, other);
             const auto* lavaBody = Component::FindBody(registry, lavaEntity);
             if (!body || !lavaBody) { continue; }
@@ -102,7 +102,7 @@ void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
     entt::registry& registry = state->registry;
-    auto view = registry.view<Component::DissolvingComponent, Component::TransformComponent>();
+    auto view = registry.view<Component::DissolvingRuntime, Component::TransformComponent>();
     if (view.size_hint() == 0) { return; }
 
     const float dt = state->timeFrame->deltaTime;
@@ -115,25 +115,25 @@ void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state)
         transform.rotation = dissolving.startRotation * glm::angleAxis(dissolving.tiltRadians * sinkT, dissolving.tiltAxis);
         transform.scale = dissolving.startScale * (1.0f - shrink);
         transform.translation = dissolving.startTranslation + dissolving.sink * sinkT + transform.rotation * (dissolving.startScale * dissolving.shrinkPivot * shrink);
-        registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+        registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
         if (u >= 1.0f) { finished.PushBack(entity); }
     }
     if (finished.Size() == 0) { return; }
 
     bool bDestroyed = false;
     for (const entt::entity entity : finished) {
-        registry.remove<Component::DissolvingComponent>(entity);
+        registry.remove<Component::DissolvingRuntime>(entity);
         if (registry.all_of<Component::DissolveKeepTag>(entity)) {
-            registry.emplace_or_replace<Component::DissolvedTag>(entity);
+            registry.emplace_or_replace<Component::DissolvedFlag>(entity);
             continue;
         }
-        registry.emplace<LavaDestroyedTag>(entity);
+        registry.emplace<LavaDestroyedFlag>(entity);
         state->commandQueue.Push({.type = Engine::CommandType::DestroyEntity, .entity = entity});
         bDestroyed = true;
     }
     if (!bDestroyed) { return; }
     for (const auto& [child, hierarchy] : registry.view<Component::HierarchyComponent>().each()) {
-        if (registry.valid(hierarchy.parent) && registry.all_of<LavaDestroyedTag>(hierarchy.parent)) {
+        if (registry.valid(hierarchy.parent) && registry.all_of<LavaDestroyedFlag>(hierarchy.parent)) {
             state->commandQueue.Push({.type = Engine::CommandType::DestroyEntity, .entity = child});
         }
     }

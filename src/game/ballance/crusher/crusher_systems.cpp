@@ -102,7 +102,7 @@ static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineSt
 
     const Physics::PhysicsWorld* physics = ctx->physicsWorld;
     AABB sweep;
-    for (const auto& [entity, hierarchy, body] : registry.view<Component::HierarchyComponent, Component::PhysicsBodyComponent>().each()) {
+    for (const auto& [entity, hierarchy, body] : registry.view<Component::HierarchyComponent, Component::PhysicsBodyRuntime>().each()) {
         if (hierarchy.parent != pusher || !body.bodyID.IsValid()) { continue; }
         sweep.Encapsulate(physics->GetWorldBounds(body.bodyID).Transformed(toLocal));
     }
@@ -120,20 +120,24 @@ static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineSt
     }
 }
 
-static void SetBelts(Engine::EngineState* state, Component::CrusherComponent& crusher, bool bEnabled)
+static void SetBelts(Engine::EngineState* state, Component::CrusherComponent& crusher, bool bRunning)
 {
     for (Engine::EntityRef* ref : {&crusher.beltA, &crusher.beltB}) {
         const entt::entity belt = ref->Get(state);
-        if (auto* conveyor = belt != entt::null ? state->registry.try_get<Component::ConveyorComponent>(belt) : nullptr) {
-            conveyor->bEnabled = bEnabled;
+        if (belt == entt::null || !state->registry.all_of<Component::ConveyorComponent>(belt)) { continue; }
+        if (bRunning) {
+            state->registry.remove<Component::ConveyorHaltedFlag>(belt);
+        }
+        else {
+            state->registry.emplace_or_replace<Component::ConveyorHaltedFlag>(belt);
         }
     }
 }
 
-static void Enter(Component::CrusherComponent& crusher, Component::CrusherPhase phase)
+static void Enter(Component::CrusherRuntime& run, Component::CrusherPhase phase)
 {
-    crusher.phase = phase;
-    crusher.phaseTime = 0.0f;
+    run.phase = phase;
+    run.phaseTime = 0.0f;
 }
 
 static void MoveAlong(entt::registry& registry, entt::entity entity, const Vec3& localDirection, float distance)
@@ -142,7 +146,7 @@ static void MoveAlong(entt::registry& registry, entt::entity entity, const Vec3&
     auto* transform = registry.try_get<Component::TransformComponent>(entity);
     if (!transform) { return; }
     transform->translation += transform->rotation * localDirection * distance;
-    registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
 }
 
 /** The arm pivots at its top, so stretching it by the head's drop keeps it joined to the head. */
@@ -157,10 +161,10 @@ static void StretchArm(Engine::EngineContext* ctx, entt::registry& registry, ent
     const float scale = 1.0f + drop / length;
     if (transform->scale.y == scale) { return; }
     transform->scale.y = scale;
-    registry.emplace_or_replace<Component::DirtyTransformTag>(arm);
+    registry.emplace_or_replace<Component::DirtyTransformRequest>(arm);
 }
 
-static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state, Component::CrusherComponent& crusher, float dt, bool bThroatClosed)
+static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state, Component::CrusherComponent& crusher, Component::CrusherRuntime& run, float dt, bool bThroatClosed)
 {
     entt::registry& registry = state->registry;
     const entt::entity head = crusher.head.Get(state);
@@ -173,49 +177,49 @@ static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state
     const AABB headWorld = physics->GetWorldBounds(headBody->bodyID);
     const entt::entity pusher = crusher.pusher.Get(state);
 
-    const float previousDrop = crusher.drop;
-    const float previousPushed = crusher.pushed;
-    crusher.phaseTime += dt;
+    const float previousDrop = run.drop;
+    const float previousPushed = run.pushed;
+    run.phaseTime += dt;
 
-    switch (crusher.phase) {
+    switch (run.phase) {
         case Component::CrusherPhase::Waiting:
             SetBelts(state, crusher, !bThroatClosed);
             if (bThroatClosed) { break; }
-            if (crusher.phaseTime >= crusher.restTime && AnyCrateWhollyUnder(ctx, state, toHead, headLocal, headWorld, crusher.stroke + 1.0f)) {
+            if (run.phaseTime >= crusher.restTime && AnyCrateWhollyUnder(ctx, state, toHead, headLocal, headWorld, crusher.stroke + 1.0f)) {
                 SetBelts(state, crusher, false);
-                Enter(crusher, Component::CrusherPhase::Slam);
+                Enter(run, Component::CrusherPhase::Slam);
             }
             break;
         case Component::CrusherPhase::Slam:
             BreakCratesUnderHead(ctx, state, toHead, headLocal, headWorld, crusher.slamSpeed * dt * BREAK_LOOKAHEAD_FRAMES);
-            crusher.drop = glm::min(crusher.stroke, crusher.drop + crusher.slamSpeed * dt);
-            if (crusher.drop >= crusher.stroke) { Enter(crusher, Component::CrusherPhase::Hold); }
+            run.drop = glm::min(crusher.stroke, run.drop + crusher.slamSpeed * dt);
+            if (run.drop >= crusher.stroke) { Enter(run, Component::CrusherPhase::Hold); }
             break;
         case Component::CrusherPhase::Hold:
             BreakCratesUnderHead(ctx, state, toHead, headLocal, headWorld, CONTACT_MARGIN);
-            if (crusher.phaseTime >= crusher.holdTime) { Enter(crusher, Component::CrusherPhase::Rise); }
+            if (run.phaseTime >= crusher.holdTime) { Enter(run, Component::CrusherPhase::Rise); }
             break;
         case Component::CrusherPhase::Rise:
-            crusher.drop = glm::max(0.0f, crusher.drop - crusher.riseSpeed * dt);
-            if (crusher.drop <= 0.0f) { Enter(crusher, pusher != entt::null ? Component::CrusherPhase::Push : Component::CrusherPhase::Return); }
+            run.drop = glm::max(0.0f, run.drop - crusher.riseSpeed * dt);
+            if (run.drop <= 0.0f) { Enter(run, pusher != entt::null ? Component::CrusherPhase::Push : Component::CrusherPhase::Return); }
             break;
         case Component::CrusherPhase::Push:
-            BreakCratesInPusherPath(ctx, state, pusher, crusher.pushDistance - crusher.pushed);
-            crusher.pushed = glm::min(crusher.pushDistance, crusher.pushed + crusher.pushSpeed * dt);
-            if (crusher.pushed >= crusher.pushDistance) { Enter(crusher, Component::CrusherPhase::Return); }
+            BreakCratesInPusherPath(ctx, state, pusher, crusher.pushDistance - run.pushed);
+            run.pushed = glm::min(crusher.pushDistance, run.pushed + crusher.pushSpeed * dt);
+            if (run.pushed >= crusher.pushDistance) { Enter(run, Component::CrusherPhase::Return); }
             break;
         case Component::CrusherPhase::Return:
-            crusher.pushed = glm::max(0.0f, crusher.pushed - crusher.returnSpeed * dt);
-            if (crusher.pushed <= 0.0f) {
+            run.pushed = glm::max(0.0f, run.pushed - crusher.returnSpeed * dt);
+            if (run.pushed <= 0.0f) {
                 SetBelts(state, crusher, true);
-                Enter(crusher, Component::CrusherPhase::Waiting);
+                Enter(run, Component::CrusherPhase::Waiting);
             }
             break;
     }
 
-    MoveAlong(registry, head, Vec3(0.0f, -1.0f, 0.0f), crusher.drop - previousDrop);
-    if (crusher.drop != previousDrop) { StretchArm(ctx, registry, crusher.arm.Get(state), crusher.drop); }
-    MoveAlong(registry, pusher, Vec3(-1.0f, 0.0f, 0.0f), crusher.pushed - previousPushed);
+    MoveAlong(registry, head, Vec3(0.0f, -1.0f, 0.0f), run.drop - previousDrop);
+    if (run.drop != previousDrop) { StretchArm(ctx, registry, crusher.arm.Get(state), run.drop); }
+    MoveAlong(registry, pusher, Vec3(-1.0f, 0.0f, 0.0f), run.pushed - previousPushed);
 }
 
 static int32_t CountLiveShards(const entt::registry& registry)
@@ -236,8 +240,8 @@ static int32_t CountAwakeShards(Engine::EngineContext* ctx, const entt::registry
 
 static bool AnyThroatClosed(const entt::registry& registry)
 {
-    for (const auto& [entity, valve] : registry.view<Component::ThroatValveComponent>().each()) {
-        if (valve.bClosed) { return true; }
+    for (const auto& [entity, run] : registry.view<Component::ThroatValveRuntime>().each()) {
+        if (run.bClosed) { return true; }
     }
     return false;
 }
@@ -253,12 +257,13 @@ void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state)
 
     const float dt = state->timeFrame->deltaTime;
     for (const auto& [entity, valve] : registry.view<Component::ThroatValveComponent>().each()) {
-        if (!valve.bClosed) { valve.openTime += dt; }
-        const bool bClose = !valve.bClosed && valve.openTime >= valve.minOpenSeconds && shards > valve.closeShards;
-        const bool bOpen = valve.bClosed && shards <= valve.openShards;
+        auto& run = registry.get_or_emplace<Component::ThroatValveRuntime>(entity);
+        if (!run.bClosed) { run.openTime += dt; }
+        const bool bClose = !run.bClosed && run.openTime >= valve.minOpenSeconds && shards > valve.closeShards;
+        const bool bOpen = run.bClosed && shards <= valve.openShards;
         if (!bClose && !bOpen) { continue; }
-        valve.bClosed = bClose;
-        valve.openTime = 0.0f;
+        run.bClosed = bClose;
+        run.openTime = 0.0f;
         WLOG_INFO(Crusher, "Throat valve {} at {} awake shards", bClose ? "closed" : "opened", shards);
     }
 }
@@ -274,14 +279,15 @@ void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state)
     const bool bThroatClosed = AnyThroatClosed(registry);
     auto intact = static_cast<int32_t>(registry.view<Component::BreakableComponent>().size());
     for (const auto& [entity, feeder] : view.each()) {
+        auto& run = registry.get_or_emplace<Component::CrateFeederRuntime>(entity);
         if (bThroatClosed || intact >= feeder.maxIntact || feeder.cratesPerSecond <= 0.0f) {
-            feeder.timer = 0.0f;
+            run.timer = 0.0f;
             continue;
         }
-        feeder.timer += dt;
+        run.timer += dt;
         const float interval = 1.0f / feeder.cratesPerSecond;
-        if (feeder.timer < interval) { continue; }
-        feeder.timer = glm::min(feeder.timer - interval, interval);
+        if (run.timer < interval) { continue; }
+        run.timer = glm::min(run.timer - interval, interval);
 
         const float angle = state->rng.Range(0.0f, glm::two_pi<float>());
         const float radius = glm::sqrt(state->rng.Range(feeder.minRadius * feeder.minRadius, feeder.maxRadius * feeder.maxRadius));
@@ -304,7 +310,7 @@ void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state)
     const float dt = state->timeFrame->deltaTime;
     const bool bThroatClosed = AnyThroatClosed(state->registry);
     for (const auto& [entity, crusher] : view.each()) {
-        UpdateCrusher(ctx, state, crusher, dt, bThroatClosed);
+        UpdateCrusher(ctx, state, crusher, state->registry.get_or_emplace<Component::CrusherRuntime>(entity), dt, bThroatClosed);
     }
 }
 

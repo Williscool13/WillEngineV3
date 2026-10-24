@@ -51,11 +51,11 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
 
     w.Key("scene_id", sceneId.id);
 
-    auto view = registry.view<Component::SceneComponent>();
+    auto view = registry.view<Component::SceneRuntime>();
     const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
 
     auto shouldSerialize = [&](entt::entity entity) {
-        return view.get<Component::SceneComponent>(entity).sceneId == sceneId && !registry.all_of<Component::DoNotSerializeTag>(entity);
+        return view.get<Component::SceneRuntime>(entity).sceneId == sceneId && !registry.all_of<Component::DoNotSerializeTag>(entity);
     };
 
     for (auto entity : view) {
@@ -179,7 +179,7 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
                 typeHits[*index]++;
             }
         });
-        registry.emplace<Component::SceneComponent>(entity, sceneId);
+        registry.emplace<Component::SceneRuntime>(entity, sceneId);
     });
 
     LogDeserializeBreakdown(componentRegistry, entityCount, createNanos, typeNanos, typeHits);
@@ -206,15 +206,15 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
         {
             ZoneScopedN("SortOrder");
             uint64_t maxSortOrder = 0;
-            auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+            auto sortView = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
             for (auto entity : sortView) {
-                if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                if (sortView.get<Component::SceneRuntime>(entity).sceneId == loadedId) {
                     maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
                 }
             }
             // For those without a valid sort order
             for (auto entity : sortView) {
-                if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+                if (sortView.get<Component::SceneRuntime>(entity).sceneId == loadedId) {
                     auto& stable = sortView.get<Component::StableIdComponent>(entity);
                     if (stable.sortOrder == 0) {
                         maxSortOrder += 1;
@@ -245,12 +245,12 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId)
 {
     ZoneScoped;
     auto* ctx = state->registry.ctx().get<Engine::EngineContext*>();
-    auto view = state->registry.view<Component::SceneComponent>();
+    auto view = state->registry.view<Component::SceneRuntime>();
 
     auto size = view.size();
     Core::ArenaVector<entt::entity> toDestroy{&ctx->gameplayArena.Get(), size};
     for (auto entity : view) {
-        if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
+        if (view.get<Component::SceneRuntime>(entity).sceneId == sceneId) {
             toDestroy.PushBack(entity);
         }
     }
@@ -360,15 +360,15 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     assert(loadedId == sceneId && "Scene ID in file does not match registry key, file was likely saved with a mismatched ID");
     uint64_t maxSortOrder = 0; {
         ZoneScopedN("SortOrder");
-        auto sortView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+        auto sortView = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
         for (auto entity : sortView) {
-            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+            if (sortView.get<Component::SceneRuntime>(entity).sceneId == loadedId) {
                 maxSortOrder = std::max(maxSortOrder, sortView.get<Component::StableIdComponent>(entity).sortOrder);
             }
         }
         // For those without a valid sort order
         for (auto entity : sortView) {
-            if (sortView.get<Component::SceneComponent>(entity).sceneId == loadedId) {
+            if (sortView.get<Component::SceneRuntime>(entity).sceneId == loadedId) {
                 auto& stable = sortView.get<Component::StableIdComponent>(entity);
                 if (stable.sortOrder == 0) {
                     maxSortOrder += 1;
@@ -529,7 +529,7 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
     if (!parentOverrides.primitiveBlacklist.Contains(primitiveOrdinal) && parentOverrides.primitiveBlacklist.Size() < Component::StaticMeshOverridesComponent::MaxBlacklist) {
         parentOverrides.primitiveBlacklist.PushBack(primitiveOrdinal);
     }
-    registry.emplace_or_replace<Component::StaticMeshLoadingTag>(parent);
+    registry.emplace_or_replace<Component::StaticMeshLoadingFlag>(parent);
 
     state->bHierarchyOrderDirty = true;
     return child;
@@ -630,9 +630,9 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
 uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId)
 {
     uint64_t maxSortOrder = 0;
-    auto view = registry.view<Component::SceneComponent, Component::StableIdComponent>();
+    auto view = registry.view<Component::SceneRuntime, Component::StableIdComponent>();
     for (auto entity : view) {
-        if (view.get<Component::SceneComponent>(entity).sceneId == sceneId) {
+        if (view.get<Component::SceneRuntime>(entity).sceneId == sceneId) {
             maxSortOrder = std::max(maxSortOrder, view.get<Component::StableIdComponent>(entity).sortOrder);
         }
     }
@@ -650,9 +650,9 @@ Core::InlineString<128> GenerateIncrementedName(entt::registry& registry, String
     const std::string_view base = src.substr(0, digitsStart);
 
     uint32_t highest = 0;
-    auto view = registry.view<Component::SceneComponent, Component::NameComponent>();
+    auto view = registry.view<Component::SceneRuntime, Component::NameComponent>();
     for (auto entity : view) {
-        if (view.get<Component::SceneComponent>(entity).sceneId != sceneId) { continue; }
+        if (view.get<Component::SceneRuntime>(entity).sceneId != sceneId) { continue; }
 
         std::string_view name = view.get<Component::NameComponent>(entity).name.View();
         if (name.size() < base.size() || name.substr(0, base.size()) != base) { continue; }
@@ -681,7 +681,7 @@ entt::entity CreateSceneEntity(Engine::EngineState* state)
 {
     entt::entity newEntity = state->registry.create();
     state->registry.emplace<Component::TransformComponent>(newEntity);
-    state->registry.emplace<Component::SceneComponent>(newEntity, state->scene.currentSceneId);
+    state->registry.emplace<Component::SceneRuntime>(newEntity, state->scene.currentSceneId);
     state->registry.emplace<Component::StableIdComponent>(newEntity);
     state->registry.get<Component::StableIdComponent>(newEntity).sortOrder = HighestSortOrderInScene(state->registry, state->scene.currentSceneId) + 1;
     state->registry.emplace<Component::EntityFolderComponent>(newEntity);
@@ -732,7 +732,7 @@ void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* s
 {
     ZoneScoped;
     auto& registry = state->registry;
-    if (registry.view<Component::DirtyTransformTag>().empty()) { return; }
+    if (registry.view<Component::DirtyTransformRequest>().empty()) { return; }
 
     const bool bRunning = IsRunning(state);
     if (bRunning) {
@@ -740,9 +740,9 @@ void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* s
     }
     EnsureHierarchyOrder(state);
     for (auto [entity, node] : registry.view<Component::HierarchyComponent>().each()) {
-        if (!registry.valid(node.parent) || !registry.all_of<Component::DirtyTransformTag>(node.parent)) { continue; }
-        if (bRunning && registry.all_of<Component::DynamicPhysicsBodyComponent>(entity)) { continue; }
-        registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+        if (!registry.valid(node.parent) || !registry.all_of<Component::DirtyTransformRequest>(node.parent)) { continue; }
+        if (bRunning && registry.all_of<Component::DynamicPhysicsBodyRuntime>(entity)) { continue; }
+        registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
     }
 }
 
@@ -799,9 +799,9 @@ void SetParent(Engine::EngineState* state, entt::entity child, entt::entity pare
     node.parentStableId = registry.get<Component::StableIdComponent>(parent).id;
 
     // Keep the child's world pose fixed.
-    if (!registry.all_of<Component::DynamicPhysicsBodyComponent>(child)) {
+    if (!registry.all_of<Component::DynamicPhysicsBodyRuntime>(child)) {
         registry.get<Component::TransformComponent>(child) = Component::ComposeLocalFromWorld(parentWorld, childWorld);
-        registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+        registry.emplace_or_replace<Component::DirtyTransformRequest>(child);
     }
 
     state->bHierarchyOrderDirty = true;
@@ -816,12 +816,12 @@ void ClearParent(Engine::EngineState* state, entt::entity child)
     const Transform childWorld = Component::ComputeWorldTransform(registry, child);
     registry.remove<Component::HierarchyComponent>(child);
 
-    if (!registry.all_of<Component::DynamicPhysicsBodyComponent>(child)) {
+    if (!registry.all_of<Component::DynamicPhysicsBodyRuntime>(child)) {
         auto& local = registry.get<Component::TransformComponent>(child);
         local.translation = childWorld.translation;
         local.rotation = childWorld.rotation;
         local.scale = childWorld.scale;
-        registry.emplace_or_replace<Component::DirtyTransformTag>(child);
+        registry.emplace_or_replace<Component::DirtyTransformRequest>(child);
     }
 
     state->bHierarchyOrderDirty = true;
@@ -836,13 +836,13 @@ void SetWorldTransform(Engine::EngineState* state, entt::entity entity, const Tr
     const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
     if (node && registry.valid(node->parent)) {
         // Cached parent world keeps both on the same one-frame-behind clock.
-        const Transform parentWorld = registry.get<Component::WorldTransformComponent>(node->parent);
+        const Transform parentWorld = registry.get<Component::WorldTransformRuntime>(node->parent);
         registry.get<Component::TransformComponent>(entity) = Component::ComposeLocalFromWorld(parentWorld, world);
     }
     else {
         registry.get<Component::TransformComponent>(entity) = world;
     }
-    registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
 }
 
 static Engine::ComponentEntry* FindPrefabComponentEntry(Engine::ComponentRegistry& componentRegistry, std::string_view opener)
@@ -1060,7 +1060,7 @@ static bool PropagatePrefabChange(Engine::EngineState* state, entt::entity entit
         if (entry->has(state->registry, entity)) {
             if (before.IsValid() && entry->propagate && entry->propagate(state->registry, entity, before, after)) {
                 if (entry->typeId == TypeSID<Component::TransformComponent>()) {
-                    state->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+                    state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
                 }
                 bChanged = true;
             }
@@ -1115,7 +1115,7 @@ void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (view.get<Component::PrefabInstanceComponent>(entity).prefabId != prefabId) { continue; }
         if (!PropagatePrefabChange(state, entity, oldData->Body(), newBody, fragment)) { continue; }
         ++updated;
-        if (const auto* sc = state->registry.try_get<Component::SceneComponent>(entity); sc && !state->editor.modifiedScenes.Contains(sc->sceneId)) {
+        if (const auto* sc = state->registry.try_get<Component::SceneRuntime>(entity); sc && !state->editor.modifiedScenes.Contains(sc->sceneId)) {
             state->editor.modifiedScenes.PushBack(sc->sceneId);
         }
     }
@@ -1202,7 +1202,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->runMode = Engine::RunMode::Edit;
     state->inputContext = Engine::InputContext::Editor;
     ctx->setCursorHiddenFn(false); {
-        auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraComponent, Component::TransformComponent>();
+        auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraRuntime, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
             auto& transform = state->registry.get<Component::TransformComponent>(camEntity);

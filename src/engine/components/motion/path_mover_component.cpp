@@ -138,19 +138,12 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
             component.spline.mode = static_cast<Engine::SplineMode>(splineModeInt);
         }
 
-        ImGui::SeparatorText("Runtime State");
+        ImGui::SeparatorText("Start");
         const int maxSeg = std::max(0, component.spline.SegmentCount() - 1);
-        ImGui::SliderInt("Segment", &component.currentSegment, 0, maxSeg);
-        ImGui::SliderFloat("Progress", &component.progress, 0.0f, 1.0f, "%.3f");
-        static const char* dirNames[] = {"Forward", "Backward"};
-        int dirIdx = (component.direction >= 0) ? 0 : 1;
-        if (ImGui::Combo("Direction", &dirIdx, dirNames, 2)) {
-            component.direction = (dirIdx == 0) ? 1 : -1;
-        }
-        ImGui::Checkbox("Waiting", &component.bIsWaiting);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(120.0f);
-        ImGui::DragFloat("Wait Timer", &component.waitTimer, 0.05f, 0.0f, 60.0f, "%.2fs");
+        ImGui::SliderInt("Segment", &component.startSegment, 0, maxSeg);
+        ImGui::SliderFloat("Progress", &component.startProgress, 0.0f, 1.0f, "%.3f");
+        ImGui::DragFloat("Wait", &component.startWait, 0.05f, 0.0f, 60.0f, "%.2fs");
+        ImGui::Checkbox("Auto Start", &component.bAutoStart);
 
         ImGui::SeparatorText("Control Points");
 
@@ -333,11 +326,13 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                 }
 
                 // Draw current progress position
-                const int source = component.currentSegment;
+                const auto* run = registry.try_get<PathMoverRuntime>(entity);
+                const PathMoverRuntime progress = run ? *run : PathMoverRuntime::AtStart(component);
+                const int source = progress.currentSegment;
                 const int target = component.spline.bClosed
-                                       ? (source + component.direction + cpCount) % cpCount
-                                       : std::clamp(source + component.direction, 0, cpCount - 1);
-                glm::vec3 progressPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, component.progress), 1.0f));
+                                       ? (source + progress.direction + cpCount) % cpCount
+                                       : std::clamp(source + progress.direction, 0, cpCount - 1);
+                glm::vec3 progressPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, progress.progress), 1.0f));
                 DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {progressPos, kPointRadius * 1.5f, kProgressColor});
             }
         }

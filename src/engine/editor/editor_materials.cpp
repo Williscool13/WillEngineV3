@@ -757,12 +757,12 @@ static void RetagIfUsingMaterial(Engine::EngineState* state, Engine::MaterialID 
 /** The tri-light range is decided at fill time from the material's immutability, so unlocking one has to re-resolve every mesh using it. */
 static void RetagMeshesUsingMaterial(Engine::EngineState* state, Engine::MaterialID id)
 {
-    RetagIfUsingMaterial<Component::StaticMeshComponent, Component::StaticMeshLoadingTag>(state, id);
-    RetagIfUsingMaterial<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingTag>(state, id);
-    RetagIfUsingMaterial<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingTag>(state, id);
-    RetagIfUsingMaterial<Component::SplineMeshComponent, Component::SplineMeshLoadingTag>(state, id);
-    RetagIfUsingMaterial<Component::Text3DComponent, Component::Text3DLoadingTag>(state, id);
-    RetagIfUsingMaterial<Component::ModuleMeshComponent, Component::ModuleMeshLoadingTag>(state, id);
+    RetagIfUsingMaterial<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>(state, id);
+    RetagIfUsingMaterial<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>(state, id);
+    RetagIfUsingMaterial<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>(state, id);
+    RetagIfUsingMaterial<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>(state, id);
+    RetagIfUsingMaterial<Component::Text3DComponent, Component::Text3DLoadingFlag>(state, id);
+    RetagIfUsingMaterial<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>(state, id);
 }
 
 static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineState* state)

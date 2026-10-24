@@ -52,9 +52,9 @@ namespace Engine
 {
 void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto transformDirtyView = state->registry.view<Component::TransformComponent, Component::DirtyTransformTag>();
+    auto transformDirtyView = state->registry.view<Component::TransformComponent, Component::DirtyTransformRequest>();
     for (auto entity : transformDirtyView) {
-        state->registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -65,7 +65,7 @@ static glm::quat NlerpPose(const glm::quat& a, glm::quat b, float t)
     return glm::normalize(glm::lerp(a, b, t));
 }
 
-static void InterpolatedPose(const Component::DynamicPhysicsBodyComponent& physics, float alpha, glm::vec3& outTranslation, glm::quat& outRotation)
+static void InterpolatedPose(const Component::DynamicPhysicsBodyRuntime& physics, float alpha, glm::vec3& outTranslation, glm::quat& outRotation)
 {
     if (physics.previousPosition == physics.currentPosition && physics.previousRotation == physics.currentRotation) {
         outTranslation = physics.currentPosition;
@@ -83,15 +83,15 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     const float alpha = state->physics.interpolationAlpha;
 
     // Roots (no parent), non-physics
-    for (auto [entity, local, world, dirty] : registry.view<Component::TransformComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>(
-             entt::exclude<Component::HierarchyComponent, Component::DynamicPhysicsBodyComponent>).each()) {
+    for (auto [entity, local, world, dirty] : registry.view<Component::TransformComponent, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>(
+             entt::exclude<Component::HierarchyComponent, Component::DynamicPhysicsBodyRuntime>).each()) {
         world.translation = local.translation;
         world.rotation = local.rotation;
         world.scale = local.scale;
     }
 
     // Roots, physics (interpolated Jolt pose)
-    for (auto [entity, physics, local, world] : registry.view<Component::DynamicPhysicsBodyComponent, Component::TransformComponent, Component::WorldTransformComponent>(
+    for (auto [entity, physics, local, world] : registry.view<Component::DynamicPhysicsBodyRuntime, Component::TransformComponent, Component::WorldTransformRuntime>(
              entt::exclude<Component::HierarchyComponent>).each()) {
         glm::vec3 translation;
         glm::quat rotation;
@@ -100,7 +100,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         world.translation = translation;
         world.rotation = rotation;
         world.scale = local.scale;
-        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
     }
 
     // Children in depth order
@@ -111,18 +111,18 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
         const auto& node = hierarchy.get<Component::HierarchyComponent>(entity);
 
         auto& local = registry.get<Component::TransformComponent>(entity);
-        auto& world = registry.get<Component::WorldTransformComponent>(entity);
+        auto& world = registry.get<Component::WorldTransformRuntime>(entity);
 
-        if (node.parent == entt::null || !registry.valid(node.parent) || !registry.all_of<Component::WorldTransformComponent>(node.parent)) {
+        if (node.parent == entt::null || !registry.valid(node.parent) || !registry.all_of<Component::WorldTransformRuntime>(node.parent)) {
             local.translation = world.translation;
             local.rotation = world.rotation;
             local.scale = world.scale;
-            registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+            registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
             orphans.PushBack(entity);
             continue;
         }
 
-        auto* physics = registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
+        auto* physics = registry.try_get<Component::DynamicPhysicsBodyRuntime>(entity);
         glm::vec3 physicsTranslation{};
         glm::quat physicsRotation{};
         bool bPhysicsMoved = false;
@@ -130,11 +130,11 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
             InterpolatedPose(*physics, alpha, physicsTranslation, physicsRotation);
             bPhysicsMoved = physicsTranslation != world.translation || physicsRotation != world.rotation || local.scale != world.scale;
         }
-        const bool selfDirty = bPhysicsMoved || registry.all_of<Component::MultiframeDirtyComponent>(entity);
-        const bool parentDirty = !physics && registry.all_of<Component::MultiframeDirtyComponent>(node.parent);
+        const bool selfDirty = bPhysicsMoved || registry.all_of<Component::MultiframeDirtyRequest>(entity);
+        const bool parentDirty = !physics && registry.all_of<Component::MultiframeDirtyRequest>(node.parent);
         if (!selfDirty && !parentDirty) { continue; }
-        if (bPhysicsMoved || !registry.all_of<Component::MultiframeDirtyComponent>(entity)) {
-            registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        if (bPhysicsMoved || !registry.all_of<Component::MultiframeDirtyRequest>(entity)) {
+            registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
         }
 
         // Physics (interpolated Jolt pose)
@@ -144,7 +144,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
             world.scale = local.scale;
         }
         else {
-            const auto& parentWorld = registry.get<Component::WorldTransformComponent>(node.parent);
+            const auto& parentWorld = registry.get<Component::WorldTransformRuntime>(node.parent);
             world = Component::ComposeWorldTransform(parentWorld, local);
         }
     }
@@ -169,7 +169,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.view<Component::WorldTransformComponent, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>();
+    auto dirtyView = state->registry.view<Component::WorldTransformRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>();
     constexpr size_t TASK_THRESHOLD = 1000;
     size_t dirtyViewCount = dirtyView.size_hint();
     if (dirtyViewCount < TASK_THRESHOLD) {
@@ -189,8 +189,8 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
             enki::TaskSet task(entities.Size(), [&](enki::TaskSetPartition range, uint32_t) {
                 for (uint32_t i = range.start; i < range.end; ++i) {
                     auto entity = entities[i];
-                    auto& world = dirtyView.get<Component::WorldTransformComponent>(entity);
-                    auto& renderTransform = dirtyView.get<Component::RenderTransformComponent>(entity);
+                    auto& world = dirtyView.get<Component::WorldTransformRuntime>(entity);
+                    auto& renderTransform = dirtyView.get<Component::RenderTransformRuntime>(entity);
 
                     renderTransform.previousMatrix = renderTransform.modelMatrix;
                     renderTransform.modelMatrix = glm::translate(GetMatrix(world), renderTransform.renderOffset) * glm::mat4_cast(renderTransform.renderRotation);
@@ -213,7 +213,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         Engine::InstanceStore& store = state->instanceStore;
         Engine::ModelStore& modelStore = state->modelStore;
         Engine::TriLightStore& triLightStore = state->triLightStore;
-        for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
+        for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::MeshRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
@@ -231,21 +231,21 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     // Area light emissive quads
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>().each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>().each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
         state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
     }
 
     // Sphere light emissive meshes
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent, Component::LightSurfaceRuntime, Component::MultiframeDirtyComponent>(entt::exclude<Component::AreaLightComponent>).each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>(entt::exclude<Component::AreaLightComponent>).each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
         state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
     }
 
     // Text quads
-    for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformComponent, Component::MultiframeDirtyComponent>().each()) {
+    for (auto [entity, runtime, renderTransform, dirty] : state->registry.view<Component::TextRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
         if (!runtime.modelRange.IsValid()) { continue; }
         state->modelStore.SetModel(runtime.modelRange.offset, {renderTransform.modelMatrix, renderTransform.previousMatrix});
     }
@@ -253,24 +253,24 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     // Analytic light payload. A bake-hidden light writes dead, so the store stays the only authority on what the GPU sees.
     {
         Engine::AnalyticLightStore& lightStore = state->analyticLightStore;
-        const bool bAnyHidden = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0;
-        auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && state->registry.all_of<Component::ProbeBakeHiddenTag>(entity); };
+        const bool bAnyHidden = state->registry.view<Component::ProbeBakeHiddenFlag>().size() > 0;
+        auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && state->registry.all_of<Component::ProbeBakeHiddenFlag>(entity); };
 
-        for (auto [entity, light, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>().each()) {
-            if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-            lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeAreaLightInfo(transform, light));
+        for (auto [entity, light, runtime, transform, dirty] : state->registry.view<Component::AreaLightComponent, Component::AreaLightRuntime, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
+            if (runtime.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+            lightStore.SetLight(runtime.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeAreaLightInfo(transform, light));
         }
 
-        for (auto [entity, light, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent, Component::MultiframeDirtyComponent>().each()) {
-            if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
-            lightStore.SetLight(light.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeSphereLightInfo(transform, light));
+        for (auto [entity, light, runtime, transform, dirty] : state->registry.view<Component::SphereLightComponent, Component::SphereLightRuntime, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
+            if (runtime.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+            lightStore.SetLight(runtime.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeSphereLightInfo(transform, light));
         }
     }
 
-    for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyComponent>().each()) {
+    for (auto [entity, dirty] : state->registry.view<Component::MultiframeDirtyRequest>().each()) {
         dirty.counter--;
         if (dirty.counter <= 0) {
-            state->registry.remove<Component::MultiframeDirtyComponent>(entity);
+            state->registry.remove<Component::MultiframeDirtyRequest>(entity);
         }
     }
 }
@@ -284,15 +284,15 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
     emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
     constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR;
 
-    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenTag>().size() > 0
-                              || state->registry.view<Component::ProbeBakeProxyHiddenTag>().size() > 0;
+    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenFlag>().size() > 0
+                              || state->registry.view<Component::ProbeBakeProxyHiddenFlag>().size() > 0;
 
     auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw) {
         if (!surfaceRuntime.range.IsValid()) { return; }
 
         bool bDraw = draw;
         if (bDraw && bAnyHideTags) {
-            bDraw = !state->registry.any_of<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>(lightEntity);
+            bDraw = !state->registry.any_of<Component::ProbeBakeHiddenFlag, Component::ProbeBakeProxyHiddenFlag>(lightEntity);
         }
 
         if (bDraw) {
@@ -324,10 +324,10 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
 void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>().each()) {
-        if (sky.handle.IsValid() || !sky.envMap.IsValid()) { continue; }
+    for (auto&& [entity, sky] : state->registry.view<Component::SkyboxComponent>(entt::exclude<Component::SkyboxRuntime>).each()) {
+        if (!sky.envMap.IsValid()) { continue; }
         if (ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
-        sky.handle = ctx->assetManager->LoadCubemap(sky.envMap);
+        state->registry.emplace<Component::SkyboxRuntime>(entity, ctx->assetManager->LoadCubemap(sky.envMap));
     }
 }
 
@@ -415,9 +415,9 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
         int32_t bestPriority = INT32_MIN;
         Render::Cubemap* bestCubemap = nullptr;
         float bestIntensity = 1.0f;
-        for (const auto& [entity, sky] : registry.view<Component::SkyboxComponent>().each()) {
-            if (!sky.bEnabled || !sky.handle.IsValid()) { continue; }
-            Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(sky.handle);
+        for (const auto& [entity, sky, skyRuntime] : registry.view<Component::SkyboxComponent, Component::SkyboxRuntime>().each()) {
+            if (!sky.bEnabled || !skyRuntime.handle.IsValid()) { continue; }
+            Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(skyRuntime.handle);
             if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
                 bestPriority = sky.priority;
                 bestCubemap = cubemap;
@@ -460,7 +460,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 {
     ZoneScoped;
     const entt::registry& registry = state->registry;
-    auto view = registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformComponent>(entt::exclude<Component::TextFontPendingTag>);
+    auto view = registry.view<Component::TextComponent, Component::TextRuntime, Component::RenderTransformRuntime>(entt::exclude<Component::TextFontRequest>);
 
     for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
         if (textComp.text.IsEmpty()) { continue; }
@@ -640,10 +640,10 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
 static void MarkAnalyticLightsDirty(entt::registry& registry)
 {
     for (auto entity : registry.view<Component::AreaLightComponent>()) {
-        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
     }
     for (auto entity : registry.view<Component::SphereLightComponent>()) {
-        registry.emplace_or_replace<Component::MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -652,21 +652,21 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
     entt::registry& registry = state->registry;
 
     for (const auto& [entity, transform] : registry.view<Component::TransformComponent>().each()) {
-        if (transform.mobility != Component::Mobility::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        if (transform.mobility != Component::Mobility::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenFlag>(entity); }
     }
 
     for (auto entity : registry.view<Component::AreaLightComponent>()) {
-        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
+        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenFlag>(entity);
     }
     for (auto entity : registry.view<Component::SphereLightComponent>()) {
-        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenTag>(entity);
+        registry.emplace_or_replace<Component::ProbeBakeProxyHiddenFlag>(entity);
     }
 
-    for (auto entity : registry.view<Component::DynamicPhysicsBodyComponent>()) {
-        registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity);
+    for (auto entity : registry.view<Component::DynamicPhysicsBodyRuntime>()) {
+        registry.emplace_or_replace<Component::ProbeBakeHiddenFlag>(entity);
     }
     for (const auto& [entity, body] : registry.view<Component::PhysicsBodyDesc>().each()) {
-        if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenTag>(entity); }
+        if (body.motionType != Component::PhysicsMotionType::Static) { registry.emplace_or_replace<Component::ProbeBakeHiddenFlag>(entity); }
     }
 
     EvaluateAllInstanceRenderStates(state);
@@ -675,7 +675,7 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    state->registry.clear<Component::ProbeBakeHiddenTag, Component::ProbeBakeProxyHiddenTag>();
+    state->registry.clear<Component::ProbeBakeHiddenFlag, Component::ProbeBakeProxyHiddenFlag>();
     EvaluateAllInstanceRenderStates(state);
     MarkAnalyticLightsDirty(state->registry);
 }
@@ -714,26 +714,26 @@ static uint32_t TouchedTileMask(const ShadowViewGPU* views, uint32_t activeTiles
     return mask & activeTiles;
 }
 
-template<typename LightComponent>
-static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, LightComponent& light, bool bActive)
+template<typename LightComponent, typename LightRuntime>
+static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, const LightComponent& light, LightRuntime& runtime, bool bActive)
 {
     Engine::AssetManager& assets = *ctx->assetManager;
     const LightInfo* lights = state->analyticLightStore.Lights();
     const Engine::AssetManager::ShadowMapInfo* info = light.shadowMode == Component::LightShadowMode::Baked ? assets.GetShadowMapInfo(light.shadowId) : nullptr;
-    const bool bUsable = info != nullptr && light.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT && Engine::IsShadowBakeCurrent(info->key, lights[light.lightSlot]);
+    const bool bUsable = info != nullptr && runtime.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT && Engine::IsShadowBakeCurrent(info->key, lights[runtime.lightSlot]);
     if (!bUsable) {
-        if (light.bakedShadow.IsValid()) {
-            assets.UnloadTextureArray(light.bakedShadow);
-            light.bakedShadow = Engine::TextureArrayHandle::INVALID;
+        if (runtime.bakedShadow.IsValid()) {
+            assets.UnloadTextureArray(runtime.bakedShadow);
+            runtime.bakedShadow = Engine::TextureArrayHandle::INVALID;
         }
         return;
     }
-    if (!light.bakedShadow.IsValid()) {
-        light.bakedShadow = assets.LoadShadowMap(light.shadowId);
+    if (!runtime.bakedShadow.IsValid()) {
+        runtime.bakedShadow = assets.LoadShadowMap(light.shadowId);
     }
-    const Render::TextureArray* map = assets.GetTextureArray(light.bakedShadow);
+    const Render::TextureArray* map = assets.GetTextureArray(runtime.bakedShadow);
     if (bActive && map != nullptr && map->loadState == Render::TextureArray::LoadState::Loaded && !vf.bakedShadowLights.IsFull()) {
-        vf.bakedShadowLights.PushBack({light.lightSlot, static_cast<uint32_t>(map->bindlessHandle.index), light.bMovingObjectShadows});
+        vf.bakedShadowLights.PushBack({runtime.lightSlot, static_cast<uint32_t>(map->bindlessHandle.index), light.bMovingObjectShadows});
     }
 }
 
@@ -743,11 +743,11 @@ void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state,
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     vf.bakedShadowLights.Clear();
     const bool bActive = state->lighting.localShadows.bEnabled && state->lighting.lightingMode == Core::LightingMode::Analytic;
-    for (auto [entity, light] : state->registry.view<Component::AreaLightComponent>().each()) {
-        ResolveBakedShadow(ctx, state, vf, light, bActive);
+    for (auto [entity, light, runtime] : state->registry.view<Component::AreaLightComponent, Component::AreaLightRuntime>().each()) {
+        ResolveBakedShadow(ctx, state, vf, light, runtime, bActive);
     }
-    for (auto [entity, light] : state->registry.view<Component::SphereLightComponent>().each()) {
-        ResolveBakedShadow(ctx, state, vf, light, bActive);
+    for (auto [entity, light, runtime] : state->registry.view<Component::SphereLightComponent, Component::SphereLightRuntime>().each()) {
+        ResolveBakedShadow(ctx, state, vf, light, runtime, bActive);
     }
 }
 
@@ -1071,7 +1071,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         if (bEmissiveCapture) {
             for (const auto& [entity, runtime] : registry.view<Component::MeshRuntime>().each()) {
                 if (!runtime.range.IsValid()) { continue; }
-                const bool bBakeHidden = registry.all_of<Component::ProbeBakeHiddenTag>(entity);
+                const bool bBakeHidden = registry.all_of<Component::ProbeBakeHiddenFlag>(entity);
                 for (uint32_t i = 0; i < runtime.range.count; ++i) {
                     const uint32_t slot = runtime.range.offset + i;
                     const Engine::InstanceSource& inst = store[slot];
@@ -1098,7 +1098,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
         ZoneScopedN("DirectionalLight");
         int32_t bestPriority = INT32_MIN;
         bool found = false;
-        auto dirView = registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>();
+        auto dirView = registry.view<Component::DirectionalLightComponent, Component::WorldTransformRuntime>();
         for (const auto& [entity, light, transform] : dirView.each()) {
             if (light.priority > bestPriority) {
                 bestPriority = light.priority;
@@ -1127,13 +1127,13 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     vf.bReflectionProbeBruteForce = config.bBruteForcePick;
 
     const entt::registry& registry = state->registry;
-    auto view = registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>();
-    for (const auto& [entity, probe, worldTransform] : view.each()) {
+    auto view = registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::WorldTransformRuntime>();
+    for (const auto& [entity, probe, probeRuntime, worldTransform] : view.each()) {
         if (vf.reflectionProbes.IsFull()) { break; }
         const bool bPreview = state->debug.bProbePreview;
         if (!probe.bEnabled && !bPreview) { continue; }
-        if (!probe.contentHandle.IsValid()) { continue; }
-        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probe.contentHandle);
+        if (!probeRuntime.contentHandle.IsValid()) { continue; }
+        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probeRuntime.contentHandle);
         if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
 
         glm::vec3 srcTranslation = worldTransform.translation;
@@ -1141,7 +1141,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         glm::vec3 srcScale = worldTransform.scale;
         glm::vec3 srcCaptureOffset = probe.captureOffset;
         float radianceScale = probe.standInIntensity;
-        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
+        if (probeRuntime.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
             if (const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
                 radianceScale = info->radianceScale;
                 const Engine::ProbeBakeSnapshot& snap = info->snapshot;
@@ -1193,7 +1193,7 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     const entt::registry& registry = state->registry;
-    auto view = registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>();
+    auto view = registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformRuntime>();
     for (const auto& [entity, volume, worldTransform] : view.each()) {
         if (vf.localDDGIVolumes.IsFull()) { break; }
         if (!volume.bEnabled) { continue; }
@@ -1218,7 +1218,7 @@ void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         float distance;
     };
     Core::InlineVector<Candidate, VOLUMETRIC_FOG_MAX_VOLUMES> picked;
-    for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::FogVolumeComponent, Component::WorldTransformComponent>().each()) {
+    for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!volume.bEnabled) { continue; }
         const float absorption = glm::max(volume.absorption, 0.0f);
         const float scattering = glm::max(volume.scattering, 0.0f);
@@ -1274,7 +1274,7 @@ void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* st
     const Vec3 cameraPos = vf.mainView.currentViewData.cameraPos;
     Core::InlineVector<Engine::ActivePostProcessVolume, Engine::DebugState::MAX_ACTIVE_POST_PROCESS_VOLUMES>& active = state->debug.postProcessVolumes;
     active.Clear();
-    for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+    for (const auto& [entity, volume, worldTransform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (active.IsFull()) { break; }
         const float weight = Component::PostProcessVolumeComponent::CameraWeight(volume, worldTransform.translation, worldTransform.rotation, worldTransform.scale, cameraPos);
         if (weight <= 0.0f || volume.overrides.IsEmpty()) { continue; }
@@ -1313,37 +1313,37 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
     };
 
     if (mask & Engine::EDITOR_OBJECT_AREA_LIGHT) {
-        for (auto [entity, light, transform] : registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, light, transform] : registry.view<Component::AreaLightComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation, {light.color.r, light.color.g, light.color.b, 1.0f}, SPRITE_AREA_LIGHT_BINDLESS_INDEX);
         }
     }
     if (mask & Engine::EDITOR_OBJECT_SPHERE_LIGHT) {
-        for (auto [entity, light, transform] : registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, light, transform] : registry.view<Component::SphereLightComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation, {light.color.r, light.color.g, light.color.b, 1.0f}, SPRITE_POINT_LIGHT_BINDLESS_INDEX);
         }
     }
     if (mask & Engine::EDITOR_OBJECT_DIRECTIONAL_LIGHT) {
-        for (auto [entity, light, transform] : registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, light, transform] : registry.view<Component::DirectionalLightComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation, {light.color.r, light.color.g, light.color.b, 1.0f}, SPRITE_DIRECTIONAL_LIGHT_BINDLESS_INDEX);
         }
     }
     if (mask & Engine::EDITOR_OBJECT_REFLECTION_PROBE) {
-        for (auto [entity, probe, transform] : registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, probe, transform] : registry.view<Component::ReflectionProbeComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation + transform.rotation * probe.captureOffset, Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f), SPRITE_REFLECTION_PROBE_BINDLESS_INDEX);
         }
     }
     if (mask & Engine::EDITOR_OBJECT_DDGI_VOLUME) {
-        for (auto [entity, volume, transform] : registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, volume, transform] : registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation, Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f), SPRITE_DDGI_VOLUME_BINDLESS_INDEX);
         }
     }
     if (mask & Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME) {
-        for (auto [entity, volume, transform] : registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, volume, transform] : registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation, {0.7f, 0.4f, 1.0f, 1.0f}, SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX);
         }
     }
     if (mask & Engine::EDITOR_OBJECT_FOG_VOLUME) {
-        for (auto [entity, volume, transform] : registry.view<Component::FogVolumeComponent, Component::WorldTransformComponent>().each()) {
+        for (auto [entity, volume, transform] : registry.view<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
             push(entity, transform.translation, {0.55f, 0.75f, 0.85f, 1.0f}, SPRITE_POST_PROCESS_VOLUME_BINDLESS_INDEX);
         }
     }
@@ -1393,7 +1393,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     };
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_AREA_LIGHT)) { continue; }
         const Vec3 center = transform.translation;
         const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
@@ -1447,7 +1447,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_SPHERE_LIGHT)) { continue; }
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
@@ -1457,31 +1457,31 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::WorldTransformComponent>().each()) {
+    for (const auto& [entity, light, transform] : state->registry.view<Component::DirectionalLightComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_DIRECTIONAL_LIGHT)) { continue; }
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
     }
 
-    for (auto [entity, volume, transform] : state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformComponent>().each()) {
+    for (auto [entity, volume, transform] : state->registry.view<Component::LocalDDGIVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_DDGI_VOLUME)) { continue; }
         constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
         const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
         Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
-    for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformComponent>().each()) {
+    for (auto [entity, volume, transform] : state->registry.view<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME)) { continue; }
         Component::PostProcessVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
-    for (auto [entity, volume, transform] : state->registry.view<Component::FogVolumeComponent, Component::WorldTransformComponent>().each()) {
+    for (auto [entity, volume, transform] : state->registry.view<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_FOG_VOLUME)) { continue; }
         Component::FogVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
-    for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformComponent>().each()) {
+    for (auto [entity, probe, transform] : state->registry.view<Component::ReflectionProbeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_REFLECTION_PROBE)) { continue; }
 
         const Vec4 volumeColor = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f);
@@ -1508,7 +1508,8 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {capturePos, 0.1f, captureColor, lineWidth});
 
         // Stale baked probes
-        if (probe.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
+        const auto* probeRuntime = state->registry.try_get<Component::ReflectionProbeRuntime>(entity);
+        if (probeRuntime && probeRuntime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
             const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId});
             if (info && Component::ReflectionProbeComponent::IsBakeStale(transform, probe, info->snapshot, info->resolution)) {
                 constexpr Vec4 staleColor{1.0f, 0.0f, 0.0f, 1.0f};

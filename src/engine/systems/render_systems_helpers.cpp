@@ -26,24 +26,24 @@ void VerifyAnalyticLightStore(Engine::EngineState* state)
     uint32_t staleCount = 0;
     uint32_t firstStaleSlot = 0;
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::AreaLightComponent, Component::WorldTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
-        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+    for (const auto& [entity, light, runtime, transform] : state->registry.view<Component::AreaLightComponent, Component::AreaLightRuntime, Component::WorldTransformRuntime>(entt::exclude<Component::ProbeBakeHiddenFlag>).each()) {
+        if (runtime.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         const LightInfo expected = Component::ComputeAreaLightInfo(transform, light);
-        if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
-            if (staleCount++ == 0) { firstStaleSlot = light.lightSlot; }
+        if (memcmp(&expected, &lights[runtime.lightSlot], sizeof(LightInfo)) != 0) {
+            if (staleCount++ == 0) { firstStaleSlot = runtime.lightSlot; }
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.view<Component::SphereLightComponent, Component::WorldTransformComponent>(entt::exclude<Component::ProbeBakeHiddenTag>).each()) {
-        if (light.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
+    for (const auto& [entity, light, runtime, transform] : state->registry.view<Component::SphereLightComponent, Component::SphereLightRuntime, Component::WorldTransformRuntime>(entt::exclude<Component::ProbeBakeHiddenFlag>).each()) {
+        if (runtime.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
         const LightInfo expected = Component::ComputeSphereLightInfo(transform, light);
-        if (memcmp(&expected, &lights[light.lightSlot], sizeof(LightInfo)) != 0) {
-            if (staleCount++ == 0) { firstStaleSlot = light.lightSlot; }
+        if (memcmp(&expected, &lights[runtime.lightSlot], sizeof(LightInfo)) != 0) {
+            if (staleCount++ == 0) { firstStaleSlot = runtime.lightSlot; }
         }
     }
 
     if (staleCount > 0) {
-        LOG_ERROR(Engine, "{} analytic light(s) stale in the store, first at slot {}; a mutation did not mark MultiframeDirtyComponent", staleCount, firstStaleSlot);
+        LOG_ERROR(Engine, "{} analytic light(s) stale in the store, first at slot {}; a mutation did not mark MultiframeDirtyRequest", staleCount, firstStaleSlot);
     }
     else {
         LOG_INFO(Engine, "Analytic light store clean");

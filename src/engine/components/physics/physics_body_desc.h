@@ -152,9 +152,28 @@ struct PhysicsBodyDesc
     static void DeferredConstruct(entt::registry& registry, entt::entity entity);
     /** Releases the runtime colliders and queues a DeferredConstruct. */
     static void RequestRebuild(entt::registry& registry, entt::entity entity);
+    /** Removes the body and holds it off with a PhysicsSuspendedFlag; the desc stays. */
+    static void Suspend(entt::registry& registry, entt::entity entity);
+    /** Clears the suspension and rebuilds the body from the desc. */
+    static void Resume(entt::registry& registry, entt::entity entity);
     static void OnEditCommit(entt::registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
+
+/** A motion type set at runtime that wins over the desc's, e.g. a kinematic body let go to fall. Read through EffectiveMotionType. */
+struct PhysicsMotionOverrideRuntime
+{
+    PhysicsMotionType motionType{PhysicsMotionType::Dynamic};
+};
+
+struct PhysicsSuspendedFlag
+{};
+
+inline PhysicsMotionType EffectiveMotionType(const entt::registry& registry, entt::entity entity, const PhysicsBodyDesc& desc)
+{
+    const auto* motionOverride = registry.try_get<PhysicsMotionOverrideRuntime>(entity);
+    return motionOverride ? motionOverride->motionType : desc.motionType;
+}
 }
 
 #endif //WILL_ENGINE_PHYSICS_BODY_DESC_H

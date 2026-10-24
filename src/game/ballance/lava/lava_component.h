@@ -38,7 +38,7 @@ struct LavaComponent
 };
 
 /** Runtime state of a body being eaten; the start pose is local to its parent. */
-struct DissolvingComponent
+struct DissolvingRuntime
 {
     glm::vec3 startTranslation{0.0f};
     glm::quat startRotation{1.0f, 0.0f, 0.0f, 0.0f};
@@ -52,11 +52,11 @@ struct DissolvingComponent
     float elapsed{0.0f};
 };
 
-/** Kept when its dissolve finishes: the entity gets a DissolvedTag instead of being destroyed, and its owner restores it. */
+/** Kept when its dissolve finishes: the entity gets a DissolvedFlag instead of being destroyed, and its owner restores it. */
 struct DissolveKeepTag
 {};
 
-struct DissolvedTag
+struct DissolvedFlag
 {};
 }
 

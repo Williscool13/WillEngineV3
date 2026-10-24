@@ -28,26 +28,26 @@ namespace Engine::Component
 void UnloadText3DFont(entt::registry& registry, entt::entity entity)
 {
     registry.remove<Component::MeshRuntime>(entity);
-    registry.remove<Text3DGeneratePendingTag>(entity);
-    registry.remove<Text3DLoadingTag>(entity);
+    registry.remove<Text3DGenerateRequest>(entity);
+    registry.remove<Text3DLoadingFlag>(entity);
 }
 
 void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity)
 {
-    registry.remove<Text3DLoadingTag>(entity);
+    registry.remove<Text3DLoadingFlag>(entity);
     if (component.fontId.IsValid()) {
-        registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
+        registry.emplace_or_replace<Text3DGenerateRequest>(entity);
     }
     else {
-        registry.remove<Text3DGeneratePendingTag>(entity);
+        registry.remove<Text3DGenerateRequest>(entity);
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -58,16 +58,16 @@ void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void Text3DComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     UnloadText3DFont(registry, entity);
-    registry.remove<RenderTransformComponent>(entity);
+    registry.remove<RenderTransformRuntime>(entity);
 }
 }
 
@@ -82,10 +82,10 @@ bool Component::Text3DComponent::CanAdd(const entt::registry& registry, entt::en
 void Component::Text3DComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
     const auto& comp = registry.get<Text3DComponent>(entity);
-    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+    if (auto* rt = registry.try_get<RenderTransformRuntime>(entity)) {
         rt->renderOffset = comp.renderOffset;
         rt->renderRotation = comp.renderRotation;
-        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -96,7 +96,7 @@ void Component::Text3DComponent::OnEditCommit(entt::registry& registry, entt::en
         UnloadText3DFont(registry, entity);
         return;
     }
-    registry.emplace_or_replace<Text3DGeneratePendingTag>(entity);
+    registry.emplace_or_replace<Text3DGenerateRequest>(entity);
     OnEditPreview(registry, entity);
 }
 
@@ -107,7 +107,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     const auto& comp = edit.Get<Text3DComponent>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
     auto* state = edit.State();
-    const bool busy = registry.any_of<Text3DGeneratePendingTag, Text3DLoadingTag>(entity);
+    const bool busy = registry.any_of<Text3DGenerateRequest, Text3DLoadingFlag>(entity);
 
     bool open = ImGui::CollapsingHeader("3D Text", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -124,7 +124,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     }
 
     if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_ALL & ~RENDER_TOGGLE_ALPHA_CUTOUT)) {
-        edit.ForEachTarget<Text3DComponent>([&registry](entt::entity e) { registry.emplace_or_replace<Text3DGeneratePendingTag>(e); });
+        edit.ForEachTarget<Text3DComponent>([&registry](entt::entity e) { registry.emplace_or_replace<Text3DGenerateRequest>(e); });
     }
 
     ImGui::BeginDisabled(busy);

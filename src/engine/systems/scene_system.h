@@ -124,7 +124,7 @@ void ResolveHierarchyLinks(Engine::EngineState* state);
  */
 void EnsureHierarchyOrder(Engine::EngineState* state);
 
-/** Tags the descendants of every DirtyTransformTag entity so physics follows a moved parent; physics-owned dynamic children are left alone while playing. */
+/** Tags the descendants of every DirtyTransformRequest entity so physics follows a moved parent; physics-owned dynamic children are left alone while playing. */
 void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
@@ -176,7 +176,7 @@ inline entt::entity CopyEntity(Engine::EngineState* state, entt::entity src)
 }
 
 /**
- * Wraps CopyEntity and assigns SceneComponent. Editor use.
+ * Wraps CopyEntity and assigns SceneRuntime. Editor use.
  * Pass a targetScene to copy into a different scene, otherwise inherits src's scene.
  * @param state
  * @param src
@@ -187,9 +187,9 @@ inline entt::entity CopySceneEntity(Engine::EngineState* state, entt::entity src
 {
     entt::entity dst = CopyEntity(state, src);
 
-    if (const auto* scene = state->registry.try_get<Component::SceneComponent>(src)) {
+    if (const auto* scene = state->registry.try_get<Component::SceneRuntime>(src)) {
         const StringID sceneId = targetScene ? targetScene : scene->sceneId;
-        state->registry.emplace<Component::SceneComponent>(dst, sceneId);
+        state->registry.emplace<Component::SceneRuntime>(dst, sceneId);
     }
 
     return dst;

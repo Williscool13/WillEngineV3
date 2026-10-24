@@ -11,7 +11,7 @@ namespace Engine::Component
 /**
  * Basically all entities should have this
  */
-struct SceneComponent
+struct SceneRuntime
 {
     StringID sceneId;
 };

@@ -276,7 +276,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             Print(state, Core::InlineString<64>::Format("  cam %d is empty", slot + 1).c_str());
             return;
         }
-        auto camView = state->registry.view<Component::TransformComponent, Component::CameraComponent, Component::EditorCameraTag>();
+        auto camView = state->registry.view<Component::TransformComponent, Component::CameraRuntime, Component::EditorCameraTag>();
         const entt::entity camEntity = camView.front();
         if (camEntity == entt::null) {
             Print(state, "  no editor camera");

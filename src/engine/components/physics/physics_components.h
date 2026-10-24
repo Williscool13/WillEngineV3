@@ -18,7 +18,7 @@ namespace Core { struct ViewFamily; }
 namespace Engine::Component
 {
 /** Physics state. Interpolate w/ physics alpha for smooth physics*/
-struct DynamicPhysicsBodyComponent
+struct DynamicPhysicsBodyRuntime
 {
     glm::vec3 previousPosition{};
     glm::quat previousRotation{};
@@ -26,31 +26,31 @@ struct DynamicPhysicsBodyComponent
     glm::quat currentRotation{};
 };
 
-struct TeleportPhysicsTransformTag
+struct TeleportPhysicsTransformRequest
 {};
 
-struct StaticFollowWarnedTag
+struct StaticFollowWarnedFlag
 {};
 
-struct DirtyKinematicPhysicsTransformTag
+struct DirtyKinematicPhysicsTransformRequest
 {};
 
-struct MovingKinematicTag
+struct MovingKinematicFlag
 {};
 
-struct PendingPhysicsMeshTag
+struct PhysicsMeshRequest
 {};
 
-struct PhysicsMeshLoadingTag
+struct PhysicsMeshLoadingFlag
 {};
 
-struct PendingPhysicsShapeCreationTag
+struct PhysicsShapeCreationRequest
 {};
 
-struct PendingPhysicsBodyCreationTag
+struct PhysicsBodyCreationRequest
 {};
 
-struct SetVelocityTag
+struct SetVelocityRequest
 {
     glm::vec3 linearVelocity{0.0f};
     glm::vec3 angularVelocity{0.0f};
@@ -89,6 +89,10 @@ struct ConveyorComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
+
+/** Stops an enabled conveyor at runtime without touching its authored bEnabled. */
+struct ConveyorHaltedFlag
+{};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

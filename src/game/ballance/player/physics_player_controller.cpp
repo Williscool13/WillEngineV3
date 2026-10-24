@@ -95,9 +95,9 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         );
     }
 
-    auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraComponent, Component::TransformComponent>();
+    auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraRuntime, Component::TransformComponent>();
     for (auto camEntity : cameraView) {
-        auto& camera = cameraView.get<Component::CameraComponent>(camEntity);
+        auto& camera = cameraView.get<Component::CameraRuntime>(camEntity);
         auto& transform = cameraView.get<Component::TransformComponent>(camEntity);
         camera.currentViewData = viewData;
         // Mirror the pose into the transform (editor eject reads it)

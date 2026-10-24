@@ -68,11 +68,11 @@ struct Text3DComponent
 };
 
 /** Mesh needs (re)generating; the kickoff generates it (freeze-gated on the source font). */
-struct Text3DGeneratePendingTag
+struct Text3DGenerateRequest
 {};
 
 /** Mesh generation in flight; waiting to bind its material. */
-struct Text3DLoadingTag
+struct Text3DLoadingFlag
 {};
 
 /** Arms the generate pipeline; call after changing fontId. */

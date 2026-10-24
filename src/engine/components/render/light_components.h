@@ -63,11 +63,6 @@ struct AreaLightComponent
     uint64_t shadowId{0};
     bool bEnabled{true};
 
-    /** Runtime-only stable analytic light slot. Allocated OnConstruct */
-    uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
-    /** Runtime-only. Resident baked shadow map while the bake matches the light. */
-    Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
-
     WILL_REFLECT(AreaLightComponent,
         WILL_FIELD(bEnabled),
         WILL_FIELD(color),
@@ -128,11 +123,6 @@ struct SphereLightComponent
     uint64_t shadowId{0};
     bool bEnabled{true};
 
-    /** Runtime-only stable analytic light slot. Allocated OnConstruct */
-    uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
-    /** Runtime-only. Resident baked shadow map while the bake matches the light. */
-    Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
-
     WILL_REFLECT(SphereLightComponent,
         WILL_FIELD(bEnabled),
         WILL_FIELD(color),
@@ -168,6 +158,27 @@ glm::mat4 ComputeSphereLightMatrix(const Transform& world, const SphereLightComp
 
 LightInfo ComputeSphereLightInfo(const Transform& world, const SphereLightComponent& light);
 
+/** Emplaced by the light's OnConstruct; the slot is allocated at command playback. bakedShadow is resident while the bake matches the light. */
+struct AreaLightRuntime
+{
+    uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
+    Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
+};
+
+struct SphereLightRuntime
+{
+    uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
+    Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
+};
+
+/** The analytic light slot of an area or sphere light, or INVALID_SLOT. */
+inline uint32_t FindLightSlot(const entt::registry& registry, entt::entity entity)
+{
+    if (const auto* area = registry.try_get<AreaLightRuntime>(entity)) { return area->lightSlot; }
+    if (const auto* sphere = registry.try_get<SphereLightRuntime>(entity)) { return sphere->lightSlot; }
+    return Engine::AnalyticLightStore::INVALID_SLOT;
+}
+
 struct LightSurfaceRuntime
 {
     Engine::InstanceStore::Range range{};
@@ -179,7 +190,7 @@ struct LightSurfaceRuntime
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
-struct LightSurfacePendingTag
+struct LightSurfaceRequest
 {};
 
 struct DirectionalLightComponent
@@ -214,9 +225,6 @@ struct SkyboxComponent
     int32_t priority{0};
     bool bEnabled{true};
 
-    // Runtime-only: refcounted cubemap acquired lazily by the skybox gather.
-    Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
-
     WILL_REFLECT(SkyboxComponent,
         WILL_FIELD(envMap),
         WILL_FIELD(intensity, .min = 0.0f, .speed = 100.0f),
@@ -227,7 +235,13 @@ struct SkyboxComponent
 
     static void OnEditCommit(entt::registry& registry, entt::entity entity);
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
+};
+
+/** The refcounted cubemap of envMap, acquired lazily by ResolveSkyboxCubemaps. */
+struct SkyboxRuntime
+{
+    Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
 
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };

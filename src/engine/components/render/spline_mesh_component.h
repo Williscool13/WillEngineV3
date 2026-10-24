@@ -70,11 +70,11 @@ struct SplineMeshComponent
 };
 
 /** Generation requested; StartSplineMeshLoads kicks the model build. */
-struct SplineMeshLoadPendingTag
+struct SplineMeshLoadRequest
 {};
 
 /** Model build in flight; ResolveSplineMeshLoads binds it once finished. */
-struct SplineMeshLoadingTag
+struct SplineMeshLoadingFlag
 {};
 
 Engine::SplineParams ToSplineParams(const SplineMeshComponent& component);

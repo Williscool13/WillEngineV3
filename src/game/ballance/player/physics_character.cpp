@@ -30,12 +30,12 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
 
     auto& transform = engineState->registry.get<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;
-    engineState->registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
+    engineState->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
 }
 
 void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* inPhysicsWorld)
 {
-    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return;
     const auto bodyId = physicsBody->bodyID;
 
@@ -82,7 +82,7 @@ glm::vec3 PhysicsCharacter::GetPosition() const
 glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
 {
     if (!engineState || !engineState->registry.valid(entity)) return {};
-    auto* dynamic = engineState->registry.try_get<Component::DynamicPhysicsBodyComponent>(entity);
+    auto* dynamic = engineState->registry.try_get<Component::DynamicPhysicsBodyRuntime>(entity);
     if (!dynamic) return GetPosition();
     float alpha = engineState->physics.interpolationAlpha;
     return glm::mix(dynamic->previousPosition, dynamic->currentPosition, alpha);
@@ -91,7 +91,7 @@ glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
 glm::vec3 PhysicsCharacter::GetLinearVelocity() const
 {
     if (!physicsWorld) return {};
-    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return {};
     return physicsWorld->GetLinearVelocity(physicsBody->bodyID);
 }
@@ -103,7 +103,7 @@ bool PhysicsCharacter::IsGrounded() const
 
 bool PhysicsCharacter::CheckGrounded(Physics::PhysicsWorld* inPhysicsWorld) const
 {
-    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyComponent>(entity);
+    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return false;
 
     // Cast ray downward from center of sphere, slightly past the bottom

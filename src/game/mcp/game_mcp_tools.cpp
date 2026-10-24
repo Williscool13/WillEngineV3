@@ -176,9 +176,9 @@ static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* s
     const entt::registry& registry = state->registry;
     const auto* stable = registry.try_get<Component::StableIdComponent>(entity);
     const auto* name = registry.try_get<Component::NameComponent>(entity);
-    const auto* scene = registry.try_get<Component::SceneComponent>(entity);
+    const auto* scene = registry.try_get<Component::SceneRuntime>(entity);
     const auto* local = registry.try_get<Component::TransformComponent>(entity);
-    const auto* world = registry.try_get<Component::WorldTransformComponent>(entity);
+    const auto* world = registry.try_get<Component::WorldTransformRuntime>(entity);
     const auto* hierarchy = registry.try_get<Component::HierarchyComponent>(entity);
 
     call.SetInt("entity", static_cast<int64_t>(entt::to_integral(entity)));

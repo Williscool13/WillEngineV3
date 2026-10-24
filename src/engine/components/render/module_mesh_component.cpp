@@ -25,22 +25,22 @@ void ModuleMeshComponent::OnConstruct(entt::registry& registry, entt::entity ent
     registry.get_or_emplace<RenderFlagsComponent>(entity);
     auto& component = registry.get<ModuleMeshComponent>(entity);
 
-    registry.emplace_or_replace<ModuleMeshLoadPendingTag>(entity);
+    registry.emplace_or_replace<ModuleMeshLoadRequest>(entity);
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void ModuleMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
-    registry.remove<ModuleMeshLoadPendingTag>(entity);
-    registry.remove<ModuleMeshLoadingTag>(entity);
-    registry.remove<RenderTransformComponent>(entity);
+    registry.remove<ModuleMeshLoadRequest>(entity);
+    registry.remove<ModuleMeshLoadingFlag>(entity);
+    registry.remove<RenderTransformRuntime>(entity);
 }
 }
 
@@ -53,7 +53,7 @@ bool Component::ModuleMeshComponent::CanAdd(const entt::registry& registry, entt
 
 void Component::ModuleMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<ModuleMeshLoadingTag>(entity);
+    registry.emplace_or_replace<ModuleMeshLoadingFlag>(entity);
 }
 
 Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
@@ -71,7 +71,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
 
     if (open) {
         if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
-            edit.ForEachTarget<ModuleMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ModuleMeshLoadingTag>(e); });
+            edit.ForEachTarget<ModuleMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ModuleMeshLoadingFlag>(e); });
         }
 
         // Parts are script-authored; the editor only re-skins slots

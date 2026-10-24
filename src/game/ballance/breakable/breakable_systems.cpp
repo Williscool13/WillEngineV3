@@ -81,7 +81,7 @@ static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* sta
         Engine::Console::Print(state, "  b.crate.break: needs play or simulate");
         return;
     }
-    const auto* camera = state->registry.try_get<Component::CameraComponent>(state->renderedCamera);
+    const auto* camera = state->registry.try_get<Component::CameraRuntime>(state->renderedCamera);
     if (!camera) {
         Engine::Console::Print(state, "  b.crate.break: no rendered camera");
         return;
@@ -115,8 +115,8 @@ static void DumpSeed(Engine::EngineContext* ctx, Engine::EngineState* state, Cor
         return;
     }
     entt::registry& registry = state->registry;
-    auto crates = registry.view<Component::BreakableComponent, Component::PrefabInstanceComponent, Component::DoNotSerializeTag>(entt::exclude<Component::DissolvingComponent>);
-    auto shards = registry.view<Component::ShardTag, Component::StaticMeshComponent, Component::PhysicsBodyDesc>(entt::exclude<Component::DissolvingComponent>);
+    auto crates = registry.view<Component::BreakableComponent, Component::PrefabInstanceComponent, Component::DoNotSerializeTag>(entt::exclude<Component::DissolvingRuntime>);
+    auto shards = registry.view<Component::ShardTag, Component::StaticMeshComponent, Component::PhysicsBodyDesc>(entt::exclude<Component::DissolvingRuntime>);
     constexpr size_t LINE_BYTES = 384;
     auto text = Core::ArenaFixedVector<char>(&ctx->gameplayArena.Get(), (crates.size_hint() + shards.size_hint() + 1) * LINE_BYTES);
     auto append = [&](const Core::InlineString<384>& line) {
@@ -197,12 +197,13 @@ void UpdateSelfDestruct(Engine::EngineContext* ctx, Engine::EngineState* state)
     const float dt = state->timeFrame->deltaTime;
     auto due = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, selfDestruct, breakable] : view.each()) {
-        selfDestruct.elapsed += dt;
-        if (selfDestruct.elapsed >= selfDestruct.delay) { due.PushBack(entity); }
+        auto& run = state->registry.get_or_emplace<Component::SelfDestructRuntime>(entity);
+        run.elapsed += dt;
+        if (run.elapsed >= selfDestruct.delay) { due.PushBack(entity); }
     }
     for (const entt::entity entity : due) {
         if (Break(ctx, state, entity)) {
-            state->registry.remove<Component::SelfDestructComponent>(entity);
+            state->registry.remove<Component::SelfDestructComponent, Component::SelfDestructRuntime>(entity);
         }
     }
 }
@@ -311,7 +312,7 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
 
         const glm::vec3 offset = position - centerOfMass;
         const float offsetLength = glm::length(offset);
-        registry.emplace<Component::SetVelocityTag>(shard, Component::SetVelocityTag{
+        registry.emplace<Component::SetVelocityRequest>(shard, Component::SetVelocityRequest{
             .linearVelocity = linearVelocity + glm::cross(angularVelocity, offset) + (offsetLength > 1e-4f ? scatterSpeed / offsetLength : 0.0f) * offset,
             .angularVelocity = angularVelocity + spin,
         });

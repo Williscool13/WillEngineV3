@@ -26,23 +26,23 @@ namespace Engine::Component
 void UnloadStaticMeshPrimitive(entt::registry& registry, entt::entity entity)
 {
     registry.remove<MeshRuntime>(entity);
-    registry.remove<StaticMeshPrimitiveLoadPendingTag>(entity);
-    registry.remove<StaticMeshPrimitiveLoadingTag>(entity);
+    registry.remove<StaticMeshPrimitiveLoadRequest>(entity);
+    registry.remove<StaticMeshPrimitiveLoadingFlag>(entity);
 }
 
 void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, entt::registry& registry, entt::entity entity)
 {
-    registry.remove<StaticMeshPrimitiveLoadingTag>(entity);
+    registry.remove<StaticMeshPrimitiveLoadingFlag>(entity);
     if (component.modelId.IsValid() && component.primitiveOrdinal != ~0u) {
-        registry.emplace_or_replace<StaticMeshPrimitiveLoadPendingTag>(entity);
+        registry.emplace_or_replace<StaticMeshPrimitiveLoadRequest>(entity);
     }
 
     auto* transform = registry.try_get<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformComponent>(entity, m, m);
+    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
 }
 
 void StaticMeshPrimitiveComponent::OnConstruct(entt::registry& registry, entt::entity entity)
@@ -58,7 +58,7 @@ void StaticMeshPrimitiveComponent::OnConstruct(entt::registry& registry, entt::e
 void StaticMeshPrimitiveComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     UnloadStaticMeshPrimitive(registry, entity);
-    registry.remove<RenderTransformComponent>(entity);
+    registry.remove<RenderTransformRuntime>(entity);
 }
 
 bool StaticMeshPrimitiveComponent::CanAdd(const entt::registry& registry, entt::entity entity)
@@ -70,10 +70,10 @@ bool StaticMeshPrimitiveComponent::CanAdd(const entt::registry& registry, entt::
 void StaticMeshPrimitiveComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
 {
     const auto& component = registry.get<StaticMeshPrimitiveComponent>(entity);
-    if (auto* rt = registry.try_get<RenderTransformComponent>(entity)) {
+    if (auto* rt = registry.try_get<RenderTransformRuntime>(entity)) {
         rt->renderOffset = component.renderOffset;
         rt->renderRotation = component.renderRotation;
-        registry.emplace_or_replace<MultiframeDirtyComponent>(entity);
+        registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -82,16 +82,16 @@ void StaticMeshPrimitiveComponent::OnEditCommit(entt::registry& registry, entt::
     auto& component = registry.get<StaticMeshPrimitiveComponent>(entity);
     if (!component.modelId.IsValid()) {
         UnloadStaticMeshPrimitive(registry, entity);
-        registry.remove<RenderTransformComponent>(entity);
-        registry.remove<MultiframeDirtyComponent>(entity);
+        registry.remove<RenderTransformRuntime>(entity);
+        registry.remove<MultiframeDirtyRequest>(entity);
         return;
     }
-    if (!registry.all_of<RenderTransformComponent>(entity)) {
+    if (!registry.all_of<RenderTransformRuntime>(entity)) {
         LoadStaticMeshPrimitive(component, registry, entity);
         return;
     }
     if (component.primitiveOrdinal != ~0u) {
-        registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(entity);
+        registry.emplace_or_replace<StaticMeshPrimitiveLoadingFlag>(entity);
     }
     OnEditPreview(registry, entity);
 }
@@ -112,7 +112,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
 
     if (open) {
         if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
-            edit.ForEachTarget<StaticMeshPrimitiveComponent>([&registry](entt::entity e) { registry.emplace_or_replace<StaticMeshPrimitiveLoadingTag>(e); });
+            edit.ForEachTarget<StaticMeshPrimitiveComponent>([&registry](entt::entity e) { registry.emplace_or_replace<StaticMeshPrimitiveLoadingFlag>(e); });
         }
 
         if (!component.modelId.IsValid()) {

@@ -59,7 +59,7 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         entt::entity otherEntity = (event.e1 == playerEntity) ? event.e2 : event.e1;
         if (otherEntity == entt::null) { continue; }
-        if (!state->registry.all_of<Component::DeathZoneComponent>(otherEntity)) { continue; }
+        if (!state->registry.all_of<Component::DeathZoneTag>(otherEntity)) { continue; }
 
         // Find the active checkpoint entity
         entt::entity checkpointEntity = entt::null;
@@ -81,8 +81,8 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         playerTransform.translation = checkpointTransform.translation + checkpoint.spawnOffset;
         playerTransform.rotation = glm::quat(glm::radians(checkpoint.spawnRotation));
 
-        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformTag>(playerEntity);
-        state->registry.emplace_or_replace<Component::SetVelocityTag>(playerEntity);
+        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformRequest>(playerEntity);
+        state->registry.emplace_or_replace<Component::SetVelocityRequest>(playerEntity);
         state->requests.RequestRenderReset(Core::RenderReset::Cut);
 
         break;

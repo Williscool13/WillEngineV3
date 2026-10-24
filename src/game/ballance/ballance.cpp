@@ -38,7 +38,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterComponent<Component::FloorTag>(componentRegistry, Engine::Origin::Game, false, false);
 
     Engine::RegisterComponent<Component::CheckpointComponent>(componentRegistry, Engine::Origin::Game, false, false);
-    Engine::RegisterComponent<Component::DeathZoneComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::DeathZoneTag>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::PlayerSpawnComponent>(componentRegistry, Engine::Origin::Game, false, false);
 
     Engine::RegisterComponent<Component::BreakableComponent>(componentRegistry, Engine::Origin::Game, false, false);

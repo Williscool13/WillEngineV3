@@ -1,7 +1,7 @@
 wscene
 version 2 1
 id 6680640857240007171
-content_version 160
+content_version 161
 entity_count 2103
 end_header
 scene_id|6680640857240007171
@@ -36213,7 +36213,7 @@ easing|5
 speed|0x3ee16d55
 waitTime|0x3f16e4e6
 ;
-waitTimer|0x3dbb8b6a
+startWait|0x3dbb8b6a
 ;
 ;
 entity
@@ -36279,7 +36279,7 @@ easing|5
 speed|0x3ec61de1
 waitTime|0x3ecc66f0
 ;
-waitTimer|0x4013b4aa
+startWait|0x4013b4aa
 ;
 ;
 entity
@@ -36345,7 +36345,7 @@ easing|4
 speed|0x3f20ec51
 waitTime|0x3e62ef3a
 ;
-waitTimer|0x3f176585
+startWait|0x3f176585
 ;
 ;
 entity
@@ -36411,7 +36411,7 @@ easing|5
 speed|0x3f1650c4
 waitTime|0x3e6889f0
 ;
-waitTimer|0x4035cc32
+startWait|0x4035cc32
 ;
 ;
 entity
@@ -36477,7 +36477,7 @@ easing|3
 speed|0x3ec064ab
 waitTime|0x3e5c7827
 ;
-waitTimer|0x4038d14d
+startWait|0x4038d14d
 ;
 ;
 entity
@@ -36543,7 +36543,7 @@ easing|3
 speed|0x3f0da1bb
 waitTime|0x3f2c1fd1
 ;
-waitTimer|0x3fa4ac88
+startWait|0x3fa4ac88
 ;
 ;
 entity
@@ -36609,7 +36609,7 @@ easing|3
 speed|0x3f16d926
 waitTime|0x3eb39187
 ;
-waitTimer|0x3f8a101a
+startWait|0x3f8a101a
 ;
 ;
 entity
@@ -36675,7 +36675,7 @@ easing|5
 speed|0x3f1d3454
 waitTime|0x3e980fe4
 ;
-waitTimer|0x404f9ceb
+startWait|0x404f9ceb
 ;
 ;
 entity
@@ -36741,7 +36741,7 @@ easing|3
 speed|0x3f0bfc95
 waitTime|0x3f0e57c2
 ;
-waitTimer|0x3d1870d7
+startWait|0x3d1870d7
 ;
 ;
 entity
@@ -36807,7 +36807,7 @@ easing|5
 speed|0x3edeba9f
 waitTime|0x3f09ca81
 ;
-waitTimer|0x3e2c6597
+startWait|0x3e2c6597
 ;
 ;
 entity
@@ -36873,7 +36873,7 @@ easing|3
 speed|0x3ef908dd
 waitTime|0x3ecb4ac3
 ;
-waitTimer|0x40248b1a
+startWait|0x40248b1a
 ;
 ;
 entity
@@ -36939,7 +36939,7 @@ easing|4
 speed|0x3ed0a0c4
 waitTime|0x3ede4064
 ;
-waitTimer|0x3daadf0f
+startWait|0x3daadf0f
 ;
 ;
 entity
@@ -37005,7 +37005,7 @@ easing|5
 speed|0x3f12b1b9
 waitTime|0x3e85137e
 ;
-waitTimer|0x3db4a591
+startWait|0x3db4a591
 ;
 ;
 entity
@@ -37071,7 +37071,7 @@ easing|3
 speed|0x3f1b38b2
 waitTime|0x3e8f3fe1
 ;
-waitTimer|0x3fb4539d
+startWait|0x3fb4539d
 ;
 ;
 entity
@@ -37251,7 +37251,7 @@ easing|3
 speed|0x3ec636de
 waitTime|0x3f03ce49
 ;
-waitTimer|0x402476d1
+startWait|0x402476d1
 ;
 ;
 entity
@@ -37317,7 +37317,7 @@ easing|3
 speed|0x3f0cf393
 waitTime|0x3f2fc415
 ;
-waitTimer|0x3f85087b
+startWait|0x3f85087b
 ;
 ;
 entity
@@ -37383,7 +37383,7 @@ easing|3
 speed|0x3f26b3ef
 waitTime|0x3eba9edf
 ;
-waitTimer|0x40596802
+startWait|0x40596802
 ;
 ;
 entity
@@ -37449,7 +37449,7 @@ easing|5
 speed|0x3f194a80
 waitTime|0x3ed88f88
 ;
-waitTimer|0x3efa5f2b
+startWait|0x3efa5f2b
 ;
 ;
 entity
@@ -37515,7 +37515,7 @@ easing|5
 speed|0x3f214f17
 waitTime|0x3f0d6375
 ;
-waitTimer|0x3f63c978
+startWait|0x3f63c978
 ;
 ;
 entity
@@ -37581,7 +37581,7 @@ easing|3
 speed|0x3f133d6e
 waitTime|0x3f000db5
 ;
-waitTimer|0x3f5be64b
+startWait|0x3f5be64b
 ;
 ;
 entity
@@ -37647,7 +37647,7 @@ easing|3
 speed|0x3f1c0b01
 waitTime|0x3e836000
 ;
-waitTimer|0x4045c20b
+startWait|0x4045c20b
 ;
 ;
 entity
@@ -37713,7 +37713,7 @@ easing|3
 speed|0x3f260a55
 waitTime|0x3f052873
 ;
-waitTimer|0x40031b3f
+startWait|0x40031b3f
 ;
 ;
 entity
@@ -37779,7 +37779,7 @@ easing|4
 speed|0x3f1b16a0
 waitTime|0x3e69b57b
 ;
-waitTimer|0x40051049
+startWait|0x40051049
 ;
 ;
 entity
@@ -37845,7 +37845,7 @@ easing|3
 speed|0x3f13af3b
 waitTime|0x3f209ad4
 ;
-waitTimer|0x402770fc
+startWait|0x402770fc
 ;
 ;
 entity
@@ -37911,7 +37911,7 @@ easing|4
 speed|0x3ee8370d
 waitTime|0x3ece6d28
 ;
-waitTimer|0x3ff03ce2
+startWait|0x3ff03ce2
 ;
 ;
 entity
@@ -37977,7 +37977,7 @@ easing|5
 speed|0x3eee995b
 waitTime|0x3f1c4662
 ;
-waitTimer|0x3f4fe761
+startWait|0x3f4fe761
 ;
 ;
 entity
@@ -38043,7 +38043,7 @@ easing|3
 speed|0x3f02f139
 waitTime|0x3eba1999
 ;
-waitTimer|0x3fefe593
+startWait|0x3fefe593
 ;
 ;
 entity
@@ -38109,7 +38109,7 @@ easing|4
 speed|0x3f0ba712
 waitTime|0x3e84ce6e
 ;
-waitTimer|0x3fe97291
+startWait|0x3fe97291
 ;
 ;
 entity
@@ -38288,7 +38288,7 @@ easing|3
 speed|0x3ee231a8
 waitTime|0x3e6b7b0e
 ;
-waitTimer|0x403f88ce
+startWait|0x403f88ce
 ;
 ;
 entity
@@ -38353,7 +38353,7 @@ easing|4
 speed|0x3efc8bc2
 waitTime|0x3ec0e514
 ;
-waitTimer|0x3ec81c06
+startWait|0x3ec81c06
 ;
 ;
 entity
@@ -38418,7 +38418,7 @@ easing|5
 speed|0x3f21340c
 waitTime|0x3f0c7484
 ;
-waitTimer|0x3ed79d58
+startWait|0x3ed79d58
 ;
 ;
 entity
@@ -38483,7 +38483,7 @@ easing|4
 speed|0x3f0bc3ab
 waitTime|0x3f1e9cd9
 ;
-waitTimer|0x3f507b8e
+startWait|0x3f507b8e
 ;
 ;
 entity
@@ -38548,7 +38548,7 @@ easing|3
 speed|0x3ecd1dd0
 waitTime|0x3e9edd00
 ;
-waitTimer|0x3f301fbd
+startWait|0x3f301fbd
 ;
 ;
 entity
@@ -38613,7 +38613,7 @@ easing|5
 speed|0x3efec909
 waitTime|0x3f187fd7
 ;
-waitTimer|0x3fa6ae43
+startWait|0x3fa6ae43
 ;
 ;
 entity
@@ -38678,7 +38678,7 @@ easing|3
 speed|0x3eca442b
 waitTime|0x3ec76c11
 ;
-waitTimer|0x40778b7d
+startWait|0x40778b7d
 ;
 ;
 entity
@@ -38743,7 +38743,7 @@ easing|4
 speed|0x3ef5947c
 waitTime|0x3f246d15
 ;
-waitTimer|0x400bd6cc
+startWait|0x400bd6cc
 ;
 ;
 entity
@@ -38808,7 +38808,7 @@ easing|5
 speed|0x3f14b66f
 waitTime|0x3f117840
 ;
-waitTimer|0x404796a6
+startWait|0x404796a6
 ;
 ;
 entity
@@ -38873,7 +38873,7 @@ easing|3
 speed|0x3ef5f8e7
 waitTime|0x3efc2e60
 ;
-waitTimer|0x405bdbea
+startWait|0x405bdbea
 ;
 ;
 entity
@@ -38938,7 +38938,7 @@ easing|5
 speed|0x3edd0d98
 waitTime|0x3e79f5ba
 ;
-waitTimer|0x4061494f
+startWait|0x4061494f
 ;
 ;
 entity
@@ -39003,7 +39003,7 @@ easing|4
 speed|0x3f126ef4
 waitTime|0x3e969621
 ;
-waitTimer|0x3fa1fda1
+startWait|0x3fa1fda1
 ;
 ;
 entity
@@ -39068,7 +39068,7 @@ easing|4
 speed|0x3f28ce19
 waitTime|0x3f044177
 ;
-waitTimer|0x3fc77433
+startWait|0x3fc77433
 ;
 ;
 entity
@@ -39133,7 +39133,7 @@ easing|3
 speed|0x3ee810d5
 waitTime|0x3e970c77
 ;
-waitTimer|0x4006444d
+startWait|0x4006444d
 ;
 ;
 entity
@@ -39310,7 +39310,7 @@ easing|3
 speed|0x3f107adc
 waitTime|0x3e549b9d
 ;
-waitTimer|0x404c8055
+startWait|0x404c8055
 ;
 ;
 entity
@@ -39376,7 +39376,7 @@ easing|3
 speed|0x3ed79935
 waitTime|0x3f2d558a
 ;
-waitTimer|0x404cd743
+startWait|0x404cd743
 ;
 ;
 entity
@@ -39442,7 +39442,7 @@ easing|3
 speed|0x3f120202
 waitTime|0x3ee05f27
 ;
-waitTimer|0x403400c7
+startWait|0x403400c7
 ;
 ;
 entity
@@ -39508,7 +39508,7 @@ easing|5
 speed|0x3f23790e
 waitTime|0x3f0fb4a0
 ;
-waitTimer|0x3e947e48
+startWait|0x3e947e48
 ;
 ;
 entity
@@ -39574,7 +39574,7 @@ easing|5
 speed|0x3ecf2f4d
 waitTime|0x3f2341e8
 ;
-waitTimer|0x4011ad10
+startWait|0x4011ad10
 ;
 ;
 entity
@@ -39640,7 +39640,7 @@ easing|3
 speed|0x3ef2e2ac
 waitTime|0x3e903106
 ;
-waitTimer|0x3ee5f466
+startWait|0x3ee5f466
 ;
 ;
 entity
@@ -39706,7 +39706,7 @@ easing|5
 speed|0x3f024529
 waitTime|0x3f20ad17
 ;
-waitTimer|0x406af58f
+startWait|0x406af58f
 ;
 ;
 entity
@@ -39772,7 +39772,7 @@ easing|3
 speed|0x3f243948
 waitTime|0x3ef1c75f
 ;
-waitTimer|0x3e40e391
+startWait|0x3e40e391
 ;
 ;
 entity
@@ -39838,7 +39838,7 @@ easing|3
 speed|0x3ed1ccc9
 waitTime|0x3ea0b51f
 ;
-waitTimer|0x3f2606ab
+startWait|0x3f2606ab
 ;
 ;
 entity
@@ -39904,7 +39904,7 @@ easing|5
 speed|0x3ef2716a
 waitTime|0x3ea5d8cc
 ;
-waitTimer|0x4004a929
+startWait|0x4004a929
 ;
 ;
 entity
@@ -39970,7 +39970,7 @@ easing|3
 speed|0x3f01c79e
 waitTime|0x3ef73379
 ;
-waitTimer|0x4048d0cc
+startWait|0x4048d0cc
 ;
 ;
 entity
@@ -40036,7 +40036,7 @@ easing|5
 speed|0x3edc709e
 waitTime|0x3f22ab44
 ;
-waitTimer|0x407d1abc
+startWait|0x407d1abc
 ;
 ;
 entity
@@ -40102,7 +40102,7 @@ easing|4
 speed|0x3ef474ae
 waitTime|0x3eb3c3ba
 ;
-waitTimer|0x3f074641
+startWait|0x3f074641
 ;
 ;
 entity
@@ -40168,7 +40168,7 @@ easing|4
 speed|0x3f286631
 waitTime|0x3eb0e581
 ;
-waitTimer|0x3e9a4fff
+startWait|0x3e9a4fff
 ;
 ;
 entity
@@ -40366,7 +40366,7 @@ easing|4
 speed|0x3eb33b12
 waitTime|0x3eacc8a3
 ;
-waitTimer|0x3fa219fb
+startWait|0x3fa219fb
 ;
 ;
 entity
@@ -40432,7 +40432,7 @@ easing|4
 speed|0x3f0790d9
 waitTime|0x3eca9c6f
 ;
-waitTimer|0x3ef1c3d3
+startWait|0x3ef1c3d3
 ;
 ;
 entity
@@ -40498,7 +40498,7 @@ easing|3
 speed|0x3ee209ed
 waitTime|0x3f00017b
 ;
-waitTimer|0x3f11fb39
+startWait|0x3f11fb39
 ;
 ;
 entity
@@ -40564,7 +40564,7 @@ easing|3
 speed|0x3f0e2275
 waitTime|0x3ed306dc
 ;
-waitTimer|0x407ff97c
+startWait|0x407ff97c
 ;
 ;
 entity
@@ -40630,7 +40630,7 @@ easing|5
 speed|0x3eaea2dc
 waitTime|0x3eb583c7
 ;
-waitTimer|0x404758d9
+startWait|0x404758d9
 ;
 ;
 entity
@@ -40696,7 +40696,7 @@ easing|4
 speed|0x3eb7dd86
 waitTime|0x3f21d767
 ;
-waitTimer|0x3f40ba5d
+startWait|0x3f40ba5d
 ;
 ;
 entity
@@ -40762,7 +40762,7 @@ easing|4
 speed|0x3ed76551
 waitTime|0x3f31c1f5
 ;
-waitTimer|0x3f45f694
+startWait|0x3f45f694
 ;
 ;
 entity
@@ -40828,7 +40828,7 @@ easing|3
 speed|0x3f0dd1b2
 waitTime|0x3ec4c183
 ;
-waitTimer|0x40721129
+startWait|0x40721129
 ;
 ;
 entity
@@ -40894,7 +40894,7 @@ easing|3
 speed|0x3f044c80
 waitTime|0x3f04af4f
 ;
-waitTimer|0x3fa3d70f
+startWait|0x3fa3d70f
 ;
 ;
 entity
@@ -40960,7 +40960,7 @@ easing|4
 speed|0x3f17af53
 waitTime|0x3f19ff7d
 ;
-waitTimer|0x3f82cb0a
+startWait|0x3f82cb0a
 ;
 ;
 entity
@@ -41026,7 +41026,7 @@ easing|5
 speed|0x3f0e7198
 waitTime|0x3ebd6856
 ;
-waitTimer|0x3edac1e0
+startWait|0x3edac1e0
 ;
 ;
 entity
@@ -41092,7 +41092,7 @@ easing|5
 speed|0x3efbda52
 waitTime|0x3f2e04cf
 ;
-waitTimer|0x3fb80596
+startWait|0x3fb80596
 ;
 ;
 entity
@@ -41158,7 +41158,7 @@ easing|3
 speed|0x3f046325
 waitTime|0x3eb27a9a
 ;
-waitTimer|0x401e7839
+startWait|0x401e7839
 ;
 ;
 entity
@@ -41224,7 +41224,7 @@ easing|3
 speed|0x3ea69ffc
 waitTime|0x3ebc7fa6
 ;
-waitTimer|0x3fcccb6b
+startWait|0x3fcccb6b
 ;
 ;
 entity
@@ -41290,7 +41290,7 @@ easing|4
 speed|0x3f047fc5
 waitTime|0x3f2cbe3a
 ;
-waitTimer|0x406fd9dc
+startWait|0x406fd9dc
 ;
 ;
 entity
@@ -41356,7 +41356,7 @@ easing|3
 speed|0x3edc1468
 waitTime|0x3e915dec
 ;
-waitTimer|0x3ff320a6
+startWait|0x3ff320a6
 ;
 ;
 entity
@@ -41422,7 +41422,7 @@ easing|3
 speed|0x3f099c12
 waitTime|0x3ec222dd
 ;
-waitTimer|0x407f2694
+startWait|0x407f2694
 ;
 ;
 entity
@@ -41488,7 +41488,7 @@ easing|5
 speed|0x3f021583
 waitTime|0x3eef5421
 ;
-waitTimer|0x4058b228
+startWait|0x4058b228
 ;
 ;
 entity
@@ -41554,7 +41554,7 @@ easing|4
 speed|0x3f028766
 waitTime|0x3f075ec9
 ;
-waitTimer|0x3f46a8a0
+startWait|0x3f46a8a0
 ;
 ;
 entity
@@ -41620,7 +41620,7 @@ easing|3
 speed|0x3ec0625d
 waitTime|0x3ea86919
 ;
-waitTimer|0x406f8810
+startWait|0x406f8810
 ;
 ;
 entity
@@ -41686,7 +41686,7 @@ easing|5
 speed|0x3ebd7fbd
 waitTime|0x3f119167
 ;
-waitTimer|0x406c5db6
+startWait|0x406c5db6
 ;
 ;
 entity
@@ -41752,7 +41752,7 @@ easing|3
 speed|0x3f16a99b
 waitTime|0x3ea04bfe
 ;
-waitTimer|0x4044aae0
+startWait|0x4044aae0
 ;
 ;
 entity
@@ -41818,7 +41818,7 @@ easing|3
 speed|0x3ec6322d
 waitTime|0x3f04cb51
 ;
-waitTimer|0x406d9369
+startWait|0x406d9369
 ;
 ;
 entity
@@ -41884,7 +41884,7 @@ easing|3
 speed|0x3eba6596
 waitTime|0x3f2d77d0
 ;
-waitTimer|0x3f9f91dc
+startWait|0x3f9f91dc
 ;
 ;
 entity
@@ -41950,7 +41950,7 @@ easing|4
 speed|0x3ee2c262
 waitTime|0x3ec48d76
 ;
-waitTimer|0x407519f3
+startWait|0x407519f3
 ;
 ;
 entity
@@ -42016,7 +42016,7 @@ easing|3
 speed|0x3f033851
 waitTime|0x3e9f7321
 ;
-waitTimer|0x3f634478
+startWait|0x3f634478
 ;
 ;
 entity
@@ -42082,7 +42082,7 @@ easing|5
 speed|0x3ee926a2
 waitTime|0x3f168e1c
 ;
-waitTimer|0x3efae511
+startWait|0x3efae511
 ;
 ;
 entity
@@ -42148,7 +42148,7 @@ easing|4
 speed|0x3f090a78
 waitTime|0x3f20bff6
 ;
-waitTimer|0x40059d4d
+startWait|0x40059d4d
 ;
 ;
 entity
@@ -42213,7 +42213,7 @@ easing|5
 speed|0x3f068aaf
 waitTime|0x3f2459f4
 ;
-waitTimer|0x4055af7e
+startWait|0x4055af7e
 ;
 ;
 entity
@@ -42278,7 +42278,7 @@ easing|5
 speed|0x3eb7cb6f
 waitTime|0x3e4edf02
 ;
-waitTimer|0x407d8b7d
+startWait|0x407d8b7d
 ;
 ;
 entity
@@ -42343,7 +42343,7 @@ easing|3
 speed|0x3ebb6bf3
 waitTime|0x3f1a0fae
 ;
-waitTimer|0x3e3b152e
+startWait|0x3e3b152e
 ;
 ;
 entity
@@ -42408,7 +42408,7 @@ easing|5
 speed|0x3eae0d34
 waitTime|0x3e8ecaac
 ;
-waitTimer|0x3fd494a4
+startWait|0x3fd494a4
 ;
 ;
 entity
@@ -42473,7 +42473,7 @@ easing|3
 speed|0x3f043b0d
 waitTime|0x3f0e1b56
 ;
-waitTimer|0x4021e963
+startWait|0x4021e963
 ;
 ;
 entity
@@ -42538,7 +42538,7 @@ easing|5
 speed|0x3ef00a9f
 waitTime|0x3ee56d59
 ;
-waitTimer|0x3e2ee4c1
+startWait|0x3e2ee4c1
 ;
 ;
 entity
@@ -42603,7 +42603,7 @@ easing|4
 speed|0x3ecf8bab
 waitTime|0x3ee71a42
 ;
-waitTimer|0x3ec72b87
+startWait|0x3ec72b87
 ;
 ;
 entity
@@ -42668,7 +42668,7 @@ easing|3
 speed|0x3f16322e
 waitTime|0x3f0259e2
 ;
-waitTimer|0x4062e667
+startWait|0x4062e667
 ;
 ;
 entity
@@ -42733,7 +42733,7 @@ easing|4
 speed|0x3ef19dee
 waitTime|0x3ee98489
 ;
-waitTimer|0x3f06c5c1
+startWait|0x3f06c5c1
 ;
 ;
 entity
@@ -42798,7 +42798,7 @@ easing|5
 speed|0x3f0471e3
 waitTime|0x3f327931
 ;
-waitTimer|0x401d829f
+startWait|0x401d829f
 ;
 ;
 entity
@@ -42863,7 +42863,7 @@ easing|3
 speed|0x3ef6aef6
 waitTime|0x3eacda17
 ;
-waitTimer|0x3e955f4b
+startWait|0x3e955f4b
 ;
 ;
 entity
@@ -42928,7 +42928,7 @@ easing|4
 speed|0x3f0432bc
 waitTime|0x3f08e547
 ;
-waitTimer|0x405fe88e
+startWait|0x405fe88e
 ;
 ;
 entity
@@ -42993,7 +42993,7 @@ easing|3
 speed|0x3f09a0e1
 waitTime|0x3f0de83a
 ;
-waitTimer|0x3fa6312a
+startWait|0x3fa6312a
 ;
 ;
 entity
@@ -43058,7 +43058,7 @@ easing|5
 speed|0x3f1265d2
 waitTime|0x3ec0c72b
 ;
-waitTimer|0x3f5f31b1
+startWait|0x3f5f31b1
 ;
 ;
 entity
@@ -43124,7 +43124,7 @@ easing|3
 speed|0x3eccddd2
 waitTime|0x3f0939f7
 ;
-waitTimer|0x400c3325
+startWait|0x400c3325
 ;
 ;
 entity
@@ -43190,7 +43190,7 @@ easing|4
 speed|0x3eca3bae
 waitTime|0x3f230ba7
 ;
-waitTimer|0x401b4ee5
+startWait|0x401b4ee5
 ;
 ;
 entity
@@ -43256,7 +43256,7 @@ easing|4
 speed|0x3f13a529
 waitTime|0x3ef8f28b
 ;
-waitTimer|0x3f79aa3e
+startWait|0x3f79aa3e
 ;
 ;
 entity
@@ -43322,7 +43322,7 @@ easing|3
 speed|0x3f0f3b23
 waitTime|0x3f1a4337
 ;
-waitTimer|0x3eaacd80
+startWait|0x3eaacd80
 ;
 ;
 entity
@@ -43388,7 +43388,7 @@ easing|4
 speed|0x3ecfbe03
 waitTime|0x3ed01c8d
 ;
-waitTimer|0x3fbc527f
+startWait|0x3fbc527f
 ;
 ;
 entity
@@ -43454,7 +43454,7 @@ easing|3
 speed|0x3f06c5e2
 waitTime|0x3e5d802f
 ;
-waitTimer|0x3fe616a2
+startWait|0x3fe616a2
 ;
 ;
 entity
@@ -43520,7 +43520,7 @@ easing|4
 speed|0x3ee6599f
 waitTime|0x3ed1bd8e
 ;
-waitTimer|0x3f08030c
+startWait|0x3f08030c
 ;
 ;
 entity
@@ -43586,7 +43586,7 @@ easing|3
 speed|0x3eb63741
 waitTime|0x3f2bd431
 ;
-waitTimer|0x3f9c33ae
+startWait|0x3f9c33ae
 ;
 ;
 entity
@@ -43652,7 +43652,7 @@ easing|4
 speed|0x3eaf08cd
 waitTime|0x3eb52812
 ;
-waitTimer|0x3fcd92b0
+startWait|0x3fcd92b0
 ;
 ;
 entity
@@ -43718,7 +43718,7 @@ easing|3
 speed|0x3ebfb935
 waitTime|0x3f1ba12e
 ;
-waitTimer|0x4023e01b
+startWait|0x4023e01b
 ;
 ;
 entity
@@ -43784,7 +43784,7 @@ easing|4
 speed|0x3f0f5d95
 waitTime|0x3ebf56e9
 ;
-waitTimer|0x3f7ad0f8
+startWait|0x3f7ad0f8
 ;
 ;
 entity
@@ -43850,7 +43850,7 @@ easing|3
 speed|0x3f05ccf6
 waitTime|0x3ea7d0b9
 ;
-waitTimer|0x3f7f1b71
+startWait|0x3f7f1b71
 ;
 ;
 entity
@@ -43916,7 +43916,7 @@ easing|5
 speed|0x3eefd3ca
 waitTime|0x3ebd8678
 ;
-waitTimer|0x40791cf5
+startWait|0x40791cf5
 ;
 ;
 entity
@@ -43982,7 +43982,7 @@ easing|3
 speed|0x3ebec4cc
 waitTime|0x3ee4f0fe
 ;
-waitTimer|0x3eebee3d
+startWait|0x3eebee3d
 ;
 ;
 entity
@@ -44066,7 +44066,7 @@ easing|4
 speed|0x3f14d6d3
 waitTime|0x3f2d1a19
 ;
-waitTimer|0x407709c4
+startWait|0x407709c4
 ;
 ;
 entity
@@ -44132,7 +44132,7 @@ easing|3
 speed|0x3f19aedd
 waitTime|0x3e6a85b1
 ;
-waitTimer|0x4041ac51
+startWait|0x4041ac51
 ;
 ;
 entity
@@ -44198,7 +44198,7 @@ easing|3
 speed|0x3ecf064b
 waitTime|0x3ed4aefc
 ;
-waitTimer|0x3f9e6609
+startWait|0x3f9e6609
 ;
 ;
 entity
@@ -44264,7 +44264,7 @@ easing|3
 speed|0x3ec09dad
 waitTime|0x3f18aa1a
 ;
-waitTimer|0x3f347758
+startWait|0x3f347758
 ;
 ;
 entity
@@ -44330,7 +44330,7 @@ easing|3
 speed|0x3eb83295
 waitTime|0x3f0d105f
 ;
-waitTimer|0x3f5a8869
+startWait|0x3f5a8869
 ;
 ;
 entity
@@ -44396,7 +44396,7 @@ easing|5
 speed|0x3eacf1ee
 waitTime|0x3f13eed2
 ;
-waitTimer|0x3db9fd61
+startWait|0x3db9fd61
 ;
 ;
 entity
@@ -44462,7 +44462,7 @@ easing|5
 speed|0x3ed2678a
 waitTime|0x3e4efa47
 ;
-waitTimer|0x3ee913f8
+startWait|0x3ee913f8
 ;
 ;
 entity
@@ -44528,7 +44528,7 @@ easing|3
 speed|0x3eef043b
 waitTime|0x3f0ac674
 ;
-waitTimer|0x4018bb36
+startWait|0x4018bb36
 ;
 ;
 entity
@@ -44594,7 +44594,7 @@ easing|4
 speed|0x3f06576a
 waitTime|0x3ef9955a
 ;
-waitTimer|0x403c3f50
+startWait|0x403c3f50
 ;
 ;
 entity
@@ -44660,7 +44660,7 @@ easing|3
 speed|0x3f0b0f4b
 waitTime|0x3edd3298
 ;
-waitTimer|0x403a4979
+startWait|0x403a4979
 ;
 ;
 entity
@@ -44726,7 +44726,7 @@ easing|3
 speed|0x3f19e0c9
 waitTime|0x3f0f6567
 ;
-waitTimer|0x3fb7ef6c
+startWait|0x3fb7ef6c
 ;
 ;
 entity
@@ -44792,7 +44792,7 @@ easing|4
 speed|0x3eb07a6c
 waitTime|0x3e973680
 ;
-waitTimer|0x406bcc89
+startWait|0x406bcc89
 ;
 ;
 entity
@@ -44858,7 +44858,7 @@ easing|3
 speed|0x3ed81f25
 waitTime|0x3f1b8216
 ;
-waitTimer|0x3fdb0f85
+startWait|0x3fdb0f85
 ;
 ;
 entity
@@ -44924,7 +44924,7 @@ easing|3
 speed|0x3f1927cc
 waitTime|0x3f256b35
 ;
-waitTimer|0x4057c737
+startWait|0x4057c737
 ;
 ;
 entity
@@ -44990,7 +44990,7 @@ easing|3
 speed|0x3ef66f4c
 waitTime|0x3ee7509a
 ;
-waitTimer|0x3fcd363e
+startWait|0x3fcd363e
 ;
 ;
 entity
@@ -45056,7 +45056,7 @@ easing|3
 speed|0x3f0f581e
 waitTime|0x3efafc8a
 ;
-waitTimer|0x3eb85357
+startWait|0x3eb85357
 ;
 ;
 entity
@@ -45122,7 +45122,7 @@ easing|3
 speed|0x3ef282a8
 waitTime|0x3ed6e33a
 ;
-waitTimer|0x406ced50
+startWait|0x406ced50
 ;
 ;
 entity
@@ -45188,7 +45188,7 @@ easing|5
 speed|0x3ef36e50
 waitTime|0x3e895c5e
 ;
-waitTimer|0x40669613
+startWait|0x40669613
 ;
 ;
 entity
@@ -45254,7 +45254,7 @@ easing|3
 speed|0x3ec8feac
 waitTime|0x3f2a0e0c
 ;
-waitTimer|0x40571f8d
+startWait|0x40571f8d
 ;
 ;
 entity
@@ -45320,7 +45320,7 @@ easing|5
 speed|0x3ecd068f
 waitTime|0x3e6ce9bb
 ;
-waitTimer|0x3f93ba63
+startWait|0x3f93ba63
 ;
 ;
 entity
@@ -45386,7 +45386,7 @@ easing|5
 speed|0x3eb36422
 waitTime|0x3ef6d5c1
 ;
-waitTimer|0x404dc4db
+startWait|0x404dc4db
 ;
 ;
 entity
@@ -45452,7 +45452,7 @@ easing|4
 speed|0x3eac2f7a
 waitTime|0x3edc55b3
 ;
-waitTimer|0x407898b1
+startWait|0x407898b1
 ;
 ;
 entity
@@ -45518,7 +45518,7 @@ easing|3
 speed|0x3f0c6b30
 waitTime|0x3f0f97e9
 ;
-waitTimer|0x4072769f
+startWait|0x4072769f
 ;
 ;
 entity
@@ -45584,7 +45584,7 @@ easing|5
 speed|0x3f132a7e
 waitTime|0x3ec81523
 ;
-waitTimer|0x405dcda4
+startWait|0x405dcda4
 ;
 ;
 entity
@@ -45650,7 +45650,7 @@ easing|4
 speed|0x3f08a4bd
 waitTime|0x3e9376cd
 ;
-waitTimer|0x407dbad0
+startWait|0x407dbad0
 ;
 ;
 entity
@@ -45716,7 +45716,7 @@ easing|5
 speed|0x3ee48dbd
 waitTime|0x3e8f2c31
 ;
-waitTimer|0x401e9b8f
+startWait|0x401e9b8f
 ;
 ;
 entity
@@ -45782,7 +45782,7 @@ easing|3
 speed|0x3f013586
 waitTime|0x3f276fc6
 ;
-waitTimer|0x4079c45f
+startWait|0x4079c45f
 ;
 ;
 entity
@@ -45848,7 +45848,7 @@ easing|3
 speed|0x3f0ae735
 waitTime|0x3ee2a020
 ;
-waitTimer|0x3eb9da68
+startWait|0x3eb9da68
 ;
 ;
 entity
@@ -45913,7 +45913,7 @@ easing|3
 speed|0x3eb57c70
 waitTime|0x3e753657
 ;
-waitTimer|0x3fa590b1
+startWait|0x3fa590b1
 ;
 ;
 entity
@@ -45978,7 +45978,7 @@ easing|5
 speed|0x3edbcf52
 waitTime|0x3e8c84ec
 ;
-waitTimer|0x40692bf8
+startWait|0x40692bf8
 ;
 ;
 entity
@@ -46043,7 +46043,7 @@ easing|3
 speed|0x3ef585f2
 waitTime|0x3ed2d418
 ;
-waitTimer|0x3f14fd75
+startWait|0x3f14fd75
 ;
 ;
 entity
@@ -46108,7 +46108,7 @@ easing|3
 speed|0x3ee125e9
 waitTime|0x3ebfed5e
 ;
-waitTimer|0x3fdb869d
+startWait|0x3fdb869d
 ;
 ;
 entity
@@ -46173,7 +46173,7 @@ easing|4
 speed|0x3ef0499a
 waitTime|0x3ed31ee5
 ;
-waitTimer|0x3f5b69eb
+startWait|0x3f5b69eb
 ;
 ;
 entity
@@ -46238,7 +46238,7 @@ easing|3
 speed|0x3ed8b741
 waitTime|0x3ee5f8f6
 ;
-waitTimer|0x40150c41
+startWait|0x40150c41
 ;
 ;
 entity
@@ -46303,7 +46303,7 @@ easing|5
 speed|0x3eee7cc7
 waitTime|0x3f17f503
 ;
-waitTimer|0x402a990c
+startWait|0x402a990c
 ;
 ;
 entity
@@ -46368,7 +46368,7 @@ easing|3
 speed|0x3eb7e24c
 waitTime|0x3ef4baf5
 ;
-waitTimer|0x3f7bb0f7
+startWait|0x3f7bb0f7
 ;
 ;
 entity
@@ -46433,7 +46433,7 @@ easing|3
 speed|0x3eec258b
 waitTime|0x3ec13b29
 ;
-waitTimer|0x3f4705aa
+startWait|0x3f4705aa
 ;
 ;
 entity
@@ -46498,7 +46498,7 @@ easing|4
 speed|0x3eb49ff0
 waitTime|0x3eb8c0d3
 ;
-waitTimer|0x3f1a53d3
+startWait|0x3f1a53d3
 ;
 ;
 entity
@@ -46563,7 +46563,7 @@ easing|3
 speed|0x3f189e39
 waitTime|0x3e72ba1d
 ;
-waitTimer|0x4019a3a7
+startWait|0x4019a3a7
 ;
 ;
 entity
@@ -46628,7 +46628,7 @@ easing|3
 speed|0x3f0ad3f8
 waitTime|0x3ece6348
 ;
-waitTimer|0x3e83cd59
+startWait|0x3e83cd59
 ;
 ;
 entity
@@ -46693,7 +46693,7 @@ easing|3
 speed|0x3f132d07
 waitTime|0x3f23f2a6
 ;
-waitTimer|0x3eff0110
+startWait|0x3eff0110
 ;
 ;
 entity
@@ -46758,7 +46758,7 @@ easing|3
 speed|0x3edd88a4
 waitTime|0x3f2aa361
 ;
-waitTimer|0x406a0b0f
+startWait|0x406a0b0f
 ;
 ;
 entity
@@ -46824,7 +46824,7 @@ easing|4
 speed|0x3effabef
 waitTime|0x3f0dcfcd
 ;
-waitTimer|0x4039934e
+startWait|0x4039934e
 ;
 ;
 entity
@@ -46890,7 +46890,7 @@ easing|3
 speed|0x3f052e36
 waitTime|0x3f1fb30f
 ;
-waitTimer|0x3fe98b0c
+startWait|0x3fe98b0c
 ;
 ;
 entity
@@ -46956,7 +46956,7 @@ easing|5
 speed|0x3edb20e0
 waitTime|0x3f01c2bb
 ;
-waitTimer|0x3e4bd34e
+startWait|0x3e4bd34e
 ;
 ;
 entity
@@ -47022,7 +47022,7 @@ easing|3
 speed|0x3f0bc680
 waitTime|0x3f02ba4a
 ;
-waitTimer|0x4047e445
+startWait|0x4047e445
 ;
 ;
 entity
@@ -47088,7 +47088,7 @@ easing|3
 speed|0x3ed90085
 waitTime|0x3f098685
 ;
-waitTimer|0x40545481
+startWait|0x40545481
 ;
 ;
 entity
@@ -47154,7 +47154,7 @@ easing|4
 speed|0x3f10b267
 waitTime|0x3ee36224
 ;
-waitTimer|0x3f417b61
+startWait|0x3f417b61
 ;
 ;
 entity
@@ -47220,7 +47220,7 @@ easing|3
 speed|0x3ece0566
 waitTime|0x3f0c31a9
 ;
-waitTimer|0x3f517668
+startWait|0x3f517668
 ;
 ;
 entity
@@ -47286,7 +47286,7 @@ easing|3
 speed|0x3ee7c707
 waitTime|0x3f23ffb6
 ;
-waitTimer|0x40283732
+startWait|0x40283732
 ;
 ;
 entity
@@ -47352,7 +47352,7 @@ easing|4
 speed|0x3f01b0dc
 waitTime|0x3eff5231
 ;
-waitTimer|0x4040fbed
+startWait|0x4040fbed
 ;
 ;
 entity
@@ -47418,7 +47418,7 @@ easing|5
 speed|0x3f052b44
 waitTime|0x3e9a5724
 ;
-waitTimer|0x3f984792
+startWait|0x3f984792
 ;
 ;
 entity
@@ -47484,7 +47484,7 @@ easing|3
 speed|0x3eeac979
 waitTime|0x3e922be5
 ;
-waitTimer|0x4055db1e
+startWait|0x4055db1e
 ;
 ;
 entity
@@ -47550,7 +47550,7 @@ easing|5
 speed|0x3f1166b6
 waitTime|0x3e8d1dde
 ;
-waitTimer|0x3f381b5a
+startWait|0x3f381b5a
 ;
 ;
 entity
@@ -47616,7 +47616,7 @@ easing|3
 speed|0x3eacb624
 waitTime|0x3efd7fef
 ;
-waitTimer|0x402b080e
+startWait|0x402b080e
 ;
 ;
 entity
@@ -47682,7 +47682,7 @@ easing|3
 speed|0x3eb04680
 waitTime|0x3e67f257
 ;
-waitTimer|0x40794ebf
+startWait|0x40794ebf
 ;
 ;
 entity
@@ -47722,7 +47722,7 @@ parentStableId|9051568934183229292
 ;
 12201049773112503228
 interval|0x40819294
-timer|0x00000000
+startDelay|0x00000000
 ;
 ;
 entity
@@ -47989,8 +47989,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x00000000
+startSegment|0
+startProgress|0x00000000
 ;
 ;
 entity
@@ -48204,8 +48204,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3f222706
+startSegment|14
+startProgress|0x3f222706
 ;
 ;
 entity
@@ -48419,8 +48419,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3e5992a0
+startSegment|14
+startProgress|0x3e5992a0
 ;
 ;
 entity
@@ -48634,8 +48634,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|10
-progress|0x3f7ee7a9
+startSegment|10
+startProgress|0x3f7ee7a9
 ;
 ;
 entity
@@ -48849,8 +48849,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|8
-progress|0x3f2c6090
+startSegment|8
+startProgress|0x3f2c6090
 ;
 ;
 entity
@@ -49064,8 +49064,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|6
-progress|0x3e8fc530
+startSegment|6
+startProgress|0x3e8fc530
 ;
 ;
 entity
@@ -49279,8 +49279,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f7fafea
+startSegment|0
+startProgress|0x3f7fafea
 ;
 ;
 entity
@@ -49494,8 +49494,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f3fc3ef
+startSegment|0
+startProgress|0x3f3fc3ef
 ;
 ;
 entity
@@ -49709,8 +49709,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3effafea
+startSegment|0
+startProgress|0x3effafea
 ;
 ;
 entity
@@ -49924,8 +49924,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3e7fafea
+startSegment|0
+startProgress|0x3e7fafea
 ;
 ;
 entity
@@ -50093,6 +50093,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -50512,6 +50513,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -50931,6 +50933,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -51350,6 +51353,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -51769,6 +51773,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -52188,6 +52193,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -52607,6 +52613,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -53026,6 +53033,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -53445,6 +53453,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -53864,6 +53873,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|1823080546658688728
@@ -54198,7 +54208,7 @@ parentStableId|9051568934183229292
 ;
 12201049773112503228
 interval|0x40819294
-timer|0x3f819294
+startDelay|0x3f819294
 ;
 ;
 entity
@@ -54465,8 +54475,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3f72f8cd
+startSegment|14
+startProgress|0x3f72f8cd
 ;
 ;
 entity
@@ -54680,8 +54690,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3f07366f
+startSegment|14
+startProgress|0x3f07366f
 ;
 ;
 entity
@@ -54895,8 +54905,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3ddba084
+startSegment|14
+startProgress|0x3ddba084
 ;
 ;
 entity
@@ -55110,8 +55120,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|10
-progress|0x3f3632be
+startSegment|10
+startProgress|0x3f3632be
 ;
 ;
 entity
@@ -55325,8 +55335,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|6
-progress|0x3f68c5b4
+startSegment|6
+startProgress|0x3f68c5b4
 ;
 ;
 entity
@@ -55540,8 +55550,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|6
-progress|0x3d920c72
+startSegment|6
+startProgress|0x3d920c72
 ;
 ;
 entity
@@ -55755,8 +55765,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f6fb4eb
+startSegment|0
+startProgress|0x3f6fb4eb
 ;
 ;
 entity
@@ -55970,8 +55980,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f2fc8f1
+startSegment|0
+startProgress|0x3f2fc8f1
 ;
 ;
 entity
@@ -56185,8 +56195,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3edfb9ec
+startSegment|0
+startProgress|0x3edfb9ec
 ;
 ;
 entity
@@ -56400,8 +56410,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3e3fc3ef
+startSegment|0
+startProgress|0x3e3fc3ef
 ;
 ;
 entity
@@ -56569,6 +56579,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -56988,6 +56999,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -57407,6 +57419,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -57826,6 +57839,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -58245,6 +58259,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -58664,6 +58679,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -59083,6 +59099,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -59502,6 +59519,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -59921,6 +59939,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -60340,6 +60359,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|6641414846576634459
@@ -60674,7 +60694,7 @@ parentStableId|9051568934183229292
 ;
 12201049773112503228
 interval|0x40819294
-timer|0x40019294
+startDelay|0x40019294
 ;
 ;
 entity
@@ -60941,8 +60961,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3f580836
+startSegment|14
+startProgress|0x3f580836
 ;
 ;
 entity
@@ -61156,8 +61176,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3ed88bae
+startSegment|14
+startProgress|0x3ed88bae
 ;
 ;
 entity
@@ -61371,8 +61391,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3b0378e0
+startSegment|14
+startProgress|0x3b0378e0
 ;
 ;
 entity
@@ -61586,8 +61606,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|10
-progress|0x3edafba7
+startSegment|10
+startProgress|0x3edafba7
 ;
 ;
 entity
@@ -61801,8 +61821,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|6
-progress|0x3f3324ab
+startSegment|6
+startProgress|0x3f3324ab
 ;
 ;
 entity
@@ -62016,8 +62036,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|4
-progress|0x3ee25564
+startSegment|4
+startProgress|0x3ee25564
 ;
 ;
 entity
@@ -62231,8 +62251,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f5fb9ec
+startSegment|0
+startProgress|0x3f5fb9ec
 ;
 ;
 entity
@@ -62446,8 +62466,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f1fcdf2
+startSegment|0
+startProgress|0x3f1fcdf2
 ;
 ;
 entity
@@ -62661,8 +62681,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3ebfc3ef
+startSegment|0
+startProgress|0x3ebfc3ef
 ;
 ;
 entity
@@ -62876,8 +62896,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3dffafea
+startSegment|0
+startProgress|0x3dffafea
 ;
 ;
 entity
@@ -63045,6 +63065,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -63464,6 +63485,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -63883,6 +63905,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -64302,6 +64325,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -64721,6 +64745,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -65140,6 +65165,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -65559,6 +65585,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -65978,6 +66005,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -66397,6 +66425,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -66816,6 +66845,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|5538889586295371457
@@ -67150,7 +67180,7 @@ parentStableId|9051568934183229292
 ;
 12201049773112503228
 interval|0x40819294
-timer|0x40425bde
+startDelay|0x40425bde
 ;
 ;
 entity
@@ -67417,8 +67447,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3f3d179e
+startSegment|14
+startProgress|0x3f3d179e
 ;
 ;
 entity
@@ -67632,8 +67662,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|14
-progress|0x3ea2aa7f
+startSegment|14
+startProgress|0x3ea2aa7f
 ;
 ;
 entity
@@ -67847,8 +67877,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|12
-progress|0x3f00524b
+startSegment|12
+startProgress|0x3f00524b
 ;
 ;
 entity
@@ -68062,8 +68092,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|10
-progress|0x3e1323a3
+startSegment|10
+startProgress|0x3e1323a3
 ;
 ;
 entity
@@ -68277,8 +68307,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|6
-progress|0x3efb0743
+startSegment|6
+startProgress|0x3efb0743
 ;
 ;
 entity
@@ -68492,8 +68522,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|3
-progress|0x3e109ffb
+startSegment|3
+startProgress|0x3e109ffb
 ;
 ;
 entity
@@ -68707,8 +68737,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f4fbeee
+startSegment|0
+startProgress|0x3f4fbeee
 ;
 ;
 entity
@@ -68922,8 +68952,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3f0fd2f3
+startSegment|0
+startProgress|0x3f0fd2f3
 ;
 ;
 entity
@@ -69137,8 +69167,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3e9fcdf2
+startSegment|0
+startProgress|0x3e9fcdf2
 ;
 ;
 entity
@@ -69352,8 +69382,8 @@ p
 rotation|0xbf6c835e|0x80000000|0x80000000|0xbec3ef15
 speed|0x40855555
 ;
-currentSegment|0
-progress|0x3d7fafea
+startSegment|0
+startProgress|0x3d7fafea
 ;
 ;
 entity
@@ -69521,6 +69551,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -69940,6 +69971,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -70359,6 +70391,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -70778,6 +70811,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -71197,6 +71231,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -71616,6 +71651,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -72035,6 +72071,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -72454,6 +72491,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -72873,6 +72911,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653
@@ -73292,6 +73331,7 @@ speed|0x40155555
 p
 speed|0x3e53e9a7
 ;
+autoStart|0
 ;
 8591620563661528554
 lift|751947486439104653

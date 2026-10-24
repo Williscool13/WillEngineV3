@@ -71,7 +71,7 @@ struct TransformComponent
 };
 
 /** Play-time lock on a Static entity: transform writes are reverted to this pose. */
-struct StaticTransformLockComponent
+struct StaticTransformLockRuntime
 {
     glm::vec3 translation{0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
@@ -88,9 +88,9 @@ inline glm::mat4 GetMatrix(const TransformComponent& transform)
  * Resolved world transform, source of truth for rendering and child composition.
  * Runtime-only, on every transform entity.
  */
-struct WorldTransformComponent
+struct WorldTransformRuntime
 {
-    static constexpr const char* COMPONENT_NAME = "WorldTransformComponent";
+    static constexpr const char* COMPONENT_NAME = "WorldTransformRuntime";
 
     glm::vec3 translation{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
@@ -98,7 +98,7 @@ struct WorldTransformComponent
 
     operator Transform() const { return {translation, rotation, scale}; }
 
-    WorldTransformComponent& operator=(const Transform& t)
+    WorldTransformRuntime& operator=(const Transform& t)
     {
         translation = t.translation;
         rotation = t.rotation;
@@ -107,7 +107,7 @@ struct WorldTransformComponent
     }
 };
 
-inline glm::mat4 GetMatrix(const WorldTransformComponent& transform)
+inline glm::mat4 GetMatrix(const WorldTransformRuntime& transform)
 {
     return Transform{transform.translation, transform.rotation, transform.scale}.GetMatrix();
 }
@@ -190,7 +190,7 @@ inline Transform ComposeLocalFromWorld(const Transform& parent, const Transform&
  */
 Transform ComputeWorldTransform(const entt::registry& registry, entt::entity entity);
 
-struct DirtyTransformTag
+struct DirtyTransformRequest
 {};
 }
 

@@ -61,7 +61,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::EndDisabled();
         if (bNewFolder) {
             entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneComponent>(f, state->scene.currentSceneId);
+            state->registry.emplace<Component::SceneRuntime>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};
             folder.folderId = StringID{state->rng()};
             folder.name = Core::ShortString("New Folder");
@@ -112,14 +112,14 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         constexpr size_t MAX_BROWSER_ENTRIES = 16384;
 
-        auto view2 = state->registry.view<Component::SceneComponent>();
+        auto view2 = state->registry.view<Component::SceneRuntime>();
         Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), MAX_BROWSER_ENTRIES + 1};
 
         size_t totalInScene = 0;
         bool bEntriesTruncated = false;
         for (int pass = 0; pass < 2; ++pass) {
             for (auto entity : view2) {
-                auto& scene = view2.get<Component::SceneComponent>(entity);
+                auto& scene = view2.get<Component::SceneRuntime>(entity);
                 if (scene.sceneId != state->scene.currentSceneId) continue;
                 if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
                 if (pass == 0) { ++totalInScene; }
@@ -148,7 +148,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 entt::entity parentEntity = entt::null;
                 uint16_t depth = 0;
                 if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
-                    const auto* ps = state->registry.try_get<Component::SceneComponent>(h->parent);
+                    const auto* ps = state->registry.try_get<Component::SceneRuntime>(h->parent);
                     if (ps && ps->sceneId == state->scene.currentSceneId) {
                         parentEntity = h->parent;
                         depth = h->depth;
@@ -449,9 +449,9 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             const char* name;
         };
         Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64}; {
-            auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneComponent>();
+            auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneRuntime>();
             for (auto a : av) {
-                if (av.get<Component::SceneComponent>(a).sceneId != state->scene.currentSceneId) { continue; }
+                if (av.get<Component::SceneRuntime>(a).sceneId != state->scene.currentSceneId) { continue; }
                 const auto& fc = av.get<Component::SceneFolderComponent>(a);
                 anchors.PushBack({a, fc.folderId, fc.parentFolder, fc.name.c_str()});
             }
@@ -462,9 +462,9 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             return false;
         };
         auto folderHasMembers = [&](StringID folderId) {
-            auto fv = state->registry.view<Component::EntityFolderComponent, Component::SceneComponent>();
+            auto fv = state->registry.view<Component::EntityFolderComponent, Component::SceneRuntime>();
             for (auto en : fv) {
-                if (fv.get<Component::SceneComponent>(en).sceneId != state->scene.currentSceneId) { continue; }
+                if (fv.get<Component::SceneRuntime>(en).sceneId != state->scene.currentSceneId) { continue; }
                 if (fv.get<Component::EntityFolderComponent>(en).folderId == folderId) { return true; }
             }
             return false;
@@ -798,9 +798,9 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             Core::ArenaVector<entt::entity> order{&ctx->editorArena.Get(), totalInScene + 1};
-            auto rv = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+            auto rv = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
             for (auto en : rv) {
-                if (rv.get<Component::SceneComponent>(en).sceneId == state->scene.currentSceneId) { order.PushBack(en); }
+                if (rv.get<Component::SceneRuntime>(en).sceneId == state->scene.currentSceneId) { order.PushBack(en); }
             }
             std::ranges::sort(order, [&](entt::entity a, entt::entity b) {
                 return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
@@ -833,7 +833,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (newSubfolderParent.IsValid()) {
             entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneComponent>(f, state->scene.currentSceneId);
+            state->registry.emplace<Component::SceneRuntime>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};
             folder.folderId = StringID{state->rng()};
             folder.parentFolder = newSubfolderParent;
@@ -879,9 +879,9 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Separator();
         if (ImGui::SmallButton("Compact Order")) {
             Core::ArenaVector<entt::entity> ordered{&ctx->editorArena.Get(), totalInScene + 1};
-            auto compactView = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+            auto compactView = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
             for (auto entity : compactView) {
-                if (compactView.get<Component::SceneComponent>(entity).sceneId == state->scene.currentSceneId) { ordered.PushBack(entity); }
+                if (compactView.get<Component::SceneRuntime>(entity).sceneId == state->scene.currentSceneId) { ordered.PushBack(entity); }
             }
             std::ranges::sort(ordered, [&](entt::entity a, entt::entity b) {
                 return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
@@ -922,9 +922,9 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                     for (entt::entity e : state->editor.selectedEntities) { target.PushBack(e); }
                 }
                 else {
-                    auto sv = state->registry.view<Component::SceneComponent, Component::StableIdComponent>();
+                    auto sv = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
                     for (auto e : sv) {
-                        if (sv.get<Component::SceneComponent>(e).sceneId == state->scene.currentSceneId) { target.PushBack(e); }
+                        if (sv.get<Component::SceneRuntime>(e).sceneId == state->scene.currentSceneId) { target.PushBack(e); }
                     }
                 }
 

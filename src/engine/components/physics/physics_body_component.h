@@ -13,7 +13,7 @@
 namespace Engine::Component
 {
 /** The body's user data owner is this entity (BodyUserData), set when the body is created. */
-struct PhysicsBodyComponent
+struct PhysicsBodyRuntime
 {
     Physics::BodyHandle bodyID;
 
@@ -36,9 +36,9 @@ inline entt::entity EntityFromBodyUserData(const entt::registry& registry, uint6
 }
 
 /** The body component of an entity whose body exists, or nullptr. */
-inline const PhysicsBodyComponent* FindBody(const entt::registry& registry, entt::entity entity)
+inline const PhysicsBodyRuntime* FindBody(const entt::registry& registry, entt::entity entity)
 {
-    const auto* body = entity != entt::null ? registry.try_get<PhysicsBodyComponent>(entity) : nullptr;
+    const auto* body = entity != entt::null ? registry.try_get<PhysicsBodyRuntime>(entity) : nullptr;
     return body && body->bodyID.IsValid() ? body : nullptr;
 }
 }

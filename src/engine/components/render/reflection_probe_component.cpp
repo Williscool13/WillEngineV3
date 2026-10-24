@@ -24,14 +24,14 @@ static void RequestReflectionProbeLoad(entt::registry& registry, entt::entity en
     auto& comp = registry.get<ReflectionProbeComponent>(entity);
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
 
-    registry.remove<ReflectionProbeLoadingTag>(entity);
+    registry.remove<ReflectionProbeLoadingFlag>(entity);
     const bool bHasBaked = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
     if (bHasBaked || comp.standInEnvMap.IsValid()) {
-        registry.emplace_or_replace<ReflectionProbeLoadPendingTag>(entity);
+        registry.emplace_or_replace<ReflectionProbeLoadRequest>(entity);
     }
 }
 
-bool ReflectionProbeComponent::IsBakeStale(const WorldTransformComponent& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snap, uint32_t bakedResolutionPx)
+bool ReflectionProbeComponent::IsBakeStale(const WorldTransformRuntime& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snap, uint32_t bakedResolutionPx)
 {
     constexpr float kEpsilon = 1e-3f;
 
@@ -63,14 +63,14 @@ bool ReflectionProbeComponent::IsBakeStale(const WorldTransformComponent& world,
 
 void ReflectionProbeComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<ReflectionProbeComponent>(entity);
-    if (comp.contentSource == ContentSource::Baked) {
+    auto* runtime = registry.try_get<ReflectionProbeRuntime>(entity);
+    if (!runtime || runtime->contentSource == ContentSource::Baked) {
         return;
     }
-    if (comp.contentHandle.IsValid()) {
+    if (runtime->contentHandle.IsValid()) {
         auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-        ctx->assetManager->UnloadCubemap(comp.contentHandle);
-        comp.contentHandle = Engine::CubemapHandle::INVALID;
+        ctx->assetManager->UnloadCubemap(runtime->contentHandle);
+        runtime->contentHandle = Engine::CubemapHandle::INVALID;
     }
     RequestReflectionProbeLoad(registry, entity);
 }
@@ -133,9 +133,9 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         ProbeBakeSystem& bake = ProbeBakeGet(state);
         const bool bBakeInFlight = bake.bBakeActive && bake.probeEntity == entity;
 
-        ImGui::BeginDisabled(comp.bBakeRequested || bBakeInFlight);
+        ImGui::BeginDisabled(registry.all_of<ReflectionProbeBakeRequest>(entity) || bBakeInFlight);
         if (ImGui::Button("Bake##rp")) {
-            edit.ForEachTarget<ReflectionProbeComponent>([&registry](entt::entity e) { registry.get<ReflectionProbeComponent>(e).bBakeRequested = true; });
+            edit.ForEachTarget<ReflectionProbeComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ReflectionProbeBakeRequest>(e); });
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -152,8 +152,9 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Walks the 6 bake faces with the real bake view, hide set, and settle pacing, but captures and writes nothing."); }
 
+        const auto* runtime = registry.try_get<ReflectionProbeRuntime>(entity);
         const char* sourceLabel = "None";
-        switch (comp.contentSource) {
+        switch (runtime ? runtime->contentSource : ContentSource::None) {
             case ContentSource::Baked: { sourceLabel = "Baked"; break; }
             case ContentSource::StandIn: { sourceLabel = "Stand-in"; break; }
             case ContentSource::None: { sourceLabel = "None"; break; }
@@ -163,7 +164,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         const Engine::AssetManager::ProbeInfo* probeInfo = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId});
         if (!probeInfo) {
             ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Not baked");
-        } else if (const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity); worldTransform && IsBakeStale(*worldTransform, comp, probeInfo->snapshot, probeInfo->resolution)) {
+        } else if (const auto* worldTransform = registry.try_get<WorldTransformRuntime>(entity); worldTransform && IsBakeStale(*worldTransform, comp, probeInfo->snapshot, probeInfo->resolution)) {
             ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Bake is stale (transform changed). Rebake.");
         }
 
@@ -278,9 +279,7 @@ void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entit
     auto& comp = registry.get<ReflectionProbeComponent>(entity);
     auto* state = registry.ctx().get<Engine::EngineState*>();
 
-    comp.contentHandle = Engine::CubemapHandle::INVALID;
-    comp.contentSource = ContentSource::None;
-    comp.bBakeRequested = false;
+    registry.emplace_or_replace<ReflectionProbeRuntime>(entity);
     if (comp.probeId == 0) {
         comp.probeId = state->rng();
     }
@@ -294,13 +293,10 @@ void ReflectionProbeComponent::DeferredConstruct(entt::registry& registry, entt:
 
 void ReflectionProbeComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<ReflectionProbeComponent>(entity);
-    if (comp.contentHandle.IsValid()) {
+    if (const auto* runtime = registry.try_get<ReflectionProbeRuntime>(entity); runtime && runtime->contentHandle.IsValid()) {
         auto* state = registry.ctx().get<Engine::EngineState*>();
-        state->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = comp.contentHandle}});
-        comp.contentHandle = Engine::CubemapHandle::INVALID;
+        state->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime->contentHandle}});
     }
-    registry.remove<ReflectionProbeLoadPendingTag>(entity);
-    registry.remove<ReflectionProbeLoadingTag>(entity);
+    registry.remove<ReflectionProbeRuntime, ReflectionProbeLoadRequest, ReflectionProbeLoadingFlag, ReflectionProbeBakeRequest>(entity);
 }
 }

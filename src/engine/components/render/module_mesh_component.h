@@ -48,11 +48,11 @@ struct ModuleMeshComponent
 };
 
 /** Generation requested; ModuleMeshPendingKickoff kicks the model build. */
-struct ModuleMeshLoadPendingTag
+struct ModuleMeshLoadRequest
 {};
 
 /** Model build in flight; ModuleMeshLoadResolve binds it once finished. */
-struct ModuleMeshLoadingTag
+struct ModuleMeshLoadingFlag
 {};
 }
 
