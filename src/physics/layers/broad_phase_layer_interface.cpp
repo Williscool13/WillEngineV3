@@ -14,6 +14,8 @@ BPLayerInterfaceImpl::BPLayerInterfaceImpl()
     mObjectToBroadPhase[Layers::SENSOR] = BroadPhaseLayers::MOVING;
     mObjectToBroadPhase[Layers::DEBRIS] = BroadPhaseLayers::MOVING;
     mObjectToBroadPhase[Layers::IGNORE_DEBRIS] = BroadPhaseLayers::MOVING;
+    mObjectToBroadPhase[Layers::CART] = BroadPhaseLayers::MOVING;
+    mObjectToBroadPhase[Layers::CART_WALL] = BroadPhaseLayers::NON_MOVING;
 }
 
 JPH::uint BPLayerInterfaceImpl::GetNumBroadPhaseLayers() const

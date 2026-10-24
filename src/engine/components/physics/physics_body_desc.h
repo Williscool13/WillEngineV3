@@ -130,6 +130,8 @@ struct PhysicsBodyDesc
     bool bActive{true};
     bool bEnhancedInternalEdgeRemoval{false};
     bool bIsSensor{false};
+    /** Freezes rotation about world X and Z so a moving body cannot tip; it can still turn about Y. */
+    bool bLockTilt{false};
 
     Core::InlineVector<PhysicsShapeDesc, 8> shapes;
 
@@ -142,6 +144,7 @@ struct PhysicsBodyDesc
         WILL_FIELD(layerOverride),
         WILL_FIELD(bEnhancedInternalEdgeRemoval, .key = "enhancedInternalEdgeRemoval"),
         WILL_FIELD(bIsSensor, .key = "isSensor"),
+        WILL_FIELD(bLockTilt, .key = "lockTilt"),
         WILL_FIELD(shapes))
 
     static void OnConstruct(entt::registry& registry, entt::entity entity);

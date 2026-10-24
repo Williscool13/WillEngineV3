@@ -23,6 +23,14 @@ set(GAME_SOURCES
         ballance/crusher/crusher_systems.cpp
         ballance/crusher/crusher_systems.h
 
+        ballance/lava/lava_component.h
+        ballance/lava/lava_systems.cpp
+        ballance/lava/lava_systems.h
+
+        ballance/cane/cane_lift_component.h
+        ballance/cane/cane_lift_systems.cpp
+        ballance/cane/cane_lift_systems.h
+
         ballance/checkpoint/checkpoint_component.cpp
         ballance/checkpoint/checkpoint_component.h
         ballance/checkpoint/checkpoint_systems.cpp

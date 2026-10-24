@@ -88,6 +88,8 @@ public:
     uint32_t GetAwakeBodyCount() const;
     void AddImpulse(BodyHandle body, const Vec3& impulse);
     void AddTorque(BodyHandle body, const Vec3& torque);
+    /** Turns a kinematic or dynamic body dynamic in place, awake and moving at linearVelocity. */
+    void MakeDynamic(BodyHandle body, const Vec3& linearVelocity);
 
     /** Closest hit along origin + t * direction for t in [0, 1], skipping `ignore` and the layers in `ignoredLayers` (Layers::Bit). */
     bool CastRay(const Vec3& origin, const Vec3& direction, CastHit& hit, BodyHandle ignore = {}, uint32_t ignoredLayers = 0) const;

@@ -79,11 +79,12 @@ void UpdatePathMovers(EngineContext* ctx, EngineState* state)
         const float speed = (static_cast<size_t>(targetSegment) < mover.pointSettings.Size()) ? mover.pointSettings[targetSegment].speed : 1.0f;
         const float wait = (static_cast<size_t>(targetSegment) < mover.pointSettings.Size()) ? mover.pointSettings[targetSegment].waitTime : 0.0f;
 
-        mover.progress += speed * dt;
+        mover.progress += speed * (dt - mover.waitTimer);
+        mover.waitTimer = 0.0f;
 
         if (mover.progress > 1.0f) {
             mover.bIsWaiting = true;
-            mover.waitTimer = wait;
+            mover.waitTimer = wait - (mover.progress - 1.0f) / speed;
             mover.currentSegment = targetSegment;
             mover.progress = 0.0f;
         }

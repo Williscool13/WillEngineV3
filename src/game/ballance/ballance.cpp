@@ -15,6 +15,8 @@
 #include "game/ballance/state.h"
 #include "game/ballance/breakable/breakable_component.h"
 #include "game/ballance/breakable/breakable_systems.h"
+#include "game/ballance/cane/cane_lift_component.h"
+#include "game/ballance/cane/cane_lift_systems.h"
 #include "game/ballance/checkpoint/checkpoint_component.h"
 #include "game/ballance/checkpoint/checkpoint_systems.h"
 #include "game/ballance/checkpoint/death_zone_component.h"
@@ -23,6 +25,8 @@
 #include "game/ballance/crusher/crusher_systems.h"
 #include "game/ballance/debug/debug_components.h"
 #include "game/ballance/debug/debug_system.h"
+#include "game/ballance/lava/lava_component.h"
+#include "game/ballance/lava/lava_systems.h"
 #include "physics/physics_world.h"
 
 namespace Ballance
@@ -40,6 +44,9 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterComponent<Component::BreakableComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::SelfDestructComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CrusherComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::LavaComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::CaneLiftComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::CaneCartComponent>(componentRegistry, Engine::Origin::Game, false, false);
 }
 
 void RegisterCommands(Engine::EngineState* state)
@@ -64,6 +71,9 @@ void CollectSystems(Engine::SystemGraph& graph)
     graph.Add("Ballance/AcquireBreakableAssets", &AcquireBreakableAssets);
     graph.Add("Ballance/UpdateSelfDestruct", &UpdateSelfDestruct, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/UpdateCrushers", &UpdateCrushers, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/LavaContacts", &LavaContacts, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateDissolving", &UpdateDissolving, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateCaneLifts", &UpdateCaneLifts, Engine::SystemWhen::WorldRunning);
 
     graph.Add("Ballance/DebugProcessPhysicsCollisions", &DebugProcessPhysicsCollisions, Engine::SystemWhen::Gameplay);
     graph.Add("Ballance/DebugApplyGroundForces", &DebugApplyGroundForces, Engine::SystemWhen::Gameplay);

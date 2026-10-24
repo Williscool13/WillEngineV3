@@ -314,6 +314,13 @@ void PhysicsWorld::AddTorque(BodyHandle body, const Vec3& torque)
     jolt->GetBodyInterface().AddTorque(ToJolt(body), ToJolt(torque));
 }
 
+void PhysicsWorld::MakeDynamic(BodyHandle body, const Vec3& linearVelocity)
+{
+    JPH::BodyInterface& bodyInterface = jolt->GetBodyInterface();
+    bodyInterface.SetMotionType(ToJolt(body), JPH::EMotionType::Dynamic, JPH::EActivation::Activate);
+    bodyInterface.SetLinearVelocity(ToJolt(body), ToJolt(linearVelocity));
+}
+
 class IgnoredLayersFilter final : public JPH::ObjectLayerFilter
 {
 public:

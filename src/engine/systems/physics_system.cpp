@@ -429,6 +429,10 @@ JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Compone
     settings.mEnhancedInternalEdgeRemoval = desc.bEnhancedInternalEdgeRemoval;
     settings.mIsSensor = desc.bIsSensor;
     settings.mUserData = userData;
+    settings.mAllowDynamicOrKinematic = desc.motionType != Component::PhysicsMotionType::Static;
+    if (desc.bLockTilt && desc.motionType != Component::PhysicsMotionType::Static) {
+        settings.mAllowedDOFs = JPH::EAllowedDOFs::TranslationX | JPH::EAllowedDOFs::TranslationY | JPH::EAllowedDOFs::TranslationZ | JPH::EAllowedDOFs::RotationY;
+    }
 
     JPH::EActivation activation = (desc.motionType == Component::PhysicsMotionType::Static && !desc.bIsSensor)
                                       ? JPH::EActivation::DontActivate

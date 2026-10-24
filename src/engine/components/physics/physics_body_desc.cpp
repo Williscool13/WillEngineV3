@@ -251,6 +251,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
         bCommit |= ImGui::Checkbox("Enhanced Internal Edge Removal", &component.bEnhancedInternalEdgeRemoval);
         bCommit |= ImGui::Checkbox("Is Sensor", &component.bIsSensor);
+        bCommit |= ImGui::Checkbox("Lock Tilt", &component.bLockTilt);
 
         ImGui::BeginDisabled(edit.IsMulti());
         if (edit.IsMulti()) { ImGui::TextDisabled("Shapes are edited one entity at a time"); }
