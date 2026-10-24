@@ -91,6 +91,11 @@ else ()
     add_executable(will-engine main.cpp)
 endif ()
 
+if (WIN32)
+    enable_language(RC)
+    target_sources(will-engine PRIVATE resources/will-engine.rc)
+endif ()
+
 target_include_directories(will-engine PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/extern

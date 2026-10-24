@@ -20,6 +20,7 @@
 #include "engine_api.h"
 #include "engine_lifecycle.h"
 #include "engine_tick.h"
+#include "resource_ids.h"
 #include "engine/include/game_interface.h"
 #include "engine/input/input_manager.h"
 #include "components/component_registration.h"
@@ -344,6 +345,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         SDL_SetMemoryFunctions(SdlMalloc, SdlCalloc, SdlRealloc, SdlFree);
         meshopt_setAllocator(MeshoptAlloc, MeshoptFree);
         Core::SetConcurrentQueueAllocator(&memoryManager.General(), Core::AllocTag::Queue);
+        SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, WILL_ENGINE_ICON_ID_STRING);
         bool sdlInitSuccess = SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
         if (!sdlInitSuccess) {
             SPDLOG_ERROR("SDL_Init failed: {}", SDL_GetError());

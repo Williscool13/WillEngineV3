@@ -1,0 +1,11 @@
+//
+// Created by William on 2026-10-24.
+//
+
+#ifndef WILL_ENGINE_RESOURCE_IDS_H
+#define WILL_ENGINE_RESOURCE_IDS_H
+
+#define WILL_ENGINE_ICON_ID 101
+#define WILL_ENGINE_ICON_ID_STRING "101"
+
+#endif //WILL_ENGINE_RESOURCE_IDS_H

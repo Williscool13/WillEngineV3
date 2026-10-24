@@ -1,0 +1,3 @@
+#include "../src/engine/resource_ids.h"
+
+WILL_ENGINE_ICON_ID ICON "logo/WillEngine_blue.ico"
