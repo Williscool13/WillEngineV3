@@ -25,6 +25,8 @@ void AcquireBreakableAssets(Engine::EngineContext* ctx, Engine::EngineState* sta
 
 void UpdateSelfDestruct(Engine::EngineContext* ctx, Engine::EngineState* state);
 
+void ShatterOnContact(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 /**
  * Spawns the entity's broken model as one dynamic shard per mesh node, each moving with the entity's velocity at its centre of mass, and destroys the entity at the end of the frame.
  * @return false when the entity has no BreakableComponent or its broken model is not loaded yet

@@ -113,6 +113,7 @@ RenderThread::~RenderThread()
 
     vkDestroySemaphore(context->device, asyncComputeTimelineSemaphore, context->HostAllocCallbacks());
 
+    shadowBakeReadback.buffer = {};
     nrdDenoiser->~NrdDenoiser();
     pipelineManager->~PipelineManager();
     renderGraph->~RenderGraph();

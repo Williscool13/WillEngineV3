@@ -45,14 +45,14 @@ mipBias|0xbf800000
 resolutionScale|0x3f400000
 reflectionProbeLineWidth|0x3dcccccd
 editorSpriteMask|127
-editorDebugDrawMask|127
+editorDebugDrawMask|1
 editorDebugDrawMode|1
 editorPhysicsDebugMask|5
 gameCameraFovDegrees|0x42480000
 gameCameraNearPlane|0x3dcccccd
 editorCameraFovDegrees|0x427fe4e0
 editorCameraNearPlane|0x3dcccccd
-gameCameraLockAspect|1
+gameCameraLockAspect|0
 gameCameraAspect|0x41800000|0x41100000
 probeBake
 settleFrames|240

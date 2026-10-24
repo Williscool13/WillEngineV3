@@ -5,6 +5,8 @@
 #include "breakable_systems.h"
 
 #include <cmath>
+#include <initializer_list>
+#include <utility>
 
 #include <tracy/Tracy.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,6 +27,8 @@
 #include "engine/resources/physics/physics_collider_asset.h"
 #include "engine/systems/command_queue.h"
 #include "engine/systems/scene_system.h"
+#include "game/ballance/lava/lava_component.h"
+#include "platform/file_utils.h"
 #include "game/ballance/fwd_components.h"
 #include "game/ballance/breakable/breakable_component.h"
 #include "physics/physics_world.h"
@@ -98,9 +102,51 @@ static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* sta
     Engine::Console::Print(state, Core::InlineString<256>::Format("  broke %u of %zu breakables within %.0f m", broken, nearby.Size(), RADIUS).c_str());
 }
 
+static void AppendPose(Core::InlineString<384>& line, const Transform& world)
+{
+    line.Append(Core::InlineString<256>::Format(" %.9g %.9g %.9g %.9g %.9g %.9g %.9g %.9g %.9g %.9g", world.translation.x, world.translation.y, world.translation.z,
+        world.rotation.w, world.rotation.x, world.rotation.y, world.rotation.z, world.scale.x, world.scale.y, world.scale.z));
+}
+
+static void DumpSeed(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args)
+{
+    if (args.Size() < 2) {
+        Engine::Console::Print(state, "  usage: b.seed.dump <path>");
+        return;
+    }
+    entt::registry& registry = state->registry;
+    auto crates = registry.view<Component::BreakableComponent, Component::PrefabInstanceComponent, Component::DoNotSerializeTag>(entt::exclude<Component::DissolvingComponent>);
+    auto shards = registry.view<Component::ShardTag, Component::StaticMeshComponent, Component::PhysicsBodyDesc>(entt::exclude<Component::DissolvingComponent>);
+    constexpr size_t LINE_BYTES = 384;
+    auto text = Core::ArenaFixedVector<char>(&ctx->gameplayArena.Get(), (crates.size_hint() + shards.size_hint() + 1) * LINE_BYTES);
+    auto append = [&](const Core::InlineString<384>& line) {
+        for (size_t i = 0; i < line.Size(); ++i) { text.PushBack(line.c_str()[i]); }
+        text.PushBack('\n');
+    };
+
+    uint32_t crateCount = 0;
+    for (const auto& [entity, breakable, prefab] : crates.each()) {
+        auto line = Core::InlineString<384>::Format("crate %llu", static_cast<unsigned long long>(prefab.prefabId.id));
+        AppendPose(line, Component::ComputeWorldTransform(registry, entity));
+        append(line);
+        ++crateCount;
+    }
+    uint32_t shardCount = 0;
+    for (const auto& [entity, mesh, desc] : shards.each()) {
+        auto line = Core::InlineString<384>::Format("shard %llu %u %.9g %.9g %.9g", static_cast<unsigned long long>(mesh.modelId.id), mesh.nodeIndex, desc.mass, desc.friction, desc.restitution);
+        AppendPose(line, Component::ComputeWorldTransform(registry, entity));
+        append(line);
+        ++shardCount;
+    }
+
+    const bool bWritten = Platform::WriteFile(Core::Path(args[1]), std::string_view(text.Data(), text.Size()));
+    Engine::Console::Print(state, Core::InlineString<256>::Format("  %s %u crates, %u shards to %s", bWritten ? "wrote" : "FAILED writing", crateCount, shardCount, args[1]).c_str());
+}
+
 void RegisterBreakableCommands(Engine::EngineState* state)
 {
     Engine::Console::Register(state, Engine::Origin::Game, "b.crate.break", "Breaks every breakable within 10 m of the camera (play or simulate)", &BreakNearCamera);
+    Engine::Console::Register(state, Engine::Origin::Game, "b.seed.dump", "`b.seed.dump <path>` writes every spawned intact crate and every shard (model, node, body, world pose) for seeding the scene", &DumpSeed);
 }
 
 void ConnectBreakableObservers(entt::registry& registry)
@@ -161,6 +207,20 @@ void UpdateSelfDestruct(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
+void ShatterOnContact(Engine::EngineContext* ctx, Engine::EngineState* state)
+{
+    ZoneScoped;
+    entt::registry& registry = state->registry;
+    if (registry.view<Component::ShatterOnContactTag>().size() == 0) { return; }
+
+    for (const auto& event : state->physics.resolvedAddedEvents) {
+        for (const auto [shatterer, other] : {std::pair{event.e1, event.e2}, std::pair{event.e2, event.e1}}) {
+            if (shatterer == entt::null || other == entt::null || !registry.all_of<Component::ShatterOnContactTag>(shatterer)) { continue; }
+            if (registry.all_of<Component::BreakableComponent>(other)) { Break(ctx, state, other); }
+        }
+    }
+}
+
 bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity entity)
 {
     ZoneScoped;
@@ -214,6 +274,7 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
 
         const entt::entity shard = Engine::CreateSceneEntity(state);
         registry.emplace<Component::DoNotSerializeTag>(shard);
+        registry.emplace<Component::ShardTag>(shard);
         registry.get<Component::NameComponent>(shard).name = Core::InlineString<128>::Format("%s %s", name ? name->name.c_str() : "Broken", nodes[n].name.c_str());
 
         auto& transform = registry.get<Component::TransformComponent>(shard);

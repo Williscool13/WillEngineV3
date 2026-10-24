@@ -1183,14 +1183,20 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::SameLine();
 
         if (IsSimulating(state)) {
+            const float runSeconds = state->timeFrame->totalTime - state->runStartTime;
             if (ImGui::Button("Stop Simulate")) {
                 SimulateStop(ctx, state);
             }
+            ImGui::SameLine();
+            ImGui::TextDisabled("%.0f s", runSeconds);
         }
         else if (IsPlaying(state)) {
+            const float runSeconds = state->timeFrame->totalTime - state->runStartTime;
             if (ImGui::Button("Stop")) {
                 PlayStop(ctx, state);
             }
+            ImGui::SameLine();
+            ImGui::TextDisabled("%.0f s", runSeconds);
             if (state->inputContext == Engine::InputContext::Menu) {
                 ImGui::SameLine();
                 if (ImGui::Button("Enter Game")) {

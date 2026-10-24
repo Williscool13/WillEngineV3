@@ -746,9 +746,38 @@ static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& 
     call.SetInt("stableEntityCount", static_cast<int64_t>(state->stableIdToEntityMap.Size()));
     call.SetString("inputContext", InputContextName(state->inputContext));
     call.SetString("runMode", RunModeName(state->runMode));
+    call.SetFloat("runSeconds", IsRunning(state) ? state->timeFrame->totalTime - state->runStartTime : 0.0);
     call.SetBool("physicsEnabled", state->physics.bEnabled);
     call.SetBool("playtestActive", state->playtest.bActive || !state->playtest.pendingPath.IsEmpty());
     call.SetString("playtestOutputDir", state->playtest.outputDir.c_str());
+    return ToolResult::Complete;
+}
+
+static ToolResult SetRunMode(EngineContext* ctx, EngineState* state, Call& call)
+{
+    const char* mode = call.GetString("mode", "");
+    const bool bEdit = strcmp(mode, "edit") == 0;
+    const bool bSimulate = strcmp(mode, "simulate") == 0;
+    const bool bPlay = strcmp(mode, "play") == 0;
+    if (!bEdit && !bSimulate && !bPlay) {
+        call.SetError("mode must be edit, simulate or play");
+        return ToolResult::Error;
+    }
+    if (state->playtest.bActive || !state->playtest.pendingPath.IsEmpty()) {
+        call.SetError("A .wplay run owns the run mode; poll get_engine_status.playtestActive until false");
+        return ToolResult::Error;
+    }
+    if (!bEdit && !ctx->bGameLoaded) {
+        call.SetError("game.dll is not loaded");
+        return ToolResult::Error;
+    }
+
+    if (IsSimulating(state) && !bSimulate) { SimulateStop(ctx, state); }
+    if (IsPlaying(state) && !bPlay) { PlayStop(ctx, state); }
+    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state); }
+    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state); }
+
+    call.SetString("runMode", RunModeName(state->runMode));
     return ToolResult::Complete;
 }
 
@@ -771,6 +800,17 @@ void RegisterEngineTools(EngineState* state)
         .inputSchemaJson = R"({"type":"object","required":["name"],"properties":{
             "name":{"type":"string","description":"The .wplay file stem, its header name, or an absolute path; a stem or name prefers runs bound to the current scene"}}})",
         .invoke = &RunPlay,
+        .origin = Origin::Engine,
+        .bNeedsDrain = true,
+    });
+
+    RegisterTool(state, {
+        .id = "set_run_mode"_sid,
+        .name = "set_run_mode",
+        .description = "Switches the editor between edit, simulate and play, as the toolbar's Play / Simulate / Stop buttons do; play captures the mouse like the Play button. Stopping restores the scene to its pre-run state. Returns the resulting runMode.",
+        .inputSchemaJson = R"({"type":"object","required":["mode"],"properties":{
+            "mode":{"type":"string","enum":["edit","simulate","play"]}}})",
+        .invoke = &SetRunMode,
         .origin = Origin::Engine,
         .bNeedsDrain = true,
     });

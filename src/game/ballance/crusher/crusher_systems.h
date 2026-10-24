@@ -13,7 +13,13 @@ struct EngineState;
 
 namespace Ballance
 {
+void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state);
+
 void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state);
+
+void RegisterCrusherCommands(Engine::EngineState* state);
 } // Ballance
 
 #endif //WILL_ENGINE_BALLANCE_CRUSHER_SYSTEMS_H

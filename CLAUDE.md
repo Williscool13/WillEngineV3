@@ -4,11 +4,12 @@
 
 Editor builds run an MCP server on `http://127.0.0.1:8787/mcp` (`--mcp-port=<n>` to change it; `--help` lists every launch argument in `engine.log`). It is registered as `will-engine` in `.mcp.json`. When the editor is running, use these tools before asking the user to check something by hand.
 
-- `get_engine_status` - readiness. Poll it after any mutation; `settled` means nothing has loaded for 30 frames.
+- `get_engine_status` - readiness. Poll it after any mutation; `settled` means nothing has loaded for 30 frames; `runSeconds` is how long the current Play or Simulate has run.
 - `get_frame_timings` - CPU and GPU frame timing, culling and pipeline counters. Safe to poll.
 - `query_assets`, `query_scene`, `get_entity`, `find_entities` - what the engine knows about, and what is in the live scene.
 - `spawn_entity` - a prefab, a model, or an empty entity, optionally parented.
 - `load_scene` - unloads everything and loads a scene by name or id; loading the current scene reloads its file. Run the console command `w.rescan` first for a file written since the last scan. Refuses when a loaded scene has unsaved edits unless `discardChanges` is true.
+- `set_run_mode` - `edit`, `simulate` or `play`, as the toolbar buttons do; stopping restores the pre-run scene.
 - `get_camera`, `set_camera` - the editor camera pose; `set_camera` takes a position plus either a look-at target or a quaternion, and optionally the field of view.
 - `exec_console_command`, `list_console_commands` - the in-game developer console, with printed output returned.
 - `capture_screenshot` - returns a PNG path immediately; `frames` > 1 captures consecutive render frames as `<stem>_NNN.png`. Poll `get_engine_status.screenshotInFlight` until false, then read the files.

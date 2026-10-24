@@ -1137,6 +1137,7 @@ static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* sta
 #endif
 
     LockStaticTransforms(state);
+    state->runStartTime = state->timeFrame->totalTime;
 }
 
 static void RestorePIESnapshot(Engine::EngineState* state)

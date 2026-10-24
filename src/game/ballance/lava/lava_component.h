@@ -46,6 +46,7 @@ struct DissolvingComponent
     /** World down expressed in the parent's space, already scaled by the sink depth. */
     glm::vec3 sink{0.0f};
     glm::vec3 tiltAxis{1.0f, 0.0f, 0.0f};
+    glm::vec3 shrinkPivot{0.0f};
     float tiltRadians{0.0f};
     float duration{1.5f};
     float elapsed{0.0f};

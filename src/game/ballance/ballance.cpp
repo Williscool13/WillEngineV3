@@ -43,7 +43,11 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 
     Engine::RegisterComponent<Component::BreakableComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::SelfDestructComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::ShatterOnContactTag>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::ShardTag>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CrusherComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::ThroatValveComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::CrateFeederComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::LavaComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CaneLiftComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CaneCartComponent>(componentRegistry, Engine::Origin::Game, false, false);
@@ -52,6 +56,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
 void RegisterCommands(Engine::EngineState* state)
 {
     RegisterBreakableCommands(state);
+    RegisterCrusherCommands(state);
 }
 
 void ConnectObservers(entt::registry& registry)
@@ -70,6 +75,9 @@ void CollectSystems(Engine::SystemGraph& graph)
 {
     graph.Add("Ballance/AcquireBreakableAssets", &AcquireBreakableAssets);
     graph.Add("Ballance/UpdateSelfDestruct", &UpdateSelfDestruct, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/ShatterOnContact", &ShatterOnContact, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateThroatValves", &UpdateThroatValves, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateCrateFeeders", &UpdateCrateFeeders, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/UpdateCrushers", &UpdateCrushers, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/LavaContacts", &LavaContacts, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/UpdateDissolving", &UpdateDissolving, Engine::SystemWhen::WorldRunning);

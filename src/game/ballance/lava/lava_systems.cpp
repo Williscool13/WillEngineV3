@@ -45,6 +45,13 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
         sink = glm::inverse(parent.rotation) * sink / parent.scale;
     }
 
+    glm::vec3 shrinkPivot{0.0f};
+    if (const auto* body = Component::FindBody(registry, entity)) {
+        const auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        const Transform world = Component::ComputeWorldTransform(registry, entity);
+        shrinkPivot = glm::inverse(world.rotation) * (ctx->physicsWorld->GetWorldBounds(body->bodyID).Center() - world.translation) / world.scale;
+    }
+
     glm::vec3 axis = state->rng.UnitVector();
     axis.y = 0.0f;
     const float axisLength = glm::length(axis);
@@ -54,6 +61,7 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
         .startScale = transform.scale,
         .sink = sink,
         .tiltAxis = axisLength > 1e-4f ? glm::inverse(transform.rotation) * (axis / axisLength) : glm::vec3(1.0f, 0.0f, 0.0f),
+        .shrinkPivot = shrinkPivot,
         .tiltRadians = glm::radians(tiltDegrees) * state->rng.Range(0.3f, 1.0f),
         .duration = duration,
     });
@@ -81,7 +89,8 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state)
             const auto* body = Component::FindBody(registry, other);
             const auto* lavaBody = Component::FindBody(registry, lavaEntity);
             if (!body || !lavaBody) { continue; }
-            const float top = ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y;
+            // A cart's origin is its post top, above its body
+            const float top = std::max(ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y, Component::ComputeWorldTransform(registry, other).translation.y);
             const float surface = ctx->physicsWorld->GetWorldBounds(lavaBody->bodyID).max.y;
             const float depth = std::max(top - surface, 0.0f) + lava->extraDepth;
             StartDissolving(state, other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees);
@@ -103,9 +112,9 @@ void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state)
         const float u = std::min(dissolving.elapsed / dissolving.duration, 1.0f);
         const float sinkT = u * u * (3.0f - 2.0f * u);
         const float shrink = std::clamp((u - SHRINK_START) / (1.0f - SHRINK_START), 0.0f, 1.0f);
-        transform.translation = dissolving.startTranslation + dissolving.sink * sinkT;
         transform.rotation = dissolving.startRotation * glm::angleAxis(dissolving.tiltRadians * sinkT, dissolving.tiltAxis);
         transform.scale = dissolving.startScale * (1.0f - shrink);
+        transform.translation = dissolving.startTranslation + dissolving.sink * sinkT + transform.rotation * (dissolving.startScale * dissolving.shrinkPivot * shrink);
         registry.emplace_or_replace<Component::DirtyTransformTag>(entity);
         if (u >= 1.0f) { finished.PushBack(entity); }
     }

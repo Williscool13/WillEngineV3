@@ -41,6 +41,18 @@ struct BreakableRuntime
     static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
+struct ShatterOnContactTag
+{
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "ShatterOnContactTag";
+};
+
+struct ShardTag
+{
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "ShardTag";
+};
+
 struct SelfDestructComponent
 {
     static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;

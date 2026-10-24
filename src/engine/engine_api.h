@@ -306,6 +306,8 @@ struct EngineState
 
     InputContext inputContext{InputContext::Editor};
     RunMode runMode{RunMode::Edit};
+    /** timeFrame->totalTime when the current Play or Simulate session started. */
+    float runStartTime{0.0f};
     FrameRequests requests{};
 
     const Core::TimeFrame* timeFrame{nullptr};

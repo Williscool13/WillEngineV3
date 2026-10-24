@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "core/string_id.h"
 #include "engine/component_registry.h"
 #include "engine/core/entity_ref.h"
 #include "engine/reflection/reflection.h"
@@ -76,6 +77,53 @@ struct CrusherComponent
         WILL_FIELD(phaseTime),
         WILL_FIELD(drop),
         WILL_FIELD(pushed))
+};
+
+/**
+ * Closes once more than `closeShards` shards are awake: crate feeders stop, and crushers stop their belts and start no new cycle.
+ * Opens again at `openShards` or fewer, and stays open at least `minOpenSeconds`: restarting the belts wakes the shards resting on them.
+ */
+struct ThroatValveComponent
+{
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "ThroatValveComponent";
+
+    int32_t closeShards{480};
+    int32_t openShards{320};
+    float minOpenSeconds{3.0f};
+
+    bool bClosed{false};
+    float openTime{0.0f};
+
+    WILL_REFLECT(ThroatValveComponent,
+        WILL_FIELD(closeShards),
+        WILL_FIELD(openShards),
+        WILL_FIELD(minOpenSeconds, .min = 0.0f, .speed = 0.1f))
+};
+
+/**
+ * Spawns `prefabId` at `cratesPerSecond`, at a random point on the ring between `minRadius` and `maxRadius` round this entity at its height, in a random orientation.
+ * Holds while any throat valve is closed or `maxIntact` intact breakables exist.
+ */
+struct CrateFeederComponent
+{
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "CrateFeederComponent";
+
+    StringID prefabId;
+    float cratesPerSecond{1.0f};
+    float minRadius{25.0f};
+    float maxRadius{28.0f};
+    int32_t maxIntact{48};
+
+    float timer{0.0f};
+
+    WILL_REFLECT(CrateFeederComponent,
+        WILL_FIELD(prefabId),
+        WILL_FIELD(cratesPerSecond, .min = 0.0f, .speed = 0.05f),
+        WILL_FIELD(minRadius, .min = 0.0f, .speed = 0.1f),
+        WILL_FIELD(maxRadius, .min = 0.0f, .speed = 0.1f),
+        WILL_FIELD(maxIntact))
 };
 }
 
