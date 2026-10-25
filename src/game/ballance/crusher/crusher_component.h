@@ -70,12 +70,17 @@ struct CrusherComponent
 
 struct CrusherRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "CrusherRuntime";
+
     CrusherPhase phase{CrusherPhase::Waiting};
     float phaseTime{0.0f};
     /** Metres the head is below its parked position. */
     float drop{0.0f};
     /** Metres the pusher is out from its home position. */
     float pushed{0.0f};
+
+    WILL_REFLECT(CrusherRuntime, WILL_FIELD(phase), WILL_FIELD(phaseTime), WILL_FIELD(drop), WILL_FIELD(pushed))
 };
 
 /**
@@ -99,8 +104,13 @@ struct ThroatValveComponent
 
 struct ThroatValveRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "ThroatValveRuntime";
+
     bool bClosed{false};
     float openTime{0.0f};
+
+    WILL_REFLECT(ThroatValveRuntime, WILL_FIELD(bClosed), WILL_FIELD(openTime))
 };
 
 /**
@@ -128,7 +138,12 @@ struct CrateFeederComponent
 
 struct CrateFeederRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "CrateFeederRuntime";
+
     float timer{0.0f};
+
+    WILL_REFLECT(CrateFeederRuntime, WILL_FIELD(timer))
 };
 }
 

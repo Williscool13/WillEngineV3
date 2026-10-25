@@ -13,6 +13,7 @@
 #include "engine/components/editor_components.h"
 #include "engine/components/motion/path_mover_component.h"
 #include "engine/components/motion/rotate_in_place_component.h"
+#include "engine/components/physics/physics_body_component.h"
 #include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/components/render/procedural_mesh_component.h"
@@ -26,21 +27,54 @@
 #include "engine/components/render/static_mesh_primitive_component.h"
 #include "engine/components/render/text_component.h"
 #include "engine/components/render/text3d_component.h"
+#include "engine/include/engine_context.h"
+#include "engine/serialization/text_reader.h"
+#include "engine/serialization/text_writer.h"
+#include "physics/physics_world.h"
 
 namespace Engine
 {
-void ClearGameComponents(ComponentRegistry& componentRegistry)
+template<typename Entry>
+static void RemoveGameEntries(Core::Vector<Entry>& entries, Core::Map<StringID, size_t>& mapping)
 {
-    for (size_t i = componentRegistry.registry.Size(); i-- > 0;) {
-        if (componentRegistry.registry[i].origin == Origin::Game) {
-            componentRegistry.registry.RemoveAt(i);
+    for (size_t i = entries.Size(); i-- > 0;) {
+        if (entries[i].origin == Origin::Game) {
+            entries.RemoveAt(i);
         }
     }
 
-    componentRegistry.registryMapping.Clear();
-    for (size_t i = 0; i < componentRegistry.registry.Size(); ++i) {
-        componentRegistry.registryMapping[componentRegistry.registry[i].typeId] = i;
+    mapping.Clear();
+    for (size_t i = 0; i < entries.Size(); ++i) {
+        mapping[entries[i].typeId] = i;
     }
+}
+
+void ClearGameComponents(ComponentRegistry& componentRegistry)
+{
+    RemoveGameEntries(componentRegistry.registry, componentRegistry.registryMapping);
+    RemoveGameEntries(componentRegistry.runtimeState, componentRegistry.runtimeStateMapping);
+}
+
+/** Velocity lives in the physics world; a load requests it back once the body exists. */
+static void RegisterBodyVelocityState(ComponentRegistry& componentRegistry)
+{
+    const StringID typeId = "PhysicsBodyVelocity"_sid;
+    componentRegistry.runtimeStateMapping[typeId] = componentRegistry.runtimeState.Size();
+    componentRegistry.runtimeState.PushBack(RuntimeStateEntry{
+        .typeId = typeId,
+        .name = "PhysicsBodyVelocity",
+        .has = [](const entt::registry& reg, entt::entity e) -> bool { return reg.all_of<Component::PhysicsBodyRuntime, Component::DynamicPhysicsBodyRuntime>(e); },
+        .serialize = [](const entt::registry& reg, entt::entity e, TextWriter& w) {
+            const Physics::PhysicsWorld* physicsWorld = reg.ctx().get<EngineContext*>()->physicsWorld;
+            const Physics::BodyHandle body = reg.get<Component::PhysicsBodyRuntime>(e).bodyID;
+            w.Key("linearVelocity", physicsWorld->GetLinearVelocity(body));
+            w.Key("angularVelocity", physicsWorld->GetAngularVelocity(body));
+        },
+        .deserialize = [](entt::registry& reg, entt::entity e, const TextReader& r) {
+            reg.emplace_or_replace<Component::SetVelocityRequest>(e, Component::SetVelocityRequest{.linearVelocity = r.Vec3("linearVelocity"), .angularVelocity = r.Vec3("angularVelocity")});
+        },
+        .origin = Origin::Engine,
+    });
 }
 
 void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
@@ -82,5 +116,12 @@ void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry)
     RegisterComponent<Component::RotateInPlaceComponent>(componentRegistry, Origin::Engine, false, false);
 
     RegisterComponent<Component::DebugGizmoComponent>(componentRegistry, Origin::Engine, false, false);
+
+    RegisterRuntimeState<Component::DoNotSerializeTag>(componentRegistry, Origin::Engine);
+    RegisterRuntimeState<Component::PathMoverRuntime>(componentRegistry, Origin::Engine);
+    RegisterRuntimeState<Component::PhysicsMotionOverrideRuntime>(componentRegistry, Origin::Engine);
+    RegisterRuntimeState<Component::PhysicsSuspendedFlag>(componentRegistry, Origin::Engine);
+    RegisterRuntimeState<Component::ConveyorHaltedFlag>(componentRegistry, Origin::Engine);
+    RegisterBodyVelocityState(componentRegistry);
 }
 } // Engine

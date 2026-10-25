@@ -79,6 +79,17 @@ struct ComponentEntry
     bool bInstanceOnly{false};
 };
 
+/** State a runtime save writes; never in scene files, the inspector or undo. */
+struct RuntimeStateEntry
+{
+    StringID typeId{};
+    const char* name{};
+    HasComponentFn has{};
+    SerializeFn serialize{};
+    DeserializeFn deserialize{};
+    Origin origin{Origin::Engine};
+};
+
 struct ComponentRegistry
 {
     ComponentRegistry() = default;
@@ -89,6 +100,9 @@ struct ComponentRegistry
 
     Core::Vector<ComponentEntry> registry{};
     Core::Map<StringID, size_t> registryMapping{};
+
+    Core::Vector<RuntimeStateEntry> runtimeState{};
+    Core::Map<StringID, size_t> runtimeStateMapping{};
 };
 
 void ClearGameComponents(ComponentRegistry& componentRegistry);

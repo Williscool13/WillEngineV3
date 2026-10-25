@@ -40,6 +40,9 @@ struct LavaComponent
 /** Runtime state of a body being eaten; the start pose is local to its parent. */
 struct DissolvingRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "DissolvingRuntime";
+
     glm::vec3 startTranslation{0.0f};
     glm::quat startRotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 startScale{1.0f};
@@ -50,14 +53,31 @@ struct DissolvingRuntime
     float tiltRadians{0.0f};
     float duration{1.5f};
     float elapsed{0.0f};
+
+    WILL_REFLECT(DissolvingRuntime,
+        WILL_FIELD(startTranslation),
+        WILL_FIELD(startRotation),
+        WILL_FIELD(startScale),
+        WILL_FIELD(sink),
+        WILL_FIELD(tiltAxis),
+        WILL_FIELD(shrinkPivot),
+        WILL_FIELD(tiltRadians),
+        WILL_FIELD(duration),
+        WILL_FIELD(elapsed))
 };
 
 /** Kept when its dissolve finishes: the entity gets a DissolvedFlag instead of being destroyed, and its owner restores it. */
 struct DissolveKeepTag
-{};
+{
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "DissolveKeepTag";
+};
 
 struct DissolvedFlag
-{};
+{
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "DissolvedFlag";
+};
 }
 
 #endif //WILL_ENGINE_BALLANCE_LAVA_COMPONENT_H

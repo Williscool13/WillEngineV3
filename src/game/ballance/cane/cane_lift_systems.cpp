@@ -31,7 +31,7 @@ static void CaptureCarts(entt::registry& registry)
     auto view = registry.view<Component::CaneCartComponent, Component::TransformComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc>(
         entt::exclude<Component::CaneCartRuntime>);
     for (const auto& [entity, link, transform, mover, desc] : view.each()) {
-        registry.emplace<Component::CaneCartRuntime>(entity, Component::CaneCartRuntime{.park = {transform.translation, transform.rotation, transform.scale}});
+        registry.emplace<Component::CaneCartRuntime>(entity, Component::CaneCartRuntime{.parkTranslation = transform.translation, .parkRotation = transform.rotation, .parkScale = transform.scale});
         registry.emplace_or_replace<Component::DissolveKeepTag>(entity);
     }
 }
@@ -73,9 +73,9 @@ static void Recycle(entt::registry& registry, entt::entity cart, Component::Cane
 {
     registry.remove<Component::DissolvedFlag, Component::PathMoverRuntime, Component::SetVelocityRequest, Component::PhysicsMotionOverrideRuntime>(cart);
     auto& transform = registry.get<Component::TransformComponent>(cart);
-    transform.translation = runtime.park.translation;
-    transform.rotation = runtime.park.rotation;
-    transform.scale = runtime.park.scale;
+    transform.translation = runtime.parkTranslation;
+    transform.rotation = runtime.parkRotation;
+    transform.scale = runtime.parkScale;
     registry.emplace_or_replace<Component::DirtyTransformRequest>(cart);
     Component::PhysicsBodyDesc::Resume(registry, cart);
     runtime.phase = Component::CaneCartPhase::Idle;

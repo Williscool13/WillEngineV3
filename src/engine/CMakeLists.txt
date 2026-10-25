@@ -211,6 +211,8 @@ add_library(engine STATIC
         systems/render_systems_helpers.cpp
         systems/render_systems_helpers.h
         systems/physics_integration.h
+        systems/runtime_save.cpp
+        systems/runtime_save.h
         systems/scene_system.cpp
         systems/scene_system.h
         systems/system_graph.h

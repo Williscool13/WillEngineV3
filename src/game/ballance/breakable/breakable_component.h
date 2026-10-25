@@ -66,7 +66,12 @@ struct SelfDestructComponent
 
 struct SelfDestructRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "SelfDestructRuntime";
+
     float elapsed{0.0f};
+
+    WILL_REFLECT(SelfDestructRuntime, WILL_FIELD(elapsed))
 };
 }
 

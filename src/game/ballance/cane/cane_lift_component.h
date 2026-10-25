@@ -47,8 +47,13 @@ struct CaneLiftComponent
 
 struct CaneLiftRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "CaneLiftRuntime";
+
     /** Seconds until the next clip-on. */
     float timer{0.0f};
+
+    WILL_REFLECT(CaneLiftRuntime, WILL_FIELD(timer))
 };
 
 /** A pooled cart of `lift`. Authored at the boot with the kinematic body it lifts with and the PathMover (autoStart off) it runs once per trip. */
@@ -70,14 +75,28 @@ enum class CaneCartPhase : uint8_t
     Eaten,
 };
 
-/** `park` is the authored pose, taken the first time the lift sees the cart, so every trip starts from it. */
+/** The park pose is the authored one, taken the first time the lift sees the cart, so every trip starts from it. */
 struct CaneCartRuntime
 {
-    Transform park;
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "CaneCartRuntime";
+
+    glm::vec3 parkTranslation{0.0f};
+    glm::quat parkRotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 parkScale{1.0f};
     CaneCartPhase phase{CaneCartPhase::Idle};
     glm::vec3 releaseVelocity{0.0f};
     bool bVelocityApplied{false};
     float fallTime{0.0f};
+
+    WILL_REFLECT(CaneCartRuntime,
+        WILL_FIELD(parkTranslation),
+        WILL_FIELD(parkRotation),
+        WILL_FIELD(parkScale),
+        WILL_FIELD(phase),
+        WILL_FIELD(releaseVelocity),
+        WILL_FIELD(bVelocityApplied),
+        WILL_FIELD(fallTime))
 };
 }
 

@@ -18,6 +18,7 @@
 #include "engine/components/core_components.h"
 #include "engine/material_manager.h"
 #include "engine/input/engine_actions.h"
+#include "engine/systems/runtime_save.h"
 #include "engine/systems/scene_system.h"
 #include "engine/systems/system_graph.h"
 #include "engine/ui/ui_zindex.h"
@@ -300,6 +301,16 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             return;
         }
         Print(state, Core::InlineString<192>::Format("  scene %d '%s'", slot + 1, state->scene.currentSceneName.c_str()).c_str());
+    });
+
+    Register(state, Origin::Engine, "w.save", "`w.save [name]` writes the running world to <user data>/saves/<name>.wsave (default quick)", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+        const char* name = args.Size() > 1 ? args[1] : "quick";
+        Print(state, SaveRuntime(ctx, state, name) ? Core::InlineString<192>::Format("  saved '%s'", name).c_str() : "  save failed, see the log");
+    });
+
+    Register(state, Origin::Engine, "w.load", "`w.load [name]` replaces the running world with <name>.wsave (default quick); needs the same scenes loaded", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*> args) {
+        const char* name = args.Size() > 1 ? args[1] : "quick";
+        Print(state, LoadRuntime(ctx, state, name) ? Core::InlineString<192>::Format("  loaded '%s'", name).c_str() : "  load failed, see the log");
     });
 
     Register(state, Origin::Engine, "w.rescan", "Rescan assets, materials and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {

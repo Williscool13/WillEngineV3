@@ -76,6 +76,9 @@ public:
 
     bool Chance(float probability) { return Float() < probability; }
 
+    uint64_t GetState(int i) const { return state[i]; }
+    void SetState(int i, uint64_t v) { state[i] = v; }
+
     /** Uniform on the unit sphere. */
     glm::vec3 UnitVector()
     {

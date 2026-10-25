@@ -117,11 +117,15 @@ struct PathMoverComponent
 
 struct PathMoverRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "PathMoverRuntime";
+
     int32_t currentSegment{0};
     float progress{0.0f};
     int32_t direction{1};
     bool bIsWaiting{false};
     float waitTimer{0.0f};
+
+    WILL_REFLECT(PathMoverRuntime, WILL_FIELD(currentSegment), WILL_FIELD(progress), WILL_FIELD(direction), WILL_FIELD(bIsWaiting), WILL_FIELD(waitTimer))
 
     static PathMoverRuntime AtStart(const PathMoverComponent& mover)
     {

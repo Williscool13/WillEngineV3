@@ -40,7 +40,7 @@
 
 namespace Engine
 {
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId)
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, bool bRuntime)
 {
     ZoneScoped;
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -55,7 +55,8 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
     const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
 
     auto shouldSerialize = [&](entt::entity entity) {
-        return view.get<Component::SceneRuntime>(entity).sceneId == sceneId && !registry.all_of<Component::DoNotSerializeTag>(entity);
+        if (view.get<Component::SceneRuntime>(entity).sceneId != sceneId) { return false; }
+        return bRuntime ? !registry.all_of<Component::DoNotRuntimeSaveTag>(entity) : !registry.all_of<Component::DoNotSerializeTag>(entity);
     };
 
     for (auto entity : view) {
@@ -116,6 +117,14 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
             w.Raw(fragment.Data(), fragment.Size());
             w.EndBlock();
         }
+        if (bRuntime) {
+            for (const Engine::RuntimeStateEntry& entry : componentRegistry.runtimeState) {
+                if (!entry.has(registry, entity)) { continue; }
+                w.BeginBlock(entry.typeId.id);
+                entry.serialize(registry, entity, w);
+                w.EndBlock();
+            }
+        }
         w.EndBlock();
     }
 
@@ -168,6 +177,10 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry&
             std::from_chars(opener.data(), opener.data() + opener.size(), typeId);
             const size_t* index = componentRegistry.registryMapping.Find(StringID{typeId});
             if (index == nullptr) {
+                if (const size_t* stateIndex = componentRegistry.runtimeStateMapping.Find(StringID{typeId})) {
+                    componentRegistry.runtimeState[*stateIndex].deserialize(registry, entity, compReader);
+                    return;
+                }
                 LOG_WARN(Engine, "Scene component key {} matches no registered component; dropped on load", typeId);
                 return;
             }

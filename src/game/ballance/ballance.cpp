@@ -51,6 +51,16 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterComponent<Component::LavaComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CaneLiftComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CaneCartComponent>(componentRegistry, Engine::Origin::Game, false, false);
+
+    Engine::RegisterRuntimeState<Component::CrusherRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::ThroatValveRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::CrateFeederRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::SelfDestructRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::CaneLiftRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::CaneCartRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::DissolvingRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::DissolveKeepTag>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::DissolvedFlag>(componentRegistry, Engine::Origin::Game);
 }
 
 void RegisterCommands(Engine::EngineState* state)

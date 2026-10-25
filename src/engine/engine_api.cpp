@@ -90,6 +90,8 @@ ComponentRegistry::ComponentRegistry(Core::TlsfAllocator* allocator)
 {
     registry = Core::Vector<ComponentEntry>(allocator, Core::AllocTag::EngineState, 1024);
     registryMapping = Core::Map<StringID, size_t>(allocator, Core::AllocTag::EngineState, 1024);
+    runtimeState = Core::Vector<RuntimeStateEntry>(allocator, Core::AllocTag::EngineState, 128);
+    runtimeStateMapping = Core::Map<StringID, size_t>(allocator, Core::AllocTag::EngineState, 128);
 }
 
 EditorState::EditorState(Core::TlsfAllocator* allocator)

@@ -27,6 +27,7 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
     engineState->registry.emplace<Component::DoNotSerializeTag>(entity);
+    engineState->registry.emplace<Component::DoNotRuntimeSaveTag>(entity);
 
     auto& transform = engineState->registry.get<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;

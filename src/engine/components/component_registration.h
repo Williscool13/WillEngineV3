@@ -168,6 +168,31 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
     componentRegistry.registryMapping[typeId] = index;
 }
 
+/** Saves the reflected fields (leave cache fields unreflected), or presence for a fieldless type. */
+template<NamedComponent T>
+void RegisterRuntimeState(Engine::ComponentRegistry& componentRegistry, Origin origin)
+{
+    auto typeId = TypeSID<T>();
+    assert(componentRegistry.runtimeStateMapping.Find(typeId) == nullptr && componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
+    RuntimeStateEntry entry{
+        .typeId = typeId,
+        .name = ComponentName<T>(),
+        .has = [](const entt::registry& reg, entt::entity e) -> bool { return reg.all_of<T>(e); },
+        .origin = origin,
+    };
+    if constexpr (TagComponent<T>) {
+        entry.serialize = [](const entt::registry&, entt::entity, Engine::TextWriter&) {};
+        entry.deserialize = [](entt::registry& reg, entt::entity e, const Engine::TextReader&) { (void) reg.get_or_emplace<T>(e); };
+    }
+    else {
+        static_assert(ReflectedSerializable<T>, "runtime state must reflect its state fields, with FieldTraits for every field type");
+        entry.serialize = [](const entt::registry& reg, entt::entity e, Engine::TextWriter& w) { SerializeFields(reg.get<T>(e), w); };
+        entry.deserialize = [](entt::registry& reg, entt::entity e, const Engine::TextReader& r) { DeserializeFields(reg.get_or_emplace<T>(e), r); };
+    }
+    componentRegistry.runtimeStateMapping[typeId] = componentRegistry.runtimeState.Size();
+    componentRegistry.runtimeState.PushBack(entry);
+}
+
 void RegisterEngineComponents(Engine::ComponentRegistry& componentRegistry);
 } // Engine
 

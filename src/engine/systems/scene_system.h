@@ -27,7 +27,8 @@ struct EngineState;
 
 namespace Engine
 {
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId);
+/** bRuntime: filter on DoNotRuntimeSaveTag instead of DoNotSerializeTag, and write runtime state. */
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, bool bRuntime = false);
 
 StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene);
 

@@ -114,7 +114,7 @@ static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
     entt::registry& registry = edit.Registry();
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    const uint32_t lightSlot = FindLightSlot(registry, edit.Primary());
+    const uint32_t lightSlot = Component::FindLightSlot(registry, edit.Primary());
 
     const AssetManager::ShadowMapInfo* info = ctx->assetManager->GetShadowMapInfo(shadowId);
     if (info == nullptr) {

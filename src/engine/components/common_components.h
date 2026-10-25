@@ -31,7 +31,14 @@ struct NameComponent
 };
 
 struct DoNotSerializeTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "DoNotSerializeTag";
+};
+
+/** Left out of runtime saves; its owner recreates it after a load. */
+struct DoNotRuntimeSaveTag
+{
+};
 
 struct PrefabInstanceComponent
 {

@@ -92,7 +92,9 @@ struct ConveyorComponent
 
 /** Stops an enabled conveyor at runtime without touching its authored bEnabled. */
 struct ConveyorHaltedFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ConveyorHaltedFlag";
+};
 }
 
 #endif //WILL_ENGINE_PHYSICS_COMPONENTS_H

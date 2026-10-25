@@ -163,11 +163,17 @@ struct PhysicsBodyDesc
 /** A motion type set at runtime that wins over the desc's, e.g. a kinematic body let go to fall. Read through EffectiveMotionType. */
 struct PhysicsMotionOverrideRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "PhysicsMotionOverrideRuntime";
+
     PhysicsMotionType motionType{PhysicsMotionType::Dynamic};
+
+    WILL_REFLECT(PhysicsMotionOverrideRuntime, WILL_FIELD(motionType))
 };
 
 struct PhysicsSuspendedFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "PhysicsSuspendedFlag";
+};
 
 inline PhysicsMotionType EffectiveMotionType(const entt::registry& registry, entt::entity entity, const PhysicsBodyDesc& desc)
 {
