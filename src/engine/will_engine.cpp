@@ -1681,6 +1681,7 @@ void WillEngine::Run()
             engineContext->frameStatus.bEmissiveLightsPipelineReady = renderThread->GetPipelineManager()->IsCategoryReady(Render::PipelineCategory::EmissiveLights);
         }
         engineContext->publishedTimeFrame.Publish(timeManager->GetTime());
+        engineState->timeFrame = &timeManager->GetTime();
 #if WILL_EDITOR
         engineContext->frameStatus.bAssetGenerationPending = assetGenerator->GetTotalTextureGenerateCount() + assetGenerator->GetTotalModelGenerateCount() > 0;
         if (!bGenPipelineWakeSent && renderThread->GetPipelineManager()->IsCategoryReady(Render::PipelineCategory::AssetGeneration)) {
@@ -1700,7 +1701,6 @@ void WillEngine::Run()
                 SaveInputConfig(engineState->input, engineState->projectConfig, engineState->allocator);
                 engineState->input.bBindingsDirty = false;
             }
-            engineState->timeFrame = &timeManager->GetTime();
             systemGraph.BeginFrame();
             {
                 ZoneScopedN("PreUpdate");
