@@ -49,6 +49,7 @@ void ConnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyDesc>().connect<&Component::PhysicsBodyDesc::OnDestroy>();
 
     registry.on_destroy<Component::PhysicsBodyRuntime>().connect<&Component::PhysicsBodyRuntime::OnDestroy>();
+    registry.on_destroy<Component::PhysicsShapeRuntime>().connect<&Component::PhysicsShapeRuntime::OnDestroy>();
 }
 
 void DisconnectPhysicsObservers(entt::registry& registry)
@@ -57,6 +58,7 @@ void DisconnectPhysicsObservers(entt::registry& registry)
     registry.on_destroy<Component::PhysicsBodyDesc>().disconnect<&Component::PhysicsBodyDesc::OnDestroy>();
 
     registry.on_destroy<Component::PhysicsBodyRuntime>().disconnect<&Component::PhysicsBodyRuntime::OnDestroy>();
+    registry.on_destroy<Component::PhysicsShapeRuntime>().disconnect<&Component::PhysicsShapeRuntime::OnDestroy>();
 }
 
 void WakeBodiesAround(JPH::BodyInterface& bodyInterface, const JPH::BodyID& bodyId)

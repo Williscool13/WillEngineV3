@@ -79,12 +79,15 @@ void ConnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnConstruct>();
     registry.on_destroy<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnDestroy>();
+    registry.on_destroy<Component::AreaLightRuntime>().connect<&Component::AreaLightRuntime::OnDestroy>();
 
     registry.on_construct<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnConstruct>();
     registry.on_destroy<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnDestroy>();
+    registry.on_destroy<Component::SphereLightRuntime>().connect<&Component::SphereLightRuntime::OnDestroy>();
 
     registry.on_construct<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnConstruct>();
     registry.on_destroy<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnDestroy>();
+    registry.on_destroy<Component::ReflectionProbeRuntime>().connect<&Component::ReflectionProbeRuntime::OnDestroy>();
 
     registry.on_construct<Component::LocalDDGIVolumeComponent>().connect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
 
@@ -126,12 +129,15 @@ void DisconnectRenderObservers(entt::registry& registry)
 
     registry.on_construct<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnConstruct>();
     registry.on_destroy<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnDestroy>();
+    registry.on_destroy<Component::AreaLightRuntime>().disconnect<&Component::AreaLightRuntime::OnDestroy>();
 
     registry.on_construct<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnConstruct>();
     registry.on_destroy<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnDestroy>();
+    registry.on_destroy<Component::SphereLightRuntime>().disconnect<&Component::SphereLightRuntime::OnDestroy>();
 
     registry.on_construct<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnConstruct>();
     registry.on_destroy<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnDestroy>();
+    registry.on_destroy<Component::ReflectionProbeRuntime>().disconnect<&Component::ReflectionProbeRuntime::OnDestroy>();
 
     registry.on_construct<Component::LocalDDGIVolumeComponent>().disconnect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
 

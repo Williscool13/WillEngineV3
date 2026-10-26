@@ -318,20 +318,28 @@ void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::
 template<typename LightRuntime>
 static void ReleaseLightRuntime(entt::registry& registry, entt::entity entity)
 {
-    auto* runtime = registry.try_get<LightRuntime>(entity);
-    if (!runtime) { return; }
-    if (runtime->bakedShadow.IsValid()) {
-        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(runtime->bakedShadow);
+    const auto& runtime = registry.get<LightRuntime>(entity);
+    if (runtime.bakedShadow.IsValid()) {
+        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(runtime.bakedShadow);
     }
-    if (runtime->lightSlot != AnalyticLightStore::INVALID_SLOT) {
-        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime->lightSlot}});
+    if (runtime.lightSlot != AnalyticLightStore::INVALID_SLOT) {
+        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
     }
-    registry.remove<LightRuntime>(entity);
+}
+
+void Component::AreaLightRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    ReleaseLightRuntime<AreaLightRuntime>(registry, entity);
+}
+
+void Component::SphereLightRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    ReleaseLightRuntime<SphereLightRuntime>(registry, entity);
 }
 
 void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    ReleaseLightRuntime<AreaLightRuntime>(registry, entity);
+    registry.remove<AreaLightRuntime>(entity);
     registry.remove<LightSurfaceRequest>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }
@@ -411,7 +419,7 @@ void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt
 
 void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    ReleaseLightRuntime<SphereLightRuntime>(registry, entity);
+    registry.remove<SphereLightRuntime>(entity);
     registry.remove<LightSurfaceRequest>(entity);
     registry.remove<LightSurfaceRuntime>(entity);
 }

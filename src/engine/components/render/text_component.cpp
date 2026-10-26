@@ -47,6 +47,10 @@ void TextRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     auto* state = registry.ctx().get<Engine::EngineState*>();
     auto& runtime = registry.get<TextRuntime>(entity);
+    if (runtime.fontHandle.IsValid()) {
+        state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
+        runtime.fontHandle = {};
+    }
     state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {0, 0, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
     runtime.modelRange = {};
 }
@@ -64,9 +68,7 @@ void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
 
 void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<TextComponent>(entity);
-    UnloadTextComponent(comp, registry, entity);
-    registry.remove<TextRuntime>(entity);
+    registry.remove<TextRuntime, TextFontRequest>(entity);
     registry.remove<RenderTransformRuntime>(entity);
     registry.remove<MultiframeDirtyRequest>(entity);
 }

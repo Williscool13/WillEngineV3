@@ -89,6 +89,8 @@ struct ReflectionProbeRuntime
 {
     Engine::CubemapHandle contentHandle{Engine::CubemapHandle::INVALID};
     ReflectionProbeComponent::ContentSource contentSource{ReflectionProbeComponent::ContentSource::None};
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
 /** Queues the probe for a bake; the probe bake system consumes it. */

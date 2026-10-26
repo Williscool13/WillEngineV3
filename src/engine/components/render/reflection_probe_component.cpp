@@ -291,12 +291,16 @@ void ReflectionProbeComponent::DeferredConstruct(entt::registry& registry, entt:
     RequestReflectionProbeLoad(registry, entity);
 }
 
+void ReflectionProbeRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+{
+    const auto& runtime = registry.get<ReflectionProbeRuntime>(entity);
+    if (runtime.contentHandle.IsValid()) {
+        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.contentHandle}});
+    }
+}
+
 void ReflectionProbeComponent::OnDestroy(entt::registry& registry, entt::entity entity)
 {
-    if (const auto* runtime = registry.try_get<ReflectionProbeRuntime>(entity); runtime && runtime->contentHandle.IsValid()) {
-        auto* state = registry.ctx().get<Engine::EngineState*>();
-        state->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime->contentHandle}});
-    }
     registry.remove<ReflectionProbeRuntime, ReflectionProbeLoadRequest, ReflectionProbeLoadingFlag, ReflectionProbeBakeRequest>(entity);
 }
 }

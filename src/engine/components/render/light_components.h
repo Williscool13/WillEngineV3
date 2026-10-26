@@ -163,12 +163,16 @@ struct AreaLightRuntime
 {
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
 struct SphereLightRuntime
 {
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 
 /** The analytic light slot of an area or sphere light, or INVALID_SLOT. */

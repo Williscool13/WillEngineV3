@@ -158,9 +158,13 @@ void PhysicsBodyDesc::RequestRebuild(entt::registry& registry, entt::entity enti
     state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
+void PhysicsShapeRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
+}
+
+void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
+{
     registry.remove<PhysicsShapeRuntime>(entity);
     auto* state = registry.ctx().get<EngineState*>();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});

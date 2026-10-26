@@ -5,6 +5,7 @@
 #ifndef WILL_ENGINE_PHYSICS_SHAPE_RUNTIME_H
 #define WILL_ENGINE_PHYSICS_SHAPE_RUNTIME_H
 
+#include <entt/entt.hpp>
 #include <Jolt/Jolt.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 
@@ -19,6 +20,8 @@ struct PhysicsShapeRuntime
     Core::InlineVector<Engine::PhysicsColliderHandle, 8> colliders;
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;
+
+    static void OnDestroy(entt::registry& registry, entt::entity entity);
 };
 }
 

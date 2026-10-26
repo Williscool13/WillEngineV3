@@ -16,7 +16,11 @@
 #include "engine/components/camera_components.h"
 #include "engine/components/common_components.h"
 #include "engine/components/core_components.h"
+#include "engine/components/render_components.h"
+#include "engine/components/render/light_components.h"
+#include "engine/components/render/reflection_probe_component.h"
 #include "engine/material_manager.h"
+#include "render/shaders/lights_interop.h"
 #include "engine/input/engine_actions.h"
 #include "engine/systems/runtime_save.h"
 #include "engine/systems/scene_system.h"
@@ -157,6 +161,8 @@ void ClearGameCommands(Engine::EngineState* state)
     }
 }
 
+static void VerifyLights(Engine::EngineState* state);
+
 void RegisterBuiltinCommands(Engine::EngineState* state)
 {
     Register(state, Origin::Engine, "help", "List commands; `help <prefix>` narrows the list", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
@@ -194,6 +200,10 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
 
     Register(state, Origin::Engine, "r.reset", "Full renderer cache clear", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
         state->requests.RequestRenderReset(Core::RenderReset::Flush);
+    });
+
+    Register(state, Origin::Engine, "r.lights.verify", "Checks every analytic light slot against its component (stale), and lists non-zero slots no entity owns (orphan)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
+        VerifyLights(state);
     });
 
     Register(state, Origin::Engine, "r.gtao", "`r.gtao 0|1` toggles ambient occlusion", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
@@ -655,6 +665,65 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
         Print(state, Core::InlineString<256>::Format("  material %s (%016llx), emissive (%.3f, %.3f, %.3f) x %.0f", material->name.c_str(), static_cast<unsigned long long>(source.materialID.id), e[0], e[1], e[2], e[3]).c_str());
     }
     Print(state, Core::InlineString<256>::Format("  emissive light: %s, world (%.3f, %.3f, %.3f)", source.emissiveMeshSlot != ~0u ? "yes" : "no", pick.worldPos.x, pick.worldPos.y, pick.worldPos.z).c_str());
+}
+
+static void VerifyLights(Engine::EngineState* state)
+{
+    using Engine::AnalyticLightStore;
+    entt::registry& registry = state->registry;
+    const LightInfo* lights = state->analyticLightStore.Lights();
+    const uint32_t watermark = state->analyticLightStore.GetWatermark();
+    uint32_t owned[MAX_ANALYTIC_LIGHTS / 32] = {};
+    uint32_t checked = 0;
+    uint32_t stale = 0;
+    uint32_t shared = 0;
+    uint32_t unslotted = 0;
+    uint32_t orphans = 0;
+    uint32_t lines = 0;
+    auto report = [&](const Core::InlineString<256>& line) {
+        if (lines++ < 24) { Print(state, line.c_str()); }
+    };
+    auto nameOf = [&](entt::entity entity) {
+        const auto* name = registry.try_get<Engine::Component::NameComponent>(entity);
+        return name ? name->name.c_str() : "Unnamed";
+    };
+    auto check = [&](entt::entity entity, uint32_t slot, const LightInfo& expected) {
+        if (slot == AnalyticLightStore::INVALID_SLOT || slot >= watermark) {
+            ++unslotted;
+            return;
+        }
+        if (owned[slot >> 5] & (1u << (slot & 31u))) {
+            ++shared;
+            report(Core::InlineString<256>::Format("  shared slot %u: '%s'", slot, nameOf(entity)));
+        }
+        owned[slot >> 5] |= 1u << (slot & 31u);
+        ++checked;
+        if (registry.all_of<Engine::Component::MultiframeDirtyRequest>(entity) || memcmp(&lights[slot], &expected, sizeof(LightInfo)) == 0) { return; }
+        ++stale;
+        const LightInfo& actual = lights[slot];
+        report(Core::InlineString<256>::Format("  stale slot %u '%s': store pos (%.2f %.2f %.2f) n (%.2f %.2f %.2f) i %.0f, expected pos (%.2f %.2f %.2f) n (%.2f %.2f %.2f) i %.0f", slot, nameOf(entity),
+                                               actual.position.x, actual.position.y, actual.position.z, actual.normal.x, actual.normal.y, actual.normal.z, actual.intensity,
+                                               expected.position.x, expected.position.y, expected.position.z, expected.normal.x, expected.normal.y, expected.normal.z, expected.intensity));
+    };
+
+    auto hidden = [&](entt::entity entity) { return registry.all_of<Engine::Component::ProbeBakeHiddenFlag>(entity); };
+    for (auto [entity, light, runtime, world] : registry.view<Engine::Component::AreaLightComponent, Engine::Component::AreaLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
+        check(entity, runtime.lightSlot, hidden(entity) ? LightInfo{} : Engine::Component::ComputeAreaLightInfo(world, light));
+    }
+    for (auto [entity, light, runtime, world] : registry.view<Engine::Component::SphereLightComponent, Engine::Component::SphereLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
+        check(entity, runtime.lightSlot, hidden(entity) ? LightInfo{} : Engine::Component::ComputeSphereLightInfo(world, light));
+    }
+
+    const LightInfo empty{};
+    for (uint32_t slot = 0; slot < watermark; ++slot) {
+        if ((owned[slot >> 5] & (1u << (slot & 31u))) || memcmp(&lights[slot], &empty, sizeof(LightInfo)) == 0) { continue; }
+        ++orphans;
+        const LightInfo& orphan = lights[slot];
+        report(Core::InlineString<256>::Format("  orphan slot %u: pos (%.2f %.2f %.2f) n (%.2f %.2f %.2f) i %.0f", slot, orphan.position.x, orphan.position.y, orphan.position.z,
+                                               orphan.normal.x, orphan.normal.y, orphan.normal.z, orphan.intensity));
+    }
+
+    Print(state, Core::InlineString<256>::Format("  %u lights checked, %u stale, %u orphan slots, %u shared slots, %u without a slot; watermark %u", checked, stale, orphans, shared, unslotted, watermark).c_str());
 }
 
 void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
