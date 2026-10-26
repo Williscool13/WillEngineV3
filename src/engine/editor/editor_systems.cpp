@@ -27,6 +27,7 @@
 #include "engine/editor/editor_gizmo_helpers.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "engine/systems/runtime_save.h"
 #include "engine/systems/scene_system.h"
 #include "core/containers/arena_array.h"
 #include "core/containers/arena_fixed_vector.h"
@@ -1209,17 +1210,40 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
         else {
             static entt::entity stuckBodies[16];
             static uint32_t stuckCount = 0;
+            bool bAnyRuntime = false;
+            bool bAnyOutdated = false;
+            for (const RuntimeSceneMetadata& scene : state->editor.loadedScenes) {
+                const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, scene.sceneId);
+                bAnyRuntime |= status.bExists;
+                bAnyOutdated |= status.bExists && status.IsOutdated();
+            }
+            const bool bUseRuntimeScenes = state->projectConfig.bUseRuntimeScenes && bAnyRuntime;
+
             ImGui::BeginDisabled(!ctx->bGameLoaded);
             if (ImGui::Button("Play")) {
                 stuckCount = FindStaticBodiesUnderMovers(state, stuckBodies);
-                if (stuckCount == 0) { PlayStart(ctx, state); }
+                if (stuckCount == 0) { PlayStart(ctx, state, bUseRuntimeScenes); }
                 else { ImGui::OpenPopup("Hierarchy Problems"); }
             }
             ImGui::SameLine();
             if (ImGui::Button("Simulate")) {
-                SimulateStart(ctx, state);
+                SimulateStart(ctx, state, bUseRuntimeScenes);
             }
             ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!bAnyRuntime);
+            if (bAnyOutdated) { ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.6f, 0.2f, 1.0f)); }
+            if (ImGui::Checkbox("Runtime", &state->projectConfig.bUseRuntimeScenes)) {
+                WriteProjectConfig(state->projectConfig, state->allocator);
+            }
+            if (bAnyOutdated) { ImGui::PopStyleColor(); }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("%s", !bAnyRuntime ? "No loaded scene has saved runtime state"
+                                        : bAnyOutdated ? "Start from saved runtime state\nOutdated; see the scene in Scenes"
+                                        : "Start from saved runtime state");
+            }
             if (ImGui::BeginPopupModal("Hierarchy Problems", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("%u static bodies are children of kinematic or dynamic bodies.", stuckCount);
                 ImGui::TextDisabled("They cannot follow their parent during play. Make them kinematic.");
@@ -1237,7 +1261,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (stuckCount > shown) { ImGui::TextDisabled("and %u more", stuckCount - shown); }
                 if (ImGui::Button("Play Anyway")) {
                     ImGui::CloseCurrentPopup();
-                    PlayStart(ctx, state);
+                    PlayStart(ctx, state, bUseRuntimeScenes);
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) { ImGui::CloseCurrentPopup(); }

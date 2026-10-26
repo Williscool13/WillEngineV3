@@ -92,7 +92,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     });
 #else
     graph.Add("PlayStart", [](EngineContext* ctx, EngineState* state) {
-        if (state->runMode == RunMode::Edit && ctx->bGameLoaded) { PlayStart(ctx, state); }
+        if (state->runMode == RunMode::Edit && ctx->bGameLoaded) { PlayStart(ctx, state, false); }
     });
 #endif
 

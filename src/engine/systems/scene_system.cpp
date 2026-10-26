@@ -34,13 +34,14 @@
 #include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/systems/physics_system.h"
+#include "engine/systems/runtime_save.h"
 #include "engine/editor/mobility_assign.h"
 #include "platform/file_utils.h"
 #include "platform/paths.h"
 
 namespace Engine
 {
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, bool bRuntime)
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, SceneSaveFilter filter)
 {
     ZoneScoped;
     auto* ctx = registry.ctx().get<Engine::EngineContext*>();
@@ -54,9 +55,11 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
     auto view = registry.view<Component::SceneRuntime>();
     const StringID prefabTypeId = TypeSID<Component::PrefabInstanceComponent>();
 
+    const bool bSpawned = filter == SceneSaveFilter::Spawned;
     auto shouldSerialize = [&](entt::entity entity) {
         if (view.get<Component::SceneRuntime>(entity).sceneId != sceneId) { return false; }
-        return bRuntime ? !registry.all_of<Component::DoNotRuntimeSaveTag>(entity) : !registry.all_of<Component::DoNotSerializeTag>(entity);
+        if (registry.all_of<Component::DoNotSerializeTag>(entity) != bSpawned) { return false; }
+        return !bSpawned || !registry.all_of<Component::DoNotRuntimeSaveTag>(entity);
     };
 
     for (auto entity : view) {
@@ -117,7 +120,7 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::regi
             w.Raw(fragment.Data(), fragment.Size());
             w.EndBlock();
         }
-        if (bRuntime) {
+        if (bSpawned) {
             for (const Engine::RuntimeStateEntry& entry : componentRegistry.runtimeState) {
                 if (!entry.has(registry, entity)) { continue; }
                 w.BeginBlock(entry.typeId.id);
@@ -471,10 +474,10 @@ bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, 
     }
 
     if (bWasPlaying) {
-        PlayStart(ctx, state);
+        PlayStart(ctx, state, state->bRunUsesRuntimeScenes);
     }
     if (bWasSimulating) {
-        SimulateStart(ctx, state);
+        SimulateStart(ctx, state, state->bRunUsesRuntimeScenes);
     }
     return result.bSuccess;
 }
@@ -1136,7 +1139,7 @@ void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state)
     LOG_INFO(Engine, "Applied prefab '{}', {} loaded instances updated", prefabName.c_str(), updated);
 }
 
-static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes)
 {
     entt::entity stuck[16];
     const uint32_t stuckCount = FindStaticBodiesUnderMovers(state, stuck);
@@ -1151,6 +1154,10 @@ static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* sta
 
     LockStaticTransforms(state);
     state->runStartTime = state->timeFrame->totalTime;
+    state->bRunUsesRuntimeScenes = bUseRuntimeScenes;
+    if (bUseRuntimeScenes) {
+        ApplyRuntimeScenes(ctx, state);
+    }
 }
 
 static void RestorePIESnapshot(Engine::EngineState* state)
@@ -1166,7 +1173,7 @@ static void RestorePIESnapshot(Engine::EngineState* state)
 #endif
 }
 
-void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes)
 {
     ZoneScoped;
     if (!ctx->bGameLoaded) {
@@ -1191,7 +1198,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    BeginPIESession(ctx, state);
+    BeginPIESession(ctx, state, bUseRuntimeScenes);
 
     state->runMode = Engine::RunMode::Play;
     state->inputContext = Engine::InputContext::Gameplay;
@@ -1226,7 +1233,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state)
+void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes)
 {
     ZoneScoped;
     if (!ctx->bGameLoaded) {
@@ -1239,7 +1246,7 @@ void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state)
         return;
     }
 
-    BeginPIESession(ctx, state);
+    BeginPIESession(ctx, state, bUseRuntimeScenes);
     for (size_t i = state->editor.selectedEntities.Size(); i-- > 0;) {
         if (!state->registry.valid(state->editor.selectedEntities[i])) {
             state->editor.selectedEntities.RemoveAt(i);

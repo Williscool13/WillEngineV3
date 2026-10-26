@@ -774,8 +774,9 @@ static ToolResult SetRunMode(EngineContext* ctx, EngineState* state, Call& call)
 
     if (IsSimulating(state) && !bSimulate) { SimulateStop(ctx, state); }
     if (IsPlaying(state) && !bPlay) { PlayStop(ctx, state); }
-    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state); }
-    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state); }
+    const bool bUseRuntimeScenes = call.GetBool("useRuntimeScenes", false);
+    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state, bUseRuntimeScenes); }
+    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state, bUseRuntimeScenes); }
 
     call.SetString("runMode", RunModeName(state->runMode));
     return ToolResult::Complete;
@@ -809,7 +810,8 @@ void RegisterEngineTools(EngineState* state)
         .name = "set_run_mode",
         .description = "Switches the editor between edit, simulate and play, as the toolbar's Play / Simulate / Stop buttons do; play captures the mouse like the Play button. Stopping restores the scene to its pre-run state. Returns the resulting runMode.",
         .inputSchemaJson = R"({"type":"object","required":["mode"],"properties":{
-            "mode":{"type":"string","enum":["edit","simulate","play"]}}})",
+            "mode":{"type":"string","enum":["edit","simulate","play"]},
+            "useRuntimeScenes":{"type":"boolean","description":"Start from saved runtime state; default false, ignores the toolbar"}}})",
         .invoke = &SetRunMode,
         .origin = Origin::Engine,
         .bNeedsDrain = true,

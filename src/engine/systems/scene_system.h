@@ -27,8 +27,16 @@ struct EngineState;
 
 namespace Engine
 {
-/** bRuntime: filter on DoNotRuntimeSaveTag instead of DoNotSerializeTag, and write runtime state. */
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId, bool bRuntime = false);
+enum class SceneSaveFilter : uint8_t
+{
+    /** Skips DoNotSerializeTag. */
+    Authored,
+    /** Only DoNotSerializeTag, minus DoNotRuntimeSaveTag; writes runtime state. */
+    Spawned,
+};
+
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId,
+                        SceneSaveFilter filter = SceneSaveFilter::Authored);
 
 StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene);
 
@@ -235,11 +243,12 @@ inline void DestroyComponent(Engine::EngineState* state, entt::entity entity, St
     entry.remove(state->registry, entity);
 }
 
-void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state);
+/** bUseRuntimeScenes: layer each loaded scene's .wruntimescene over it. */
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes);
 
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);
 
-void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state);
+void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes);
 
 void SimulateStop(Engine::EngineContext* ctx, Engine::EngineState* state);
 

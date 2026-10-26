@@ -34,6 +34,9 @@ bool WriteWSceneHeader(Core::Vector<std::byte>& out, const WSceneHeader& header)
 std::optional<WSceneHeader> ReadWSceneHeader(const void* data, uint64_t size);
 
 std::optional<WSceneHeader> ReadWSceneHeader(const Core::Path& path);
+
+/** `<stem>.wruntimescene` beside the scene. */
+Core::Path RuntimeScenePath(const Core::Path& scenePath);
 } // Engine
 
 #endif //WILL_ENGINE_SCENE_FORMAT_H

@@ -89,6 +89,7 @@ struct PlaytestSystem
         Op op{Op::Wait};
         CamMode camMode{CamMode::Follow};
         bool bFlag{false};
+        bool bUseRuntimeScenes{false};
         int32_t count{0};
         int32_t fps{0};
         glm::vec3 translation{0.0f};

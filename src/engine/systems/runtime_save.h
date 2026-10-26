@@ -5,16 +5,39 @@
 #ifndef WILL_ENGINE_RUNTIME_SAVE_H
 #define WILL_ENGINE_RUNTIME_SAVE_H
 
+#include <cstdint>
+
+#include "core/string_id.h"
+#include "core/containers/inline_string.h"
+
 namespace Engine
 {
 struct EngineContext;
 struct EngineState;
 
-/** Writes `<user data>/saves/<name>.wsave` while running: loaded scenes with runtime state, body velocities, rng and run clock. */
-bool SaveRuntime(EngineContext* ctx, EngineState* state, const char* name);
+struct RuntimeSceneStatus
+{
+    bool bExists{false};
+    bool bUnreadable{false};
+    /** Saved entities gone from the scene. */
+    uint32_t missing{0};
+    /** Saved entities whose authored components changed since. */
+    uint32_t changed{0};
+    Core::InlineString<128> firstChanged{};
 
-/** Needs the same scenes loaded. In Play the player respawns. */
-bool LoadRuntime(EngineContext* ctx, EngineState* state, const char* name);
+    bool IsOutdated() const { return bUnreadable || missing + changed > 0; }
+};
+
+/** While running. Authored entities: pose and runtime state; destroyed ones by id. Spawned entities: in full. Plus rng and run clock. */
+bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId);
+
+bool DeleteRuntimeScene(EngineContext* ctx, StringID sceneId);
+
+/** Loaded scenes only; cached for 500 ms. */
+const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId);
+
+/** Over each loaded scene. */
+void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state);
 } // Engine
 
 #endif //WILL_ENGINE_RUNTIME_SAVE_H

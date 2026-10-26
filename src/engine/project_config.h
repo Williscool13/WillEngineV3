@@ -72,6 +72,8 @@ struct ProbeBakeSettings
 struct ProjectConfig
 {
     StringID defaultScene{};
+    /** Toolbar "Runtime" checkbox. */
+    bool bUseRuntimeScenes{false};
 
     bool bLimitFps{false};
     int32_t frameLimitTarget{60};

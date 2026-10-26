@@ -261,6 +261,9 @@ bool AssetManager::DeleteScene(StringID sceneId)
             LOG_WARN(Asset, "Failed to delete run '{}'", run.source.c_str());
         }
     }
+    if (const Core::Path runtimePath = RuntimeScenePath(it->source); Platform::FileExists(runtimePath) && !Platform::MoveToRecycleBin(runtimePath)) {
+        LOG_WARN(Asset, "Failed to delete runtime scene '{}'", runtimePath.c_str());
+    }
     sceneCache.Remove(sceneId);
     ctx->rescan.bScenes = true;
     return true;
@@ -277,6 +280,11 @@ bool AssetManager::MoveScene(StringID sceneId, const Core::Path& newSource)
         if (!Platform::RenameFile(oldSource, newSource)) {
             LOG_ERROR(Asset, "Failed to move scene '{}' to '{}'", oldSource.c_str(), newSource.c_str());
             return false;
+        }
+        const Core::Path oldRuntime = RuntimeScenePath(oldSource);
+        const Core::Path newRuntime = RuntimeScenePath(newSource);
+        if (Platform::FileExists(oldRuntime) && (Platform::FileExists(newRuntime) || !Platform::RenameFile(oldRuntime, newRuntime))) {
+            LOG_WARN(Asset, "Runtime scene '{}' was not moved to '{}'", oldRuntime.c_str(), newRuntime.c_str());
         }
     }
     meta->source = newSource;

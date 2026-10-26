@@ -301,6 +301,8 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
 void MarkPhysicsTransformsDirty(Engine::EngineState* state)
 {
     auto& registry = state->registry;
+    const bool bTeleportAll = state->requests.bTeleportPhysics;
+    state->requests.bTeleportPhysics = false;
     auto view = registry.view<Component::PhysicsBodyRuntime, Component::DirtyTransformRequest>();
     for (auto entity : view) {
         const auto* desc = registry.try_get<Component::PhysicsBodyDesc>(entity);
@@ -315,14 +317,14 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
             }
             continue;
         }
-        if (motionType == Component::PhysicsMotionType::Kinematic) {
+        if (motionType == Component::PhysicsMotionType::Kinematic && !bTeleportAll) {
             state->registry.emplace_or_replace<Component::DirtyKinematicPhysicsTransformRequest>(entity);
         }
         else {
             state->registry.emplace_or_replace<Component::TeleportPhysicsTransformRequest>(entity);
             // An editor drag during Simulate holds the body still; without this gravity builds velocity it releases on drop.
             if (IsSimulating(state) && motionType == Component::PhysicsMotionType::Dynamic) {
-                state->registry.emplace_or_replace<Component::SetVelocityRequest>(entity);
+                state->registry.get_or_emplace<Component::SetVelocityRequest>(entity);
             }
         }
     }

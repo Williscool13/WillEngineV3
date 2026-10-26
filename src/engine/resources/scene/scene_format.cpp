@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cstring>
 
+#include "core/containers/inline_string.h"
 #include "engine/serialization/text_parse.h"
 #include "platform/file_utils.h"
 
@@ -55,5 +56,11 @@ std::optional<WSceneHeader> ReadWSceneHeader(const Core::Path& path)
     Platform::ScopedFileMapping map(path);
     if (!map.data) { return std::nullopt; }
     return ReadWSceneHeader(map.data, map.size);
+}
+
+Core::Path RuntimeScenePath(const Core::Path& scenePath)
+{
+    const std::string_view stem = scenePath.Stem();
+    return scenePath.Parent() / Core::InlineString<192>::Format("%.*s.wruntimescene", static_cast<int>(stem.size()), stem.data()).c_str();
 }
 } // Engine

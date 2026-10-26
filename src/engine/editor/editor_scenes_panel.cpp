@@ -10,6 +10,8 @@
 #include "imgui.h"
 #include "engine/editor/editor_systems.h"
 #include "engine/editor/probe_bake_system.h"
+#include "engine/resources/scene/scene_format.h"
+#include "engine/systems/runtime_save.h"
 #include "engine/systems/scene_system.h"
 #include "engine/include/engine_context.h"
 #include "engine/engine_api.h"
@@ -177,6 +179,32 @@ static void DrawRunsMenu(EngineContext* ctx, EngineState* state, StringID sceneI
     }
 }
 
+static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bLoaded)
+{
+    if (!bLoaded) {
+        const bool bExists = !meta.bUnsaved && Platform::FileExists(RuntimeScenePath(meta.source));
+        ImGui::TextUnformatted(bExists ? "Saved (load to check if outdated)" : "None");
+        return;
+    }
+    const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, sceneId);
+    if (!status.bExists) {
+        ImGui::TextUnformatted("None");
+        return;
+    }
+    if (!status.IsOutdated()) {
+        ImGui::TextUnformatted("Saved");
+        return;
+    }
+    constexpr ImVec4 ORANGE{1.0f, 0.6f, 0.2f, 1.0f};
+    if (status.bUnreadable) {
+        ImGui::TextColored(ORANGE, "Unreadable; resave");
+        return;
+    }
+    ImGui::TextColored(ORANGE, "Outdated; resave");
+    if (status.missing > 0) { ImGui::TextColored(ORANGE, "  %u gone from the scene", status.missing); }
+    if (status.changed > 0) { ImGui::TextColored(ORANGE, "  %u changed, first '%s'", status.changed, status.firstChanged.c_str()); }
+}
+
 static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bShowFolder)
 {
     const bool bLoaded = IsLoaded(state, sceneId);
@@ -197,8 +225,13 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
     }
     if (!bLoaded) { ImGui::PopStyleColor(); }
 
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s\nid %llu\n%s", meta.source.c_str(), static_cast<unsigned long long>(sceneId.id), bLoaded ? "Click to make active" : "Double-click to load");
+    if (ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
+        ImGui::Text("%s\nid %llu\n%s", meta.source.c_str(), static_cast<unsigned long long>(sceneId.id), bLoaded ? "Click to make active" : "Double-click to load");
+        ImGui::SeparatorText("Authored");
+        ImGui::TextUnformatted(meta.bUnsaved ? "Never saved" : bModified ? "Unsaved changes" : "Saved");
+        ImGui::SeparatorText("Runtime");
+        DrawRuntimeSceneStatus(ctx, state, sceneId, meta, bLoaded);
+        ImGui::EndTooltip();
     }
     if (ImGui::BeginDragDropSource()) {
         ImGui::SetDragDropPayload("SCENE_ASSET", &sceneId, sizeof(sceneId));
@@ -217,9 +250,24 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
                 state->scene.currentSceneId = sceneId;
                 SyncActiveScene(ctx, state);
             }
-            if (ImGui::MenuItem("Save", nullptr, false, bCanSave)) {
+            ImGui::SeparatorText("Authored");
+            if (ImGui::MenuItem("Save##authored", nullptr, false, bCanSave)) {
                 SaveEditorScene(ctx, state, sceneId);
             }
+            if (!bCanSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Only in edit mode");
+            }
+            ImGui::SeparatorText("Runtime");
+            if (ImGui::MenuItem("Save##runtime", nullptr, false, IsRunning(state) && !meta.bUnsaved)) {
+                SaveRuntimeScene(ctx, state, sceneId);
+            }
+            if (!IsRunning(state) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Only while playing or simulating");
+            }
+            if (ImGui::MenuItem("Delete##runtime", nullptr, false, GetRuntimeSceneStatus(ctx, state, sceneId).bExists)) {
+                DeleteRuntimeScene(ctx, sceneId);
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Unload")) {
                 RequestUnload(state, Core::Span<const StringID>(&sceneId, 1));
             }

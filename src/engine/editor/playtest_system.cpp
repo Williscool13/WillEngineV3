@@ -105,6 +105,7 @@ static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& 
         else if (e.Has("play")) {
             ev.op = PlaytestSystem::Op::Play;
             ev.bFlag = e.Bool("play");
+            ev.bUseRuntimeScenes = e.Bool("useRuntimeScenes", false);
         }
         else if (e.Str("action", action)) {
             ev.action = ActionHandle{StringID(action.c_str(), action.Size()).id};
@@ -346,7 +347,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                                 finish("aborted: game.dll is not loaded");
                                 return;
                             }
-                            if (!IsPlaying(state)) { PlayStart(ctx, state); }
+                            if (!IsPlaying(state)) { PlayStart(ctx, state, e.bUseRuntimeScenes); }
                         }
                         else if (IsPlaying(state)) {
                             PlayStop(ctx, state);

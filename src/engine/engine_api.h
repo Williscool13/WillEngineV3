@@ -259,6 +259,8 @@ struct FrameRequests
     bool bViewportClickPending{false};
     bool bRequestedQuit{false};
     bool bLogRDG{false};
+    /** One shot: the next dirty pass teleports kinematic bodies instead of sweeping them. */
+    bool bTeleportPhysics{false};
     Core::RenderReset renderReset{Core::RenderReset::None};
 
     void RequestRenderReset(Core::RenderReset reset)
@@ -308,6 +310,8 @@ struct EngineState
     RunMode runMode{RunMode::Edit};
     /** timeFrame->totalTime when the current Play or Simulate session started. */
     float runStartTime{0.0f};
+    /** A mid-run scene switch restarts the same way. */
+    bool bRunUsesRuntimeScenes{false};
     FrameRequests requests{};
 
     const Core::TimeFrame* timeFrame{nullptr};

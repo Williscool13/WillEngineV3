@@ -31,6 +31,7 @@ ProjectConfig ReadProjectConfig()
     const TextReader r(map.data, map.size);
 
     config.defaultScene = StringID(r.U64("defaultScene"));
+    config.bUseRuntimeScenes = r.Bool("bUseRuntimeScenes", config.bUseRuntimeScenes);
 
     config.bLimitFps = r.Bool("bLimitFps", config.bLimitFps);
     config.frameLimitTarget = r.Int("frameLimitTarget", config.frameLimitTarget);
@@ -91,6 +92,7 @@ bool WriteProjectConfig(const ProjectConfig& config, Core::TlsfAllocator* alloc)
     TextWriter w(body);
 
     w.Key("defaultScene", config.defaultScene.id);
+    w.Key("bUseRuntimeScenes", config.bUseRuntimeScenes);
     w.Key("bLimitFps", config.bLimitFps);
     w.Key("frameLimitTarget", config.frameLimitTarget);
     w.Key("bAutoSaveProjectConfig", config.bAutoSaveProjectConfig);
