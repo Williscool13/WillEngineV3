@@ -62,9 +62,9 @@ bool ProbeBakeInFlight(Engine::EngineState* state)
     return ProbeBakeGet(state).phase != ProbeBakeSystem::Phase::Idle;
 }
 
-void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
-    ProbeBakeGet(state).Tick(ctx, state, frameBuffer);
+    ProbeBakeGet(state).Tick(ctx, state, frameBuffer, registry);
 }
 
 void ProbeBakeOverrideView(Engine::EngineState* state, Core::ViewFamily& viewFamily)
@@ -115,23 +115,23 @@ void ProbeBakeSystem::StartDryRun(Engine::EngineContext* ctx, Engine::EngineStat
     bDryRun = bBakeActive;
 }
 
-void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState* state)
+void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     bakeQueue.Clear();
-    for (const entt::entity entity : state->registry.View<Component::ReflectionProbeComponent>()) {
+    for (const entt::entity entity : registry.View<Component::ReflectionProbeComponent>()) {
         if (bakeQueue.IsFull()) { break; }
         bakeQueue.PushBack(entity);
     }
     bakeBatchTotal = static_cast<uint32_t>(bakeQueue.Size());
 }
 
-void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState* state)
+void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (phase == Phase::AwaitAssembles) {
         state->inputContext = stashedBatchInputContext;
         phase = Phase::Idle;
     }
-    EnqueueAllProbes(state);
+    EnqueueAllProbes(state, registry);
     interbounceBatch.Clear();
     for (const entt::entity entity : bakeQueue) {
         if (interbounceBatch.IsFull()) { break; }
@@ -158,7 +158,7 @@ void ProbeBakeSystem::EnqueueProbeInterbounce(Engine::EngineState* state, entt::
     bakePass = 1;
 }
 
-void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (bBakeActive) {
         state->lighting.reflectionProbe = stashedProbeConfig;
@@ -169,7 +169,7 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
             state->lighting.bResetGroundTruth = true;
             bGroundTruthBake = false;
         }
-        ClearProbeBakeHideSet(ctx, state);
+        ClearProbeBakeHideSet(ctx, state, registry);
         state->inputContext = stashedInputContext;
         if (bakeForcedExtent > 0) {
             state->projectConfig.resolutionScale = stashedResolutionScale;
@@ -191,7 +191,7 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
     phase = Phase::Idle;
 }
 
-void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     frameBuffer->bCaptureProbeFace = false;
     frameBuffer->probeCaptureCropSize = bBakeActive ? bakeCropSize : 0;
@@ -213,17 +213,17 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
     switch (phase) {
         case Phase::Idle:
         {
-            for (const entt::entity entity : state->registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeBakeRequest>()) {
+            for (const entt::entity entity : registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeBakeRequest>()) {
                 if (!bakeQueue.Contains(entity) && !bakeQueue.IsFull()) { bakeQueue.PushBack(entity); }
             }
-            state->registry.Clear<Component::ReflectionProbeBakeRequest>();
+            registry.Clear<Component::ReflectionProbeBakeRequest>();
 
             if (state->shadowBake.IsBusy()) { break; }
 
             while (!bakeQueue.IsEmpty()) {
                 const entt::entity next = bakeQueue.Front();
                 bakeQueue.RemoveAt(0);
-                if (state->registry.Valid(next) && state->registry.Has<Component::ReflectionProbeComponent>(next)) {
+                if (registry.Valid(next) && registry.Has<Component::ReflectionProbeComponent>(next)) {
                     Start(ctx, state, next);
                     return;
                 }
@@ -257,7 +257,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 state->lighting.reflectionProbe.bEnabled = false;
             }
 
-            ApplyProbeBakeHideSet(ctx, state);
+            ApplyProbeBakeHideSet(ctx, state, registry);
             state->editor.selectedEntities.Clear();
 
             // Console restores via its own prevContext once we steal the context; restoring Console here would strand input in a closed console
@@ -266,10 +266,10 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
             settleFrames = glm::max(1, state->projectConfig.probeBake.settleFrames);
 
-            const Component::WorldTransformRuntime* worldTransform = state->registry.TryGet<Component::WorldTransformRuntime>(probeEntity);
-            const Component::ReflectionProbeComponent* probe = state->registry.TryGet<Component::ReflectionProbeComponent>(probeEntity);
+            const Component::WorldTransformRuntime* worldTransform = registry.TryGet<Component::WorldTransformRuntime>(probeEntity);
+            const Component::ReflectionProbeComponent* probe = registry.TryGet<Component::ReflectionProbeComponent>(probeEntity);
             if (!worldTransform || !probe) {
-                Cancel(ctx, state);
+                Cancel(ctx, state, registry);
                 return;
             }
             capturePosition = worldTransform->translation + worldTransform->rotation * probe->captureOffset;
@@ -401,7 +401,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 state->lighting.bResetGroundTruth = true;
                 bGroundTruthBake = false;
             }
-            ClearProbeBakeHideSet(ctx, state);
+            ClearProbeBakeHideSet(ctx, state, registry);
             state->inputContext = stashedInputContext;
             if (bakeForcedExtent > 0) {
                 state->projectConfig.resolutionScale = stashedResolutionScale;
@@ -458,10 +458,10 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             Core::InlineVector<AwaitedAssemble, 64> stillPending{};
             bool bAllReady = true;
             for (const AwaitedAssemble& awaited : awaitedAssembles) {
-                if (!state->registry.Valid(awaited.entity) || !state->registry.Has<Component::ReflectionProbeComponent>(awaited.entity)) { continue; }
+                if (!registry.Valid(awaited.entity) || !registry.Has<Component::ReflectionProbeComponent>(awaited.entity)) { continue; }
                 stillPending.PushBack(awaited);
 
-                const auto* runtime = state->registry.TryGet<Component::ReflectionProbeRuntime>(awaited.entity);
+                const auto* runtime = registry.TryGet<Component::ReflectionProbeRuntime>(awaited.entity);
                 const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{awaited.probeId});
                 bool bReady = info != nullptr
                     && info->contentVersion >= awaited.expectedVersion
@@ -495,7 +495,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 bakeQueue.Clear();
                 for (const entt::entity entity : interbounceBatch) {
                     if (bakeQueue.IsFull()) { break; }
-                    if (state->registry.Valid(entity) && state->registry.Has<Component::ReflectionProbeComponent>(entity)) { bakeQueue.PushBack(entity); }
+                    if (registry.Valid(entity) && registry.Has<Component::ReflectionProbeComponent>(entity)) { bakeQueue.PushBack(entity); }
                 }
                 bakeBatchTotal = static_cast<uint32_t>(bakeQueue.Size());
                 awaitedAssembles.Clear();
@@ -510,16 +510,16 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 bool ProbeBakeActive(Engine::EngineState*) { return false; }
 bool ProbeBakeInFlight(Engine::EngineState*) { return false; }
-void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
+void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
 void ProbeBakeOverrideView(Engine::EngineState*, Core::ViewFamily&) {}
 void ProbeBakeScrubFrame(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
 void ProbeBakeSystem::Start(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
 void ProbeBakeSystem::StartDryRun(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
-void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState*) {}
-void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState*) {}
+void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState*, Engine::SystemRegistry&) {}
+void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::EnqueueProbeInterbounce(Engine::EngineState*, entt::entity) {}
-void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
-void ProbeBakeSystem::Cancel(Engine::EngineContext*, Engine::EngineState*) {}
+void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
+void ProbeBakeSystem::Cancel(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&) {}
 
 #endif
 } // Engine

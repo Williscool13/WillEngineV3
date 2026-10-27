@@ -41,20 +41,24 @@ struct ModuleMeshComponent
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; ModuleMeshPendingKickoff kicks the model build. */
 struct ModuleMeshLoadRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ModuleMeshLoadRequest";
+};
 
 /** Model build in flight; ModuleMeshLoadResolve binds it once finished. */
 struct ModuleMeshLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ModuleMeshLoadingFlag";
+};
 }
 
 #endif //WILL_ENGINE_MODULE_MESH_COMPONENT_H

@@ -559,6 +559,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         engineContext->systemGraph = &systemGraph;
         systemGraph.SetDumpSink(&SystemGraphDumpSink);
         systemGraph.SetDotSink(&SystemGraphDotSink);
+        systemGraph.SetAllocator(&memoryManager.General());
         engineContext->memoryManager = &memoryManager;
         engineContext->gameplayArena = Core::VirtualArena(memoryManager.Virtual(), 8ull * 1024 * 1024, Core::AllocTag::ECS, "gameplay");
         engineContext->editorArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Editor, "editor");
@@ -655,6 +656,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         }
 
         engineState->registry.Bind(engineState, engineContext);
+        systemGraph.SetRegistry(&engineState->registry);
         gameFunctions.gameStartup(engineContext, engineState);
     }
 
@@ -1090,11 +1092,9 @@ void WillEngine::EditorImgui()
                     if (engineState->triLightStore.IsInitialized()) { storeRow("Tri Light", engineState->triLightStore.GetStats(), engineState->triLightStore.GetPendingFreeCount()); }
                     ImGui::EndTable();
                 }
-                if (engineContext->materialManager) {
-                    ImGui::Text("Materials  resident %u / %u   definitions %u / %u",
-                                engineContext->materialManager->GetActiveMaterialCount(), Render::BINDLESS_MATERIAL_BUFFER_COUNT,
-                                static_cast<uint32_t>(engineContext->materialManager->GetMaterials().Size()), Engine::MAX_LOADED_MATERIALS);
-                }
+                ImGui::Text("Materials  resident %u / %u   definitions %u / %u",
+                            engineContext->materialManager->GetActiveMaterialCount(), Render::BINDLESS_MATERIAL_BUFFER_COUNT,
+                            static_cast<uint32_t>(engineContext->materialManager->GetMaterials().Size()), Engine::MAX_LOADED_MATERIALS);
 
                 ImGui::SeparatorText("GPU");
                 ImGui::Text("Device: %zu allocs / %.3f MB",
@@ -1972,8 +1972,9 @@ void WillEngine::Cleanup()
     }
     {
         ZoneScopedN("RegistryTeardown");
-        engineState->registry.ClearAll();
-        PlaybackCommands(engineContext, engineState);
+        Engine::SystemRegistry registry{engineState->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/RegistryTeardown"};
+        registry.ClearAll();
+        PlaybackCommands(engineContext, engineState, registry);
         engineState->~EngineState();
     }
     {

@@ -21,6 +21,7 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Engine::Console
@@ -107,7 +108,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state);
 
 void ClearGameCommands(Engine::EngineState* state);
 
-void Update(Engine::EngineContext* ctx, Engine::EngineState* state);
+void Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void Draw(Engine::EngineContext* ctx, Engine::EngineState* state);
 }

@@ -42,28 +42,28 @@ static constexpr int32_t READY_QUIET_FRAMES = 30;
 static constexpr int32_t READY_TIMEOUT_FRAMES = 3000;
 static constexpr int32_t SAVE_TIMEOUT_FRAMES = 300;
 
-size_t CountLoadingEntities(Engine::EngineState* state)
+size_t CountLoadingEntities(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    return state->registry.View<Component::StaticMeshLoadingFlag>().size() +
-           state->registry.View<Component::StaticMeshPrimitiveLoadingFlag>().size() +
-           state->registry.View<Component::ProceduralMeshLoadingFlag>().size() +
-           state->registry.View<Component::SplineMeshLoadingFlag>().size() +
-           state->registry.View<Component::ModuleMeshLoadingFlag>().size() +
-           state->registry.View<Component::Text3DLoadingFlag>().size() +
-           state->registry.View<Component::ReflectionProbeLoadingFlag>().size() +
-           state->registry.View<Component::PhysicsMeshLoadingFlag>().size() +
-           state->registry.View<Component::StaticMeshLoadRequest>().size() +
-           state->registry.View<Component::StaticMeshPrimitiveLoadRequest>().size() +
-           state->registry.View<Component::ProceduralMeshLoadRequest>().size() +
-           state->registry.View<Component::SplineMeshLoadRequest>().size() +
-           state->registry.View<Component::ModuleMeshLoadRequest>().size() +
-           state->registry.View<Component::Text3DGenerateRequest>().size() +
-           state->registry.View<Component::ReflectionProbeLoadRequest>().size() +
-           state->registry.View<Component::PhysicsMeshRequest>().size() +
-           state->registry.View<Component::PhysicsShapeCreationRequest>().size() +
-           state->registry.View<Component::PhysicsBodyCreationRequest>().size() +
-           state->registry.View<Component::LightSurfaceRequest>().size() +
-           state->registry.View<Component::TextFontRequest>().size();
+    return registry.View<Component::StaticMeshLoadingFlag>().size() +
+           registry.View<Component::StaticMeshPrimitiveLoadingFlag>().size() +
+           registry.View<Component::ProceduralMeshLoadingFlag>().size() +
+           registry.View<Component::SplineMeshLoadingFlag>().size() +
+           registry.View<Component::ModuleMeshLoadingFlag>().size() +
+           registry.View<Component::Text3DLoadingFlag>().size() +
+           registry.View<Component::ReflectionProbeLoadingFlag>().size() +
+           registry.View<Component::PhysicsMeshLoadingFlag>().size() +
+           registry.View<Component::StaticMeshLoadRequest>().size() +
+           registry.View<Component::StaticMeshPrimitiveLoadRequest>().size() +
+           registry.View<Component::ProceduralMeshLoadRequest>().size() +
+           registry.View<Component::SplineMeshLoadRequest>().size() +
+           registry.View<Component::ModuleMeshLoadRequest>().size() +
+           registry.View<Component::Text3DGenerateRequest>().size() +
+           registry.View<Component::ReflectionProbeLoadRequest>().size() +
+           registry.View<Component::PhysicsMeshRequest>().size() +
+           registry.View<Component::PhysicsShapeCreationRequest>().size() +
+           registry.View<Component::PhysicsBodyCreationRequest>().size() +
+           registry.View<Component::LightSurfaceRequest>().size() +
+           registry.View<Component::TextFontRequest>().size();
 }
 
 static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& outEvents, Core::InlineString<128>& outName)
@@ -154,9 +154,9 @@ static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& 
 }
 
 /** bCut drops last frame's view so the move reads as a cut (zero camera motion vectors); false keeps it, so a cam event per frame renders as real camera motion. */
-static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation, bool bCut = true)
+static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation, Engine::SystemRegistry& registry, bool bCut = true)
 {
-    auto camView = state->registry.View<Component::EditorCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
+    auto camView = registry.View<Component::EditorCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) { return; }
     auto [camera, transform] = camView.get<Component::CameraRuntime, Component::TransformComponent>(camEntity);
@@ -196,7 +196,7 @@ static Core::InlineString<32> LocalTimestamp()
     return Core::InlineString<32>(buf);
 }
 
-void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     frameBuffer->screenshotPath = {};
 
@@ -237,7 +237,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         // Console restores via its own prevContext once we steal the context (same guard as ProbeBakeSystem)
         stashedInputContext = state->inputContext == Engine::InputContext::Console ? Engine::InputContext::Editor : state->inputContext;
         state->inputContext = Engine::InputContext::ProbeBake; {
-            auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
+            auto camView = registry.View<Component::EditorCameraTag, Component::TransformComponent>();
             const entt::entity camEntity = camView.front();
             if (camEntity != entt::null) {
                 const auto& transform = camView.get<Component::TransformComponent>(camEntity);
@@ -265,7 +265,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
 
     auto finish = [&](const char* outcome) {
         if (IsPlaying(state)) {
-            PlayStop(ctx, state);
+            PlayStop(ctx, state, registry);
         }
         state->input.scripted.Clear();
         cameraOverride = {};
@@ -276,7 +276,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
             bProfileStashed = false;
         }
         state->inputContext = stashedInputContext;
-        TeleportEditorCamera(ctx, state, stashedCameraTranslation, stashedCameraRotation);
+        TeleportEditorCamera(ctx, state, stashedCameraTranslation, stashedCameraRotation, registry);
         LOG_INFO(Engine, "Run '{}' {}: {} capture(s) -> {}", runName.c_str(), outcome, captureCount, outputDir.c_str());
         bActive = false;
         phase = Phase::Idle;
@@ -293,7 +293,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         }
         case Phase::WaitReady:
         {
-            const size_t loadingEntities = CountLoadingEntities(state);
+            const size_t loadingEntities = CountLoadingEntities(state, registry);
             const bool bQuiet = loadingEntities == 0 &&
                                 !ctx->rescan.bResources && !ctx->frameStatus.bAssetGenerationPending && !ctx->assetManager->HasPendingLoads();
             readyQuietCounter = bQuiet ? readyQuietCounter + 1 : 0;
@@ -329,13 +329,13 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                             ov.mode = CameraOverride::Mode::Held;
                             ov.rotation = preset.rotation;
                             ov.translation = preset.translation + preset.rotation * e.translation;
-                            TeleportEditorCamera(ctx, state, ov.translation, ov.rotation, e.bFlag);
+                            TeleportEditorCamera(ctx, state, ov.translation, ov.rotation, registry, e.bFlag);
                         }
                         else {
                             ov.mode = e.camMode == CamMode::Held ? CameraOverride::Mode::Held : CameraOverride::Mode::Track;
                             ov.translation = e.translation;
                             ov.rotation = e.rotation;
-                            TeleportEditorCamera(ctx, state, e.translation, e.rotation, e.bFlag);
+                            TeleportEditorCamera(ctx, state, e.translation, e.rotation, registry, e.bFlag);
                         }
                         ++cursor;
                         break;
@@ -347,10 +347,10 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                                 finish("aborted: game.dll is not loaded");
                                 return;
                             }
-                            if (!IsPlaying(state)) { PlayStart(ctx, state, e.bUseRuntimeScenes); }
+                            if (!IsPlaying(state)) { PlayStart(ctx, state, e.bUseRuntimeScenes, registry); }
                         }
                         else if (IsPlaying(state)) {
-                            PlayStop(ctx, state);
+                            PlayStop(ctx, state, registry);
                             state->inputContext = Engine::InputContext::ProbeBake;
                         }
                         ++cursor;
@@ -488,9 +488,9 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
     }
 }
 
-void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
-    state->playtest.Tick(ctx, state, frameBuffer);
+    state->playtest.Tick(ctx, state, frameBuffer, registry);
 }
 
 bool CameraRecorder::Start(Engine::EngineContext* ctx, Engine::EngineState* state, const char* recordingName)
@@ -505,12 +505,12 @@ bool CameraRecorder::Start(Engine::EngineContext* ctx, Engine::EngineState* stat
     return true;
 }
 
-void CameraRecorder::Tick(Engine::EngineState* state)
+void CameraRecorder::Tick(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (!bActive) {
         return;
     }
-    auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
+    auto camView = registry.View<Component::EditorCameraTag, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         return;
@@ -574,9 +574,9 @@ Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine:
     return Core::InlineString<512>(std::string_view(path.c_str()));
 }
 
-void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Core::FrameBuffer*)
+void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Core::FrameBuffer*, Engine::SystemRegistry& registry)
 {
-    state->cameraRecorder.Tick(state);
+    state->cameraRecorder.Tick(state, registry);
 }
 
 void PlaytestScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)

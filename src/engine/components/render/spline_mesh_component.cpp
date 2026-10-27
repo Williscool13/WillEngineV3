@@ -50,7 +50,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     return params;
 }
 
-void SplineMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void SplineMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<SplineMeshComponent>(entity);
@@ -61,12 +61,11 @@ void SplineMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity e
 
     auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
-    rt.renderOffset = component.renderOffset;
+    registry.Set<RenderTransformRuntime>(entity, RenderTransformRuntime{.modelMatrix = m, .previousMatrix = m, .renderOffset = component.renderOffset});
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void SplineMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void SplineMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<SplineMeshLoadRequest>(entity);
@@ -77,7 +76,7 @@ void SplineMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity ent
 
 namespace Engine
 {
-bool Component::SplineMeshComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
+bool Component::SplineMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::SplineMeshComponent>(registry, entity);
 }
@@ -91,7 +90,7 @@ void Component::SplineMeshComponent::Sanitize(SplineMeshComponent& comp)
     }
 }
 
-void Component::SplineMeshComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::SplineMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<SplineMeshLoadingFlag>(entity);
     registry.Set<SplineMeshLoadRequest>(entity);
@@ -112,7 +111,7 @@ void Component::SplineMeshComponent::OnEditCommit(Engine::Registry& registry, en
 
 Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const SplineMeshComponent before = edit.Get<SplineMeshComponent>();
     SplineMeshComponent component = before;

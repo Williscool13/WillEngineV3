@@ -14,6 +14,7 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 
 struct RuntimeSceneStatus
 {
@@ -29,15 +30,15 @@ struct RuntimeSceneStatus
 };
 
 /** While running. Authored entities: pose and runtime state; destroyed ones by id. Spawned entities: in full. Plus rng and run clock. */
-bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId);
+bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, SystemRegistry& registry);
 
 bool DeleteRuntimeScene(EngineContext* ctx, StringID sceneId);
 
 /** Loaded scenes only; cached for 500 ms. */
-const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId);
+const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, SystemRegistry& registry);
 
 /** Over each loaded scene. */
-void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state);
+void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
 } // Engine
 
 #endif //WILL_ENGINE_RUNTIME_SAVE_H

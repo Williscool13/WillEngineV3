@@ -22,14 +22,14 @@
 
 namespace Engine::Component
 {
-void UnloadStaticMeshPrimitive(Engine::Registry& registry, entt::entity entity)
+void UnloadStaticMeshPrimitive(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<StaticMeshPrimitiveLoadRequest>(entity);
     registry.Remove<StaticMeshPrimitiveLoadingFlag>(entity);
 }
 
-void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, Engine::Registry& registry, entt::entity entity)
+void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<StaticMeshPrimitiveLoadingFlag>(entity);
     if (component.modelId.IsValid() && component.primitiveOrdinal != ~0u) {
@@ -38,13 +38,11 @@ void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, Engine::Re
 
     auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
-    rt.renderOffset = component.renderOffset;
-    rt.renderRotation = component.renderRotation;
+    registry.Set<RenderTransformRuntime>(entity, RenderTransformRuntime{.modelMatrix = m, .previousMatrix = m, .renderOffset = component.renderOffset, .renderRotation = component.renderRotation});
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void StaticMeshPrimitiveComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<StaticMeshPrimitiveComponent>(entity);
@@ -54,19 +52,19 @@ void StaticMeshPrimitiveComponent::OnConstruct(Engine::Registry& registry, entt:
     LoadStaticMeshPrimitive(component, registry, entity);
 }
 
-void StaticMeshPrimitiveComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     UnloadStaticMeshPrimitive(registry, entity);
     registry.Remove<RenderTransformRuntime>(entity);
 }
 
-bool StaticMeshPrimitiveComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
+bool StaticMeshPrimitiveComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return MeshSources::NoneOtherThan<StaticMeshPrimitiveComponent>(registry, entity);
 }
 
 
-void StaticMeshPrimitiveComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& component = registry.Get<StaticMeshPrimitiveComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -76,7 +74,7 @@ void StaticMeshPrimitiveComponent::OnEditPreview(Engine::Registry& registry, ent
     }
 }
 
-void StaticMeshPrimitiveComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& component = registry.GetMut<StaticMeshPrimitiveComponent>(entity);
     if (!component.modelId.IsValid()) {
@@ -97,7 +95,7 @@ void StaticMeshPrimitiveComponent::OnEditCommit(Engine::Registry& registry, entt
 
 Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<StaticMeshPrimitiveComponent>();
     auto* ctx = registry.Context();

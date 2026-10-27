@@ -42,10 +42,10 @@ Core::ViewData BuildPerspectiveView(glm::vec3 pos, glm::vec3 forward, glm::vec3 
     return vd;
 }
 
-void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
+void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto view = state->registry.View<Engine::Mut<Component::FreeCameraComponent>, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>, Component::EditorCameraTag>();
+    auto view = registry.View<Engine::Mut<Component::FreeCameraComponent>, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>, Component::EditorCameraTag>();
     for (entt::entity entity : view) {
         auto [freeCam, camera, transform] = view.get<Component::FreeCameraComponent, Component::CameraRuntime, Component::TransformComponent>(entity);
 
@@ -113,27 +113,27 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily)
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     entt::entity mainCamera;
 #if WILL_EDITOR
     if (state->inputContext == Engine::InputContext::Gameplay) {
-        auto cameraView = state->registry.View<Component::CameraRuntime, Component::GameCameraTag, Component::TransformComponent>();
+        auto cameraView = registry.View<Component::CameraRuntime, Component::GameCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     } else {
-        auto cameraView = state->registry.View<Component::CameraRuntime, Component::EditorCameraTag, Component::TransformComponent>();
+        auto cameraView = registry.View<Component::CameraRuntime, Component::EditorCameraTag, Component::TransformComponent>();
         mainCamera = cameraView.front();
     }
 #else
-    auto cameraView = state->registry.View<Component::CameraRuntime, Component::GameCameraTag, Component::TransformComponent>();
+    auto cameraView = registry.View<Component::CameraRuntime, Component::GameCameraTag, Component::TransformComponent>();
     mainCamera = cameraView.front();
 #endif
 
-    auto& cam = state->registry.GetMut<Component::CameraRuntime>(mainCamera);
+    auto& cam = registry.GetMut<Component::CameraRuntime>(mainCamera);
 
-    if (mainCamera != state->renderedCamera && state->registry.Valid(state->renderedCamera)) {
-        if (const auto* renderedCam = state->registry.TryGet<Component::CameraRuntime>(state->renderedCamera)) {
+    if (mainCamera != state->renderedCamera && registry.Valid(state->renderedCamera)) {
+        if (const auto* renderedCam = registry.TryGet<Component::CameraRuntime>(state->renderedCamera)) {
             cam.previousViewData = renderedCam->previousViewData;
         }
     }

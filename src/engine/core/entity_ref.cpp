@@ -8,8 +8,8 @@
 
 namespace Engine
 {
-entt::entity EntityRef::Get(const EngineState* state) const
+entt::entity EntityRef::Get(const EngineState* state, SystemRegistry& registry) const
 {
-    return FindEntity(state, stableId);
+    return FindEntity(state, stableId, registry);
 }
 } // Engine

@@ -73,7 +73,7 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
     return shape;
 }
 
-void FitMeshShapeToEntity(Engine::Registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
+void FitMeshShapeToEntity(Engine::SystemRegistry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
 {
     // Re-fitting keeps the collision choices made on the old source.
     ColliderShape collider{};
@@ -122,7 +122,7 @@ void FitMeshShapeToEntity(Engine::Registry& registry, entt::entity entity, Physi
     shape.rotation = renderRotation;
 }
 
-void FitPrimitiveShapeToEntity(Engine::Registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds)
+void FitPrimitiveShapeToEntity(Engine::SystemRegistry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds)
 {
     shape.bakedScale = glm::vec3(1.0f);
 

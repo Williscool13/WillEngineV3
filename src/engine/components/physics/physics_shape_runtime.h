@@ -17,11 +17,13 @@ namespace Engine::Component
 /** Runtime state derived from PhysicsBodyDesc; colliders is index-parallel to shapes and rebuilt with them. Engine physics integration only. */
 struct PhysicsShapeRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "PhysicsShapeRuntime";
+
     Core::InlineVector<Engine::PhysicsColliderHandle, 8> colliders;
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 }
 

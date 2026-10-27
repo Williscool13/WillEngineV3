@@ -26,12 +26,8 @@
 
 namespace Ballance
 {
-struct LavaDestroyedFlag
-{};
-
-void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees, float shrinkStart)
+void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees, Engine::SystemRegistry& registry, float shrinkStart)
 {
-    Engine::Registry& registry = state->registry;
     if (registry.Has<Component::DissolvingRuntime>(entity)) { return; }
     auto& transform = registry.GetMut<Component::TransformComponent>(entity);
     transform.mobility = Component::Mobility::Movable;
@@ -66,10 +62,9 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
     if (registry.Has<Component::PhysicsBodyDesc>(entity)) { Component::PhysicsBodyDesc::Suspend(registry, entity); }
 }
 
-void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state)
+void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    Engine::Registry& registry = state->registry;
     if (registry.View<Component::LavaComponent>().size() == 0) { return; }
 
     entt::entity playerEntity = entt::null;
@@ -91,15 +86,14 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state)
             const float top = std::max(ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y, Component::ComputeWorldTransform(registry, other).translation.y);
             const float surface = ctx->physicsWorld->GetWorldBounds(lavaBody->bodyID).max.y;
             const float depth = std::max(top - surface, 0.0f) + lava->extraDepth;
-            StartDissolving(state, other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees);
+            StartDissolving(state, other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees, registry);
         }
     }
 }
 
-void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state)
+void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    Engine::Registry& registry = state->registry;
     auto view = registry.View<Engine::Mut<Component::DissolvingRuntime>, Engine::Mut<Component::TransformComponent>>();
     if (view.size_hint() == 0) { return; }
 
@@ -118,21 +112,20 @@ void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
     if (finished.Size() == 0) { return; }
 
-    bool bDestroyed = false;
+    auto destroyed = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), finished.Size());
     for (const entt::entity entity : finished) {
         registry.Remove<Component::DissolvingRuntime>(entity);
         if (registry.Has<Component::DissolveKeepTag>(entity)) {
             registry.Set<Component::DissolvedFlag>(entity);
             continue;
         }
-        registry.Add<LavaDestroyedFlag>(entity);
-        state->commandQueue.Push({.type = Engine::CommandType::DestroyEntity, .entity = entity});
-        bDestroyed = true;
+        destroyed.PushBack(entity);
+        registry.PushCommand({.type = Engine::CommandType::DestroyEntity, .entity = entity});
     }
-    if (!bDestroyed) { return; }
+    if (destroyed.Size() == 0) { return; }
     for (const auto& [child, hierarchy] : registry.View<Component::HierarchyComponent>().each()) {
-        if (registry.Valid(hierarchy.parent) && registry.Has<LavaDestroyedFlag>(hierarchy.parent)) {
-            state->commandQueue.Push({.type = Engine::CommandType::DestroyEntity, .entity = child});
+        if (registry.Valid(hierarchy.parent) && destroyed.Contains(hierarchy.parent)) {
+            registry.PushCommand({.type = Engine::CommandType::DestroyEntity, .entity = child});
         }
     }
 }

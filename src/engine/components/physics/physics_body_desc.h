@@ -147,16 +147,16 @@ struct PhysicsBodyDesc
         WILL_FIELD(bLockTilt, .key = "lockTilt"),
         WILL_FIELD(shapes))
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
-    static void DeferredConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity);
     /** Releases the runtime colliders and queues a DeferredConstruct. */
-    static void RequestRebuild(Engine::Registry& registry, entt::entity entity);
+    static void RequestRebuild(Engine::SystemRegistry& registry, entt::entity entity);
     /** Removes the body and holds it off with a PhysicsSuspendedFlag; the desc stays. */
-    static void Suspend(Engine::Registry& registry, entt::entity entity);
+    static void Suspend(Engine::SystemRegistry& registry, entt::entity entity);
     /** Clears the suspension and rebuilds the body from the desc. */
-    static void Resume(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void Resume(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
@@ -175,7 +175,7 @@ struct PhysicsSuspendedFlag
     static constexpr const char* COMPONENT_NAME = "PhysicsSuspendedFlag";
 };
 
-inline PhysicsMotionType EffectiveMotionType(const Engine::Registry& registry, entt::entity entity, const PhysicsBodyDesc& desc)
+inline PhysicsMotionType EffectiveMotionType(const Engine::SystemRegistry& registry, entt::entity entity, const PhysicsBodyDesc& desc)
 {
     const auto* motionOverride = registry.TryGet<PhysicsMotionOverrideRuntime>(entity);
     return motionOverride ? motionOverride->motionType : desc.motionType;

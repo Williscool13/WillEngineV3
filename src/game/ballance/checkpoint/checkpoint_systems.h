@@ -18,8 +18,8 @@ namespace Ballance
 void ConnectCheckpointObservers(Engine::Registry& registry);
 void DisconnectCheckpointObservers(Engine::Registry& registry);
 
-void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
-void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
+void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 } // Ballance
 
 #endif //WILL_ENGINE_BALLANCE_CHECKPOINT_SYSTEMS_H

@@ -29,14 +29,14 @@
 
 namespace Engine::Component
 {
-void UnloadStaticMesh(Engine::Registry& registry, entt::entity entity)
+void UnloadStaticMesh(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<StaticMeshLoadRequest>(entity);
     registry.Remove<StaticMeshLoadingFlag>(entity);
 }
 
-void LoadStaticMesh(StaticMeshComponent& component, Engine::Registry& registry, entt::entity entity)
+void LoadStaticMesh(StaticMeshComponent& component, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<StaticMeshLoadingFlag>(entity);
     if (component.modelId.IsValid()) {
@@ -45,13 +45,11 @@ void LoadStaticMesh(StaticMeshComponent& component, Engine::Registry& registry, 
 
     auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
-    rt.renderOffset = component.renderOffset;
-    rt.renderRotation = component.renderRotation;
+    registry.Set<RenderTransformRuntime>(entity, RenderTransformRuntime{.modelMatrix = m, .previousMatrix = m, .renderOffset = component.renderOffset, .renderRotation = component.renderRotation});
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void PruneStaticMeshOverrides(Engine::Registry& registry, entt::entity entity)
+void PruneStaticMeshOverrides(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto* overrides = registry.TryGet<StaticMeshOverridesComponent>(entity);
     if (overrides && overrides->materialOverrides.IsEmpty() && overrides->primitiveBlacklist.IsEmpty()) {
@@ -81,7 +79,7 @@ void StaticMeshOverridesComponent::SetMaterialOverride(uint32_t slot, Engine::Ma
     }
 }
 
-void StaticMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void StaticMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<StaticMeshComponent>(entity);
@@ -91,7 +89,7 @@ void StaticMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity e
     LoadStaticMesh(component, registry, entity);
 }
 
-void StaticMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void StaticMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     UnloadStaticMesh(registry, entity);
     registry.Remove<RenderTransformRuntime>(entity);
@@ -101,19 +99,19 @@ void StaticMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity ent
 
 namespace Engine
 {
-bool Component::StaticMeshComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
+bool Component::StaticMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return MeshSources::NoneOtherThan<StaticMeshComponent>(registry, entity);
 }
 
-bool Component::StaticMeshOverridesComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
+bool Component::StaticMeshOverridesComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return registry.Has<StaticMeshComponent>(entity);
 }
 
 
 
-void Component::StaticMeshComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
+void Component::StaticMeshComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& component = registry.Get<StaticMeshComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -123,7 +121,7 @@ void Component::StaticMeshComponent::OnEditPreview(Engine::Registry& registry, e
     }
 }
 
-void Component::StaticMeshComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::StaticMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& component = registry.GetMut<StaticMeshComponent>(entity);
     if (!component.modelId.IsValid()) {
@@ -152,7 +150,7 @@ void Component::StaticMeshComponent::OnEditCommit(Engine::Registry& registry, en
     OnEditPreview(registry, entity);
 }
 
-void Component::StaticMeshOverridesComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::StaticMeshOverridesComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<StaticMeshLoadingFlag>(entity);
     PruneStaticMeshOverrides(registry, entity);
@@ -160,7 +158,7 @@ void Component::StaticMeshOverridesComponent::OnEditCommit(Engine::Registry& reg
 
 Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditingOffset = false;
@@ -269,7 +267,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         ImGui::BeginDisabled(edit.IsMulti());
         if (primCount > 0 && ImGui::SmallButton("Split All")) {
             ImGui::EndDisabled();
-            SplitAllMeshPrimitives(ctx, state, entity);
+            SplitAllMeshPrimitives(ctx, state, entity, registry);
             return {.bRequestRemoval = true};
         }
         ImGui::EndDisabled();
@@ -295,7 +293,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             ImGui::TreePop();
         }
         if (pendingSplitOrdinal != ~0u) {
-            SplitOffMeshPrimitive(state, entity, pendingSplitOrdinal, pendingSplitTransform);
+            SplitOffMeshPrimitive(state, entity, pendingSplitOrdinal, pendingSplitTransform, registry);
             return finish({.bRequestRemoval = remove});
         }
 

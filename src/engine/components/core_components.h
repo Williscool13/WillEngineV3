@@ -59,15 +59,15 @@ struct TransformComponent
         WILL_FIELD(mobility),
         WILL_FIELD(bMobilityLocked, .key = "mobilityLocked"))
 
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** Play-time lock on a Static entity: transform writes are reverted to this pose. */
@@ -188,10 +188,12 @@ inline Transform ComposeLocalFromWorld(const Transform& parent, const Transform&
  * @param entity
  * @return
  */
-Transform ComputeWorldTransform(const Engine::Registry& registry, entt::entity entity);
+Transform ComputeWorldTransform(const Engine::SystemRegistry& registry, entt::entity entity);
 
 struct DirtyTransformRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "DirtyTransformRequest";
+};
 }
 
 

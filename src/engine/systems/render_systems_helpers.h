@@ -8,13 +8,14 @@
 namespace Engine
 {
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Engine
 {
 #ifdef WDEBUG
 /** Catches a light mutated without marking MultiframeDirtyRequest, which nothing else would notice until the light looked wrong. No-op unless DebugState::bVerifyStoresOnce is raised. */
-void VerifyAnalyticLightStore(Engine::EngineState* state);
+void VerifyAnalyticLightStore(Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 /**
  * Instances are checked by derivation: their record is a pure projection of InstanceSource, so a source mutated without WriteRecord shows up directly.

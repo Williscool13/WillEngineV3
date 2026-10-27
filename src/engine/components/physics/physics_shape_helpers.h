@@ -29,13 +29,13 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
  * transform in StaticMesh > Procedural > Spline > Text3D priority. Clears the source and bakes an identity transform
  * when no mesh component is attached.
  */
-void FitMeshShapeToEntity(Engine::Registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale);
+void FitMeshShapeToEntity(Engine::SystemRegistry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale);
 
 /**
  * Fits a primitive shape (Box/Sphere/Capsule, per shape.geometry) to the given model bounds, pre-scaled by `scale`, and
  * bakes the attached mesh's render offset/rotation. shape.geometry must hold the primitive before calling.
  */
-void FitPrimitiveShapeToEntity(Engine::Registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds);
+void FitPrimitiveShapeToEntity(Engine::SystemRegistry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds);
 } // Engine::Component
 
 #endif //WILL_ENGINE_PHYSICS_SHAPE_HELPERS_H

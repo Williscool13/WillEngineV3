@@ -22,6 +22,7 @@ class TlsfAllocator;
 namespace Engine
 {
 struct EngineState;
+class SystemRegistry;
 
 struct UndoEntry
 {
@@ -49,14 +50,14 @@ public:
     explicit UndoStack(Core::TlsfAllocator* allocator);
 
     /** No-op while an interaction on the same type is open. */
-    void Begin(EngineState* state, StringID typeId, Core::Span<const entt::entity> targets);
-    void End(EngineState* state, StringID typeId);
+    void Begin(EngineState* state, StringID typeId, Core::Span<const entt::entity> targets, SystemRegistry& registry);
+    void End(EngineState* state, StringID typeId, SystemRegistry& registry);
 
     /** Closes an interaction whose widget went inactive without committing. */
-    void Tick(EngineState* state, bool bAnyItemActive);
+    void Tick(EngineState* state, bool bAnyItemActive, SystemRegistry& registry);
 
-    bool Undo(EngineState* state);
-    bool Redo(EngineState* state);
+    bool Undo(EngineState* state, SystemRegistry& registry);
+    bool Redo(EngineState* state, SystemRegistry& registry);
     void Clear();
 
     [[nodiscard]] bool CanUndo() const { return !undo.IsEmpty(); }
@@ -68,7 +69,7 @@ public:
     [[nodiscard]] const UndoRecord* Pending() const { return bPending ? &pending : nullptr; }
 
 private:
-    void Apply(EngineState* state, const UndoRecord& record, bool bBefore);
+    void Apply(EngineState* state, const UndoRecord& record, bool bBefore, SystemRegistry& registry);
     void Push(UndoRecord&& record);
 
     Core::TlsfAllocator* allocator{nullptr};

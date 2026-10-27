@@ -8,22 +8,22 @@
 
 namespace Engine
 {
-EditContext::EditContext(EngineState* state, Core::Span<const entt::entity> targets)
-    : state(state), targets(targets)
+EditContext::EditContext(EngineState* state, Core::Span<const entt::entity> targets, Engine::SystemRegistry& registry)
+    : state(state), targets(targets), registry(registry)
 {}
 
-Engine::Registry& EditContext::Registry() const
+Engine::SystemRegistry& EditContext::Registry() const
 {
-    return state->registry;
+    return registry;
 }
 
 void EditContext::BeginUndo(StringID typeId)
 {
-    state->editor.undo.Begin(state, typeId, targets);
+    state->editor.undo.Begin(state, typeId, targets, registry);
 }
 
 void EditContext::EndUndo(StringID typeId)
 {
-    state->editor.undo.End(state, typeId);
+    state->editor.undo.End(state, typeId, registry);
 }
 }

@@ -9,15 +9,16 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Ballance
 {
-void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state);
+void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state);
+void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state);
+void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void RegisterCrusherCommands(Engine::EngineState* state);
 } // Ballance

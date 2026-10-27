@@ -60,27 +60,31 @@ struct Text3DComponent
         WILL_FIELD(renderOffset, .speed = 0.01f),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Mesh needs (re)generating; the kickoff generates it (freeze-gated on the source font). */
 struct Text3DGenerateRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "Text3DGenerateRequest";
+};
 
 /** Mesh generation in flight; waiting to bind its material. */
 struct Text3DLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "Text3DLoadingFlag";
+};
 
 /** Arms the generate pipeline; call after changing fontId. */
-void LoadText3DFont(Text3DComponent& component, Engine::Registry& registry, entt::entity entity);
+void LoadText3DFont(Text3DComponent& component, Engine::SystemRegistry& registry, entt::entity entity);
 
 /** Releases the generated mesh and clears pending state without removing the component (for font hot-reload). */
-void UnloadText3DFont(Engine::Registry& registry, entt::entity entity);
+void UnloadText3DFont(Engine::SystemRegistry& registry, entt::entity entity);
 } // Engine::Component
 
 #endif //WILL_ENGINE_TEXT3D_COMPONENT_H

@@ -16,6 +16,7 @@ struct FrameResources;
 namespace Engine
 {
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Core
@@ -25,14 +26,14 @@ struct FrameBuffer;
 
 namespace Ballance
 {
-void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
-void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineState* state);
-void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 
 
 #ifdef WDEBUG
-void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
 #endif
 } // Ballance
 

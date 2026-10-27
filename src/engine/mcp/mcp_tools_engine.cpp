@@ -378,7 +378,7 @@ static ToolResult QueryScene(EngineContext*, EngineState* state, Call& call)
         filter = &components.registry[*index];
     }
 
-    const Engine::Registry& registry = state->registry;
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/query_scene"};
     int64_t aliveCount = 0;
     for ([[maybe_unused]] const entt::entity e : registry.View<entt::entity>()) {
         ++aliveCount;
@@ -458,7 +458,8 @@ static ToolResult CaptureScreenshot(EngineContext* ctx, EngineState* state, Call
 
 static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
 {
-    auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/get_camera"};
+    auto camView = registry.View<Component::EditorCameraTag, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         call.SetError("No editor camera in the registry");
@@ -485,7 +486,8 @@ static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
 
 static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
 {
-    auto camView = state->registry.View<Component::EditorCameraTag, Component::CameraRuntime, Engine::Mut<Component::TransformComponent>>();
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/set_camera"};
+    auto camView = registry.View<Component::EditorCameraTag, Component::CameraRuntime, Engine::Mut<Component::TransformComponent>>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         call.SetError("No editor camera in the registry");
@@ -560,7 +562,8 @@ static ToolResult LoadScene(EngineContext* ctx, EngineState* state, Call& call)
         }
     }
 
-    if (!LoadSceneExclusive(ctx, state, sceneId)) {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/load_scene"};
+    if (!LoadSceneExclusive(ctx, state, sceneId, registry)) {
         call.SetError("Scene failed to load; see engine.log");
         return ToolResult::Error;
     }
@@ -617,11 +620,12 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
     call.End();
 
     call.SetString("stableId", HexId(source.stableId).c_str());
-    const entt::entity entity = FindEntity(state, StringID(source.stableId));
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/pick_pixel"};
+    const entt::entity entity = FindEntity(state, StringID(source.stableId), registry);
     if (entity != entt::null) {
-        const auto* name = state->registry.TryGet<Component::NameComponent>(entity);
+        const auto* name = registry.TryGet<Component::NameComponent>(entity);
         call.SetString("name", name ? name->name.c_str() : "");
-        const auto* runtime = state->registry.TryGet<Component::MeshRuntime>(entity);
+        const auto* runtime = registry.TryGet<Component::MeshRuntime>(entity);
         const StaticModel* model = runtime ? ctx->assetManager->GetModel(runtime->modelHandle) : nullptr;
         if (model) { call.SetString("modelName", model->name.c_str()); } else { call.SetNull("modelName"); }
     }
@@ -636,7 +640,7 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
     call.SetInt("modelSlot", source.modelSlot);
     call.SetString("materialId", HexId(source.materialID.id).c_str());
     call.SetInt("materialIndex", source.materialIndex);
-    const Material* material = ctx->materialManager ? ctx->materialManager->GetMaterial(source.materialID) : nullptr;
+    const Material* material = ctx->materialManager->GetMaterial(source.materialID);
     if (material) {
         call.SetString("materialName", material->name.c_str());
         call.BeginArray("emissiveFactor");
@@ -729,6 +733,7 @@ static const char* RunModeName(const RunMode mode)
 
 static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& call)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/get_engine_status"};
     const Core::TimeFrame t = ctx->publishedTimeFrame.Get();
     const int32_t quiet = state->assetLoad.quietFrames;
 
@@ -737,7 +742,7 @@ static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& 
     call.SetBool("settled", quiet >= AssetLoadState::SETTLED_QUIET_FRAMES);
     call.SetInt("quietFrames", quiet);
     call.SetInt("settledThresholdFrames", AssetLoadState::SETTLED_QUIET_FRAMES);
-    call.SetInt("loadingEntities", static_cast<int64_t>(CountLoadingEntities(state)));
+    call.SetInt("loadingEntities", static_cast<int64_t>(CountLoadingEntities(state, registry)));
     call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
     call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
     call.SetBool("rescanResources", ctx->rescan.bResources);
@@ -783,11 +788,12 @@ static ToolResult SetRunMode(EngineContext* ctx, EngineState* state, Call& call)
         return ToolResult::Error;
     }
 
-    if (IsSimulating(state) && !bSimulate) { SimulateStop(ctx, state); }
-    if (IsPlaying(state) && !bPlay) { PlayStop(ctx, state); }
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/set_run_mode"};
+    if (IsSimulating(state) && !bSimulate) { SimulateStop(ctx, state, registry); }
+    if (IsPlaying(state) && !bPlay) { PlayStop(ctx, state, registry); }
     const bool bUseRuntimeScenes = call.GetBool("useRuntimeScenes", false);
-    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state, bUseRuntimeScenes); }
-    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state, bUseRuntimeScenes); }
+    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state, bUseRuntimeScenes, registry); }
+    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state, bUseRuntimeScenes, registry); }
 
     call.SetString("runMode", RunModeName(state->runMode));
     return ToolResult::Complete;

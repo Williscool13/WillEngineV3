@@ -12,11 +12,12 @@ namespace Engine
 struct EngineContext;
 struct EngineState;
 struct MaterialBrowserState;
+class SystemRegistry;
 }
 
 namespace Engine
 {
-void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
 

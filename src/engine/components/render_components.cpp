@@ -17,14 +17,14 @@
 
 namespace Engine::Component
 {
-void RenderFlagsComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
+void RenderFlagsComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    EvaluateInstanceRenderState(registry.State(), entity);
+    EvaluateInstanceRenderState(registry.State(), entity, registry);
 }
 
-void RenderFlagsComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void RenderFlagsComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    EvaluateInstanceRenderState(registry.State(), entity);
+    EvaluateInstanceRenderState(registry.State(), entity, registry);
 }
 
 bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
@@ -62,19 +62,18 @@ bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
     return bEmissiveChanged;
 }
 
-void MeshRuntime::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void MeshRuntime::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     if (const auto* stable = registry.TryGet<StableIdComponent>(entity)) {
         registry.GetMut<MeshRuntime>(entity).stableId = stable->id.id;
     }
 }
 
-void MeshRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void MeshRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
     auto& runtime = registry.GetMut<MeshRuntime>(entity);
 
-    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, runtime.modelHandle, runtime.pendingModelHandle}}});
+    registry.PushCommand({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, runtime.modelHandle, runtime.pendingModelHandle}}});
     runtime.range = {};
     runtime.modelRange = {};
     runtime.modelHandle = StaticModelHandle::INVALID;

@@ -27,7 +27,11 @@ add_library(engine STATIC
         core/registry.h
         core/access_check.cpp
         core/access_check.h
-        core/checked.h
+        core/access_set.h
+        core/deferred_commands.cpp
+        core/deferred_commands.h
+        core/system_registry.cpp
+        core/system_registry.h
         core/environment_map_id.h
         core/material_id.h
         core/texture_id.h

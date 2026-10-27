@@ -23,14 +23,14 @@
 
 namespace Engine::Component
 {
-void ProceduralMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void ProceduralMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<ProceduralMeshComponent>(entity);
     RecreateProceduralMesh(component, registry, entity);
 }
 
-void ProceduralMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void ProceduralMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<ProceduralMeshLoadRequest>(entity);
@@ -38,7 +38,7 @@ void ProceduralMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity
     registry.Remove<RenderTransformRuntime>(entity);
 }
 
-void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::Registry& registry, entt::entity entity)
+void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<ProceduralMeshLoadingFlag>(entity);
     if (!std::holds_alternative<std::monostate>(component.params)) {
@@ -51,16 +51,14 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::Registry
 
     auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
-    rt.renderOffset = component.renderOffset;
-    rt.renderRotation = component.renderRotation;
+    registry.Set<RenderTransformRuntime>(entity, RenderTransformRuntime{.modelMatrix = m, .previousMatrix = m, .renderOffset = component.renderOffset, .renderRotation = component.renderRotation});
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 }
 
 namespace Engine
 {
-bool Component::ProceduralMeshComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
+bool Component::ProceduralMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::ProceduralMeshComponent>(registry, entity);
 }
@@ -95,10 +93,10 @@ static Engine::Spline BuildSpiralRailingSpline(const Engine::SpiralStaircasePara
 }
 
 /** Spawns a child entity (parented to the stair) carrying a railing-mode SplineMeshComponent that traces the helix at `radius`. */
-static void CreateSpiralRailingEntity(Engine::EngineState* state, Engine::Registry& registry, entt::entity stairEntity,
+static void CreateSpiralRailingEntity(Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity stairEntity,
                                       const Engine::SpiralStaircaseParams& p, float radius, float railHeight, const char* suffix)
 {
-    const entt::entity child = CreateSceneEntity(state);
+    const entt::entity child = CreateSceneEntity(state, registry);
 
     if (auto* nm = registry.TryGetMut<Component::NameComponent>(child)) {
         Core::InlineString<128> base("Railing");
@@ -106,7 +104,7 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, Engine::Regist
         nm->name = Core::InlineString<128>::Format("%s Railing (%s)", base.c_str(), suffix);
     }
 
-    SetParent(state, child, stairEntity);
+    SetParent(state, child, stairEntity, registry);
 
     // Child sits at the stair's local origin so the local-space railing spline aligns with the stair geometry.
     auto& ct = registry.GetMut<Component::TransformComponent>(child);
@@ -135,7 +133,7 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, Engine::Regist
     MarkSceneModified(state, state->scene.currentSceneId);
 }
 
-void Component::ProceduralMeshComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
+void Component::ProceduralMeshComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& component = registry.Get<ProceduralMeshComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -145,7 +143,7 @@ void Component::ProceduralMeshComponent::OnEditPreview(Engine::Registry& registr
     }
 }
 
-void Component::ProceduralMeshComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::ProceduralMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     RecreateProceduralMesh(registry.GetMut<ProceduralMeshComponent>(entity), registry, entity);
 }
@@ -217,7 +215,7 @@ template<typename SetSize>
 static bool DrawExtentFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const Component::ProceduralMeshComponent& component, Vec3 size, SetSize&& setSize,
                                   bool& bOutMovedEntity)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     auto* state = edit.State();
     auto* ctx = registry.Context();
@@ -317,7 +315,7 @@ static bool DrawShapeFaceHandles(Core::ViewFamily& viewFamily, Engine::EditConte
 
 Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditingOffset = false;

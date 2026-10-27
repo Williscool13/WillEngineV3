@@ -28,7 +28,7 @@ static const ComponentEntry* FindEntry(const EngineState* state, StringID typeId
     return index ? &state->componentRegistry.registry[*index] : nullptr;
 }
 
-static uint32_t AppendSnapshot(const ComponentEntry& entry, Engine::Registry& registry, entt::entity e, Core::Vector<std::byte>& data, uint32_t& outSize)
+static uint32_t AppendSnapshot(const ComponentEntry& entry, Engine::SystemRegistry& registry,entt::entity e, Core::Vector<std::byte>& data, uint32_t& outSize)
 {
     const auto offset = static_cast<uint32_t>(data.Size());
     TextWriter writer(data);
@@ -37,11 +37,11 @@ static uint32_t AppendSnapshot(const ComponentEntry& entry, Engine::Registry& re
     return offset;
 }
 
-void UndoStack::Begin(EngineState* state, StringID typeId, Core::Span<const entt::entity> targets)
+void UndoStack::Begin(EngineState* state, StringID typeId, Core::Span<const entt::entity> targets, SystemRegistry& registry)
 {
     if (bPending && pending.typeId == typeId) { return; }
     if (bPending) {
-        End(state, pending.typeId);
+        End(state, pending.typeId, registry);
     }
 
     const ComponentEntry* entry = FindEntry(state, typeId);
@@ -50,15 +50,15 @@ void UndoStack::Begin(EngineState* state, StringID typeId, Core::Span<const entt
     pending = UndoRecord{typeId, Core::Vector<UndoEntry>(allocator, Core::AllocTag::EngineState), Core::Vector<std::byte>(allocator, Core::AllocTag::EngineState)};
     bPending = true;
     for (const entt::entity e : targets) {
-        const auto* stable = state->registry.TryGet<Component::StableIdComponent>(e);
-        if (stable == nullptr || !entry->has(state->registry, e)) { continue; }
+        const auto* stable = registry.TryGet<Component::StableIdComponent>(e);
+        if (stable == nullptr || !entry->has(registry, e)) { continue; }
         UndoEntry& u = pending.entries.EmplaceBack();
         u.stableId = stable->id;
-        u.beforeOffset = AppendSnapshot(*entry, state->registry, e, pending.data, u.beforeSize);
+        u.beforeOffset = AppendSnapshot(*entry, registry, e, pending.data, u.beforeSize);
     }
 }
 
-void UndoStack::End(EngineState* state, StringID typeId)
+void UndoStack::End(EngineState* state, StringID typeId, SystemRegistry& registry)
 {
     if (!bPending || pending.typeId != typeId) { return; }
     bPending = false;
@@ -68,12 +68,12 @@ void UndoStack::End(EngineState* state, StringID typeId)
 
     bool bChanged = false;
     for (UndoEntry& u : pending.entries) {
-        const entt::entity e = FindEntity(state, u.stableId);
-        if (e == entt::null || !entry->has(state->registry, e)) { continue; }
-        u.afterOffset = AppendSnapshot(*entry, state->registry, e, pending.data, u.afterSize);
+        const entt::entity e = FindEntity(state, u.stableId, registry);
+        if (e == entt::null || !entry->has(registry, e)) { continue; }
+        u.afterOffset = AppendSnapshot(*entry, registry, e, pending.data, u.afterSize);
         const bool bEntityChanged = u.beforeSize != u.afterSize || memcmp(pending.data.Data() + u.beforeOffset, pending.data.Data() + u.afterOffset, u.beforeSize) != 0;
         if (bEntityChanged) {
-            if (const auto* sc = state->registry.TryGet<Component::SceneRuntime>(e)) {
+            if (const auto* sc = registry.TryGet<Component::SceneRuntime>(e)) {
                 MarkSceneModified(state, sc->sceneId);
             }
         }
@@ -84,10 +84,10 @@ void UndoStack::End(EngineState* state, StringID typeId)
     }
 }
 
-void UndoStack::Tick(EngineState* state, bool bAnyItemActive)
+void UndoStack::Tick(EngineState* state, bool bAnyItemActive, SystemRegistry& registry)
 {
     if (bPending && !bAnyItemActive) {
-        End(state, pending.typeId);
+        End(state, pending.typeId, registry);
     }
 }
 
@@ -100,39 +100,39 @@ void UndoStack::Push(UndoRecord&& record)
     redo.Clear();
 }
 
-void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore)
+void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore, SystemRegistry& registry)
 {
     const ComponentEntry* entry = FindEntry(state, record.typeId);
     if (entry == nullptr || entry->restore == nullptr) { return; }
 
     for (const UndoEntry& u : record.entries) {
-        const entt::entity e = FindEntity(state, u.stableId);
-        if (e == entt::null || !entry->has(state->registry, e)) { continue; }
+        const entt::entity e = FindEntity(state, u.stableId, registry);
+        if (e == entt::null || !entry->has(registry, e)) { continue; }
         const uint32_t offset = bBefore ? u.beforeOffset : u.afterOffset;
         const uint32_t size = bBefore ? u.beforeSize : u.afterSize;
-        entry->restore(state->registry, e, TextReader(record.data.Data() + offset, size));
-        if (auto* sc = state->registry.TryGet<Component::SceneRuntime>(e)) {
+        entry->restore(registry, e, TextReader(record.data.Data() + offset, size));
+        if (auto* sc = registry.TryGet<Component::SceneRuntime>(e)) {
             MarkSceneModified(state, sc->sceneId);
         }
     }
 }
 
-bool UndoStack::Undo(EngineState* state)
+bool UndoStack::Undo(EngineState* state, SystemRegistry& registry)
 {
     if (undo.IsEmpty()) { return false; }
     bPending = false;
     UndoRecord record = undo.PopBackValue();
-    Apply(state, record, true);
+    Apply(state, record, true, registry);
     redo.PushBack(std::move(record));
     return true;
 }
 
-bool UndoStack::Redo(EngineState* state)
+bool UndoStack::Redo(EngineState* state, SystemRegistry& registry)
 {
     if (redo.IsEmpty()) { return false; }
     bPending = false;
     UndoRecord record = redo.PopBackValue();
-    Apply(state, record, false);
+    Apply(state, record, false, registry);
     undo.PushBack(std::move(record));
     return true;
 }

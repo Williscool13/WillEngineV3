@@ -105,9 +105,8 @@ static void WriteTransform(Call& call, const char* key, const Vec3& translation,
     call.End();
 }
 
-static void WriteAuthoredMaterial(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
+static void WriteAuthoredMaterial(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity, Engine::SystemRegistry& registry)
 {
-    const Engine::Registry& registry = state->registry;
     Engine::MaterialID id{};
     if (const auto* c = registry.TryGet<Component::ProceduralMeshComponent>(entity)) { id = c->material; }
     else if (const auto* c = registry.TryGet<Component::SplineMeshComponent>(entity)) { id = c->material; }
@@ -134,9 +133,9 @@ static void WriteVec3(Call& call, const char* key, const Vec3& v)
     call.End();
 }
 
-static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
+static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity, Engine::SystemRegistry& registry)
 {
-    const auto* body = Component::FindBody(state->registry, entity);
+    const auto* body = Component::FindBody(registry, entity);
     if (!body) {
         call.SetNull("physics");
         return;
@@ -156,9 +155,9 @@ static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* s
     call.BeginArray("touching");
     for (const Physics::BodyTouch& touch : physics->QueryTouching(&ctx->gameplayArena.Get(), body->bodyID, 0.01f, MAX_TOUCHING)) {
         call.PushObject();
-        const entt::entity other = Component::EntityFromBodyUserData(state->registry, physics->GetUserData(touch.body));
-        const auto* otherStable = other != entt::null ? state->registry.TryGet<Component::StableIdComponent>(other) : nullptr;
-        const auto* otherName = other != entt::null ? state->registry.TryGet<Component::NameComponent>(other) : nullptr;
+        const entt::entity other = Component::EntityFromBodyUserData(registry, physics->GetUserData(touch.body));
+        const auto* otherStable = other != entt::null ? registry.TryGet<Component::StableIdComponent>(other) : nullptr;
+        const auto* otherName = other != entt::null ? registry.TryGet<Component::NameComponent>(other) : nullptr;
         if (otherStable) { call.SetString("stableId", Engine::MCP::HexId(otherStable->id.id).c_str()); } else { call.SetNull("stableId"); }
         call.SetString("name", otherName ? otherName->name.c_str() : "");
         call.SetBool("awake", physics->IsAwake(touch.body));
@@ -171,9 +170,8 @@ static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* s
     call.End();
 }
 
-static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
+static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity, Engine::SystemRegistry& registry)
 {
-    const Engine::Registry& registry = state->registry;
     const auto* stable = registry.TryGet<Component::StableIdComponent>(entity);
     const auto* name = registry.TryGet<Component::NameComponent>(entity);
     const auto* scene = registry.TryGet<Component::SceneRuntime>(entity);
@@ -188,8 +186,8 @@ static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* s
     if (local) { WriteTransform(call, "localTransform", local->translation, local->rotation, local->scale); } else { call.SetNull("localTransform"); }
     if (world) { WriteTransform(call, "worldTransform", world->translation, world->rotation, world->scale); } else { call.SetNull("worldTransform"); }
     if (hierarchy && hierarchy->parentStableId.IsValid()) { call.SetString("parentStableId", Engine::MCP::HexId(hierarchy->parentStableId.id).c_str()); } else { call.SetNull("parentStableId"); }
-    WriteAuthoredMaterial(ctx, state, call, entity);
-    WritePhysicsState(ctx, state, call, entity);
+    WriteAuthoredMaterial(ctx, state, call, entity, registry);
+    WritePhysicsState(ctx, state, call, entity, registry);
 
     call.BeginArray("components");
     const Engine::ComponentRegistry& components = state->componentRegistry;
@@ -202,38 +200,40 @@ static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* s
     call.End();
 }
 
-static entt::entity FindByStableIdArg(Engine::EngineState* state, Call& call, const char* key)
+static entt::entity FindByStableIdArg(Engine::EngineState* state, Call& call, const char* key, Engine::SystemRegistry& registry)
 {
     uint64_t raw = 0;
     if (!Engine::MCP::ParseHexId(call.GetString(key, ""), raw)) {
         return entt::null;
     }
-    return Engine::FindEntity(state, StringID(raw));
+    return Engine::FindEntity(state, StringID(raw), registry);
 }
 
 static ToolResult GetEntity(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
 {
-    const entt::entity entity = FindByStableIdArg(state, call, "stableId");
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/get_entity"};
+    const entt::entity entity = FindByStableIdArg(state, call, "stableId", registry);
     if (entity == entt::null) {
         call.SetError("No live entity with that stableId; expected 16 hex digits as returned by query_scene");
         return ToolResult::Error;
     }
-    WriteEntityDetail(ctx, state, call, entity);
+    WriteEntityDetail(ctx, state, call, entity, registry);
     return ToolResult::Complete;
 }
 
 static ToolResult FindEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/find_entities"};
     const std::string_view needle = call.GetString("nameContains", "");
     const int64_t limit = std::clamp<int64_t>(call.GetInt("limit", FIND_DEFAULT_LIMIT), 1, FIND_MAX_LIMIT);
     int64_t matched = 0;
 
     call.BeginArray("entities");
-    for (const auto [entity, name] : state->registry.View<Component::NameComponent>().each()) {
+    for (const auto [entity, name] : registry.View<Component::NameComponent>().each()) {
         if (!name.name.Contains(needle, Core::CaseSensitivity::Insensitive)) { continue; }
         if (matched++ >= limit) { continue; }
         call.PushObject();
-        WriteEntityDetail(ctx, state, call, entity);
+        WriteEntityDetail(ctx, state, call, entity, registry);
         call.End();
     }
     call.End();
@@ -276,6 +276,7 @@ static bool ResolveModelArg(Engine::EngineContext* ctx, const char* text, Engine
 
 static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/spawn_entity"};
     const char* prefab = call.GetString("prefab", "");
     const char* model = call.GetString("model", "");
     if (*prefab && *model) {
@@ -286,7 +287,7 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
 
     entt::entity parent = entt::null;
     if (call.HasArg("parentStableId")) {
-        parent = FindByStableIdArg(state, call, "parentStableId");
+        parent = FindByStableIdArg(state, call, "parentStableId", registry);
         if (parent == entt::null) {
             call.SetError("parentStableId does not name a live entity");
             return ToolResult::Error;
@@ -300,7 +301,7 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
             call.SetError("Unknown prefab; pass a name or the hex id from query_assets type=prefab");
             return ToolResult::Error;
         }
-        entity = Engine::SpawnPrefab(state, ctx->assetManager, prefabId, position);
+        entity = Engine::SpawnPrefab(state, ctx->assetManager, prefabId, registry, position);
     }
     else if (*model) {
         Engine::ModelID modelId{};
@@ -308,28 +309,28 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
             call.SetError("Unknown model; pass a name or the hex id from query_assets type=model");
             return ToolResult::Error;
         }
-        const auto spawned = Engine::SpawnModel(ctx, state, modelId, position);
+        const auto spawned = Engine::SpawnModel(ctx, state, modelId, registry, position);
         entity = spawned.IsEmpty() ? entt::null : spawned[0];
     }
     else {
-        entity = Engine::CreateSceneEntity(state);
-        state->registry.GetMut<Component::TransformComponent>(entity).translation = position;
+        entity = Engine::CreateSceneEntity(state, registry);
+        registry.GetMut<Component::TransformComponent>(entity).translation = position;
     }
 
-    if (entity == entt::null || !state->registry.Valid(entity)) {
+    if (entity == entt::null || !registry.Valid(entity)) {
         call.SetError("Spawn failed; see the engine log");
         return ToolResult::Error;
     }
 
     const char* name = call.GetString("name", "");
     if (*name) {
-        state->registry.GetOrAdd<Component::NameComponent>(entity).name = Core::InlineString<128>(std::string_view(name));
+        registry.GetOrAdd<Component::NameComponent>(entity).name = Core::InlineString<128>(std::string_view(name));
     }
     if (parent != entt::null) {
-        Engine::SetParent(state, entity, parent);
+        Engine::SetParent(state, entity, parent, registry);
     }
 
-    WriteEntityDetail(ctx, state, call, entity);
+    WriteEntityDetail(ctx, state, call, entity, registry);
     return ToolResult::Complete;
 }
 

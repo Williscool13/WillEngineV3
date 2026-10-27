@@ -9,16 +9,16 @@
 
 #include "core/containers/vector.h"
 #include "engine/asset_manager_types.h"
-#include "engine/core/access_check.h"
 
 namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 
 enum class CommandType : uint32_t
 {
-    None,
+        None,
     PhysicsBodyConstruct,
     PhysicsBodyRemove,
     ColliderRelease,
@@ -68,18 +68,13 @@ struct CommandQueue
         : commands(allocator, Core::AllocTag::EngineState)
     {}
 
-    void Push(const Command& command)
-    {
-#if WILL_ACCESS_CHECK
-        CheckStructuralAccess("CommandQueue::Push");
-#endif
-        commands.PushBack(command);
-    }
+    /** Systems push through SystemRegistry::PushCommand. */
+    void Push(const Command& command) { commands.PushBack(command); }
 
     Core::Vector<Command> commands;
 };
 
-void PlaybackCommands(EngineContext* ctx, EngineState* state);
+void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
 } // Engine
 
 #endif //WILL_ENGINE_COMMAND_QUEUE_H

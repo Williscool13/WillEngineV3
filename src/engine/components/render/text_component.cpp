@@ -19,18 +19,17 @@
 
 namespace Engine::Component
 {
-void UnloadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::entity entity)
+void UnloadTextComponent(TextComponent& comp, Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
     auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
     if (runtime.fontHandle.IsValid()) {
-        state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
+        registry.PushCommand({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
         runtime.fontHandle = {};
     }
     registry.Remove<TextFontRequest>(entity);
 }
 
-void LoadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::entity entity)
+void LoadTextComponent(TextComponent& comp, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto* state = registry.State();
     // Arm only; the load happens in ResolveTextFontPending (freeze-gated).
@@ -43,22 +42,20 @@ void LoadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::en
     }
 }
 
-void TextRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void TextRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
     auto& runtime = registry.GetMut<TextRuntime>(entity);
     if (runtime.fontHandle.IsValid()) {
-        state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
+        registry.PushCommand({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
         runtime.fontHandle = {};
     }
-    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {0, 0, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
+    registry.PushCommand({.type = CommandType::MeshRelease, .payload = {.meshRelease = {0, 0, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
     runtime.modelRange = {};
 }
 
-void TextComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void TextComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
-    state->commandQueue.Push({.type = CommandType::TextConstruct, .entity = entity});
+    registry.PushCommand({.type = CommandType::TextConstruct, .entity = entity});
 
     auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
@@ -66,7 +63,7 @@ void TextComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void TextComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void TextComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<TextRuntime, TextFontRequest>(entity);
     registry.Remove<RenderTransformRuntime>(entity);
@@ -74,7 +71,7 @@ void TextComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 }
 
 
-void TextComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void TextComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<TextComponent>(entity);
     auto* ctx = registry.Context();
@@ -89,7 +86,7 @@ void TextComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity
 
 Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& comp = edit.Get<TextComponent>();
 

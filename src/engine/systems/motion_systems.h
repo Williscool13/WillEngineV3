@@ -9,9 +9,10 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 
-void UpdatePathMovers(EngineContext* ctx, EngineState* state);
-void UpdateRotateInPlace(EngineContext* ctx, EngineState* state);
+void UpdatePathMovers(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
+void UpdateRotateInPlace(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
 } // Engine
 
 #endif //WILL_ENGINE_MOTION_SYSTEMS_H

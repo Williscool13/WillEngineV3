@@ -17,15 +17,15 @@
 
 namespace Ballance
 {
-void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition)
+void PhysicsPlayerController::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition, Engine::SystemRegistry& registry)
 {
     character.emplace();
-    character->Initialize(gameState, ctx, spawnPosition);
+    character->Initialize(gameState, ctx, spawnPosition, registry);
 
     cameraParams.sideOffset = 0;
 }
 
-void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     const float deltaTime = state->timeFrame->deltaTime;
 
@@ -51,7 +51,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         const glm::quat horizontalRotation = glm::angleAxis(lookYaw, WORLD_UP);
         glm::vec3 forward = horizontalRotation * WORLD_FORWARD;
         if (bOverride) {
-            glm::vec3 overrideForward = camOverride.mode == Engine::CameraOverride::Mode::Held ? camOverride.rotation * WORLD_FORWARD : character->GetInterpolatedPosition() - camOverride.translation;
+            glm::vec3 overrideForward = camOverride.mode == Engine::CameraOverride::Mode::Held ? camOverride.rotation * WORLD_FORWARD : character->GetInterpolatedPosition(registry) - camOverride.translation;
             overrideForward.y = 0.0f;
             if (glm::length(overrideForward) > DIRECTION_EPSILON) {
                 forward = glm::normalize(overrideForward);
@@ -70,10 +70,10 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         jumpRequested = state->input.GetActionState(Game::Actions::ACTION_JUMP).pressed;
     }
 
-    character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsWorld);
+    character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsWorld, registry);
 
     // Camera always updates (even when cursor released, so the view doesn't freeze)
-    glm::vec3 characterPos = character->GetInterpolatedPosition();
+    glm::vec3 characterPos = character->GetInterpolatedPosition(registry);
     const float aspectRatio = state->projectConfig.ResolvedGameAspect(static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight));
     const float fov = glm::radians(state->projectConfig.gameCameraFovDegrees);
     const float nearPlane = state->projectConfig.gameCameraNearPlane;
@@ -95,7 +95,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         );
     }
 
-    auto cameraView = state->registry.View<Component::GameCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
+    auto cameraView = registry.View<Component::GameCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
     for (auto camEntity : cameraView) {
         auto& camera = cameraView.get<Component::CameraRuntime>(camEntity);
         auto& transform = cameraView.get<Component::TransformComponent>(camEntity);
@@ -113,9 +113,9 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     }
 }
 
-void PhysicsPlayerController::Shutdown(Physics::PhysicsWorld* physicsWorld)
+void PhysicsPlayerController::Shutdown(Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry)
 {
-    character->Shutdown(physicsWorld);
+    character->Shutdown(physicsWorld, registry);
     character.reset();
 }
 } // Ballance

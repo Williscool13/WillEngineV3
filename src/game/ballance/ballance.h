@@ -27,7 +27,7 @@ void RegisterCommands(Engine::EngineState* state);
 void ConnectObservers(Engine::Registry& registry);
 void DisconnectObservers(Engine::Registry& registry);
 void CollectSystems(Engine::SystemGraph& graph);
-void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
 
 void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state);

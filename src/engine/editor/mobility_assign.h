@@ -23,16 +23,16 @@ struct MobilityAssignResult
 };
 
 /** True when the entity or an ancestor has a moving physics body or a MOVES_ENTITY component. */
-bool IsMovedAtRuntime(const EngineState* state, entt::entity entity);
+bool IsMovedAtRuntime(const EngineState* state, entt::entity entity, SystemRegistry& registry);
 
 /** Sets every unlocked transform's mobility from IsMovedAtRuntime. */
-MobilityAssignResult AssignMobility(EngineState* state);
+MobilityAssignResult AssignMobility(EngineState* state, SystemRegistry& registry);
 
 /** Locks every Static transform nothing is expected to move; PropagateDirtyTransforms reverts writes to them during play. */
-void LockStaticTransforms(EngineState* state);
+void LockStaticTransforms(EngineState* state, SystemRegistry& registry);
 
 /** Reverts play-time writes to locked Static transforms and drops their dirty tags; warns once per entity. */
-void RejectStaticTransformWrites(EngineState* state);
+void RejectStaticTransformWrites(EngineState* state, SystemRegistry& registry);
 } // Engine
 
 #endif //WILL_ENGINE_MOBILITY_ASSIGN_H

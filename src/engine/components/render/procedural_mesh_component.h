@@ -36,23 +36,27 @@ struct ProceduralMeshComponent
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; StartProceduralMeshLoads kicks the model build. */
 struct ProceduralMeshLoadRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ProceduralMeshLoadRequest";
+};
 
 /** Model build in flight; ResolveProceduralMeshLoads binds it once finished. */
 struct ProceduralMeshLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ProceduralMeshLoadingFlag";
+};
 
-void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::Registry& registry, entt::entity entity);
+void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::SystemRegistry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_PROCEDURAL_MESH_COMPONENT_H

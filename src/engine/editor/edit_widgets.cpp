@@ -11,9 +11,9 @@
 
 namespace Engine::EditWidgets
 {
-bool EntityRefPicker(EngineState* state, const char* label, EntityRef& ref, bool bMixed)
+bool EntityRefPicker(EngineState* state, const char* label, EntityRef& ref, bool bMixed, Engine::SystemRegistry& registry)
 {
-    const entt::entity target = FindEntity(state, ref.stableId);
+    const entt::entity target = FindEntity(state, ref.stableId, registry);
     const bool bMissing = !bMixed && ref.stableId.IsValid() && target == entt::null;
 
     using Text = Core::InlineString<160>;
@@ -28,7 +28,7 @@ bool EntityRefPicker(EngineState* state, const char* label, EntityRef& ref, bool
         text = Text::Format("Missing (%016llx)", static_cast<unsigned long long>(ref.stableId.id));
     }
     else {
-        const auto* name = state->registry.TryGet<Component::NameComponent>(target);
+        const auto* name = registry.TryGet<Component::NameComponent>(target);
         text = Text(name ? name->name.c_str() : "(unnamed)");
     }
 
@@ -42,7 +42,7 @@ bool EntityRefPicker(EngineState* state, const char* label, EntityRef& ref, bool
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_ENTITY")) {
             const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
-            if (const auto* id = state->registry.Valid(dropped) ? state->registry.TryGet<Component::StableIdComponent>(dropped) : nullptr) {
+            if (const auto* id = registry.Valid(dropped) ? registry.TryGet<Component::StableIdComponent>(dropped) : nullptr) {
                 ref = EntityRef{id->id};
                 bChanged = true;
             }

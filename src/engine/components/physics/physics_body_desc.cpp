@@ -50,14 +50,13 @@ static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
     return collider->text3DSource.IsValid() && collider->text3DSource.bPrecise;
 }
 
-static void ReleaseColliders(Engine::Registry& registry, entt::entity entity)
+static void ReleaseColliders(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto* runtime = registry.TryGetMut<PhysicsShapeRuntime>(entity);
     if (!runtime) { return; }
-    auto* state = registry.State();
     for (const Engine::PhysicsColliderHandle handle : runtime->colliders) {
         if (handle.IsValid()) {
-            state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = handle}});
+            registry.PushCommand({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = handle}});
         }
     }
     runtime->colliders.Clear();
@@ -71,13 +70,12 @@ static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
     return false;
 }
 
-void PhysicsBodyDesc::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
-    state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
+    registry.PushCommand({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsBodyDesc::DeferredConstruct(Engine::Registry& registry, entt::entity entity)
+void PhysicsBodyDesc::DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     if (registry.Has<PhysicsSuspendedFlag>(entity)) { return; }
     auto& component = registry.GetMut<PhysicsBodyDesc>(entity);
@@ -122,7 +120,7 @@ void PhysicsBodyDesc::DeferredConstruct(Engine::Registry& registry, entt::entity
         if (auto* transform = registry.TryGetMut<TransformComponent>(entity); transform && transform->mobility != Mobility::Movable) {
             transform->mobility = Mobility::Movable;
             transform->bMobilityLocked = false;
-            Engine::EvaluateInstanceRenderState(state, entity);
+            Engine::EvaluateInstanceRenderState(state, entity, registry);
         }
     }
 
@@ -150,36 +148,33 @@ void PhysicsBodyDesc::DeferredConstruct(Engine::Registry& registry, entt::entity
     registry.Set<PhysicsBodyCreationRequest>(entity);
 }
 
-void PhysicsBodyDesc::RequestRebuild(Engine::Registry& registry, entt::entity entity)
+void PhysicsBodyDesc::RequestRebuild(Engine::SystemRegistry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
     registry.Remove<PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
-    auto* state = registry.State();
-    state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
+    registry.PushCommand({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsShapeRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void PhysicsShapeRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
 }
 
-void PhysicsBodyDesc::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<PhysicsShapeRuntime>(entity);
-    auto* state = registry.State();
-    state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
+    registry.PushCommand({.type = CommandType::PhysicsBodyRemove, .entity = entity});
 }
 
-void PhysicsBodyDesc::Suspend(Engine::Registry& registry, entt::entity entity)
+void PhysicsBodyDesc::Suspend(Engine::SystemRegistry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
     registry.Remove<PhysicsShapeRuntime, PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
     registry.Set<PhysicsSuspendedFlag>(entity);
-    auto* state = registry.State();
-    state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
+    registry.PushCommand({.type = CommandType::PhysicsBodyRemove, .entity = entity});
 }
 
-void PhysicsBodyDesc::Resume(Engine::Registry& registry, entt::entity entity)
+void PhysicsBodyDesc::Resume(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<PhysicsSuspendedFlag>(entity);
     RequestRebuild(registry, entity);
@@ -189,7 +184,7 @@ void PhysicsBodyDesc::Resume(Engine::Registry& registry, entt::entity entity)
 
 namespace Engine
 {
-void Component::PhysicsBodyDesc::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::PhysicsBodyDesc::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     RequestRebuild(registry, entity);
 }
@@ -197,7 +192,7 @@ void Component::PhysicsBodyDesc::OnEditCommit(Engine::Registry& registry, entt::
 /** Multi-edit replaces a whole shape list with the primary's, so shapes are edited on single selections only. */
 Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const PhysicsBodyDesc before = edit.Get<PhysicsBodyDesc>();
     PhysicsBodyDesc component = before;

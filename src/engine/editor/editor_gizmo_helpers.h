@@ -67,7 +67,7 @@ Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 view
  * Pivot shortcut row: sets renderOffset so the picked point of the entity's loaded mesh bounds lands on the entity origin.
  * @return true when a preset was picked
  */
-bool MeshPivotPresets(Engine::EngineContext* ctx, const Engine::Registry& registry, entt::entity entity, const Quat& renderRotation, Vec3& renderOffset);
+bool MeshPivotPresets(Engine::EngineContext* ctx, const Engine::SystemRegistry& registry, entt::entity entity, const Quat& renderRotation, Vec3& renderOffset);
 
 /**
  * Draws a dot handle in world space; calls onMoved(hitPoint) while dragging.

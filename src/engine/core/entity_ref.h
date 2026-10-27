@@ -12,13 +12,14 @@
 namespace Engine
 {
 struct EngineState;
+class SystemRegistry;
 
 /** A reference to another entity, saved as its stable id. */
 struct EntityRef
 {
     StringID stableId;
 
-    entt::entity Get(const EngineState* state) const;
+    entt::entity Get(const EngineState* state, SystemRegistry& registry) const;
 
     bool operator==(const EntityRef& other) const { return stableId == other.stableId; }
 };

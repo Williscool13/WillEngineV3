@@ -26,18 +26,18 @@ namespace Engine
 {
 void ConnectPhysicsObservers(Engine::Registry& registry);
 void DisconnectPhysicsObservers(Engine::Registry& registry);
-void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
-void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
-void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);
-void MarkPhysicsTransformsDirty(Engine::EngineState* state);
+void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void MarkPhysicsTransformsDirty(Engine::EngineState* state, Engine::SystemRegistry& registry);
 /** Entities whose bodies' broadphase bounds touch the world box, from the gameplay arena. */
-Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box);
-void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state);
-void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
-void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state);
-void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
-void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
-void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state);
+Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box, Engine::SystemRegistry& registry);
+void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 } // Engine
 
 #endif //WILL_ENGINE_PHYSICS_SYSTEM_H

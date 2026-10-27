@@ -52,7 +52,7 @@ static void ReadClock(EngineState* state, const TextReader& r)
     state->runStartTime = state->timeFrame->totalTime - r.Float("runSeconds");
 }
 
-static bool HasRuntimeState(const ComponentRegistry& componentRegistry, const Engine::Registry& registry, entt::entity e)
+static bool HasRuntimeState(const ComponentRegistry& componentRegistry, const Engine::SystemRegistry& registry, entt::entity e)
 {
     for (const RuntimeStateEntry& entry : componentRegistry.runtimeState) {
         if (entry.has(registry, e)) { return true; }
@@ -61,14 +61,14 @@ static bool HasRuntimeState(const ComponentRegistry& componentRegistry, const En
 }
 
 /** Skips name (harmless) and transform (moves at runtime). */
-static uint64_t AuthoredHash(EngineState* state, entt::entity e, Core::Vector<std::byte>& scratch)
+static uint64_t AuthoredHash(EngineState* state, entt::entity e, Core::Vector<std::byte>& scratch, Engine::SystemRegistry& registry)
 {
     scratch.Clear();
     TextWriter w(scratch);
     for (const ComponentEntry& entry : state->componentRegistry.registry) {
-        if (entry.typeId == TypeSID<Component::NameComponent>() || entry.typeId == TypeSID<Component::TransformComponent>() || !entry.has(state->registry, e)) { continue; }
+        if (entry.typeId == TypeSID<Component::NameComponent>() || entry.typeId == TypeSID<Component::TransformComponent>() || !entry.has(registry, e)) { continue; }
         w.BeginBlock(entry.typeId.id);
-        entry.serialize(state->registry, e, w);
+        entry.serialize(registry, e, w);
         w.EndBlock();
     }
     return Hash(scratch.Data(), scratch.Size());
@@ -82,7 +82,7 @@ static Core::Path RuntimeSceneFile(EngineContext* ctx, StringID sceneId)
 }
 
 /** In the run-start snapshot but no longer alive. */
-static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx, EngineState* state, StringID sceneId)
+static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx, EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
 {
 #if WILL_EDITOR
     for (const Scene& snapshot : state->editor.pieSnapshot) {
@@ -92,7 +92,7 @@ static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx,
         const Core::ShortString stableKey = Core::ShortString::Format("%llu", static_cast<unsigned long long>(TypeSID<Component::StableIdComponent>().id));
         reader.ForEachRecord("entities", [&](const TextReader& entityReader) {
             const uint64_t stableId = entityReader.Block(stableKey.c_str()).U64("id");
-            if (stableId != 0 && FindEntity(state, StringID{stableId}) == entt::null) {
+            if (stableId != 0 && FindEntity(state, StringID{stableId}, registry) == entt::null) {
                 destroyed.PushBack(stableId);
             }
         });
@@ -102,9 +102,8 @@ static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx,
     return Core::ArenaVector<uint64_t>{&ctx->gameplayArena.Get(), 0};
 }
 
-static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, TextWriter& w)
+static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, TextWriter& w, Engine::SystemRegistry& registry)
 {
-    Engine::Registry& registry = state->registry;
     Core::Vector<std::byte> scratch(&ctx->memoryManager->General(), Core::AllocTag::AssetManager);
     auto view = registry.View<Component::SceneRuntime, Component::StableIdComponent>(entt::exclude<Component::DoNotSerializeTag, Component::DoNotRuntimeSaveTag>);
     Core::ArenaVector<entt::entity> overrides{&ctx->gameplayArena.Get(), view.size_hint()};
@@ -118,7 +117,7 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
     for (const entt::entity e : overrides) {
         w.BeginBlock("entity");
         w.Key("stable_id", view.get<Component::StableIdComponent>(e).id.id);
-        w.Key("authored_hash", AuthoredHash(state, e, scratch));
+        w.Key("authored_hash", AuthoredHash(state, e, scratch, registry));
         if (const auto* transform = registry.TryGet<Component::TransformComponent>(e); transform && transform->mobility == Component::Mobility::Movable) {
             w.Key("translation", transform->translation);
             w.Key("rotation", transform->rotation);
@@ -133,7 +132,7 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
         w.EndBlock();
     }
 
-    const Core::ArenaVector<uint64_t> destroyed = DestroyedAuthoredEntities(ctx, state, sceneId);
+    const Core::ArenaVector<uint64_t> destroyed = DestroyedAuthoredEntities(ctx, state, sceneId, registry);
     w.Count("destroyed", static_cast<uint32_t>(destroyed.Size()));
     for (const uint64_t stableId : destroyed) {
         w.BeginBlock("entity");
@@ -148,11 +147,10 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
 }
 
 /** The caller resolves prefabs and hierarchy after. */
-static void ApplyRuntimeScene(EngineState* state, const TextReader& r)
+static void ApplyRuntimeScene(EngineState* state, const TextReader& r, Engine::SystemRegistry& registry)
 {
-    Engine::Registry& registry = state->registry;
     r.ForEachRecord("overrides", [&](const TextReader& entityReader) {
-        const entt::entity e = FindEntity(state, StringID{entityReader.U64("stable_id")});
+        const entt::entity e = FindEntity(state, StringID{entityReader.U64("stable_id")}, registry);
         if (e == entt::null) { return; }
         if (auto* transform = registry.TryGetMut<Component::TransformComponent>(e); transform && entityReader.Has("translation")) {
             transform->translation = entityReader.Vec3("translation");
@@ -169,14 +167,14 @@ static void ApplyRuntimeScene(EngineState* state, const TextReader& r)
         });
     });
     r.ForEachRecord("destroyed", [&](const TextReader& entityReader) {
-        if (const entt::entity e = FindEntity(state, StringID{entityReader.U64("stable_id")}); e != entt::null) {
-            state->commandQueue.Push({.type = CommandType::DestroyEntity, .entity = e});
+        if (const entt::entity e = FindEntity(state, StringID{entityReader.U64("stable_id")}, registry); e != entt::null) {
+            registry.PushCommand({.type = CommandType::DestroyEntity, .entity = e});
         }
     });
     LoadScene(state->componentRegistry, registry, r.Block("spawned"));
 }
 
-static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const Platform::ScopedFileMapping& map)
+static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const Platform::ScopedFileMapping& map, Engine::SystemRegistry& registry)
 {
     RuntimeSceneStatus status{.bExists = true};
     const TextReader reader(map.data, map.size);
@@ -187,20 +185,20 @@ static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineSt
 
     Core::Vector<std::byte> scratch(&ctx->memoryManager->General(), Core::AllocTag::AssetManager);
     reader.ForEachRecord("overrides", [&](const TextReader& r) {
-        const entt::entity e = FindEntity(state, StringID{r.U64("stable_id")});
+        const entt::entity e = FindEntity(state, StringID{r.U64("stable_id")}, registry);
         if (e == entt::null) {
             ++status.missing;
             return;
         }
-        if (AuthoredHash(state, e, scratch) != r.U64("authored_hash") && status.changed++ == 0) {
-            const auto* name = state->registry.TryGet<Component::NameComponent>(e);
+        if (AuthoredHash(state, e, scratch, registry) != r.U64("authored_hash") && status.changed++ == 0) {
+            const auto* name = registry.TryGet<Component::NameComponent>(e);
             status.firstChanged = name ? name->name : Core::InlineString<128>("Unnamed");
         }
     });
     return status;
 }
 
-bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId)
+bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     if (!IsRunning(state)) {
@@ -218,7 +216,7 @@ bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId)
     w.Key("wruntimescene", RUNTIME_SCENE_VERSION);
     w.Key("scene_id", sceneId.id);
     WriteClock(state, w);
-    WriteRuntimeScene(ctx, state, sceneId, w);
+    WriteRuntimeScene(ctx, state, sceneId, w, registry);
 
     gRuntimeSceneStatus.Remove(sceneId);
     if (!Platform::WriteFile(path, out.Data(), out.Size())) {
@@ -241,7 +239,7 @@ bool DeleteRuntimeScene(EngineContext* ctx, StringID sceneId)
     return true;
 }
 
-const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId)
+const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
 {
     constexpr auto REFRESH = std::chrono::milliseconds(500);
     const auto now = std::chrono::steady_clock::now();
@@ -253,12 +251,12 @@ const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState*
     }
     RuntimeSceneStatus status{};
     if (const Core::Path path = RuntimeSceneFile(ctx, sceneId); !path.IsEmpty() && Platform::FileExists(path)) {
-        status = ComputeRuntimeSceneStatus(ctx, state, sceneId, Platform::ScopedFileMapping(path));
+        status = ComputeRuntimeSceneStatus(ctx, state, sceneId, Platform::ScopedFileMapping(path), registry);
     }
     return gRuntimeSceneStatus.Emplace(sceneId, CachedRuntimeSceneStatus{status, now}).status;
 }
 
-void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state)
+void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     bool bApplied = false;
@@ -267,7 +265,7 @@ void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state)
         if (path.IsEmpty() || !Platform::FileExists(path)) { continue; }
 
         const Platform::ScopedFileMapping map(path);
-        const RuntimeSceneStatus status = ComputeRuntimeSceneStatus(ctx, state, meta.sceneId, map);
+        const RuntimeSceneStatus status = ComputeRuntimeSceneStatus(ctx, state, meta.sceneId, map, registry);
         if (status.bUnreadable) {
             LOG_ERROR(Engine, "Runtime scene '{}' is unreadable, for another scene, or an unknown version", path.c_str());
             continue;
@@ -278,15 +276,15 @@ void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state)
         }
 
         const TextReader reader(map.data, map.size);
-        ApplyRuntimeScene(state, reader);
+        ApplyRuntimeScene(state, reader, registry);
         ReadClock(state, reader);
         bApplied = true;
         LOG_INFO(Engine, "Applied runtime scene '{}'", path.c_str());
     }
 
     if (bApplied) {
-        ResolvePrefabLoads(state, ctx->assetManager);
-        ResolveHierarchyLinks(state);
+        ResolvePrefabLoads(state, ctx->assetManager, registry);
+        ResolveHierarchyLinks(state, registry);
         state->requests.bTeleportPhysics = true;
         state->requests.RequestRenderReset(Core::RenderReset::Cut);
     }

@@ -63,14 +63,14 @@ static void RegisterBodyVelocityState(ComponentRegistry& componentRegistry)
     componentRegistry.runtimeState.PushBack(RuntimeStateEntry{
         .typeId = typeId,
         .name = "PhysicsBodyVelocity",
-        .has = [](const Engine::Registry& reg, entt::entity e) -> bool { return reg.Has<Component::PhysicsBodyRuntime, Component::DynamicPhysicsBodyRuntime>(e); },
-        .serialize = [](const Engine::Registry& reg, entt::entity e, TextWriter& w) {
+        .has = [](const Engine::SystemRegistry& reg, entt::entity e) -> bool { return reg.Has<Component::PhysicsBodyRuntime, Component::DynamicPhysicsBodyRuntime>(e); },
+        .serialize = [](const Engine::SystemRegistry& reg, entt::entity e, TextWriter& w) {
             const Physics::PhysicsWorld* physicsWorld = reg.Context()->physicsWorld;
             const Physics::BodyHandle body = reg.Get<Component::PhysicsBodyRuntime>(e).bodyID;
             w.Key("linearVelocity", physicsWorld->GetLinearVelocity(body));
             w.Key("angularVelocity", physicsWorld->GetAngularVelocity(body));
         },
-        .deserialize = [](Engine::Registry& reg, entt::entity e, const TextReader& r) {
+        .deserialize = [](Engine::SystemRegistry& reg, entt::entity e, const TextReader& r) {
             reg.Set<Component::SetVelocityRequest>(e, Component::SetVelocityRequest{.linearVelocity = r.Vec3("linearVelocity"), .angularVelocity = r.Vec3("angularVelocity")});
         },
         .origin = Origin::Engine,

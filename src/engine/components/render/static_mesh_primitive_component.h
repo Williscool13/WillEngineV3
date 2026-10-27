@@ -41,22 +41,26 @@ struct StaticMeshPrimitiveComponent
         WILL_FIELD(renderOffset, .speed = 0.1f),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 struct StaticMeshPrimitiveLoadRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "StaticMeshPrimitiveLoadRequest";
+};
 
 struct StaticMeshPrimitiveLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "StaticMeshPrimitiveLoadingFlag";
+};
 
-void UnloadStaticMeshPrimitive(Engine::Registry& registry, entt::entity entity);
-void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, Engine::Registry& registry, entt::entity entity);
+void UnloadStaticMeshPrimitive(Engine::SystemRegistry& registry, entt::entity entity);
+void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, Engine::SystemRegistry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_STATIC_MESH_PRIMITIVE_COMPONENT_H

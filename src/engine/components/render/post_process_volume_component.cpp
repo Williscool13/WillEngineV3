@@ -304,7 +304,7 @@ static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverride
 
 static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edit)
 {
-    const Engine::Registry& registry = edit.Registry();
+    const Engine::SystemRegistry& registry = edit.Registry();
     uint32_t volumeCount = 0;
     bool bAllFull = true;
     for (const entt::entity e : edit.Targets()) {
@@ -437,7 +437,7 @@ static void DrawFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& e
 
 Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;

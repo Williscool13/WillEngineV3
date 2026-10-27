@@ -9,6 +9,7 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Core
@@ -26,7 +27,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 /**
  * Draws the "Diagnostics" window: a checkbox and a fixed-height readout per zone.
  */
-void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 /**
  * Draws the "Project Config" window: frame limit, render resolution, anti-aliasing with the active mode's settings, and cameras - the global, non-profile settings persisted directly in project.wconfig.
@@ -36,7 +37,7 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
 /**
  * Draws the "Lighting" window: per-tab save + lighting profile picker, shading/lighting shader overrides, ReSTIR DI settings, the denoiser (A-Trous / A-SVGF / RELAX), and ambient occlusion (GTAO).
  */
-void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 /**
  * Draws the collapsible editor for one PostProcessConfiguration (tonemapping, exposure, bloom ... dither).
@@ -50,7 +51,7 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp, Engine::EngineSta
 /**
  * Draws the "Post-Processing" window: per-tab save + post-process profile picker and the per-config image effects via DrawPostProcessConfig.
  */
-void DrawPostProcessingWindow(Engine::EngineState* state);
+void DrawPostProcessingWindow(Engine::EngineState* state, Engine::SystemRegistry& registry);
 }
 
 #endif //WILL_ENGINE_GRAPHICS_SETTINGS_H

@@ -36,7 +36,7 @@ static void LoadLightingProfile(Engine::EngineState* state, const char* name)
     }
 }
 
-void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->input.GetActionState(Actions::ACTION_SCREENSHOT).pressed) {
         state->requests.bWantsScreenshot |= true;
@@ -59,7 +59,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
 #endif
-        LoadSceneSlot(ctx, state, i);
+        LoadSceneSlot(ctx, state, i, registry);
     }
 
 #ifdef WDEBUG
@@ -80,7 +80,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 #endif
 }
 
-void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     if (state->requests.screenshotBurstRemaining > 0) {
         state->requests.screenshotPath = Core::InlineString<512>::Format("%s_%03d.png", state->requests.screenshotBurstBase.c_str(), state->requests.screenshotBurstIndex);

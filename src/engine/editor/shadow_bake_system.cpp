@@ -53,9 +53,8 @@ bool IsShadowBakeCurrent(const ShadowBakeKey& baked, const LightInfo& light)
 
 #if WILL_EDITOR
 
-static bool LightForBake(EngineState* state, entt::entity entity, uint64_t& outShadowId, uint32_t& outResolution, LightInfo& outLight)
+static bool LightForBake(EngineState* state, entt::entity entity, uint64_t& outShadowId, uint32_t& outResolution, LightInfo& outLight, Engine::SystemRegistry& registry)
 {
-    Engine::Registry& registry = state->registry;
     if (!registry.Valid(entity)) { return false; }
 
     uint32_t slot = AnalyticLightStore::INVALID_SLOT;
@@ -124,7 +123,7 @@ void ShadowBakeSystem::Enqueue(entt::entity light)
     ++batchTotal;
 }
 
-void ShadowBakeSystem::EnqueueAll(Engine::Registry& registry)
+void ShadowBakeSystem::EnqueueAll(Engine::SystemRegistry& registry)
 {
     for (const auto [light, comp] : registry.View<Component::AreaLightComponent>().each()) {
         if (comp.shadowMode == Component::LightShadowMode::Baked) { Enqueue(light); }
@@ -142,7 +141,7 @@ void ShadowBakeSystem::Cancel()
     pixels = {};
 }
 
-void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     frameBuffer->shadowBake = {};
     ShadowBakeCaptureStaging& capture = ctx->shadowBakeCapture;
@@ -169,7 +168,7 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameB
 
     while (requestId == 0 && !queue.IsEmpty() && !ProbeBakeInFlight(state)) {
         const entt::entity next = queue.PopBackValue();
-        if (!LightForBake(state, next, shadowId, resolution, light)) {
+        if (!LightForBake(state, next, shadowId, resolution, light, registry)) {
             ++batchDone;
             continue;
         }
@@ -178,7 +177,7 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameB
         face = 0;
         pixels = Core::HeapArray<uint16_t>(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::EngineContext, static_cast<size_t>(resolution) * resolution * key.faceCount);
         // Physics bodies may have changed since the flags were last evaluated
-        EvaluateAllInstanceRenderStates(state);
+        EvaluateAllInstanceRenderStates(state, registry);
         requestId = nextRequestId++;
     }
 
@@ -193,18 +192,18 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameB
     }
 }
 
-void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
-    state->shadowBake.Tick(ctx, state, frameBuffer);
+    state->shadowBake.Tick(ctx, state, frameBuffer, registry);
 }
 
 #else
 
 void ShadowBakeSystem::Enqueue(entt::entity) {}
-void ShadowBakeSystem::EnqueueAll(Engine::Registry&) {}
+void ShadowBakeSystem::EnqueueAll(Engine::SystemRegistry&) {}
 void ShadowBakeSystem::Cancel() {}
-void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Core::FrameBuffer*) {}
-void ShadowBakeTick(EngineContext*, EngineState*, Core::FrameBuffer*) {}
+void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
+void ShadowBakeTick(EngineContext*, EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
 
 #endif
 } // Engine

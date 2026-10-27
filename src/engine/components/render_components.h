@@ -29,6 +29,8 @@ namespace Engine::Component
 {
 struct MultiframeDirtyRequest
 {
+    static constexpr const char* COMPONENT_NAME = "MultiframeDirtyRequest";
+
     // FRAME_BUFFER_COUNT to update all 3 host buffers. +1 for prevModeLmatrix
     int32_t counter{Core::FRAME_BUFFER_COUNT + 1};
 };
@@ -52,8 +54,8 @@ struct RenderFlagsComponent
         WILL_FIELD(bEmissiveLight, .key = "emissiveLight"),
         WILL_FIELD(bCameraMotionBlur, .key = "cameraMotionBlur"))
 
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 enum RenderFlagToggle : uint32_t
@@ -100,8 +102,8 @@ struct MeshRuntime
 
     uint64_t stableId{StableIdComponent::NO_ID};
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 }
 

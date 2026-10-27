@@ -26,7 +26,7 @@ static constexpr float LOST_SINK_DEPTH = 0.6f;
 static constexpr float LOST_DISSOLVE_SECONDS = 1.5f;
 static constexpr float LOST_TILT_DEGREES = 25.0f;
 
-static void CaptureCarts(Engine::Registry& registry)
+static void CaptureCarts(Engine::SystemRegistry& registry)
 {
     auto view = registry.View<Component::CaneCartComponent, Component::TransformComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc>(
         entt::exclude<Component::CaneCartRuntime>);
@@ -36,13 +36,13 @@ static void CaptureCarts(Engine::Registry& registry)
     }
 }
 
-static void ClipOn(Engine::Registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, float carry)
+static void ClipOn(Engine::SystemRegistry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, float carry)
 {
     registry.Set<Component::PathMoverRuntime>(cart, Component::PathMoverRuntime{.waitTimer = -carry});
     runtime.phase = Component::CaneCartPhase::Lifting;
 }
 
-static void Release(Engine::EngineContext* ctx, Engine::Registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, const Component::CaneLiftComponent& lift)
+static void Release(Engine::EngineContext* ctx, Engine::SystemRegistry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, const Component::CaneLiftComponent& lift)
 {
     const auto& mover = registry.Get<Component::PathMoverComponent>(cart);
     const auto& transform = registry.Get<Component::TransformComponent>(cart);
@@ -69,7 +69,7 @@ static void Release(Engine::EngineContext* ctx, Engine::Registry& registry, entt
     runtime.phase = Component::CaneCartPhase::Falling;
 }
 
-static void Recycle(Engine::Registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime)
+static void Recycle(Engine::SystemRegistry& registry, entt::entity cart, Component::CaneCartRuntime& runtime)
 {
     registry.Remove<Component::DissolvedFlag, Component::PathMoverRuntime, Component::SetVelocityRequest, Component::PhysicsMotionOverrideRuntime>(cart);
     auto& transform = registry.GetMut<Component::TransformComponent>(cart);
@@ -81,10 +81,9 @@ static void Recycle(Engine::Registry& registry, entt::entity cart, Component::Ca
     runtime.phase = Component::CaneCartPhase::Idle;
 }
 
-void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state)
+void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    Engine::Registry& registry = state->registry;
     if (registry.View<Component::CaneLiftComponent>().size() == 0) { return; }
 
     CaptureCarts(registry);
@@ -96,7 +95,7 @@ void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state)
             Recycle(registry, cart, runtime);
             continue;
         }
-        const entt::entity liftEntity = link.lift.Get(state);
+        const entt::entity liftEntity = link.lift.Get(state, registry);
         const auto* lift = registry.Valid(liftEntity) ? registry.TryGet<Component::CaneLiftComponent>(liftEntity) : nullptr;
         if (!lift) { continue; }
 
@@ -117,7 +116,7 @@ void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state)
                 runtime.phase = Component::CaneCartPhase::Eaten;
             }
             else if (runtime.fallTime > lift->releaseTimeout || transform.translation.y < lift->killHeight) {
-                StartDissolving(state, cart, LOST_SINK_DEPTH, LOST_DISSOLVE_SECONDS, LOST_TILT_DEGREES);
+                StartDissolving(state, cart, LOST_SINK_DEPTH, LOST_DISSOLVE_SECONDS, LOST_TILT_DEGREES, registry);
                 runtime.phase = Component::CaneCartPhase::Eaten;
             }
         }
@@ -130,7 +129,7 @@ void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state)
             const float carry = -liftRun.timer;
             liftRun.timer += lift.interval;
             for (const auto& [cart, link, runtime, transform] : carts.each()) {
-                if (runtime.phase != Component::CaneCartPhase::Idle || link.lift.Get(state) != liftEntity) { continue; }
+                if (runtime.phase != Component::CaneCartPhase::Idle || link.lift.Get(state, registry) != liftEntity) { continue; }
                 ClipOn(registry, cart, runtime, carry);
                 break;
             }

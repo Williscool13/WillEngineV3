@@ -15,8 +15,9 @@
 #include "core/string_id.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
-#include "engine/components/component_identity.h"
-#include "engine/core/access_check.h"
+#include "engine/core/access_set.h"
+#include "engine/core/deferred_commands.h"
+#include "engine/core/system_registry.h"
 
 namespace Core
 {
@@ -29,7 +30,6 @@ struct EngineContext;
 struct EngineState;
 
 inline constexpr uint32_t MAX_SYSTEM_NODES = 128;
-inline constexpr uint32_t MAX_ACCESS_ENTRIES = 16;
 inline constexpr uint32_t MAX_NODES_PER_PHASE = 64;
 inline constexpr uint32_t MAX_ACCESS_IDS_PER_PHASE = 128;
 inline constexpr uint32_t ACCESS_MASK_WORDS = MAX_ACCESS_IDS_PER_PHASE / 64;
@@ -65,43 +65,8 @@ struct SystemConditions
     bool bGameplay{false};
 };
 
-using SystemFn = void(*)(EngineContext*, EngineState*);
-using SystemFrameFn = void(*)(EngineContext*, EngineState*, Core::FrameBuffer*);
-
-struct AccessSet
-{
-    bool bExclusive{true};
-    Core::InlineVector<StringID, MAX_ACCESS_ENTRIES> reads{};
-    Core::InlineVector<StringID, MAX_ACCESS_ENTRIES> writes{};
-};
-
-template<typename... T>
-struct Reads
-{};
-
-template<typename... T>
-struct Writes
-{};
-
-template<typename... T>
-void AppendAccess(AccessSet& set, Reads<T...>)
-{
-    (set.reads.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
-}
-
-template<typename... T>
-void AppendAccess(AccessSet& set, Writes<T...>)
-{
-    (set.writes.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
-}
-
-template<typename... Lists>
-AccessSet Access()
-{
-    AccessSet set{.bExclusive = false};
-    (AppendAccess(set, Lists{}), ...);
-    return set;
-}
+using SystemFn = void(*)(EngineContext*, EngineState*, SystemRegistry&);
+using SystemFrameFn = void(*)(EngineContext*, EngineState*, Core::FrameBuffer*, SystemRegistry&);
 
 struct SystemNode
 {
@@ -119,6 +84,13 @@ class SystemGraph
 {
 public:
     void SetScheduler(enki::TaskScheduler* scheduler_) { scheduler = scheduler_; }
+
+    void SetRegistry(Registry* storage_) { storage = storage_; }
+
+    void SetAllocator(Core::TlsfAllocator* allocator)
+    {
+        for (DeferredCommands& commands : commandBuffers) { commands.Init(allocator); }
+    }
 
     void SetDumpSink(void (*sink)(EngineState*, const char*)) { dumpSink = sink; }
 
@@ -235,7 +207,7 @@ public:
             ZoneValue(waveCount);
             if (waveCount == 1 || scheduler == nullptr) {
                 for (uint32_t t = 0; t < waveCount; ++t) {
-                    RunNode(nodes[wave[t]], ctx, state, frameBuffer);
+                    RunNode(nodes[wave[t]], ctx, state, frameBuffer, CommandsFor(begin, wave[t]));
                 }
             }
             else {
@@ -244,11 +216,22 @@ public:
                 }
                 enki::TaskSet waveTask(waveCount, [&](enki::TaskSetPartition range, uint32_t) {
                     for (uint32_t t = range.start; t < range.end; ++t) {
-                        RunNode(nodes[wave[t]], ctx, state, frameBuffer);
+                        RunNode(nodes[wave[t]], ctx, state, frameBuffer, CommandsFor(begin, wave[t]));
                     }
                 });
                 scheduler->AddTaskSetToPipe(&waveTask);
                 scheduler->WaitforTask(&waveTask);
+            }
+
+            DeferredCommands* waveCommands[MAX_NODES_PER_PHASE];
+            uint32_t waveCommandCount = 0;
+            for (uint32_t t = 0; t < waveCount; ++t) {
+                DeferredCommands* commands = CommandsFor(begin, wave[t]);
+                if (commands != nullptr && !commands->IsEmpty()) { waveCommands[waveCommandCount++] = commands; }
+            }
+            if (waveCommandCount > 0) {
+                ZoneScopedN("ApplyDeferredCommands");
+                ApplyDeferredCommands(*storage, waveCommands, waveCommandCount);
             }
 
             for (uint32_t t = 0; t < waveCount; ++t) {
@@ -287,17 +270,17 @@ private:
         return false;
     }
 
-    static void RunNode(const SystemNode& node, EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+    DeferredCommands* CommandsFor(uint32_t begin, uint32_t node)
+    {
+        return nodes[node].access.bExclusive ? nullptr : &commandBuffers[node - begin];
+    }
+
+    void RunNode(const SystemNode& node, EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, DeferredCommands* commands)
     {
         ZoneTransientN(zone, node.name, true);
-#if WILL_ACCESS_CHECK
-        SetRunningSystem(node.name, &node.access);
-#endif
-        if (node.frameFn != nullptr) { node.frameFn(ctx, state, frameBuffer); }
-        else { node.fn(ctx, state); }
-#if WILL_ACCESS_CHECK
-        SetRunningSystem(nullptr, nullptr);
-#endif
+        SystemRegistry registry{*storage, node.access, commands, node.name};
+        if (node.frameFn != nullptr) { node.frameFn(ctx, state, frameBuffer, registry); }
+        else { node.fn(ctx, state, registry); }
     }
 
     static const char* PhaseName(SystemPhase phase)
@@ -408,6 +391,8 @@ private:
     bool bDumpPending{};
     bool bDumpActive{};
     Core::InlineVector<SystemNode, MAX_SYSTEM_NODES> nodes{};
+    DeferredCommands commandBuffers[MAX_NODES_PER_PHASE];
+    Registry* storage{nullptr};
     SystemConditions conditions{};
     SystemPhase currentPhase{SystemPhase::PreUpdate};
     size_t cursor{};

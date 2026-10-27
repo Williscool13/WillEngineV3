@@ -36,7 +36,7 @@
 
 namespace Engine
 {
-static bool AuthoredMaterialExists(const Engine::Registry& registry, const MaterialManager* materialManager, entt::entity entity, MaterialID material)
+static bool AuthoredMaterialExists(const Engine::SystemRegistry& registry, const MaterialManager* materialManager, entt::entity entity, MaterialID material)
 {
     if (!material.IsValid()) { return false; }
     if (materialManager->DoesMutableMaterialExist(material)) { return true; }
@@ -145,7 +145,7 @@ void DisconnectRenderObservers(Engine::Registry& registry)
     registry.DisconnectDestroy<Component::SkyboxRuntime, &Component::SkyboxRuntime::OnDestroy>();
 }
 
-void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->assetLoad.pendingHotReloadModelIds.IsEmpty()) { return; }
 
@@ -165,15 +165,15 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    for (auto [entity, smc] : state->registry.View<Engine::Mut<Component::StaticMeshComponent>>().each()) {
-        if (!state->registry.Has<Component::MeshRuntime>(entity)) { continue; }
+    for (auto [entity, smc] : registry.View<Engine::Mut<Component::StaticMeshComponent>>().each()) {
+        if (!registry.Has<Component::MeshRuntime>(entity)) { continue; }
         if (!isHot(smc.modelId)) { continue; }
-        Component::UnloadStaticMesh(state->registry, entity);
-        Component::LoadStaticMesh(smc, state->registry, entity);
+        Component::UnloadStaticMesh(registry, entity);
+        Component::LoadStaticMesh(smc, registry, entity);
     }
 
     // Physics holds its own model ref (its serialized key, loaded independently), so it must also release + re-arm or the model can never drain.
-    for (auto [entity, bodyDesc, runtime] : state->registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>>().each()) {
+    for (auto [entity, bodyDesc, runtime] : registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>>().each()) {
         bool affected = false;
         for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
             const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
@@ -185,16 +185,16 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (!affected) { continue; }
 
-        state->registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
-        state->registry.Set<Component::PhysicsMeshRequest>(entity);
-        state->registry.Set<Component::PhysicsShapeCreationRequest>(entity);
-        state->registry.Set<Component::PhysicsBodyCreationRequest>(entity);
+        registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
+        registry.Set<Component::PhysicsMeshRequest>(entity);
+        registry.Set<Component::PhysicsShapeCreationRequest>(entity);
+        registry.Set<Component::PhysicsBodyCreationRequest>(entity);
     }
 
     state->assetLoad.pendingHotReloadModelIds.Clear();
 }
 
-void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
+void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->assetLoad.pendingHotReloadFontIds.IsEmpty()) { return; }
 
@@ -221,19 +221,19 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    for (auto [entity, textComp, runtime] : state->registry.View<Engine::Mut<Component::TextComponent>, Component::TextRuntime>().each()) {
+    for (auto [entity, textComp, runtime] : registry.View<Engine::Mut<Component::TextComponent>, Component::TextRuntime>().each()) {
         if (!isHot(textComp.fontId)) { continue; }
-        Component::UnloadTextComponent(textComp, state->registry, entity);
-        Component::LoadTextComponent(textComp, state->registry, entity);
+        Component::UnloadTextComponent(textComp, registry, entity);
+        Component::LoadTextComponent(textComp, registry, entity);
     }
-    for (auto [entity, text3DComp] : state->registry.View<Engine::Mut<Component::Text3DComponent>>().each()) {
+    for (auto [entity, text3DComp] : registry.View<Engine::Mut<Component::Text3DComponent>>().each()) {
         if (!isHot(text3DComp.fontId)) { continue; }
-        Component::UnloadText3DFont(state->registry, entity);
-        Component::LoadText3DFont(text3DComp, state->registry, entity);
+        Component::UnloadText3DFont(registry, entity);
+        Component::LoadText3DFont(text3DComp, registry, entity);
     }
 
     // A Text3D physics collider holds its own ref to the generated mesh (keyed on the font), so it must release + re-arm too or that mesh can never drain.
-    for (auto [entity, bodyDesc, runtime] : state->registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>>().each()) {
+    for (auto [entity, bodyDesc, runtime] : registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>>().each()) {
         bool affected = false;
         for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
             const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
@@ -245,16 +245,16 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (!affected) { continue; }
 
-        state->registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
-        state->registry.Set<Component::PhysicsMeshRequest>(entity);
-        state->registry.Set<Component::PhysicsShapeCreationRequest>(entity);
-        state->registry.Set<Component::PhysicsBodyCreationRequest>(entity);
+        registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
+        registry.Set<Component::PhysicsMeshRequest>(entity);
+        registry.Set<Component::PhysicsShapeCreationRequest>(entity);
+        registry.Set<Component::PhysicsBodyCreationRequest>(entity);
     }
 
     state->assetLoad.pendingHotReloadFontIds.Clear();
 }
 
-void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
+void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->assetLoad.pendingHotReloadTextureIds.IsEmpty()) { return; }
 
@@ -267,7 +267,7 @@ void TextureHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->assetLoad.pendingHotReloadTextureIds.Clear();
 }
 
-void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
+void CubemapHotReload(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->assetLoad.pendingHotReloadEnvironmentMapIds.IsEmpty()) { return; }
 
@@ -286,6 +286,17 @@ static void StageModel(Engine::EngineContext* ctx, Component::MeshRuntime& runti
     runtime.pendingModelHandle = Engine::StaticModelHandle::INVALID;
     if (runtime.modelHandle.IsValid()) { runtime.pendingModelHandle = handle; }
     else { runtime.modelHandle = handle; }
+}
+
+static void StageModel(Engine::EngineContext* ctx, Engine::SystemRegistry& registry, entt::entity entity, Engine::StaticModelHandle handle)
+{
+    if (auto* existing = registry.TryGetMut<Component::MeshRuntime>(entity)) {
+        StageModel(ctx, *existing, handle);
+        return;
+    }
+    Component::MeshRuntime runtime{};
+    StageModel(ctx, runtime, handle);
+    registry.Set<Component::MeshRuntime>(entity, runtime);
 }
 
 static Engine::StaticModelHandle TargetModel(const Component::MeshRuntime& runtime)
@@ -309,9 +320,9 @@ static void PromotePendingModel(Engine::EngineContext* ctx, Component::MeshRunti
     runtime.pendingModelHandle = Engine::StaticModelHandle::INVALID;
 }
 
-void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>();
+    auto view = registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -321,18 +332,18 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadModel(meshComponent.modelId);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, registry, entity, handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::StaticMeshLoadRequest>(entity);
-        state->registry.Set<Component::StaticMeshLoadingFlag>(entity);
+        registry.Remove<Component::StaticMeshLoadRequest>(entity);
+        registry.Set<Component::StaticMeshLoadingFlag>(entity);
     }
 }
 
-void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>, Component::ReflectionProbeLoadRequest>();
+    auto view = registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>, Component::ReflectionProbeLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -349,18 +360,18 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
         }
         else {
             runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            state->registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
+            registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
             continue;
         }
         if (runtime.contentHandle.IsValid()) { started.PushBack(entity); }
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
-        state->registry.Set<Component::ReflectionProbeLoadingFlag>(entity);
+        registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
+        registry.Set<Component::ReflectionProbeLoadingFlag>(entity);
     }
 }
 
-void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     struct ClaimedProbeId
     {
@@ -368,7 +379,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         entt::entity owner;
     };
     Core::InlineVector<ClaimedProbeId, 64> claimedProbeIds{};
-    for (auto [entity, probe, runtime] : state->registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
+    for (auto [entity, probe, runtime] : registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
         if (runtime.contentSource != Component::ReflectionProbeComponent::ContentSource::Baked || probe.probeId == 0) { continue; }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -379,7 +390,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         }
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
-    for (auto [entity, probe, runtime] : state->registry.View<Engine::Mut<Component::ReflectionProbeComponent>, Engine::Mut<Component::ReflectionProbeRuntime>>().each()) {
+    for (auto [entity, probe, runtime] : registry.View<Engine::Mut<Component::ReflectionProbeComponent>, Engine::Mut<Component::ReflectionProbeRuntime>>().each()) {
         bool bCollision = probe.probeId == 0;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
             if (claimed.id == probe.probeId) {
@@ -406,8 +417,8 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
                 runtime.contentHandle = Engine::CubemapHandle::INVALID;
             }
             runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            state->registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
-            state->registry.Set<Component::ReflectionProbeLoadRequest>(entity);
+            registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
+            registry.Set<Component::ReflectionProbeLoadRequest>(entity);
         }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -419,21 +430,21 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
 
-    for (auto [entity, probe, runtime] : state->registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>>().each()) {
+    for (auto [entity, probe, runtime] : registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>>().each()) {
         if (runtime.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) { continue; }
         if (!ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) { continue; }
         if (runtime.contentHandle.IsValid()) {
             ctx->assetManager->UnloadCubemap(runtime.contentHandle);
             runtime.contentHandle = Engine::CubemapHandle::INVALID;
         }
-        state->registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
-        state->registry.Set<Component::ReflectionProbeLoadRequest>(entity);
+        registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
+        registry.Set<Component::ReflectionProbeLoadRequest>(entity);
     }
 }
 
-void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadingFlag>();
+    auto view = registry.View<Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadingFlag>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -449,17 +460,17 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
         resolved.PushBack(entity);
     }
     for (const entt::entity entity : resolved) {
-        state->registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
+        registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
     }
 }
 
-static bool HasEmissiveLightFlag(const Engine::Registry& registry, entt::entity entity)
+static bool HasEmissiveLightFlag(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto* renderFlags = registry.TryGet<Component::RenderFlagsComponent>(entity);
     return renderFlags && renderFlags->bEmissiveLight;
 }
 
-static bool IsBakeStatic(const Engine::Registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
+static bool IsBakeStatic(const Engine::SystemRegistry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
     const auto* transform = registry.TryGet<Component::TransformComponent>(entity);
     if (!transform || transform->mobility != Component::Mobility::Static || registry.Has<Component::DynamicPhysicsBodyRuntime>(entity)) { return false; }
@@ -467,7 +478,7 @@ static bool IsBakeStatic(const Engine::Registry& registry, entt::entity entity, 
     return body == nullptr || body->motionType == Component::PhysicsMotionType::Static;
 }
 
-static uint32_t InstanceFlagsFrom(const Engine::Registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
+static uint32_t InstanceFlagsFrom(const Engine::SystemRegistry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
     return (renderFlags.bMotionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u)
            | (renderFlags.bAlphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
@@ -476,36 +487,36 @@ static uint32_t InstanceFlagsFrom(const Engine::Registry& registry, entt::entity
            | (IsBakeStatic(registry, entity, renderFlags) ? INSTANCE_FLAG_BAKE_STATIC : 0u);
 }
 
-void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity)
+void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity, Engine::SystemRegistry& registry)
 {
-    auto* runtime = state->registry.TryGet<Component::MeshRuntime>(entity);
-    const auto* renderFlags = state->registry.TryGet<Component::RenderFlagsComponent>(entity);
+    auto* runtime = registry.TryGet<Component::MeshRuntime>(entity);
+    const auto* renderFlags = registry.TryGet<Component::RenderFlagsComponent>(entity);
     if (!runtime || !renderFlags) { return; }
 
     if (!runtime->range.IsValid()) { return; }
 
-    const bool bVisible = renderFlags->bVisible &&!state->registry.Has<Component::ProbeBakeHiddenFlag>(entity);
-    const uint32_t flags = InstanceFlagsFrom(state->registry, entity, *renderFlags);
+    const bool bVisible = renderFlags->bVisible &&!registry.Has<Component::ProbeBakeHiddenFlag>(entity);
+    const uint32_t flags = InstanceFlagsFrom(registry, entity, *renderFlags);
 
     const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
     if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime->stableId) { return; }
     state->instanceStore.SetRenderState(runtime->range, bVisible, flags, runtime->stableId);
 }
 
-void EvaluateAllInstanceRenderStates(Engine::EngineState* state)
+void EvaluateAllInstanceRenderStates(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     Engine::InstanceStore& store = state->instanceStore;
-    const bool bAnyHideTags = state->registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
+    const bool bAnyHideTags = registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
 
-    for (auto [entity, renderFlags, runtime] : state->registry.View<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
+    for (auto [entity, renderFlags, runtime] : registry.View<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
 
         bool bVisible = renderFlags.bVisible;
         if (bVisible && bAnyHideTags) {
-            bVisible = !state->registry.Has<Component::ProbeBakeHiddenFlag>(entity);
+            bVisible = !registry.Has<Component::ProbeBakeHiddenFlag>(entity);
         }
-        const uint32_t flags = InstanceFlagsFrom(state->registry, entity, renderFlags);
+        const uint32_t flags = InstanceFlagsFrom(registry, entity, renderFlags);
 
         const Engine::InstanceSource& src = store[runtime.range.offset];
         if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime.stableId) { continue; }
@@ -527,9 +538,9 @@ static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& node
     return m;
 }
 
-void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::LightSurfaceRequest>();
+    auto view = registry.View<Component::LightSurfaceRequest>();
     if (view.size() == 0) { return; }
 
     const Engine::Material* defaultMaterial = ctx->materialManager->GetMaterial(ctx->materialManager->GetDefaultMaterialID());
@@ -539,8 +550,8 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const entt::entity entity : view) {
         if (resolved.Size() >= budget) { break; }
-        const auto* areaLight = state->registry.TryGet<Component::AreaLightComponent>(entity);
-        const auto* sphereLight = state->registry.TryGet<Component::SphereLightComponent>(entity);
+        const auto* areaLight = registry.TryGet<Component::AreaLightComponent>(entity);
+        const auto* sphereLight = registry.TryGet<Component::SphereLightComponent>(entity);
         if (!areaLight && !sphereLight) {
             resolved.PushBack(entity);
             continue;
@@ -558,12 +569,12 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         const Engine::MaterialID materialID = ctx->materialManager->CreateSynthesizedMaterial(emissive);
 
         glm::mat4 m(1.0f);
-        if (state->registry.Has<Component::TransformComponent>(entity)) {
-            const Transform world = Component::ComputeWorldTransform(state->registry, entity);
+        if (registry.Has<Component::TransformComponent>(entity)) {
+            const Transform world = Component::ComputeWorldTransform(registry, entity);
             m = areaLight ? Component::ComputeAreaLightQuadMatrix(world, *areaLight) : Component::ComputeSphereLightMatrix(world, *sphereLight);
         }
 
-        state->registry.Remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
+        registry.Remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
         Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
         if (!modelRange.IsValid()) {
             resolved.PushBack(entity);
@@ -576,19 +587,19 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
             continue;
         }
         state->modelStore.SetModel(modelRange.offset, {m, m});
-        state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(state->registry, entity));
-        state->registry.Add<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
+        state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(registry, entity));
+        registry.Set<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
         resolved.PushBack(entity);
     }
 
     for (const entt::entity entity : resolved) {
-        state->registry.Remove<Component::LightSurfaceRequest>(entity);
+        registry.Remove<Component::LightSurfaceRequest>(entity);
     }
 }
 
-void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>();
+    auto view = registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -599,7 +610,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
+        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
@@ -626,7 +637,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
         Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
 
-        const auto* overrides = state->registry.TryGet<Component::StaticMeshOverridesComponent>(entity);
+        const auto* overrides = registry.TryGet<Component::StaticMeshOverridesComponent>(entity);
 
         auto included = [&](uint32_t ordinal) -> bool {
             return !overrides || !overrides->primitiveBlacklist.Contains(ordinal);
@@ -692,7 +703,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
             return mat;
         };
 
-        const bool bEmissiveLight = HasEmissiveLightFlag(state->registry, entity);
+        const bool bEmissiveLight = HasEmissiveLightFlag(registry, entity);
         uint32_t writeIndex = range.offset;
         uint32_t ordinal = 0;
         uint32_t nodeModelSlot = modelRange.offset - 1;
@@ -721,7 +732,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
                 }
                 else {
                     Engine::MaterialID materialOverride = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(primitive.materialIndex)) : Engine::MaterialID::INVALID;
-                    if (AuthoredMaterialExists(state->registry, materialManager, entity, materialOverride)) {
+                    if (AuthoredMaterialExists(registry, materialManager, entity, materialOverride)) {
                         matID = materialOverride;
                     }
                     else {
@@ -744,8 +755,8 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         runtime->range = range;
         runtime->modelRange = modelRange;
-        EvaluateInstanceRenderState(state, entity);
-        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+        EvaluateInstanceRenderState(state, entity, registry);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
         resolved.PushBack(entity);
     }
 
@@ -759,13 +770,13 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::StaticMeshLoadingFlag>(entity);
+        registry.Remove<Component::StaticMeshLoadingFlag>(entity);
     }
 }
 
-void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>();
+    auto view = registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -775,18 +786,18 @@ void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::Engin
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadModel(meshComponent.modelId);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, registry, entity, handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
-        state->registry.Set<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        registry.Remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
+        registry.Set<Component::StaticMeshPrimitiveLoadingFlag>(entity);
     }
 }
 
-void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>();
+    auto view = registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) { return; }
 
@@ -794,7 +805,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
+        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
@@ -851,7 +862,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         };
 
         Engine::MaterialID matID;
-        if (AuthoredMaterialExists(state->registry, materialManager, entity, meshComponent.materialOverride)) {
+        if (AuthoredMaterialExists(registry, materialManager, entity, meshComponent.materialOverride)) {
             matID = meshComponent.materialOverride;
         }
         else if (targetPrim->materialIndex == -1) {
@@ -881,24 +892,24 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
                             .materialSlot = targetPrim->materialIndex,
                             .sourceNodeIndex = targetNode,
                             .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
-                            .bEmissiveLight = HasEmissiveLightFlag(state->registry, entity),
+                            .bEmissiveLight = HasEmissiveLightFlag(registry, entity),
                         });
         runtime->range = range;
         runtime->modelRange = modelRange;
-        EvaluateInstanceRenderState(state, entity);
-        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+        EvaluateInstanceRenderState(state, entity, registry);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
     }
 }
 
-void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>();
+    auto view = registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -907,18 +918,18 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
         if (started.Size() >= budget) { break; }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadProceduralModel(meshComponent.params, meshComponent.repeat);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, registry, entity, handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::ProceduralMeshLoadRequest>(entity);
-        state->registry.Set<Component::ProceduralMeshLoadingFlag>(entity);
+        registry.Remove<Component::ProceduralMeshLoadRequest>(entity);
+        registry.Set<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
-void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>();
+    auto view = registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -930,7 +941,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
+        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
@@ -952,15 +963,15 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
-        if (AuthoredMaterialExists(state->registry, ctx->materialManager, entity, meshComponent.material)) {
+        if (AuthoredMaterialExists(registry, ctx->materialManager, entity, meshComponent.material)) {
             matID = meshComponent.material;
         }
         releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
-            EvaluateInstanceRenderState(state, entity);
-            state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+            EvaluateInstanceRenderState(state, entity, registry);
+            registry.Set<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
@@ -976,7 +987,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::ProceduralMeshLoadingFlag>(entity);
+        registry.Remove<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
@@ -1026,9 +1037,9 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
     runtime->modelRange = modelRange;
 }
 
-void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>();
+    auto view = registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1038,18 +1049,18 @@ void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         if (meshComponent.params.parts.IsEmpty()) { continue; }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadModuleModel(meshComponent.params);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, registry, entity, handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::ModuleMeshLoadRequest>(entity);
-        state->registry.Set<Component::ModuleMeshLoadingFlag>(entity);
+        registry.Remove<Component::ModuleMeshLoadRequest>(entity);
+        registry.Set<Component::ModuleMeshLoadingFlag>(entity);
     }
 }
 
-void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>();
+    auto view = registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1058,7 +1069,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
+        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
@@ -1078,15 +1089,15 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
         PromotePendingModel(ctx, *runtime);
 
-        FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
-        EvaluateInstanceRenderState(state, entity);
-        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+        FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(registry, entity));
+        EvaluateInstanceRenderState(state, entity, registry);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::ModuleMeshLoadingFlag>(entity);
+        registry.Remove<Component::ModuleMeshLoadingFlag>(entity);
     }
 }
 
@@ -1096,9 +1107,9 @@ static bool SplineHasGeometry(const Engine::SplineParams& params)
     return !params.railing.bEnabled || !params.railing.lanes.IsEmpty() || params.railing.bPosts;
 }
 
-void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>();
+    auto view = registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1113,22 +1124,22 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadSplineModel(params);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, registry, entity, handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::SplineMeshLoadRequest>(entity);
-        state->registry.Set<Component::SplineMeshLoadingFlag>(entity);
+        registry.Remove<Component::SplineMeshLoadRequest>(entity);
+        registry.Set<Component::SplineMeshLoadingFlag>(entity);
     }
     for (const entt::entity entity : emptied) {
-        state->registry.Remove<Component::SplineMeshLoadRequest>(entity);
-        state->registry.Remove<Component::MeshRuntime>(entity);
+        registry.Remove<Component::SplineMeshLoadRequest>(entity);
+        registry.Remove<Component::MeshRuntime>(entity);
     }
 }
 
-void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>();
+    auto view = registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1137,7 +1148,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
+        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
@@ -1158,28 +1169,28 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
-        if (AuthoredMaterialExists(state->registry, ctx->materialManager, entity, meshComponent.material)) {
+        if (AuthoredMaterialExists(registry, ctx->materialManager, entity, meshComponent.material)) {
             matID = meshComponent.material;
         }
         releaseExisting();
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
-            EvaluateInstanceRenderState(state, entity);
-            state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+            EvaluateInstanceRenderState(state, entity, registry);
+            registry.Set<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::SplineMeshLoadingFlag>(entity);
+        registry.Remove<Component::SplineMeshLoadingFlag>(entity);
     }
 }
 
-void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::Text3DComponent, Component::Text3DGenerateRequest>();
+    auto view = registry.View<Component::Text3DComponent, Component::Text3DGenerateRequest>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1195,22 +1206,22 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
             ? ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius)
             : Engine::StaticModelHandle::INVALID;
         if (handle.IsValid()) {
-            StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
-            state->registry.Set<Component::Text3DLoadingFlag>(entity);
+            StageModel(ctx, registry, entity, handle);
+            registry.Set<Component::Text3DLoadingFlag>(entity);
         }
         else {
-            state->registry.Remove<Component::MeshRuntime>(entity);
+            registry.Remove<Component::MeshRuntime>(entity);
         }
         done.PushBack(entity);
     }
     for (const entt::entity entity : done) {
-        state->registry.Remove<Component::Text3DGenerateRequest>(entity);
+        registry.Remove<Component::Text3DGenerateRequest>(entity);
     }
 }
 
-void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::Text3DComponent, Component::Text3DLoadingFlag>();
+    auto view = registry.View<Component::Text3DComponent, Component::Text3DLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1219,7 +1230,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, textComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
+        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         if (!TargetModel(*runtime).IsValid()) {
@@ -1248,29 +1259,29 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         PromotePendingModel(ctx, *runtime);
 
         Engine::MaterialID matID = ctx->materialManager->GetDefaultMaterialID();
-        if (AuthoredMaterialExists(state->registry, ctx->materialManager, entity, textComponent.material)) {
+        if (AuthoredMaterialExists(registry, ctx->materialManager, entity, textComponent.material)) {
             matID = textComponent.material;
         }
         state->instanceStore.ReleaseAndFree(ctx->materialManager,runtime->range);
         state->modelStore.Free(runtime->modelRange);
         runtime->modelRange = state->modelStore.Allocate(1);
         if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
-            EvaluateInstanceRenderState(state, entity);
-            state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+            runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+            EvaluateInstanceRenderState(state, entity, registry);
+            registry.Set<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::Text3DLoadingFlag>(entity);
+        registry.Remove<Component::Text3DLoadingFlag>(entity);
     }
 }
 
-void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = state->registry.View<Component::TextComponent, Engine::Mut<Component::TextRuntime>, Component::TextFontRequest>();
+    auto view = registry.View<Component::TextComponent, Engine::Mut<Component::TextRuntime>, Component::TextFontRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1296,7 +1307,7 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::TextFontRequest>(entity);
+        registry.Remove<Component::TextFontRequest>(entity);
     }
 }
 } // Engine

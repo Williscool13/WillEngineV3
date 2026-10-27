@@ -12,15 +12,20 @@ namespace Engine::Component
 {
 struct CameraRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "CameraRuntime";
     Core::ViewData currentViewData;
     Core::ViewData previousViewData;
 };
 
 struct GameCameraTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "GameCameraTag";
+};
 
 struct EditorCameraTag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "EditorCameraTag";
+};
 
 struct FreeCameraComponent
 {

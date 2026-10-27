@@ -33,10 +33,9 @@ struct Sleeper
     float since;
 };
 
-void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state)
+void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    Engine::Registry& registry = state->registry;
     auto cullers = registry.View<Component::CullerComponent>();
     if (cullers.size() == 0) { return; }
     const entt::entity cullerEntity = cullers.front();
@@ -61,7 +60,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state)
         const size_t excess = sleepers.Size() - budget;
         std::nth_element(sleepers.begin(), sleepers.begin() + excess, sleepers.end(), [](const Sleeper& a, const Sleeper& b) { return a.since < b.since; });
         for (size_t i = 0; i < excess; ++i) {
-            StartDissolving(state, sleepers[i].entity, 0.0f, culler.cullSeconds, 0.0f, 0.0f);
+            StartDissolving(state, sleepers[i].entity, 0.0f, culler.cullSeconds, 0.0f, registry, 0.0f);
         }
         WLOG_DEBUG(Culler, "Culled {} sleeping shards ({} asleep, budget {})", excess, sleepers.Size(), budget);
     }
@@ -88,7 +87,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
     for (const entt::entity entity : lost) {
-        StartDissolving(state, entity, 0.0f, culler.cullSeconds, 0.0f, 0.0f);
+        StartDissolving(state, entity, 0.0f, culler.cullSeconds, 0.0f, registry, 0.0f);
     }
 }
 } // Ballance

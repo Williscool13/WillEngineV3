@@ -9,12 +9,12 @@
 
 namespace Engine::Component
 {
-void StableIdComponent::OnUpdate(Engine::Registry& registry, entt::entity entity)
+void StableIdComponent::OnUpdate(Engine::SystemRegistry& registry, entt::entity entity)
 {
     assert(false && "StableIdComponent should never be updated");
 }
 
-void StableIdComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void StableIdComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<StableIdComponent>(entity);
     auto* state = registry.State();
@@ -26,7 +26,7 @@ void StableIdComponent::OnConstruct(Engine::Registry& registry, entt::entity ent
 }
 
 
-void StableIdComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void StableIdComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& comp = registry.Get<StableIdComponent>(entity);
     auto* state = registry.State();

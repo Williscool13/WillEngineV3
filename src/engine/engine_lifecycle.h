@@ -12,10 +12,11 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 
 inline constexpr Args::ArgDesc ARG_SCENE = Args::StringArg("scene", "", "load this scene (the .wscene stem) instead of the .wplay header's scene or projectConfig.defaultScene");
 
-void CreateCameras(EngineState* state, Vec3 editorPos, Quat editorRot);
+void CreateCameras(EngineState* state, Vec3 editorPos, Quat editorRot, SystemRegistry& registry);
 
 void CreateDefaultCameras(EngineState* state);
 

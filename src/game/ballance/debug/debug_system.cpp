@@ -21,7 +21,7 @@
 
 namespace Ballance
 {
-void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->input.GetActionState(Game::Actions::ACTION_DEBUG_PLAY_MUSIC).pressed) {
         auto musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
@@ -37,39 +37,41 @@ void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    state->registry.Clear<Component::AntiGravityTag>();
+    for (const entt::entity entity : registry.View<Component::AntiGravityTag>()) {
+        registry.Remove<Component::AntiGravityTag>(entity);
+    }
 
     for (const auto& event : state->physics.resolvedAddedEvents) {
         entt::entity e1 = event.e1;
         entt::entity e2 = event.e2;
         if (e1 == entt::null || e2 == entt::null) continue;
 
-        if (state->registry.Has<Component::FloorTag>(e2))
-            state->registry.Set<Component::AntiGravityTag>(e1);
-        else if (state->registry.Has<Component::FloorTag>(e1))
-            state->registry.Set<Component::AntiGravityTag>(e2);
+        if (registry.Has<Component::FloorTag>(e2))
+            registry.Set<Component::AntiGravityTag>(e1);
+        else if (registry.Has<Component::FloorTag>(e1))
+            registry.Set<Component::AntiGravityTag>(e2);
     }
 
 
 }
 
-void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto view = state->registry.View<Component::AntiGravityTag, Component::PhysicsBodyRuntime>();
+    auto view = registry.View<Component::AntiGravityTag, Component::PhysicsBodyRuntime>();
     for (const auto& [entity, body] : view.each()) {
         ctx->physicsWorld->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
     }
 }
 
 #ifdef WDEBUG
-void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     auto& vf = frameBuffer->mainViewFamily;
-    auto view = state->registry.View<Component::DebugGizmoComponent, Component::TransformComponent>();
+    auto view = registry.View<Component::DebugGizmoComponent, Component::TransformComponent>();
     for (auto entity : view) {
         auto& gizmo = view.get<Component::DebugGizmoComponent>(entity);
         auto& transform = view.get<Component::TransformComponent>(entity);

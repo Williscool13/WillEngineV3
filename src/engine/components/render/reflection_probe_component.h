@@ -71,18 +71,18 @@ struct ReflectionProbeComponent
         WILL_FIELD(standInEnvMap),
         WILL_FIELD(standInIntensity, .min = 0.0f, .max = 1.0e9f))
 
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
     /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
     static bool IsBakeStale(const WorldTransformRuntime& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void DeferredConstruct(Engine::Registry& registry, entt::entity entity);
+    static void DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** Emplaced by the probe's OnConstruct. contentHandle is the resident cubemap for the current content, recorded on load kickoff. */
@@ -92,7 +92,7 @@ struct ReflectionProbeRuntime
     Engine::CubemapHandle contentHandle{Engine::CubemapHandle::INVALID};
     ReflectionProbeComponent::ContentSource contentSource{ReflectionProbeComponent::ContentSource::None};
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** Queues the probe for a bake; the probe bake system consumes it. */
@@ -101,11 +101,15 @@ struct ReflectionProbeBakeRequest
 
 /** Stand-in cubemap load requested; ReflectionProbePendingKickoff kicks the cubemap load. */
 struct ReflectionProbeLoadRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ReflectionProbeLoadRequest";
+};
 
 /** Cubemap load in flight; ReflectionProbeLoadResolve records the resident handle once it finishes. */
 struct ReflectionProbeLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ReflectionProbeLoadingFlag";
+};
 
 /** Transient bake-time hide: tagged entities drop out of raster, TLAS, and light gather for the capture. */
 struct ProbeBakeHiddenFlag
@@ -115,7 +119,9 @@ struct ProbeBakeHiddenFlag
 
 /** Transient bake-time hide of the emissive proxy surface only. Light still contributes to GI, but not to DI in probe bake.*/
 struct ProbeBakeProxyHiddenFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "ProbeBakeProxyHiddenFlag";
+};
 }
 
 #endif //WILL_ENGINE_REFLECTION_PROBE_COMPONENT_H

@@ -22,29 +22,30 @@ namespace Engine
 {
 static constexpr Vec3 DEFAULT_CAMERA_POS{0.0f, 3.0f, 5.0f};
 
-void CreateCameras(EngineState* state, Vec3 editorPos, Quat editorRot)
+void CreateCameras(EngineState* state, Vec3 editorPos, Quat editorRot, SystemRegistry& registry)
 {
-    const entt::entity editorCamera = state->registry.Create();
-    state->registry.Add<Component::FreeCameraComponent>(editorCamera);
-    state->registry.Add<Component::CameraRuntime>(editorCamera);
-    state->registry.Add<Component::EditorCameraTag>(editorCamera);
-    auto& editorCameraTransform = state->registry.Add<Component::TransformComponent>(editorCamera);
+    const entt::entity editorCamera = registry.Create();
+    registry.Add<Component::FreeCameraComponent>(editorCamera);
+    registry.Add<Component::CameraRuntime>(editorCamera);
+    registry.Add<Component::EditorCameraTag>(editorCamera);
+    auto& editorCameraTransform = registry.Add<Component::TransformComponent>(editorCamera);
     editorCameraTransform.translation = editorPos;
     editorCameraTransform.rotation = editorRot;
 
-    const entt::entity gameCamera = state->registry.Create();
-    state->registry.Add<Component::FreeCameraComponent>(gameCamera);
-    state->registry.Add<Component::CameraRuntime>(gameCamera);
-    state->registry.Add<Component::GameCameraTag>(gameCamera);
-    auto& gameCameraTransform = state->registry.Add<Component::TransformComponent>(gameCamera);
+    const entt::entity gameCamera = registry.Create();
+    registry.Add<Component::FreeCameraComponent>(gameCamera);
+    registry.Add<Component::CameraRuntime>(gameCamera);
+    registry.Add<Component::GameCameraTag>(gameCamera);
+    auto& gameCameraTransform = registry.Add<Component::TransformComponent>(gameCamera);
     gameCameraTransform.translation = DEFAULT_CAMERA_POS;
     gameCameraTransform.rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f) - DEFAULT_CAMERA_POS), WORLD_UP);
 }
 
 void CreateDefaultCameras(EngineState* state)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/CreateDefaultCameras"};
     const Quat rot = glm::quatLookAt(glm::normalize(glm::vec3(0.0f) - DEFAULT_CAMERA_POS), WORLD_UP);
-    CreateCameras(state, DEFAULT_CAMERA_POS, rot);
+    CreateCameras(state, DEFAULT_CAMERA_POS, rot, registry);
 }
 
 struct UIFontContext
@@ -106,7 +107,8 @@ void LoadStartupScene(EngineContext* ctx, EngineState* state)
         }
         return;
     }
-    const auto res = LoadSceneFromFile(state, ctx->assetManager, startupScene);
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/LoadStartupScene"};
+    const auto res = LoadSceneFromFile(state, ctx->assetManager, startupScene, registry);
     if (res.bSuccess) {
         state->scene.currentSceneId = res.sceneId;
         state->scene.currentSceneName = res.sceneName;
@@ -115,40 +117,42 @@ void LoadStartupScene(EngineContext* ctx, EngineState* state)
 
 void HotReloadSave(EngineContext* ctx, EngineState* state)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/HotReloadSave"};
     if (IsPlaying(state)) {
-        PlayStop(ctx, state);
+        PlayStop(ctx, state, registry);
     }
-    SimulateStop(ctx, state);
+    SimulateStop(ctx, state, registry);
 
     {
-        auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
+        auto camView = registry.View<Component::EditorCameraTag, Component::TransformComponent>();
         const auto camEntity = camView.front();
         if (camEntity != entt::null) {
-            const auto& transform = state->registry.Get<Component::TransformComponent>(camEntity);
+            const auto& transform = registry.Get<Component::TransformComponent>(camEntity);
             state->editor.pieCameraTranslation = transform.translation;
             state->editor.pieCameraRotation = transform.rotation;
         }
     }
 
-    state->editor.hotReloadSnapshot = SerializeAll(state->componentRegistry, state->registry, ctx->assetManager, state->editor.loadedScenes);
+    state->editor.hotReloadSnapshot = SerializeAll(state->componentRegistry, registry, ctx->assetManager, state->editor.loadedScenes);
     Core::InlineVector<StringID, 8> scenesToUnload;
     for (RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);
     }
-    UnloadScenes(state, scenesToUnload);
+    UnloadScenes(state, scenesToUnload, registry);
     LOG_INFO(Engine, "Hot reload: snapshot saved ({} scene(s))", state->editor.hotReloadSnapshot.Size());
 
-    state->registry.ClearAll();
-    PlaybackCommands(ctx, state);
+    registry.ClearAll();
+    PlaybackCommands(ctx, state, registry);
 }
 
 void HotReloadRestore(EngineContext* ctx, EngineState* state)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/HotReloadRestore"};
     state->editor.undo.Clear();
-    CreateCameras(state, state->editor.pieCameraTranslation, state->editor.pieCameraRotation);
+    CreateCameras(state, state->editor.pieCameraTranslation, state->editor.pieCameraRotation, registry);
 
     if (!state->editor.hotReloadSnapshot.IsEmpty()) {
-        DeserializeAll(state, state->editor.hotReloadSnapshot);
+        DeserializeAll(state, state->editor.hotReloadSnapshot, registry);
         state->editor.hotReloadSnapshot.Clear();
         LOG_INFO(Engine, "Hot reload: snapshot restored");
     }

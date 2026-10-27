@@ -16,6 +16,7 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Engine::Args
@@ -101,7 +102,7 @@ const char* GetString(const LaunchArgs& args, const ArgDesc& desc);
 uint32_t GetAll(const LaunchArgs& args, const ArgDesc& desc, Core::Span<const char*> out);
 
 /** Runs every --exec once, the first frame the startup scene has settled. */
-void RunLaunchExec(EngineContext* ctx, EngineState* state);
+void RunLaunchExec(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
 }
 
 #endif //WILL_ENGINE_LAUNCH_ARGS_H

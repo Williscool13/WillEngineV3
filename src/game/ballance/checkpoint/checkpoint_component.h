@@ -34,7 +34,7 @@ struct CheckpointComponent
         WILL_FIELD(spawnOffset, .speed = 0.1f),
         WILL_FIELD(spawnRotation, .speed = 0.5f))
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }

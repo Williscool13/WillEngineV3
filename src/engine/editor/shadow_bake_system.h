@@ -36,13 +36,13 @@ struct ShadowBakeSystem
 
     void Enqueue(entt::entity light);
 
-    void EnqueueAll(Engine::Registry& registry);
+    void EnqueueAll(Engine::SystemRegistry& registry);
 
     void Cancel();
 
     [[nodiscard]] bool IsBusy() const { return requestId != 0 || !queue.IsEmpty(); }
 
-    void Tick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer);
+    void Tick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
 };
 
 ShadowBakeKey MakeShadowBakeKey(const LightInfo& light);
@@ -50,7 +50,7 @@ ShadowBakeKey MakeShadowBakeKey(const LightInfo& light);
 /** True when the light still matches the views its map was baked with. */
 bool IsShadowBakeCurrent(const ShadowBakeKey& baked, const LightInfo& light);
 
-void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer);
+void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
 } // Engine
 
 #endif //WILL_ENGINE_SHADOW_BAKE_SYSTEM_H

@@ -85,16 +85,16 @@ struct AreaLightComponent
 
     static void Sanitize(AreaLightComponent& comp);
 
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /**
@@ -140,13 +140,13 @@ struct SphereLightComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /**
@@ -162,22 +162,24 @@ LightInfo ComputeSphereLightInfo(const Transform& world, const SphereLightCompon
 /** Emplaced by the light's OnConstruct; the slot is allocated at command playback. bakedShadow is resident while the bake matches the light. */
 struct AreaLightRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "AreaLightRuntime";
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct SphereLightRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "SphereLightRuntime";
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** The analytic light slot of an area or sphere light, or INVALID_SLOT. */
-inline uint32_t FindLightSlot(const Engine::Registry& registry, entt::entity entity)
+inline uint32_t FindLightSlot(const Engine::SystemRegistry& registry, entt::entity entity)
 {
     if (const auto* area = registry.TryGet<AreaLightRuntime>(entity)) { return area->lightSlot; }
     if (const auto* sphere = registry.TryGet<SphereLightRuntime>(entity)) { return sphere->lightSlot; }
@@ -186,17 +188,20 @@ inline uint32_t FindLightSlot(const Engine::Registry& registry, entt::entity ent
 
 struct LightSurfaceRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "LightSurfaceRuntime";
     Engine::InstanceStore::Range range{};
     Engine::ModelStore::Range modelRange{};
     Engine::MaterialID materialID{};
     uint64_t stableId{StableIdComponent::NO_ID};
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct LightSurfaceRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "LightSurfaceRequest";
+};
 
 struct DirectionalLightComponent
 {
@@ -238,9 +243,9 @@ struct SkyboxComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** The refcounted cubemap of envMap, acquired lazily by ResolveSkyboxCubemaps. */
@@ -249,7 +254,7 @@ struct SkyboxRuntime
     static constexpr const char* COMPONENT_NAME = "SkyboxRuntime";
     Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /**

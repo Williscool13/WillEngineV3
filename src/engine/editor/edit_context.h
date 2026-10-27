@@ -42,10 +42,10 @@ bool ValuesEqual(const V& a, const V& b)
 class EditContext
 {
 public:
-    EditContext(EngineState* state, Core::Span<const entt::entity> targets);
+    EditContext(EngineState* state, Core::Span<const entt::entity> targets, Engine::SystemRegistry& registry);
 
     [[nodiscard]] entt::entity Primary() const { return targets[0]; }
-    [[nodiscard]] Engine::Registry& Registry() const;
+    [[nodiscard]] Engine::SystemRegistry& Registry() const;
     [[nodiscard]] EngineState* State() const { return state; }
     [[nodiscard]] Core::Span<const entt::entity> Targets() const { return targets; }
     [[nodiscard]] bool IsMulti() const { return targets.Size() > 1; }
@@ -56,7 +56,6 @@ public:
     template<typename C, typename Fn>
     void Preview(Fn&& fn)
     {
-        Engine::Registry& registry = Registry();
         BeginUndo(TypeSID<C>());
         for (uint32_t i = 0; i < targets.Size(); ++i) {
             const entt::entity e = targets[i];
@@ -80,7 +79,6 @@ public:
     template<typename C>
     void Commit()
     {
-        Engine::Registry& registry = Registry();
         if constexpr (HasOnEditCommit<C>) {
             for (const entt::entity e : targets) {
                 if (registry.Has<C>(e)) {
@@ -123,7 +121,6 @@ public:
     template<typename C, typename Fn>
     void ForEachTarget(Fn&& fn) const
     {
-        Engine::Registry& registry = Registry();
         for (const entt::entity e : targets) {
             if (registry.Has<C>(e)) {
                 fn(e);
@@ -134,7 +131,6 @@ public:
     template<typename C, typename V>
     [[nodiscard]] bool IsMixed(V C::* member) const
     {
-        Engine::Registry& registry = Registry();
         const C* first = registry.TryGet<C>(Primary());
         if (first == nullptr) { return false; }
         for (const entt::entity e : targets) {
@@ -150,6 +146,7 @@ private:
 
     EngineState* state{nullptr};
     Core::Span<const entt::entity> targets{};
+    Engine::SystemRegistry& registry;
 };
 }
 

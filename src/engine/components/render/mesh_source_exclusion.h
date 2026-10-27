@@ -23,7 +23,7 @@ template<typename... Ts>
 struct MeshSourceSet
 {
     template<typename Self>
-    static bool NoneOtherThan(const Engine::Registry& registry, entt::entity entity)
+    static bool NoneOtherThan(const Engine::SystemRegistry& registry, entt::entity entity)
     {
         static_assert((std::is_same_v<Ts, Self> || ...), "Self must be one of the mesh sources");
         return (... && (std::is_same_v<Ts, Self> || !registry.Has<Ts>(entity)));

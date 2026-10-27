@@ -588,7 +588,7 @@ static const char* EmissiveDispatchStateName(Engine::EmissiveDispatchState dispa
     return "?";
 }
 
-static void DrawEmissiveTriLightSection(Engine::EngineState* state)
+static void DrawEmissiveTriLightSection(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     Engine::EmissiveDebugState& emissive = state->debug.emissive;
     const uint32_t triLightCapacity = static_cast<uint32_t>(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS);
@@ -643,7 +643,7 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            const auto* nameComponent = state->registry.TryGet<Component::NameComponent>(entry.entity);
+            const auto* nameComponent = registry.TryGet<Component::NameComponent>(entry.entity);
             ImGui::TextUnformatted(nameComponent ? nameComponent->name.c_str() : "<unnamed>");
             ImGui::TableNextColumn();
             ImGui::Text("%u", entry.instanceSlot);
@@ -1249,7 +1249,7 @@ static void DrawLatchedMarker(bool bLatched)
     ImGui::TextDisabled("(latched)");
 }
 
-void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     static Engine::ReGIRCursorCell latchedReGIRCursor{};
     static Engine::WorldGridCursorCell latchedWorldGridCursor{};
@@ -1338,7 +1338,7 @@ void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* stat
         const bool bEmissiveAvailable = bReSTIRMode && restir.bEmissiveTriangleLights;
         const float emissiveRows = state->debug.emissive.bCapture ? 30.0f : 10.0f;
         if (BeginDiagnosticZone("Emissive Triangle Lights", &diagnostics.bEmissive, bEmissiveAvailable, "needs ReSTIR + Emissive Triangle Lights", emissiveRows)) {
-            DrawEmissiveTriLightSection(state);
+            DrawEmissiveTriLightSection(state, registry);
             EndDiagnosticZone();
         }
 
@@ -1530,11 +1530,11 @@ static void DrawReBLURParamsUI(bool& changed, Core::ReBLURParams& reblur, bool b
 static MobilityAssignResult gLastMobilityAssign{};
 static bool gbMobilityAssigned = false;
 
-static void DrawShadowBakeSection(Engine::EngineState* state)
+static void DrawShadowBakeSection(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ShadowBakeSystem& bake = state->shadowBake;
     if (ImGui::Button("Bake All Shadow Maps##shadowbakeall")) {
-        bake.EnqueueAll(state->registry);
+        bake.EnqueueAll(registry);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Every light set to Baked shadows. Casters are objects with Bake on that are not moving physics bodies.");
@@ -1547,14 +1547,14 @@ static void DrawShadowBakeSection(Engine::EngineState* state)
     }
 }
 
-static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (ImGui::Button("Bake All Probes##probebakeall")) {
-        ProbeBakeGet(state).EnqueueAllProbes(state);
+        ProbeBakeGet(state).EnqueueAllProbes(state, registry);
     }
     ImGui::SameLine();
     if (ImGui::Button("Bake All (2-Pass Interbounce)##probebakeall2")) {
-        ProbeBakeGet(state).EnqueueAllProbesInterbounce(state);
+        ProbeBakeGet(state).EnqueueAllProbesInterbounce(state, registry);
     }
 
     ProbeBakeSystem* bake = &ProbeBakeGet(state);
@@ -1575,7 +1575,7 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
             ImGui::Text(bake->bDryRun ? "Face %d/6, settle frame %d/%d (dry run)" : "Face %d/6, settle frame %d/%d", bake->currentFace + 1, bake->settleCounter, bake->settleFrames);
         }
         if (ImGui::Button("Cancel Bake##probebakecancel")) {
-            bake->Cancel(ctx, state);
+            bake->Cancel(ctx, state, registry);
         }
     }
 
@@ -1618,7 +1618,7 @@ static void DrawProbeBakeSection(Engine::EngineContext* ctx, Engine::EngineState
     }
 }
 
-void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_LIGHTING];
     if (!bOpen) { return; }
@@ -1655,7 +1655,7 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
             ImGui::BeginDisabled(IsRunning(state));
             if (Widgets::Button("Assign Mobility##assignmobility")) {
-                gLastMobilityAssign = AssignMobility(state);
+                gLastMobilityAssign = AssignMobility(state, registry);
                 gbMobilityAssigned = true;
             }
             ImGui::EndDisabled();
@@ -1671,17 +1671,17 @@ void DrawLightingWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                 }
             }
             if (Widgets::Button("Bake All Lighting##bakealllighting")) {
-                state->shadowBake.EnqueueAll(state->registry);
-                ProbeBakeGet(state).EnqueueAllProbesInterbounce(state);
+                state->shadowBake.EnqueueAll(registry);
+                ProbeBakeGet(state).EnqueueAllProbesInterbounce(state, registry);
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Shadow maps first, then every reflection probe with the 2-pass interbounce bake. Probe and shadow bakes never run at the same time.");
             }
             if (ImGui::CollapsingHeader("Probe Bake")) {
-                DrawProbeBakeSection(ctx, state);
+                DrawProbeBakeSection(ctx, state, registry);
             }
             if (ImGui::CollapsingHeader("Shadow Map Bake")) {
-                DrawShadowBakeSection(state);
+                DrawShadowBakeSection(state, registry);
             }
         }
 
@@ -2510,7 +2510,7 @@ bool DrawPostProcessConfig(Core::PostProcessConfiguration& pp, Engine::EngineSta
     return changed;
 }
 
-static void DrawActivePostProcessVolumes(Engine::EngineState* state)
+static void DrawActivePostProcessVolumes(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     const auto& active = state->debug.postProcessVolumes;
     if (active.IsEmpty()) {
@@ -2519,12 +2519,12 @@ static void DrawActivePostProcessVolumes(Engine::EngineState* state)
     }
     ImGui::TextUnformatted("Active volumes:");
     for (const Engine::ActivePostProcessVolume& a : active) {
-        const auto* nameComp = state->registry.TryGet<Component::NameComponent>(a.entity);
+        const auto* nameComp = registry.TryGet<Component::NameComponent>(a.entity);
         ImGui::BulletText("%s  priority %d  weight %.2f", nameComp != nullptr ? nameComp->name.c_str() : "(unnamed)", a.priority, a.weight);
     }
 }
 
-void DrawPostProcessingWindow(Engine::EngineState* state)
+void DrawPostProcessingWindow(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_POST_PROCESSING];
     if (!bOpen) { return; }
@@ -2535,7 +2535,7 @@ void DrawPostProcessingWindow(Engine::EngineState* state)
             SavePostProcessTab(state);
         }
         DrawPostProcessProfiles(state);
-        DrawActivePostProcessVolumes(state);
+        DrawActivePostProcessVolumes(state, registry);
 
         ImGui::Separator();
         if (ImGui::Button("Reset All to Defaults")) {

@@ -101,7 +101,7 @@ void PathMoverComponent::Sanitize(PathMoverComponent& comp)
 
 Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const PathMoverComponent before = edit.Get<PathMoverComponent>();
     PathMoverComponent component = before;

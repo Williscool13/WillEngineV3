@@ -70,21 +70,21 @@ void WakeBodiesAround(JPH::BodyInterface& bodyInterface, const JPH::BodyID& body
     bodyInterface.ActivateBodiesInAABox(bounds, JPH::BroadPhaseLayerFilter{}, JPH::ObjectLayerFilter{});
 }
 
-void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (!IsPhysicsStepping(state)) { return; }
     if (state->physics.bEnabled) {
-        PhysicsUpdate(ctx, state);
+        PhysicsUpdate(ctx, state, registry);
     }
-    ResolveCollisionEvents(ctx, state);
+    ResolveCollisionEvents(ctx, state, registry);
 }
 
-static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     auto& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
     auto& listener = ctx->physicsWorld->Jolt().GetContactListener();
     uint32_t count = 0;
-    for (const auto& [entity, conveyor, physicsBody, world] : state->registry.View<Component::ConveyorComponent, Component::PhysicsBodyRuntime, Component::WorldTransformRuntime>(entt::exclude<Component::ConveyorHaltedFlag>).each()) {
+    for (const auto& [entity, conveyor, physicsBody, world] : registry.View<Component::ConveyorComponent, Component::PhysicsBodyRuntime, Component::WorldTransformRuntime>(entt::exclude<Component::ConveyorHaltedFlag>).each()) {
         if (!conveyor.bEnabled || !physicsBody.bodyID.IsValid()) { continue; }
         if (count >= Physics::MAX_CONVEYORS) {
             static bool bWarned = false;
@@ -122,7 +122,7 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
     listener.SetConveyorCount(count);
 }
 
-void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     Physics::PhysicsWorld* physics = ctx->physicsWorld;
@@ -131,7 +131,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, static_cast<float>(maxSteps) * Physics::PHYSICS_TIMESTEP);
     const uint32_t stepCount = static_cast<uint32_t>(state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP);
 
-    UpdateConveyors(ctx, state);
+    UpdateConveyors(ctx, state, registry);
 #ifdef TRACY_ENABLE
     const Physics::BodyCounts bodies = physics->GetBodyCounts();
     TracyPlot("Physics/Dynamic bodies", static_cast<int64_t>(bodies.dynamic));
@@ -154,20 +154,20 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         glm::quat startRotation;
         Transform target;
     };
-    auto stoppedView = state->registry.View<Component::PhysicsBodyRuntime, Component::MovingKinematicFlag>(entt::exclude<Component::DirtyKinematicPhysicsTransformRequest>);
+    auto stoppedView = registry.View<Component::PhysicsBodyRuntime, Component::MovingKinematicFlag>(entt::exclude<Component::DirtyKinematicPhysicsTransformRequest>);
     if (stoppedView.size_hint() > 0) {
         auto stopped = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), stoppedView.size_hint());
         for (const auto& [entity, physicsBody] : stoppedView.each()) {
             if (physicsBody.bodyID.IsValid()) { bodyInterface.SetLinearAndAngularVelocity(ToJolt(physicsBody.bodyID), JPH::Vec3::sZero(), JPH::Vec3::sZero()); }
             stopped.PushBack(entity);
         }
-        for (const entt::entity entity : stopped) { state->registry.Remove<Component::MovingKinematicFlag>(entity); }
+        for (const entt::entity entity : stopped) { registry.Remove<Component::MovingKinematicFlag>(entity); }
     }
 
-    auto kinematicView = state->registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformRequest>();
+    auto kinematicView = registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::DirtyKinematicPhysicsTransformRequest>();
     auto kinematicMoves = Core::ArenaFixedVector<KinematicMove>(&ctx->gameplayArena.Get(), std::max(kinematicView.size_hint(), size_t{1}));
     for (const auto& [entity, physicsBody, transform] : kinematicView.each()) {
-        state->registry.Set<Component::MovingKinematicFlag>(entity);
+        registry.Set<Component::MovingKinematicFlag>(entity);
         const JPH::BodyID bodyID = ToJolt(physicsBody.bodyID);
         const JPH::RVec3 p = bodyInterface.GetPosition(bodyID);
         const JPH::Quat r = bodyInterface.GetRotation(bodyID);
@@ -175,29 +175,29 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             .bodyID = bodyID,
             .startPosition = {static_cast<float>(p.GetX()), static_cast<float>(p.GetY()), static_cast<float>(p.GetZ())},
             .startRotation = {r.GetW(), r.GetX(), r.GetY(), r.GetZ()},
-            .target = Component::ComputeWorldTransform(state->registry, entity),
+            .target = Component::ComputeWorldTransform(registry, entity),
         });
     }
-    state->registry.Clear<Component::DirtyKinematicPhysicsTransformRequest>();
+    registry.Clear<Component::DirtyKinematicPhysicsTransformRequest>();
 
     // todo: Truly teleport mechanics are a little more user-defined. Need a unified "mark movement as teleport" function that emplaces the teleport physics transform tag to allow kinematics to teleport.
     for (uint32_t step = 0; step < stepCount; ++step) {
         // Teleport
-        auto teleportView = state->registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::TeleportPhysicsTransformRequest>();
+        auto teleportView = registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::TeleportPhysicsTransformRequest>();
         for (const auto& [entity, physicsBody, transform] : teleportView.each()) {
-            const Transform world = Component::ComputeWorldTransform(state->registry, entity);
+            const Transform world = Component::ComputeWorldTransform(registry, entity);
             bodyInterface.SetPositionAndRotation(
                 ToJolt(physicsBody.bodyID),
                 JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
                 JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
                 JPH::EActivation::Activate
             );
-            if (auto* dynamic = state->registry.TryGetMut<Component::DynamicPhysicsBodyRuntime>(entity)) {
+            if (auto* dynamic = registry.TryGetMut<Component::DynamicPhysicsBodyRuntime>(entity)) {
                 dynamic->previousPosition = dynamic->currentPosition = world.translation;
                 dynamic->previousRotation = dynamic->currentRotation = world.rotation;
             }
         }
-        state->registry.Clear<Component::TeleportPhysicsTransformRequest>();
+        registry.Clear<Component::TeleportPhysicsTransformRequest>();
 
         // Kinematic
         const float t = static_cast<float>(step + 1) / static_cast<float>(stepCount);
@@ -208,7 +208,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
 
         // Set velocity
-        auto velocityView = state->registry.View<Component::PhysicsBodyRuntime, Component::SetVelocityRequest>();
+        auto velocityView = registry.View<Component::PhysicsBodyRuntime, Component::SetVelocityRequest>();
         if (velocityView.size_hint() > 0) {
             auto applied = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), velocityView.size_hint());
             for (const auto& [entity, physicsBody, tag] : velocityView.each()) {
@@ -219,10 +219,10 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
                 );
                 applied.PushBack(entity);
             }
-            for (const entt::entity entity : applied) { state->registry.Remove<Component::SetVelocityRequest>(entity); }
+            for (const entt::entity entity : applied) { registry.Remove<Component::SetVelocityRequest>(entity); }
         }
 
-        auto saveView = state->registry.View<Engine::Mut<Component::DynamicPhysicsBodyRuntime>>();
+        auto saveView = registry.View<Engine::Mut<Component::DynamicPhysicsBodyRuntime>>();
         for (auto [entity, dynamic] : saveView.each()) {
             dynamic.previousPosition = dynamic.currentPosition;
             dynamic.previousRotation = dynamic.currentRotation;
@@ -230,7 +230,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         physics->Step(Physics::PHYSICS_TIMESTEP);
 
-        auto dynamicView = state->registry.View<Engine::Mut<Component::DynamicPhysicsBodyRuntime>, Component::PhysicsBodyRuntime, Engine::Mut<Component::TransformComponent>>();
+        auto dynamicView = registry.View<Engine::Mut<Component::DynamicPhysicsBodyRuntime>, Component::PhysicsBodyRuntime, Engine::Mut<Component::TransformComponent>>();
         for (auto [entity, dynamic, physicsBody, transform] : dynamicView.each()) {
             JPH::RVec3 pos = bodyInterface.GetPosition(ToJolt(physicsBody.bodyID));
             JPH::Quat rot = bodyInterface.GetRotation(ToJolt(physicsBody.bodyID));
@@ -241,8 +241,8 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
             dynamic.currentRotation = worldRotation;
 
             // Back-fill the local transform (T/R; physics never scales) so it stays the body's parent-relative pose.
-            if (const auto* node = state->registry.TryGet<Component::HierarchyComponent>(entity); node && state->registry.Valid(node->parent)) {
-                const auto& parentWorld = state->registry.Get<Component::WorldTransformRuntime>(node->parent);
+            if (const auto* node = registry.TryGet<Component::HierarchyComponent>(entity); node && registry.Valid(node->parent)) {
+                const auto& parentWorld = registry.Get<Component::WorldTransformRuntime>(node->parent);
                 const glm::quat invParentRotation = glm::inverse(parentWorld.rotation);
                 transform.translation = (invParentRotation * (worldPosition - parentWorld.translation)) / parentWorld.scale;
                 transform.rotation = glm::normalize(invParentRotation * worldRotation);
@@ -260,21 +260,20 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
 }
 
-Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box)
+Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box, Engine::SystemRegistry& registry)
 {
     Core::Arena* arena = &ctx->gameplayArena.Get();
     const auto bodies = ctx->physicsWorld->QueryBodiesInBox(arena, box);
     auto entities = Core::ArenaFixedVector<entt::entity>(arena, std::max(bodies.Size(), size_t{1}));
     for (const Physics::BodyHandle body : bodies) {
-        const entt::entity entity = Component::EntityFromBodyUserData(state->registry, ctx->physicsWorld->GetUserData(body));
+        const entt::entity entity = Component::EntityFromBodyUserData(registry, ctx->physicsWorld->GetUserData(body));
         if (entity != entt::null) { entities.PushBack(entity); }
     }
     return entities;
 }
 
-void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    const Engine::Registry& registry = state->registry;
     Physics::JoltWorld& world = ctx->physicsWorld->Jolt();
     state->physics.resolvedAddedEvents.Clear();
     for (const auto& event : world.GetAddedEvents()) {
@@ -307,9 +306,8 @@ void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void MarkPhysicsTransformsDirty(Engine::EngineState* state)
+void MarkPhysicsTransformsDirty(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto& registry = state->registry;
     const bool bTeleportAll = state->requests.bTeleportPhysics;
     state->requests.bTeleportPhysics = false;
     auto view = registry.View<Component::PhysicsBodyRuntime, Component::DirtyTransformRequest>();
@@ -322,43 +320,43 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state)
             if (!registry.Has<Component::StaticFollowWarnedFlag>(entity)) {
                 const auto* name = registry.TryGet<Component::NameComponent>(entity);
                 LOG_WARN(Physics, "Static body '{}' has a moving parent and stays put; make it kinematic", name ? name->name.c_str() : "Unnamed");
-                registry.Add<Component::StaticFollowWarnedFlag>(entity);
+                registry.Set<Component::StaticFollowWarnedFlag>(entity);
             }
             continue;
         }
         if (motionType == Component::PhysicsMotionType::Kinematic && !bTeleportAll) {
-            state->registry.Set<Component::DirtyKinematicPhysicsTransformRequest>(entity);
+            registry.Set<Component::DirtyKinematicPhysicsTransformRequest>(entity);
         }
         else {
-            state->registry.Set<Component::TeleportPhysicsTransformRequest>(entity);
+            registry.Set<Component::TeleportPhysicsTransformRequest>(entity);
             // An editor drag during Simulate holds the body still; without this gravity builds velocity it releases on drop.
-            if (IsSimulating(state) && motionType == Component::PhysicsMotionType::Dynamic) {
-                state->registry.GetOrAdd<Component::SetVelocityRequest>(entity);
+            if (IsSimulating(state) && motionType == Component::PhysicsMotionType::Dynamic && !registry.Has<Component::SetVelocityRequest>(entity)) {
+                registry.Set<Component::SetVelocityRequest>(entity);
             }
         }
     }
 }
 
-void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state)
+void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     auto& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
-    auto view = state->registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::DirtyTransformRequest>();
+    auto view = registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::DirtyTransformRequest>();
     for (const auto& [entity, physicsBody, transform] : view.each()) {
-        const Transform world = Component::ComputeWorldTransform(state->registry, entity);
+        const Transform world = Component::ComputeWorldTransform(registry, entity);
         bodyInterface.SetPositionAndRotation(
             ToJolt(physicsBody.bodyID),
             JPH::RVec3(world.translation.x, world.translation.y, world.translation.z),
             JPH::Quat(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w),
             JPH::EActivation::DontActivate);
-        if (auto* dynamic = state->registry.TryGetMut<Component::DynamicPhysicsBodyRuntime>(entity)) {
+        if (auto* dynamic = registry.TryGetMut<Component::DynamicPhysicsBodyRuntime>(entity)) {
             dynamic->previousPosition = dynamic->currentPosition = world.translation;
             dynamic->previousRotation = dynamic->currentRotation = world.rotation;
         }
     }
 }
 
-void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
 #ifdef WDEBUG
@@ -370,7 +368,7 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     filter.Clear();
 
     if (bCasterChanges) {
-        for (const auto& [entity, runtime, dirty, physicsBody] : state->registry.View<Component::MeshRuntime, Component::MultiframeDirtyRequest, Component::PhysicsBodyRuntime>().each()) {
+        for (const auto& [entity, runtime, dirty, physicsBody] : registry.View<Component::MeshRuntime, Component::MultiframeDirtyRequest, Component::PhysicsBodyRuntime>().each()) {
             filter.AddBody(ToJolt(physicsBody.bodyID));
         }
     }
@@ -379,24 +377,24 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     ctx->physicsWorld->Jolt().SetDebugDrawForceLowestLOD(bAllBodies);
 
     if (bAllBodies) {
-        for (const auto& [entity, physicsBody] : state->registry.View<Component::PhysicsBodyRuntime>().each()) {
+        for (const auto& [entity, physicsBody] : registry.View<Component::PhysicsBodyRuntime>().each()) {
             filter.AddBody(ToJolt(physicsBody.bodyID));
         }
     }
     else {
         if (mask & Engine::PHYSICS_DEBUG_SENSORS) {
-            for (const auto& [entity, physicsBody, bodyDesc] : state->registry.View<Component::PhysicsBodyRuntime, Component::PhysicsBodyDesc>().each()) {
+            for (const auto& [entity, physicsBody, bodyDesc] : registry.View<Component::PhysicsBodyRuntime, Component::PhysicsBodyDesc>().each()) {
                 if (bodyDesc.bIsSensor) { filter.AddBody(ToJolt(physicsBody.bodyID)); }
             }
         }
         if (mask & Engine::PHYSICS_DEBUG_TAGGED) {
-            for (const auto& [entity, physicsBody] : state->registry.View<Component::DrawPhysicsDebugTag, Component::PhysicsBodyRuntime>().each()) {
+            for (const auto& [entity, physicsBody] : registry.View<Component::DrawPhysicsDebugTag, Component::PhysicsBodyRuntime>().each()) {
                 filter.AddBody(ToJolt(physicsBody.bodyID));
             }
         }
         if (mask & Engine::PHYSICS_DEBUG_SELECTED) {
             for (entt::entity entity : state->editor.selectedEntities) {
-                if (auto* physicsBody = state->registry.TryGet<Component::PhysicsBodyRuntime>(entity)) {
+                if (auto* physicsBody = registry.TryGet<Component::PhysicsBodyRuntime>(entity)) {
                     filter.AddBody(ToJolt(physicsBody->bodyID));
                 }
             }
@@ -611,10 +609,10 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
     return nullptr;
 }
 
-void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto view = state->registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>, Component::PhysicsMeshRequest>();
+    auto view = registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>, Component::PhysicsMeshRequest>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -626,7 +624,7 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
         if (started.Size() + abandoned.Size() >= budget) { break; }
         bool allArmed = true;
         bool shouldAbandon = false;
-        const bool bDynamic = Component::EffectiveMotionType(state->registry, entity, bodyDesc) == Component::PhysicsMotionType::Dynamic;
+        const bool bDynamic = Component::EffectiveMotionType(registry,entity, bodyDesc) == Component::PhysicsMotionType::Dynamic;
 
         for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
             const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
@@ -672,18 +670,18 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     for (const entt::entity entity : abandoned) {
-        state->registry.Remove<Component::PhysicsMeshRequest>(entity);
+        registry.Remove<Component::PhysicsMeshRequest>(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.Remove<Component::PhysicsMeshRequest>(entity);
-        state->registry.Set<Component::PhysicsMeshLoadingFlag>(entity);
+        registry.Remove<Component::PhysicsMeshRequest>(entity);
+        registry.Set<Component::PhysicsMeshLoadingFlag>(entity);
     }
 }
 
-void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto view = state->registry.View<Component::PhysicsShapeRuntime, Component::PhysicsMeshLoadingFlag>();
+    auto view = registry.View<Component::PhysicsShapeRuntime, Component::PhysicsMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -723,16 +721,16 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
+        registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
     }
 }
 
-void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
 
     // Mesh based physics need to wait for its mesh to load
-    auto view = state->registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>, Component::PhysicsShapeCreationRequest>(
+    auto view = registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>, Component::PhysicsShapeCreationRequest>(
         entt::exclude<Component::PhysicsMeshRequest, Component::PhysicsMeshLoadingFlag>);
 
     size_t viewCount = view.size_hint();
@@ -791,7 +789,7 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
         }
 
         if (!shape) {
-            const auto* name = state->registry.TryGet<Component::NameComponent>(entity);
+            const auto* name = registry.TryGet<Component::NameComponent>(entity);
             LOG_WARN(Engine, "Shape creation failed for '{}', skipping", name ? name->name.c_str() : "Unnamed");
             resolved.PushBack(entity);
             continue;
@@ -802,15 +800,15 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::PhysicsShapeCreationRequest>(entity);
+        registry.Remove<Component::PhysicsShapeCreationRequest>(entity);
     }
 }
 
-void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
+void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
 
-    auto view = state->registry.View<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsBodyCreationRequest>(
+    auto view = registry.View<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsBodyCreationRequest>(
         entt::exclude<Component::PhysicsShapeCreationRequest>);
 
     size_t viewCount = view.size_hint();
@@ -829,7 +827,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
             continue;
         }
 
-        const auto* transform = state->registry.TryGet<Component::TransformComponent>(entity);
+        const auto* transform = registry.TryGet<Component::TransformComponent>(entity);
         if (!transform) {
             LOG_WARN(Engine, "PhysicsBodyDesc on entity without TransformComponent, skipping");
             resolved.PushBack(entity);
@@ -837,29 +835,29 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
         }
 
         // Drop any stale body so a re-tagged desc rebuilds cleanly.
-        state->registry.Remove<Component::PhysicsBodyRuntime>(entity);
-        state->registry.Remove<Component::DynamicPhysicsBodyRuntime>(entity);
+        registry.Remove<Component::PhysicsBodyRuntime>(entity);
+        registry.Remove<Component::DynamicPhysicsBodyRuntime>(entity);
 
         // Jolt is world-space. Place the body at the entity's world pose (equals local for an unparented entity).
-        const Transform world = Component::ComputeWorldTransform(state->registry, entity);
+        const Transform world = Component::ComputeWorldTransform(registry, entity);
         JPH::Vec3 pos(world.translation.x, world.translation.y, world.translation.z);
         JPH::Quat rot(world.rotation.x, world.rotation.y, world.rotation.z, world.rotation.w);
-        const Component::PhysicsMotionType motionType = Component::EffectiveMotionType(state->registry, entity, bodyDesc);
+        const Component::PhysicsMotionType motionType = Component::EffectiveMotionType(registry,entity, bodyDesc);
         JPH::BodyID bodyId = CreateBodyFromShape(bodyInterface, bodyDesc, motionType, runtime.shapeRef, pos, rot, Component::BodyUserDataFor(entity), bodyDesc.layerOverride);
         if (!bodyId.IsInvalid()) {
             if (bodyDesc.restitution > 0.0f) {
                 bodyInterface.SetRestitution(bodyId, bodyDesc.restitution);
             }
-            state->registry.Add<Component::PhysicsBodyRuntime>(entity, ToHandle(bodyId));
+            registry.Set<Component::PhysicsBodyRuntime>(entity, ToHandle(bodyId));
             if (motionType == Component::PhysicsMotionType::Dynamic) {
-                state->registry.Set<Component::DynamicPhysicsBodyRuntime>(entity, world.translation, world.rotation, world.translation, world.rotation);
+                registry.Set<Component::DynamicPhysicsBodyRuntime>(entity, world.translation, world.rotation, world.translation, world.rotation);
             }
         }
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.Remove<Component::PhysicsBodyCreationRequest>(entity);
+        registry.Remove<Component::PhysicsBodyCreationRequest>(entity);
     }
 }
 } // Engine

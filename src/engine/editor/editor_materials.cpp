@@ -741,31 +741,31 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
 }
 
 template<typename C, typename Tag>
-static void RetagIfUsingMaterial(Engine::EngineState* state, Engine::MaterialID id)
+static void RetagIfUsingMaterial(Engine::EngineState* state, Engine::MaterialID id, Engine::SystemRegistry& registry)
 {
     const Engine::InstanceStore& store = state->instanceStore;
-    for (const auto& [entity, component, runtime] : state->registry.View<C, Component::MeshRuntime>().each()) {
+    for (const auto& [entity, component, runtime] : registry.View<C, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
         for (uint32_t i = 0; i < runtime.range.count; ++i) {
             if (store[runtime.range.offset + i].materialID != id) { continue; }
-            state->registry.Set<Tag>(entity);
+            registry.Set<Tag>(entity);
             break;
         }
     }
 }
 
 /** The tri-light range is decided at fill time from the material's immutability, so unlocking one has to re-resolve every mesh using it. */
-static void RetagMeshesUsingMaterial(Engine::EngineState* state, Engine::MaterialID id)
+static void RetagMeshesUsingMaterial(Engine::EngineState* state, Engine::MaterialID id, Engine::SystemRegistry& registry)
 {
-    RetagIfUsingMaterial<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>(state, id);
-    RetagIfUsingMaterial<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>(state, id);
-    RetagIfUsingMaterial<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>(state, id);
-    RetagIfUsingMaterial<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>(state, id);
-    RetagIfUsingMaterial<Component::Text3DComponent, Component::Text3DLoadingFlag>(state, id);
-    RetagIfUsingMaterial<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>(state, id);
+    RetagIfUsingMaterial<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>(state, id, registry);
+    RetagIfUsingMaterial<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>(state, id, registry);
+    RetagIfUsingMaterial<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>(state, id, registry);
+    RetagIfUsingMaterial<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>(state, id, registry);
+    RetagIfUsingMaterial<Component::Text3DComponent, Component::Text3DLoadingFlag>(state, id, registry);
+    RetagIfUsingMaterial<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>(state, id, registry);
 }
 
-static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     Engine::MaterialManager* materialManager = ctx->materialManager;
     const Engine::Material* selected = materialManager->GetMaterial(state->editor.selectedMaterial);
@@ -795,7 +795,7 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
         editMat.immutable = immutable;
         changed = true;
         if (!immutable) {
-            RetagMeshesUsingMaterial(state, id);
+            RetagMeshesUsingMaterial(state, id, registry);
         }
     }
     if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Contents never change at runtime. Locks the fields below."); }
@@ -1051,7 +1051,7 @@ static void DrawTextMaterialsTab(Engine::EngineContext* ctx, Engine::EngineState
     ImGui::EndTable();
 }
 
-void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_MATERIALS];
     if (!bOpen) {
@@ -1072,7 +1072,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
                     DrawMaterialBrowserPane(ctx, state);
 
                     ImGui::TableSetColumnIndex(1);
-                    DrawMaterialDetailPane(ctx, state);
+                    DrawMaterialDetailPane(ctx, state, registry);
 
                     ImGui::EndTable();
                 }

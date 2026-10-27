@@ -62,20 +62,20 @@ static bool IsSceneLoaded(const EngineState* state, StringID sceneId)
     return false;
 }
 
-static void DrawFileMenu(EngineContext* ctx, EngineState* state)
+static void DrawFileMenu(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     const StringID current = state->scene.currentSceneId;
     const bool bCanSave = ctx->bGameLoaded && !IsRunning(state);
 
     ImGui::BeginDisabled(!bCanSave || !IsSceneLoaded(state, current));
     if (ImGui::MenuItem(Core::InlineString<160>::Format("Save '%s'", state->scene.currentSceneName.c_str()).c_str(), "Ctrl+S")) {
-        SaveEditorScene(ctx, state, current);
+        SaveEditorScene(ctx, state, current, registry);
     }
     ImGui::EndDisabled();
 
     ImGui::BeginDisabled(!bCanSave || state->editor.modifiedScenes.IsEmpty());
     if (ImGui::MenuItem("Save All", "Ctrl+Shift+S")) {
-        SaveModifiedScenes(ctx, state);
+        SaveModifiedScenes(ctx, state, registry);
     }
     ImGui::EndDisabled();
     if (!ctx->bGameLoaded && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -97,7 +97,7 @@ static void DrawFileMenu(EngineContext* ctx, EngineState* state)
     }
 }
 
-static void DrawQuitPrompt(EngineContext* ctx, EngineState* state)
+static void DrawQuitPrompt(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     constexpr const char* QUIT_POPUP = "Unsaved Changes##quit";
     if (state->editor.bQuitPromptRequested) {
@@ -120,7 +120,7 @@ static void DrawQuitPrompt(EngineContext* ctx, EngineState* state)
     const bool bCanSave = ctx->bGameLoaded && !IsRunning(state);
     ImGui::BeginDisabled(!bCanSave);
     if (ImGui::Button("Save All and Quit")) {
-        SaveModifiedScenes(ctx, state);
+        SaveModifiedScenes(ctx, state, registry);
         quit();
     }
     ImGui::EndDisabled();
@@ -134,16 +134,16 @@ static void DrawQuitPrompt(EngineContext* ctx, EngineState* state)
     ImGui::EndPopup();
 }
 
-static void DrawEditMenu(EngineState* state)
+static void DrawEditMenu(EngineState* state, SystemRegistry& registry)
 {
     UndoStack& undo = state->editor.undo;
     const bool bEditing = state->inputContext == InputContext::Editor;
 
     ImGui::BeginDisabled(!bEditing || !undo.CanUndo());
-    if (ImGui::MenuItem("Undo", "Ctrl+Z")) { undo.Undo(state); }
+    if (ImGui::MenuItem("Undo", "Ctrl+Z")) { undo.Undo(state, registry); }
     ImGui::EndDisabled();
     ImGui::BeginDisabled(!bEditing || !undo.CanRedo());
-    if (ImGui::MenuItem("Redo", "Ctrl+Y")) { undo.Redo(state); }
+    if (ImGui::MenuItem("Redo", "Ctrl+Y")) { undo.Redo(state, registry); }
     ImGui::EndDisabled();
 
     ImGui::Separator();
@@ -164,13 +164,14 @@ static void DrawWindowMenu(EngineState* state)
 
 void DrawEditorMenuBar(EngineContext* ctx, EngineState* state)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Editor/MenuBar"};
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            DrawFileMenu(ctx, state);
+            DrawFileMenu(ctx, state, registry);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            DrawEditMenu(state);
+            DrawEditMenu(state, registry);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Window")) {
@@ -179,7 +180,7 @@ void DrawEditorMenuBar(EngineContext* ctx, EngineState* state)
         }
         ImGui::EndMainMenuBar();
     }
-    DrawQuitPrompt(ctx, state);
+    DrawQuitPrompt(ctx, state, registry);
 
     if (memcmp(state->editor.windowOpen, state->editor.windowOpenSaved, sizeof(state->editor.windowOpenSaved)) != 0) {
         WriteEditorWindowConfig(state);

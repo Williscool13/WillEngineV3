@@ -119,15 +119,15 @@ static void Request(ScenesPopup popup, StringID scene, const Core::Path& folder,
     gScenesPanel.name[len] = '\0';
 }
 
-static void LoadAndActivate(EngineContext* ctx, EngineState* state, StringID sceneId)
+static void LoadAndActivate(EngineContext* ctx, EngineState* state, StringID sceneId, SystemRegistry& registry)
 {
-    if (LoadSceneFromFile(state, ctx->assetManager, sceneId).bSuccess) {
+    if (LoadSceneFromFile(state, ctx->assetManager, sceneId, registry).bSuccess) {
         state->scene.currentSceneId = sceneId;
         SyncActiveScene(ctx, state);
     }
 }
 
-static void RequestUnload(EngineState* state, Core::Span<const StringID> sceneIds)
+static void RequestUnload(EngineState* state, Core::Span<const StringID> sceneIds, SystemRegistry& registry)
 {
     gScenesPanel.unloadIds.Clear();
     bool bAnyModified = false;
@@ -139,7 +139,7 @@ static void RequestUnload(EngineState* state, Core::Span<const StringID> sceneId
         gScenesPanel.request = ScenesPopup::ConfirmUnload;
         return;
     }
-    UnloadScenes(state, gScenesPanel.unloadIds);
+    UnloadScenes(state, gScenesPanel.unloadIds, registry);
     gScenesPanel.unloadIds.Clear();
 }
 
@@ -179,14 +179,14 @@ static void DrawRunsMenu(EngineContext* ctx, EngineState* state, StringID sceneI
     }
 }
 
-static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bLoaded)
+static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bLoaded, SystemRegistry& registry)
 {
     if (!bLoaded) {
         const bool bExists = !meta.bUnsaved && Platform::FileExists(RuntimeScenePath(meta.source));
         ImGui::TextUnformatted(bExists ? "Saved (load to check if outdated)" : "None");
         return;
     }
-    const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, sceneId);
+    const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, sceneId, registry);
     if (!status.bExists) {
         ImGui::TextUnformatted("None");
         return;
@@ -205,7 +205,7 @@ static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, Strin
     if (status.changed > 0) { ImGui::TextColored(ORANGE, "  %u changed, first '%s'", status.changed, status.firstChanged.c_str()); }
 }
 
-static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bShowFolder)
+static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bShowFolder, SystemRegistry& registry)
 {
     const bool bLoaded = IsLoaded(state, sceneId);
     const bool bActive = sceneId == state->scene.currentSceneId;
@@ -220,7 +220,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
             SyncActiveScene(ctx, state);
         }
         else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && state->editor.loadedScenes.Size() < MAX_LOADED_SCENES) {
-            LoadAndActivate(ctx, state, sceneId);
+            LoadAndActivate(ctx, state, sceneId, registry);
         }
     }
     if (!bLoaded) { ImGui::PopStyleColor(); }
@@ -230,7 +230,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
         ImGui::SeparatorText("Authored");
         ImGui::TextUnformatted(meta.bUnsaved ? "Never saved" : bModified ? "Unsaved changes" : "Saved");
         ImGui::SeparatorText("Runtime");
-        DrawRuntimeSceneStatus(ctx, state, sceneId, meta, bLoaded);
+        DrawRuntimeSceneStatus(ctx, state, sceneId, meta, bLoaded, registry);
         ImGui::EndTooltip();
     }
     if (ImGui::BeginDragDropSource()) {
@@ -242,7 +242,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
     if (ImGui::BeginPopupContextItem()) {
         if (!bLoaded) {
             if (ImGui::MenuItem("Load", nullptr, false, state->editor.loadedScenes.Size() < MAX_LOADED_SCENES)) {
-                LoadAndActivate(ctx, state, sceneId);
+                LoadAndActivate(ctx, state, sceneId, registry);
             }
         }
         else {
@@ -252,24 +252,24 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
             }
             ImGui::SeparatorText("Authored");
             if (ImGui::MenuItem("Save##authored", nullptr, false, bCanSave)) {
-                SaveEditorScene(ctx, state, sceneId);
+                SaveEditorScene(ctx, state, sceneId, registry);
             }
             if (!bCanSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                 ImGui::SetTooltip("Only in edit mode");
             }
             ImGui::SeparatorText("Runtime");
             if (ImGui::MenuItem("Save##runtime", nullptr, false, IsRunning(state) && !meta.bUnsaved)) {
-                SaveRuntimeScene(ctx, state, sceneId);
+                SaveRuntimeScene(ctx, state, sceneId, registry);
             }
             if (!IsRunning(state) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                 ImGui::SetTooltip("Only while playing or simulating");
             }
-            if (ImGui::MenuItem("Delete##runtime", nullptr, false, GetRuntimeSceneStatus(ctx, state, sceneId).bExists)) {
+            if (ImGui::MenuItem("Delete##runtime", nullptr, false, GetRuntimeSceneStatus(ctx, state, sceneId, registry).bExists)) {
                 DeleteRuntimeScene(ctx, sceneId);
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Unload")) {
-                RequestUnload(state, Core::Span<const StringID>(&sceneId, 1));
+                RequestUnload(state, Core::Span<const StringID>(&sceneId, 1), registry);
             }
         }
         if (ImGui::BeginMenu("Runs", bActive)) {
@@ -329,7 +329,7 @@ struct SceneEntry
     const AssetManager::CachedSceneMetadata* meta;
 };
 
-static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path& folder, bool bRoot)
+static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path& folder, bool bRoot, SystemRegistry& registry)
 {
     const std::string_view name = bRoot ? std::string_view{"scenes"} : folder.Filename();
     const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanFullWidth | (bRoot ? ImGuiTreeNodeFlags_DefaultOpen : 0);
@@ -361,7 +361,7 @@ static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path&
     }
     std::ranges::sort(subfolders, [](const Core::Path* a, const Core::Path* b) { return a->Filename() < b->Filename(); });
     for (const Core::Path* subfolder : subfolders) {
-        DrawFolder(ctx, state, *subfolder, false);
+        DrawFolder(ctx, state, *subfolder, false, registry);
     }
 
     const auto& sceneCache = ctx->assetManager->GetSceneCache();
@@ -371,12 +371,12 @@ static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path&
     }
     std::ranges::sort(scenes, [](const SceneEntry& a, const SceneEntry& b) { return a.meta->sceneName.View() < b.meta->sceneName.View(); });
     for (const SceneEntry& scene : scenes) {
-        DrawSceneRow(ctx, state, scene.id, *scene.meta, false);
+        DrawSceneRow(ctx, state, scene.id, *scene.meta, false, registry);
     }
     ImGui::TreePop();
 }
 
-static void DrawSearchResults(EngineContext* ctx, EngineState* state)
+static void DrawSearchResults(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     const auto& sceneCache = ctx->assetManager->GetSceneCache();
     Core::ArenaFixedVector<SceneEntry> scenes(&ctx->editorArena.Get(), sceneCache.Size() + 1);
@@ -385,7 +385,7 @@ static void DrawSearchResults(EngineContext* ctx, EngineState* state)
     }
     std::ranges::sort(scenes, [](const SceneEntry& a, const SceneEntry& b) { return a.meta->sceneName.View() < b.meta->sceneName.View(); });
     for (const SceneEntry& scene : scenes) {
-        DrawSceneRow(ctx, state, scene.id, *scene.meta, true);
+        DrawSceneRow(ctx, state, scene.id, *scene.meta, true, registry);
     }
     if (scenes.IsEmpty()) {
         ImGui::TextDisabled("No scene matches");
@@ -415,7 +415,7 @@ static bool ConfirmButtons(const char* confirmLabel, bool bValid, bool bEnter)
     return bConfirm;
 }
 
-static void DrawPopups(EngineContext* ctx, EngineState* state)
+static void DrawPopups(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     if (gScenesPanel.request != ScenesPopup::None) {
         ImGui::OpenPopup(PopupTitle(gScenesPanel.request));
@@ -509,7 +509,7 @@ static void DrawPopups(EngineContext* ctx, EngineState* state)
         ImGui::BeginDisabled(!ctx->bGameLoaded);
         if (ImGui::Button("Save and Unload")) {
             for (StringID id : gScenesPanel.unloadIds) {
-                if (state->editor.modifiedScenes.Contains(id)) { SaveEditorScene(ctx, state, id); }
+                if (state->editor.modifiedScenes.Contains(id)) { SaveEditorScene(ctx, state, id, registry); }
             }
             bUnload = true;
         }
@@ -522,7 +522,7 @@ static void DrawPopups(EngineContext* ctx, EngineState* state)
             ImGui::CloseCurrentPopup();
         }
         if (bUnload) {
-            UnloadScenes(state, gScenesPanel.unloadIds);
+            UnloadScenes(state, gScenesPanel.unloadIds, registry);
             gScenesPanel.unloadIds.Clear();
             ImGui::CloseCurrentPopup();
         }
@@ -530,7 +530,7 @@ static void DrawPopups(EngineContext* ctx, EngineState* state)
     }
 }
 
-void DrawScenesPanel(EngineContext* ctx, EngineState* state)
+void DrawScenesPanel(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_SCENES];
     if (!bOpen) { return; }
@@ -549,11 +549,11 @@ void DrawScenesPanel(EngineContext* ctx, EngineState* state)
             if (scene.sceneId != state->scene.currentSceneId) { others.PushBack(scene.sceneId); }
         }
         ImGui::BeginDisabled(loaded.IsEmpty());
-        if (ImGui::Button("Unload All")) { RequestUnload(state, loaded); }
+        if (ImGui::Button("Unload All")) { RequestUnload(state, loaded, registry); }
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(others.IsEmpty());
-        if (ImGui::Button("Unload Others")) { RequestUnload(state, others); }
+        if (ImGui::Button("Unload Others")) { RequestUnload(state, others, registry); }
         ImGui::EndDisabled();
         ImGui::SameLine();
 
@@ -574,14 +574,14 @@ void DrawScenesPanel(EngineContext* ctx, EngineState* state)
 
         ImGui::BeginChild("##scene_tree");
         if (gScenesPanel.search[0] != '\0') {
-            DrawSearchResults(ctx, state);
+            DrawSearchResults(ctx, state, registry);
         }
         else {
-            DrawFolder(ctx, state, root, true);
+            DrawFolder(ctx, state, root, true, registry);
         }
         ImGui::EndChild();
 
-        DrawPopups(ctx, state);
+        DrawPopups(ctx, state, registry);
     }
     ImGui::End();
 }

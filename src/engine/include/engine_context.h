@@ -18,7 +18,6 @@
 #include "core/containers/vector.h"
 #include "core/memory/virtual_arena.h"
 #include "core/time/time_frame.h"
-#include "engine/core/checked.h"
 #include "engine/resources/environment_map/probe_format.h"
 #include "render/pipelines/pipeline_manager.h"
 
@@ -228,11 +227,11 @@ struct EngineContext
     Core::VirtualArena editorArena{};
 
     EngineLogger* engineLogger{nullptr};
-    Checked<AssetManager> assetManager{};
-    Checked<MaterialManager> materialManager{};
+    AssetManager* assetManager{nullptr};
+    MaterialManager* materialManager{nullptr};
     Render::PipelineManager* pipelineManager{nullptr};
-    Checked<Audio::AudioManager> audioManager{};
-    Checked<Physics::PhysicsWorld> physicsWorld{};
+    Audio::AudioManager* audioManager{nullptr};
+    Physics::PhysicsWorld* physicsWorld{nullptr};
 
     // Global Fn
     //   Defined by engine called by game

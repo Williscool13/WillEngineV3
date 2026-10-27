@@ -302,7 +302,7 @@ uint32_t GetAll(const LaunchArgs& args, const ArgDesc& desc, Core::Span<const ch
     return count;
 }
 
-void RunLaunchExec(EngineContext* ctx, EngineState* state)
+void RunLaunchExec(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     LaunchArgs& args = *state->launchArgs;
     if (args.bExecDone || state->assetLoad.quietFrames < AssetLoadState::SETTLED_QUIET_FRAMES) { return; }

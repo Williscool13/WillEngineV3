@@ -9,11 +9,12 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Ballance
 {
-void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state);
+void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 } // Ballance
 
 #endif //WILL_ENGINE_BALLANCE_CULLER_SYSTEMS_H

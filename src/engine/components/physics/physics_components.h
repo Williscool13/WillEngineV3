@@ -20,6 +20,8 @@ namespace Engine::Component
 /** Physics state. Interpolate w/ physics alpha for smooth physics*/
 struct DynamicPhysicsBodyRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "DynamicPhysicsBodyRuntime";
+
     glm::vec3 previousPosition{};
     glm::quat previousRotation{};
     glm::vec3 currentPosition{};
@@ -27,31 +29,47 @@ struct DynamicPhysicsBodyRuntime
 };
 
 struct TeleportPhysicsTransformRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "TeleportPhysicsTransformRequest";
+};
 
 struct StaticFollowWarnedFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "StaticFollowWarnedFlag";
+};
 
 struct DirtyKinematicPhysicsTransformRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "DirtyKinematicPhysicsTransformRequest";
+};
 
 struct MovingKinematicFlag
 {};
 
 struct PhysicsMeshRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "PhysicsMeshRequest";
+};
 
 struct PhysicsMeshLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "PhysicsMeshLoadingFlag";
+};
 
 struct PhysicsShapeCreationRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "PhysicsShapeCreationRequest";
+};
 
 struct PhysicsBodyCreationRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "PhysicsBodyCreationRequest";
+};
 
 struct SetVelocityRequest
 {
+    static constexpr const char* COMPONENT_NAME = "SetVelocityRequest";
+
     glm::vec3 linearVelocity{0.0f};
     glm::vec3 angularVelocity{0.0f};
 };

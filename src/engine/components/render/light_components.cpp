@@ -21,7 +21,7 @@ namespace Engine
 {
 static constexpr float LIGHT_PI = 3.14159265358979f;
 
-static Vec3 EditorLightScale(Engine::Registry& registry, entt::entity entity)
+static Vec3 EditorLightScale(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto* world = registry.TryGet<Component::WorldTransformRuntime>(entity);
     return world ? world->scale : Vec3{1.0f, 1.0f, 1.0f};
@@ -66,7 +66,7 @@ static void EditLightIntensity(EditContext& edit, const char* label, float C::* 
     EditWidgets::CommitOnRelease<C>(edit, false);
 }
 
-static void ClaimShadowId(Engine::Registry& registry, entt::entity entity, Component::LightShadowMode mode, uint64_t& shadowId)
+static void ClaimShadowId(Engine::SystemRegistry& registry, entt::entity entity, Component::LightShadowMode mode, uint64_t& shadowId)
 {
     if (mode != Component::LightShadowMode::Baked) { return; }
     auto* state = registry.State();
@@ -84,12 +84,12 @@ static void ClaimShadowId(Engine::Registry& registry, entt::entity entity, Compo
     }
 }
 
-void Component::AreaLightComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Component::AreaLightComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& light = registry.GetMut<AreaLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
@@ -97,12 +97,12 @@ void Component::AreaLightComponent::OnEditCommit(Engine::Registry& registry, ent
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Component::SphereLightComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Component::SphereLightComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& light = registry.GetMut<SphereLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
@@ -111,7 +111,7 @@ void Component::SphereLightComponent::OnEditCommit(Engine::Registry& registry, e
 
 static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     auto* state = registry.State();
     auto* ctx = registry.Context();
     const uint32_t lightSlot = Component::FindLightSlot(registry, edit.Primary());
@@ -139,7 +139,7 @@ static constexpr const char* SHADOW_BAKE_RESOLUTION_LABELS[] = {"256", "512", "1
 
 Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -304,40 +304,39 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
     };
 }
 
-void Component::AreaLightComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
     auto& light = registry.GetMut<AreaLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
     registry.Set<AreaLightRuntime>(entity);
-    state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
+    registry.PushCommand({.type = CommandType::AreaLightConstruct, .entity = entity});
     registry.Set<MultiframeDirtyRequest>(entity);
     registry.Set<LightSurfaceRequest>(entity);
 }
 
 template<typename LightRuntime>
-static void ReleaseLightRuntime(Engine::Registry& registry, entt::entity entity)
+static void ReleaseLightRuntime(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& runtime = registry.Get<LightRuntime>(entity);
     if (runtime.bakedShadow.IsValid()) {
         registry.Context()->assetManager->UnloadTextureArray(runtime.bakedShadow);
     }
     if (runtime.lightSlot != AnalyticLightStore::INVALID_SLOT) {
-        registry.State()->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
+        registry.PushCommand({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
     }
 }
 
-void Component::AreaLightRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::AreaLightRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     ReleaseLightRuntime<AreaLightRuntime>(registry, entity);
 }
 
-void Component::SphereLightRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::SphereLightRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     ReleaseLightRuntime<SphereLightRuntime>(registry, entity);
 }
 
-void Component::AreaLightComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<AreaLightRuntime>(entity);
     registry.Remove<LightSurfaceRequest>(entity);
@@ -406,43 +405,41 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
     };
 }
 
-void Component::SphereLightComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* state = registry.State();
     auto& light = registry.GetMut<SphereLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
     registry.Set<SphereLightRuntime>(entity);
-    state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
+    registry.PushCommand({.type = CommandType::SphereLightConstruct, .entity = entity});
     registry.Set<MultiframeDirtyRequest>(entity);
     registry.Set<LightSurfaceRequest>(entity);
 }
 
-void Component::SphereLightComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<SphereLightRuntime>(entity);
     registry.Remove<LightSurfaceRequest>(entity);
     registry.Remove<LightSurfaceRuntime>(entity);
 }
 
-void Component::LightSurfaceRuntime::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void Component::LightSurfaceRuntime::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     if (const auto* stable = registry.TryGet<StableIdComponent>(entity)) {
         registry.GetMut<LightSurfaceRuntime>(entity).stableId = stable->id.id;
     }
 }
 
-void Component::LightSurfaceRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::LightSurfaceRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& runtime = registry.GetMut<LightSurfaceRuntime>(entity);
     if (!runtime.range.IsValid() && !runtime.modelRange.IsValid()) { return; }
 
-    auto* state = registry.State();
-    state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
+    registry.PushCommand({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
     runtime.range = {};
     runtime.modelRange = {};
 }
 
-void Component::SkyboxComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void Component::SkyboxComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<SkyboxRuntime>(entity);
 }
@@ -511,7 +508,7 @@ static void DrawFogVolumeFaceHandles(Core::ViewFamily& viewFamily, EditContext& 
 {
     auto* ctx = edit.Registry().Context();
     Engine::EngineState* state = edit.State();
-    const Engine::Registry& registry = edit.Registry();
+    const Engine::SystemRegistry& registry = edit.Registry();
     const auto& vd = viewFamily.mainView.currentViewData;
     const Vec4 viewport{
         static_cast<float>(ctx->windowContext.viewportOffsetX),
@@ -565,7 +562,7 @@ static void DrawFogVolumeFaceHandles(Core::ViewFamily& viewFamily, EditContext& 
 
 Engine::ComponentEditorResult Component::FogVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -652,16 +649,16 @@ void Component::FogVolumeComponent::DrawBounds(Core::ViewFamily& viewFamily, con
     }
 }
 
-void Component::SkyboxComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::SkyboxComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<SkyboxRuntime>(entity);
 }
 
-void Component::SkyboxRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void Component::SkyboxRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& runtime = registry.Get<SkyboxRuntime>(entity);
     if (runtime.handle.IsValid()) {
-        registry.State()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.handle}});
+        registry.PushCommand({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.handle}});
     }
 }
 } // Engine

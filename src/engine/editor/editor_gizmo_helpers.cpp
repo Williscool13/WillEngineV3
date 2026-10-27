@@ -33,7 +33,7 @@ Vec3 ScreenToRay(ImVec2 screenPos, const Mat4& view, const Mat4& proj, Vec4 view
     return glm::normalize(Vec3(glm::inverse(view) * viewRay));
 }
 
-bool MeshPivotPresets(Engine::EngineContext* ctx, const Engine::Registry& registry, entt::entity entity, const Quat& renderRotation, Vec3& renderOffset)
+bool MeshPivotPresets(Engine::EngineContext* ctx, const Engine::SystemRegistry& registry, entt::entity entity, const Quat& renderRotation, Vec3& renderOffset)
 {
     Vec3 boundsMin{1.0f};
     Vec3 boundsMax{-1.0f};

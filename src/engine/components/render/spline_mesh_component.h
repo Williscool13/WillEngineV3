@@ -63,20 +63,24 @@ struct SplineMeshComponent
         WILL_FIELD(bFacetNormals))
 
     static void Sanitize(SplineMeshComponent& comp);
-    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; StartSplineMeshLoads kicks the model build. */
 struct SplineMeshLoadRequest
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "SplineMeshLoadRequest";
+};
 
 /** Model build in flight; ResolveSplineMeshLoads binds it once finished. */
 struct SplineMeshLoadingFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "SplineMeshLoadingFlag";
+};
 
 Engine::SplineParams ToSplineParams(const SplineMeshComponent& component);
 }

@@ -9,12 +9,13 @@ namespace Engine
 {
 struct EngineContext;
 struct EngineState;
+class SystemRegistry;
 }
 
 namespace Ballance
 {
 /** Clips idle carts on at the boot, releases them at the end of their path, and recycles eaten or lost ones. */
-void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state);
+void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 } // Ballance
 
 #endif //WILL_ENGINE_BALLANCE_CANE_LIFT_SYSTEMS_H

@@ -15,6 +15,7 @@ namespace Engine
 struct EngineContext;
 struct EngineState;
 class AssetManager;
+class SystemRegistry;
 }
 
 namespace Physics
@@ -27,18 +28,18 @@ namespace Ballance
 class PhysicsCharacter
 {
 public:
-    void Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition);
-    void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* physicsWorld);
-    void Shutdown(Physics::PhysicsWorld* physicsWorld);
+    void Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition, Engine::SystemRegistry& registry);
+    void Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry);
+    void Shutdown(Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry);
 
     [[nodiscard]] entt::entity GetEntity() const { return entity; }
-    [[nodiscard]] glm::vec3 GetPosition() const;
-    [[nodiscard]] glm::vec3 GetInterpolatedPosition() const;
-    [[nodiscard]] glm::vec3 GetLinearVelocity() const;
+    [[nodiscard]] glm::vec3 GetPosition(Engine::SystemRegistry& registry) const;
+    [[nodiscard]] glm::vec3 GetInterpolatedPosition(Engine::SystemRegistry& registry) const;
+    [[nodiscard]] glm::vec3 GetLinearVelocity(Engine::SystemRegistry& registry) const;
     [[nodiscard]] bool IsGrounded() const;
 
 private:
-    bool CheckGrounded(Physics::PhysicsWorld* physicsWorld) const;
+    bool CheckGrounded(Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry) const;
 
     Engine::EngineState* engineState{nullptr};
     Physics::PhysicsWorld* physicsWorld{nullptr};

@@ -34,10 +34,13 @@ struct BreakableComponent
 
 struct BreakableRuntime
 {
+    static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
+    static constexpr const char* COMPONENT_NAME = "BreakableRuntime";
+
     Engine::StaticModelHandle model{};
     Core::InlineVector<Engine::PhysicsColliderHandle, 32> colliders{};
 
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct ShatterOnContactTag

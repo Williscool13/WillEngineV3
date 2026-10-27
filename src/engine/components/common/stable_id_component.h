@@ -42,9 +42,9 @@ struct StableIdComponent
 
     WILL_REFLECT(StableIdComponent, WILL_FIELD(id), WILL_FIELD(sortOrder))
 
-    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
-    static void OnUpdate(Engine::Registry& registry, entt::entity entity);
-    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnUpdate(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 

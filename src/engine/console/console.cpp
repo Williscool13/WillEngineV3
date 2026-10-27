@@ -161,7 +161,7 @@ void ClearGameCommands(Engine::EngineState* state)
     }
 }
 
-static void VerifyLights(Engine::EngineState* state);
+static void VerifyLights(Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void RegisterBuiltinCommands(Engine::EngineState* state)
 {
@@ -203,7 +203,8 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
     });
 
     Register(state, Origin::Engine, "r.lights.verify", "Checks every analytic light slot against its component (stale), and lists non-zero slots no entity owns (orphan)", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*>) {
-        VerifyLights(state);
+        Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/r.lights.verify"};
+        VerifyLights(state, registry);
     });
 
     Register(state, Origin::Engine, "r.gtao", "`r.gtao 0|1` toggles ambient occlusion", [](Engine::EngineContext*, Engine::EngineState* state, Core::Span<const char*> args) {
@@ -288,7 +289,8 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             Print(state, Core::InlineString<64>::Format("  cam %d is empty", slot + 1).c_str());
             return;
         }
-        auto camView = state->registry.View<Engine::Mut<Component::TransformComponent>, Component::CameraRuntime, Component::EditorCameraTag>();
+        Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.cam"};
+        auto camView = registry.View<Engine::Mut<Component::TransformComponent>, Component::CameraRuntime, Component::EditorCameraTag>();
         const entt::entity camEntity = camView.front();
         if (camEntity == entt::null) {
             Print(state, "  no editor camera");
@@ -307,7 +309,8 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             Print(state, "  usage: w.scene <1-9>");
             return;
         }
-        if (!LoadSceneSlot(ctx, state, slot)) {
+        Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.scene"};
+        if (!LoadSceneSlot(ctx, state, slot, registry)) {
             Print(state, Core::InlineString<64>::Format("  scene %d is empty or unregistered", slot + 1).c_str());
             return;
         }
@@ -315,7 +318,8 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
     });
 
     Register(state, Origin::Engine, "w.runtime.save", "Writes the current scene's runtime state to <scene>.wruntimescene (play or simulate)", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
-        Print(state, SaveRuntimeScene(ctx, state, state->scene.currentSceneId) ? "  saved runtime scene" : "  save failed, see the log");
+        Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.runtime.save"};
+        Print(state, SaveRuntimeScene(ctx, state, state->scene.currentSceneId, registry) ? "  saved runtime scene" : "  save failed, see the log");
     });
 
     Register(state, Origin::Engine, "w.rescan", "Rescan assets, materials and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
@@ -642,10 +646,10 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     c.windowSize.y = std::max(c.windowSize.y, MIN_WINDOW_HEIGHT);
 }
 
-static void SnapEditorCameraToGameCamera(Engine::EngineState* state)
+static void SnapEditorCameraToGameCamera(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto gameCamView = state->registry.View<Component::GameCameraTag, Component::TransformComponent>();
-    auto editorCamView = state->registry.View<Component::EditorCameraTag, Engine::Mut<Component::TransformComponent>>();
+    auto gameCamView = registry.View<Component::GameCameraTag, Component::TransformComponent>();
+    auto editorCamView = registry.View<Component::EditorCameraTag, Engine::Mut<Component::TransformComponent>>();
     if (gameCamView.front() == entt::null || editorCamView.front() == entt::null) {
         return;
     }
@@ -655,7 +659,7 @@ static void SnapEditorCameraToGameCamera(Engine::EngineState* state)
     editorT.rotation = gameT.rotation;
 }
 
-static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     const Engine::PickPixelState& pick = state->debug.pick;
     if (!pick.bHit || pick.instanceIndex >= state->instanceStore.GetWatermark()) {
@@ -663,8 +667,8 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
         return;
     }
     const Engine::InstanceSource& source = state->instanceStore[pick.instanceIndex];
-    const entt::entity found = Engine::FindEntity(state, StringID(source.stableId));
-    const auto* name = found != entt::null ? state->registry.TryGet<Engine::Component::NameComponent>(found) : nullptr;
+    const entt::entity found = Engine::FindEntity(state, StringID(source.stableId), registry);
+    const auto* name = found != entt::null ? registry.TryGet<Engine::Component::NameComponent>(found) : nullptr;
     const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
     Print(state, Core::InlineString<256>::Format("  pick: %s, primitive ordinal %u (index %u, node %u), instance %u", name ? name->name.c_str() : "(no entity)", source.modelPrimitiveOrdinal, source.primitiveIndex, source.sourceNodeIndex, pick.instanceIndex).c_str());
     if (material) {
@@ -674,10 +678,9 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
     Print(state, Core::InlineString<256>::Format("  emissive light: %s, world (%.3f, %.3f, %.3f)", source.emissiveMeshSlot != ~0u ? "yes" : "no", pick.worldPos.x, pick.worldPos.y, pick.worldPos.z).c_str());
 }
 
-static void VerifyLights(Engine::EngineState* state)
+static void VerifyLights(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     using Engine::AnalyticLightStore;
-    Engine::Registry& registry = state->registry;
     const LightInfo* lights = state->analyticLightStore.Lights();
     const uint32_t watermark = state->analyticLightStore.GetWatermark();
     uint32_t owned[MAX_ANALYTIC_LIGHTS / 32] = {};
@@ -733,13 +736,13 @@ static void VerifyLights(Engine::EngineState* state)
     Print(state, Core::InlineString<256>::Format("  %u lights checked, %u stale, %u orphan slots, %u shared slots, %u without a slot; watermark %u", checked, stale, orphans, shared, unslotted, watermark).c_str());
 }
 
-void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
+void Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ConsoleState& c = state->console;
 
     if (state->debug.pick.bPrintToConsole && !state->debug.pick.bPending) {
         state->debug.pick.bPrintToConsole = false;
-        PrintPickResult(ctx, state);
+        PrintPickResult(ctx, state, registry);
     }
 
     if (c.bOwnsContext && state->inputContext != Engine::InputContext::Console) {
@@ -767,7 +770,7 @@ void Update(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (c.bOpen && !c.bOwnsContext) {
         c.prevContext = state->inputContext;
         if (c.prevContext == Engine::InputContext::Gameplay) {
-            SnapEditorCameraToGameCamera(state);
+            SnapEditorCameraToGameCamera(state, registry);
         }
         state->inputContext = Engine::InputContext::Console;
         ctx->setCursorHiddenFn(false);

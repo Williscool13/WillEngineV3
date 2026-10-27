@@ -19,7 +19,7 @@
 
 namespace Engine::Component
 {
-static void RequestReflectionProbeLoad(Engine::Registry& registry, entt::entity entity)
+static void RequestReflectionProbeLoad(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.Get<ReflectionProbeComponent>(entity);
     auto* ctx = registry.Context();
@@ -61,7 +61,7 @@ bool ReflectionProbeComponent::IsBakeStale(const WorldTransformRuntime& world, c
     return false;
 }
 
-void ReflectionProbeComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto* runtime = registry.TryGetMut<ReflectionProbeRuntime>(entity);
     if (!runtime || runtime->contentSource == ContentSource::Baked) {
@@ -77,7 +77,7 @@ void ReflectionProbeComponent::OnEditCommit(Engine::Registry& registry, entt::en
 
 Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -274,7 +274,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
 }
 
 
-void ReflectionProbeComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<ReflectionProbeComponent>(entity);
     auto* state = registry.State();
@@ -283,23 +283,23 @@ void ReflectionProbeComponent::OnConstruct(Engine::Registry& registry, entt::ent
     if (comp.probeId == 0) {
         comp.probeId = state->rng();
     }
-    state->commandQueue.Push({.type = CommandType::ProbeConstruct, .entity = entity});
+    registry.PushCommand({.type = CommandType::ProbeConstruct, .entity = entity});
 }
 
-void ReflectionProbeComponent::DeferredConstruct(Engine::Registry& registry, entt::entity entity)
+void ReflectionProbeComponent::DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     RequestReflectionProbeLoad(registry, entity);
 }
 
-void ReflectionProbeRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void ReflectionProbeRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& runtime = registry.Get<ReflectionProbeRuntime>(entity);
     if (runtime.contentHandle.IsValid()) {
-        registry.State()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.contentHandle}});
+        registry.PushCommand({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.contentHandle}});
     }
 }
 
-void ReflectionProbeComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<ReflectionProbeRuntime, ReflectionProbeLoadRequest, ReflectionProbeLoadingFlag, ReflectionProbeBakeRequest>(entity);
 }

@@ -14,7 +14,7 @@
 
 namespace Ballance::Component
 {
-void CheckpointComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
+void CheckpointComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<CheckpointComponent>(entity);
     if (comp.checkpointId.id == 0) {
@@ -26,7 +26,7 @@ void CheckpointComponent::OnConstruct(Engine::Registry& registry, entt::entity e
 
 Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    Engine::Registry& registry = edit.Registry();
+    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<CheckpointComponent>();
     bool open = ImGui::CollapsingHeader("Checkpoint", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);

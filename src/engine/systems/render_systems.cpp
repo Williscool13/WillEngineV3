@@ -50,11 +50,11 @@
 
 namespace Engine
 {
-void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state)
+void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto transformDirtyView = state->registry.View<Component::TransformComponent, Component::DirtyTransformRequest>();
+    auto transformDirtyView = registry.View<Component::TransformComponent, Component::DirtyTransformRequest>();
     for (auto entity : transformDirtyView) {
-        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
     }
 }
 
@@ -76,10 +76,9 @@ static void InterpolatedPose(const Component::DynamicPhysicsBodyRuntime& physics
     outRotation = NlerpPose(physics.previousRotation, physics.currentRotation, alpha);
 }
 
-void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto& registry = state->registry;
     const float alpha = state->physics.interpolationAlpha;
 
     // Roots (no parent), non-physics
@@ -104,7 +103,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     // Children in depth order
-    EnsureHierarchyOrder(state);
+    EnsureHierarchyOrder(state, registry);
     auto orphans = Core::ArenaVector<entt::entity>(&ctx->gameplayArena.Get(), 8);
     auto hierarchy = registry.View<Component::HierarchyComponent>();
     for (auto entity : hierarchy) {
@@ -154,7 +153,7 @@ void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state)
+void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     const Vec2 mousePos = state->input.mousePositionAbsolute;
     const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
@@ -165,11 +164,11 @@ void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state
     state->input.uiScrollAccum += state->input.GetActionState(Actions::ACTION_UI_SCROLL).axis;
 }
 
-void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
 
-    auto dirtyView = state->registry.View<Component::WorldTransformRuntime, Engine::Mut<Component::RenderTransformRuntime>, Component::MultiframeDirtyRequest>();
+    auto dirtyView = registry.View<Component::WorldTransformRuntime, Engine::Mut<Component::RenderTransformRuntime>, Component::MultiframeDirtyRequest>();
     constexpr size_t TASK_THRESHOLD = 1000;
     size_t dirtyViewCount = dirtyView.size_hint();
     if (dirtyViewCount < TASK_THRESHOLD) {
@@ -213,7 +212,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
         Engine::InstanceStore& store = state->instanceStore;
         Engine::ModelStore& modelStore = state->modelStore;
         Engine::TriLightStore& triLightStore = state->triLightStore;
-        for (auto [entity, runtime, renderTransform, dirty] : state->registry.View<Component::MeshRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
+        for (auto [entity, runtime, renderTransform, dirty] : registry.View<Component::MeshRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
@@ -231,21 +230,21 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     // Area light emissive quads
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.View<Component::AreaLightComponent, Component::WorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>().each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : registry.View<Component::AreaLightComponent, Component::WorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>().each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
         state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
     }
 
     // Sphere light emissive meshes
-    for (auto [entity, light, transform, surfaceRuntime, dirty] : state->registry.View<Component::SphereLightComponent, Component::WorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>(entt::exclude<Component::AreaLightComponent>).each()) {
+    for (auto [entity, light, transform, surfaceRuntime, dirty] : registry.View<Component::SphereLightComponent, Component::WorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>(entt::exclude<Component::AreaLightComponent>).each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
         const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
         state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
     }
 
     // Text quads
-    for (auto [entity, runtime, renderTransform, dirty] : state->registry.View<Component::TextRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
+    for (auto [entity, runtime, renderTransform, dirty] : registry.View<Component::TextRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
         if (!runtime.modelRange.IsValid()) { continue; }
         state->modelStore.SetModel(runtime.modelRange.offset, {renderTransform.modelMatrix, renderTransform.previousMatrix});
     }
@@ -253,29 +252,29 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     // Analytic light payload. A bake-hidden light writes dead, so the store stays the only authority on what the GPU sees.
     {
         Engine::AnalyticLightStore& lightStore = state->analyticLightStore;
-        const bool bAnyHidden = state->registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
-        auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && state->registry.Has<Component::ProbeBakeHiddenFlag>(entity); };
+        const bool bAnyHidden = registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
+        auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && registry.Has<Component::ProbeBakeHiddenFlag>(entity); };
 
-        for (auto [entity, light, runtime, transform, dirty] : state->registry.View<Component::AreaLightComponent, Component::AreaLightRuntime, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
+        for (auto [entity, light, runtime, transform, dirty] : registry.View<Component::AreaLightComponent, Component::AreaLightRuntime, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
             if (runtime.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
             lightStore.SetLight(runtime.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeAreaLightInfo(transform, light));
         }
 
-        for (auto [entity, light, runtime, transform, dirty] : state->registry.View<Component::SphereLightComponent, Component::SphereLightRuntime, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
+        for (auto [entity, light, runtime, transform, dirty] : registry.View<Component::SphereLightComponent, Component::SphereLightRuntime, Component::WorldTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
             if (runtime.lightSlot == Engine::AnalyticLightStore::INVALID_SLOT) { continue; }
             lightStore.SetLight(runtime.lightSlot, bHiddenLight(entity) ? LightInfo{} : Component::ComputeSphereLightInfo(transform, light));
         }
     }
 
-    for (auto [entity, dirty] : state->registry.View<Engine::Mut<Component::MultiframeDirtyRequest>>().each()) {
+    for (auto [entity, dirty] : registry.View<Engine::Mut<Component::MultiframeDirtyRequest>>().each()) {
         dirty.counter--;
         if (dirty.counter <= 0) {
-            state->registry.Remove<Component::MultiframeDirtyRequest>(entity);
+            registry.Remove<Component::MultiframeDirtyRequest>(entity);
         }
     }
 }
 
-void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
+void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager;
@@ -284,15 +283,15 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
     emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
     constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR;
 
-    const bool bAnyHideTags = state->registry.View<Component::ProbeBakeHiddenFlag>().size() > 0
-                              || state->registry.View<Component::ProbeBakeProxyHiddenFlag>().size() > 0;
+    const bool bAnyHideTags = registry.View<Component::ProbeBakeHiddenFlag>().size() > 0
+                              || registry.View<Component::ProbeBakeProxyHiddenFlag>().size() > 0;
 
     auto emitSurface = [&](entt::entity lightEntity, Component::LightSurfaceRuntime& surfaceRuntime, const glm::vec3& color, float intensity, bool draw) {
         if (!surfaceRuntime.range.IsValid()) { return; }
 
         bool bDraw = draw;
         if (bDraw && bAnyHideTags) {
-            bDraw = !state->registry.HasAny<Component::ProbeBakeHiddenFlag, Component::ProbeBakeProxyHiddenFlag>(lightEntity);
+            bDraw = !registry.HasAny<Component::ProbeBakeHiddenFlag, Component::ProbeBakeProxyHiddenFlag>(lightEntity);
         }
 
         if (bDraw) {
@@ -313,29 +312,28 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     };
 
-    for (auto [entity, light, surfaceRuntime] : state->registry.View<Component::AreaLightComponent, Engine::Mut<Component::LightSurfaceRuntime>>().each()) {
+    for (auto [entity, light, surfaceRuntime] : registry.View<Component::AreaLightComponent, Engine::Mut<Component::LightSurfaceRuntime>>().each()) {
         emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface && light.bEnabled);
     }
-    for (auto [entity, light, surfaceRuntime] : state->registry.View<Component::SphereLightComponent, Engine::Mut<Component::LightSurfaceRuntime>>(entt::exclude<Component::AreaLightComponent>).each()) {
+    for (auto [entity, light, surfaceRuntime] : registry.View<Component::SphereLightComponent, Engine::Mut<Component::LightSurfaceRuntime>>(entt::exclude<Component::AreaLightComponent>).each()) {
         emitSurface(entity, surfaceRuntime, light.color, light.intensity, light.drawEmissiveSurface && light.bEnabled);
     }
 }
 
-void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    for (auto&& [entity, sky] : state->registry.View<Component::SkyboxComponent>(entt::exclude<Component::SkyboxRuntime>).each()) {
+    for (auto&& [entity, sky] : registry.View<Component::SkyboxComponent>(entt::exclude<Component::SkyboxRuntime>).each()) {
         if (!sky.envMap.IsValid()) { continue; }
         if (ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
-        state->registry.Add<Component::SkyboxRuntime>(entity, ctx->assetManager->LoadCubemap(sky.envMap));
+        registry.Set<Component::SkyboxRuntime>(entity, ctx->assetManager->LoadCubemap(sky.envMap));
     }
 }
 
-void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     auto& materialManager = ctx->materialManager;
-    const Engine::Registry& registry = state->registry;
 
 #ifdef WDEBUG
     VerifyGeometryStores(state);
@@ -456,10 +454,9 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     }
 }
 
-void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    const Engine::Registry& registry = state->registry;
     auto view = registry.View<Component::TextComponent,Component::TextRuntime, Component::RenderTransformRuntime>(entt::exclude<Component::TextFontRequest>);
 
     for (const auto& [entity, textComp, runtime, renderTransform] : view.each()) {
@@ -637,7 +634,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-static void MarkAnalyticLightsDirty(Engine::Registry& registry)
+static void MarkAnalyticLightsDirty(Engine::SystemRegistry& registry)
 {
     for (auto entity : registry.View<Component::AreaLightComponent>()) {
         registry.Set<Component::MultiframeDirtyRequest>(entity);
@@ -647,10 +644,8 @@ static void MarkAnalyticLightsDirty(Engine::Registry& registry)
     }
 }
 
-void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    Engine::Registry& registry = state->registry;
-
     for (const auto& [entity, transform] : registry.View<Component::TransformComponent>().each()) {
         if (transform.mobility != Component::Mobility::Static) { registry.Set<Component::ProbeBakeHiddenFlag>(entity); }
     }
@@ -669,15 +664,15 @@ void ApplyProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (body.motionType != Component::PhysicsMotionType::Static) { registry.Set<Component::ProbeBakeHiddenFlag>(entity); }
     }
 
-    EvaluateAllInstanceRenderStates(state);
+    EvaluateAllInstanceRenderStates(state, registry);
     MarkAnalyticLightsDirty(registry);
 }
 
-void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state)
+void ClearProbeBakeHideSet(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    state->registry.Clear<Component::ProbeBakeHiddenFlag, Component::ProbeBakeProxyHiddenFlag>();
-    EvaluateAllInstanceRenderStates(state);
-    MarkAnalyticLightsDirty(state->registry);
+    registry.Clear<Component::ProbeBakeHiddenFlag, Component::ProbeBakeProxyHiddenFlag>();
+    EvaluateAllInstanceRenderStates(state, registry);
+    MarkAnalyticLightsDirty(registry);
 }
 
 /** Bit per active tile whose view frustum a changed caster's bounds touch. */
@@ -737,16 +732,16 @@ static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
-void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     vf.bakedShadowLights.Clear();
     const bool bActive = state->lighting.localShadows.bEnabled && state->lighting.lightingMode == Core::LightingMode::Analytic;
-    for (auto [entity, light, runtime] : state->registry.View<Component::AreaLightComponent, Engine::Mut<Component::AreaLightRuntime>>().each()) {
+    for (auto [entity, light, runtime] : registry.View<Component::AreaLightComponent, Engine::Mut<Component::AreaLightRuntime>>().each()) {
         ResolveBakedShadow(ctx, state, vf, light, runtime, bActive);
     }
-    for (auto [entity, light, runtime] : state->registry.View<Component::SphereLightComponent, Engine::Mut<Component::SphereLightRuntime>>().each()) {
+    for (auto [entity, light, runtime] : registry.View<Component::SphereLightComponent, Engine::Mut<Component::SphereLightRuntime>>().each()) {
         ResolveBakedShadow(ctx, state, vf, light, runtime, bActive);
     }
 }
@@ -959,17 +954,16 @@ static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* 
     vf.localShadowAtlasExtent = selection.atlasExtent;
 }
 
-void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    const Engine::Registry& registry = state->registry;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
 
     state->analyticLightStore.Tick(ctx->currentRenderFrame);
     state->triLightStore.Tick(ctx->currentRenderFrame);
 
 #ifdef WDEBUG
-    VerifyAnalyticLightStore(state);
+    VerifyAnalyticLightStore(state, registry);
 #endif
 
     const uint32_t analyticWatermark = state->analyticLightStore.GetWatermark();
@@ -1117,7 +1111,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     }
 }
 
-void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     const auto& config = state->lighting.reflectionProbe;
@@ -1126,7 +1120,6 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     vf.bReflectionProbeBruteForce = config.bBruteForcePick;
 
-    const Engine::Registry& registry = state->registry;
     auto view = registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::WorldTransformRuntime>();
     for (const auto& [entity, probe, probeRuntime, worldTransform] : view.each()) {
         if (vf.reflectionProbes.IsFull()) { break; }
@@ -1186,13 +1179,12 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     if (!state->lighting.ddgi.bLocalVolumes) { return; }
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-    const Engine::Registry& registry = state->registry;
     auto view = registry.View<Component::LocalDDGIVolumeComponent, Component::WorldTransformRuntime>();
     for (const auto& [entity, volume, worldTransform] : view.each()) {
         if (vf.localDDGIVolumes.IsFull()) { break; }
@@ -1205,7 +1197,7 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
@@ -1218,7 +1210,7 @@ void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Co
         float distance;
     };
     Core::InlineVector<Candidate, VOLUMETRIC_FOG_MAX_VOLUMES> picked;
-    for (const auto& [entity, volume, worldTransform] : state->registry.View<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, volume, worldTransform] : registry.View<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!volume.bEnabled) { continue; }
         const float absorption = glm::max(volume.absorption, 0.0f);
         const float scattering = glm::max(volume.scattering, 0.0f);
@@ -1267,14 +1259,14 @@ void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Co
     }
 }
 
-void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     const Vec3 cameraPos = vf.mainView.currentViewData.cameraPos;
     Core::InlineVector<Engine::ActivePostProcessVolume, Engine::DebugState::MAX_ACTIVE_POST_PROCESS_VOLUMES>& active = state->debug.postProcessVolumes;
     active.Clear();
-    for (const auto& [entity, volume, worldTransform] : state->registry.View<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, volume, worldTransform] : registry.View<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (active.IsFull()) { break; }
         const float weight = Component::PostProcessVolumeComponent::CameraWeight(volume, worldTransform.translation, worldTransform.rotation, worldTransform.scale, cameraPos);
         if (weight <= 0.0f || volume.overrides.IsEmpty()) { continue; }
@@ -1285,7 +1277,7 @@ void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 
     for (const Engine::ActivePostProcessVolume& a : active) {
-        for (const Component::PostProcessOverride& o : state->registry.Get<Component::PostProcessVolumeComponent>(a.entity).overrides) {
+        for (const Component::PostProcessOverride& o : registry.Get<Component::PostProcessVolumeComponent>(a.entity).overrides) {
             if (const Component::PostProcessOverrideField* field = Component::FindPostProcessOverrideField(o.field.View())) {
                 Component::ApplyPostProcessOverride(*field, vf, o.value, a.weight);
             }
@@ -1293,11 +1285,10 @@ void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
-void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     const uint32_t mask = state->projectConfig.editorSpriteMask;
-    const Engine::Registry& registry = state->registry;
     Core::ArenaVector<Core::Sprite>& sprites = frameBuffer->mainViewFamily.sprites;
     auto push = [&](entt::entity entity, const Vec3& position, const Vec4& color, uint32_t textureIndex) {
         const auto* stable = registry.TryGet<Component::StableIdComponent>(entity);
@@ -1349,7 +1340,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     const Engine::LightDebugDrawMode mode = state->projectConfig.editorDebugDrawMode;
@@ -1393,7 +1384,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     };
 
-    for (const auto& [entity, light, transform] : state->registry.View<Component::AreaLightComponent, Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, light, transform] : registry.View<Component::AreaLightComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_AREA_LIGHT)) { continue; }
         const Vec3 center = transform.translation;
         const Vec3 right = transform.rotation * Vec3(1.0f, 0.0f, 0.0f);
@@ -1447,7 +1438,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.View<Component::SphereLightComponent, Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, light, transform] : registry.View<Component::SphereLightComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_SPHERE_LIGHT)) { continue; }
         constexpr Vec4 editColor{0.5f, 0.8f, 1.0f, 1.0f};
         constexpr Vec4 rangeColor{1.0f, 0.55f, 0.15f, 1.0f};
@@ -1457,31 +1448,31 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
     }
 
-    for (const auto& [entity, light, transform] : state->registry.View<Component::DirectionalLightComponent, Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, light, transform] : registry.View<Component::DirectionalLightComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_DIRECTIONAL_LIGHT)) { continue; }
         const Vec3 forward = transform.rotation * Vec3(0.0f, 0.0f, 1.0f);
         constexpr Vec4 dirColor{1.0f, 0.9f, 0.5f, 1.0f};
         DEBUG_ADD_ARROW(viewFamily.debugArrows, {transform.translation, transform.translation + forward * 2.0f, 0.15f, 0.04f, dirColor, 0.02f});
     }
 
-    for (auto [entity, volume, transform] : state->registry.View<Component::LocalDDGIVolumeComponent, Component::WorldTransformRuntime>().each()) {
+    for (auto [entity, volume, transform] : registry.View<Component::LocalDDGIVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_DDGI_VOLUME)) { continue; }
         constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
         const Vec4 color = volume.bEnabled ? Core::Math::HashColor(volume.volumeId, 0u, 0.08f, 0.84f) : disabledColor;
         Component::LocalDDGIVolumeComponent::DrawWindow(viewFamily, transform.translation, volume.probeSpacing, color, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
-    for (auto [entity, volume, transform] : state->registry.View<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
+    for (auto [entity, volume, transform] : registry.View<Component::PostProcessVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_POST_PROCESS_VOLUME)) { continue; }
         Component::PostProcessVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
-    for (auto [entity, volume, transform] : state->registry.View<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
+    for (auto [entity, volume, transform] : registry.View<Component::FogVolumeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_FOG_VOLUME)) { continue; }
         Component::FogVolumeComponent::DrawBounds(viewFamily, volume, transform.translation, transform.rotation, transform.scale, state->projectConfig.reflectionProbeLineWidth, state->editor.selectedEntities.Contains(entity));
     }
 
-    for (auto [entity, probe, transform] : state->registry.View<Component::ReflectionProbeComponent, Component::WorldTransformRuntime>().each()) {
+    for (auto [entity, probe, transform] : registry.View<Component::ReflectionProbeComponent, Component::WorldTransformRuntime>().each()) {
         if (!shouldDraw(entity, Engine::EDITOR_OBJECT_REFLECTION_PROBE)) { continue; }
 
         const Vec4 volumeColor = Core::Math::HashColor(probe.probeId, 0u, 0.08f, 0.84f);
@@ -1508,7 +1499,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {capturePos, 0.1f, captureColor, lineWidth});
 
         // Stale baked probes
-        const auto* probeRuntime = state->registry.TryGet<Component::ReflectionProbeRuntime>(entity);
+        const auto* probeRuntime = registry.TryGet<Component::ReflectionProbeRuntime>(entity);
         if (probeRuntime && probeRuntime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
             const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId});
             if (info && Component::ReflectionProbeComponent::IsBakeStale(transform, probe, info->snapshot, info->resolution)) {
@@ -1529,7 +1520,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
@@ -1546,7 +1537,7 @@ void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
     if (!state->debug.localShadow.bDrawViews) { return; }

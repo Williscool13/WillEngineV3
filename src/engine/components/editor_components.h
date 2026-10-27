@@ -51,7 +51,7 @@ struct SceneFolderComponent
         WILL_FIELD(parentFolder),
         WILL_FIELD(name))
 
-    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
 };
 }
 
