@@ -7,7 +7,7 @@
 
 #include <cstdint>
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 namespace Engine
 {

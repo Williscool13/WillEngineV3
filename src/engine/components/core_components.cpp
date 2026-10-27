@@ -20,37 +20,37 @@
 #include "engine/systems/render_systems.h"
 
 
-void Engine::Component::TransformComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
-    registry.emplace_or_replace<WorldTransformRuntime>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
+    registry.Set<WorldTransformRuntime>(entity);
 }
 
-void Engine::Component::TransformComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<MultiframeDirtyRequest>(entity);
-    registry.remove<WorldTransformRuntime>(entity);
+    registry.Remove<MultiframeDirtyRequest>(entity);
+    registry.Remove<WorldTransformRuntime>(entity);
 }
 
-Transform Engine::Component::ComputeWorldTransform(const entt::registry& registry, entt::entity entity)
+Transform Engine::Component::ComputeWorldTransform(const Engine::Registry& registry, entt::entity entity)
 {
-    const auto& local = registry.get<TransformComponent>(entity);
-    const auto* node = registry.try_get<HierarchyComponent>(entity);
-    if (!node || node->parent == entt::null || !registry.valid(node->parent)) {
+    const auto& local = registry.Get<TransformComponent>(entity);
+    const auto* node = registry.TryGet<HierarchyComponent>(entity);
+    if (!node || node->parent == entt::null || !registry.Valid(node->parent)) {
         return {local.translation, local.rotation, local.scale};
     }
     return ComposeWorldTransform(ComputeWorldTransform(registry, node->parent), local);
 }
 
-void Engine::Component::TransformComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<DirtyTransformRequest>(entity);
+    registry.Set<DirtyTransformRequest>(entity);
 }
 
-void Engine::Component::TransformComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<DirtyTransformRequest>(entity);
-    Engine::EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
+    registry.Set<DirtyTransformRequest>(entity);
+    Engine::EvaluateInstanceRenderState(registry.State(), entity);
 }
 
 namespace Engine

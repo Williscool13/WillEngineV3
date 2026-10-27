@@ -11,6 +11,7 @@
 #include <imgui_internal.h>
 #include <glm/glm.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/components/component_editor.h"
 #include "engine/components/core_components.h"
 #include "engine/editor/editor_gizmo_helpers.h"
@@ -303,11 +304,11 @@ static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverride
 
 static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edit)
 {
-    const entt::registry& registry = edit.Registry();
+    const Engine::Registry& registry = edit.Registry();
     uint32_t volumeCount = 0;
     bool bAllFull = true;
     for (const entt::entity e : edit.Targets()) {
-        if (const auto* c = registry.try_get<PostProcessVolumeComponent>(e)) {
+        if (const auto* c = registry.TryGet<PostProcessVolumeComponent>(e)) {
             ++volumeCount;
             bAllFull = bAllFull && c->overrides.IsFull();
         }
@@ -319,7 +320,7 @@ static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edi
         bool bMixed = false;
         Vec3 value{0.0f};
         for (const entt::entity e : edit.Targets()) {
-            const auto* c = registry.try_get<PostProcessVolumeComponent>(e);
+            const auto* c = registry.TryGet<PostProcessVolumeComponent>(e);
             if (c == nullptr) { continue; }
             const int32_t index = FindOverride(*c, f.name);
             if (index < 0) { continue; }
@@ -379,7 +380,7 @@ static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edi
         for (const PostProcessOverrideField& f : OVERRIDE_FIELDS) {
             uint32_t holders = 0;
             for (const entt::entity e : edit.Targets()) {
-                const auto* c = registry.try_get<PostProcessVolumeComponent>(e);
+                const auto* c = registry.TryGet<PostProcessVolumeComponent>(e);
                 if (c != nullptr && FindOverride(*c, f.name) >= 0) {
                     ++holders;
                 }
@@ -401,7 +402,7 @@ static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edi
 
 static void DrawFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const TransformComponent& transform)
 {
-    auto* ctx = edit.Registry().ctx().get<Engine::EngineContext*>();
+    auto* ctx = edit.Registry().Context();
     Engine::EngineState* state = edit.State();
     const auto& vd = viewFamily.mainView.currentViewData;
     const Vec4 viewport{
@@ -436,7 +437,7 @@ static void DrawFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& e
 
 Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -483,7 +484,7 @@ Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Core::ViewF
         DrawOverrides(viewFamily, edit);
     }
 
-    const auto* transform = registry.try_get<TransformComponent>(entity);
+    const auto* transform = registry.TryGet<TransformComponent>(entity);
     if (transform && bEditing) {
         DrawFaceHandles(viewFamily, edit, *transform);
         DrawBounds(viewFamily, edit.Get<PostProcessVolumeComponent>(),transform->translation, transform->rotation, transform->scale, state->projectConfig.reflectionProbeLineWidth, true);

@@ -28,7 +28,7 @@ static const ComponentEntry* FindEntry(const EngineState* state, StringID typeId
     return index ? &state->componentRegistry.registry[*index] : nullptr;
 }
 
-static uint32_t AppendSnapshot(const ComponentEntry& entry, entt::registry& registry, entt::entity e, Core::Vector<std::byte>& data, uint32_t& outSize)
+static uint32_t AppendSnapshot(const ComponentEntry& entry, Engine::Registry& registry, entt::entity e, Core::Vector<std::byte>& data, uint32_t& outSize)
 {
     const auto offset = static_cast<uint32_t>(data.Size());
     TextWriter writer(data);
@@ -50,7 +50,7 @@ void UndoStack::Begin(EngineState* state, StringID typeId, Core::Span<const entt
     pending = UndoRecord{typeId, Core::Vector<UndoEntry>(allocator, Core::AllocTag::EngineState), Core::Vector<std::byte>(allocator, Core::AllocTag::EngineState)};
     bPending = true;
     for (const entt::entity e : targets) {
-        const auto* stable = state->registry.try_get<Component::StableIdComponent>(e);
+        const auto* stable = state->registry.TryGet<Component::StableIdComponent>(e);
         if (stable == nullptr || !entry->has(state->registry, e)) { continue; }
         UndoEntry& u = pending.entries.EmplaceBack();
         u.stableId = stable->id;
@@ -73,7 +73,7 @@ void UndoStack::End(EngineState* state, StringID typeId)
         u.afterOffset = AppendSnapshot(*entry, state->registry, e, pending.data, u.afterSize);
         const bool bEntityChanged = u.beforeSize != u.afterSize || memcmp(pending.data.Data() + u.beforeOffset, pending.data.Data() + u.afterOffset, u.beforeSize) != 0;
         if (bEntityChanged) {
-            if (const auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
+            if (const auto* sc = state->registry.TryGet<Component::SceneRuntime>(e)) {
                 MarkSceneModified(state, sc->sceneId);
             }
         }
@@ -111,7 +111,7 @@ void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore
         const uint32_t offset = bBefore ? u.beforeOffset : u.afterOffset;
         const uint32_t size = bBefore ? u.beforeSize : u.afterSize;
         entry->restore(state->registry, e, TextReader(record.data.Data() + offset, size));
-        if (auto* sc = state->registry.try_get<Component::SceneRuntime>(e)) {
+        if (auto* sc = state->registry.TryGet<Component::SceneRuntime>(e)) {
             MarkSceneModified(state, sc->sceneId);
         }
     }

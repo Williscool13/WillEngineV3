@@ -19,15 +19,15 @@
 
 namespace Engine::Component
 {
-static void RequestReflectionProbeLoad(entt::registry& registry, entt::entity entity)
+static void RequestReflectionProbeLoad(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<ReflectionProbeComponent>(entity);
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto& comp = registry.Get<ReflectionProbeComponent>(entity);
+    auto* ctx = registry.Context();
 
-    registry.remove<ReflectionProbeLoadingFlag>(entity);
+    registry.Remove<ReflectionProbeLoadingFlag>(entity);
     const bool bHasBaked = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
     if (bHasBaked || comp.standInEnvMap.IsValid()) {
-        registry.emplace_or_replace<ReflectionProbeLoadRequest>(entity);
+        registry.Set<ReflectionProbeLoadRequest>(entity);
     }
 }
 
@@ -61,14 +61,14 @@ bool ReflectionProbeComponent::IsBakeStale(const WorldTransformRuntime& world, c
     return false;
 }
 
-void ReflectionProbeComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    auto* runtime = registry.try_get<ReflectionProbeRuntime>(entity);
+    auto* runtime = registry.TryGetMut<ReflectionProbeRuntime>(entity);
     if (!runtime || runtime->contentSource == ContentSource::Baked) {
         return;
     }
     if (runtime->contentHandle.IsValid()) {
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        auto* ctx = registry.Context();
         ctx->assetManager->UnloadCubemap(runtime->contentHandle);
         runtime->contentHandle = Engine::CubemapHandle::INVALID;
     }
@@ -77,7 +77,7 @@ void ReflectionProbeComponent::OnEditCommit(entt::registry& registry, entt::enti
 
 Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -117,7 +117,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         static constexpr const char* RESOLUTION_LABELS[] = {"128", "256"};
         EditWidgets::Combo(edit, "Resolution##rp", &ReflectionProbeComponent::resolution, RESOLUTION_LABELS, 2);
 
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        auto* ctx = registry.Context();
         const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.standInEnvMap);
         const char* preview = edit.IsMixed(&ReflectionProbeComponent::standInEnvMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Stand-in Env Map##rp", preview)) {
@@ -133,9 +133,9 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         ProbeBakeSystem& bake = ProbeBakeGet(state);
         const bool bBakeInFlight = bake.bBakeActive && bake.probeEntity == entity;
 
-        ImGui::BeginDisabled(registry.all_of<ReflectionProbeBakeRequest>(entity) || bBakeInFlight);
+        ImGui::BeginDisabled(registry.Has<ReflectionProbeBakeRequest>(entity) || bBakeInFlight);
         if (ImGui::Button("Bake##rp")) {
-            edit.ForEachTarget<ReflectionProbeComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ReflectionProbeBakeRequest>(e); });
+            edit.ForEachTarget<ReflectionProbeComponent>([&registry](entt::entity e) { registry.Set<ReflectionProbeBakeRequest>(e); });
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -152,7 +152,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", "Walks the 6 bake faces with the real bake view, hide set, and settle pacing, but captures and writes nothing."); }
 
-        const auto* runtime = registry.try_get<ReflectionProbeRuntime>(entity);
+        const auto* runtime = registry.TryGet<ReflectionProbeRuntime>(entity);
         const char* sourceLabel = "None";
         switch (runtime ? runtime->contentSource : ContentSource::None) {
             case ContentSource::Baked: { sourceLabel = "Baked"; break; }
@@ -164,7 +164,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         const Engine::AssetManager::ProbeInfo* probeInfo = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId});
         if (!probeInfo) {
             ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Not baked");
-        } else if (const auto* worldTransform = registry.try_get<WorldTransformRuntime>(entity); worldTransform && IsBakeStale(*worldTransform, comp, probeInfo->snapshot, probeInfo->resolution)) {
+        } else if (const auto* worldTransform = registry.TryGet<WorldTransformRuntime>(entity); worldTransform && IsBakeStale(*worldTransform, comp, probeInfo->snapshot, probeInfo->resolution)) {
             ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Bake is stale (transform changed). Rebake.");
         }
 
@@ -177,10 +177,10 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         ImGui::PopStyleColor();
     }
 
-    const auto* transform = registry.try_get<TransformComponent>(entity);
+    const auto* transform = registry.TryGet<TransformComponent>(entity);
     if (transform && bEditing) {
         const auto& comp = edit.Get<ReflectionProbeComponent>();
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        auto* ctx = registry.Context();
         const auto& vd = viewFamily.mainView.currentViewData;
         const Vec3 center = transform->translation;
         const Quat rot = transform->rotation;
@@ -274,33 +274,33 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
 }
 
 
-void ReflectionProbeComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<ReflectionProbeComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto& comp = registry.GetMut<ReflectionProbeComponent>(entity);
+    auto* state = registry.State();
 
-    registry.emplace_or_replace<ReflectionProbeRuntime>(entity);
+    registry.Set<ReflectionProbeRuntime>(entity);
     if (comp.probeId == 0) {
         comp.probeId = state->rng();
     }
     state->commandQueue.Push({.type = CommandType::ProbeConstruct, .entity = entity});
 }
 
-void ReflectionProbeComponent::DeferredConstruct(entt::registry& registry, entt::entity entity)
+void ReflectionProbeComponent::DeferredConstruct(Engine::Registry& registry, entt::entity entity)
 {
     RequestReflectionProbeLoad(registry, entity);
 }
 
-void ReflectionProbeRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void ReflectionProbeRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    const auto& runtime = registry.get<ReflectionProbeRuntime>(entity);
+    const auto& runtime = registry.Get<ReflectionProbeRuntime>(entity);
     if (runtime.contentHandle.IsValid()) {
-        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.contentHandle}});
+        registry.State()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.contentHandle}});
     }
 }
 
-void ReflectionProbeComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<ReflectionProbeRuntime, ReflectionProbeLoadRequest, ReflectionProbeLoadingFlag, ReflectionProbeBakeRequest>(entity);
+    registry.Remove<ReflectionProbeRuntime, ReflectionProbeLoadRequest, ReflectionProbeLoadingFlag, ReflectionProbeBakeRequest>(entity);
 }
 }

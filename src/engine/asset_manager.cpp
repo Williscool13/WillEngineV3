@@ -365,7 +365,7 @@ StaticModelHandle AssetManager::LoadModel(ModelID modelId)
     return handle;
 }
 
-StaticModelHandle AssetManager::LoadProceduralModel(ProceduralParams& params, const ProceduralRepeat& repeat)
+StaticModelHandle AssetManager::LoadProceduralModel(const ProceduralParams& params, const ProceduralRepeat& repeat)
 {
     HashBuilder h;
     h.Add(params.index());

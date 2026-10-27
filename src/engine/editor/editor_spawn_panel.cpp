@@ -43,7 +43,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
 
         if (ImGui::Button("Create Entity")) {
             const entt::entity newEntity = CreateSceneEntity(state);
-            state->registry.get<Component::TransformComponent>(newEntity).translation = spawnPos;
+            state->registry.GetMut<Component::TransformComponent>(newEntity).translation = spawnPos;
             SelectOnly(state, newEntity);
             MarkSceneModified(state, state->scene.currentSceneId);
         }
@@ -112,7 +112,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
 
         const bool hasOneSelected = state->editor.selectedEntities.Size() == 1;
         const entt::entity selected = hasOneSelected ? state->editor.selectedEntities[0] : entt::null;
-        const bool bCanSaveAsPrefab = hasOneSelected && !state->registry.all_of<Component::PrefabInstanceComponent>(selected) && selected != state->editor.editingPrefabEntity;
+        const bool bCanSaveAsPrefab = hasOneSelected && !state->registry.Has<Component::PrefabInstanceComponent>(selected) && selected != state->editor.editingPrefabEntity;
         static char prefabName[128] = "New Prefab";
 
         ImGui::SetNextItemWidth(-1);
@@ -171,7 +171,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
             const StringID selectedPrefabId = prefabList.IsEmpty() ? StringID{} : prefabList[selectedPrefab].id;
             bool prefabInUse = false;
             if (!prefabList.IsEmpty()) {
-                auto prefabView = state->registry.view<Component::PrefabInstanceComponent>();
+                auto prefabView = state->registry.View<Component::PrefabInstanceComponent>();
                 for (auto entity : prefabView) {
                     if (prefabView.get<Component::PrefabInstanceComponent>(entity).prefabId == selectedPrefabId) {
                         prefabInUse = true;

@@ -12,7 +12,7 @@ EditContext::EditContext(EngineState* state, Core::Span<const entt::entity> targ
     : state(state), targets(targets)
 {}
 
-entt::registry& EditContext::Registry() const
+Engine::Registry& EditContext::Registry() const
 {
     return state->registry;
 }

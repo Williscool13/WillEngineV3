@@ -73,7 +73,7 @@ PhysicsShapeDesc MakeProceduralShape(const Engine::ProceduralParams& params, con
     return shape;
 }
 
-void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
+void FitMeshShapeToEntity(Engine::Registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale)
 {
     // Re-fitting keeps the collision choices made on the old source.
     ColliderShape collider{};
@@ -86,22 +86,22 @@ void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, Physics
 
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
-    if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
+    if (auto* sm = registry.TryGet<StaticMeshComponent>(entity)) {
         collider.meshSourceModelId = sm->modelId;
         collider.meshSourceNodeIndex = sm->nodeIndex;
         renderOffset = sm->renderOffset;
         renderRotation = sm->renderRotation;
     }
-    else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+    else if (auto* pm = registry.TryGet<ProceduralMeshComponent>(entity)) {
         collider.proceduralParams = pm->params;
         collider.proceduralRepeat = pm->repeat;
         renderOffset = pm->renderOffset;
         renderRotation = pm->renderRotation;
     }
-    else if (auto* splm = registry.try_get<SplineMeshComponent>(entity)) {
+    else if (auto* splm = registry.TryGet<SplineMeshComponent>(entity)) {
         FillSplineParams(collider.splineParams, *splm);
     }
-    else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
+    else if (auto* t3 = registry.TryGet<Text3DComponent>(entity)) {
         collider.text3DSource.fontId = t3->fontId;
         collider.text3DSource.text = t3->text;
         collider.text3DSource.depth = t3->depth;
@@ -122,21 +122,21 @@ void FitMeshShapeToEntity(entt::registry& registry, entt::entity entity, Physics
     shape.rotation = renderRotation;
 }
 
-void FitPrimitiveShapeToEntity(entt::registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds)
+void FitPrimitiveShapeToEntity(Engine::Registry& registry, entt::entity entity, PhysicsShapeDesc& shape, const glm::vec3& scale, const Engine::ModelBounds& bounds)
 {
     shape.bakedScale = glm::vec3(1.0f);
 
     glm::vec3 renderOffset{0.0f};
     glm::quat renderRotation{1.0f, 0.0f, 0.0f, 0.0f};
-    if (auto* sm = registry.try_get<StaticMeshComponent>(entity)) {
+    if (auto* sm = registry.TryGet<StaticMeshComponent>(entity)) {
         renderOffset = sm->renderOffset;
         renderRotation = sm->renderRotation;
     }
-    else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+    else if (auto* pm = registry.TryGet<ProceduralMeshComponent>(entity)) {
         renderOffset = pm->renderOffset;
         renderRotation = pm->renderRotation;
     }
-    else if (auto* t3 = registry.try_get<Text3DComponent>(entity)) {
+    else if (auto* t3 = registry.TryGet<Text3DComponent>(entity)) {
         renderOffset = t3->renderOffset;
         renderRotation = t3->renderRotation;
     }

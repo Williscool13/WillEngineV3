@@ -20,47 +20,47 @@
 
 namespace Engine::Component
 {
-void ModuleMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void ModuleMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    registry.get_or_emplace<RenderFlagsComponent>(entity);
-    auto& component = registry.get<ModuleMeshComponent>(entity);
+    registry.GetOrAdd<RenderFlagsComponent>(entity);
+    auto& component = registry.Get<ModuleMeshComponent>(entity);
 
-    registry.emplace_or_replace<ModuleMeshLoadRequest>(entity);
+    registry.Set<ModuleMeshLoadRequest>(entity);
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
+    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void ModuleMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void ModuleMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<MeshRuntime>(entity);
-    registry.remove<ModuleMeshLoadRequest>(entity);
-    registry.remove<ModuleMeshLoadingFlag>(entity);
-    registry.remove<RenderTransformRuntime>(entity);
+    registry.Remove<MeshRuntime>(entity);
+    registry.Remove<ModuleMeshLoadRequest>(entity);
+    registry.Remove<ModuleMeshLoadingFlag>(entity);
+    registry.Remove<RenderTransformRuntime>(entity);
 }
 }
 
 namespace Engine
 {
-bool Component::ModuleMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
+bool Component::ModuleMeshComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::ModuleMeshComponent>(registry, entity);
 }
 
-void Component::ModuleMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::ModuleMeshComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<ModuleMeshLoadingFlag>(entity);
+    registry.Set<ModuleMeshLoadingFlag>(entity);
 }
 
 Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const auto& component = edit.Get<ModuleMeshComponent>();
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* ctx = registry.Context();
     auto* state = edit.State();
 
     bool open = ImGui::CollapsingHeader("Module Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -71,7 +71,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
 
     if (open) {
         if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
-            edit.ForEachTarget<ModuleMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<ModuleMeshLoadingFlag>(e); });
+            edit.ForEachTarget<ModuleMeshComponent>([&registry](entt::entity e) { registry.Set<ModuleMeshLoadingFlag>(e); });
         }
 
         // Parts are script-authored; the editor only re-skins slots

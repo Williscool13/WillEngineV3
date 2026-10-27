@@ -101,7 +101,7 @@ void PathMoverComponent::Sanitize(PathMoverComponent& comp)
 
 Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const PathMoverComponent before = edit.Get<PathMoverComponent>();
     PathMoverComponent component = before;
@@ -249,7 +249,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         // Gizmo for editing individual control points
         if (editPointIdx == -1) { hasGizmoClaim = false; }
         if (hasGizmoClaim && editPointIdx < cpCount) {
-            auto* transform = registry.try_get<TransformComponent>(entity);
+            auto* transform = registry.TryGet<TransformComponent>(entity);
             if (transform) {
                 const glm::mat4 view = viewFamily.mainView.currentViewData.view;
                 const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
@@ -297,7 +297,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
             constexpr float kPointRadius = 0.1f;
             constexpr int kCurveSubdivisions = 32;
 
-            auto* transform = registry.try_get<TransformComponent>(entity);
+            auto* transform = registry.TryGet<TransformComponent>(entity);
             const glm::mat4 entityMat = transform
                                             ? glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation)
                                             : glm::mat4(1.0f);
@@ -326,7 +326,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                 }
 
                 // Draw current progress position
-                const auto* run = registry.try_get<PathMoverRuntime>(entity);
+                const auto* run = registry.TryGet<PathMoverRuntime>(entity);
                 const PathMoverRuntime progress = run ? *run : PathMoverRuntime::AtStart(component);
                 const int source = progress.currentSegment;
                 const int target = component.spline.bClosed

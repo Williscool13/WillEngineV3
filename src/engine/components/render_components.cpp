@@ -17,14 +17,14 @@
 
 namespace Engine::Component
 {
-void RenderFlagsComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+void RenderFlagsComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
 {
-    EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
+    EvaluateInstanceRenderState(registry.State(), entity);
 }
 
-void RenderFlagsComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void RenderFlagsComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    EvaluateInstanceRenderState(registry.ctx().get<Engine::EngineState*>(), entity);
+    EvaluateInstanceRenderState(registry.State(), entity);
 }
 
 bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
@@ -62,17 +62,17 @@ bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
     return bEmissiveChanged;
 }
 
-void MeshRuntime::OnConstruct(entt::registry& registry, entt::entity entity)
+void MeshRuntime::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    if (const auto* stable = registry.try_get<StableIdComponent>(entity)) {
-        registry.get<MeshRuntime>(entity).stableId = stable->id.id;
+    if (const auto* stable = registry.TryGet<StableIdComponent>(entity)) {
+        registry.GetMut<MeshRuntime>(entity).stableId = stable->id.id;
     }
 }
 
-void MeshRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void MeshRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get<MeshRuntime>(entity);
+    auto* state = registry.State();
+    auto& runtime = registry.GetMut<MeshRuntime>(entity);
 
     state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, runtime.modelHandle, runtime.pendingModelHandle}}});
     runtime.range = {};

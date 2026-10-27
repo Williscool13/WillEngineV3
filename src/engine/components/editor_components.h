@@ -6,10 +6,10 @@
 #define WILL_ENGINE_EDITOR_COMPONENTS_H
 #include <array>
 
-#include <entt/entt.hpp>
 
 #include "core/containers/inline_string.h"
 #include "core/string_id.h"
+#include "engine/core/registry.h"
 #include "engine/component_registry.h"
 #include "engine/reflection/reflection.h"
 
@@ -51,7 +51,7 @@ struct SceneFolderComponent
         WILL_FIELD(parentFolder),
         WILL_FIELD(name))
 
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
 };
 }
 

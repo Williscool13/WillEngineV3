@@ -19,7 +19,7 @@ namespace Engine::Component
 {
 Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<RotateInPlaceComponent>();
 
@@ -34,7 +34,7 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
         Engine::EditWidgets::DragFloat(edit, "Speed", &RotateInPlaceComponent::speedDegrees, 1.0f, -3600.0f, 3600.0f, "%.1f deg/s");
         Engine::EditWidgets::Checkbox(edit, "World Space", &RotateInPlaceComponent::bWorldSpace);
 
-        auto* transform = registry.try_get<TransformComponent>(entity);
+        auto* transform = registry.TryGet<TransformComponent>(entity);
         if (transform) {
             constexpr glm::vec4 kAxisColor{0.3f, 0.7f, 1.0f, 1.0f};
             constexpr glm::vec4 kCircleColor{1.0f, 0.8f, 0.2f, 1.0f};

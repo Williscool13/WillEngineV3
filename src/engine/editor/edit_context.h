@@ -9,7 +9,7 @@
 #include <iterator>
 #include <type_traits>
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 #include "core/containers/span.h"
 #include "core/string_id.h"
@@ -45,22 +45,22 @@ public:
     EditContext(EngineState* state, Core::Span<const entt::entity> targets);
 
     [[nodiscard]] entt::entity Primary() const { return targets[0]; }
-    [[nodiscard]] entt::registry& Registry() const;
+    [[nodiscard]] Engine::Registry& Registry() const;
     [[nodiscard]] EngineState* State() const { return state; }
     [[nodiscard]] Core::Span<const entt::entity> Targets() const { return targets; }
     [[nodiscard]] bool IsMulti() const { return targets.Size() > 1; }
 
     template<typename C>
-    [[nodiscard]] C& Get() const { return Registry().template get<C>(Primary()); }
+    [[nodiscard]] C& Get() const { return Registry().template GetMut<C>(Primary()); }
 
     template<typename C, typename Fn>
     void Preview(Fn&& fn)
     {
-        entt::registry& registry = Registry();
+        Engine::Registry& registry = Registry();
         BeginUndo(TypeSID<C>());
         for (uint32_t i = 0; i < targets.Size(); ++i) {
             const entt::entity e = targets[i];
-            C* c = registry.try_get<C>(e);
+            C* c = registry.TryGetMut<C>(e);
             if (c == nullptr) { continue; }
             if constexpr (std::is_invocable_v<Fn&, C&, uint32_t>) {
                 fn(*c, i);
@@ -80,10 +80,10 @@ public:
     template<typename C>
     void Commit()
     {
-        entt::registry& registry = Registry();
+        Engine::Registry& registry = Registry();
         if constexpr (HasOnEditCommit<C>) {
             for (const entt::entity e : targets) {
-                if (registry.all_of<C>(e)) {
+                if (registry.Has<C>(e)) {
                     C::OnEditCommit(registry, e);
                 }
             }
@@ -123,9 +123,9 @@ public:
     template<typename C, typename Fn>
     void ForEachTarget(Fn&& fn) const
     {
-        entt::registry& registry = Registry();
+        Engine::Registry& registry = Registry();
         for (const entt::entity e : targets) {
-            if (registry.all_of<C>(e)) {
+            if (registry.Has<C>(e)) {
                 fn(e);
             }
         }
@@ -134,11 +134,11 @@ public:
     template<typename C, typename V>
     [[nodiscard]] bool IsMixed(V C::* member) const
     {
-        entt::registry& registry = Registry();
-        const C* first = registry.try_get<C>(Primary());
+        Engine::Registry& registry = Registry();
+        const C* first = registry.TryGet<C>(Primary());
         if (first == nullptr) { return false; }
         for (const entt::entity e : targets) {
-            const C* c = registry.try_get<C>(e);
+            const C* c = registry.TryGet<C>(e);
             if (c != nullptr && !ValuesEqual(c->*member, first->*member)) { return true; }
         }
         return false;

@@ -7,6 +7,7 @@
 
 #include <entt/entt.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/engine_api.h"
 
 namespace Core
@@ -38,7 +39,7 @@ struct LocalDDGIVolumeComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
 
     /**
      * Draws the fully-owned interior (the window minus its one-cell fade band); the outer window is never drawn. Face crosses only when bCrosses (selected / editing).

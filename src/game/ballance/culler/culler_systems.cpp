@@ -36,22 +36,22 @@ struct Sleeper
 void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    entt::registry& registry = state->registry;
-    auto cullers = registry.view<Component::CullerComponent>();
+    Engine::Registry& registry = state->registry;
+    auto cullers = registry.View<Component::CullerComponent>();
     if (cullers.size() == 0) { return; }
     const entt::entity cullerEntity = cullers.front();
-    const auto& culler = registry.get<Component::CullerComponent>(cullerEntity);
+    const auto& culler = registry.Get<Component::CullerComponent>(cullerEntity);
     const float now = state->timeFrame->totalTime - state->runStartTime;
 
-    auto shards = registry.view<Component::ShardTag>(entt::exclude<Component::DissolvingRuntime>);
+    auto shards = registry.View<Component::ShardTag>(entt::exclude<Component::DissolvingRuntime>);
     auto sleepers = Core::ArenaFixedVector<Sleeper>(&ctx->gameplayArena.Get(), std::max(shards.size_hint(), size_t{1}));
     for (const entt::entity entity : shards) {
         const auto* body = Component::FindBody(registry, entity);
         if (body && !ctx->physicsWorld->IsAwake(body->bodyID)) {
-            sleepers.PushBack({entity, registry.get_or_emplace<Component::ShardSleepRuntime>(entity, Component::ShardSleepRuntime{now}).sleepSince});
+            sleepers.PushBack({entity, registry.GetOrAdd<Component::ShardSleepRuntime>(entity, Component::ShardSleepRuntime{now}).sleepSince});
         }
         else {
-            registry.remove<Component::ShardSleepRuntime>(entity);
+            registry.Remove<Component::ShardSleepRuntime>(entity);
         }
     }
     TracyPlot("Ballance/Sleeping shards", static_cast<int64_t>(sleepers.Size()));
@@ -72,7 +72,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
     const Vec3 center = Component::ComputeWorldTransform(registry, cullerEntity).translation;
     const float radiusSq = culler.killRadius * culler.killRadius;
-    auto bodies = registry.view<Component::PhysicsBodyDesc>(entt::exclude<Component::DissolvingRuntime>);
+    auto bodies = registry.View<Component::PhysicsBodyDesc>(entt::exclude<Component::DissolvingRuntime>);
     auto lost = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::max(bodies.size_hint(), size_t{1}));
     for (const auto& [entity, desc] : bodies.each()) {
         if (entity == playerEntity || Component::EffectiveMotionType(registry, entity, desc) != Component::PhysicsMotionType::Dynamic) { continue; }
@@ -82,7 +82,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state)
         const float dx = p.x - center.x;
         const float dz = p.z - center.z;
         if (p.y < culler.killHeight || dx * dx + dz * dz > radiusSq) {
-            const auto* name = registry.try_get<Component::NameComponent>(entity);
+            const auto* name = registry.TryGet<Component::NameComponent>(entity);
             WLOG_WARN(Culler, "'{}' left the kill bounds at ({:.1f}, {:.1f}, {:.1f})", name ? name->name.c_str() : "Unnamed", p.x, p.y, p.z);
             lost.PushBack(entity);
         }

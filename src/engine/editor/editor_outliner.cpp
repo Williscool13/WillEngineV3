@@ -28,11 +28,11 @@ namespace Engine
 {
 void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    if (state->editor.renamingEntity != entt::null && !state->registry.valid(state->editor.renamingEntity)) {
+    if (state->editor.renamingEntity != entt::null && !state->registry.Valid(state->editor.renamingEntity)) {
         state->editor.renamingEntity = entt::null;
     }
     for (int i = static_cast<int>(state->editor.selectedFolders.Size()) - 1; i >= 0; --i) {
-        if (!state->registry.valid(state->editor.selectedFolders[i])) {
+        if (!state->registry.Valid(state->editor.selectedFolders[i])) {
             state->editor.selectedFolders.Remove(state->editor.selectedFolders.begin() + i);
         }
     }
@@ -60,12 +60,12 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         const bool bNewFolder = ImGui::Button("New Folder");
         ImGui::EndDisabled();
         if (bNewFolder) {
-            entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneRuntime>(f, state->scene.currentSceneId);
+            entt::entity f = state->registry.Create();
+            state->registry.Add<Component::SceneRuntime>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};
             folder.folderId = StringID{state->rng()};
             folder.name = Core::ShortString("New Folder");
-            state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
+            state->registry.Add<Component::SceneFolderComponent>(f, std::move(folder));
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         char* search = state->editor.sceneBrowserSearch;
@@ -112,7 +112,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         constexpr size_t MAX_BROWSER_ENTRIES = 16384;
 
-        auto view2 = state->registry.view<Component::SceneRuntime>();
+        auto view2 = state->registry.View<Component::SceneRuntime>();
         Core::ArenaVector<EntityEntry> entries{&ctx->editorArena.Get(), MAX_BROWSER_ENTRIES + 1};
 
         size_t totalInScene = 0;
@@ -121,13 +121,13 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             for (auto entity : view2) {
                 auto& scene = view2.get<Component::SceneRuntime>(entity);
                 if (scene.sceneId != state->scene.currentSceneId) continue;
-                if (state->registry.all_of<Component::SceneFolderComponent>(entity)) continue;
+                if (state->registry.Has<Component::SceneFolderComponent>(entity)) continue;
                 if (pass == 0) { ++totalInScene; }
 
                 if (componentFilter && !componentFilter->has(state->registry, entity)) continue;
 
                 const char* label = "Unnamed";
-                const auto* nameComp = state->registry.try_get<Component::NameComponent>(entity);
+                const auto* nameComp = state->registry.TryGet<Component::NameComponent>(entity);
                 if (nameComp) { label = nameComp->name.c_str(); }
 
                 if (search[0]) {
@@ -137,18 +137,18 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                     if (!nameMatches) { continue; }
                 }
 
-                auto* stable = state->registry.try_get<Component::StableIdComponent>(entity);
+                auto* stable = state->registry.TryGet<Component::StableIdComponent>(entity);
                 uint64_t stableId = stable ? stable->id.id : static_cast<uint64_t>(entity);
                 uint64_t sortOrder = stable ? stable->sortOrder : 0;
 
                 StringID folderId;
-                if (auto* fc = state->registry.try_get<Component::EntityFolderComponent>(entity)) {
+                if (auto* fc = state->registry.TryGet<Component::EntityFolderComponent>(entity)) {
                     folderId = fc->folderId;
                 }
                 entt::entity parentEntity = entt::null;
                 uint16_t depth = 0;
-                if (auto* h = state->registry.try_get<Component::HierarchyComponent>(entity); h && state->registry.valid(h->parent)) {
-                    const auto* ps = state->registry.try_get<Component::SceneRuntime>(h->parent);
+                if (auto* h = state->registry.TryGet<Component::HierarchyComponent>(entity); h && state->registry.Valid(h->parent)) {
+                    const auto* ps = state->registry.TryGet<Component::SceneRuntime>(h->parent);
                     if (ps && ps->sceneId == state->scene.currentSceneId) {
                         parentEntity = h->parent;
                         depth = h->depth;
@@ -230,8 +230,8 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         auto isAncestorOf = [&](entt::entity ancestor, entt::entity node) {
             entt::entity e = node;
             for (int guard = 0; e != entt::null && guard < 1024; ++guard) {
-                const auto* h = state->registry.try_get<Component::HierarchyComponent>(e);
-                e = (h && state->registry.valid(h->parent)) ? h->parent : entt::null;
+                const auto* h = state->registry.TryGet<Component::HierarchyComponent>(e);
+                e = (h && state->registry.Valid(h->parent)) ? h->parent : entt::null;
                 if (e == ancestor) { return true; }
             }
             return false;
@@ -245,7 +245,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 return out;
             }
             for (entt::entity e : selection) {
-                if (e == exclude || !state->registry.valid(e)) { continue; }
+                if (e == exclude || !state->registry.Valid(e)) { continue; }
                 bool bNested = false;
                 for (entt::entity other : selection) { bNested |= other != e && isAncestorOf(other, e); }
                 if (!bNested) { out.PushBack(e); }
@@ -259,16 +259,16 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::PushID(static_cast<int>(entt::to_integral(e.entity)));
             ImGui::BeginDisabled(prev == nullptr);
             if (ImGui::SmallButton("^")) {
-                std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
-                          state->registry.get<Component::StableIdComponent>(prev->entity).sortOrder);
+                std::swap(state->registry.GetMut<Component::StableIdComponent>(e.entity).sortOrder,
+                          state->registry.GetMut<Component::StableIdComponent>(prev->entity).sortOrder);
                 MarkSceneModified(state, state->scene.currentSceneId);
             }
             ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::BeginDisabled(next == nullptr);
             if (ImGui::SmallButton("v")) {
-                std::swap(state->registry.get<Component::StableIdComponent>(e.entity).sortOrder,
-                          state->registry.get<Component::StableIdComponent>(next->entity).sortOrder);
+                std::swap(state->registry.GetMut<Component::StableIdComponent>(e.entity).sortOrder,
+                          state->registry.GetMut<Component::StableIdComponent>(next->entity).sortOrder);
                 MarkSceneModified(state, state->scene.currentSceneId);
             }
             ImGui::EndDisabled();
@@ -291,7 +291,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             ImGui::SameLine();
 
             const bool isPrefabEdit = e.entity == state->editor.editingPrefabEntity;
-            const bool isPrefab = isPrefabEdit || state->registry.all_of<Component::PrefabInstanceComponent>(e.entity);
+            const bool isPrefab = isPrefabEdit || state->registry.Has<Component::PrefabInstanceComponent>(e.entity);
 
             if (isPrefab) ImGui::PushStyleColor(ImGuiCol_Text, isPrefabEdit ? ImVec4(1.0f, 0.75f, 0.3f, 1.0f) : ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
 
@@ -305,7 +305,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 const bool committed = ImGui::InputText("##rename_row", state->editor.renameBuffer, sizeof(state->editor.renameBuffer),
                                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
                 if (committed || ImGui::IsItemDeactivated()) {
-                    auto& nc = state->registry.get_or_emplace<Component::NameComponent>(e.entity);
+                    auto& nc = state->registry.GetOrAdd<Component::NameComponent>(e.entity);
                     if (strcmp(nc.name.c_str(), state->editor.renameBuffer) != 0) {
                         nc.name = Core::InlineString<128>(state->editor.renameBuffer);
                         MarkSceneModified(state, state->scene.currentSceneId);
@@ -449,7 +449,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             const char* name;
         };
         Core::ArenaVector<AnchorInfo> anchors{&ctx->editorArena.Get(), 64}; {
-            auto av = state->registry.view<Component::SceneFolderComponent, Component::SceneRuntime>();
+            auto av = state->registry.View<Component::SceneFolderComponent, Component::SceneRuntime>();
             for (auto a : av) {
                 if (av.get<Component::SceneRuntime>(a).sceneId != state->scene.currentSceneId) { continue; }
                 const auto& fc = av.get<Component::SceneFolderComponent>(a);
@@ -462,7 +462,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             return false;
         };
         auto folderHasMembers = [&](StringID folderId) {
-            auto fv = state->registry.view<Component::EntityFolderComponent, Component::SceneRuntime>();
+            auto fv = state->registry.View<Component::EntityFolderComponent, Component::SceneRuntime>();
             for (auto en : fv) {
                 if (fv.get<Component::SceneRuntime>(en).sceneId != state->scene.currentSceneId) { continue; }
                 if (fv.get<Component::EntityFolderComponent>(en).folderId == folderId) { return true; }
@@ -534,7 +534,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 const bool committed = ImGui::InputText("##folder_rename", state->editor.renameBuffer, sizeof(state->editor.renameBuffer),
                                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
                 if (committed || ImGui::IsItemDeactivated()) {
-                    if (auto* fc = state->registry.try_get<Component::SceneFolderComponent>(a.entity)) {
+                    if (auto* fc = state->registry.TryGetMut<Component::SceneFolderComponent>(a.entity)) {
                         if (strcmp(fc->name.c_str(), state->editor.renameBuffer) != 0) {
                             fc->name = Core::ShortString(state->editor.renameBuffer);
                             MarkSceneModified(state, state->scene.currentSceneId);
@@ -573,7 +573,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                     const ImGuiPayload* fp = ImGui::AcceptDragDropPayload("SCENE_FOLDER", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
                     if (fp) {
                         const entt::entity draggedAnchor = *static_cast<const entt::entity*>(fp->Data);
-                        const auto* dfc = state->registry.try_get<Component::SceneFolderComponent>(draggedAnchor);
+                        const auto* dfc = state->registry.TryGet<Component::SceneFolderComponent>(draggedAnchor);
                         const bool valid = dfc && draggedAnchor != a.entity && !folderHasChildren(dfc->folderId);
                         if (valid) {
                             ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), IM_COL32(255, 220, 0, 255), 0.0f, 0, 2.0f);
@@ -591,7 +591,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (ImGui::IsWindowAppearing()) { strncpy_s(nameBuf, a.name, sizeof(nameBuf) - 1); }
                 ImGui::SetNextItemWidth(160.0f);
                 if (ImGui::InputText("##foldername", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue)) {
-                    state->registry.get<Component::SceneFolderComponent>(a.entity).name = Core::ShortString(nameBuf);
+                    state->registry.GetMut<Component::SceneFolderComponent>(a.entity).name = Core::ShortString(nameBuf);
                     MarkSceneModified(state, state->scene.currentSceneId);
                     ImGui::CloseCurrentPopup();
                 }
@@ -642,12 +642,12 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (inScope(en)) { storage->SetInt(entityOpenId(en.entity), expandAll); }
             }
         }
-        if (revealEntity != entt::null && state->registry.valid(revealEntity)) {
+        if (revealEntity != entt::null && state->registry.Valid(revealEntity)) {
             ImGuiStorage* storage = ImGui::GetStateStorage();
             entt::entity root = revealEntity;
             for (int guard = 0; guard < 1024; ++guard) {
-                const auto* h = state->registry.try_get<Component::HierarchyComponent>(root);
-                if (!h || !state->registry.valid(h->parent)) { break; }
+                const auto* h = state->registry.TryGet<Component::HierarchyComponent>(root);
+                if (!h || !state->registry.Valid(h->parent)) { break; }
                 root = h->parent;
                 storage->SetInt(entityOpenId(root), 1);
             }
@@ -752,22 +752,22 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (moveToFolderEntity != entt::null) {
             Core::ArenaVector<entt::entity> toMove = topLevelOf(moveToFolderEntity, entt::null);
             std::ranges::sort(toMove, [&](entt::entity a, entt::entity b) {
-                const auto* sa = state->registry.try_get<Component::StableIdComponent>(a);
-                const auto* sb = state->registry.try_get<Component::StableIdComponent>(b);
+                const auto* sa = state->registry.TryGet<Component::StableIdComponent>(a);
+                const auto* sb = state->registry.TryGet<Component::StableIdComponent>(b);
                 return (sa ? sa->sortOrder : 0) < (sb ? sb->sortOrder : 0);
             });
             uint64_t order = HighestSortOrderInScene(state->registry, state->scene.currentSceneId);
             for (entt::entity e : toMove) {
                 ClearParent(state, e);
-                state->registry.get_or_emplace<Component::EntityFolderComponent>(e).folderId = moveToFolderId;
-                if (auto* st = state->registry.try_get<Component::StableIdComponent>(e)) {
+                state->registry.GetOrAdd<Component::EntityFolderComponent>(e).folderId = moveToFolderId;
+                if (auto* st = state->registry.TryGetMut<Component::StableIdComponent>(e)) {
                     st->sortOrder = ++order;
                 }
             }
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (reparentFolderEntity != entt::null) {
-            if (auto* fc = state->registry.try_get<Component::SceneFolderComponent>(reparentFolderEntity)) {
+            if (auto* fc = state->registry.TryGetMut<Component::SceneFolderComponent>(reparentFolderEntity)) {
                 if (fc->parentFolder != reparentFolderTo && fc->folderId != reparentFolderTo) {
                     fc->parentFolder = reparentFolderTo;
                     MarkSceneModified(state, state->scene.currentSceneId);
@@ -777,11 +777,11 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (reorderDragged != entt::null && reorderTarget != entt::null && reorderDragged != reorderTarget) {
             // The dragged entities become siblings of the target: reparent to the target's level, then position via sort order.
             entt::entity targetParent = entt::null;
-            if (auto* th = state->registry.try_get<Component::HierarchyComponent>(reorderTarget); th && state->registry.valid(th->parent)) {
+            if (auto* th = state->registry.TryGet<Component::HierarchyComponent>(reorderTarget); th && state->registry.Valid(th->parent)) {
                 targetParent = th->parent;
             }
             StringID targetFolder;
-            if (auto* tf = state->registry.try_get<Component::EntityFolderComponent>(reorderTarget)) {
+            if (auto* tf = state->registry.TryGet<Component::EntityFolderComponent>(reorderTarget)) {
                 targetFolder = tf->folderId;
             }
 
@@ -790,7 +790,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             for (entt::entity m : moved) {
                 if (targetParent == entt::null) {
                     ClearParent(state, m); // sibling of a root
-                    state->registry.get_or_emplace<Component::EntityFolderComponent>(m).folderId = targetFolder;
+                    state->registry.GetOrAdd<Component::EntityFolderComponent>(m).folderId = targetFolder;
                 }
                 else {
                     SetParent(state, m, targetParent); // sibling of a child
@@ -798,15 +798,15 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             }
 
             Core::ArenaVector<entt::entity> order{&ctx->editorArena.Get(), totalInScene + 1};
-            auto rv = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
+            auto rv = state->registry.View<Component::SceneRuntime, Component::StableIdComponent>();
             for (auto en : rv) {
                 if (rv.get<Component::SceneRuntime>(en).sceneId == state->scene.currentSceneId) { order.PushBack(en); }
             }
             std::ranges::sort(order, [&](entt::entity a, entt::entity b) {
-                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
+                return state->registry.Get<Component::StableIdComponent>(a).sortOrder < state->registry.Get<Component::StableIdComponent>(b).sortOrder;
             });
             std::ranges::sort(moved, [&](entt::entity a, entt::entity b) {
-                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
+                return state->registry.Get<Component::StableIdComponent>(a).sortOrder < state->registry.Get<Component::StableIdComponent>(b).sortOrder;
             });
             auto inMoved = [&](entt::entity e) {
                 for (entt::entity m : moved) { if (m == e) { return true; } }
@@ -821,7 +821,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 if (en == reorderTarget && reorderBelow) { for (entt::entity m : moved) { finalOrder.PushBack(m); } }
             }
             uint64_t n = 1;
-            for (entt::entity en : finalOrder) { state->registry.get<Component::StableIdComponent>(en).sortOrder = n++; }
+            for (entt::entity en : finalOrder) { state->registry.GetMut<Component::StableIdComponent>(en).sortOrder = n++; }
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (parentDragged != entt::null && parentTarget != entt::null) {
@@ -832,17 +832,17 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (newSubfolderParent.IsValid()) {
-            entt::entity f = state->registry.create();
-            state->registry.emplace<Component::SceneRuntime>(f, state->scene.currentSceneId);
+            entt::entity f = state->registry.Create();
+            state->registry.Add<Component::SceneRuntime>(f, state->scene.currentSceneId);
             Component::SceneFolderComponent folder{};
             folder.folderId = StringID{state->rng()};
             folder.parentFolder = newSubfolderParent;
             folder.name = Core::ShortString("New Subfolder");
-            state->registry.emplace<Component::SceneFolderComponent>(f, std::move(folder));
+            state->registry.Add<Component::SceneFolderComponent>(f, std::move(folder));
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         if (folderToDelete != entt::null) {
-            state->registry.destroy(folderToDelete);
+            state->registry.Destroy(folderToDelete);
             MarkSceneModified(state, state->scene.currentSceneId);
         }
         switch (entityAction) {
@@ -854,7 +854,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                 break;
             case EntityMenuAction::Rename: {
                 const entt::entity target = state->editor.selectedEntities[0];
-                const auto* nc = state->registry.try_get<Component::NameComponent>(target);
+                const auto* nc = state->registry.TryGet<Component::NameComponent>(target);
                 state->editor.renamingEntity = target;
                 state->editor.renameRequestFocus = true;
                 strncpy_s(state->editor.renameBuffer, nc ? nc->name.c_str() : "", sizeof(state->editor.renameBuffer) - 1);
@@ -879,16 +879,16 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
         ImGui::Separator();
         if (ImGui::SmallButton("Compact Order")) {
             Core::ArenaVector<entt::entity> ordered{&ctx->editorArena.Get(), totalInScene + 1};
-            auto compactView = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
+            auto compactView = state->registry.View<Component::SceneRuntime, Component::StableIdComponent>();
             for (auto entity : compactView) {
                 if (compactView.get<Component::SceneRuntime>(entity).sceneId == state->scene.currentSceneId) { ordered.PushBack(entity); }
             }
             std::ranges::sort(ordered, [&](entt::entity a, entt::entity b) {
-                return state->registry.get<Component::StableIdComponent>(a).sortOrder < state->registry.get<Component::StableIdComponent>(b).sortOrder;
+                return state->registry.Get<Component::StableIdComponent>(a).sortOrder < state->registry.Get<Component::StableIdComponent>(b).sortOrder;
             });
             uint64_t next = 1;
             for (entt::entity e : ordered) {
-                state->registry.get<Component::StableIdComponent>(e).sortOrder = next++;
+                state->registry.GetMut<Component::StableIdComponent>(e).sortOrder = next++;
             }
             if (next > 1) { MarkSceneModified(state, state->scene.currentSceneId); }
         }
@@ -922,25 +922,25 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state)
                     for (entt::entity e : state->editor.selectedEntities) { target.PushBack(e); }
                 }
                 else {
-                    auto sv = state->registry.view<Component::SceneRuntime, Component::StableIdComponent>();
+                    auto sv = state->registry.View<Component::SceneRuntime, Component::StableIdComponent>();
                     for (auto e : sv) {
                         if (sv.get<Component::SceneRuntime>(e).sceneId == state->scene.currentSceneId) { target.PushBack(e); }
                     }
                 }
 
                 auto nameOf = [&](entt::entity e) -> const char* {
-                    const auto* nc = state->registry.try_get<Component::NameComponent>(e);
+                    const auto* nc = state->registry.TryGet<Component::NameComponent>(e);
                     return nc ? nc->name.c_str() : "Unnamed";
                 };
                 auto reassignSlots = [&]() {
                     Core::ArenaVector<uint64_t> slots{&ctx->editorArena.Get(), target.Size() + 1};
                     for (entt::entity e : target) {
-                        const auto* s = state->registry.try_get<Component::StableIdComponent>(e);
+                        const auto* s = state->registry.TryGet<Component::StableIdComponent>(e);
                         slots.PushBack(s ? s->sortOrder : 0);
                     }
                     std::ranges::sort(slots);
                     for (size_t i = 0; i < target.Size(); ++i) {
-                        if (auto* s = state->registry.try_get<Component::StableIdComponent>(target[i])) { s->sortOrder = slots[i]; }
+                        if (auto* s = state->registry.TryGetMut<Component::StableIdComponent>(target[i])) { s->sortOrder = slots[i]; }
                     }
                     if (selCount > 0) {
                         state->editor.selectedEntities.Clear();

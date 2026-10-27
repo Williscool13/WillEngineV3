@@ -8,10 +8,10 @@
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <entt/entt.hpp>
 
 #include "core/string_id.h"
 #include "core/types/transform.h"
+#include "engine/core/registry.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection.h"
@@ -59,15 +59,15 @@ struct TransformComponent
         WILL_FIELD(mobility),
         WILL_FIELD(bMobilityLocked, .key = "mobilityLocked"))
 
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
 
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /** Play-time lock on a Static entity: transform writes are reverted to this pose. */
@@ -188,7 +188,7 @@ inline Transform ComposeLocalFromWorld(const Transform& parent, const Transform&
  * @param entity
  * @return
  */
-Transform ComputeWorldTransform(const entt::registry& registry, entt::entity entity);
+Transform ComputeWorldTransform(const Engine::Registry& registry, entt::entity entity);
 
 struct DirtyTransformRequest
 {};

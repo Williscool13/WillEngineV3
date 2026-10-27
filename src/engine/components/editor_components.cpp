@@ -16,13 +16,13 @@ namespace Engine::Component
 
 Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const auto& comp = edit.Get<EntityFolderComponent>();
     bool open = ImGui::CollapsingHeader("Folder##entityfolder", ImGuiTreeNodeFlags_DefaultOpen);
 
     if (open) {
         const char* current = "(None)";
-        auto anchorView = registry.view<SceneFolderComponent>();
+        auto anchorView = registry.View<SceneFolderComponent>();
         for (auto a : anchorView) {
             if (anchorView.get<SceneFolderComponent>(a).folderId == comp.folderId) {
                 current = anchorView.get<SceneFolderComponent>(a).name.c_str();
@@ -52,7 +52,7 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
     return {};
 }
 
-bool SceneFolderComponent::CanAdd(const entt::registry& registry, entt::entity entity)
+bool SceneFolderComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
 {
     return false;
 }

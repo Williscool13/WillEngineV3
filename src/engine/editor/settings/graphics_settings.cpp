@@ -643,7 +643,7 @@ static void DrawEmissiveTriLightSection(Engine::EngineState* state)
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            const auto* nameComponent = state->registry.try_get<Component::NameComponent>(entry.entity);
+            const auto* nameComponent = state->registry.TryGet<Component::NameComponent>(entry.entity);
             ImGui::TextUnformatted(nameComponent ? nameComponent->name.c_str() : "<unnamed>");
             ImGui::TableNextColumn();
             ImGui::Text("%u", entry.instanceSlot);
@@ -2519,7 +2519,7 @@ static void DrawActivePostProcessVolumes(Engine::EngineState* state)
     }
     ImGui::TextUnformatted("Active volumes:");
     for (const Engine::ActivePostProcessVolume& a : active) {
-        const auto* nameComp = state->registry.try_get<Component::NameComponent>(a.entity);
+        const auto* nameComp = state->registry.TryGet<Component::NameComponent>(a.entity);
         ImGui::BulletText("%s  priority %d  weight %.2f", nameComp != nullptr ? nameComp->name.c_str() : "(unnamed)", a.priority, a.weight);
     }
 }

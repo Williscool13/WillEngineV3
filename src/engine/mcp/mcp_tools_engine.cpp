@@ -378,16 +378,16 @@ static ToolResult QueryScene(EngineContext*, EngineState* state, Call& call)
         filter = &components.registry[*index];
     }
 
-    const entt::registry& registry = state->registry;
+    const Engine::Registry& registry = state->registry;
     int64_t aliveCount = 0;
-    for ([[maybe_unused]] const entt::entity e : registry.view<entt::entity>()) {
+    for ([[maybe_unused]] const entt::entity e : registry.View<entt::entity>()) {
         ++aliveCount;
     }
 
     call.BeginArray("entities");
     for (const auto kv : state->stableIdToEntityMap) {
         const entt::entity e = kv.value;
-        if (!registry.valid(e)) { continue; }
+        if (!registry.Valid(e)) { continue; }
         if (filter && !filter->has(registry, e)) { continue; }
         if (!page.Accept()) { continue; }
 
@@ -458,7 +458,7 @@ static ToolResult CaptureScreenshot(EngineContext* ctx, EngineState* state, Call
 
 static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
 {
-    auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+    auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         call.SetError("No editor camera in the registry");
@@ -485,7 +485,7 @@ static ToolResult GetCamera(EngineContext*, EngineState* state, Call& call)
 
 static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
 {
-    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraRuntime, Component::TransformComponent>();
+    auto camView = state->registry.View<Component::EditorCameraTag, Component::CameraRuntime, Engine::Mut<Component::TransformComponent>>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         call.SetError("No editor camera in the registry");
@@ -619,9 +619,9 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
     call.SetString("stableId", HexId(source.stableId).c_str());
     const entt::entity entity = FindEntity(state, StringID(source.stableId));
     if (entity != entt::null) {
-        const auto* name = state->registry.try_get<Component::NameComponent>(entity);
+        const auto* name = state->registry.TryGet<Component::NameComponent>(entity);
         call.SetString("name", name ? name->name.c_str() : "");
-        const auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        const auto* runtime = state->registry.TryGet<Component::MeshRuntime>(entity);
         const StaticModel* model = runtime ? ctx->assetManager->GetModel(runtime->modelHandle) : nullptr;
         if (model) { call.SetString("modelName", model->name.c_str()); } else { call.SetNull("modelName"); }
     }

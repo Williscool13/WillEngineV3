@@ -107,12 +107,12 @@ static void WriteTransform(Call& call, const char* key, const Vec3& translation,
 
 static void WriteAuthoredMaterial(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
 {
-    const entt::registry& registry = state->registry;
+    const Engine::Registry& registry = state->registry;
     Engine::MaterialID id{};
-    if (const auto* c = registry.try_get<Component::ProceduralMeshComponent>(entity)) { id = c->material; }
-    else if (const auto* c = registry.try_get<Component::SplineMeshComponent>(entity)) { id = c->material; }
-    else if (const auto* c = registry.try_get<Component::Text3DComponent>(entity)) { id = c->material; }
-    else if (const auto* c = registry.try_get<Component::StaticMeshPrimitiveComponent>(entity)) { id = c->materialOverride; }
+    if (const auto* c = registry.TryGet<Component::ProceduralMeshComponent>(entity)) { id = c->material; }
+    else if (const auto* c = registry.TryGet<Component::SplineMeshComponent>(entity)) { id = c->material; }
+    else if (const auto* c = registry.TryGet<Component::Text3DComponent>(entity)) { id = c->material; }
+    else if (const auto* c = registry.TryGet<Component::StaticMeshPrimitiveComponent>(entity)) { id = c->materialOverride; }
     if (!id.IsValid()) {
         call.SetNull("material");
         return;
@@ -157,8 +157,8 @@ static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* s
     for (const Physics::BodyTouch& touch : physics->QueryTouching(&ctx->gameplayArena.Get(), body->bodyID, 0.01f, MAX_TOUCHING)) {
         call.PushObject();
         const entt::entity other = Component::EntityFromBodyUserData(state->registry, physics->GetUserData(touch.body));
-        const auto* otherStable = other != entt::null ? state->registry.try_get<Component::StableIdComponent>(other) : nullptr;
-        const auto* otherName = other != entt::null ? state->registry.try_get<Component::NameComponent>(other) : nullptr;
+        const auto* otherStable = other != entt::null ? state->registry.TryGet<Component::StableIdComponent>(other) : nullptr;
+        const auto* otherName = other != entt::null ? state->registry.TryGet<Component::NameComponent>(other) : nullptr;
         if (otherStable) { call.SetString("stableId", Engine::MCP::HexId(otherStable->id.id).c_str()); } else { call.SetNull("stableId"); }
         call.SetString("name", otherName ? otherName->name.c_str() : "");
         call.SetBool("awake", physics->IsAwake(touch.body));
@@ -173,13 +173,13 @@ static void WritePhysicsState(Engine::EngineContext* ctx, Engine::EngineState* s
 
 static void WriteEntityDetail(Engine::EngineContext* ctx, Engine::EngineState* state, Call& call, const entt::entity entity)
 {
-    const entt::registry& registry = state->registry;
-    const auto* stable = registry.try_get<Component::StableIdComponent>(entity);
-    const auto* name = registry.try_get<Component::NameComponent>(entity);
-    const auto* scene = registry.try_get<Component::SceneRuntime>(entity);
-    const auto* local = registry.try_get<Component::TransformComponent>(entity);
-    const auto* world = registry.try_get<Component::WorldTransformRuntime>(entity);
-    const auto* hierarchy = registry.try_get<Component::HierarchyComponent>(entity);
+    const Engine::Registry& registry = state->registry;
+    const auto* stable = registry.TryGet<Component::StableIdComponent>(entity);
+    const auto* name = registry.TryGet<Component::NameComponent>(entity);
+    const auto* scene = registry.TryGet<Component::SceneRuntime>(entity);
+    const auto* local = registry.TryGet<Component::TransformComponent>(entity);
+    const auto* world = registry.TryGet<Component::WorldTransformRuntime>(entity);
+    const auto* hierarchy = registry.TryGet<Component::HierarchyComponent>(entity);
 
     call.SetInt("entity", static_cast<int64_t>(entt::to_integral(entity)));
     if (stable) { call.SetString("stableId", Engine::MCP::HexId(stable->id.id).c_str()); } else { call.SetNull("stableId"); }
@@ -229,7 +229,7 @@ static ToolResult FindEntities(Engine::EngineContext* ctx, Engine::EngineState* 
     int64_t matched = 0;
 
     call.BeginArray("entities");
-    for (const auto [entity, name] : state->registry.view<Component::NameComponent>().each()) {
+    for (const auto [entity, name] : state->registry.View<Component::NameComponent>().each()) {
         if (!name.name.Contains(needle, Core::CaseSensitivity::Insensitive)) { continue; }
         if (matched++ >= limit) { continue; }
         call.PushObject();
@@ -313,17 +313,17 @@ static ToolResult SpawnEntity(Engine::EngineContext* ctx, Engine::EngineState* s
     }
     else {
         entity = Engine::CreateSceneEntity(state);
-        state->registry.get<Component::TransformComponent>(entity).translation = position;
+        state->registry.GetMut<Component::TransformComponent>(entity).translation = position;
     }
 
-    if (entity == entt::null || !state->registry.valid(entity)) {
+    if (entity == entt::null || !state->registry.Valid(entity)) {
         call.SetError("Spawn failed; see the engine log");
         return ToolResult::Error;
     }
 
     const char* name = call.GetString("name", "");
     if (*name) {
-        state->registry.get_or_emplace<Component::NameComponent>(entity).name = Core::InlineString<128>(std::string_view(name));
+        state->registry.GetOrAdd<Component::NameComponent>(entity).name = Core::InlineString<128>(std::string_view(name));
     }
     if (parent != entt::null) {
         Engine::SetParent(state, entity, parent);

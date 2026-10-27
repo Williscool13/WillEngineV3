@@ -26,26 +26,26 @@ static constexpr float LOST_SINK_DEPTH = 0.6f;
 static constexpr float LOST_DISSOLVE_SECONDS = 1.5f;
 static constexpr float LOST_TILT_DEGREES = 25.0f;
 
-static void CaptureCarts(entt::registry& registry)
+static void CaptureCarts(Engine::Registry& registry)
 {
-    auto view = registry.view<Component::CaneCartComponent, Component::TransformComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc>(
+    auto view = registry.View<Component::CaneCartComponent, Component::TransformComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc>(
         entt::exclude<Component::CaneCartRuntime>);
     for (const auto& [entity, link, transform, mover, desc] : view.each()) {
-        registry.emplace<Component::CaneCartRuntime>(entity, Component::CaneCartRuntime{.parkTranslation = transform.translation, .parkRotation = transform.rotation, .parkScale = transform.scale});
-        registry.emplace_or_replace<Component::DissolveKeepTag>(entity);
+        registry.Add<Component::CaneCartRuntime>(entity, Component::CaneCartRuntime{.parkTranslation = transform.translation, .parkRotation = transform.rotation, .parkScale = transform.scale});
+        registry.Set<Component::DissolveKeepTag>(entity);
     }
 }
 
-static void ClipOn(entt::registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, float carry)
+static void ClipOn(Engine::Registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, float carry)
 {
-    registry.emplace_or_replace<Component::PathMoverRuntime>(cart, Component::PathMoverRuntime{.waitTimer = -carry});
+    registry.Set<Component::PathMoverRuntime>(cart, Component::PathMoverRuntime{.waitTimer = -carry});
     runtime.phase = Component::CaneCartPhase::Lifting;
 }
 
-static void Release(Engine::EngineContext* ctx, entt::registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, const Component::CaneLiftComponent& lift)
+static void Release(Engine::EngineContext* ctx, Engine::Registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime, const Component::CaneLiftComponent& lift)
 {
-    const auto& mover = registry.get<Component::PathMoverComponent>(cart);
-    const auto& transform = registry.get<Component::TransformComponent>(cart);
+    const auto& mover = registry.Get<Component::PathMoverComponent>(cart);
+    const auto& transform = registry.Get<Component::TransformComponent>(cart);
     const size_t last = mover.spline.points.Size() - 1;
     const glm::quat anchor = transform.rotation * glm::inverse(mover.pointSettings[last].rotation);
     glm::vec3 velocity = anchor * ((mover.spline.points[last].pos - mover.spline.points[last - 1].pos) * mover.pointSettings[last].speed);
@@ -53,12 +53,12 @@ static void Release(Engine::EngineContext* ctx, entt::registry& registry, entt::
     if (speed > 1e-4f) { velocity += velocity / speed * lift.releaseBoost; }
 
     // Switched in place so the cart keeps moving the frame it lets go; a rebuild would hold it still until the new body exists
-    registry.remove<Component::PathMoverRuntime, Component::MovingKinematicFlag, Component::DirtyKinematicPhysicsTransformRequest>(cart);
-    registry.emplace_or_replace<Component::PhysicsMotionOverrideRuntime>(cart, Component::PhysicsMotionOverrideRuntime{.motionType = Component::PhysicsMotionType::Dynamic});
+    registry.Remove<Component::PathMoverRuntime, Component::MovingKinematicFlag, Component::DirtyKinematicPhysicsTransformRequest>(cart);
+    registry.Set<Component::PhysicsMotionOverrideRuntime>(cart, Component::PhysicsMotionOverrideRuntime{.motionType = Component::PhysicsMotionType::Dynamic});
     runtime.releaseVelocity = velocity;
     if (const auto* body = Component::FindBody(registry, cart)) {
         ctx->physicsWorld->MakeDynamic(body->bodyID, velocity);
-        registry.emplace_or_replace<Component::DynamicPhysicsBodyRuntime>(cart, transform.translation, transform.rotation, transform.translation, transform.rotation);
+        registry.Set<Component::DynamicPhysicsBodyRuntime>(cart,transform.translation, transform.rotation, transform.translation, transform.rotation);
         runtime.bVelocityApplied = true;
     }
     else {
@@ -69,14 +69,14 @@ static void Release(Engine::EngineContext* ctx, entt::registry& registry, entt::
     runtime.phase = Component::CaneCartPhase::Falling;
 }
 
-static void Recycle(entt::registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime)
+static void Recycle(Engine::Registry& registry, entt::entity cart, Component::CaneCartRuntime& runtime)
 {
-    registry.remove<Component::DissolvedFlag, Component::PathMoverRuntime, Component::SetVelocityRequest, Component::PhysicsMotionOverrideRuntime>(cart);
-    auto& transform = registry.get<Component::TransformComponent>(cart);
+    registry.Remove<Component::DissolvedFlag, Component::PathMoverRuntime, Component::SetVelocityRequest, Component::PhysicsMotionOverrideRuntime>(cart);
+    auto& transform = registry.GetMut<Component::TransformComponent>(cart);
     transform.translation = runtime.parkTranslation;
     transform.rotation = runtime.parkRotation;
     transform.scale = runtime.parkScale;
-    registry.emplace_or_replace<Component::DirtyTransformRequest>(cart);
+    registry.Set<Component::DirtyTransformRequest>(cart);
     Component::PhysicsBodyDesc::Resume(registry, cart);
     runtime.phase = Component::CaneCartPhase::Idle;
 }
@@ -84,36 +84,36 @@ static void Recycle(entt::registry& registry, entt::entity cart, Component::Cane
 void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    entt::registry& registry = state->registry;
-    if (registry.view<Component::CaneLiftComponent>().size() == 0) { return; }
+    Engine::Registry& registry = state->registry;
+    if (registry.View<Component::CaneLiftComponent>().size() == 0) { return; }
 
     CaptureCarts(registry);
     const float dt = state->timeFrame->deltaTime;
 
-    auto carts = registry.view<Component::CaneCartComponent, Component::CaneCartRuntime, Component::TransformComponent>();
+    auto carts = registry.View<Component::CaneCartComponent, Engine::Mut<Component::CaneCartRuntime>, Component::TransformComponent>();
     for (const auto& [cart, link, runtime, transform] : carts.each()) {
-        if (registry.all_of<Component::DissolvedFlag>(cart)) {
+        if (registry.Has<Component::DissolvedFlag>(cart)) {
             Recycle(registry, cart, runtime);
             continue;
         }
         const entt::entity liftEntity = link.lift.Get(state);
-        const auto* lift = registry.valid(liftEntity) ? registry.try_get<Component::CaneLiftComponent>(liftEntity) : nullptr;
+        const auto* lift = registry.Valid(liftEntity) ? registry.TryGet<Component::CaneLiftComponent>(liftEntity) : nullptr;
         if (!lift) { continue; }
 
         if (runtime.phase == Component::CaneCartPhase::Lifting) {
-            const auto* mover = registry.try_get<Component::PathMoverComponent>(cart);
-            const auto* run = registry.try_get<Component::PathMoverRuntime>(cart);
+            const auto* mover = registry.TryGet<Component::PathMoverComponent>(cart);
+            const auto* run = registry.TryGet<Component::PathMoverRuntime>(cart);
             if (mover && run && mover->spline.points.Size() >= 2 && run->currentSegment == static_cast<int32_t>(mover->spline.points.Size()) - 1) {
                 Release(ctx, registry, cart, runtime, *lift);
             }
         }
         else if (runtime.phase == Component::CaneCartPhase::Falling) {
             runtime.fallTime += dt;
-            if (!runtime.bVelocityApplied && registry.all_of<Component::DynamicPhysicsBodyRuntime>(cart)) {
-                registry.emplace_or_replace<Component::SetVelocityRequest>(cart, Component::SetVelocityRequest{.linearVelocity = runtime.releaseVelocity});
+            if (!runtime.bVelocityApplied && registry.Has<Component::DynamicPhysicsBodyRuntime>(cart)) {
+                registry.Set<Component::SetVelocityRequest>(cart, Component::SetVelocityRequest{.linearVelocity = runtime.releaseVelocity});
                 runtime.bVelocityApplied = true;
             }
-            if (registry.all_of<Component::DissolvingRuntime>(cart)) {
+            if (registry.Has<Component::DissolvingRuntime>(cart)) {
                 runtime.phase = Component::CaneCartPhase::Eaten;
             }
             else if (runtime.fallTime > lift->releaseTimeout || transform.translation.y < lift->killHeight) {
@@ -123,8 +123,8 @@ void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    for (const auto& [liftEntity, lift] : registry.view<Component::CaneLiftComponent>().each()) {
-        auto& liftRun = registry.get_or_emplace<Component::CaneLiftRuntime>(liftEntity, Component::CaneLiftRuntime{.timer = lift.startDelay});
+    for (const auto& [liftEntity, lift] : registry.View<Component::CaneLiftComponent>().each()) {
+        auto& liftRun = registry.GetOrAdd<Component::CaneLiftRuntime>(liftEntity, Component::CaneLiftRuntime{.timer = lift.startDelay});
         liftRun.timer -= dt;
         while (liftRun.timer <= 0.0f) {
             const float carry = -liftRun.timer;

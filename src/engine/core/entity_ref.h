@@ -13,13 +13,12 @@ namespace Engine
 {
 struct EngineState;
 
-/** A reference to another entity, saved as its stable id. The handle is cached and re-resolved whenever it no longer points at that stable id. */
+/** A reference to another entity, saved as its stable id. */
 struct EntityRef
 {
     StringID stableId;
-    entt::entity cached{entt::null};
 
-    entt::entity Get(const EngineState* state);
+    entt::entity Get(const EngineState* state) const;
 
     bool operator==(const EntityRef& other) const { return stableId == other.stableId; }
 };

@@ -44,26 +44,26 @@ static constexpr int32_t SAVE_TIMEOUT_FRAMES = 300;
 
 size_t CountLoadingEntities(Engine::EngineState* state)
 {
-    return state->registry.view<Component::StaticMeshLoadingFlag>().size() +
-           state->registry.view<Component::StaticMeshPrimitiveLoadingFlag>().size() +
-           state->registry.view<Component::ProceduralMeshLoadingFlag>().size() +
-           state->registry.view<Component::SplineMeshLoadingFlag>().size() +
-           state->registry.view<Component::ModuleMeshLoadingFlag>().size() +
-           state->registry.view<Component::Text3DLoadingFlag>().size() +
-           state->registry.view<Component::ReflectionProbeLoadingFlag>().size() +
-           state->registry.view<Component::PhysicsMeshLoadingFlag>().size() +
-           state->registry.view<Component::StaticMeshLoadRequest>().size() +
-           state->registry.view<Component::StaticMeshPrimitiveLoadRequest>().size() +
-           state->registry.view<Component::ProceduralMeshLoadRequest>().size() +
-           state->registry.view<Component::SplineMeshLoadRequest>().size() +
-           state->registry.view<Component::ModuleMeshLoadRequest>().size() +
-           state->registry.view<Component::Text3DGenerateRequest>().size() +
-           state->registry.view<Component::ReflectionProbeLoadRequest>().size() +
-           state->registry.view<Component::PhysicsMeshRequest>().size() +
-           state->registry.view<Component::PhysicsShapeCreationRequest>().size() +
-           state->registry.view<Component::PhysicsBodyCreationRequest>().size() +
-           state->registry.view<Component::LightSurfaceRequest>().size() +
-           state->registry.view<Component::TextFontRequest>().size();
+    return state->registry.View<Component::StaticMeshLoadingFlag>().size() +
+           state->registry.View<Component::StaticMeshPrimitiveLoadingFlag>().size() +
+           state->registry.View<Component::ProceduralMeshLoadingFlag>().size() +
+           state->registry.View<Component::SplineMeshLoadingFlag>().size() +
+           state->registry.View<Component::ModuleMeshLoadingFlag>().size() +
+           state->registry.View<Component::Text3DLoadingFlag>().size() +
+           state->registry.View<Component::ReflectionProbeLoadingFlag>().size() +
+           state->registry.View<Component::PhysicsMeshLoadingFlag>().size() +
+           state->registry.View<Component::StaticMeshLoadRequest>().size() +
+           state->registry.View<Component::StaticMeshPrimitiveLoadRequest>().size() +
+           state->registry.View<Component::ProceduralMeshLoadRequest>().size() +
+           state->registry.View<Component::SplineMeshLoadRequest>().size() +
+           state->registry.View<Component::ModuleMeshLoadRequest>().size() +
+           state->registry.View<Component::Text3DGenerateRequest>().size() +
+           state->registry.View<Component::ReflectionProbeLoadRequest>().size() +
+           state->registry.View<Component::PhysicsMeshRequest>().size() +
+           state->registry.View<Component::PhysicsShapeCreationRequest>().size() +
+           state->registry.View<Component::PhysicsBodyCreationRequest>().size() +
+           state->registry.View<Component::LightSurfaceRequest>().size() +
+           state->registry.View<Component::TextFontRequest>().size();
 }
 
 static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& outEvents, Core::InlineString<128>& outName)
@@ -156,7 +156,7 @@ static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& 
 /** bCut drops last frame's view so the move reads as a cut (zero camera motion vectors); false keeps it, so a cam event per frame renders as real camera motion. */
 static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation, bool bCut = true)
 {
-    auto camView = state->registry.view<Component::EditorCameraTag, Component::CameraRuntime, Component::TransformComponent>();
+    auto camView = state->registry.View<Component::EditorCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) { return; }
     auto [camera, transform] = camView.get<Component::CameraRuntime, Component::TransformComponent>(camEntity);
@@ -237,7 +237,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         // Console restores via its own prevContext once we steal the context (same guard as ProbeBakeSystem)
         stashedInputContext = state->inputContext == Engine::InputContext::Console ? Engine::InputContext::Editor : state->inputContext;
         state->inputContext = Engine::InputContext::ProbeBake; {
-            auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+            auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
             const entt::entity camEntity = camView.front();
             if (camEntity != entt::null) {
                 const auto& transform = camView.get<Component::TransformComponent>(camEntity);
@@ -510,7 +510,7 @@ void CameraRecorder::Tick(Engine::EngineState* state)
     if (!bActive) {
         return;
     }
-    auto camView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+    auto camView = state->registry.View<Component::EditorCameraTag, Component::TransformComponent>();
     const entt::entity camEntity = camView.front();
     if (camEntity == entt::null) {
         return;

@@ -5,10 +5,10 @@
 
 #include "text_component.h"
 
-#include <entt/entt.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "imgui.h"
 
+#include "engine/core/registry.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/material_manager.h"
@@ -19,34 +19,34 @@
 
 namespace Engine::Component
 {
-void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
+void UnloadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    auto* state = registry.State();
+    auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
     if (runtime.fontHandle.IsValid()) {
         state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
         runtime.fontHandle = {};
     }
-    registry.remove<TextFontRequest>(entity);
+    registry.Remove<TextFontRequest>(entity);
 }
 
-void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity)
+void LoadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = registry.State();
     // Arm only; the load happens in ResolveTextFontPending (freeze-gated).
-    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
     if (!runtime.modelRange.IsValid()) {
         runtime.modelRange = state->modelStore.Allocate(1);
     }
     if (comp.fontId.IsValid()) {
-        registry.emplace_or_replace<TextFontRequest>(entity);
+        registry.Set<TextFontRequest>(entity);
     }
 }
 
-void TextRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void TextRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& runtime = registry.get<TextRuntime>(entity);
+    auto* state = registry.State();
+    auto& runtime = registry.GetMut<TextRuntime>(entity);
     if (runtime.fontHandle.IsValid()) {
         state->commandQueue.Push({.type = CommandType::FontRelease, .payload = {.fontHandle = runtime.fontHandle}});
         runtime.fontHandle = {};
@@ -55,32 +55,32 @@ void TextRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
     runtime.modelRange = {};
 }
 
-void TextComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void TextComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = registry.State();
     state->commandQueue.Push({.type = CommandType::TextConstruct, .entity = entity});
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<RenderTransformRuntime>(entity, m, m);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void TextComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void TextComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<TextRuntime, TextFontRequest>(entity);
-    registry.remove<RenderTransformRuntime>(entity);
-    registry.remove<MultiframeDirtyRequest>(entity);
+    registry.Remove<TextRuntime, TextFontRequest>(entity);
+    registry.Remove<RenderTransformRuntime>(entity);
+    registry.Remove<MultiframeDirtyRequest>(entity);
 }
 
 
-void TextComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void TextComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<TextComponent>(entity);
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    const auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    auto& comp = registry.GetMut<TextComponent>(entity);
+    auto* ctx = registry.Context();
+    const auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
     const Engine::Font* font = runtime.fontHandle.IsValid() ? ctx->assetManager->GetFont(runtime.fontHandle) : nullptr;
-    const bool bFontCurrent = (font != nullptr && font->fontId == comp.fontId) || registry.all_of<TextFontRequest>(entity);
+    const bool bFontCurrent = (font != nullptr && font->fontId == comp.fontId) || registry.Has<TextFontRequest>(entity);
     if (!bFontCurrent) {
         UnloadTextComponent(comp, registry, entity);
         LoadTextComponent(comp, registry, entity);
@@ -89,7 +89,7 @@ void TextComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
 
 Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& comp = edit.Get<TextComponent>();
 
@@ -103,8 +103,8 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
         return {.bRequestRemoval = remove};
     }
 
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto& runtime = registry.get_or_emplace<TextRuntime>(entity);
+    auto* ctx = registry.Context();
+    auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
 
     // Font picker
     const char* fontLabel = "(none)";

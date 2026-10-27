@@ -24,6 +24,7 @@ add_library(engine STATIC
         logging/log_category.h
         core/entity_ref.cpp
         core/entity_ref.h
+        core/registry.h
         core/environment_map_id.h
         core/material_id.h
         core/texture_id.h

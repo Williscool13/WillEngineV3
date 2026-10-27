@@ -4,10 +4,10 @@
 
 #include "text3d_component.h"
 
-#include <entt/entt.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "imgui.h"
 
+#include "engine/core/registry.h"
 #include "mesh_source_exclusion.h"
 #include "static_mesh_component.h"
 #include "spline_mesh_component.h"
@@ -25,89 +25,89 @@
 
 namespace Engine::Component
 {
-void UnloadText3DFont(entt::registry& registry, entt::entity entity)
+void UnloadText3DFont(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<Component::MeshRuntime>(entity);
-    registry.remove<Text3DGenerateRequest>(entity);
-    registry.remove<Text3DLoadingFlag>(entity);
+    registry.Remove<Component::MeshRuntime>(entity);
+    registry.Remove<Text3DGenerateRequest>(entity);
+    registry.Remove<Text3DLoadingFlag>(entity);
 }
 
-void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity)
+void LoadText3DFont(Text3DComponent& component, Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<Text3DLoadingFlag>(entity);
+    registry.Remove<Text3DLoadingFlag>(entity);
     if (component.fontId.IsValid()) {
-        registry.emplace_or_replace<Text3DGenerateRequest>(entity);
+        registry.Set<Text3DGenerateRequest>(entity);
     }
     else {
-        registry.remove<Text3DGenerateRequest>(entity);
+        registry.Remove<Text3DGenerateRequest>(entity);
     }
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
+    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Text3DComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void Text3DComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    registry.get_or_emplace<RenderFlagsComponent>(entity);
-    auto& component = registry.get<Text3DComponent>(entity);
+    registry.GetOrAdd<RenderFlagsComponent>(entity);
+    auto& component = registry.GetMut<Text3DComponent>(entity);
     LoadText3DFont(component, registry, entity);
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
+    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
     rt.renderRotation = component.renderRotation;
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Text3DComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void Text3DComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
     UnloadText3DFont(registry, entity);
-    registry.remove<RenderTransformRuntime>(entity);
+    registry.Remove<RenderTransformRuntime>(entity);
 }
 }
 
 namespace Engine
 {
-bool Component::Text3DComponent::CanAdd(const entt::registry& registry, entt::entity entity)
+bool Component::Text3DComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::Text3DComponent>(registry, entity);
 }
 
 
-void Component::Text3DComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+void Component::Text3DComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
 {
-    const auto& comp = registry.get<Text3DComponent>(entity);
-    if (auto* rt = registry.try_get<RenderTransformRuntime>(entity)) {
+    const auto& comp = registry.Get<Text3DComponent>(entity);
+    if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
         rt->renderOffset = comp.renderOffset;
         rt->renderRotation = comp.renderRotation;
-        registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+        registry.Set<MultiframeDirtyRequest>(entity);
     }
 }
 
-void Component::Text3DComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::Text3DComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<Text3DComponent>(entity);
+    auto& comp = registry.Get<Text3DComponent>(entity);
     if (!comp.fontId.IsValid()) {
         UnloadText3DFont(registry, entity);
         return;
     }
-    registry.emplace_or_replace<Text3DGenerateRequest>(entity);
+    registry.Set<Text3DGenerateRequest>(entity);
     OnEditPreview(registry, entity);
 }
 
 Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& comp = edit.Get<Text3DComponent>();
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* ctx = registry.Context();
     auto* state = edit.State();
-    const bool busy = registry.any_of<Text3DGenerateRequest, Text3DLoadingFlag>(entity);
+    const bool busy = registry.HasAny<Text3DGenerateRequest, Text3DLoadingFlag>(entity);
 
     bool open = ImGui::CollapsingHeader("3D Text", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -124,7 +124,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     }
 
     if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_ALL & ~RENDER_TOGGLE_ALPHA_CUTOUT)) {
-        edit.ForEachTarget<Text3DComponent>([&registry](entt::entity e) { registry.emplace_or_replace<Text3DGenerateRequest>(e); });
+        edit.ForEachTarget<Text3DComponent>([&registry](entt::entity e) { registry.Set<Text3DGenerateRequest>(e); });
     }
 
     ImGui::BeginDisabled(busy);

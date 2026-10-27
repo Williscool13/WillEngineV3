@@ -4,10 +4,10 @@
 
 #ifndef WILL_ENGINE_COMPONENT_REGISTRY_H
 #define WILL_ENGINE_COMPONENT_REGISTRY_H
-#include <entt/entt.hpp>
 
 #include "component_editor.h"
 #include "core/string_id.h"
+#include "engine/core/registry.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection_entity_refs.h"
@@ -27,15 +27,15 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
     componentRegistry.registry.PushBack({
         typeId,
         ComponentName<T>(),
-        [](const entt::registry& reg, entt::entity e, Engine::TextWriter& w) {
-            SerializeFields(reg.get<T>(e), w);
+        [](const Engine::Registry& reg, entt::entity e, Engine::TextWriter& w) {
+            SerializeFields(reg.Get<T>(e), w);
         },
-        [](entt::registry& reg, entt::entity e, const Engine::TextReader& r) {
+        [](Engine::Registry& reg, entt::entity e, const Engine::TextReader& r) {
             T comp{};
             DeserializeFields(comp, r);
-            reg.emplace_or_replace<T>(e, std::move(comp));
+            reg.Set<T>(e, std::move(comp));
         },
-        [](const entt::registry& reg, entt::entity e) -> bool {
+        [](const Engine::Registry& reg, entt::entity e) -> bool {
             if constexpr (HasCanAdd<T>) {
                 return T::CanAdd(reg, e);
             }
@@ -43,14 +43,14 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
                 return true;
             }
         },
-        [](entt::registry& reg, entt::entity e) {
-            T a = reg.get_or_emplace<T>(e);
+        [](Engine::Registry& reg, entt::entity e) {
+            T a = reg.GetOrAdd<T>(e);
         },
-        [](entt::registry& reg, entt::entity e) {
-            reg.remove<T>(e);
+        [](Engine::Registry& reg, entt::entity e) {
+            reg.Remove<T>(e);
         },
-        [](const entt::registry& srcReg, entt::entity srcEntity, entt::registry& dstReg, entt::entity dstEntity) {
-            dstReg.emplace_or_replace<T>(dstEntity, srcReg.get<T>(srcEntity));
+        [](const Engine::Registry& srcReg, entt::entity srcEntity, Engine::Registry& dstReg, entt::entity dstEntity) {
+            dstReg.Set<T>(dstEntity, srcReg.Get<T>(srcEntity));
         },
         [](Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* n) {
             if constexpr (HasDrawEditor<T>) {
@@ -60,18 +60,18 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
                 return DrawReflectedComponentEditor<T>(edit, n);
             }
         },
-        [](const entt::registry& reg, entt::entity e) -> bool {
-            return reg.all_of<T>(e);
+        [](const Engine::Registry& reg, entt::entity e) -> bool {
+            return reg.Has<T>(e);
         },
         origin,
         hidden,
         hideInInspector
     });
 
-    componentRegistry.registry[index].restore = [](entt::registry& reg, entt::entity e, const Engine::TextReader& r) {
+    componentRegistry.registry[index].restore = [](Engine::Registry& reg, entt::entity e, const Engine::TextReader& r) {
         T fresh{};
         DeserializeFields(fresh, r);
-        T& live = reg.get<T>(e);
+        T& live = reg.GetMut<T>(e);
         ForEachField<T>([&live, &fresh](const auto& f) { AssignValue(live.*f.member, fresh.*f.member); });
         if constexpr (HasOnEditCommit<T>) {
             T::OnEditCommit(reg, e);
@@ -84,13 +84,13 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         SerializeFields(comp, w);
     };
 
-    componentRegistry.registry[index].propagate = [](entt::registry& reg, entt::entity e, const Engine::TextReader& before, const Engine::TextReader& after) -> bool {
+    componentRegistry.registry[index].propagate = [](Engine::Registry& reg, entt::entity e, const Engine::TextReader& before, const Engine::TextReader& after) -> bool {
         T b{};
         T a{};
         DeserializeFields(b, before);
         DeserializeFields(a, after);
         if (DeepEqual(b, a)) { return false; }
-        T& live = reg.get<T>(e);
+        T& live = reg.GetMut<T>(e);
         T updated = live;
         PropagateDiff(updated, b, a);
         if (DeepEqual(updated, live)) { return false; }
@@ -102,8 +102,8 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
     };
 
     if constexpr (ContainsEntityRef<T>()) {
-        componentRegistry.registry[index].remapEntityRefs = [](entt::registry& reg, entt::entity e, Core::Span<const StringID> from, Core::Span<const StringID> to) {
-            ForEachEntityRef(reg.get<T>(e), [&from, &to](EntityRef& ref) {
+        componentRegistry.registry[index].remapEntityRefs = [](Engine::Registry& reg, entt::entity e, Core::Span<const StringID> from, Core::Span<const StringID> to) {
+            ForEachEntityRef(reg.GetMut<T>(e), [&from, &to](EntityRef& ref) {
                 for (size_t i = 0; i < from.Size(); ++i) {
                     if (ref.stableId == from[i]) {
                         ref = EntityRef{to[i]};
@@ -128,11 +128,11 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
     componentRegistry.registry.PushBack({
         typeId,
         ComponentName<T>(),
-        [](const entt::registry&, entt::entity, Engine::TextWriter&) {},
-        [](entt::registry& reg, entt::entity e, const Engine::TextReader&) {
-            (void) reg.get_or_emplace<T>(e);
+        [](const Engine::Registry&, entt::entity, Engine::TextWriter&) {},
+        [](Engine::Registry& reg, entt::entity e, const Engine::TextReader&) {
+            (void) reg.GetOrAdd<T>(e);
         },
-        [](const entt::registry& reg, entt::entity e) -> bool {
+        [](const Engine::Registry& reg, entt::entity e) -> bool {
             if constexpr (HasCanAdd<T>) {
                 return T::CanAdd(reg, e);
             }
@@ -140,14 +140,14 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
                 return true;
             }
         },
-        [](entt::registry& reg, entt::entity e) {
-            reg.get_or_emplace<T>(e);
+        [](Engine::Registry& reg, entt::entity e) {
+            reg.GetOrAdd<T>(e);
         },
-        [](entt::registry& reg, entt::entity e) {
-            reg.remove<T>(e);
+        [](Engine::Registry& reg, entt::entity e) {
+            reg.Remove<T>(e);
         },
-        [](const entt::registry&, entt::entity, entt::registry& dstReg, entt::entity dstEntity) {
-            (void) dstReg.get_or_emplace<T>(dstEntity);
+        [](const Engine::Registry&, entt::entity, Engine::Registry& dstReg, entt::entity dstEntity) {
+            (void) dstReg.GetOrAdd<T>(dstEntity);
         },
         [](Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* n) {
             if constexpr (HasDrawEditor<T>) {
@@ -157,8 +157,8 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
                 return DefaultDrawComponentEditor(n);
             }
         },
-        [](const entt::registry& reg, entt::entity e) -> bool {
-            return reg.all_of<T>(e);
+        [](const Engine::Registry& reg, entt::entity e) -> bool {
+            return reg.Has<T>(e);
         },
         origin,
         hidden,
@@ -177,17 +177,17 @@ void RegisterRuntimeState(Engine::ComponentRegistry& componentRegistry, Origin o
     RuntimeStateEntry entry{
         .typeId = typeId,
         .name = ComponentName<T>(),
-        .has = [](const entt::registry& reg, entt::entity e) -> bool { return reg.all_of<T>(e); },
+        .has = [](const Engine::Registry& reg, entt::entity e) -> bool { return reg.Has<T>(e); },
         .origin = origin,
     };
     if constexpr (TagComponent<T>) {
-        entry.serialize = [](const entt::registry&, entt::entity, Engine::TextWriter&) {};
-        entry.deserialize = [](entt::registry& reg, entt::entity e, const Engine::TextReader&) { (void) reg.get_or_emplace<T>(e); };
+        entry.serialize = [](const Engine::Registry&, entt::entity, Engine::TextWriter&) {};
+        entry.deserialize = [](Engine::Registry& reg, entt::entity e, const Engine::TextReader&) { (void) reg.GetOrAdd<T>(e); };
     }
     else {
         static_assert(ReflectedSerializable<T>, "runtime state must reflect its state fields, with FieldTraits for every field type");
-        entry.serialize = [](const entt::registry& reg, entt::entity e, Engine::TextWriter& w) { SerializeFields(reg.get<T>(e), w); };
-        entry.deserialize = [](entt::registry& reg, entt::entity e, const Engine::TextReader& r) { DeserializeFields(reg.get_or_emplace<T>(e), r); };
+        entry.serialize = [](const Engine::Registry& reg, entt::entity e, Engine::TextWriter& w) { SerializeFields(reg.Get<T>(e), w); };
+        entry.deserialize = [](Engine::Registry& reg, entt::entity e, const Engine::TextReader& r) { DeserializeFields(reg.GetOrAdd<T>(e), r); };
     }
     componentRegistry.runtimeStateMapping[typeId] = componentRegistry.runtimeState.Size();
     componentRegistry.runtimeState.PushBack(entry);

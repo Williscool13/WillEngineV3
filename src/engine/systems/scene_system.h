@@ -4,7 +4,6 @@
 
 #ifndef WILL_ENGINE_SCENE_SYSTEM_H
 #define WILL_ENGINE_SCENE_SYSTEM_H
-#include <entt/entt.hpp>
 
 #include "engine/components/component_registration.h"
 #include "engine/components/scene_components.h"
@@ -15,6 +14,7 @@
 #include "core/containers/vector.h"
 #include "engine/asset_manager.h"
 #include "engine/core/model_id.h"
+#include "engine/core/registry.h"
 #include "engine/engine_api.h"
 #include "engine/resources/scene/scene.h"
 #include "engine/serialization/text_reader.h"
@@ -35,12 +35,12 @@ enum class SceneSaveFilter : uint8_t
     Spawned,
 };
 
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager, StringID sceneId,
+Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, Engine::Registry& registry, Engine::AssetManager* assetManager, StringID sceneId,
                         SceneSaveFilter filter = SceneSaveFilter::Authored);
 
-StringID LoadScene(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, const Engine::TextReader& scene);
+StringID LoadScene(Engine::ComponentRegistry& componentRegistry, Engine::Registry& registry, const Engine::TextReader& scene);
 
-Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, entt::registry& registry, Engine::AssetManager* assetManager,
+Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, Engine::Registry& registry, Engine::AssetManager* assetManager,
                                                   Core::Span<Engine::RuntimeSceneMetadata> loadedScenes);
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots);
@@ -162,10 +162,10 @@ entt::entity CreateSceneEntity(Engine::EngineState* state);
 entt::entity FindEntity(const Engine::EngineState* state, StringID stableId);
 
 /** Highest sortOrder value among entities in the given scene (0 if none). */
-uint64_t HighestSortOrderInScene(entt::registry& registry, StringID sceneId);
+uint64_t HighestSortOrderInScene(Engine::Registry& registry, StringID sceneId);
 
 /** Base name of sourceName with the highest matching trailing index in the scene incremented by 1. */
-Core::InlineString<128> GenerateIncrementedName(entt::registry& registry, StringID sceneId, const Core::InlineString<128>& sourceName);
+Core::InlineString<128> GenerateIncrementedName(Engine::Registry& registry, StringID sceneId, const Core::InlineString<128>& sourceName);
 
 /**
  * Copies all registered components from src to a new entity.
@@ -173,7 +173,7 @@ Core::InlineString<128> GenerateIncrementedName(entt::registry& registry, String
  */
 inline entt::entity CopyEntity(Engine::EngineState* state, entt::entity src)
 {
-    entt::entity dst = state->registry.create();
+    entt::entity dst = state->registry.Create();
 
     for (auto& entry : state->componentRegistry.registry) {
         if (entry.has(state->registry, src)) {
@@ -196,9 +196,9 @@ inline entt::entity CopySceneEntity(Engine::EngineState* state, entt::entity src
 {
     entt::entity dst = CopyEntity(state, src);
 
-    if (const auto* scene = state->registry.try_get<Component::SceneRuntime>(src)) {
+    if (const auto* scene = state->registry.TryGet<Component::SceneRuntime>(src)) {
         const StringID sceneId = targetScene ? targetScene : scene->sceneId;
-        state->registry.emplace<Component::SceneRuntime>(dst, sceneId);
+        state->registry.Add<Component::SceneRuntime>(dst, sceneId);
     }
 
     return dst;

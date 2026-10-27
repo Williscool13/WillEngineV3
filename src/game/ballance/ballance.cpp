@@ -73,13 +73,13 @@ void RegisterCommands(Engine::EngineState* state)
     RegisterCrusherCommands(state);
 }
 
-void ConnectObservers(entt::registry& registry)
+void ConnectObservers(Engine::Registry& registry)
 {
     ConnectCheckpointObservers(registry);
     ConnectBreakableObservers(registry);
 }
 
-void DisconnectObservers(entt::registry& registry)
+void DisconnectObservers(Engine::Registry& registry)
 {
     DisconnectCheckpointObservers(registry);
     DisconnectBreakableObservers(registry);
@@ -123,7 +123,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     glm::vec3 spawnPosition{0.0f, 3.0f, 0.0f};
     int32_t bestPriority = INT32_MIN;
-    auto spawnView = state->registry.view<Component::PlayerSpawnComponent, Component::TransformComponent>();
+    auto spawnView = state->registry.View<Component::PlayerSpawnComponent, Component::TransformComponent>();
     for (auto entity : spawnView) {
         auto& spawn = spawnView.get<Component::PlayerSpawnComponent>(entity);
         if (spawn.priority > bestPriority) {

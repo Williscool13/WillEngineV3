@@ -52,7 +52,7 @@ static void ReadClock(EngineState* state, const TextReader& r)
     state->runStartTime = state->timeFrame->totalTime - r.Float("runSeconds");
 }
 
-static bool HasRuntimeState(const ComponentRegistry& componentRegistry, const entt::registry& registry, entt::entity e)
+static bool HasRuntimeState(const ComponentRegistry& componentRegistry, const Engine::Registry& registry, entt::entity e)
 {
     for (const RuntimeStateEntry& entry : componentRegistry.runtimeState) {
         if (entry.has(registry, e)) { return true; }
@@ -104,9 +104,9 @@ static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx,
 
 static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, TextWriter& w)
 {
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
     Core::Vector<std::byte> scratch(&ctx->memoryManager->General(), Core::AllocTag::AssetManager);
-    auto view = registry.view<Component::SceneRuntime, Component::StableIdComponent>(entt::exclude<Component::DoNotSerializeTag, Component::DoNotRuntimeSaveTag>);
+    auto view = registry.View<Component::SceneRuntime, Component::StableIdComponent>(entt::exclude<Component::DoNotSerializeTag, Component::DoNotRuntimeSaveTag>);
     Core::ArenaVector<entt::entity> overrides{&ctx->gameplayArena.Get(), view.size_hint()};
     for (const entt::entity e : view) {
         if (view.get<Component::SceneRuntime>(e).sceneId == sceneId && HasRuntimeState(state->componentRegistry, registry, e)) {
@@ -119,7 +119,7 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
         w.BeginBlock("entity");
         w.Key("stable_id", view.get<Component::StableIdComponent>(e).id.id);
         w.Key("authored_hash", AuthoredHash(state, e, scratch));
-        if (const auto* transform = registry.try_get<Component::TransformComponent>(e); transform && transform->mobility == Component::Mobility::Movable) {
+        if (const auto* transform = registry.TryGet<Component::TransformComponent>(e); transform && transform->mobility == Component::Mobility::Movable) {
             w.Key("translation", transform->translation);
             w.Key("rotation", transform->rotation);
             w.Key("scale", transform->scale);
@@ -150,15 +150,15 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
 /** The caller resolves prefabs and hierarchy after. */
 static void ApplyRuntimeScene(EngineState* state, const TextReader& r)
 {
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
     r.ForEachRecord("overrides", [&](const TextReader& entityReader) {
         const entt::entity e = FindEntity(state, StringID{entityReader.U64("stable_id")});
         if (e == entt::null) { return; }
-        if (auto* transform = registry.try_get<Component::TransformComponent>(e); transform && entityReader.Has("translation")) {
+        if (auto* transform = registry.TryGetMut<Component::TransformComponent>(e); transform && entityReader.Has("translation")) {
             transform->translation = entityReader.Vec3("translation");
             transform->rotation = entityReader.Quat("rotation");
             transform->scale = entityReader.Vec3("scale", glm::vec3(1.0f));
-            registry.emplace_or_replace<Component::DirtyTransformRequest>(e);
+            registry.Set<Component::DirtyTransformRequest>(e);
         }
         entityReader.ForEachBlock([&](std::string_view opener, const TextReader& block) {
             uint64_t typeId = 0;
@@ -193,7 +193,7 @@ static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineSt
             return;
         }
         if (AuthoredHash(state, e, scratch) != r.U64("authored_hash") && status.changed++ == 0) {
-            const auto* name = state->registry.try_get<Component::NameComponent>(e);
+            const auto* name = state->registry.TryGet<Component::NameComponent>(e);
             status.firstChanged = name ? name->name : Core::InlineString<128>("Unnamed");
         }
     });

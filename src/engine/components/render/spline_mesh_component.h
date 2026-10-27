@@ -9,6 +9,7 @@
 #include <entt/entt.hpp>
 
 #include "procedural_mesh_component.h"
+#include "engine/core/registry.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/material_id.h"
 #include "engine/spline/spline.h"
@@ -62,10 +63,10 @@ struct SplineMeshComponent
         WILL_FIELD(bFacetNormals))
 
     static void Sanitize(SplineMeshComponent& comp);
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 

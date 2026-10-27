@@ -38,15 +38,15 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
                 break;
             }
             case CommandType::PhysicsBodyConstruct: {
-                if (state->registry.valid(command.entity) && state->registry.all_of<Component::PhysicsBodyDesc>(command.entity)) {
+                if (state->registry.Valid(command.entity) && state->registry.Has<Component::PhysicsBodyDesc>(command.entity)) {
                     Component::PhysicsBodyDesc::DeferredConstruct(state->registry, command.entity);
                 }
                 break;
             }
             case CommandType::PhysicsBodyRemove: {
-                if (state->registry.valid(command.entity)) {
-                    state->registry.remove<Component::PhysicsBodyRuntime>(command.entity);
-                    state->registry.remove<Component::DynamicPhysicsBodyRuntime>(command.entity);
+                if (state->registry.Valid(command.entity)) {
+                    state->registry.Remove<Component::PhysicsBodyRuntime>(command.entity);
+                    state->registry.Remove<Component::DynamicPhysicsBodyRuntime>(command.entity);
                 }
                 break;
             }
@@ -79,8 +79,8 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
                 break;
             }
             case CommandType::AreaLightConstruct: {
-                if (state->registry.valid(command.entity)) {
-                    if (auto* runtime = state->registry.try_get<Component::AreaLightRuntime>(command.entity)) {
+                if (state->registry.Valid(command.entity)) {
+                    if (auto* runtime = state->registry.TryGetMut<Component::AreaLightRuntime>(command.entity)) {
                         if (runtime->lightSlot == AnalyticLightStore::INVALID_SLOT) {
                             runtime->lightSlot = state->analyticLightStore.Allocate();
                         }
@@ -89,8 +89,8 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
                 break;
             }
             case CommandType::SphereLightConstruct: {
-                if (state->registry.valid(command.entity)) {
-                    if (auto* runtime = state->registry.try_get<Component::SphereLightRuntime>(command.entity)) {
+                if (state->registry.Valid(command.entity)) {
+                    if (auto* runtime = state->registry.TryGetMut<Component::SphereLightRuntime>(command.entity)) {
                         if (runtime->lightSlot == AnalyticLightStore::INVALID_SLOT) {
                             runtime->lightSlot = state->analyticLightStore.Allocate();
                         }
@@ -114,22 +114,22 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state)
                 break;
             }
             case CommandType::ProbeConstruct: {
-                if (state->registry.valid(command.entity) && state->registry.all_of<Component::ReflectionProbeComponent>(command.entity)) {
+                if (state->registry.Valid(command.entity) && state->registry.Has<Component::ReflectionProbeComponent>(command.entity)) {
                     Component::ReflectionProbeComponent::DeferredConstruct(state->registry, command.entity);
                 }
                 break;
             }
             case CommandType::TextConstruct: {
-                if (state->registry.valid(command.entity)) {
-                    if (auto* text = state->registry.try_get<Component::TextComponent>(command.entity)) {
+                if (state->registry.Valid(command.entity)) {
+                    if (auto* text = state->registry.TryGetMut<Component::TextComponent>(command.entity)) {
                         Component::LoadTextComponent(*text, state->registry, command.entity);
                     }
                 }
                 break;
             }
             case CommandType::DestroyEntity: {
-                if (state->registry.valid(command.entity)) {
-                    state->registry.destroy(command.entity);
+                if (state->registry.Valid(command.entity)) {
+                    state->registry.Destroy(command.entity);
                 }
                 break;
             }

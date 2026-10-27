@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_SHADOW_BAKE_SYSTEM_H
 #define WILL_ENGINE_SHADOW_BAKE_SYSTEM_H
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 #include "core/containers/heap_array.h"
 #include "core/containers/inline_vector.h"
@@ -36,7 +36,7 @@ struct ShadowBakeSystem
 
     void Enqueue(entt::entity light);
 
-    void EnqueueAll(entt::registry& registry);
+    void EnqueueAll(Engine::Registry& registry);
 
     void Cancel();
 

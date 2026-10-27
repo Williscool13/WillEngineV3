@@ -7,6 +7,7 @@
 
 #include <entt/entt.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/engine_api.h"
 #include "engine/components/common/stable_id_component.h"
 #include "engine/asset_manager_types.h"
@@ -84,16 +85,16 @@ struct AreaLightComponent
 
     static void Sanitize(AreaLightComponent& comp);
 
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
 
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /**
@@ -139,13 +140,13 @@ struct SphereLightComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
 
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /**
@@ -164,7 +165,7 @@ struct AreaLightRuntime
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 struct SphereLightRuntime
@@ -172,14 +173,14 @@ struct SphereLightRuntime
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /** The analytic light slot of an area or sphere light, or INVALID_SLOT. */
-inline uint32_t FindLightSlot(const entt::registry& registry, entt::entity entity)
+inline uint32_t FindLightSlot(const Engine::Registry& registry, entt::entity entity)
 {
-    if (const auto* area = registry.try_get<AreaLightRuntime>(entity)) { return area->lightSlot; }
-    if (const auto* sphere = registry.try_get<SphereLightRuntime>(entity)) { return sphere->lightSlot; }
+    if (const auto* area = registry.TryGet<AreaLightRuntime>(entity)) { return area->lightSlot; }
+    if (const auto* sphere = registry.TryGet<SphereLightRuntime>(entity)) { return sphere->lightSlot; }
     return Engine::AnalyticLightStore::INVALID_SLOT;
 }
 
@@ -190,8 +191,8 @@ struct LightSurfaceRuntime
     Engine::MaterialID materialID{};
     uint64_t stableId{StableIdComponent::NO_ID};
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 struct LightSurfaceRequest
@@ -237,9 +238,9 @@ struct SkyboxComponent
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /** The refcounted cubemap of envMap, acquired lazily by ResolveSkyboxCubemaps. */
@@ -247,7 +248,7 @@ struct SkyboxRuntime
 {
     Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /**

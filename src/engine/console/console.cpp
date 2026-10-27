@@ -288,7 +288,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             Print(state, Core::InlineString<64>::Format("  cam %d is empty", slot + 1).c_str());
             return;
         }
-        auto camView = state->registry.view<Component::TransformComponent, Component::CameraRuntime, Component::EditorCameraTag>();
+        auto camView = state->registry.View<Engine::Mut<Component::TransformComponent>, Component::CameraRuntime, Component::EditorCameraTag>();
         const entt::entity camEntity = camView.front();
         if (camEntity == entt::null) {
             Print(state, "  no editor camera");
@@ -644,8 +644,8 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
 
 static void SnapEditorCameraToGameCamera(Engine::EngineState* state)
 {
-    auto gameCamView = state->registry.view<Component::GameCameraTag, Component::TransformComponent>();
-    auto editorCamView = state->registry.view<Component::EditorCameraTag, Component::TransformComponent>();
+    auto gameCamView = state->registry.View<Component::GameCameraTag, Component::TransformComponent>();
+    auto editorCamView = state->registry.View<Component::EditorCameraTag, Engine::Mut<Component::TransformComponent>>();
     if (gameCamView.front() == entt::null || editorCamView.front() == entt::null) {
         return;
     }
@@ -664,7 +664,7 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
     const Engine::InstanceSource& source = state->instanceStore[pick.instanceIndex];
     const entt::entity found = Engine::FindEntity(state, StringID(source.stableId));
-    const auto* name = found != entt::null ? state->registry.try_get<Engine::Component::NameComponent>(found) : nullptr;
+    const auto* name = found != entt::null ? state->registry.TryGet<Engine::Component::NameComponent>(found) : nullptr;
     const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
     Print(state, Core::InlineString<256>::Format("  pick: %s, primitive ordinal %u (index %u, node %u), instance %u", name ? name->name.c_str() : "(no entity)", source.modelPrimitiveOrdinal, source.primitiveIndex, source.sourceNodeIndex, pick.instanceIndex).c_str());
     if (material) {
@@ -677,7 +677,7 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
 static void VerifyLights(Engine::EngineState* state)
 {
     using Engine::AnalyticLightStore;
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
     const LightInfo* lights = state->analyticLightStore.Lights();
     const uint32_t watermark = state->analyticLightStore.GetWatermark();
     uint32_t owned[MAX_ANALYTIC_LIGHTS / 32] = {};
@@ -691,7 +691,7 @@ static void VerifyLights(Engine::EngineState* state)
         if (lines++ < 24) { Print(state, line.c_str()); }
     };
     auto nameOf = [&](entt::entity entity) {
-        const auto* name = registry.try_get<Engine::Component::NameComponent>(entity);
+        const auto* name = registry.TryGet<Engine::Component::NameComponent>(entity);
         return name ? name->name.c_str() : "Unnamed";
     };
     auto check = [&](entt::entity entity, uint32_t slot, const LightInfo& expected) {
@@ -705,7 +705,7 @@ static void VerifyLights(Engine::EngineState* state)
         }
         owned[slot >> 5] |= 1u << (slot & 31u);
         ++checked;
-        if (registry.all_of<Engine::Component::MultiframeDirtyRequest>(entity) || memcmp(&lights[slot], &expected, sizeof(LightInfo)) == 0) { return; }
+        if (registry.Has<Engine::Component::MultiframeDirtyRequest>(entity) || memcmp(&lights[slot], &expected, sizeof(LightInfo)) == 0) { return; }
         ++stale;
         const LightInfo& actual = lights[slot];
         report(Core::InlineString<256>::Format("  stale slot %u '%s': store pos (%.2f %.2f %.2f) n (%.2f %.2f %.2f) i %.0f, expected pos (%.2f %.2f %.2f) n (%.2f %.2f %.2f) i %.0f", slot, nameOf(entity),
@@ -713,11 +713,11 @@ static void VerifyLights(Engine::EngineState* state)
                                                expected.position.x, expected.position.y, expected.position.z, expected.normal.x, expected.normal.y, expected.normal.z, expected.intensity));
     };
 
-    auto hidden = [&](entt::entity entity) { return registry.all_of<Engine::Component::ProbeBakeHiddenFlag>(entity); };
-    for (auto [entity, light, runtime, world] : registry.view<Engine::Component::AreaLightComponent, Engine::Component::AreaLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
+    auto hidden = [&](entt::entity entity) { return registry.Has<Engine::Component::ProbeBakeHiddenFlag>(entity); };
+    for (auto [entity, light, runtime, world] : registry.View<Engine::Component::AreaLightComponent, Engine::Component::AreaLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
         check(entity, runtime.lightSlot, hidden(entity) ? LightInfo{} : Engine::Component::ComputeAreaLightInfo(world, light));
     }
-    for (auto [entity, light, runtime, world] : registry.view<Engine::Component::SphereLightComponent, Engine::Component::SphereLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
+    for (auto [entity, light, runtime, world] : registry.View<Engine::Component::SphereLightComponent, Engine::Component::SphereLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
         check(entity, runtime.lightSlot, hidden(entity) ? LightInfo{} : Engine::Component::ComputeSphereLightInfo(world, light));
     }
 

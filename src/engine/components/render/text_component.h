@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 
 #include "core/containers/inline_string.h"
+#include "engine/core/registry.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/font_id.h"
 #include "engine/core/text_material_id.h"
@@ -42,9 +43,9 @@ struct TextComponent
         WILL_FIELD(anchor),
         WILL_FIELD(wrapWidth, .min = 0.0f, .max = 1000.0f, .speed = 0.05f))
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
@@ -58,7 +59,7 @@ struct TextRuntime
      */
     Engine::ModelStore::Range modelRange{};
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 struct TextFontRequest
@@ -66,8 +67,8 @@ struct TextFontRequest
     static constexpr const char* COMPONENT_NAME = "TextFontRequest";
 };
 
-void UnloadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);
-void LoadTextComponent(TextComponent& comp, entt::registry& registry, entt::entity entity);
+void UnloadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::entity entity);
+void LoadTextComponent(TextComponent& comp, Engine::Registry& registry, entt::entity entity);
 } // Engine::Component
 
 #endif //WILL_ENGINE_TEXT_COMPONENT_H

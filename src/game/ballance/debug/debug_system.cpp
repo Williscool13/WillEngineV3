@@ -40,17 +40,17 @@ void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    state->registry.clear<Component::AntiGravityTag>();
+    state->registry.Clear<Component::AntiGravityTag>();
 
     for (const auto& event : state->physics.resolvedAddedEvents) {
         entt::entity e1 = event.e1;
         entt::entity e2 = event.e2;
         if (e1 == entt::null || e2 == entt::null) continue;
 
-        if (state->registry.all_of<Component::FloorTag>(e2))
-            state->registry.emplace_or_replace<Component::AntiGravityTag>(e1);
-        else if (state->registry.all_of<Component::FloorTag>(e1))
-            state->registry.emplace_or_replace<Component::AntiGravityTag>(e2);
+        if (state->registry.Has<Component::FloorTag>(e2))
+            state->registry.Set<Component::AntiGravityTag>(e1);
+        else if (state->registry.Has<Component::FloorTag>(e1))
+            state->registry.Set<Component::AntiGravityTag>(e2);
     }
 
 
@@ -59,7 +59,7 @@ void DebugProcessPhysicsCollisions(Engine::EngineContext* ctx, Engine::EngineSta
 void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::AntiGravityTag, Component::PhysicsBodyRuntime>();
+    auto view = state->registry.View<Component::AntiGravityTag, Component::PhysicsBodyRuntime>();
     for (const auto& [entity, body] : view.each()) {
         ctx->physicsWorld->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
     }
@@ -69,7 +69,7 @@ void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* sta
 void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
 {
     auto& vf = frameBuffer->mainViewFamily;
-    auto view = state->registry.view<Component::DebugGizmoComponent, Component::TransformComponent>();
+    auto view = state->registry.View<Component::DebugGizmoComponent, Component::TransformComponent>();
     for (auto entity : view) {
         auto& gizmo = view.get<Component::DebugGizmoComponent>(entity);
         auto& transform = view.get<Component::TransformComponent>(entity);

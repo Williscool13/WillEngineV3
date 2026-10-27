@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <type_traits>
 
 #include <enkiTS/src/TaskScheduler.h>
 #include <tracy/Tracy.hpp>
@@ -14,6 +15,7 @@
 #include "core/string_id.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
+#include "engine/components/component_types.h"
 
 namespace Core
 {
@@ -71,6 +73,41 @@ struct AccessSet
     Core::InlineVector<StringID, MAX_ACCESS_ENTRIES> reads{};
     Core::InlineVector<StringID, MAX_ACCESS_ENTRIES> writes{};
 };
+
+template<typename... T>
+struct Reads
+{};
+
+template<typename... T>
+struct Writes
+{};
+
+template<NamedComponent T>
+StringID AccessId()
+{
+    static const StringID id{ComponentName<T>(), StringIdLength(ComponentName<T>())};
+    return id;
+}
+
+template<typename... T>
+void AppendAccess(AccessSet& set, Reads<T...>)
+{
+    (set.reads.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
+}
+
+template<typename... T>
+void AppendAccess(AccessSet& set, Writes<T...>)
+{
+    (set.writes.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
+}
+
+template<typename... Lists>
+AccessSet Access()
+{
+    AccessSet set{.bExclusive = false};
+    (AppendAccess(set, Lists{}), ...);
+    return set;
+}
 
 struct SystemNode
 {

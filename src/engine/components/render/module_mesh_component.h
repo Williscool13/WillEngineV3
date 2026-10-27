@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/core/material_id.h"
 #include "engine/resources/model/model_types.h"
 #include "engine/component_registry.h"
@@ -40,10 +41,10 @@ struct ModuleMeshComponent
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 

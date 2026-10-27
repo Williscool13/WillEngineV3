@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_BALLANCE_CHECKPOINT_SYSTEMS_H
 #define WILL_ENGINE_BALLANCE_CHECKPOINT_SYSTEMS_H
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 namespace Engine
 {
@@ -15,8 +15,8 @@ struct EngineState;
 
 namespace Ballance
 {
-void ConnectCheckpointObservers(entt::registry& registry);
-void DisconnectCheckpointObservers(entt::registry& registry);
+void ConnectCheckpointObservers(Engine::Registry& registry);
+void DisconnectCheckpointObservers(Engine::Registry& registry);
 
 void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);

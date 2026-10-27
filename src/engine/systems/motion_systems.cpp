@@ -22,19 +22,19 @@ void UpdatePathMovers(EngineContext* ctx, EngineState* state)
     ZoneScoped;
     const float dt = state->timeFrame->deltaTime;
 
-    for (const auto& [entity, mover, transform] : state->registry.view<Component::PathMoverComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, mover, transform] : state->registry.View<Component::PathMoverComponent, Engine::Mut<Component::TransformComponent>>().each()) {
         if (mover.spline.points.Size() < 2) {
             continue;
         }
-        auto* run = state->registry.try_get<Component::PathMoverRuntime>(entity);
+        auto* run = state->registry.TryGetMut<Component::PathMoverRuntime>(entity);
         if (!run) {
             if (!mover.bAutoStart) { continue; }
-            run = &state->registry.emplace<Component::PathMoverRuntime>(entity, Component::PathMoverRuntime::AtStart(mover));
+            run = &state->registry.Add<Component::PathMoverRuntime>(entity, Component::PathMoverRuntime::AtStart(mover));
         }
 
         if (run->waitTimer > 0.0f) {
             run->waitTimer -= dt;
-            state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
+            state->registry.Set<Component::DirtyTransformRequest>(entity);
             continue;
         }
 
@@ -97,7 +97,7 @@ void UpdatePathMovers(EngineContext* ctx, EngineState* state)
         const glm::quat anchorRot = transform.rotation * glm::inverse(oldRot);
         transform.translation += anchorRot * (newPos - oldPos);
         transform.rotation = anchorRot * newRot;
-        state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
+        state->registry.Set<Component::DirtyTransformRequest>(entity);
     }
 }
 
@@ -106,7 +106,7 @@ void UpdateRotateInPlace(EngineContext* ctx, EngineState* state)
     ZoneScoped;
     const float dt = state->timeFrame->deltaTime;
 
-    for (const auto& [entity, rotator, transform] : state->registry.view<Component::RotateInPlaceComponent, Component::TransformComponent>().each()) {
+    for (const auto& [entity, rotator, transform] : state->registry.View<Component::RotateInPlaceComponent, Engine::Mut<Component::TransformComponent>>().each()) {
         const float axisLen = glm::length(rotator.axis);
         if (axisLen < DIVISION_EPSILON || rotator.speedDegrees == 0.0f) {
             continue;
@@ -122,7 +122,7 @@ void UpdateRotateInPlace(EngineContext* ctx, EngineState* state)
             transform.rotation = glm::normalize(transform.rotation * delta);
         }
 
-        state->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
+        state->registry.Set<Component::DirtyTransformRequest>(entity);
     }
 }
 } // Engine

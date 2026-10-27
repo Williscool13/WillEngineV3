@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/material_manager.h"
 #include "core/containers/inline_string.h"
 #include "engine/asset_manager_types.h"
@@ -59,11 +60,11 @@ struct Text3DComponent
         WILL_FIELD(renderOffset, .speed = 0.01f),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
@@ -76,10 +77,10 @@ struct Text3DLoadingFlag
 {};
 
 /** Arms the generate pipeline; call after changing fontId. */
-void LoadText3DFont(Text3DComponent& component, entt::registry& registry, entt::entity entity);
+void LoadText3DFont(Text3DComponent& component, Engine::Registry& registry, entt::entity entity);
 
 /** Releases the generated mesh and clears pending state without removing the component (for font hot-reload). */
-void UnloadText3DFont(entt::registry& registry, entt::entity entity);
+void UnloadText3DFont(Engine::Registry& registry, entt::entity entity);
 } // Engine::Component
 
 #endif //WILL_ENGINE_TEXT3D_COMPONENT_H

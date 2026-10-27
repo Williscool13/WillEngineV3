@@ -5,10 +5,9 @@
 #ifndef WILL_ENGINE_PHYSICS_SYSTEM_H
 #define WILL_ENGINE_PHYSICS_SYSTEM_H
 
-#include <entt/entt.hpp>
-
 #include "core/containers/arena_fixed_vector.h"
 #include "core/types/aabb.h"
+#include "engine/core/registry.h"
 
 
 namespace Core
@@ -25,8 +24,8 @@ struct EngineState;
 
 namespace Engine
 {
-void ConnectPhysicsObservers(entt::registry& registry);
-void DisconnectPhysicsObservers(entt::registry& registry);
+void ConnectPhysicsObservers(Engine::Registry& registry);
+void DisconnectPhysicsObservers(Engine::Registry& registry);
 void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state);
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state);

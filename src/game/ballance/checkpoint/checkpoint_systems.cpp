@@ -15,28 +15,28 @@
 
 namespace Ballance
 {
-void ConnectCheckpointObservers(entt::registry& registry)
+void ConnectCheckpointObservers(Engine::Registry& registry)
 {
-    registry.on_construct<Component::CheckpointComponent>().connect<&Component::CheckpointComponent::OnConstruct>();
+    registry.ConnectConstruct<Component::CheckpointComponent, &Component::CheckpointComponent::OnConstruct>();
 }
 
-void DisconnectCheckpointObservers(entt::registry& registry)
+void DisconnectCheckpointObservers(Engine::Registry& registry)
 {
-    registry.on_construct<Component::CheckpointComponent>().disconnect<&Component::CheckpointComponent::OnConstruct>();
+    registry.DisconnectConstruct<Component::CheckpointComponent, &Component::CheckpointComponent::OnConstruct>();
 }
 
 void CheckpointUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     for (const auto& event : state->physics.resolvedAddedEvents) {
         entt::entity checkpointEntity = entt::null;
-        if (event.e1 != entt::null && state->registry.all_of<Component::CheckpointComponent>(event.e1)) {
+        if (event.e1 != entt::null && state->registry.Has<Component::CheckpointComponent>(event.e1)) {
             checkpointEntity = event.e1;
-        } else if (event.e2 != entt::null && state->registry.all_of<Component::CheckpointComponent>(event.e2)) {
+        } else if (event.e2 != entt::null && state->registry.Has<Component::CheckpointComponent>(event.e2)) {
             checkpointEntity = event.e2;
         }
 
         if (checkpointEntity != entt::null) {
-            const auto& checkpoint = state->registry.get<Component::CheckpointComponent>(checkpointEntity);
+            const auto& checkpoint = state->registry.Get<Component::CheckpointComponent>(checkpointEntity);
             if (checkpoint.priority > state->scene.currentCheckpointPriority) {
                 state->scene.currentCheckpointId = checkpoint.checkpointId;
                 state->scene.currentCheckpointPriority = checkpoint.priority;
@@ -59,11 +59,11 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         entt::entity otherEntity = (event.e1 == playerEntity) ? event.e2 : event.e1;
         if (otherEntity == entt::null) { continue; }
-        if (!state->registry.all_of<Component::DeathZoneTag>(otherEntity)) { continue; }
+        if (!state->registry.Has<Component::DeathZoneTag>(otherEntity)) { continue; }
 
         // Find the active checkpoint entity
         entt::entity checkpointEntity = entt::null;
-        auto checkpointView = state->registry.view<Component::CheckpointComponent, Component::TransformComponent>();
+        auto checkpointView = state->registry.View<Component::CheckpointComponent,Component::TransformComponent>();
         for (auto entity : checkpointView) {
             const auto& cp = checkpointView.get<Component::CheckpointComponent>(entity);
             if (cp.checkpointId == state->scene.currentCheckpointId) {
@@ -74,15 +74,15 @@ void DeathZoneUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 
         if (checkpointEntity == entt::null) { break; }
 
-        const auto& checkpoint = state->registry.get<Component::CheckpointComponent>(checkpointEntity);
-        const auto& checkpointTransform = state->registry.get<Component::TransformComponent>(checkpointEntity);
+        const auto& checkpoint = state->registry.Get<Component::CheckpointComponent>(checkpointEntity);
+        const auto& checkpointTransform = state->registry.Get<Component::TransformComponent>(checkpointEntity);
 
-        auto& playerTransform = state->registry.get<Component::TransformComponent>(playerEntity);
+        auto& playerTransform = state->registry.GetMut<Component::TransformComponent>(playerEntity);
         playerTransform.translation = checkpointTransform.translation + checkpoint.spawnOffset;
         playerTransform.rotation = glm::quat(glm::radians(checkpoint.spawnRotation));
 
-        state->registry.emplace_or_replace<Component::TeleportPhysicsTransformRequest>(playerEntity);
-        state->registry.emplace_or_replace<Component::SetVelocityRequest>(playerEntity);
+        state->registry.Set<Component::TeleportPhysicsTransformRequest>(playerEntity);
+        state->registry.Set<Component::SetVelocityRequest>(playerEntity);
         state->requests.RequestRenderReset(Core::RenderReset::Cut);
 
         break;

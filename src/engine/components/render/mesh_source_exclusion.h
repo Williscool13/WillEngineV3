@@ -9,6 +9,7 @@
 
 #include <entt/entt.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/components/render/module_mesh_component.h"
 #include "engine/components/render/procedural_mesh_component.h"
 #include "engine/components/render/spline_mesh_component.h"
@@ -22,10 +23,10 @@ template<typename... Ts>
 struct MeshSourceSet
 {
     template<typename Self>
-    static bool NoneOtherThan(const entt::registry& registry, entt::entity entity)
+    static bool NoneOtherThan(const Engine::Registry& registry, entt::entity entity)
     {
         static_assert((std::is_same_v<Ts, Self> || ...), "Self must be one of the mesh sources");
-        return (... && (std::is_same_v<Ts, Self> || !registry.all_of<Ts>(entity)));
+        return (... && (std::is_same_v<Ts, Self> || !registry.Has<Ts>(entity)));
     }
 };
 

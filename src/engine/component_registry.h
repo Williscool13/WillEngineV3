@@ -5,13 +5,12 @@
 #ifndef WILL_ENGINE_ENGINE_COMPONENT_REGISTRY_H
 #define WILL_ENGINE_ENGINE_COMPONENT_REGISTRY_H
 
-#include <entt/entt.hpp>
-
 #include "core/containers/map.h"
 #include "core/containers/span.h"
 #include "core/containers/vector.h"
 #include "core/string_id.h"
 #include "engine/core/origin.h"
+#include "engine/core/registry.h"
 
 namespace Core
 {
@@ -29,19 +28,19 @@ struct ComponentEditorResult {
     bool bRequestRemoval{false};
 };
 
-using SerializeFn = void(*)(const entt::registry&, entt::entity, TextWriter&);
-using DeserializeFn = void(*)(entt::registry&, entt::entity, const TextReader&);
-using HasComponentFn = bool(*)(const entt::registry&, entt::entity);
-using CanAddComponentFn = bool(*)(const entt::registry&, entt::entity);
-using EmplaceDefaultFn = void(*)(entt::registry&, entt::entity);
-using RemoveComponentFn = void(*)(entt::registry&, entt::entity);
-using CopyComponentFn = void(*)(const entt::registry&, entt::entity, entt::registry&, entt::entity);
+using SerializeFn = void(*)(const Registry&, entt::entity, TextWriter&);
+using DeserializeFn = void(*)(Registry&, entt::entity, const TextReader&);
+using HasComponentFn = bool(*)(const Registry&, entt::entity);
+using CanAddComponentFn = bool(*)(const Registry&, entt::entity);
+using EmplaceDefaultFn = void(*)(Registry&, entt::entity);
+using RemoveComponentFn = void(*)(Registry&, entt::entity);
+using CopyComponentFn = void(*)(const Registry&, entt::entity, Registry&, entt::entity);
 using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, EditContext&, const char*);
-using RestoreFn = void(*)(entt::registry&, entt::entity, const TextReader&);
+using RestoreFn = void(*)(Registry&, entt::entity, const TextReader&);
 using FillDefaultsFn =void(*)(const TextReader&, TextWriter&);
-using PropagateFn = bool(*)(entt::registry&, entt::entity, const TextReader&, const TextReader&);
+using PropagateFn = bool(*)(Registry&, entt::entity, const TextReader&, const TextReader&);
 /** Points each EntityRef naming from[i] at to[i]. */
-using RemapEntityRefsFn = void(*)(entt::registry&, entt::entity, Core::Span<const StringID> from, Core::Span<const StringID> to);
+using RemapEntityRefsFn = void(*)(Registry&, entt::entity, Core::Span<const StringID> from, Core::Span<const StringID> to);
 
 struct ComponentEntry
 {

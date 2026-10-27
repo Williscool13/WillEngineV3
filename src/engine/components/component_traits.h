@@ -50,16 +50,16 @@ concept HasDrawEditor = requires(Core::ViewFamily& vf, Engine::EditContext& edit
 };
 
 template<typename T>
-concept HasCanAdd = requires(const entt::registry& r, entt::entity e) {
+concept HasCanAdd = requires(const Registry& r, entt::entity e) {
     { T::CanAdd(r, e) } -> std::same_as<bool>;
 };
 
 template<typename C>
-concept HasOnEditPreview = requires(entt::registry& r, entt::entity e) { C::OnEditPreview(r, e); };
+concept HasOnEditPreview = requires(Registry& r, entt::entity e) { C::OnEditPreview(r, e); };
 
 /** Also runs after undo/redo, which never call OnEditPreview, so it must cover everything OnEditPreview does. */
 template<typename C>
-concept HasOnEditCommit = requires(entt::registry& r, entt::entity e) { C::OnEditCommit(r, e); };
+concept HasOnEditCommit = requires(Registry& r, entt::entity e) { C::OnEditCommit(r, e); };
 }
 
 #endif //WILL_ENGINE_COMPONENT_TRAITS_H

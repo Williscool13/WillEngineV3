@@ -14,11 +14,11 @@
 
 namespace Ballance::Component
 {
-void CheckpointComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void CheckpointComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<CheckpointComponent>(entity);
+    auto& comp = registry.GetMut<CheckpointComponent>(entity);
     if (comp.checkpointId.id == 0) {
-        auto* state = registry.ctx().get<Engine::EngineState*>();
+        auto* state = registry.State();
         comp.checkpointId = StringID(state->rng());
     }
 }
@@ -26,7 +26,7 @@ void CheckpointComponent::OnConstruct(entt::registry& registry, entt::entity ent
 
 Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<CheckpointComponent>();
     bool open = ImGui::CollapsingHeader("Checkpoint", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -51,7 +51,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
 #ifdef WDEBUG
     {
         glm::vec3 basePos{0.0f};
-        if (auto* transform = registry.try_get<TransformComponent>(entity)) {
+        if (auto* transform = registry.TryGet<TransformComponent>(entity)) {
             basePos = transform->translation;
         }
         const glm::vec3 spawnPos = basePos + component.spawnOffset;

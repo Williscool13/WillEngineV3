@@ -744,11 +744,11 @@ template<typename C, typename Tag>
 static void RetagIfUsingMaterial(Engine::EngineState* state, Engine::MaterialID id)
 {
     const Engine::InstanceStore& store = state->instanceStore;
-    for (const auto& [entity, component, runtime] : state->registry.view<C, Component::MeshRuntime>().each()) {
+    for (const auto& [entity, component, runtime] : state->registry.View<C, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
         for (uint32_t i = 0; i < runtime.range.count; ++i) {
             if (store[runtime.range.offset + i].materialID != id) { continue; }
-            state->registry.emplace_or_replace<Tag>(entity);
+            state->registry.Set<Tag>(entity);
             break;
         }
     }

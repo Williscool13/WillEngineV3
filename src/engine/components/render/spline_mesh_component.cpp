@@ -13,6 +13,7 @@
 #include "mesh_source_exclusion.h"
 #include "static_mesh_component.h"
 #include "text3d_component.h"
+#include "engine/core/registry.h"
 #include "engine/include/engine_context.h"
 #include "engine/asset_manager.h"
 #include "engine/engine_api.h"
@@ -49,34 +50,34 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     return params;
 }
 
-void SplineMeshComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void SplineMeshComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    registry.get_or_emplace<RenderFlagsComponent>(entity);
-    auto& component = registry.get<SplineMeshComponent>(entity);
+    registry.GetOrAdd<RenderFlagsComponent>(entity);
+    auto& component = registry.GetMut<SplineMeshComponent>(entity);
 
     Sanitize(component);
 
-    registry.emplace_or_replace<SplineMeshLoadRequest>(entity);
+    registry.Set<SplineMeshLoadRequest>(entity);
 
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    auto* transform = registry.TryGet<TransformComponent>(entity);
     glm::mat4 m = transform ? GetMatrix(*transform) : glm::mat4(1.0f);
-    auto& rt = registry.emplace_or_replace<RenderTransformRuntime>(entity, m, m);
+    auto& rt = registry.Set<RenderTransformRuntime>(entity, m, m);
     rt.renderOffset = component.renderOffset;
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void SplineMeshComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void SplineMeshComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<MeshRuntime>(entity);
-    registry.remove<SplineMeshLoadRequest>(entity);
-    registry.remove<SplineMeshLoadingFlag>(entity);
-    registry.remove<RenderTransformRuntime>(entity);
+    registry.Remove<MeshRuntime>(entity);
+    registry.Remove<SplineMeshLoadRequest>(entity);
+    registry.Remove<SplineMeshLoadingFlag>(entity);
+    registry.Remove<RenderTransformRuntime>(entity);
 }
 } // Engine::Component
 
 namespace Engine
 {
-bool Component::SplineMeshComponent::CanAdd(const entt::registry& registry, entt::entity entity)
+bool Component::SplineMeshComponent::CanAdd(const Engine::Registry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::SplineMeshComponent>(registry, entity);
 }
@@ -90,15 +91,15 @@ void Component::SplineMeshComponent::Sanitize(SplineMeshComponent& comp)
     }
 }
 
-void Component::SplineMeshComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::SplineMeshComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<SplineMeshLoadingFlag>(entity);
-    registry.emplace_or_replace<SplineMeshLoadRequest>(entity);
+    registry.Remove<SplineMeshLoadingFlag>(entity);
+    registry.Set<SplineMeshLoadRequest>(entity);
 
     // Spline colliders carry a copy of the mesh's spline; keep it in step so the collider follows edits.
-    auto* body = registry.try_get<PhysicsBodyDesc>(entity);
+    auto* body = registry.TryGetMut<PhysicsBodyDesc>(entity);
     if (body == nullptr) { return; }
-    const auto& component = registry.get<SplineMeshComponent>(entity);
+    const auto& component = registry.Get<SplineMeshComponent>(entity);
     bool bResynced = false;
     for (PhysicsShapeDesc& shape : body->shapes) {
         auto* collider = std::get_if<ColliderShape>(&shape.geometry);
@@ -111,7 +112,7 @@ void Component::SplineMeshComponent::OnEditCommit(entt::registry& registry, entt
 
 Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const SplineMeshComponent before = edit.Get<SplineMeshComponent>();
     SplineMeshComponent component = before;
@@ -119,7 +120,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     static entt::entity editEntity = entt::null;
     static bool wasUsingGizmo = false;
 
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto* ctx = registry.Context();
     auto* state = edit.State();
 
     if (editEntity != entity || edit.IsMulti()) {
@@ -139,7 +140,7 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     bool dirty = false;
     if (open) {
         if (DrawRenderFlagToggles(edit, RENDER_TOGGLE_VISIBLE | RENDER_TOGGLE_EMISSIVE)) {
-            edit.ForEachTarget<SplineMeshComponent>([&registry](entt::entity e) { registry.emplace_or_replace<SplineMeshLoadingFlag>(e); });
+            edit.ForEachTarget<SplineMeshComponent>([&registry](entt::entity e) { registry.Set<SplineMeshLoadingFlag>(e); });
         }
 
 
@@ -426,11 +427,11 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
         const int liveCpCount = static_cast<int>(component.spline.points.Size());
 
-        auto* transform = registry.try_get<TransformComponent>(entity);
+        auto* transform = registry.TryGet<TransformComponent>(entity);
         glm::mat4 entityMat(1.0f);
         if (transform) {
-            const auto* world = registry.try_get<WorldTransformRuntime>(entity);
-            const auto* rt = registry.try_get<RenderTransformRuntime>(entity);
+            const auto* world = registry.TryGet<WorldTransformRuntime>(entity);
+            const auto* rt = registry.TryGet<RenderTransformRuntime>(entity);
             const glm::vec3 renderOffset = rt ? rt->renderOffset : glm::vec3(0.0f);
             const glm::quat renderRotation = rt ? rt->renderRotation : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
             entityMat = glm::translate(world ? GetMatrix(*world) : glm::mat4(1.0f), renderOffset) * glm::mat4_cast(renderRotation);

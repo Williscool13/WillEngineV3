@@ -5,12 +5,11 @@
 #ifndef WILL_ENGINE_BALLANCE_BREAKABLE_COMPONENT_H
 #define WILL_ENGINE_BALLANCE_BREAKABLE_COMPONENT_H
 
-#include <entt/entt.hpp>
-
 #include "core/containers/inline_vector.h"
 #include "engine/asset_manager_types.h"
 #include "engine/component_registry.h"
 #include "engine/core/model_id.h"
+#include "engine/core/registry.h"
 #include "engine/reflection/reflection.h"
 #include "game/ballance/fwd_components.h"
 
@@ -38,7 +37,7 @@ struct BreakableRuntime
     Engine::StaticModelHandle model{};
     Core::InlineVector<Engine::PhysicsColliderHandle, 32> colliders{};
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 struct ShatterOnContactTag

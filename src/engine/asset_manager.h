@@ -98,7 +98,7 @@ public: // Models
 
     StaticModelHandle LoadModel(ModelID modelId);
 
-    StaticModelHandle LoadProceduralModel(ProceduralParams& params, const ProceduralRepeat& repeat = {});
+    StaticModelHandle LoadProceduralModel(const ProceduralParams& params, const ProceduralRepeat& repeat = {});
 
     StaticModelHandle LoadSplineModel(const SplineParams& params);
 

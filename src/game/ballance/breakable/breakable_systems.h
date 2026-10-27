@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_BALLANCE_BREAKABLE_SYSTEMS_H
 #define WILL_ENGINE_BALLANCE_BREAKABLE_SYSTEMS_H
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 namespace Engine
 {
@@ -17,8 +17,8 @@ namespace Ballance
 {
 void RegisterBreakableCommands(Engine::EngineState* state);
 
-void ConnectBreakableObservers(entt::registry& registry);
-void DisconnectBreakableObservers(entt::registry& registry);
+void ConnectBreakableObservers(Engine::Registry& registry);
+void DisconnectBreakableObservers(Engine::Registry& registry);
 
 /** Gives each BreakableComponent a BreakableRuntime holding its broken model and per-node hulls once they can be loaded. */
 void AcquireBreakableAssets(Engine::EngineContext* ctx, Engine::EngineState* state);

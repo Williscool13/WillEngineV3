@@ -9,17 +9,17 @@
 
 namespace Engine
 {
-void ConnectCommonObservers(entt::registry& registry)
+void ConnectCommonObservers(Engine::Registry& registry)
 {
-    registry.on_construct<Component::StableIdComponent>().connect<&Component::StableIdComponent::OnConstruct>();
-    registry.on_update<Component::StableIdComponent>().connect<&Component::StableIdComponent::OnUpdate>();
-    registry.on_destroy<Component::StableIdComponent>().connect<&Component::StableIdComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::StableIdComponent, &Component::StableIdComponent::OnConstruct>();
+    registry.ConnectUpdate<Component::StableIdComponent, &Component::StableIdComponent::OnUpdate>();
+    registry.ConnectDestroy<Component::StableIdComponent, &Component::StableIdComponent::OnDestroy>();
 }
 
-void DisconnectCommonObservers(entt::registry& registry)
+void DisconnectCommonObservers(Engine::Registry& registry)
 {
-    registry.on_construct<Component::StableIdComponent>().disconnect<&Component::StableIdComponent::OnConstruct>();
-    registry.on_update<Component::StableIdComponent>().disconnect<&Component::StableIdComponent::OnUpdate>();
-    registry.on_destroy<Component::StableIdComponent>().disconnect<&Component::StableIdComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::StableIdComponent, &Component::StableIdComponent::OnConstruct>();
+    registry.DisconnectUpdate<Component::StableIdComponent, &Component::StableIdComponent::OnUpdate>();
+    registry.DisconnectDestroy<Component::StableIdComponent, &Component::StableIdComponent::OnDestroy>();
 }
 } // Engine

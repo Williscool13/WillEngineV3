@@ -5,10 +5,9 @@
 #ifndef WILL_ENGINE_STABLE_ID_COMPONENT_H
 #define WILL_ENGINE_STABLE_ID_COMPONENT_H
 
-#include <entt/entt.hpp>
-
 #include "core/math/random.h"
 #include "core/string_id.h"
+#include "engine/core/registry.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection.h"
@@ -43,9 +42,9 @@ struct StableIdComponent
 
     WILL_REFLECT(StableIdComponent, WILL_FIELD(id), WILL_FIELD(sortOrder))
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnUpdate(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnUpdate(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 

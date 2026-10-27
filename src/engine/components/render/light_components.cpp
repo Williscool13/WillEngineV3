@@ -21,9 +21,9 @@ namespace Engine
 {
 static constexpr float LIGHT_PI = 3.14159265358979f;
 
-static Vec3 EditorLightScale(entt::registry& registry, entt::entity entity)
+static Vec3 EditorLightScale(Engine::Registry& registry, entt::entity entity)
 {
-    const auto* world = registry.try_get<Component::WorldTransformRuntime>(entity);
+    const auto* world = registry.TryGet<Component::WorldTransformRuntime>(entity);
     return world ? world->scale : Vec3{1.0f, 1.0f, 1.0f};
 }
 
@@ -66,15 +66,15 @@ static void EditLightIntensity(EditContext& edit, const char* label, float C::* 
     EditWidgets::CommitOnRelease<C>(edit, false);
 }
 
-static void ClaimShadowId(entt::registry& registry, entt::entity entity, Component::LightShadowMode mode, uint64_t& shadowId)
+static void ClaimShadowId(Engine::Registry& registry, entt::entity entity, Component::LightShadowMode mode, uint64_t& shadowId)
 {
     if (mode != Component::LightShadowMode::Baked) { return; }
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = registry.State();
     auto isTaken = [&](uint64_t id) {
-        for (const auto [other, light] : registry.view<Component::AreaLightComponent>().each()) {
+        for (const auto [other, light] : registry.View<Component::AreaLightComponent>().each()) {
             if (other != entity && light.shadowId == id) { return true; }
         }
-        for (const auto [other, light] : registry.view<Component::SphereLightComponent>().each()) {
+        for (const auto [other, light] : registry.View<Component::SphereLightComponent>().each()) {
             if (other != entity && light.shadowId == id) { return true; }
         }
         return false;
@@ -84,36 +84,36 @@ static void ClaimShadowId(entt::registry& registry, entt::entity entity, Compone
     }
 }
 
-void Component::AreaLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Component::AreaLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    auto& light = registry.get<AreaLightComponent>(entity);
+    auto& light = registry.GetMut<AreaLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
-    registry.emplace_or_replace<LightSurfaceRequest>(entity);
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<LightSurfaceRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Component::SphereLightComponent::OnEditPreview(entt::registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnEditPreview(Engine::Registry& registry, entt::entity entity)
 {
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Component::SphereLightComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    auto& light = registry.get<SphereLightComponent>(entity);
+    auto& light = registry.GetMut<SphereLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
 }
 
 static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
 {
-    entt::registry& registry = edit.Registry();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+    Engine::Registry& registry = edit.Registry();
+    auto* state = registry.State();
+    auto* ctx = registry.Context();
     const uint32_t lightSlot = Component::FindLightSlot(registry, edit.Primary());
 
     const AssetManager::ShadowMapInfo* info = ctx->assetManager->GetShadowMapInfo(shadowId);
@@ -139,7 +139,7 @@ static constexpr const char* SHADOW_BAKE_RESOLUTION_LABELS[] = {"256", "512", "1
 
 Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -202,10 +202,10 @@ Engine::ComponentEditorResult Component::AreaLightComponent::DrawEditor(Core::Vi
         }
     }
 
-    const auto* transform = registry.try_get<WorldTransformRuntime>(entity);
+    const auto* transform = registry.TryGet<WorldTransformRuntime>(entity);
     if (transform && bEditing) {
         const auto& comp = edit.Get<AreaLightComponent>();
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        auto* ctx = registry.Context();
         const auto& vd = viewFamily.mainView.currentViewData;
         const Vec3 center = transform->translation;
         const Quat rot = transform->rotation;
@@ -304,44 +304,44 @@ LightInfo Component::ComputeAreaLightInfo(const Transform& world, const AreaLigh
     };
 }
 
-void Component::AreaLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& light = registry.get<AreaLightComponent>(entity);
+    auto* state = registry.State();
+    auto& light = registry.GetMut<AreaLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
-    registry.emplace_or_replace<AreaLightRuntime>(entity);
+    registry.Set<AreaLightRuntime>(entity);
     state->commandQueue.Push({.type = CommandType::AreaLightConstruct, .entity = entity});
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
-    registry.emplace_or_replace<LightSurfaceRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
+    registry.Set<LightSurfaceRequest>(entity);
 }
 
 template<typename LightRuntime>
-static void ReleaseLightRuntime(entt::registry& registry, entt::entity entity)
+static void ReleaseLightRuntime(Engine::Registry& registry, entt::entity entity)
 {
-    const auto& runtime = registry.get<LightRuntime>(entity);
+    const auto& runtime = registry.Get<LightRuntime>(entity);
     if (runtime.bakedShadow.IsValid()) {
-        registry.ctx().get<Engine::EngineContext*>()->assetManager->UnloadTextureArray(runtime.bakedShadow);
+        registry.Context()->assetManager->UnloadTextureArray(runtime.bakedShadow);
     }
     if (runtime.lightSlot != AnalyticLightStore::INVALID_SLOT) {
-        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
+        registry.State()->commandQueue.Push({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
     }
 }
 
-void Component::AreaLightRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::AreaLightRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
     ReleaseLightRuntime<AreaLightRuntime>(registry, entity);
 }
 
-void Component::SphereLightRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::SphereLightRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
     ReleaseLightRuntime<SphereLightRuntime>(registry, entity);
 }
 
-void Component::AreaLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::AreaLightComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<AreaLightRuntime>(entity);
-    registry.remove<LightSurfaceRequest>(entity);
-    registry.remove<LightSurfaceRuntime>(entity);
+    registry.Remove<AreaLightRuntime>(entity);
+    registry.Remove<LightSurfaceRequest>(entity);
+    registry.Remove<LightSurfaceRuntime>(entity);
 }
 
 Engine::ComponentEditorResult Component::SphereLightComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
@@ -406,45 +406,45 @@ LightInfo Component::ComputeSphereLightInfo(const Transform& world, const Sphere
     };
 }
 
-void Component::SphereLightComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto& light = registry.get<SphereLightComponent>(entity);
+    auto* state = registry.State();
+    auto& light = registry.GetMut<SphereLightComponent>(entity);
     ClaimShadowId(registry, entity, light.shadowMode, light.shadowId);
-    registry.emplace_or_replace<SphereLightRuntime>(entity);
+    registry.Set<SphereLightRuntime>(entity);
     state->commandQueue.Push({.type = CommandType::SphereLightConstruct, .entity = entity});
-    registry.emplace_or_replace<MultiframeDirtyRequest>(entity);
-    registry.emplace_or_replace<LightSurfaceRequest>(entity);
+    registry.Set<MultiframeDirtyRequest>(entity);
+    registry.Set<LightSurfaceRequest>(entity);
 }
 
-void Component::SphereLightComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::SphereLightComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<SphereLightRuntime>(entity);
-    registry.remove<LightSurfaceRequest>(entity);
-    registry.remove<LightSurfaceRuntime>(entity);
+    registry.Remove<SphereLightRuntime>(entity);
+    registry.Remove<LightSurfaceRequest>(entity);
+    registry.Remove<LightSurfaceRuntime>(entity);
 }
 
-void Component::LightSurfaceRuntime::OnConstruct(entt::registry& registry, entt::entity entity)
+void Component::LightSurfaceRuntime::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    if (const auto* stable = registry.try_get<StableIdComponent>(entity)) {
-        registry.get<LightSurfaceRuntime>(entity).stableId = stable->id.id;
+    if (const auto* stable = registry.TryGet<StableIdComponent>(entity)) {
+        registry.GetMut<LightSurfaceRuntime>(entity).stableId = stable->id.id;
     }
 }
 
-void Component::LightSurfaceRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::LightSurfaceRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    auto& runtime = registry.get<LightSurfaceRuntime>(entity);
+    auto& runtime = registry.GetMut<LightSurfaceRuntime>(entity);
     if (!runtime.range.IsValid() && !runtime.modelRange.IsValid()) { return; }
 
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = registry.State();
     state->commandQueue.Push({.type = CommandType::MeshRelease, .payload = {.meshRelease = {runtime.range.offset, runtime.range.count, runtime.modelRange.offset, runtime.modelRange.count, StaticModelHandle::INVALID}}});
     runtime.range = {};
     runtime.modelRange = {};
 }
 
-void Component::SkyboxComponent::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::SkyboxComponent::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<SkyboxRuntime>(entity);
+    registry.Remove<SkyboxRuntime>(entity);
 }
 
 Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
@@ -457,7 +457,7 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
 
     if (open) {
         const auto& comp = edit.Get<SkyboxComponent>();
-        auto* ctx = edit.Registry().ctx().get<Engine::EngineContext*>();
+        auto* ctx = edit.Registry().Context();
 
         EditWidgets::Checkbox(edit, "Enabled##sky", &SkyboxComponent::bEnabled);
 
@@ -509,9 +509,9 @@ Engine::ComponentEditorResult Component::VolumetricFogComponent::DrawEditor(Core
 // World-space face handles. Plain drag moves one face with the opposite face fixed; Shift scales X and Z together about the centre, Ctrl scales all axes together.
 static void DrawFogVolumeFaceHandles(Core::ViewFamily& viewFamily, EditContext& edit, entt::entity entity)
 {
-    auto* ctx = edit.Registry().ctx().get<Engine::EngineContext*>();
+    auto* ctx = edit.Registry().Context();
     Engine::EngineState* state = edit.State();
-    const entt::registry& registry = edit.Registry();
+    const Engine::Registry& registry = edit.Registry();
     const auto& vd = viewFamily.mainView.currentViewData;
     const Vec4 viewport{
         static_cast<float>(ctx->windowContext.viewportOffsetX),
@@ -521,8 +521,8 @@ static void DrawFogVolumeFaceHandles(Core::ViewFamily& viewFamily, EditContext& 
     };
 
     const Transform world = Component::ComputeWorldTransform(registry, entity);
-    const auto* node = registry.try_get<Component::HierarchyComponent>(entity);
-    const Transform parentWorld = node && registry.valid(node->parent) ? Component::ComputeWorldTransform(registry, node->parent) : Transform{};
+    const auto* node = registry.TryGet<Component::HierarchyComponent>(entity);
+    const Transform parentWorld = node && registry.Valid(node->parent) ? Component::ComputeWorldTransform(registry, node->parent) : Transform{};
 
     const Vec3 center = world.translation;
     const Quat rot = world.rotation;
@@ -565,7 +565,7 @@ static void DrawFogVolumeFaceHandles(Core::ViewFamily& viewFamily, EditContext& 
 
 Engine::ComponentEditorResult Component::FogVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -616,7 +616,7 @@ Engine::ComponentEditorResult Component::FogVolumeComponent::DrawEditor(Core::Vi
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("0 on both ambient and local lights leaves only sun shafts, so a partial volume shows no seam."); }
     }
 
-    if (bEditing && registry.all_of<TransformComponent>(entity)) {
+    if (bEditing && registry.Has<TransformComponent>(entity)) {
         DrawFogVolumeFaceHandles(viewFamily, edit, entity);
         const Transform world = ComputeWorldTransform(registry, entity);
         DrawBounds(viewFamily, edit.Get<FogVolumeComponent>(), world.translation, world.rotation, world.scale, state->projectConfig.reflectionProbeLineWidth, true);
@@ -652,16 +652,16 @@ void Component::FogVolumeComponent::DrawBounds(Core::ViewFamily& viewFamily, con
     }
 }
 
-void Component::SkyboxComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::SkyboxComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<SkyboxRuntime>(entity);
+    registry.Remove<SkyboxRuntime>(entity);
 }
 
-void Component::SkyboxRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void Component::SkyboxRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    const auto& runtime = registry.get<SkyboxRuntime>(entity);
+    const auto& runtime = registry.Get<SkyboxRuntime>(entity);
     if (runtime.handle.IsValid()) {
-        registry.ctx().get<Engine::EngineState*>()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.handle}});
+        registry.State()->commandQueue.Push({.type = CommandType::CubemapRelease, .payload = {.cubemapHandle = runtime.handle}});
     }
 }
 } // Engine

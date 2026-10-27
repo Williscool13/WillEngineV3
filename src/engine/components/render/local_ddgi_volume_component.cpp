@@ -24,7 +24,7 @@ void LocalDDGIVolumeComponent::Sanitize(LocalDDGIVolumeComponent& comp)
 
 Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -34,8 +34,8 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
         bEditing = false;
     }
 
-    auto* state = registry.ctx().get<Engine::EngineState*>();
-    auto* transform = registry.try_get<TransformComponent>(entity);
+    auto* state = registry.State();
+    auto* transform = registry.TryGet<TransformComponent>(entity);
     if (bEditing) {
         state->editor.bExclusiveGizmoActive = true;
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
@@ -71,7 +71,7 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
 
     if (transform && bEditing) {
         const auto& comp = edit.Get<LocalDDGIVolumeComponent>();
-        auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+        auto* ctx = registry.Context();
         const auto& vd = viewFamily.mainView.currentViewData;
         const Vec4 viewport{
             static_cast<float>(ctx->windowContext.viewportOffsetX),
@@ -111,10 +111,10 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
 }
 
 
-void LocalDDGIVolumeComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void LocalDDGIVolumeComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<LocalDDGIVolumeComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto& comp = registry.GetMut<LocalDDGIVolumeComponent>(entity);
+    auto* state = registry.State();
     if (comp.volumeId == 0) {
         comp.volumeId = state->rng();
     }

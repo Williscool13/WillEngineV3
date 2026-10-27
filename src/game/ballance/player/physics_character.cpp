@@ -26,17 +26,17 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
     entity = Engine::SpawnPrefab(engineState, ctx->assetManager, WOODEN_BALL_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
-    engineState->registry.emplace<Component::DoNotSerializeTag>(entity);
-    engineState->registry.emplace<Component::DoNotRuntimeSaveTag>(entity);
+    engineState->registry.Add<Component::DoNotSerializeTag>(entity);
+    engineState->registry.Add<Component::DoNotRuntimeSaveTag>(entity);
 
-    auto& transform = engineState->registry.get<Component::TransformComponent>(entity);
+    auto& transform = engineState->registry.GetMut<Component::TransformComponent>(entity);
     transform.translation = spawnPosition;
-    engineState->registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
+    engineState->registry.Set<Component::DirtyTransformRequest>(entity);
 }
 
 void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* inPhysicsWorld)
 {
-    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyRuntime>(entity);
+    auto* physicsBody = engineState->registry.TryGet<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return;
     const auto bodyId = physicsBody->bodyID;
 
@@ -66,8 +66,8 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
 
 void PhysicsCharacter::Shutdown(Physics::PhysicsWorld* inPhysicsWorld)
 {
-    if (engineState && engineState->registry.valid(entity)) {
-        engineState->registry.destroy(entity);
+    if (engineState && engineState->registry.Valid(entity)) {
+        engineState->registry.Destroy(entity);
     }
     entity = entt::null;
     engineState = nullptr;
@@ -76,14 +76,14 @@ void PhysicsCharacter::Shutdown(Physics::PhysicsWorld* inPhysicsWorld)
 
 glm::vec3 PhysicsCharacter::GetPosition() const
 {
-    if (!engineState || !engineState->registry.valid(entity)) return {};
-    return engineState->registry.get<Component::TransformComponent>(entity).translation;
+    if (!engineState || !engineState->registry.Valid(entity)) return {};
+    return engineState->registry.Get<Component::TransformComponent>(entity).translation;
 }
 
 glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
 {
-    if (!engineState || !engineState->registry.valid(entity)) return {};
-    auto* dynamic = engineState->registry.try_get<Component::DynamicPhysicsBodyRuntime>(entity);
+    if (!engineState || !engineState->registry.Valid(entity)) return {};
+    auto* dynamic = engineState->registry.TryGet<Component::DynamicPhysicsBodyRuntime>(entity);
     if (!dynamic) return GetPosition();
     float alpha = engineState->physics.interpolationAlpha;
     return glm::mix(dynamic->previousPosition, dynamic->currentPosition, alpha);
@@ -92,7 +92,7 @@ glm::vec3 PhysicsCharacter::GetInterpolatedPosition() const
 glm::vec3 PhysicsCharacter::GetLinearVelocity() const
 {
     if (!physicsWorld) return {};
-    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyRuntime>(entity);
+    auto* physicsBody = engineState->registry.TryGet<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return {};
     return physicsWorld->GetLinearVelocity(physicsBody->bodyID);
 }
@@ -104,7 +104,7 @@ bool PhysicsCharacter::IsGrounded() const
 
 bool PhysicsCharacter::CheckGrounded(Physics::PhysicsWorld* inPhysicsWorld) const
 {
-    auto* physicsBody = engineState->registry.try_get<Component::PhysicsBodyRuntime>(entity);
+    auto* physicsBody = engineState->registry.TryGet<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return false;
 
     // Cast ray downward from center of sphere, slightly past the bottom

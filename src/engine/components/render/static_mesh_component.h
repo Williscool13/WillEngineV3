@@ -8,6 +8,7 @@
 #include <array>
 #include <entt/entt.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/core/model_id.h"
 #include "engine/material_manager.h"
 #include "engine/resources/model/model_types.h"
@@ -37,11 +38,11 @@ struct StaticMeshComponent
         WILL_FIELD(renderRotation),
         WILL_FIELD(nodeIndex))
 
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
@@ -73,8 +74,8 @@ struct StaticMeshOverridesComponent
     [[nodiscard]] Engine::MaterialID GetMaterialOverride(uint32_t slot) const;
     void SetMaterialOverride(uint32_t slot, Engine::MaterialID id);
 
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 };
 
 /** Load requested; StartStaticMeshLoads kicks the model load (when not frozen). */
@@ -85,10 +86,10 @@ struct StaticMeshLoadRequest
 struct StaticMeshLoadingFlag
 {};
 
-void UnloadStaticMesh(entt::registry& registry, entt::entity entity);
-void LoadStaticMesh(StaticMeshComponent& component, entt::registry& registry, entt::entity entity);
+void UnloadStaticMesh(Engine::Registry& registry, entt::entity entity);
+void LoadStaticMesh(StaticMeshComponent& component, Engine::Registry& registry, entt::entity entity);
 
-void PruneStaticMeshOverrides(entt::registry& registry, entt::entity entity);
+void PruneStaticMeshOverrides(Engine::Registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_STATIC_MESH_COMPONENT_H

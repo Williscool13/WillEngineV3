@@ -18,6 +18,7 @@
 #include "core/math/random.h"
 #include "core/types/math.h"
 #include "engine/core/action_handle.h"
+#include "engine/core/registry.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
@@ -328,7 +329,7 @@ struct EngineState
     Core::Random rng{};
 
     CommandQueue commandQueue{};
-    entt::registry registry;
+    Registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
     bool bHierarchyOrderDirty{true};
     ComponentRegistry componentRegistry{};

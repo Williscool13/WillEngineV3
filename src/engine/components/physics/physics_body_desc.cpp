@@ -50,11 +50,11 @@ static bool ShapeIsConcaveExotic(const PhysicsShapeDesc& shape)
     return collider->text3DSource.IsValid() && collider->text3DSource.bPrecise;
 }
 
-static void ReleaseColliders(entt::registry& registry, entt::entity entity)
+static void ReleaseColliders(Engine::Registry& registry, entt::entity entity)
 {
-    auto* runtime = registry.try_get<PhysicsShapeRuntime>(entity);
+    auto* runtime = registry.TryGetMut<PhysicsShapeRuntime>(entity);
     if (!runtime) { return; }
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = registry.State();
     for (const Engine::PhysicsColliderHandle handle : runtime->colliders) {
         if (handle.IsValid()) {
             state->commandQueue.Push({.type = CommandType::ColliderRelease, .payload = {.colliderHandle = handle}});
@@ -71,25 +71,25 @@ static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
     return false;
 }
 
-void PhysicsBodyDesc::OnConstruct(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto* state = registry.State();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::DeferredConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    if (registry.all_of<PhysicsSuspendedFlag>(entity)) { return; }
-    auto& component = registry.get<PhysicsBodyDesc>(entity);
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    if (registry.Has<PhysicsSuspendedFlag>(entity)) { return; }
+    auto& component = registry.GetMut<PhysicsBodyDesc>(entity);
+    auto* ctx = registry.Context();
+    auto* state = registry.State();
 
     // Default shape automatically fits to procedurals (static meshes just get box)
     if (component.shapes.IsEmpty()) {
-        auto* transform = registry.try_get<TransformComponent>(entity);
+        auto* transform = registry.TryGet<TransformComponent>(entity);
         const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
 
-        if (auto* sm = registry.try_get<StaticMeshComponent>(entity); sm && sm->modelId.IsValid()) {
+        if (auto* sm = registry.TryGet<StaticMeshComponent>(entity); sm && sm->modelId.IsValid()) {
             PhysicsShapeDesc box{};
             const auto* meta = ctx->assetManager->GetModelMetadata(sm->modelId);
             if (meta && meta->bounds.aabb.min.x <= meta->bounds.aabb.max.x) {
@@ -99,12 +99,12 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
             ApplyRenderTransform(box, scale, sm->renderOffset, sm->renderRotation);
             component.shapes.PushBack(box);
         }
-        else if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+        else if (auto* pm = registry.TryGet<ProceduralMeshComponent>(entity)) {
             PhysicsShapeDesc shape = MakeProceduralShape(pm->params, pm->repeat, scale);
             ApplyRenderTransform(shape, scale, pm->renderOffset, pm->renderRotation);
             component.shapes.PushBack(shape);
         }
-        else if (auto* splm = registry.try_get<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
+        else if (auto* splm = registry.TryGet<SplineMeshComponent>(entity); splm && !splm->spline.points.IsEmpty()) {
             ColliderShape collider{};
             FillSplineParams(collider.splineParams, *splm);
             PhysicsShapeDesc s{};
@@ -119,14 +119,14 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
 
     // A body that moves itself is Movable by definition; the stored mobility must agree because bakes read it directly.
     if (component.motionType != PhysicsMotionType::Static) {
-        if (auto* transform = registry.try_get<TransformComponent>(entity); transform && transform->mobility != Mobility::Movable) {
+        if (auto* transform = registry.TryGetMut<TransformComponent>(entity); transform && transform->mobility != Mobility::Movable) {
             transform->mobility = Mobility::Movable;
             transform->bMobilityLocked = false;
             Engine::EvaluateInstanceRenderState(state, entity);
         }
     }
 
-    auto& runtime = registry.get_or_emplace<PhysicsShapeRuntime>(entity);
+    auto& runtime = registry.GetOrAdd<PhysicsShapeRuntime>(entity);
     runtime.colliders.Clear();
     for (size_t i = 0; i < component.shapes.Size(); ++i) {
         runtime.colliders.PushBack({});
@@ -142,46 +142,46 @@ void PhysicsBodyDesc::DeferredConstruct(entt::registry& registry, entt::entity e
         }
     }
     if (bHasMeshShape) {
-        registry.remove<PhysicsMeshLoadingFlag>(entity);
-        registry.emplace_or_replace<PhysicsMeshRequest>(entity);
+        registry.Remove<PhysicsMeshLoadingFlag>(entity);
+        registry.Set<PhysicsMeshRequest>(entity);
     }
 
-    registry.emplace_or_replace<PhysicsShapeCreationRequest>(entity);
-    registry.emplace_or_replace<PhysicsBodyCreationRequest>(entity);
+    registry.Set<PhysicsShapeCreationRequest>(entity);
+    registry.Set<PhysicsBodyCreationRequest>(entity);
 }
 
-void PhysicsBodyDesc::RequestRebuild(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::RequestRebuild(Engine::Registry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
-    registry.remove<PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    registry.Remove<PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
+    auto* state = registry.State();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsShapeRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void PhysicsShapeRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
 }
 
-void PhysicsBodyDesc::OnDestroy(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<PhysicsShapeRuntime>(entity);
-    auto* state = registry.ctx().get<EngineState*>();
+    registry.Remove<PhysicsShapeRuntime>(entity);
+    auto* state = registry.State();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
 }
 
-void PhysicsBodyDesc::Suspend(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::Suspend(Engine::Registry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
-    registry.remove<PhysicsShapeRuntime, PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
-    registry.emplace_or_replace<PhysicsSuspendedFlag>(entity);
-    auto* state = registry.ctx().get<EngineState*>();
+    registry.Remove<PhysicsShapeRuntime, PhysicsMeshRequest, PhysicsMeshLoadingFlag, PhysicsShapeCreationRequest, PhysicsBodyCreationRequest>(entity);
+    registry.Set<PhysicsSuspendedFlag>(entity);
+    auto* state = registry.State();
     state->commandQueue.Push({.type = CommandType::PhysicsBodyRemove, .entity = entity});
 }
 
-void PhysicsBodyDesc::Resume(entt::registry& registry, entt::entity entity)
+void PhysicsBodyDesc::Resume(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<PhysicsSuspendedFlag>(entity);
+    registry.Remove<PhysicsSuspendedFlag>(entity);
     RequestRebuild(registry, entity);
 }
 }
@@ -189,7 +189,7 @@ void PhysicsBodyDesc::Resume(entt::registry& registry, entt::entity entity)
 
 namespace Engine
 {
-void Component::PhysicsBodyDesc::OnEditCommit(entt::registry& registry, entt::entity entity)
+void Component::PhysicsBodyDesc::OnEditCommit(Engine::Registry& registry, entt::entity entity)
 {
     RequestRebuild(registry, entity);
 }
@@ -197,7 +197,7 @@ void Component::PhysicsBodyDesc::OnEditCommit(entt::registry& registry, entt::en
 /** Multi-edit replaces a whole shape list with the primary's, so shapes are edited on single selections only. */
 Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
 {
-    entt::registry& registry = edit.Registry();
+    Engine::Registry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const PhysicsBodyDesc before = edit.Get<PhysicsBodyDesc>();
     PhysicsBodyDesc component = before;
@@ -207,7 +207,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     static bool bGizmoWasDragging = false;
 
     auto state = edit.State();
-    auto ctx = registry.ctx().get<Engine::EngineContext*>();
+    auto ctx = registry.Context();
 
     if (editEntity != entity || edit.IsMulti()) {
         editShapeIdx = -1;
@@ -278,19 +278,19 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
 
         const glm::mat4 view = viewFamily.mainView.currentViewData.view;
         const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
-        auto* transform = registry.try_get<TransformComponent>(entity);
+        auto* transform = registry.TryGet<TransformComponent>(entity);
 
         auto renderShapeContent = [&](PhysicsShapeDesc& shape) {
             const bool bIsDynamic = component.motionType == PhysicsMotionType::Dynamic;
             const glm::vec3 scale = transform ? transform->scale : glm::vec3(1.0f);
 
             bool bRenderSourceExotic = false;
-            if (auto* pm = registry.try_get<ProceduralMeshComponent>(entity)) {
+            if (auto* pm = registry.TryGet<ProceduralMeshComponent>(entity)) {
                 bRenderSourceExotic = !std::holds_alternative<std::monostate>(pm->params) && !Engine::CanBuildProceduralCollider(pm->params);
             }
 
             Engine::StaticModelHandle fitHandle{};
-            if (auto* rt = registry.try_get<MeshRuntime>(entity)) {
+            if (auto* rt = registry.TryGet<MeshRuntime>(entity)) {
                 fitHandle = rt->modelHandle;
             }
             Engine::StaticModel* fitModel = fitHandle.IsValid() ? ctx->assetManager->GetModel(fitHandle) : nullptr;
@@ -467,7 +467,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         auto renderGizmo = [&](int i, PhysicsShapeDesc& shape) {
             if (editShapeIdx != i || !transform || !hasGizmoClaim) return;
 
-            const auto& world = registry.get<WorldTransformRuntime>(entity);
+            const auto& world = registry.Get<WorldTransformRuntime>(entity);
             const Mat4 entityMat = glm::translate(Mat4(1.0f), world.translation) * glm::mat4_cast(world.rotation);
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 shapeCenter = Vec3(entityMat * Vec4(shape.offset, 1.0f));
@@ -476,7 +476,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             const Vec3 entityForward = world.rotation * Vec3(0.0f, 0.0f, 1.0f);
             const auto& vd = viewFamily.mainView.currentViewData;
 
-            auto* ctx = registry.ctx().get<Engine::EngineContext*>();
+            auto* ctx = registry.Context();
             const Vec4 viewport{
                 static_cast<float>(ctx->windowContext.viewportOffsetX),
                 static_cast<float>(ctx->windowContext.viewportOffsetY),

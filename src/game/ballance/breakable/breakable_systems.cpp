@@ -69,9 +69,9 @@ static void ReleaseBreakableRuntime(Engine::AssetManager* assetManager, Componen
     runtime.colliders.Clear();
 }
 
-static void DropBreakableRuntime(entt::registry& registry, entt::entity entity)
+static void DropBreakableRuntime(Engine::Registry& registry, entt::entity entity)
 {
-    registry.remove<Component::BreakableRuntime>(entity);
+    registry.Remove<Component::BreakableRuntime>(entity);
 }
 
 static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>)
@@ -81,14 +81,14 @@ static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* sta
         Engine::Console::Print(state, "  b.crate.break: needs play or simulate");
         return;
     }
-    const auto* camera = state->registry.try_get<Component::CameraRuntime>(state->renderedCamera);
+    const auto* camera = state->registry.TryGet<Component::CameraRuntime>(state->renderedCamera);
     if (!camera) {
         Engine::Console::Print(state, "  b.crate.break: no rendered camera");
         return;
     }
     const glm::vec3 origin = camera->currentViewData.cameraPos;
 
-    auto view = state->registry.view<Component::BreakableComponent>();
+    auto view = state->registry.View<Component::BreakableComponent>();
     auto nearby = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::max(view.size(), size_t{1}));
     for (const entt::entity entity : view) {
         if (glm::distance(Component::ComputeWorldTransform(state->registry, entity).translation, origin) <= RADIUS) {
@@ -107,24 +107,24 @@ void RegisterBreakableCommands(Engine::EngineState* state)
     Engine::Console::Register(state, Engine::Origin::Game, "b.crate.break", "Breaks every breakable within 10 m of the camera (play or simulate)", &BreakNearCamera);
 }
 
-void ConnectBreakableObservers(entt::registry& registry)
+void ConnectBreakableObservers(Engine::Registry& registry)
 {
-    registry.on_destroy<Component::BreakableRuntime>().connect<&Component::BreakableRuntime::OnDestroy>();
-    registry.on_update<Component::BreakableComponent>().connect<&DropBreakableRuntime>();
-    registry.on_destroy<Component::BreakableComponent>().connect<&DropBreakableRuntime>();
+    registry.ConnectDestroy<Component::BreakableRuntime, &Component::BreakableRuntime::OnDestroy>();
+    registry.ConnectUpdate<Component::BreakableComponent, &DropBreakableRuntime>();
+    registry.ConnectDestroy<Component::BreakableComponent, &DropBreakableRuntime>();
 }
 
-void DisconnectBreakableObservers(entt::registry& registry)
+void DisconnectBreakableObservers(Engine::Registry& registry)
 {
-    registry.on_destroy<Component::BreakableRuntime>().disconnect<&Component::BreakableRuntime::OnDestroy>();
-    registry.on_update<Component::BreakableComponent>().disconnect<&DropBreakableRuntime>();
-    registry.on_destroy<Component::BreakableComponent>().disconnect<&DropBreakableRuntime>();
+    registry.DisconnectDestroy<Component::BreakableRuntime, &Component::BreakableRuntime::OnDestroy>();
+    registry.DisconnectUpdate<Component::BreakableComponent, &DropBreakableRuntime>();
+    registry.DisconnectDestroy<Component::BreakableComponent, &DropBreakableRuntime>();
 }
 
 void AcquireBreakableAssets(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::BreakableComponent>(entt::exclude<Component::BreakableRuntime>);
+    auto view = state->registry.View<Component::BreakableComponent>(entt::exclude<Component::BreakableRuntime>);
     if (view.size_hint() == 0) { return; }
 
     Engine::AssetManager* assetManager = ctx->assetManager;
@@ -135,33 +135,33 @@ void AcquireBreakableAssets(Engine::EngineContext* ctx, Engine::EngineState* sta
         acquired.PushBack(entity);
     }
     for (const entt::entity entity : acquired) {
-        const Engine::ModelID brokenModelId = state->registry.get<Component::BreakableComponent>(entity).brokenModelId;
+        const Engine::ModelID brokenModelId = state->registry.Get<Component::BreakableComponent>(entity).brokenModelId;
         const auto* meta = assetManager->GetModelMetadata(brokenModelId);
         Component::BreakableRuntime runtime{.model = assetManager->LoadModel(brokenModelId)};
         for (uint32_t n = 0; n < meta->nodes.Size() && !runtime.colliders.IsFull(); ++n) {
             if (meta->nodes[n].meshIndex == ~0u) { continue; }
             runtime.colliders.PushBack(assetManager->LoadModelCollider(brokenModelId, Engine::PhysicsColliderKind::ConvexHull, n));
         }
-        state->registry.emplace<Component::BreakableRuntime>(entity, runtime);
+        state->registry.Add<Component::BreakableRuntime>(entity, runtime);
     }
 }
 
 void UpdateSelfDestruct(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::SelfDestructComponent, Component::BreakableComponent>();
+    auto view = state->registry.View<Component::SelfDestructComponent, Component::BreakableComponent>();
     if (view.size_hint() == 0) { return; }
 
     const float dt = state->timeFrame->deltaTime;
     auto due = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, selfDestruct, breakable] : view.each()) {
-        auto& run = state->registry.get_or_emplace<Component::SelfDestructRuntime>(entity);
+        auto& run = state->registry.GetOrAdd<Component::SelfDestructRuntime>(entity);
         run.elapsed += dt;
         if (run.elapsed >= selfDestruct.delay) { due.PushBack(entity); }
     }
     for (const entt::entity entity : due) {
         if (Break(ctx, state, entity)) {
-            state->registry.remove<Component::SelfDestructComponent, Component::SelfDestructRuntime>(entity);
+            state->registry.Remove<Component::SelfDestructComponent,Component::SelfDestructRuntime>(entity);
         }
     }
 }
@@ -169,13 +169,13 @@ void UpdateSelfDestruct(Engine::EngineContext* ctx, Engine::EngineState* state)
 void ShatterOnContact(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    entt::registry& registry = state->registry;
-    if (registry.view<Component::ShatterOnContactTag>().size() == 0) { return; }
+    Engine::Registry& registry = state->registry;
+    if (registry.View<Component::ShatterOnContactTag>().size() == 0) { return; }
 
     for (const auto& event : state->physics.resolvedAddedEvents) {
         for (const auto [shatterer, other] : {std::pair{event.e1, event.e2}, std::pair{event.e2, event.e1}}) {
-            if (shatterer == entt::null || other == entt::null || !registry.all_of<Component::ShatterOnContactTag>(shatterer)) { continue; }
-            if (registry.all_of<Component::BreakableComponent>(other)) { Break(ctx, state, other); }
+            if (shatterer == entt::null || other == entt::null || !registry.Has<Component::ShatterOnContactTag>(shatterer)) { continue; }
+            if (registry.Has<Component::BreakableComponent>(other)) { Break(ctx, state, other); }
         }
     }
 }
@@ -183,9 +183,9 @@ void ShatterOnContact(Engine::EngineContext* ctx, Engine::EngineState* state)
 bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity entity)
 {
     ZoneScoped;
-    entt::registry& registry = state->registry;
-    const auto* breakable = registry.try_get<Component::BreakableComponent>(entity);
-    const auto* runtime = registry.try_get<Component::BreakableRuntime>(entity);
+    Engine::Registry& registry = state->registry;
+    const auto* breakable = registry.TryGet<Component::BreakableComponent>(entity);
+    const auto* runtime = registry.TryGet<Component::BreakableRuntime>(entity);
     if (!breakable || !runtime) { return false; }
     const Engine::StaticModel* brokenModel = ctx->assetManager->GetModel(runtime->model);
     if (!brokenModel || brokenModel->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) { return false; }
@@ -214,14 +214,14 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
         centerOfMass = ctx->physicsWorld->GetCenterOfMassPosition(body->bodyID);
     }
 
-    const auto* desc = registry.try_get<Component::PhysicsBodyDesc>(entity);
+    const auto* desc = registry.TryGet<Component::PhysicsBodyDesc>(entity);
     const float shardMass = (desc ? desc->mass : 1.0f) / static_cast<float>(shardCount);
     const float friction = desc ? desc->friction : 0.5f;
     const float restitution = desc ? desc->restitution : 0.0f;
 
     constexpr float MAX_THIN_AXIS_SPIN_ALIGNMENT = 0.5f;
 
-    const auto* name = registry.try_get<Component::NameComponent>(entity);
+    const auto* name = registry.TryGet<Component::NameComponent>(entity);
     for (uint32_t n = 0; n < nodes.Size(); ++n) {
         const uint32_t meshIndex = nodes[n].meshIndex;
         if (meshIndex >= meshes.Size()) { continue; }
@@ -232,17 +232,17 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
         const glm::quat rotation = glm::quat_cast(glm::mat3(glm::vec3(m[0]) / scale.x, glm::vec3(m[1]) / scale.y, glm::vec3(m[2]) / scale.z));
 
         const entt::entity shard = Engine::CreateSceneEntity(state);
-        registry.emplace<Component::DoNotSerializeTag>(shard);
-        registry.emplace<Component::ShardTag>(shard);
-        registry.get<Component::NameComponent>(shard).name = Core::InlineString<128>::Format("%s %s", name ? name->name.c_str() : "Broken", nodes[n].name.c_str());
+        registry.Add<Component::DoNotSerializeTag>(shard);
+        registry.Add<Component::ShardTag>(shard);
+        registry.GetMut<Component::NameComponent>(shard).name = Core::InlineString<128>::Format("%s %s", name ? name->name.c_str() : "Broken", nodes[n].name.c_str());
 
-        auto& transform = registry.get<Component::TransformComponent>(shard);
+        auto& transform = registry.GetMut<Component::TransformComponent>(shard);
         transform.translation = position;
         transform.rotation = rotation;
         transform.scale = scale;
         transform.mobility = Component::Mobility::Movable;
 
-        registry.emplace<Component::StaticMeshComponent>(shard, Component::StaticMeshComponent{.modelId = brokenModelId, .nodeIndex = n});
+        registry.Add<Component::StaticMeshComponent>(shard, Component::StaticMeshComponent{.modelId = brokenModelId, .nodeIndex = n});
 
         Component::PhysicsBodyDesc shardDesc{
             .motionType = Component::PhysicsMotionType::Dynamic,
@@ -254,7 +254,7 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
             .bEnhancedInternalEdgeRemoval = true,
         };
         shardDesc.shapes.PushBack(Component::PhysicsShapeDesc{.geometry = Component::ColliderShape{.meshSourceModelId = brokenModelId, .meshSourceNodeIndex = n}, .bakedScale = scale});
-        registry.emplace<Component::PhysicsBodyDesc>(shard, shardDesc);
+        registry.Add<Component::PhysicsBodyDesc>(shard, shardDesc);
 
         glm::vec3 boundsMin(1e30f);
         glm::vec3 boundsMax(-1e30f);
@@ -270,13 +270,13 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
 
         const glm::vec3 offset = position - centerOfMass;
         const float offsetLength = glm::length(offset);
-        registry.emplace<Component::SetVelocityRequest>(shard, Component::SetVelocityRequest{
+        registry.Add<Component::SetVelocityRequest>(shard,Component::SetVelocityRequest{
             .linearVelocity = linearVelocity + glm::cross(angularVelocity, offset) + (offsetLength > 1e-4f ? scatterSpeed / offsetLength : 0.0f) * offset,
             .angularVelocity = angularVelocity + spin,
         });
     }
 
-    registry.remove<Component::BreakableComponent>(entity);
+    registry.Remove<Component::BreakableComponent>(entity);
     state->commandQueue.Push({.type = Engine::CommandType::DestroyEntity, .entity = entity});
     return true;
 }
@@ -284,9 +284,9 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
 
 namespace Ballance::Component
 {
-void BreakableRuntime::OnDestroy(entt::registry& registry, entt::entity entity)
+void BreakableRuntime::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    auto* ctx = registry.ctx().get<Engine::EngineContext*>();
-    ReleaseBreakableRuntime(ctx->assetManager, registry.get<BreakableRuntime>(entity));
+    auto* ctx = registry.Context();
+    ReleaseBreakableRuntime(ctx->assetManager, registry.GetMut<BreakableRuntime>(entity));
 }
 } // Ballance::Component

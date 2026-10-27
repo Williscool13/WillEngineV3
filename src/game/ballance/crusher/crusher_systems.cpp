@@ -60,7 +60,7 @@ static Core::ArenaFixedVector<CrateHit> FindCrates(Engine::EngineContext* ctx, E
     auto crates = Core::ArenaFixedVector<CrateHit>(&ctx->gameplayArena.Get(), std::max(entities.Size(), size_t{1}));
     for (const entt::entity entity : entities) {
         const auto* body = Component::FindBody(state->registry, entity);
-        if (!body || !state->registry.all_of<Component::BreakableComponent>(entity)) { continue; }
+        if (!body || !state->registry.Has<Component::BreakableComponent>(entity)) { continue; }
         crates.PushBack({entity, ctx->physicsWorld->GetWorldBounds(body->bodyID).Transformed(toLocal)});
     }
     return crates;
@@ -97,13 +97,13 @@ static void BreakCratesUnderHead(Engine::EngineContext* ctx, Engine::EngineState
 /** Rule C: nothing intact leaves on the pusher. Any crate in what is left of its sweep breaks; one getting this far means the head or the belts let it through. */
 static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity pusher, float remaining)
 {
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
     const Mat4 toWorld = Component::ComputeWorldTransform(registry, pusher).GetMatrix();
     const Mat4 toLocal = glm::inverse(toWorld);
 
     const Physics::PhysicsWorld* physics = ctx->physicsWorld;
     AABB sweep;
-    for (const auto& [entity, hierarchy, body] : registry.view<Component::HierarchyComponent, Component::PhysicsBodyRuntime>().each()) {
+    for (const auto& [entity, hierarchy, body] : registry.View<Component::HierarchyComponent, Component::PhysicsBodyRuntime>().each()) {
         if (hierarchy.parent != pusher || !body.bodyID.IsValid()) { continue; }
         sweep.Encapsulate(physics->GetWorldBounds(body.bodyID).Transformed(toLocal));
     }
@@ -115,22 +115,22 @@ static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineSt
 
     for (const CrateHit& crate : FindCrates(ctx, state, sweep.Transformed(toWorld), toLocal)) {
         if (!crate.local.Overlaps(sweep)) { continue; }
-        const auto* name = registry.try_get<Component::NameComponent>(crate.entity);
+        const auto* name = registry.TryGet<Component::NameComponent>(crate.entity);
         WLOG_WARN(Crusher, "Crate '{}' reached the pusher intact; broken there", name ? name->name.c_str() : "Unnamed");
         Break(ctx, state, crate.entity);
     }
 }
 
-static void SetBelts(Engine::EngineState* state, Component::CrusherComponent& crusher, bool bRunning)
+static void SetBelts(Engine::EngineState* state, const Component::CrusherComponent& crusher, bool bRunning)
 {
-    for (Engine::EntityRef* ref : {&crusher.beltA, &crusher.beltB}) {
+    for (const Engine::EntityRef* ref : {&crusher.beltA, &crusher.beltB}) {
         const entt::entity belt = ref->Get(state);
-        if (belt == entt::null || !state->registry.all_of<Component::ConveyorComponent>(belt)) { continue; }
+        if (belt == entt::null || !state->registry.Has<Component::ConveyorComponent>(belt)) { continue; }
         if (bRunning) {
-            state->registry.remove<Component::ConveyorHaltedFlag>(belt);
+            state->registry.Remove<Component::ConveyorHaltedFlag>(belt);
         }
         else {
-            state->registry.emplace_or_replace<Component::ConveyorHaltedFlag>(belt);
+            state->registry.Set<Component::ConveyorHaltedFlag>(belt);
         }
     }
 }
@@ -141,20 +141,20 @@ static void Enter(Component::CrusherRuntime& run, Component::CrusherPhase phase)
     run.phaseTime = 0.0f;
 }
 
-static void MoveAlong(entt::registry& registry, entt::entity entity, const Vec3& localDirection, float distance)
+static void MoveAlong(Engine::Registry& registry, entt::entity entity, const Vec3& localDirection, float distance)
 {
     if (entity == entt::null || distance == 0.0f) { return; }
-    auto* transform = registry.try_get<Component::TransformComponent>(entity);
+    auto* transform = registry.TryGetMut<Component::TransformComponent>(entity);
     if (!transform) { return; }
     transform->translation += transform->rotation * localDirection * distance;
-    registry.emplace_or_replace<Component::DirtyTransformRequest>(entity);
+    registry.Set<Component::DirtyTransformRequest>(entity);
 }
 
 /** The arm pivots at its top, so stretching it by the head's drop keeps it joined to the head. */
-static void StretchArm(Engine::EngineContext* ctx, entt::registry& registry, entt::entity arm, float drop)
+static void StretchArm(Engine::EngineContext* ctx, Engine::Registry& registry, entt::entity arm, float drop)
 {
     const auto* armBody = Component::FindBody(registry, arm);
-    auto* transform = armBody ? registry.try_get<Component::TransformComponent>(arm) : nullptr;
+    auto* transform = armBody ? registry.TryGetMut<Component::TransformComponent>(arm) : nullptr;
     if (!transform) { return; }
     const AABB bounds = ctx->physicsWorld->GetLocalBounds(armBody->bodyID);
     const float length = bounds.max.y - bounds.min.y;
@@ -162,12 +162,12 @@ static void StretchArm(Engine::EngineContext* ctx, entt::registry& registry, ent
     const float scale = 1.0f + drop / length;
     if (transform->scale.y == scale) { return; }
     transform->scale.y = scale;
-    registry.emplace_or_replace<Component::DirtyTransformRequest>(arm);
+    registry.Set<Component::DirtyTransformRequest>(arm);
 }
 
-static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state, Component::CrusherComponent& crusher, Component::CrusherRuntime& run, float dt, bool bThroatClosed)
+static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state, const Component::CrusherComponent& crusher, Component::CrusherRuntime& run, float dt, bool bThroatClosed)
 {
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
     const entt::entity head = crusher.head.Get(state);
     const auto* headBody = Component::FindBody(registry, head);
     if (!headBody) { return; }
@@ -223,25 +223,25 @@ static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state
     MoveAlong(registry, pusher, Vec3(-1.0f, 0.0f, 0.0f), run.pushed - previousPushed);
 }
 
-static int32_t CountLiveShards(const entt::registry& registry)
+static int32_t CountLiveShards(const Engine::Registry& registry)
 {
-    return static_cast<int32_t>(registry.view<Component::ShardTag>().size());
+    return static_cast<int32_t>(registry.View<Component::ShardTag>().size());
 }
 
 /** Sleeping shards cost next to nothing, and ones resting out of every pusher's reach would otherwise hold the valve shut. */
-static int32_t CountAwakeShards(Engine::EngineContext* ctx, const entt::registry& registry)
+static int32_t CountAwakeShards(Engine::EngineContext* ctx, const Engine::Registry& registry)
 {
     int32_t awake = 0;
-    for (const entt::entity entity : registry.view<Component::ShardTag>()) {
+    for (const entt::entity entity : registry.View<Component::ShardTag>()) {
         const auto* body = Component::FindBody(registry, entity);
         if (body && ctx->physicsWorld->IsAwake(body->bodyID)) { ++awake; }
     }
     return awake;
 }
 
-static bool AnyThroatClosed(const entt::registry& registry)
+static bool AnyThroatClosed(const Engine::Registry& registry)
 {
-    for (const auto& [entity, run] : registry.view<Component::ThroatValveRuntime>().each()) {
+    for (const auto& [entity, run] : registry.View<Component::ThroatValveRuntime>().each()) {
         if (run.bClosed) { return true; }
     }
     return false;
@@ -250,15 +250,15 @@ static bool AnyThroatClosed(const entt::registry& registry)
 void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
     const int32_t shards = CountAwakeShards(ctx, registry);
     TracyPlot("Ballance/Live shards", static_cast<int64_t>(CountLiveShards(registry)));
     TracyPlot("Ballance/Awake shards", static_cast<int64_t>(shards));
     TracyPlot("Ballance/Awake bodies", static_cast<int64_t>(ctx->physicsWorld->GetAwakeBodyCount()));
 
     const float dt = state->timeFrame->deltaTime;
-    for (const auto& [entity, valve] : registry.view<Component::ThroatValveComponent>().each()) {
-        auto& run = registry.get_or_emplace<Component::ThroatValveRuntime>(entity);
+    for (const auto& [entity, valve] : registry.View<Component::ThroatValveComponent>().each()) {
+        auto& run = registry.GetOrAdd<Component::ThroatValveRuntime>(entity);
         if (!run.bClosed) { run.openTime += dt; }
         const bool bClose = !run.bClosed && run.openTime >= valve.minOpenSeconds && shards > valve.closeShards;
         const bool bOpen = run.bClosed && shards <= valve.openShards;
@@ -272,15 +272,15 @@ void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state)
 void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    entt::registry& registry = state->registry;
-    auto view = registry.view<Component::CrateFeederComponent>();
+    Engine::Registry& registry = state->registry;
+    auto view = registry.View<Component::CrateFeederComponent>();
     if (view.size() == 0) { return; }
 
     const float dt = state->timeFrame->deltaTime;
     const bool bThroatClosed = AnyThroatClosed(registry);
-    auto intact = static_cast<int32_t>(registry.view<Component::BreakableComponent>().size());
+    auto intact = static_cast<int32_t>(registry.View<Component::BreakableComponent>().size());
     for (const auto& [entity, feeder] : view.each()) {
-        auto& run = registry.get_or_emplace<Component::CrateFeederRuntime>(entity);
+        auto& run = registry.GetOrAdd<Component::CrateFeederRuntime>(entity);
         if (bThroatClosed || intact >= feeder.maxIntact || feeder.cratesPerSecond <= 0.0f) {
             run.timer = 0.0f;
             continue;
@@ -295,8 +295,8 @@ void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state)
         const Vec3 position = Component::ComputeWorldTransform(registry, entity).translation + Vec3(glm::cos(angle) * radius, 0.0f, glm::sin(angle) * radius);
         const entt::entity crate = Engine::SpawnPrefab(state, ctx->assetManager, feeder.prefabId, position);
         if (crate == entt::null) { continue; }
-        registry.emplace_or_replace<Component::DoNotSerializeTag>(crate);
-        auto& transform = registry.get<Component::TransformComponent>(crate);
+        registry.Set<Component::DoNotSerializeTag>(crate);
+        auto& transform = registry.GetMut<Component::TransformComponent>(crate);
         transform.rotation = glm::angleAxis(state->rng.Range(0.0f, glm::two_pi<float>()), state->rng.UnitVector());
         transform.mobility = Component::Mobility::Movable;
         ++intact;
@@ -306,20 +306,20 @@ void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state)
 void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto view = state->registry.view<Component::CrusherComponent>();
+    auto view = state->registry.View<Component::CrusherComponent>();
     if (view.size() == 0) { return; }
     const float dt = state->timeFrame->deltaTime;
     const bool bThroatClosed = AnyThroatClosed(state->registry);
     for (const auto& [entity, crusher] : view.each()) {
-        UpdateCrusher(ctx, state, crusher, state->registry.get_or_emplace<Component::CrusherRuntime>(entity), dt, bThroatClosed);
+        UpdateCrusher(ctx, state, crusher, state->registry.GetOrAdd<Component::CrusherRuntime>(entity), dt, bThroatClosed);
     }
 }
 
 static void PrintFlow(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>)
 {
-    const entt::registry& registry = state->registry;
+    const Engine::Registry& registry = state->registry;
     const auto line = Core::InlineString<256>::Format("  live shards %d (%d awake, %zu stamped asleep), intact breakables %zu, awake bodies %u, throat %s", CountLiveShards(registry), CountAwakeShards(ctx, registry),
-        registry.view<Component::ShardSleepRuntime>().size(), registry.view<Component::BreakableComponent>().size(), ctx->physicsWorld->GetAwakeBodyCount(), AnyThroatClosed(registry) ? "closed" : "open");
+        registry.View<Component::ShardSleepRuntime>().size(), registry.View<Component::BreakableComponent>().size(), ctx->physicsWorld->GetAwakeBodyCount(), AnyThroatClosed(registry) ? "closed" : "open");
     Engine::Console::Print(state, line.c_str());
 }
 

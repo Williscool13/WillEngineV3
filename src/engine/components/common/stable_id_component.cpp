@@ -9,15 +9,15 @@
 
 namespace Engine::Component
 {
-void StableIdComponent::OnUpdate(entt::registry& registry, entt::entity entity)
+void StableIdComponent::OnUpdate(Engine::Registry& registry, entt::entity entity)
 {
     assert(false && "StableIdComponent should never be updated");
 }
 
-void StableIdComponent::OnConstruct(entt::registry& registry, entt::entity entity)
+void StableIdComponent::OnConstruct(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<StableIdComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    auto& comp = registry.GetMut<StableIdComponent>(entity);
+    auto* state = registry.State();
 
     while (comp.id.id == 0 || state->stableIdToEntityMap.Contains(comp.id)) {
         comp.id = Generate(state->rng);
@@ -26,10 +26,10 @@ void StableIdComponent::OnConstruct(entt::registry& registry, entt::entity entit
 }
 
 
-void StableIdComponent::OnDestroy(entt::registry& registry, entt::entity entity)
+void StableIdComponent::OnDestroy(Engine::Registry& registry, entt::entity entity)
 {
-    auto& comp = registry.get<StableIdComponent>(entity);
-    auto* state = registry.ctx().get<Engine::EngineState*>();
+    const auto& comp = registry.Get<StableIdComponent>(entity);
+    auto* state = registry.State();
     state->stableIdToEntityMap.Remove(comp.id);
 }
 

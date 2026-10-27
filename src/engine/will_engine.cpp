@@ -646,8 +646,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
             engineContext->gameState = memoryManager.PersistentAllocRaw(engineContext->gameStateSize, Core::AllocTag::GameState);
         }
 
-        engineState->registry.ctx().emplace<EngineState*>(engineState);
-        engineState->registry.ctx().emplace<EngineContext*>(engineContext);
+        engineState->registry.Bind(engineState, engineContext);
         gameFunctions.gameStartup(engineContext, engineState);
     }
 
@@ -703,7 +702,7 @@ void WillEngine::HotReloadGame()
     if (!gameDll.HasChanged()) { return; }
     HotReloadSave(engineContext, engineState);
     gameFunctions.gameHotReloadSave(engineContext, engineState);
-    engineState->registry = entt::registry{};
+    engineState->registry.Reset();
     MCP::ClearGameTools(engineState);
     ClearGameComponents(engineState->componentRegistry);
     ClearGameInputActions(engineState->input);
@@ -712,8 +711,6 @@ void WillEngine::HotReloadGame()
 
     auto reloadResponse = gameDll.Reload();
 
-    engineState->registry.ctx().emplace<EngineContext*>(engineContext);
-    engineState->registry.ctx().emplace<EngineState*>(engineState);
     ConnectEngineObservers(engineState->registry);
 
     switch (reloadResponse) {
@@ -1967,7 +1964,7 @@ void WillEngine::Cleanup()
     }
     {
         ZoneScopedN("RegistryTeardown");
-        engineState->registry.clear();
+        engineState->registry.ClearAll();
         PlaybackCommands(engineContext, engineState);
         engineState->~EngineState();
     }

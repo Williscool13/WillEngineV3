@@ -36,113 +36,113 @@
 
 namespace Engine
 {
-static bool AuthoredMaterialExists(const entt::registry& registry, const MaterialManager* materialManager, entt::entity entity, MaterialID material)
+static bool AuthoredMaterialExists(const Engine::Registry& registry, const MaterialManager* materialManager, entt::entity entity, MaterialID material)
 {
     if (!material.IsValid()) { return false; }
     if (materialManager->DoesMutableMaterialExist(material)) { return true; }
-    const auto* name = registry.try_get<Component::NameComponent>(entity);
+    const auto* name = registry.TryGet<Component::NameComponent>(entity);
     LOG_WARN(Engine, "'{}' references material {:016x}, which does not exist; drawing the fallback material", name != nullptr ? name->name.c_str() : "(unnamed)", material.id);
     return false;
 }
 
-void ConnectRenderObservers(entt::registry& registry)
+void ConnectRenderObservers(Engine::Registry& registry)
 {
-    registry.on_construct<Component::TransformComponent>().connect<&Component::TransformComponent::OnConstruct>();
-    registry.on_destroy<Component::TransformComponent>().connect<&Component::TransformComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::TransformComponent, &Component::TransformComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::TransformComponent, &Component::TransformComponent::OnDestroy>();
 
-    registry.on_construct<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnConstruct>();
-    registry.on_destroy<Component::MeshRuntime>().connect<&Component::MeshRuntime::OnDestroy>();
-    registry.on_construct<Component::LightSurfaceRuntime>().connect<&Component::LightSurfaceRuntime::OnConstruct>();
-    registry.on_destroy<Component::LightSurfaceRuntime>().connect<&Component::LightSurfaceRuntime::OnDestroy>();
-    registry.on_destroy<Component::TextRuntime>().connect<&Component::TextRuntime::OnDestroy>();
+    registry.ConnectConstruct<Component::MeshRuntime, &Component::MeshRuntime::OnConstruct>();
+    registry.ConnectDestroy<Component::MeshRuntime, &Component::MeshRuntime::OnDestroy>();
+    registry.ConnectConstruct<Component::LightSurfaceRuntime, &Component::LightSurfaceRuntime::OnConstruct>();
+    registry.ConnectDestroy<Component::LightSurfaceRuntime, &Component::LightSurfaceRuntime::OnDestroy>();
+    registry.ConnectDestroy<Component::TextRuntime, &Component::TextRuntime::OnDestroy>();
 
-    registry.on_construct<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::StaticMeshComponent>().connect<&Component::StaticMeshComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::StaticMeshComponent, &Component::StaticMeshComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::StaticMeshComponent, &Component::StaticMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::StaticMeshPrimitiveComponent>().connect<&Component::StaticMeshPrimitiveComponent::OnConstruct>();
-    registry.on_destroy<Component::StaticMeshPrimitiveComponent>().connect<&Component::StaticMeshPrimitiveComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::StaticMeshPrimitiveComponent, &Component::StaticMeshPrimitiveComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::StaticMeshPrimitiveComponent, &Component::StaticMeshPrimitiveComponent::OnDestroy>();
 
-    registry.on_construct<Component::ProceduralMeshComponent>().connect<&Component::ProceduralMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::ProceduralMeshComponent>().connect<&Component::ProceduralMeshComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::ProceduralMeshComponent, &Component::ProceduralMeshComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::ProceduralMeshComponent, &Component::ProceduralMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::SplineMeshComponent>().connect<&Component::SplineMeshComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::SplineMeshComponent, &Component::SplineMeshComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::SplineMeshComponent, &Component::SplineMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::ModuleMeshComponent>().connect<&Component::ModuleMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::ModuleMeshComponent>().connect<&Component::ModuleMeshComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::ModuleMeshComponent, &Component::ModuleMeshComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::ModuleMeshComponent, &Component::ModuleMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::TextComponent>().connect<&Component::TextComponent::OnConstruct>();
-    registry.on_destroy<Component::TextComponent>().connect<&Component::TextComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::TextComponent, &Component::TextComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::TextComponent, &Component::TextComponent::OnDestroy>();
 
-    registry.on_construct<Component::Text3DComponent>().connect<&Component::Text3DComponent::OnConstruct>();
-    registry.on_destroy<Component::Text3DComponent>().connect<&Component::Text3DComponent::OnDestroy>();
+    registry.ConnectConstruct<Component::Text3DComponent, &Component::Text3DComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::Text3DComponent, &Component::Text3DComponent::OnDestroy>();
 
-    registry.on_construct<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnConstruct>();
-    registry.on_destroy<Component::AreaLightComponent>().connect<&Component::AreaLightComponent::OnDestroy>();
-    registry.on_destroy<Component::AreaLightRuntime>().connect<&Component::AreaLightRuntime::OnDestroy>();
+    registry.ConnectConstruct<Component::AreaLightComponent, &Component::AreaLightComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::AreaLightComponent, &Component::AreaLightComponent::OnDestroy>();
+    registry.ConnectDestroy<Component::AreaLightRuntime, &Component::AreaLightRuntime::OnDestroy>();
 
-    registry.on_construct<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnConstruct>();
-    registry.on_destroy<Component::SphereLightComponent>().connect<&Component::SphereLightComponent::OnDestroy>();
-    registry.on_destroy<Component::SphereLightRuntime>().connect<&Component::SphereLightRuntime::OnDestroy>();
+    registry.ConnectConstruct<Component::SphereLightComponent, &Component::SphereLightComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::SphereLightComponent, &Component::SphereLightComponent::OnDestroy>();
+    registry.ConnectDestroy<Component::SphereLightRuntime, &Component::SphereLightRuntime::OnDestroy>();
 
-    registry.on_construct<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnConstruct>();
-    registry.on_destroy<Component::ReflectionProbeComponent>().connect<&Component::ReflectionProbeComponent::OnDestroy>();
-    registry.on_destroy<Component::ReflectionProbeRuntime>().connect<&Component::ReflectionProbeRuntime::OnDestroy>();
+    registry.ConnectConstruct<Component::ReflectionProbeComponent, &Component::ReflectionProbeComponent::OnConstruct>();
+    registry.ConnectDestroy<Component::ReflectionProbeComponent, &Component::ReflectionProbeComponent::OnDestroy>();
+    registry.ConnectDestroy<Component::ReflectionProbeRuntime, &Component::ReflectionProbeRuntime::OnDestroy>();
 
-    registry.on_construct<Component::LocalDDGIVolumeComponent>().connect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
+    registry.ConnectConstruct<Component::LocalDDGIVolumeComponent, &Component::LocalDDGIVolumeComponent::OnConstruct>();
 
-    registry.on_destroy<Component::SkyboxComponent>().connect<&Component::SkyboxComponent::OnDestroy>();
-    registry.on_destroy<Component::SkyboxRuntime>().connect<&Component::SkyboxRuntime::OnDestroy>();
+    registry.ConnectDestroy<Component::SkyboxComponent, &Component::SkyboxComponent::OnDestroy>();
+    registry.ConnectDestroy<Component::SkyboxRuntime, &Component::SkyboxRuntime::OnDestroy>();
 }
 
-void DisconnectRenderObservers(entt::registry& registry)
+void DisconnectRenderObservers(Engine::Registry& registry)
 {
-    registry.on_construct<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnConstruct>();
-    registry.on_destroy<Component::TransformComponent>().disconnect<&Component::TransformComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::TransformComponent, &Component::TransformComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::TransformComponent, &Component::TransformComponent::OnDestroy>();
 
-    registry.on_construct<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnConstruct>();
-    registry.on_destroy<Component::MeshRuntime>().disconnect<&Component::MeshRuntime::OnDestroy>();
-    registry.on_construct<Component::LightSurfaceRuntime>().disconnect<&Component::LightSurfaceRuntime::OnConstruct>();
-    registry.on_destroy<Component::LightSurfaceRuntime>().disconnect<&Component::LightSurfaceRuntime::OnDestroy>();
-    registry.on_destroy<Component::TextRuntime>().disconnect<&Component::TextRuntime::OnDestroy>();
+    registry.DisconnectConstruct<Component::MeshRuntime, &Component::MeshRuntime::OnConstruct>();
+    registry.DisconnectDestroy<Component::MeshRuntime, &Component::MeshRuntime::OnDestroy>();
+    registry.DisconnectConstruct<Component::LightSurfaceRuntime, &Component::LightSurfaceRuntime::OnConstruct>();
+    registry.DisconnectDestroy<Component::LightSurfaceRuntime, &Component::LightSurfaceRuntime::OnDestroy>();
+    registry.DisconnectDestroy<Component::TextRuntime, &Component::TextRuntime::OnDestroy>();
 
-    registry.on_construct<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::StaticMeshComponent>().disconnect<&Component::StaticMeshComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::StaticMeshComponent, &Component::StaticMeshComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::StaticMeshComponent, &Component::StaticMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::StaticMeshPrimitiveComponent>().disconnect<&Component::StaticMeshPrimitiveComponent::OnConstruct>();
-    registry.on_destroy<Component::StaticMeshPrimitiveComponent>().disconnect<&Component::StaticMeshPrimitiveComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::StaticMeshPrimitiveComponent, &Component::StaticMeshPrimitiveComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::StaticMeshPrimitiveComponent, &Component::StaticMeshPrimitiveComponent::OnDestroy>();
 
-    registry.on_construct<Component::ProceduralMeshComponent>().disconnect<&Component::ProceduralMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::ProceduralMeshComponent>().disconnect<&Component::ProceduralMeshComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::ProceduralMeshComponent, &Component::ProceduralMeshComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::ProceduralMeshComponent, &Component::ProceduralMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::SplineMeshComponent>().disconnect<&Component::SplineMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::SplineMeshComponent>().disconnect<&Component::SplineMeshComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::SplineMeshComponent, &Component::SplineMeshComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::SplineMeshComponent, &Component::SplineMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::ModuleMeshComponent>().disconnect<&Component::ModuleMeshComponent::OnConstruct>();
-    registry.on_destroy<Component::ModuleMeshComponent>().disconnect<&Component::ModuleMeshComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::ModuleMeshComponent, &Component::ModuleMeshComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::ModuleMeshComponent, &Component::ModuleMeshComponent::OnDestroy>();
 
-    registry.on_construct<Component::TextComponent>().disconnect<&Component::TextComponent::OnConstruct>();
-    registry.on_destroy<Component::TextComponent>().disconnect<&Component::TextComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::TextComponent, &Component::TextComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::TextComponent, &Component::TextComponent::OnDestroy>();
 
-    registry.on_construct<Component::Text3DComponent>().disconnect<&Component::Text3DComponent::OnConstruct>();
-    registry.on_destroy<Component::Text3DComponent>().disconnect<&Component::Text3DComponent::OnDestroy>();
+    registry.DisconnectConstruct<Component::Text3DComponent, &Component::Text3DComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::Text3DComponent, &Component::Text3DComponent::OnDestroy>();
 
-    registry.on_construct<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnConstruct>();
-    registry.on_destroy<Component::AreaLightComponent>().disconnect<&Component::AreaLightComponent::OnDestroy>();
-    registry.on_destroy<Component::AreaLightRuntime>().disconnect<&Component::AreaLightRuntime::OnDestroy>();
+    registry.DisconnectConstruct<Component::AreaLightComponent, &Component::AreaLightComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::AreaLightComponent, &Component::AreaLightComponent::OnDestroy>();
+    registry.DisconnectDestroy<Component::AreaLightRuntime, &Component::AreaLightRuntime::OnDestroy>();
 
-    registry.on_construct<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnConstruct>();
-    registry.on_destroy<Component::SphereLightComponent>().disconnect<&Component::SphereLightComponent::OnDestroy>();
-    registry.on_destroy<Component::SphereLightRuntime>().disconnect<&Component::SphereLightRuntime::OnDestroy>();
+    registry.DisconnectConstruct<Component::SphereLightComponent, &Component::SphereLightComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::SphereLightComponent, &Component::SphereLightComponent::OnDestroy>();
+    registry.DisconnectDestroy<Component::SphereLightRuntime, &Component::SphereLightRuntime::OnDestroy>();
 
-    registry.on_construct<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnConstruct>();
-    registry.on_destroy<Component::ReflectionProbeComponent>().disconnect<&Component::ReflectionProbeComponent::OnDestroy>();
-    registry.on_destroy<Component::ReflectionProbeRuntime>().disconnect<&Component::ReflectionProbeRuntime::OnDestroy>();
+    registry.DisconnectConstruct<Component::ReflectionProbeComponent, &Component::ReflectionProbeComponent::OnConstruct>();
+    registry.DisconnectDestroy<Component::ReflectionProbeComponent, &Component::ReflectionProbeComponent::OnDestroy>();
+    registry.DisconnectDestroy<Component::ReflectionProbeRuntime, &Component::ReflectionProbeRuntime::OnDestroy>();
 
-    registry.on_construct<Component::LocalDDGIVolumeComponent>().disconnect<&Component::LocalDDGIVolumeComponent::OnConstruct>();
+    registry.DisconnectConstruct<Component::LocalDDGIVolumeComponent, &Component::LocalDDGIVolumeComponent::OnConstruct>();
 
-    registry.on_destroy<Component::SkyboxComponent>().disconnect<&Component::SkyboxComponent::OnDestroy>();
-    registry.on_destroy<Component::SkyboxRuntime>().disconnect<&Component::SkyboxRuntime::OnDestroy>();
+    registry.DisconnectDestroy<Component::SkyboxComponent, &Component::SkyboxComponent::OnDestroy>();
+    registry.DisconnectDestroy<Component::SkyboxRuntime, &Component::SkyboxRuntime::OnDestroy>();
 }
 
 void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
@@ -165,15 +165,15 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    for (auto [entity, smc] : state->registry.view<Component::StaticMeshComponent>().each()) {
-        if (!state->registry.all_of<Component::MeshRuntime>(entity)) { continue; }
+    for (auto [entity, smc] : state->registry.View<Engine::Mut<Component::StaticMeshComponent>>().each()) {
+        if (!state->registry.Has<Component::MeshRuntime>(entity)) { continue; }
         if (!isHot(smc.modelId)) { continue; }
         Component::UnloadStaticMesh(state->registry, entity);
         Component::LoadStaticMesh(smc, state->registry, entity);
     }
 
     // Physics holds its own model ref (its serialized key, loaded independently), so it must also release + re-arm or the model can never drain.
-    for (auto [entity, bodyDesc, runtime] : state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime>().each()) {
+    for (auto [entity, bodyDesc, runtime] : state->registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>>().each()) {
         bool affected = false;
         for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
             const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
@@ -185,10 +185,10 @@ void ModelHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (!affected) { continue; }
 
-        state->registry.remove<Component::PhysicsMeshLoadingFlag>(entity);
-        state->registry.emplace_or_replace<Component::PhysicsMeshRequest>(entity);
-        state->registry.emplace_or_replace<Component::PhysicsShapeCreationRequest>(entity);
-        state->registry.emplace_or_replace<Component::PhysicsBodyCreationRequest>(entity);
+        state->registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
+        state->registry.Set<Component::PhysicsMeshRequest>(entity);
+        state->registry.Set<Component::PhysicsShapeCreationRequest>(entity);
+        state->registry.Set<Component::PhysicsBodyCreationRequest>(entity);
     }
 
     state->assetLoad.pendingHotReloadModelIds.Clear();
@@ -221,19 +221,19 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
     }
 
-    for (auto [entity, textComp, runtime] : state->registry.view<Component::TextComponent, Component::TextRuntime>().each()) {
+    for (auto [entity, textComp, runtime] : state->registry.View<Engine::Mut<Component::TextComponent>, Component::TextRuntime>().each()) {
         if (!isHot(textComp.fontId)) { continue; }
         Component::UnloadTextComponent(textComp, state->registry, entity);
         Component::LoadTextComponent(textComp, state->registry, entity);
     }
-    for (auto [entity, text3DComp] : state->registry.view<Component::Text3DComponent>().each()) {
+    for (auto [entity, text3DComp] : state->registry.View<Engine::Mut<Component::Text3DComponent>>().each()) {
         if (!isHot(text3DComp.fontId)) { continue; }
         Component::UnloadText3DFont(state->registry, entity);
         Component::LoadText3DFont(text3DComp, state->registry, entity);
     }
 
     // A Text3D physics collider holds its own ref to the generated mesh (keyed on the font), so it must release + re-arm too or that mesh can never drain.
-    for (auto [entity, bodyDesc, runtime] : state->registry.view<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime>().each()) {
+    for (auto [entity, bodyDesc, runtime] : state->registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>>().each()) {
         bool affected = false;
         for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
             const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
@@ -245,10 +245,10 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         if (!affected) { continue; }
 
-        state->registry.remove<Component::PhysicsMeshLoadingFlag>(entity);
-        state->registry.emplace_or_replace<Component::PhysicsMeshRequest>(entity);
-        state->registry.emplace_or_replace<Component::PhysicsShapeCreationRequest>(entity);
-        state->registry.emplace_or_replace<Component::PhysicsBodyCreationRequest>(entity);
+        state->registry.Remove<Component::PhysicsMeshLoadingFlag>(entity);
+        state->registry.Set<Component::PhysicsMeshRequest>(entity);
+        state->registry.Set<Component::PhysicsShapeCreationRequest>(entity);
+        state->registry.Set<Component::PhysicsBodyCreationRequest>(entity);
     }
 
     state->assetLoad.pendingHotReloadFontIds.Clear();
@@ -311,7 +311,7 @@ static void PromotePendingModel(Engine::EngineContext* ctx, Component::MeshRunti
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>();
+    auto view = state->registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -321,18 +321,18 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadModel(meshComponent.modelId);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::StaticMeshLoadRequest>(entity);
-        state->registry.emplace_or_replace<Component::StaticMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::StaticMeshLoadRequest>(entity);
+        state->registry.Set<Component::StaticMeshLoadingFlag>(entity);
     }
 }
 
 void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest>();
+    auto view = state->registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>, Component::ReflectionProbeLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -349,14 +349,14 @@ void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineSta
         }
         else {
             runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            state->registry.remove<Component::ReflectionProbeLoadRequest>(entity);
+            state->registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
             continue;
         }
         if (runtime.contentHandle.IsValid()) { started.PushBack(entity); }
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::ReflectionProbeLoadRequest>(entity);
-        state->registry.emplace_or_replace<Component::ReflectionProbeLoadingFlag>(entity);
+        state->registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
+        state->registry.Set<Component::ReflectionProbeLoadingFlag>(entity);
     }
 }
 
@@ -368,7 +368,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         entt::entity owner;
     };
     Core::InlineVector<ClaimedProbeId, 64> claimedProbeIds{};
-    for (auto [entity, probe, runtime] : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
+    for (auto [entity, probe, runtime] : state->registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
         if (runtime.contentSource != Component::ReflectionProbeComponent::ContentSource::Baked || probe.probeId == 0) { continue; }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -379,7 +379,7 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         }
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
-    for (auto [entity, probe, runtime] : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
+    for (auto [entity, probe, runtime] : state->registry.View<Engine::Mut<Component::ReflectionProbeComponent>, Engine::Mut<Component::ReflectionProbeRuntime>>().each()) {
         bool bCollision = probe.probeId == 0;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
             if (claimed.id == probe.probeId) {
@@ -406,8 +406,8 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
                 runtime.contentHandle = Engine::CubemapHandle::INVALID;
             }
             runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            state->registry.remove<Component::ReflectionProbeLoadingFlag>(entity);
-            state->registry.emplace_or_replace<Component::ReflectionProbeLoadRequest>(entity);
+            state->registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
+            state->registry.Set<Component::ReflectionProbeLoadRequest>(entity);
         }
         bool bTaken = false;
         for (const ClaimedProbeId& claimed : claimedProbeIds) {
@@ -419,21 +419,21 @@ void ReflectionProbeBakeUpgrade(Engine::EngineContext* ctx, Engine::EngineState*
         if (!bTaken && !claimedProbeIds.IsFull()) { claimedProbeIds.PushBack({probe.probeId, entity}); }
     }
 
-    for (auto [entity, probe, runtime] : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime>().each()) {
+    for (auto [entity, probe, runtime] : state->registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>>().each()) {
         if (runtime.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) { continue; }
         if (!ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) { continue; }
         if (runtime.contentHandle.IsValid()) {
             ctx->assetManager->UnloadCubemap(runtime.contentHandle);
             runtime.contentHandle = Engine::CubemapHandle::INVALID;
         }
-        state->registry.remove<Component::ReflectionProbeLoadingFlag>(entity);
-        state->registry.emplace_or_replace<Component::ReflectionProbeLoadRequest>(entity);
+        state->registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
+        state->registry.Set<Component::ReflectionProbeLoadRequest>(entity);
     }
 }
 
 void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadingFlag>();
+    auto view = state->registry.View<Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadingFlag>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -449,25 +449,25 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
         resolved.PushBack(entity);
     }
     for (const entt::entity entity : resolved) {
-        state->registry.remove<Component::ReflectionProbeLoadingFlag>(entity);
+        state->registry.Remove<Component::ReflectionProbeLoadingFlag>(entity);
     }
 }
 
-static bool HasEmissiveLightFlag(const entt::registry& registry, entt::entity entity)
+static bool HasEmissiveLightFlag(const Engine::Registry& registry, entt::entity entity)
 {
-    const auto* renderFlags = registry.try_get<Component::RenderFlagsComponent>(entity);
+    const auto* renderFlags = registry.TryGet<Component::RenderFlagsComponent>(entity);
     return renderFlags && renderFlags->bEmissiveLight;
 }
 
-static bool IsBakeStatic(const entt::registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
+static bool IsBakeStatic(const Engine::Registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
-    const auto* transform = registry.try_get<Component::TransformComponent>(entity);
-    if (!transform || transform->mobility != Component::Mobility::Static || registry.all_of<Component::DynamicPhysicsBodyRuntime>(entity)) { return false; }
-    const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
+    const auto* transform = registry.TryGet<Component::TransformComponent>(entity);
+    if (!transform || transform->mobility != Component::Mobility::Static || registry.Has<Component::DynamicPhysicsBodyRuntime>(entity)) { return false; }
+    const auto* body = registry.TryGet<Component::PhysicsBodyDesc>(entity);
     return body == nullptr || body->motionType == Component::PhysicsMotionType::Static;
 }
 
-static uint32_t InstanceFlagsFrom(const entt::registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
+static uint32_t InstanceFlagsFrom(const Engine::Registry& registry, entt::entity entity, const Component::RenderFlagsComponent& renderFlags)
 {
     return (renderFlags.bMotionBlur ? INSTANCE_FLAG_MOTION_BLUR : 0u)
            | (renderFlags.bAlphaCutout ? INSTANCE_FLAG_ALPHA_CUTOUT : 0u)
@@ -478,13 +478,13 @@ static uint32_t InstanceFlagsFrom(const entt::registry& registry, entt::entity e
 
 void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity)
 {
-    auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
-    const auto* renderFlags = state->registry.try_get<Component::RenderFlagsComponent>(entity);
+    auto* runtime = state->registry.TryGet<Component::MeshRuntime>(entity);
+    const auto* renderFlags = state->registry.TryGet<Component::RenderFlagsComponent>(entity);
     if (!runtime || !renderFlags) { return; }
 
     if (!runtime->range.IsValid()) { return; }
 
-    const bool bVisible = renderFlags->bVisible &&!state->registry.all_of<Component::ProbeBakeHiddenFlag>(entity);
+    const bool bVisible = renderFlags->bVisible &&!state->registry.Has<Component::ProbeBakeHiddenFlag>(entity);
     const uint32_t flags = InstanceFlagsFrom(state->registry, entity, *renderFlags);
 
     const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
@@ -496,14 +496,14 @@ void EvaluateAllInstanceRenderStates(Engine::EngineState* state)
 {
     ZoneScoped;
     Engine::InstanceStore& store = state->instanceStore;
-    const bool bAnyHideTags = state->registry.view<Component::ProbeBakeHiddenFlag>().size() > 0;
+    const bool bAnyHideTags = state->registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
 
-    for (auto [entity, renderFlags, runtime] : state->registry.view<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
+    for (auto [entity, renderFlags, runtime] : state->registry.View<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
 
         bool bVisible = renderFlags.bVisible;
         if (bVisible && bAnyHideTags) {
-            bVisible = !state->registry.all_of<Component::ProbeBakeHiddenFlag>(entity);
+            bVisible = !state->registry.Has<Component::ProbeBakeHiddenFlag>(entity);
         }
         const uint32_t flags = InstanceFlagsFrom(state->registry, entity, renderFlags);
 
@@ -529,7 +529,7 @@ static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& node
 
 void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::LightSurfaceRequest>();
+    auto view = state->registry.View<Component::LightSurfaceRequest>();
     if (view.size() == 0) { return; }
 
     const Engine::Material* defaultMaterial = ctx->materialManager->GetMaterial(ctx->materialManager->GetDefaultMaterialID());
@@ -539,8 +539,8 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const entt::entity entity : view) {
         if (resolved.Size() >= budget) { break; }
-        const auto* areaLight = state->registry.try_get<Component::AreaLightComponent>(entity);
-        const auto* sphereLight = state->registry.try_get<Component::SphereLightComponent>(entity);
+        const auto* areaLight = state->registry.TryGet<Component::AreaLightComponent>(entity);
+        const auto* sphereLight = state->registry.TryGet<Component::SphereLightComponent>(entity);
         if (!areaLight && !sphereLight) {
             resolved.PushBack(entity);
             continue;
@@ -558,12 +558,12 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         const Engine::MaterialID materialID = ctx->materialManager->CreateSynthesizedMaterial(emissive);
 
         glm::mat4 m(1.0f);
-        if (state->registry.all_of<Component::TransformComponent>(entity)) {
+        if (state->registry.Has<Component::TransformComponent>(entity)) {
             const Transform world = Component::ComputeWorldTransform(state->registry, entity);
             m = areaLight ? Component::ComputeAreaLightQuadMatrix(world, *areaLight) : Component::ComputeSphereLightMatrix(world, *sphereLight);
         }
 
-        state->registry.remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
+        state->registry.Remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
         Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
         if (!modelRange.IsValid()) {
             resolved.PushBack(entity);
@@ -577,18 +577,18 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         }
         state->modelStore.SetModel(modelRange.offset, {m, m});
         state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(state->registry, entity));
-        state->registry.emplace<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
+        state->registry.Add<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
         resolved.PushBack(entity);
     }
 
     for (const entt::entity entity : resolved) {
-        state->registry.remove<Component::LightSurfaceRequest>(entity);
+        state->registry.Remove<Component::LightSurfaceRequest>(entity);
     }
 }
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>();
+    auto view = state->registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -599,7 +599,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
@@ -626,7 +626,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
         Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
 
-        const auto* overrides = state->registry.try_get<Component::StaticMeshOverridesComponent>(entity);
+        const auto* overrides = state->registry.TryGet<Component::StaticMeshOverridesComponent>(entity);
 
         auto included = [&](uint32_t ordinal) -> bool {
             return !overrides || !overrides->primitiveBlacklist.Contains(ordinal);
@@ -745,7 +745,7 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         runtime->range = range;
         runtime->modelRange = modelRange;
         EvaluateInstanceRenderState(state, entity);
-        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
+        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
         resolved.PushBack(entity);
     }
 
@@ -759,13 +759,13 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::StaticMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::StaticMeshLoadingFlag>(entity);
     }
 }
 
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>();
+    auto view = state->registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -775,18 +775,18 @@ void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::Engin
         if (ctx->assetManager->IsModelFrozen(meshComponent.modelId)) { continue; }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadModel(meshComponent.modelId);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
-        state->registry.emplace_or_replace<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        state->registry.Remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
+        state->registry.Set<Component::StaticMeshPrimitiveLoadingFlag>(entity);
     }
 }
 
 void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>();
+    auto view = state->registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) { return; }
 
@@ -794,7 +794,7 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         Engine::MaterialManager* materialManager = ctx->materialManager;
@@ -886,19 +886,19 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
         runtime->range = range;
         runtime->modelRange = modelRange;
         EvaluateInstanceRenderState(state, entity);
-        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
+        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        state->registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
     }
 }
 
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>();
+    auto view = state->registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -907,18 +907,18 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
         if (started.Size() >= budget) { break; }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadProceduralModel(meshComponent.params, meshComponent.repeat);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::ProceduralMeshLoadRequest>(entity);
-        state->registry.emplace_or_replace<Component::ProceduralMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::ProceduralMeshLoadRequest>(entity);
+        state->registry.Set<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>();
+    auto view = state->registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -930,7 +930,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
@@ -960,7 +960,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
-            state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
+            state->registry.Set<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
@@ -976,7 +976,7 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::ProceduralMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
@@ -1028,7 +1028,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
 
 void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>();
+    auto view = state->registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1038,18 +1038,18 @@ void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         if (meshComponent.params.parts.IsEmpty()) { continue; }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadModuleModel(meshComponent.params);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::ModuleMeshLoadRequest>(entity);
-        state->registry.emplace_or_replace<Component::ModuleMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::ModuleMeshLoadRequest>(entity);
+        state->registry.Set<Component::ModuleMeshLoadingFlag>(entity);
     }
 }
 
 void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>();
+    auto view = state->registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1058,7 +1058,7 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
@@ -1080,13 +1080,13 @@ void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
 
         FillModuleMeshRange(ctx, state, runtime, model, meshComponent, HasEmissiveLightFlag(state->registry, entity));
         EvaluateInstanceRenderState(state, entity);
-        state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
+        state->registry.Set<Component::MultiframeDirtyRequest>(entity);
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::ModuleMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::ModuleMeshLoadingFlag>(entity);
     }
 }
 
@@ -1098,7 +1098,7 @@ static bool SplineHasGeometry(const Engine::SplineParams& params)
 
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>();
+    auto view = state->registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1113,22 +1113,22 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
         }
         const Engine::StaticModelHandle handle = ctx->assetManager->LoadSplineModel(params);
         if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
+        StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
         started.PushBack(entity);
     }
     for (const entt::entity entity : started) {
-        state->registry.remove<Component::SplineMeshLoadRequest>(entity);
-        state->registry.emplace_or_replace<Component::SplineMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::SplineMeshLoadRequest>(entity);
+        state->registry.Set<Component::SplineMeshLoadingFlag>(entity);
     }
     for (const entt::entity entity : emptied) {
-        state->registry.remove<Component::SplineMeshLoadRequest>(entity);
-        state->registry.remove<Component::MeshRuntime>(entity);
+        state->registry.Remove<Component::SplineMeshLoadRequest>(entity);
+        state->registry.Remove<Component::MeshRuntime>(entity);
     }
 }
 
 void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>();
+    auto view = state->registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1137,7 +1137,7 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, meshComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         auto releaseExisting = [&] {
@@ -1166,20 +1166,20 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
-            state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
+            state->registry.Set<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::SplineMeshLoadingFlag>(entity);
+        state->registry.Remove<Component::SplineMeshLoadingFlag>(entity);
     }
 }
 
 void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DGenerateRequest>();
+    auto view = state->registry.View<Component::Text3DComponent, Component::Text3DGenerateRequest>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1195,22 +1195,22 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
             ? ctx->assetManager->LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius)
             : Engine::StaticModelHandle::INVALID;
         if (handle.IsValid()) {
-            StageModel(ctx, state->registry.get_or_emplace<Component::MeshRuntime>(entity), handle);
-            state->registry.emplace_or_replace<Component::Text3DLoadingFlag>(entity);
+            StageModel(ctx, state->registry.GetOrAdd<Component::MeshRuntime>(entity), handle);
+            state->registry.Set<Component::Text3DLoadingFlag>(entity);
         }
         else {
-            state->registry.remove<Component::MeshRuntime>(entity);
+            state->registry.Remove<Component::MeshRuntime>(entity);
         }
         done.PushBack(entity);
     }
     for (const entt::entity entity : done) {
-        state->registry.remove<Component::Text3DGenerateRequest>(entity);
+        state->registry.Remove<Component::Text3DGenerateRequest>(entity);
     }
 }
 
 void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::Text3DComponent, Component::Text3DLoadingFlag>();
+    auto view = state->registry.View<Component::Text3DComponent, Component::Text3DLoadingFlag>();
     size_t viewCount = view.size_hint();
     if (viewCount == 0) {
         return;
@@ -1219,7 +1219,7 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, textComponent] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        auto* runtime = state->registry.try_get<Component::MeshRuntime>(entity);
+        auto* runtime = state->registry.TryGetMut<Component::MeshRuntime>(entity);
         if (!runtime) continue;
 
         if (!TargetModel(*runtime).IsValid()) {
@@ -1257,20 +1257,20 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (runtime->modelRange.IsValid()) {
             runtime->range = state->instanceStore.AllocateSingleMeshRange(ctx->materialManager,model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(state->registry, entity));
             EvaluateInstanceRenderState(state, entity);
-            state->registry.emplace_or_replace<Component::MultiframeDirtyRequest>(entity);
+            state->registry.Set<Component::MultiframeDirtyRequest>(entity);
         }
 
         resolved.PushBack(entity);
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::Text3DLoadingFlag>(entity);
+        state->registry.Remove<Component::Text3DLoadingFlag>(entity);
     }
 }
 
 void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
-    auto view = state->registry.view<Component::TextComponent, Component::TextRuntime, Component::TextFontRequest>();
+    auto view = state->registry.View<Component::TextComponent, Engine::Mut<Component::TextRuntime>, Component::TextFontRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1296,7 +1296,7 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
     for (const auto entity : resolved) {
-        state->registry.remove<Component::TextFontRequest>(entity);
+        state->registry.Remove<Component::TextFontRequest>(entity);
     }
 }
 } // Engine

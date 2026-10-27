@@ -118,7 +118,7 @@ void ProbeBakeSystem::StartDryRun(Engine::EngineContext* ctx, Engine::EngineStat
 void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState* state)
 {
     bakeQueue.Clear();
-    for (const entt::entity entity : state->registry.view<Component::ReflectionProbeComponent>()) {
+    for (const entt::entity entity : state->registry.View<Component::ReflectionProbeComponent>()) {
         if (bakeQueue.IsFull()) { break; }
         bakeQueue.PushBack(entity);
     }
@@ -213,17 +213,17 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
     switch (phase) {
         case Phase::Idle:
         {
-            for (const entt::entity entity : state->registry.view<Component::ReflectionProbeComponent, Component::ReflectionProbeBakeRequest>()) {
+            for (const entt::entity entity : state->registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeBakeRequest>()) {
                 if (!bakeQueue.Contains(entity) && !bakeQueue.IsFull()) { bakeQueue.PushBack(entity); }
             }
-            state->registry.clear<Component::ReflectionProbeBakeRequest>();
+            state->registry.Clear<Component::ReflectionProbeBakeRequest>();
 
             if (state->shadowBake.IsBusy()) { break; }
 
             while (!bakeQueue.IsEmpty()) {
                 const entt::entity next = bakeQueue.Front();
                 bakeQueue.RemoveAt(0);
-                if (state->registry.valid(next) && state->registry.all_of<Component::ReflectionProbeComponent>(next)) {
+                if (state->registry.Valid(next) && state->registry.Has<Component::ReflectionProbeComponent>(next)) {
                     Start(ctx, state, next);
                     return;
                 }
@@ -266,8 +266,8 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
             settleFrames = glm::max(1, state->projectConfig.probeBake.settleFrames);
 
-            const Component::WorldTransformRuntime* worldTransform = state->registry.try_get<Component::WorldTransformRuntime>(probeEntity);
-            const Component::ReflectionProbeComponent* probe = state->registry.try_get<Component::ReflectionProbeComponent>(probeEntity);
+            const Component::WorldTransformRuntime* worldTransform = state->registry.TryGet<Component::WorldTransformRuntime>(probeEntity);
+            const Component::ReflectionProbeComponent* probe = state->registry.TryGet<Component::ReflectionProbeComponent>(probeEntity);
             if (!worldTransform || !probe) {
                 Cancel(ctx, state);
                 return;
@@ -458,10 +458,10 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             Core::InlineVector<AwaitedAssemble, 64> stillPending{};
             bool bAllReady = true;
             for (const AwaitedAssemble& awaited : awaitedAssembles) {
-                if (!state->registry.valid(awaited.entity) || !state->registry.all_of<Component::ReflectionProbeComponent>(awaited.entity)) { continue; }
+                if (!state->registry.Valid(awaited.entity) || !state->registry.Has<Component::ReflectionProbeComponent>(awaited.entity)) { continue; }
                 stillPending.PushBack(awaited);
 
-                const auto* runtime = state->registry.try_get<Component::ReflectionProbeRuntime>(awaited.entity);
+                const auto* runtime = state->registry.TryGet<Component::ReflectionProbeRuntime>(awaited.entity);
                 const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{awaited.probeId});
                 bool bReady = info != nullptr
                     && info->contentVersion >= awaited.expectedVersion
@@ -495,7 +495,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 bakeQueue.Clear();
                 for (const entt::entity entity : interbounceBatch) {
                     if (bakeQueue.IsFull()) { break; }
-                    if (state->registry.valid(entity) && state->registry.all_of<Component::ReflectionProbeComponent>(entity)) { bakeQueue.PushBack(entity); }
+                    if (state->registry.Valid(entity) && state->registry.Has<Component::ReflectionProbeComponent>(entity)) { bakeQueue.PushBack(entity); }
                 }
                 bakeBatchTotal = static_cast<uint32_t>(bakeQueue.Size());
                 awaitedAssembles.Clear();

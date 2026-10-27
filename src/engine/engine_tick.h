@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_ENGINE_TICK_H
 #define WILL_ENGINE_ENGINE_TICK_H
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 namespace Core
 {
@@ -18,7 +18,7 @@ struct EngineContext;
 struct EngineState;
 class SystemGraph;
 
-void ConnectEngineObservers(entt::registry& registry);
+void ConnectEngineObservers(Engine::Registry& registry);
 
 void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph);
 

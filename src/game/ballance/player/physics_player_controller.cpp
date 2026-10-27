@@ -95,7 +95,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         );
     }
 
-    auto cameraView = state->registry.view<Component::GameCameraTag, Component::CameraRuntime, Component::TransformComponent>();
+    auto cameraView = state->registry.View<Component::GameCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
     for (auto camEntity : cameraView) {
         auto& camera = cameraView.get<Component::CameraRuntime>(camEntity);
         auto& transform = cameraView.get<Component::TransformComponent>(camEntity);

@@ -35,7 +35,7 @@
 
 namespace Engine
 {
-void ConnectEngineObservers(entt::registry& registry)
+void ConnectEngineObservers(Engine::Registry& registry)
 {
     ConnectPhysicsObservers(registry);
     ConnectCommonObservers(registry);
@@ -75,7 +75,7 @@ static void TickQuietFrames(EngineContext* ctx, EngineState* state)
 
 static void PostUpdateCleanup(EngineContext* ctx, EngineState* state)
 {
-    state->registry.clear<Component::DirtyTransformRequest>();
+    state->registry.Clear<Component::DirtyTransformRequest>();
     ctx->physicsWorld->ClearCollisionEvents();
     ctx->physicsWorld->ClearActivationEvents();
     ctx->materialManager->ProcessRetirements();
@@ -143,7 +143,7 @@ static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::F
         frameBuffer->selectedStableId = 0;
         if (!state->editor.selectedEntities.IsEmpty()) {
             entt::entity selected = state->editor.selectedEntities.Front();
-            if (auto* stable = state->registry.try_get<Component::StableIdComponent>(selected)) {
+            if (auto* stable = state->registry.TryGet<Component::StableIdComponent>(selected)) {
                 frameBuffer->selectedStableId = stable->id.id;
             }
         }

@@ -7,6 +7,7 @@
 
 #include <entt/entt.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/engine_api.h"
 #include "engine/asset_manager_types.h"
 #include "engine/core/environment_map_id.h"
@@ -70,18 +71,18 @@ struct ReflectionProbeComponent
         WILL_FIELD(standInEnvMap),
         WILL_FIELD(standInIntensity, .min = 0.0f, .max = 1.0e9f))
 
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
     /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
     static bool IsBakeStale(const WorldTransformRuntime& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 
-    static void DeferredConstruct(entt::registry& registry, entt::entity entity);
+    static void DeferredConstruct(Engine::Registry& registry, entt::entity entity);
 };
 
 /** Emplaced by the probe's OnConstruct. contentHandle is the resident cubemap for the current content, recorded on load kickoff. */
@@ -90,7 +91,7 @@ struct ReflectionProbeRuntime
     Engine::CubemapHandle contentHandle{Engine::CubemapHandle::INVALID};
     ReflectionProbeComponent::ContentSource contentSource{ReflectionProbeComponent::ContentSource::None};
 
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 
 /** Queues the probe for a bake; the probe bake system consumes it. */

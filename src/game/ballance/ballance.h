@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_BALLANCE_H
 #define WILL_ENGINE_BALLANCE_H
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 namespace Core
 {
@@ -24,8 +24,8 @@ namespace Ballance
 {
 void RegisterComponents(Engine::ComponentRegistry& componentRegistry);
 void RegisterCommands(Engine::EngineState* state);
-void ConnectObservers(entt::registry& registry);
-void DisconnectObservers(entt::registry& registry);
+void ConnectObservers(Engine::Registry& registry);
+void DisconnectObservers(Engine::Registry& registry);
 void CollectSystems(Engine::SystemGraph& graph);
 void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
 

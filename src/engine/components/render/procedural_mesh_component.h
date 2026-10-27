@@ -8,6 +8,7 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
+#include "engine/core/registry.h"
 #include "engine/material_manager.h"
 #include "engine/resources/model/model_types.h"
 #include "engine/component_registry.h"
@@ -35,11 +36,11 @@ struct ProceduralMeshComponent
         WILL_FIELD(renderOffset),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const entt::registry& registry, entt::entity entity);
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::Registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 
@@ -51,7 +52,7 @@ struct ProceduralMeshLoadRequest
 struct ProceduralMeshLoadingFlag
 {};
 
-void RecreateProceduralMesh(ProceduralMeshComponent& component, entt::registry& registry, entt::entity entity);
+void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::Registry& registry, entt::entity entity);
 }
 
 #endif //WILL_ENGINE_PROCEDURAL_MESH_COMPONENT_H

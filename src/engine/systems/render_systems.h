@@ -5,7 +5,7 @@
 #ifndef WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H
 #define WILL_ENGINE_GATHER_RENDERABLES_COMPONENT_H
 
-#include <entt/entt.hpp>
+#include "engine/core/registry.h"
 
 namespace Render
 {
@@ -25,8 +25,8 @@ struct FrameBuffer;
 
 namespace Engine
 {
-void ConnectRenderObservers(entt::registry& registry);
-void DisconnectRenderObservers(entt::registry& registry);
+void ConnectRenderObservers(Engine::Registry& registry);
+void DisconnectRenderObservers(Engine::Registry& registry);
 
 /** Recomputes one entity's effective render state and writes it to the instance store. */
 void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity);

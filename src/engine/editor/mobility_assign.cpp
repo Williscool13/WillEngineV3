@@ -20,27 +20,27 @@ namespace Engine
 {
 static bool MovesItself(const EngineState* state, entt::entity entity)
 {
-    const entt::registry& registry = state->registry;
-    if (registry.all_of<Component::DynamicPhysicsBodyRuntime>(entity)) { return true; }
-    if (const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity); body && body->motionType != Component::PhysicsMotionType::Static) { return true; }
+    const Engine::Registry& registry = state->registry;
+    if (registry.Has<Component::DynamicPhysicsBodyRuntime>(entity)) { return true; }
+    if (const auto* body = registry.TryGet<Component::PhysicsBodyDesc>(entity); body && body->motionType != Component::PhysicsMotionType::Static) { return true; }
     for (const ComponentEntry& entry : state->componentRegistry.registry) {
         if (entry.bMovesEntity && entry.has(registry, entity)) { return true; }
     }
     return false;
 }
 
-static const char* EntityName(const entt::registry& registry, entt::entity entity)
+static const char* EntityName(const Engine::Registry& registry, entt::entity entity)
 {
-    const auto* name = registry.try_get<Component::NameComponent>(entity);
+    const auto* name = registry.TryGet<Component::NameComponent>(entity);
     return name ? name->name.c_str() : "(unnamed)";
 }
 
 bool IsMovedAtRuntime(const EngineState* state, entt::entity entity)
 {
-    const entt::registry& registry = state->registry;
-    for (entt::entity e = entity; e != entt::null && registry.valid(e);) {
+    const Engine::Registry& registry = state->registry;
+    for (entt::entity e = entity; e != entt::null && registry.Valid(e);) {
         if (MovesItself(state, e)) { return true; }
-        const auto* hierarchy = registry.try_get<Component::HierarchyComponent>(e);
+        const auto* hierarchy = registry.TryGet<Component::HierarchyComponent>(e);
         e = hierarchy ? hierarchy->parent : entt::null;
     }
     return false;
@@ -48,7 +48,7 @@ bool IsMovedAtRuntime(const EngineState* state, entt::entity entity)
 
 static void WarnIfBakedLightMoves(EngineState* state, entt::entity entity, Component::LightShadowMode mode, MobilityAssignResult& result)
 {
-    const auto* transform = state->registry.try_get<Component::TransformComponent>(entity);
+    const auto* transform = state->registry.TryGet<Component::TransformComponent>(entity);
     if (mode != Component::LightShadowMode::Baked || !transform || transform->mobility != Component::Mobility::Movable) { return; }
     ++result.bakedLightsOnMovers;
     LOG_WARN(Engine, "Light {} bakes its shadows but is Movable; its map will go stale", EntityName(state->registry, entity));
@@ -57,9 +57,9 @@ static void WarnIfBakedLightMoves(EngineState* state, entt::entity entity, Compo
 MobilityAssignResult AssignMobility(EngineState* state)
 {
     MobilityAssignResult result{};
-    entt::registry& registry = state->registry;
+    Engine::Registry& registry = state->registry;
 
-    for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraRuntime>).each()) {
+    for (const auto [entity, transform] : registry.View<Engine::Mut<Component::TransformComponent>>(entt::exclude<Component::CameraRuntime>).each()) {
         if (transform.bMobilityLocked) {
             ++result.lockedCount;
         }
@@ -69,7 +69,7 @@ MobilityAssignResult AssignMobility(EngineState* state)
                 transform.mobility = mobility;
                 ++result.changedCount;
                 EvaluateInstanceRenderState(state, entity);
-                if (const auto* scene = registry.try_get<Component::SceneRuntime>(entity)) {
+                if (const auto* scene = registry.TryGet<Component::SceneRuntime>(entity)) {
                     MarkSceneModified(state, scene->sceneId);
                 }
             }
@@ -78,10 +78,10 @@ MobilityAssignResult AssignMobility(EngineState* state)
         else { ++result.movableCount; }
     }
 
-    for (const auto [entity, light] : registry.view<Component::AreaLightComponent>().each()) {
+    for (const auto [entity, light] : registry.View<Component::AreaLightComponent>().each()) {
         WarnIfBakedLightMoves(state, entity, light.shadowMode, result);
     }
-    for (const auto [entity, light] : registry.view<Component::SphereLightComponent>().each()) {
+    for (const auto [entity, light] : registry.View<Component::SphereLightComponent>().each()) {
         WarnIfBakedLightMoves(state, entity, light.shadowMode, result);
     }
     return result;
@@ -89,20 +89,20 @@ MobilityAssignResult AssignMobility(EngineState* state)
 
 void LockStaticTransforms(EngineState* state)
 {
-    entt::registry& registry = state->registry;
-    for (const auto [entity, transform] : registry.view<Component::TransformComponent>(entt::exclude<Component::CameraRuntime>).each()) {
+    Engine::Registry& registry = state->registry;
+    for (const auto [entity, transform] : registry.View<Component::TransformComponent>(entt::exclude<Component::CameraRuntime>).each()) {
         // A Static physics body never moves while running either, whatever the mobility says, so its collider cannot be left behind.
-        const auto* body = registry.try_get<Component::PhysicsBodyDesc>(entity);
+        const auto* body = registry.TryGet<Component::PhysicsBodyDesc>(entity);
         const bool bStaticBody = body != nullptr && body->motionType == Component::PhysicsMotionType::Static;
         if ((transform.mobility != Component::Mobility::Static && !bStaticBody) || IsMovedAtRuntime(state, entity)) { continue; }
-        registry.emplace_or_replace<Component::StaticTransformLockRuntime>(entity, transform.translation, transform.rotation, transform.scale, false);
+        registry.Set<Component::StaticTransformLockRuntime>(entity, transform.translation, transform.rotation, transform.scale, false);
     }
 }
 
 void RejectStaticTransformWrites(EngineState* state)
 {
-    entt::registry& registry = state->registry;
-    auto view = registry.view<Component::StaticTransformLockRuntime, Component::TransformComponent, Component::DirtyTransformRequest>();
+    Engine::Registry& registry = state->registry;
+    auto view = registry.View<Engine::Mut<Component::StaticTransformLockRuntime>, Engine::Mut<Component::TransformComponent>, Component::DirtyTransformRequest>();
     for (const auto [entity, lock, transform] : view.each()) {
         if (!lock.bWarned) {
             lock.bWarned = true;
@@ -111,7 +111,7 @@ void RejectStaticTransformWrites(EngineState* state)
         transform.translation = lock.translation;
         transform.rotation = lock.rotation;
         transform.scale = lock.scale;
-        registry.remove<Component::DirtyTransformRequest>(entity);
+        registry.Remove<Component::DirtyTransformRequest>(entity);
     }
 }
 } // Engine

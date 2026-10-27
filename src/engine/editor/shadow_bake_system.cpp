@@ -55,16 +55,16 @@ bool IsShadowBakeCurrent(const ShadowBakeKey& baked, const LightInfo& light)
 
 static bool LightForBake(EngineState* state, entt::entity entity, uint64_t& outShadowId, uint32_t& outResolution, LightInfo& outLight)
 {
-    entt::registry& registry = state->registry;
-    if (!registry.valid(entity)) { return false; }
+    Engine::Registry& registry = state->registry;
+    if (!registry.Valid(entity)) { return false; }
 
     uint32_t slot = AnalyticLightStore::INVALID_SLOT;
-    if (const auto* area = registry.try_get<Component::AreaLightComponent>(entity); area && area->shadowMode == Component::LightShadowMode::Baked) {
+    if (const auto* area = registry.TryGet<Component::AreaLightComponent>(entity); area && area->shadowMode == Component::LightShadowMode::Baked) {
         slot = Component::FindLightSlot(registry, entity);
         outShadowId = area->shadowId;
         outResolution = Component::ShadowBakeResolutionPixels(area->shadowBakeResolution);
     }
-    else if (const auto* sphere = registry.try_get<Component::SphereLightComponent>(entity); sphere && sphere->shadowMode == Component::LightShadowMode::Baked) {
+    else if (const auto* sphere = registry.TryGet<Component::SphereLightComponent>(entity); sphere && sphere->shadowMode == Component::LightShadowMode::Baked) {
         slot = Component::FindLightSlot(registry, entity);
         outShadowId = sphere->shadowId;
         outResolution = Component::ShadowBakeResolutionPixels(sphere->shadowBakeResolution);
@@ -124,12 +124,12 @@ void ShadowBakeSystem::Enqueue(entt::entity light)
     ++batchTotal;
 }
 
-void ShadowBakeSystem::EnqueueAll(entt::registry& registry)
+void ShadowBakeSystem::EnqueueAll(Engine::Registry& registry)
 {
-    for (const auto [light, comp] : registry.view<Component::AreaLightComponent>().each()) {
+    for (const auto [light, comp] : registry.View<Component::AreaLightComponent>().each()) {
         if (comp.shadowMode == Component::LightShadowMode::Baked) { Enqueue(light); }
     }
-    for (const auto [light, comp] : registry.view<Component::SphereLightComponent>().each()) {
+    for (const auto [light, comp] : registry.View<Component::SphereLightComponent>().each()) {
         if (comp.shadowMode == Component::LightShadowMode::Baked) { Enqueue(light); }
     }
 }
@@ -201,7 +201,7 @@ void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* f
 #else
 
 void ShadowBakeSystem::Enqueue(entt::entity) {}
-void ShadowBakeSystem::EnqueueAll(entt::registry&) {}
+void ShadowBakeSystem::EnqueueAll(Engine::Registry&) {}
 void ShadowBakeSystem::Cancel() {}
 void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Core::FrameBuffer*) {}
 void ShadowBakeTick(EngineContext*, EngineState*, Core::FrameBuffer*) {}

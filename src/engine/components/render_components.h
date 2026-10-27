@@ -8,9 +8,9 @@
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <entt/entt.hpp>
 
 #include "core/containers/inline_vector.h"
+#include "engine/core/registry.h"
 #include "engine/components/common/stable_id_component.h"
 #include "engine/material_manager.h"
 #include "engine/asset_manager_types.h"
@@ -52,8 +52,8 @@ struct RenderFlagsComponent
         WILL_FIELD(bEmissiveLight, .key = "emissiveLight"),
         WILL_FIELD(bCameraMotionBlur, .key = "cameraMotionBlur"))
 
-    static void OnEditPreview(entt::registry& registry, entt::entity entity);
-    static void OnEditCommit(entt::registry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::Registry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::Registry& registry, entt::entity entity);
 };
 
 enum RenderFlagToggle : uint32_t
@@ -100,8 +100,8 @@ struct MeshRuntime
 
     uint64_t stableId{StableIdComponent::NO_ID};
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
-    static void OnDestroy(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
+    static void OnDestroy(Engine::Registry& registry, entt::entity entity);
 };
 }
 

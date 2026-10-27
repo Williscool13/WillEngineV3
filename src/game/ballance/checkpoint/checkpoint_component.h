@@ -6,11 +6,11 @@
 #define WILL_ENGINE_CHECKPOINT_COMPONENT_H
 
 #include <glm/vec3.hpp>
-#include <entt/entt.hpp>
 
 #include "core/string_id.h"
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
+#include "engine/core/registry.h"
 #include "engine/reflection/reflection.h"
 #include "game/ballance/fwd_components.h"
 
@@ -34,7 +34,7 @@ struct CheckpointComponent
         WILL_FIELD(spawnOffset, .speed = 0.1f),
         WILL_FIELD(spawnRotation, .speed = 0.5f))
 
-    static void OnConstruct(entt::registry& registry, entt::entity entity);
+    static void OnConstruct(Engine::Registry& registry, entt::entity entity);
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 };
 }
