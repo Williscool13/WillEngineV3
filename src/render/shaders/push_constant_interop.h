@@ -1198,6 +1198,9 @@ SHADER_PUBLIC struct Fsr2AccumulatePushConstant
     SHADER_PUBLIC uint32_t lumaHistoryOutIndex;
     SHADER_PUBLIC uint32_t outputIndex; // FSR2_INVALID_INDEX when RCAS writes the output
     SHADER_PUBLIC uint32_t virtualMotionIndex;
+    SHADER_PUBLIC uint32_t preOverlayColorIndex;
+    SHADER_PUBLIC uint32_t flickerDebugIndex;
+    SHADER_PUBLIC float flickerTolerance;
 };
 
 SHADER_PUBLIC struct Fsr2RcasPushConstant

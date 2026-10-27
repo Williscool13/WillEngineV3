@@ -41,6 +41,11 @@ import fsr2_common;
 
 [[vk::push_constant]] Fsr2AccumulatePushConstant pc;
 
+static const float FLICKER_DECAY = 0.95;
+static const float FLICKER_COUNT_MAX = 20.0;
+static const float FLICKER_PERIOD = 2.0;
+static const float FLICKER_MAX_VELOCITY_1080P = 10.0;
+
 struct AccumulationParams
 {
     int2 pxHrPos;
@@ -341,7 +346,7 @@ void AccumulateColor(inout float3 historyColor, float3 accumulation, float4 upsa
     historyColor = Fsr2InverseTonemap(historyColor);
 }
 
-void RectifyHistory(AccumulationParams params, Fsr2RectificationBox clippingBox, inout float3 historyColor, inout float3 accumulation, float lockContributionThisFrame, float temporalReactiveFactor, float lumaInstabilityFactor)
+void RectifyHistory(AccumulationParams params, Fsr2RectificationBox clippingBox, inout float3 historyColor, inout float3 accumulation, float lockContributionThisFrame, float temporalReactiveFactor, float flickerAmplitude)
 {
     const float scaleFactorInfluence = min(20.0, pow(1.0 / abs(pc.c.downscaleFactor.x * pc.c.downscaleFactor.y), 3.0));
 
@@ -356,10 +361,19 @@ void RectifyHistory(AccumulationParams params, Fsr2RectificationBox clippingBox,
     boxMin = max(clippingBox.aabbMin, boxMin);
     boxMax = min(clippingBox.aabbMax, boxMax);
 
+    if (flickerAmplitude > 0.0) {
+        const float lumaScale = 1.0 + max(0.0, clippingBox.boxCenter.x);
+        const float3 minBoxSize = float3(flickerAmplitude * lumaScale * lumaScale);
+        const float3 widenedMin = min(boxMin, boxMax - minBoxSize);
+        const float3 widenedMax = max(boxMax, boxMin + minBoxSize);
+        boxMin = widenedMin;
+        boxMax = widenedMax;
+    }
+
     if (any(boxMin > historyColor) || any(historyColor > boxMax)) {
         const float3 clampedHistoryColor = clamp(historyColor, boxMin, boxMax);
 
-        float3 historyContribution = float3(max(lumaInstabilityFactor, lockContributionThisFrame));
+        float3 historyContribution = float3(lockContributionThisFrame);
 
         const float reactiveFactor = params.dilatedReactiveFactor;
         const float reactiveContribution = 1.0 - pow(reactiveFactor, 1.0 / 2.0);
@@ -382,52 +396,62 @@ float3 ComputeBaseAccumulationWeight(AccumulationParams params, float thisFrameR
     return float3(baseAccumulation);
 }
 
-float ComputeLumaInstabilityFactor(AccumulationParams params, Fsr2RectificationBox clippingBox, float thisFrameReactiveFactor, float luminanceDiff)
+float ComputeLumaModification(AccumulationParams params)
+{
+    if (pc.preOverlayColorIndex == FSR2_INVALID_INDEX) {
+        return 0.0;
+    }
+    const int2 renderSize = int2(pc.c.renderSize);
+    const int2 pos = Fsr2ClampCoord(int2(params.lrUvHwSampler * pc.c.renderSize), renderSize);
+    float finalLuma = Fsr2RGBToLuma(Fsr2YCoCgToRGB(LoadPreparedInputColor(pos)));
+    float preLuma = Fsr2RGBToLuma(Fsr2PrepareRgb(max(float3(0.0), Fsr2LoadInputColor(pc.preOverlayColorIndex, pos))));
+    finalLuma = finalLuma / (1.0 + finalLuma);
+    preLuma = preLuma / (1.0 + preLuma);
+    return max(abs(finalLuma - preLuma) - 0.5 / 255.0, 0.0);
+}
+
+// Luma flicker amplitude accumulated over frames (tonemapped luma units); history is allowed to ghost within it.
+// Luma history: x = luma N-1, y = luma N-2, z = decayed amplitude sum, w = decayed flicker count / FLICKER_COUNT_MAX.
+float ComputeFlickerAmplitude(AccumulationParams params, Fsr2RectificationBox clippingBox, float thisFrameReactiveFactor, float luminanceDiff, float lumaModification)
 {
     const float UNORM_THRESHOLD = 1.0 / 255.0;
-    const int N_MINUS_1 = 0;
-    const int N_MINUS_2 = 1;
-    const int N_MINUS_3 = 2;
-    const int N_MINUS_4 = 3;
 
-    float currentFrameLuma = clippingBox.boxCenter.x;
-    currentFrameLuma = currentFrameLuma / (1.0 + max(0.0, currentFrameLuma));
-    currentFrameLuma = round(currentFrameLuma * 255.0) / 255.0;
+    float currentLuma = clippingBox.boxCenter.x;
+    currentLuma = currentLuma / (1.0 + max(0.0, currentLuma));
+    currentLuma = round(currentLuma * 255.0) / 255.0;
 
     const bool bSampleLumaHistory = (max(max(params.depthClipFactor, params.accumulationMask), luminanceDiff) < 0.1) && (params.bIsNewSample == false);
-    float4 currentFrameLumaHistory = bSampleLumaHistory ? SampleLumaHistory(params.reprojectedHrUv) : float4(0.0);
+    const float4 lumaHistory = bSampleLumaHistory ? SampleLumaHistory(params.reprojectedHrUv) : float4(0.0);
 
-    float lumaInstability = 0.0;
-    const float diffs0 = (currentFrameLuma - currentFrameLumaHistory[N_MINUS_1]);
+    const float maxVelocity = FLICKER_MAX_VELOCITY_1080P * pc.c.displaySize.x / 1920.0;
+    const float staticFactor = 1.0 - saturate(params.hrVelocity / maxVelocity - 0.5);
 
-    float minDiff = abs(diffs0);
+    const float lumaN1 = lumaHistory.x;
+    const float lumaN2 = lumaHistory.y;
+    float amplitudeSum = lumaHistory.z * FLICKER_DECAY * staticFactor;
+    float count = lumaHistory.w * FLICKER_COUNT_MAX * FLICKER_DECAY * staticFactor;
 
-    if (minDiff >= UNORM_THRESHOLD) {
-        for (int i = N_MINUS_2; i <= N_MINUS_4; i++) {
-            const float diffs1 = (currentFrameLuma - currentFrameLumaHistory[i]);
-            if (sign(diffs0) == sign(diffs1)) {
-                const float MIN_BIAS = 1.0;
-                minDiff = min(minDiff, abs(diffs1) * MIN_BIAS);
-            }
-        }
-
-        const float boxSize = clippingBox.boxVec.x;
-        const float boxSizeFactor = pow(saturate(boxSize / 0.1), 6.0);
-
-        lumaInstability = ((minDiff != abs(diffs0)) ? 1.0 : 0.0) * boxSizeFactor;
-        lumaInstability = (lumaInstability > UNORM_THRESHOLD) ? 1.0 : 0.0;
-
-        lumaInstability *= 1.0 - max(params.accumulationMask, pow(thisFrameReactiveFactor, 1.0 / 6.0));
+    const float g0 = currentLuma - lumaN1;
+    const float g1 = lumaN1 - lumaN2;
+    const bool bHistoryValid = lumaN2 != 0.0;
+    const bool bFlicker = bHistoryValid && (g0 * g1 < 0.0) && (abs(g0) > UNORM_THRESHOLD + lumaModification) && (abs(g1) > UNORM_THRESHOLD);
+    if (bFlicker) {
+        amplitudeSum += max(min(abs(g0), abs(g1)) - lumaModification, 0.0);
+        count += 1.0;
     }
+    count = min(count, FLICKER_COUNT_MAX);
 
-    currentFrameLumaHistory[N_MINUS_4] = currentFrameLumaHistory[N_MINUS_3];
-    currentFrameLumaHistory[N_MINUS_3] = currentFrameLumaHistory[N_MINUS_2];
-    currentFrameLumaHistory[N_MINUS_2] = currentFrameLumaHistory[N_MINUS_1];
-    currentFrameLumaHistory[N_MINUS_1] = currentFrameLuma;
+    rdgStorageFloat4[pc.lumaHistoryOutIndex][params.pxHrPos] = float4(currentLuma, lumaN1, amplitudeSum, count / FLICKER_COUNT_MAX);
 
-    rdgStorageFloat4[pc.lumaHistoryOutIndex][params.pxHrPos] = currentFrameLumaHistory;
+    const float fadeIn = saturate(count * (1.0 - pow(FLICKER_DECAY, FLICKER_PERIOD)) - 0.5);
+    const float reactiveCut = 1.0 - max(params.accumulationMask, pow(thisFrameReactiveFactor, 1.0 / 6.0));
+    float amplitude = (amplitudeSum / max(count, 1.0) + count * UNORM_THRESHOLD) * fadeIn;
+    amplitude = saturate(amplitude * staticFactor * reactiveCut - lumaModification);
 
-    return lumaInstability * ((currentFrameLumaHistory[N_MINUS_4] != 0.0) ? 1.0 : 0.0);
+    if (pc.flickerDebugIndex != FSR2_INVALID_INDEX) {
+        rdgStorageFloat[pc.flickerDebugIndex][params.pxHrPos] = amplitude;
+    }
+    return amplitude * pc.flickerTolerance;
 }
 
 float ComputeTemporalReactiveFactor(AccumulationParams params, float temporalReactiveFactor)
@@ -507,14 +531,15 @@ void ComputeFsr2Accumulate(uint3 dispatchThreadId : SV_DispatchThreadID)
     Fsr2RectificationBox clippingBox = Fsr2RectificationBoxReset();
     const float4 upsampledColorAndWeight = ComputeUpsampledColorAndWeight(params, clippingBox, thisFrameReactiveFactor);
 
-    const float lumaInstabilityFactor = ComputeLumaInstabilityFactor(params, clippingBox, thisFrameReactiveFactor, luminanceDiff);
+    const float lumaModification = ComputeLumaModification(params);
+    const float flickerAmplitude = ComputeFlickerAmplitude(params, clippingBox, thisFrameReactiveFactor, luminanceDiff, lumaModification);
 
     float3 accumulation = ComputeBaseAccumulationWeight(params, thisFrameReactiveFactor, bInMotionLastFrame, upsampledColorAndWeight.w);
 
     if (params.bIsNewSample) {
         historyColor = Fsr2YCoCgToRGB(upsampledColorAndWeight.xyz);
     } else {
-        RectifyHistory(params, clippingBox, historyColor, accumulation, lockContributionThisFrame, thisFrameReactiveFactor, lumaInstabilityFactor);
+        RectifyHistory(params, clippingBox, historyColor, accumulation, lockContributionThisFrame, thisFrameReactiveFactor, flickerAmplitude);
         AccumulateColor(historyColor, accumulation, upsampledColorAndWeight);
     }
 

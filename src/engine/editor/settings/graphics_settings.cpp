@@ -551,6 +551,8 @@ void DrawProjectConfigWindow(Engine::EngineContext* ctx, Engine::EngineState* st
             if (Widgets::SliderFloat("Reactive Threshold##fsr2", &fsr2.reactiveThreshold, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
             if (Widgets::SliderFloat("Reflection Reactive##fsr2", &fsr2.reflectionReactive, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
             if (Widgets::SliderFloat("Mip Bias##fsr2", &fsr2.mipBias, -2.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (Widgets::SliderFloat("Flicker Tolerance##fsr2", &fsr2.flickerTolerance, 0.0f, 1.0f, {.format = "%.2f"})) { changed = true; }
+            if (ImGui::Checkbox("Flicker Debug Target (r.view fsr2_flicker)##fsr2", &fsr2.bFlickerDebug)) { changed = true; }
             if (ImGui::Button("Reset FSR 2")) {
                 fsr2 = defaultFsr2;
                 changed = true;

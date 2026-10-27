@@ -190,6 +190,8 @@ struct Fsr2Configuration
     float reactiveThreshold{0.2f};
     float reflectionReactive{0.6f}; // mirror-roughness surfaces under camera motion; 0 = off
     float mipBias{-1.0f};
+    float flickerTolerance{1.0f}; // history may ghost within the measured luma flicker amplitude; 0 = off
+    bool bFlickerDebug{false}; // writes fsr2_flicker for r.view
 };
 
 struct AntiAliasingConfiguration

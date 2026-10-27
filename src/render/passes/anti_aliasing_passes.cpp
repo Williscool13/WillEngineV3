@@ -498,6 +498,11 @@ RDGTexture SetupFsr2(RenderGraph& graph,
         reactiveMask = graph.CreateTexture("fsr2_reactive_mask"_sid, TextureInfo{VK_FORMAT_R8_UNORM, renderW, renderH, 1}, CLEAR_COLOR_EMPTY, true);
     }
     const RDGTexture fsr2Output = graph.CreateTexture("fsr2_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, displayW, displayH, 1}, CLEAR_COLOR_EMPTY, true);
+    RDGTexture flickerDebug{};
+    if (config.bFlickerDebug) {
+        flickerDebug = graph.CreateTexture("fsr2_flicker"_sid, TextureInfo{VK_FORMAT_R8_UNORM, displayW, displayH, 1}, CLEAR_COLOR_EMPTY, true);
+    }
+    const bool bFlickerDebug = flickerDebug.IsValid();
 
     const bool bHasHistory = historyColorRing.Version(1).IsValid();
     const bool bHasPrevMotion = dilatedMotionRing.Version(1).IsValid();
@@ -652,6 +657,12 @@ RDGTexture SetupFsr2(RenderGraph& graph,
     if (bVirtualMotion) {
         accumulatePass.ReadSampledImage(virtualMotion);
     }
+    if (bHasPreOverlayColor) {
+        accumulatePass.ReadSampledImage(preOverlayColor);
+    }
+    if (bFlickerDebug) {
+        accumulatePass.WriteStorageImage(flickerDebug);
+    }
     if (bHasHistory) {
         accumulatePass.ReadSampledImage(prevHistoryColor);
         accumulatePass.ReadSampledImage(prevLockStatus);
@@ -665,7 +676,8 @@ RDGTexture SetupFsr2(RenderGraph& graph,
         accumulatePass.WriteStorageImage(fsr2Output);
     }
     accumulatePass.Execute([pipelineManager, constants, bSharpen, bVirtualMotion, prevHistoryColor, prevLockStatus, prevLumaHistory, dilatedReactive, dilatedMotion, preparedColor, lumaMip4, newLocks,
-            historyColor, lockStatus, lumaHistory, fsr2Output, virtualMotion, displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            historyColor, lockStatus, lumaHistory, fsr2Output, virtualMotion, bHasPreOverlayColor, preOverlayColor, bFlickerDebug, flickerDebug, flickerTolerance = config.flickerTolerance,
+            displayGroupsX, displayGroupsY](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             Fsr2AccumulatePushConstant pushData{
                 .c = constants,
                 .dilatedReactiveIndex = graph.GetSampledImageViewDescriptorIndex(dilatedReactive),
@@ -681,6 +693,9 @@ RDGTexture SetupFsr2(RenderGraph& graph,
                 .lumaHistoryOutIndex = graph.GetStorageImageViewDescriptorIndex(lumaHistory),
                 .outputIndex = bSharpen ? INVALID_INDEX : graph.GetStorageImageViewDescriptorIndex(fsr2Output),
                 .virtualMotionIndex = bVirtualMotion ? graph.GetSampledImageViewDescriptorIndex(virtualMotion) : INVALID_INDEX,
+                .preOverlayColorIndex = bHasPreOverlayColor ? graph.GetSampledImageViewDescriptorIndex(preOverlayColor) : INVALID_INDEX,
+                .flickerDebugIndex = bFlickerDebug ? graph.GetStorageImageViewDescriptorIndex(flickerDebug) : INVALID_INDEX,
+                .flickerTolerance = flickerTolerance,
             };
             DispatchFsr2Pass(pipelineManager, cmd, "fsr2_accumulate"_sid, &pushData, sizeof(pushData), displayGroupsX, displayGroupsY);
         });
