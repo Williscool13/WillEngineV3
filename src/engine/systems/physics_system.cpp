@@ -132,6 +132,13 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
     const uint32_t stepCount = static_cast<uint32_t>(state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP);
 
     UpdateConveyors(ctx, state);
+#ifdef TRACY_ENABLE
+    const Physics::BodyCounts bodies = physics->GetBodyCounts();
+    TracyPlot("Physics/Dynamic bodies", static_cast<int64_t>(bodies.dynamic));
+    TracyPlot("Physics/Dynamic awake", static_cast<int64_t>(bodies.dynamicAwake));
+    TracyPlot("Physics/Dynamic asleep", static_cast<int64_t>(bodies.dynamic - bodies.dynamicAwake));
+    TracyPlot("Physics/Kinematic awake", static_cast<int64_t>(bodies.kinematicAwake));
+#endif
     if (stepCount == 0) {
         state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
         return;

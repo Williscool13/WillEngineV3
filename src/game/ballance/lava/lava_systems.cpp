@@ -26,13 +26,10 @@
 
 namespace Ballance
 {
-/** Fraction of the dissolve after which the body shrinks away; it is under the surface by then. */
-static constexpr float SHRINK_START = 0.8f;
-
 struct LavaDestroyedFlag
 {};
 
-void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees)
+void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees, float shrinkStart)
 {
     entt::registry& registry = state->registry;
     if (registry.all_of<Component::DissolvingRuntime>(entity)) { return; }
@@ -64,6 +61,7 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
         .shrinkPivot = shrinkPivot,
         .tiltRadians = glm::radians(tiltDegrees) * state->rng.Range(0.3f, 1.0f),
         .duration = duration,
+        .shrinkStart = std::clamp(shrinkStart, 0.0f, 0.99f),
     });
     if (registry.all_of<Component::PhysicsBodyDesc>(entity)) { Component::PhysicsBodyDesc::Suspend(registry, entity); }
 }
@@ -111,7 +109,7 @@ void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state)
         dissolving.elapsed += dt;
         const float u = std::min(dissolving.elapsed / dissolving.duration, 1.0f);
         const float sinkT = u * u * (3.0f - 2.0f * u);
-        const float shrink = std::clamp((u - SHRINK_START) / (1.0f - SHRINK_START), 0.0f, 1.0f);
+        const float shrink = std::clamp((u - dissolving.shrinkStart) / (1.0f - dissolving.shrinkStart), 0.0f, 1.0f);
         transform.rotation = dissolving.startRotation * glm::angleAxis(dissolving.tiltRadians * sinkT, dissolving.tiltAxis);
         transform.scale = dissolving.startScale * (1.0f - shrink);
         transform.translation = dissolving.startTranslation + dissolving.sink * sinkT + transform.rotation * (dissolving.startScale * dissolving.shrinkPivot * shrink);

@@ -53,6 +53,7 @@ struct DissolvingRuntime
     float tiltRadians{0.0f};
     float duration{1.5f};
     float elapsed{0.0f};
+    float shrinkStart{0.8f};
 
     WILL_REFLECT(DissolvingRuntime,
         WILL_FIELD(startTranslation),
@@ -63,7 +64,8 @@ struct DissolvingRuntime
         WILL_FIELD(shrinkPivot),
         WILL_FIELD(tiltRadians),
         WILL_FIELD(duration),
-        WILL_FIELD(elapsed))
+        WILL_FIELD(elapsed),
+        WILL_FIELD(shrinkStart))
 };
 
 /** Kept when its dissolve finishes: the entity gets a DissolvedFlag instead of being destroyed, and its owner restores it. */

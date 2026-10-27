@@ -23,6 +23,10 @@ set(GAME_SOURCES
         ballance/crusher/crusher_systems.cpp
         ballance/crusher/crusher_systems.h
 
+        ballance/culler/culler_component.h
+        ballance/culler/culler_systems.cpp
+        ballance/culler/culler_systems.h
+
         ballance/lava/lava_component.h
         ballance/lava/lava_systems.cpp
         ballance/lava/lava_systems.h

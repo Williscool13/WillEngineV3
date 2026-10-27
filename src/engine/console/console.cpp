@@ -236,6 +236,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
                      {"world_grid_cursor", &diagnostics.bWorldGridCursor},
                      {"emissive", &diagnostics.bEmissive},
                      {"stores", &diagnostics.bStores},
+                     {"physics", &diagnostics.bPhysics},
                  };
                  if (args.Size() <= 1) {
                      for (const DiagZone& zone : zones) {
@@ -376,6 +377,12 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         }
         const uint32_t awake = ctx->physicsWorld->GetAwakeBodyCount();
         Print(state, Core::InlineString<96>::Format("  physics_timescale %.2f, %u bodies awake", state->physics.timeScale, awake).c_str());
+    });
+
+    Register(state, Origin::Engine, "w.physics_bodies", "Prints physics body counts by motion type, awake and asleep", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+        const Physics::BodyCounts b = ctx->physicsWorld->GetBodyCounts();
+        Print(state, Core::InlineString<192>::Format("  %u bodies: %u static, kinematic %u (%u awake), dynamic %u (%u awake, %u asleep)", b.total, b.staticBodies, b.kinematic, b.kinematicAwake, b.dynamic,
+            b.dynamicAwake, b.dynamic - b.dynamicAwake).c_str());
     });
 
     Register(state, Origin::Engine, "w.pick", "Print the entity, primitive and material under the mouse cursor", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {

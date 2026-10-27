@@ -16,7 +16,7 @@ struct EngineState;
 namespace Ballance
 {
 /** Removes the entity's physics body and starts it sinking, shrinking and tilting; a no-op when it is already dissolving. */
-void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees);
+void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees, float shrinkStart = 0.8f);
 
 /** Starts dissolving every dynamic body that newly touched a LavaComponent this frame. */
 void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state);

@@ -23,6 +23,8 @@
 #include "game/ballance/checkpoint/player_spawn_component.h"
 #include "game/ballance/crusher/crusher_component.h"
 #include "game/ballance/crusher/crusher_systems.h"
+#include "game/ballance/culler/culler_component.h"
+#include "game/ballance/culler/culler_systems.h"
 #include "game/ballance/debug/debug_components.h"
 #include "game/ballance/debug/debug_system.h"
 #include "game/ballance/lava/lava_component.h"
@@ -48,6 +50,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterComponent<Component::CrusherComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::ThroatValveComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CrateFeederComponent>(componentRegistry, Engine::Origin::Game, false, false);
+    Engine::RegisterComponent<Component::CullerComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::LavaComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CaneLiftComponent>(componentRegistry, Engine::Origin::Game, false, false);
     Engine::RegisterComponent<Component::CaneCartComponent>(componentRegistry, Engine::Origin::Game, false, false);
@@ -58,6 +61,7 @@ void RegisterComponents(Engine::ComponentRegistry& componentRegistry)
     Engine::RegisterRuntimeState<Component::SelfDestructRuntime>(componentRegistry, Engine::Origin::Game);
     Engine::RegisterRuntimeState<Component::CaneLiftRuntime>(componentRegistry, Engine::Origin::Game);
     Engine::RegisterRuntimeState<Component::CaneCartRuntime>(componentRegistry, Engine::Origin::Game);
+    Engine::RegisterRuntimeState<Component::ShardSleepRuntime>(componentRegistry, Engine::Origin::Game);
     Engine::RegisterRuntimeState<Component::DissolvingRuntime>(componentRegistry, Engine::Origin::Game);
     Engine::RegisterRuntimeState<Component::DissolveKeepTag>(componentRegistry, Engine::Origin::Game);
     Engine::RegisterRuntimeState<Component::DissolvedFlag>(componentRegistry, Engine::Origin::Game);
@@ -90,6 +94,7 @@ void CollectSystems(Engine::SystemGraph& graph)
     graph.Add("Ballance/UpdateCrateFeeders", &UpdateCrateFeeders, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/UpdateCrushers", &UpdateCrushers, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/LavaContacts", &LavaContacts, Engine::SystemWhen::WorldRunning);
+    graph.Add("Ballance/UpdateCuller", &UpdateCuller, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/UpdateDissolving", &UpdateDissolving, Engine::SystemWhen::WorldRunning);
     graph.Add("Ballance/UpdateCaneLifts", &UpdateCaneLifts, Engine::SystemWhen::WorldRunning);
 

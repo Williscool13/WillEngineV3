@@ -162,6 +162,7 @@ struct DiagnosticsState
     bool bWorldGridCursor{false};
     bool bEmissive{false};
     bool bStores{false};
+    bool bPhysics{false};
 };
 
 struct PickPixelState

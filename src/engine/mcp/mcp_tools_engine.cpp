@@ -23,6 +23,7 @@
 #include "engine/logging/engine_logger.h"
 #include "engine/logging/log_category.h"
 #include "engine/systems/scene_system.h"
+#include "physics/physics_world.h"
 #include "platform/paths.h"
 #include "render/renderer_statistics.h"
 #include "render/render-graph/render_graph_resources.h"
@@ -748,6 +749,16 @@ static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& 
     call.SetString("runMode", RunModeName(state->runMode));
     call.SetFloat("runSeconds", IsRunning(state) ? state->timeFrame->totalTime - state->runStartTime : 0.0);
     call.SetBool("physicsEnabled", state->physics.bEnabled);
+    const Physics::BodyCounts bodies = ctx->physicsWorld->GetBodyCounts();
+    call.BeginObject("physicsBodies");
+    call.SetInt("total", bodies.total);
+    call.SetInt("static", bodies.staticBodies);
+    call.SetInt("kinematic", bodies.kinematic);
+    call.SetInt("kinematicAwake", bodies.kinematicAwake);
+    call.SetInt("dynamic", bodies.dynamic);
+    call.SetInt("dynamicAwake", bodies.dynamicAwake);
+    call.SetInt("dynamicAsleep", bodies.dynamic - bodies.dynamicAwake);
+    call.End();
     call.SetBool("playtestActive", state->playtest.bActive || !state->playtest.pendingPath.IsEmpty());
     call.SetString("playtestOutputDir", state->playtest.outputDir.c_str());
     return ToolResult::Complete;
@@ -787,7 +798,7 @@ void RegisterEngineTools(EngineState* state)
     RegisterTool(state, {
         .id = "get_engine_status"_sid,
         .name = "get_engine_status",
-        .description = "Readiness of the running scene: settled (no loads in flight for 30 frames), loading entity count, pending asset work, current scene, input context. Poll this after any mutation before trusting a screenshot or query.",
+        .description = "Readiness of the running scene: settled (no loads in flight for 30 frames), loading entity count, pending asset work, current scene, input context, physics body counts (awake and asleep by motion type). Poll this after any mutation before trusting a screenshot or query.",
         .inputSchemaJson = nullptr,
         .invoke = &GetEngineStatus,
         .origin = Origin::Engine,

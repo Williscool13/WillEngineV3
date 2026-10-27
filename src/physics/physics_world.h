@@ -29,6 +29,16 @@ class JoltWorld;
 
 enum class MotionType : uint8_t { Static, Kinematic, Dynamic };
 
+struct BodyCounts
+{
+    uint32_t total{0};
+    uint32_t staticBodies{0};
+    uint32_t kinematic{0};
+    uint32_t kinematicAwake{0};
+    uint32_t dynamic{0};
+    uint32_t dynamicAwake{0};
+};
+
 struct CastHit
 {
     /** Along the cast, 0 at its origin and 1 at its end. */
@@ -86,6 +96,7 @@ public:
     BodyState GetBodyState(BodyHandle body) const;
     bool IsAwake(BodyHandle body) const;
     uint32_t GetAwakeBodyCount() const;
+    BodyCounts GetBodyCounts() const;
     void AddImpulse(BodyHandle body, const Vec3& impulse);
     void AddTorque(BodyHandle body, const Vec3& torque);
     /** Turns a kinematic or dynamic body dynamic in place, awake and moving at linearVelocity. */

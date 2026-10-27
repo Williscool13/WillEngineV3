@@ -304,6 +304,19 @@ uint32_t PhysicsWorld::GetAwakeBodyCount() const
     return jolt->GetPhysicsSystem().GetNumActiveBodies(JPH::EBodyType::RigidBody);
 }
 
+BodyCounts PhysicsWorld::GetBodyCounts() const
+{
+    const JPH::BodyManager::BodyStats stats = jolt->GetPhysicsSystem().GetBodyStats();
+    return {
+        .total = stats.mNumBodies,
+        .staticBodies = stats.mNumBodiesStatic,
+        .kinematic = stats.mNumBodiesKinematic,
+        .kinematicAwake = stats.mNumActiveBodiesKinematic,
+        .dynamic = stats.mNumBodiesDynamic,
+        .dynamicAwake = stats.mNumActiveBodiesDynamic,
+    };
+}
+
 void PhysicsWorld::AddImpulse(BodyHandle body, const Vec3& impulse)
 {
     jolt->GetBodyInterface().AddImpulse(ToJolt(body), ToJolt(impulse));

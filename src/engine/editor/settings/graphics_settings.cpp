@@ -26,6 +26,7 @@
 #include "core/string_id.h"
 #include "core/containers/arena_array.h"
 #include "engine/include/engine_context.h"
+#include "physics/physics_world.h"
 #include "engine/engine_api.h"
 #include "engine/profiles/profile_library.h"
 #include "render/passes/ddgi_passes.h"
@@ -1350,6 +1351,14 @@ void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* stat
 #else
             ImGui::TextDisabled("debug builds only");
 #endif
+            EndDiagnosticZone();
+        }
+
+        if (BeginDiagnosticZone("Physics Bodies", &diagnostics.bPhysics, true, nullptr, 3.0f)) {
+            const Physics::BodyCounts b = ctx->physicsWorld->GetBodyCounts();
+            ImGui::Text("Total: %u (%u static)", b.total, b.staticBodies);
+            ImGui::Text("Dynamic: %u (%u awake, %u asleep)", b.dynamic, b.dynamicAwake, b.dynamic - b.dynamicAwake);
+            ImGui::Text("Kinematic: %u (%u awake)", b.kinematic, b.kinematicAwake);
             EndDiagnosticZone();
         }
     }

@@ -981,7 +981,7 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
     state->registry.get<Component::TransformComponent>(entity).translation = spawnPosition;
     state->registry.emplace_or_replace<Component::PrefabInstanceComponent>(entity, prefabId);
 
-    LOG_INFO(Engine, "Spawned prefab '{}' as entity {}", meta->prefabName.c_str(), entt::to_integral(entity));
+    LOG_TRACE(Engine, "Spawned prefab '{}' as entity {}", meta->prefabName.c_str(), entt::to_integral(entity));
     return entity;
 }
 

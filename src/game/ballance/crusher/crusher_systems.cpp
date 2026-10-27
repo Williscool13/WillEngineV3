@@ -28,6 +28,7 @@
 #include "game/ballance/breakable/breakable_component.h"
 #include "game/ballance/breakable/breakable_systems.h"
 #include "game/ballance/crusher/crusher_component.h"
+#include "game/ballance/culler/culler_component.h"
 #include "game/logging/game_log.h"
 #include "physics/physics_world.h"
 
@@ -317,8 +318,8 @@ void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state)
 static void PrintFlow(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>)
 {
     const entt::registry& registry = state->registry;
-    const auto line = Core::InlineString<256>::Format("  live shards %d (%d awake), intact breakables %zu, awake bodies %u, throat %s", CountLiveShards(registry), CountAwakeShards(ctx, registry),
-        registry.view<Component::BreakableComponent>().size(), ctx->physicsWorld->GetAwakeBodyCount(), AnyThroatClosed(registry) ? "closed" : "open");
+    const auto line = Core::InlineString<256>::Format("  live shards %d (%d awake, %zu stamped asleep), intact breakables %zu, awake bodies %u, throat %s", CountLiveShards(registry), CountAwakeShards(ctx, registry),
+        registry.view<Component::ShardSleepRuntime>().size(), registry.view<Component::BreakableComponent>().size(), ctx->physicsWorld->GetAwakeBodyCount(), AnyThroatClosed(registry) ? "closed" : "open");
     Engine::Console::Print(state, line.c_str());
 }
 
