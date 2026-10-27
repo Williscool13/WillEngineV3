@@ -123,86 +123,54 @@ public:
     V& operator[](const K& key)
     {
         assert(slots_ != nullptr && "FixedMap: not initialized");
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) { return s.Val(); }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V();
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return s.Val();
-            }
-        }
-        assert(false && "FixedMap: table full");
-        return slots_[0].Val();
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return s.Val(); }
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V();
+        Occupy(s);
+        return s.Val();
     }
 
     void Insert(const K& key, const V& value)
     {
         assert(slots_ != nullptr && "FixedMap: not initialized");
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                s.Val() = value;
-                return;
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(value);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return;
-            }
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) {
+            s.Val() = value;
+            return;
         }
-        assert(false && "FixedMap: table full");
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(value);
+        Occupy(s);
     }
 
     void Insert(const K& key, V&& value)
     {
         assert(slots_ != nullptr && "FixedMap: not initialized");
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                s.Val() = std::move(value);
-                return;
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(std::move(value));
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return;
-            }
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) {
+            s.Val() = std::move(value);
+            return;
         }
-        assert(false && "FixedMap: table full");
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(std::move(value));
+        Occupy(s);
     }
 
     template<typename... Args>
     V& Emplace(const K& key, Args&&... args)
     {
         assert(slots_ != nullptr && "FixedMap: not initialized");
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) { return s.Val(); }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(std::forward<Args>(args)...);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return s.Val();
-            }
-        }
-        assert(false && "FixedMap: table full");
-        return slots_[0].Val();
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return s.Val(); }
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(std::forward<Args>(args)...);
+        Occupy(s);
+        return s.Val();
     }
 
     struct EmplaceResult { V& value; bool inserted; };
@@ -211,23 +179,13 @@ public:
     EmplaceResult TryEmplace(const K& key, Args&&... args)
     {
         assert(slots_ != nullptr && "FixedMap: not initialized");
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                return {s.Val(), false};
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(std::forward<Args>(args)...);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return {s.Val(), true};
-            }
-        }
-        assert(false && "FixedMap: table full");
-        return {slots_[0].Val(), false};
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return {s.Val(), false}; }
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(std::forward<Args>(args)...);
+        Occupy(s);
+        return {s.Val(), true};
     }
 
     V* Find(const K& key)
@@ -278,6 +236,7 @@ public:
                 s.Val().~V();
                 s.state = Slot::State::Dead;
                 --size_;
+                ClearTrailingTombstones(idx);
                 return true;
             }
         }
@@ -397,6 +356,45 @@ public:
     ConstIterator cend() const { return end(); }
 
 private:
+    Slot& Locate(const K& key, bool& bFound)
+    {
+        const uint64_t h = H{}(key);
+        Slot* firstDead = nullptr;
+        for (size_t probe = 0; probe < capacity_; ++probe) {
+            Slot& s = slots_[(h + probe) & (capacity_ - 1)];
+            if (s.state == Slot::State::Occupied) {
+                if (s.Key() == key) {
+                    bFound = true;
+                    return s;
+                }
+                continue;
+            }
+            if (s.state == Slot::State::Dead) {
+                if (firstDead == nullptr) { firstDead = &s; }
+                continue;
+            }
+            bFound = false;
+            return firstDead != nullptr ? *firstDead : s;
+        }
+        assert(firstDead != nullptr && "FixedMap: table full");
+        bFound = false;
+        return firstDead != nullptr ? *firstDead : slots_[0];
+    }
+
+    void Occupy(Slot& s)
+    {
+        s.state = Slot::State::Occupied;
+        ++size_;
+    }
+
+    void ClearTrailingTombstones(size_t idx)
+    {
+        while (slots_[idx].state == Slot::State::Dead && slots_[(idx + 1) & (capacity_ - 1)].state == Slot::State::Empty) {
+            slots_[idx].state = Slot::State::Empty;
+            idx = (idx - 1) & (capacity_ - 1);
+        }
+    }
+
     static size_t NextPow2(size_t n)
     {
         if (n == 0) { return 1; }

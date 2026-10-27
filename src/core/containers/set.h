@@ -84,10 +84,11 @@ public:
 
     Set(Set&& other) noexcept
         : alloc_(other.alloc_), tag_(other.tag_),
-          slots_(other.slots_), size_(other.size_), capacity_(other.capacity_)
+          slots_(other.slots_), size_(other.size_), dead_(other.dead_), capacity_(other.capacity_)
     {
         other.slots_ = nullptr;
         other.size_ = 0;
+        other.dead_ = 0;
         other.capacity_ = 0;
     }
 
@@ -99,9 +100,11 @@ public:
         tag_ = other.tag_;
         slots_ = other.slots_;
         size_ = other.size_;
+        dead_ = other.dead_;
         capacity_ = other.capacity_;
         other.slots_ = nullptr;
         other.size_ = 0;
+        other.dead_ = 0;
         other.capacity_ = 0;
         return *this;
     }
@@ -110,20 +113,12 @@ public:
     bool Insert(const K& key)
     {
         EnsureCapacity();
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) { return false; }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return true;
-            }
-        }
-        assert(false && "Set: table full");
-        return false;
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return false; }
+        new(s.keyBuf) K(key);
+        Occupy(s);
+        return true;
     }
 
     bool Contains(const K& key) const
@@ -151,6 +146,7 @@ public:
                 s.Key().~K();
                 s.state = Slot::State::Dead;
                 --size_;
+                ++dead_;
                 return true;
             }
         }
@@ -166,6 +162,7 @@ public:
             slots_[i].state = Slot::State::Empty;
         }
         size_ = 0;
+        dead_ = 0;
     }
 
     void Reset()
@@ -179,6 +176,7 @@ public:
             alloc_->Free(slots_);
             slots_ = nullptr;
             size_ = 0;
+            dead_ = 0;
             capacity_ = 0;
         }
     }
@@ -258,8 +256,9 @@ public:
 private:
     void EnsureCapacity()
     {
-        if (capacity_ == 0 || (size_ + 1) * 4 > capacity_ * 3) {
-            Rehash(capacity_ < 8 ? 8 : capacity_ * 2);
+        if (capacity_ == 0 || (size_ + dead_ + 1) * 4 > capacity_ * 3) {
+            const bool bGrow = (size_ + 1) * 2 > capacity_;
+            Rehash(capacity_ < 8 ? 8 : (bGrow ? capacity_ * 2 : capacity_));
         }
     }
 
@@ -273,6 +272,7 @@ private:
         assert(slots_ != nullptr && "Set: allocation failed");
         capacity_ = newCapacity;
         size_ = 0;
+        dead_ = 0;
 
         for (size_t i = 0; i < newCapacity; ++i) {
             slots_[i].state = Slot::State::Empty;
@@ -292,20 +292,44 @@ private:
 
     bool Insert(K&& key)
     {
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return false; }
+        new(s.keyBuf) K(std::move(key));
+        Occupy(s);
+        return true;
+    }
+
+    Slot& Locate(const K& key, bool& bFound)
+    {
         const uint64_t h = H{}(key);
+        Slot* firstDead = nullptr;
         for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) { return false; }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(std::move(key));
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return true;
+            Slot& s = slots_[(h + probe) & (capacity_ - 1)];
+            if (s.state == Slot::State::Occupied) {
+                if (s.Key() == key) {
+                    bFound = true;
+                    return s;
+                }
+                continue;
             }
+            if (s.state == Slot::State::Dead) {
+                if (firstDead == nullptr) { firstDead = &s; }
+                continue;
+            }
+            bFound = false;
+            return firstDead != nullptr ? *firstDead : s;
         }
-        assert(false && "Set: table full");
-        return false;
+        assert(firstDead != nullptr && "Set: table full");
+        bFound = false;
+        return firstDead != nullptr ? *firstDead : slots_[0];
+    }
+
+    void Occupy(Slot& s)
+    {
+        if (s.state == Slot::State::Dead) { --dead_; }
+        s.state = Slot::State::Occupied;
+        ++size_;
     }
 
     static size_t NextPow2(size_t n)
@@ -325,6 +349,7 @@ private:
     AllocTag tag_{AllocTag::Unknown};
     Slot* slots_{};
     size_t size_{};
+    size_t dead_{};
     size_t capacity_{};
 };
 } // namespace Core

@@ -118,20 +118,12 @@ public:
     bool Insert(const K& key)
     {
         assert(slots_ != nullptr && "ArenaFixedSet: not initialized");
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) { return false; }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return true;
-            }
-        }
-        assert(false && "ArenaFixedSet: table full");
-        return false;
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return false; }
+        new(s.keyBuf) K(key);
+        Occupy(s);
+        return true;
     }
 
     bool Contains(const K& key) const
@@ -159,6 +151,7 @@ public:
                 s.Key().~K();
                 s.state = Slot::State::Dead;
                 --size_;
+                ClearTrailingTombstones(idx);
                 return true;
             }
         }
@@ -249,6 +242,45 @@ public:
     ConstIterator cend() const { return end(); }
 
 private:
+    Slot& Locate(const K& key, bool& bFound)
+    {
+        const uint64_t h = H{}(key);
+        Slot* firstDead = nullptr;
+        for (size_t probe = 0; probe < capacity_; ++probe) {
+            Slot& s = slots_[(h + probe) & (capacity_ - 1)];
+            if (s.state == Slot::State::Occupied) {
+                if (s.Key() == key) {
+                    bFound = true;
+                    return s;
+                }
+                continue;
+            }
+            if (s.state == Slot::State::Dead) {
+                if (firstDead == nullptr) { firstDead = &s; }
+                continue;
+            }
+            bFound = false;
+            return firstDead != nullptr ? *firstDead : s;
+        }
+        assert(firstDead != nullptr && "ArenaFixedSet: table full");
+        bFound = false;
+        return firstDead != nullptr ? *firstDead : slots_[0];
+    }
+
+    void Occupy(Slot& s)
+    {
+        s.state = Slot::State::Occupied;
+        ++size_;
+    }
+
+    void ClearTrailingTombstones(size_t idx)
+    {
+        while (slots_[idx].state == Slot::State::Dead && slots_[(idx + 1) & (capacity_ - 1)].state == Slot::State::Empty) {
+            slots_[idx].state = Slot::State::Empty;
+            idx = (idx - 1) & (capacity_ - 1);
+        }
+    }
+
     static size_t NextPow2(size_t n)
     {
         if (n == 0) { return 1; }

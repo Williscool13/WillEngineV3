@@ -386,7 +386,7 @@ private:
         }
         assert(firstDead != nullptr && "Map: table full");
         bFound = false;
-        return *firstDead;
+        return firstDead != nullptr ? *firstDead : slots_[0];
     }
 
     void Occupy(Slot& s)

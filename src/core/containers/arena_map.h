@@ -88,10 +88,11 @@ public:
 
     ArenaMap(ArenaMap&& other) noexcept
         : arena_(other.arena_),
-          slots_(other.slots_), size_(other.size_), capacity_(other.capacity_)
+          slots_(other.slots_), size_(other.size_), dead_(other.dead_), capacity_(other.capacity_)
     {
         other.slots_ = nullptr;
         other.size_ = 0;
+        other.dead_ = 0;
         other.capacity_ = 0;
     }
 
@@ -102,9 +103,11 @@ public:
         arena_ = other.arena_;
         slots_ = other.slots_;
         size_ = other.size_;
+        dead_ = other.dead_;
         capacity_ = other.capacity_;
         other.slots_ = nullptr;
         other.size_ = 0;
+        other.dead_ = 0;
         other.capacity_ = 0;
         return *this;
     }
@@ -112,90 +115,54 @@ public:
     V& operator[](const K& key)
     {
         EnsureCapacity();
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                return s.Val();
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V();
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return s.Val();
-            }
-        }
-        assert(false && "ArenaMap: table full");
-        return slots_[0].Val();
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return s.Val(); }
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V();
+        Occupy(s);
+        return s.Val();
     }
 
     void Insert(const K& key, const V& value)
     {
         EnsureCapacity();
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                s.Val() = value;
-                return;
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(value);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return;
-            }
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) {
+            s.Val() = value;
+            return;
         }
-        assert(false && "ArenaMap: table full");
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(value);
+        Occupy(s);
     }
 
     void Insert(const K& key, V&& value)
     {
         EnsureCapacity();
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                s.Val() = std::move(value);
-                return;
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(std::move(value));
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return;
-            }
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) {
+            s.Val() = std::move(value);
+            return;
         }
-        assert(false && "ArenaMap: table full");
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(std::move(value));
+        Occupy(s);
     }
 
     template<typename... Args>
     V& Emplace(const K& key, Args&&... args)
     {
         EnsureCapacity();
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                return s.Val();
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(std::forward<Args>(args)...);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return s.Val();
-            }
-        }
-        assert(false && "ArenaMap: table full");
-        return slots_[0].Val();
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return s.Val(); }
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(std::forward<Args>(args)...);
+        Occupy(s);
+        return s.Val();
     }
 
     struct EmplaceResult { V& value; bool inserted; };
@@ -204,23 +171,13 @@ public:
     EmplaceResult TryEmplace(const K& key, Args&&... args)
     {
         EnsureCapacity();
-        const uint64_t h = H{}(key);
-        for (size_t probe = 0; probe < capacity_; ++probe) {
-            const size_t idx = (h + probe) & (capacity_ - 1);
-            Slot& s = slots_[idx];
-            if (s.state == Slot::State::Occupied && s.Key() == key) {
-                return {s.Val(), false};
-            }
-            if (s.state == Slot::State::Empty || s.state == Slot::State::Dead) {
-                new(s.keyBuf) K(key);
-                new(s.valBuf) V(std::forward<Args>(args)...);
-                s.state = Slot::State::Occupied;
-                ++size_;
-                return {s.Val(), true};
-            }
-        }
-        assert(false && "ArenaMap: table full");
-        return {slots_[0].Val(), false};
+        bool bFound = false;
+        Slot& s = Locate(key, bFound);
+        if (bFound) { return {s.Val(), false}; }
+        new(s.keyBuf) K(key);
+        new(s.valBuf) V(std::forward<Args>(args)...);
+        Occupy(s);
+        return {s.Val(), true};
     }
 
     V* Find(const K& key)
@@ -271,6 +228,7 @@ public:
                 s.Val().~V();
                 s.state = Slot::State::Dead;
                 --size_;
+                ++dead_;
                 return true;
             }
         }
@@ -287,6 +245,7 @@ public:
             slots_[i].state = Slot::State::Empty;
         }
         size_ = 0;
+        dead_ = 0;
     }
 
     // Calls destructors and forgets the allocation. Arena memory is reclaimed on arena reset.
@@ -367,9 +326,42 @@ public:
 private:
     void EnsureCapacity()
     {
-        if (capacity_ == 0 || (size_ + 1) * 4 > capacity_ * 3) {
-            Rehash(capacity_ < 8 ? 8 : capacity_ * 2);
+        if (capacity_ == 0 || (size_ + dead_ + 1) * 4 > capacity_ * 3) {
+            const bool bGrow = (size_ + 1) * 2 > capacity_;
+            Rehash(capacity_ < 8 ? 8 : (bGrow ? capacity_ * 2 : capacity_));
         }
+    }
+
+    Slot& Locate(const K& key, bool& bFound)
+    {
+        const uint64_t h = H{}(key);
+        Slot* firstDead = nullptr;
+        for (size_t probe = 0; probe < capacity_; ++probe) {
+            Slot& s = slots_[(h + probe) & (capacity_ - 1)];
+            if (s.state == Slot::State::Occupied) {
+                if (s.Key() == key) {
+                    bFound = true;
+                    return s;
+                }
+                continue;
+            }
+            if (s.state == Slot::State::Dead) {
+                if (firstDead == nullptr) { firstDead = &s; }
+                continue;
+            }
+            bFound = false;
+            return firstDead != nullptr ? *firstDead : s;
+        }
+        assert(firstDead != nullptr && "ArenaMap: table full");
+        bFound = false;
+        return firstDead != nullptr ? *firstDead : slots_[0];
+    }
+
+    void Occupy(Slot& s)
+    {
+        if (s.state == Slot::State::Dead) { --dead_; }
+        s.state = Slot::State::Occupied;
+        ++size_;
     }
 
     void Rehash(size_t newCapacity)
@@ -382,6 +374,7 @@ private:
         assert(slots_ != nullptr && "ArenaMap: allocation failed");
         capacity_ = newCapacity;
         size_ = 0;
+        dead_ = 0;
 
         for (size_t i = 0; i < newCapacity; ++i) {
             slots_[i].state = Slot::State::Empty;
@@ -413,6 +406,7 @@ private:
     Arena* arena_{};
     Slot* slots_{};
     size_t size_{};
+    size_t dead_{};
     size_t capacity_{};
 };
 } // namespace Core
