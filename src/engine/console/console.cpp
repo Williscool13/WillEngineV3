@@ -444,7 +444,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         Print(state, state->debug.resourceName.IsEmpty() ? "  view off" : Core::InlineString<256>::Format("  view %s", state->debug.resourceName.c_str()).c_str());
     });
 
-    Register(state, Origin::Engine, "w.system_graph_dump", "Print the next frame's SystemGraph waves and access sets", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
+    Register(state, Origin::Engine, "w.system_graph_dump", "Print the next frame's SystemGraph waves and access sets, and write them to assets/visualizations/system_graph.dot", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         ctx->systemGraph->RequestDump();
         Print(state, "  dumping next frame");
     });

@@ -204,6 +204,13 @@ static void SystemGraphDumpSink(EngineState* state, const char* line)
     LOG_INFO(Engine, "{}", line);
 }
 
+static void SystemGraphDotSink(const char* dot, size_t size)
+{
+    const Core::Path outPath = Platform::GetAssetPath() / "visualizations" / "system_graph.dot";
+    Platform::WriteFile(outPath, dot, size);
+    LOG_INFO(Engine, "System graph written to {}", outPath.c_str());
+}
+
 static void DumpMemoryBreakdown(Core::MemoryManager& memoryManager)
 {
     struct PoolRef
@@ -551,6 +558,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         engineContext->scheduler = scheduler;
         engineContext->systemGraph = &systemGraph;
         systemGraph.SetDumpSink(&SystemGraphDumpSink);
+        systemGraph.SetDotSink(&SystemGraphDotSink);
         engineContext->memoryManager = &memoryManager;
         engineContext->gameplayArena = Core::VirtualArena(memoryManager.Virtual(), 8ull * 1024 * 1024, Core::AllocTag::ECS, "gameplay");
         engineContext->editorArena = Core::VirtualArena(memoryManager.Virtual(), 16ull * 1024 * 1024, Core::AllocTag::Editor, "editor");

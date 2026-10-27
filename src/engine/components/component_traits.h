@@ -11,21 +11,10 @@
 #include <entt/entt.hpp>
 
 #include "engine/component_registry.h"
+#include "engine/components/component_identity.h"
 
 namespace Engine
 {
-// Identity
-
-template<typename T>
-concept NamedComponent = requires {
-    { T::COMPONENT_NAME } -> std::convertible_to<const char*>;
-};
-
-template<typename T>
-concept DomainComponent = NamedComponent<T> && requires {
-    { T::COMPONENT_DOMAIN } -> std::convertible_to<const char*>;
-};
-
 // Shape
 
 template<typename T>

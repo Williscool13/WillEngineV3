@@ -125,7 +125,7 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     ZoneScoped;
-    auto* physics = ctx->physicsWorld;
+    Physics::PhysicsWorld* physics = ctx->physicsWorld;
     state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime * state->physics.timeScale;
     const uint32_t maxSteps = state->physics.timeScale > 1.0f ? Physics::MAX_TIMESCALE_STEPS_PER_FRAME : Physics::MAX_PHYSICS_STEPS_PER_FRAME;
     state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, static_cast<float>(maxSteps) * Physics::PHYSICS_TIMESTEP);

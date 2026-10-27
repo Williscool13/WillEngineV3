@@ -11,6 +11,9 @@
 
 #include <entt/entt.hpp>
 
+#include "engine/components/component_identity.h"
+#include "engine/core/access_check.h"
+
 namespace Engine
 {
 struct EngineState;
@@ -69,24 +72,59 @@ public:
     [[nodiscard]] EngineState* State() const { return state; }
     [[nodiscard]] EngineContext* Context() const { return context; }
 
-    void Reset() { raw = entt::registry{}; }
+    void Reset()
+    {
+        CheckStructural("Registry::Reset");
+        raw = entt::registry{};
+    }
 
-    [[nodiscard]] entt::entity Create() { return raw.create(); }
-    void Destroy(entt::entity entity) { raw.destroy(entity); }
+    [[nodiscard]] entt::entity Create()
+    {
+        CheckStructural("Registry::Create");
+        return raw.create();
+    }
+
+    void Destroy(entt::entity entity)
+    {
+        CheckStructural("Registry::Destroy");
+        raw.destroy(entity);
+    }
+
     [[nodiscard]] bool Valid(entt::entity entity) const { return raw.valid(entity); }
-    void ClearAll() { raw.clear(); }
+
+    void ClearAll()
+    {
+        CheckStructural("Registry::ClearAll");
+        raw.clear();
+    }
 
     template<typename T>
-    [[nodiscard]] const T& Get(entt::entity entity) const { return raw.get<T>(entity); }
+    [[nodiscard]] const T& Get(entt::entity entity) const
+    {
+        CheckRead<T>();
+        return raw.get<T>(entity);
+    }
 
     template<typename T>
-    [[nodiscard]] const T* TryGet(entt::entity entity) const { return raw.try_get<T>(entity); }
+    [[nodiscard]] const T* TryGet(entt::entity entity) const
+    {
+        CheckRead<T>();
+        return raw.try_get<T>(entity);
+    }
 
     template<typename T>
-    [[nodiscard]] T& GetMut(entt::entity entity) { return raw.get<T>(entity); }
+    [[nodiscard]] T& GetMut(entt::entity entity)
+    {
+        CheckWrite<T>();
+        return raw.get<T>(entity);
+    }
 
     template<typename T>
-    [[nodiscard]] T* TryGetMut(entt::entity entity) { return raw.try_get<T>(entity); }
+    [[nodiscard]] T* TryGetMut(entt::entity entity)
+    {
+        CheckWrite<T>();
+        return raw.try_get<T>(entity);
+    }
 
     template<typename... T>
     [[nodiscard]] bool Has(entt::entity entity) const { return raw.all_of<T...>(entity); }
@@ -97,6 +135,7 @@ public:
     template<typename... T, typename... Exclude>
     [[nodiscard]] auto View(entt::exclude_t<Exclude...> exclude = entt::exclude_t{})
     {
+        (CheckViewElement<T>(), ...);
         return raw.view<typename RegistryDetail::ViewElement<T>::Type...>(exclude);
     }
 
@@ -104,26 +143,51 @@ public:
     [[nodiscard]] auto View(entt::exclude_t<Exclude...> exclude = entt::exclude_t{}) const
     {
         static_assert((!RegistryDetail::IsMut<T>::value && ...), "Mut<T> needs a non-const Registry");
+        (CheckViewElement<T>(), ...);
         return raw.view<typename RegistryDetail::ViewElement<T>::Type...>(exclude);
     }
 
     template<typename T, typename... Args>
-    decltype(auto) Add(entt::entity entity, Args&&... args) { return raw.emplace<T>(entity, std::forward<Args>(args)...); }
+    decltype(auto) Add(entt::entity entity, Args&&... args)
+    {
+        CheckStructural("Registry::Add");
+        return raw.emplace<T>(entity, std::forward<Args>(args)...);
+    }
 
     template<typename T, typename... Args>
-    decltype(auto) Set(entt::entity entity, Args&&... args) { return raw.emplace_or_replace<T>(entity, std::forward<Args>(args)...); }
+    decltype(auto) Set(entt::entity entity, Args&&... args)
+    {
+        CheckStructural("Registry::Set");
+        return raw.emplace_or_replace<T>(entity, std::forward<Args>(args)...);
+    }
 
     template<typename T, typename... Args>
-    decltype(auto) GetOrAdd(entt::entity entity, Args&&... args) { return raw.get_or_emplace<T>(entity, std::forward<Args>(args)...); }
+    decltype(auto) GetOrAdd(entt::entity entity, Args&&... args)
+    {
+        CheckStructural("Registry::GetOrAdd");
+        return raw.get_or_emplace<T>(entity, std::forward<Args>(args)...);
+    }
 
     template<typename T, typename... Other>
-    size_t Remove(entt::entity entity) { return raw.remove<T, Other...>(entity); }
+    size_t Remove(entt::entity entity)
+    {
+        CheckStructural("Registry::Remove");
+        return raw.remove<T, Other...>(entity);
+    }
 
     template<typename T, typename... Other>
-    void Clear() { raw.clear<T, Other...>(); }
+    void Clear()
+    {
+        CheckStructural("Registry::Clear");
+        raw.clear<T, Other...>();
+    }
 
     template<typename T, typename... Args>
-    void Sort(Args&&... args) { raw.sort<T>(std::forward<Args>(args)...); }
+    void Sort(Args&&... args)
+    {
+        CheckStructural("Registry::Sort");
+        raw.sort<T>(std::forward<Args>(args)...);
+    }
 
     template<typename T, RegistryHook Fn>
     void ConnectConstruct() { raw.on_construct<T>().template connect<&HookThunk<Fn>>(*this); }
@@ -146,6 +210,38 @@ public:
 private:
     template<RegistryHook Fn>
     static void HookThunk(Registry& self, entt::registry&, entt::entity entity) { Fn(self, entity); }
+
+    template<typename T>
+    static void CheckRead()
+    {
+#if WILL_ACCESS_CHECK
+        if constexpr (NamedComponent<T>) { CheckReadAccess(AccessId<T>()); }
+        else if constexpr (!std::is_same_v<T, entt::entity>) { CheckUnnamedAccess(entt::type_name<T>::value()); }
+#endif
+    }
+
+    template<typename T>
+    static void CheckWrite()
+    {
+#if WILL_ACCESS_CHECK
+        if constexpr (NamedComponent<T>) { CheckWriteAccess(AccessId<T>()); }
+        else { CheckUnnamedAccess(entt::type_name<T>::value()); }
+#endif
+    }
+
+    template<typename T>
+    static void CheckViewElement()
+    {
+        if constexpr (RegistryDetail::IsMut<T>::value) { CheckWrite<typename RegistryDetail::ViewElement<T>::Type>(); }
+        else { CheckRead<T>(); }
+    }
+
+    static void CheckStructural([[maybe_unused]] const char* operation)
+    {
+#if WILL_ACCESS_CHECK
+        CheckStructuralAccess(operation);
+#endif
+    }
 
     entt::registry raw;
     EngineState* state{nullptr};

@@ -27,6 +27,8 @@ namespace Audio
 class AudioManager
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "AudioManager";
+
     AudioManager(AssetLoad::AsyncAssetLoadManager* asyncAssetLoadManager);
 
     ~AudioManager();

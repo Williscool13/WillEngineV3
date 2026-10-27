@@ -25,6 +25,9 @@ add_library(engine STATIC
         core/entity_ref.cpp
         core/entity_ref.h
         core/registry.h
+        core/access_check.cpp
+        core/access_check.h
+        core/checked.h
         core/environment_map_id.h
         core/material_id.h
         core/texture_id.h
@@ -140,6 +143,7 @@ add_library(engine STATIC
         components/fwd_components.h
         components/component_types.cpp
         components/component_types.h
+        components/component_identity.h
         components/component_editor.h
         components/component_registration.cpp
         components/component_registration.h

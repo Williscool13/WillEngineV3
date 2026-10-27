@@ -7,6 +7,7 @@
 #include <enkiTS/src/TaskScheduler.h>
 #include <tracy/Tracy.hpp>
 
+#include "engine/asset_manager.h"
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/material_manager.h"
@@ -233,22 +234,22 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("ResolveBakedShadows", &ResolveBakedShadows);
     graph.Add("GatherRenderables", &GatherRenderables, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::VolumetricFogComponent>(), "assetManager"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "engineConfig"_sid},
         .writes = {"instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "modelStore"_sid, "materialManager.uploadDirty"_sid, "viewFamily.renderables"_sid},
     });
     graph.Add("GatherLights", &GatherLights, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::WorldTransformRuntime>(), "instanceStore.visibility"_sid, "materialManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::WorldTransformRuntime>(), "instanceStore.visibility"_sid, TypeSID<MaterialManager>(), "engineConfig"_sid},
         .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid, "instanceStore.boundsChanges"_sid},
     });
     graph.Add("GatherTextRenderables", &GatherTextRenderables, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), "assetManager"_sid, "materialManager"_sid},
+        .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>()},
         .writes = {"viewFamily.text"_sid},
     });
     graph.Add("GatherReflectionProbes", &GatherReflectionProbes, {
         .bExclusive = false,
-        .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::WorldTransformRuntime>(), "assetManager"_sid, "engineConfig"_sid},
+        .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::WorldTransformRuntime>(), TypeSID<AssetManager>(), "engineConfig"_sid},
         .writes = {"viewFamily.probes"_sid},
     });
     graph.Add("GatherLocalDDGIVolumes", &GatherLocalDDGIVolumes, {

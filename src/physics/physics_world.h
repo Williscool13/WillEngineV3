@@ -67,6 +67,8 @@ struct BodyTouch
 class PhysicsWorld
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "PhysicsWorld";
+
     explicit PhysicsWorld(Core::MemoryManager& memoryManager, enki::TaskScheduler* scheduler);
     ~PhysicsWorld();
 

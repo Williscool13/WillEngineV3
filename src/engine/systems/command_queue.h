@@ -9,6 +9,7 @@
 
 #include "core/containers/vector.h"
 #include "engine/asset_manager_types.h"
+#include "engine/core/access_check.h"
 
 namespace Engine
 {
@@ -67,7 +68,13 @@ struct CommandQueue
         : commands(allocator, Core::AllocTag::EngineState)
     {}
 
-    void Push(const Command& command) { commands.PushBack(command); }
+    void Push(const Command& command)
+    {
+#if WILL_ACCESS_CHECK
+        CheckStructuralAccess("CommandQueue::Push");
+#endif
+        commands.PushBack(command);
+    }
 
     Core::Vector<Command> commands;
 };

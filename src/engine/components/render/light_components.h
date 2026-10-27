@@ -246,6 +246,7 @@ struct SkyboxComponent
 /** The refcounted cubemap of envMap, acquired lazily by ResolveSkyboxCubemaps. */
 struct SkyboxRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "SkyboxRuntime";
     Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
 
     static void OnDestroy(Engine::Registry& registry, entt::entity entity);

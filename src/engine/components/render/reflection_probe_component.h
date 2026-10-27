@@ -88,6 +88,7 @@ struct ReflectionProbeComponent
 /** Emplaced by the probe's OnConstruct. contentHandle is the resident cubemap for the current content, recorded on load kickoff. */
 struct ReflectionProbeRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "ReflectionProbeRuntime";
     Engine::CubemapHandle contentHandle{Engine::CubemapHandle::INVALID};
     ReflectionProbeComponent::ContentSource contentSource{ReflectionProbeComponent::ContentSource::None};
 

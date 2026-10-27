@@ -15,7 +15,8 @@
 #include "core/string_id.h"
 #include "core/containers/inline_string.h"
 #include "core/containers/inline_vector.h"
-#include "engine/components/component_types.h"
+#include "engine/components/component_identity.h"
+#include "engine/core/access_check.h"
 
 namespace Core
 {
@@ -82,13 +83,6 @@ template<typename... T>
 struct Writes
 {};
 
-template<NamedComponent T>
-StringID AccessId()
-{
-    static const StringID id{ComponentName<T>(), StringIdLength(ComponentName<T>())};
-    return id;
-}
-
 template<typename... T>
 void AppendAccess(AccessSet& set, Reads<T...>)
 {
@@ -128,14 +122,28 @@ public:
 
     void SetDumpSink(void (*sink)(EngineState*, const char*)) { dumpSink = sink; }
 
+    /** Receives the dumped frame as Graphviz DOT at the start of the next frame. */
+    void SetDotSink(void (*sink)(const char*, size_t)) { dotSink = sink; }
+
     void RequestDump() { bDumpPending = true; }
 
     void BeginFrame()
     {
+        if (bDumpActive && dotSink != nullptr) {
+            Dot().Append("}\n");
+            dotSink(Dot().c_str(), Dot().Size());
+        }
         nodes.Clear();
         cursor = 0;
         bDumpActive = bDumpPending && dumpSink != nullptr;
         bDumpPending = false;
+        if (bDumpActive) {
+            Dot().Clear();
+            Dot().Append("digraph SystemGraph {\n    rankdir=TB;\n    nodesep=0.4;\n    ranksep=0.5;\n    node [shape=box fontname=\"Consolas\" style=filled];\n");
+            Dot().Append("    legend_exclusive [label=\"Exclusive\" fillcolor=\"#eeeeee\"];\n    legend_parallel [label=\"Declared access\" fillcolor=\"#d5e8d4\"];\n");
+            Dot().Append("    legend_exclusive -> legend_parallel [style=invis];\n");
+            dotPreviousTail = ~0u;
+        }
     }
 
     /** Conditions are re-read per phase, so a run-mode change mid-frame takes effect at the next phase. */
@@ -209,6 +217,7 @@ public:
         const uint64_t allMask = count == 64 ? ~0ull : (1ull << count) - 1;
         uint64_t finished = 0;
         uint32_t wave[MAX_NODES_PER_PHASE];
+        uint32_t waveOfNode[MAX_NODES_PER_PHASE];
         uint32_t waveIndex = 0;
         while (finished != allMask) {
             uint32_t waveCount = 0;
@@ -242,9 +251,13 @@ public:
                 scheduler->WaitforTask(&waveTask);
             }
 
-            for (uint32_t t = 0; t < waveCount; ++t) { finished |= 1ull << (wave[t] - begin); }
+            for (uint32_t t = 0; t < waveCount; ++t) {
+                finished |= 1ull << (wave[t] - begin);
+                waveOfNode[wave[t] - begin] = waveIndex;
+            }
             ++waveIndex;
         }
+        if (bDumpActive && dotSink != nullptr) { DotPhase(begin, count, predMasks, waveOfNode, waveIndex); }
     }
 
 private:
@@ -277,8 +290,14 @@ private:
     static void RunNode(const SystemNode& node, EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
     {
         ZoneTransientN(zone, node.name, true);
+#if WILL_ACCESS_CHECK
+        SetRunningSystem(node.name, &node.access);
+#endif
         if (node.frameFn != nullptr) { node.frameFn(ctx, state, frameBuffer); }
         else { node.fn(ctx, state); }
+#if WILL_ACCESS_CHECK
+        SetRunningSystem(nullptr, nullptr);
+#endif
     }
 
     static const char* PhaseName(SystemPhase phase)
@@ -317,8 +336,75 @@ private:
         }
     }
 
+    static Core::InlineString<65536>& Dot()
+    {
+        static Core::InlineString<65536> dot;
+        return dot;
+    }
+
+    static void AppendIds(Core::InlineString<1024>& label, const char* prefix, const Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& ids)
+    {
+        if (ids.Size() == 0) { return; }
+        label.Append(prefix);
+        for (const StringID id : ids) {
+            label.Append(" ");
+            label.Append(id.ToString());
+        }
+    }
+
+    /** Edges are the transitive reduction of the conflict predecessors. */
+    void DotPhase(uint32_t begin, uint32_t count, const uint64_t* predMasks, const uint32_t* waveOfNode, uint32_t waveCount)
+    {
+        Core::InlineString<65536>& dot = Dot();
+        const uint32_t phase = static_cast<uint32_t>(nodes[begin].phase);
+        dot.Append(Core::InlineString<128>::Format("    subgraph cluster_%u {\n        label=\"%s\"; fontname=\"Consolas\";\n", phase, PhaseName(nodes[begin].phase)));
+        for (uint32_t i = 0; i < count; ++i) {
+            const SystemNode& node = nodes[begin + i];
+            Core::InlineString<1024> label = Core::InlineString<1024>::Format("%s\\nwave %u", node.name, waveOfNode[i]);
+            if (!node.access.bExclusive) {
+                AppendIds(label, "\\nr:", node.access.reads);
+                AppendIds(label, "\\nw:", node.access.writes);
+            }
+            dot.Append(Core::InlineString<1200>::Format("        n%u_%u [label=\"%s\" fillcolor=\"%s\"];\n", phase, i, label.c_str(), node.access.bExclusive ? "#eeeeee" : "#d5e8d4"));
+        }
+        for (uint32_t w = 0; w < waveCount; ++w) {
+            dot.Append("        { rank=same;");
+            for (uint32_t i = 0; i < count; ++i) {
+                if (waveOfNode[i] == w) { dot.Append(Core::InlineString<32>::Format(" n%u_%u;", phase, i)); }
+            }
+            dot.Append(" }\n");
+        }
+        dot.Append("    }\n");
+
+        uint64_t ancestors[MAX_NODES_PER_PHASE];
+        for (uint32_t i = 0; i < count; ++i) {
+            uint64_t all = predMasks[i];
+            for (uint32_t j = 0; j < i; ++j) {
+                if ((predMasks[i] >> j) & 1ull) { all |= ancestors[j]; }
+            }
+            ancestors[i] = all;
+        }
+        uint32_t tail = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+            uint64_t direct = predMasks[i];
+            for (uint32_t k = 0; k < i; ++k) {
+                if ((predMasks[i] >> k) & 1ull) { direct &= ~ancestors[k]; }
+            }
+            for (uint32_t j = 0; j < i; ++j) {
+                if ((direct >> j) & 1ull) { dot.Append(Core::InlineString<64>::Format("    n%u_%u -> n%u_%u;\n", phase, j, phase, i)); }
+            }
+            if (waveOfNode[i] + 1 == waveCount) { tail = i; }
+        }
+        if (dotPreviousTail != ~0u) {
+            dot.Append(Core::InlineString<96>::Format("    n%u_%u -> n%u_0 [style=dashed color=\"#999999\"];\n", dotPreviousTail >> 8, dotPreviousTail & 0xFF, phase));
+        }
+        dotPreviousTail = (phase << 8) | tail;
+    }
+
     enki::TaskScheduler* scheduler{};
     void (*dumpSink)(EngineState*, const char*){};
+    void (*dotSink)(const char*, size_t){};
+    uint32_t dotPreviousTail{~0u};
     bool bDumpPending{};
     bool bDumpActive{};
     Core::InlineVector<SystemNode, MAX_SYSTEM_NODES> nodes{};

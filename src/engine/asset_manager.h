@@ -70,6 +70,8 @@ struct ResolveUnloadResult
 class AssetManager
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "AssetManager";
+
     AssetManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
 
     ~AssetManager();

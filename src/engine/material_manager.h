@@ -31,6 +31,8 @@ class AssetManager;
 class MaterialManager
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "MaterialManager";
+
     MaterialManager(Core::MemoryManager& memoryManager, EngineContext* ctx, AssetManager* assetManager);
 
     MaterialID CreateSynthesizedMaterial(const Material& mat);
