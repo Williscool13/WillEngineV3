@@ -38,7 +38,7 @@ bool MeshPivotPresets(Engine::EngineContext* ctx, const Engine::SystemRegistry& 
     Vec3 boundsMin{1.0f};
     Vec3 boundsMax{-1.0f};
     if (const auto* rt = registry.TryGet<Engine::Component::MeshRuntime>(entity); rt && rt->modelHandle.IsValid()) {
-        const Engine::StaticModel* model = ctx->assetManager->GetModel(rt->modelHandle);
+        const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(rt->modelHandle);
         if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
             boundsMin = model->bounds.aabb.min;
             boundsMax = model->bounds.aabb.max;

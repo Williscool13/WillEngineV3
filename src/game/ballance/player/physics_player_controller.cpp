@@ -70,7 +70,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
         jumpRequested = state->input.GetActionState(Game::Actions::ACTION_JUMP).pressed;
     }
 
-    character->Update(deltaTime, moveInput, jumpRequested, ctx->physicsWorld, registry);
+    character->Update(deltaTime, moveInput, jumpRequested, &registry.Service<Physics::PhysicsWorld>(), registry);
 
     // Camera always updates (even when cursor released, so the view doesn't freeze)
     glm::vec3 characterPos = character->GetInterpolatedPosition(registry);
@@ -91,7 +91,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
             characterPos, lookYaw, lookPitch,
             cameraParams, aspectRatio,
             fov, nearPlane,
-            deltaTime, cameraState, ctx->physicsWorld
+            deltaTime, cameraState, &registry.Service<Physics::PhysicsWorld>()
         );
     }
 
@@ -113,7 +113,7 @@ void PhysicsPlayerController::Update(Engine::EngineContext* ctx, Engine::EngineS
     }
 }
 
-void PhysicsPlayerController::Shutdown(Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry)
+void PhysicsPlayerController::Shutdown(const Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry)
 {
     character->Shutdown(physicsWorld, registry);
     character.reset();

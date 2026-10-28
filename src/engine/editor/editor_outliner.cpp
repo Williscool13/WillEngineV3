@@ -43,13 +43,13 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##active_scene", state->scene.currentSceneId.IsValid() ? state->scene.currentSceneName.c_str() : "No scene loaded")) {
             for (const RuntimeSceneMetadata& loaded : state->editor.loadedScenes) {
-                const auto* meta = ctx->assetManager->GetSceneMetadata(loaded.sceneId);
+                const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(loaded.sceneId);
                 const bool bModified = state->editor.modifiedScenes.Contains(loaded.sceneId);
                 const Core::InlineString<160> label = Core::InlineString<160>::Format("%s%s##%llu", meta ? meta->sceneName.c_str() : "(unregistered)", bModified ? " *" : "",
                                                                                       static_cast<unsigned long long>(loaded.sceneId.id));
                 if (ImGui::Selectable(label.c_str(), loaded.sceneId == state->scene.currentSceneId)) {
                     state->scene.currentSceneId = loaded.sceneId;
-                    SyncActiveScene(ctx, state);
+                    SyncActiveScene(ctx, state, registry);
                 }
             }
             ImGui::EndCombo();
@@ -847,7 +847,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         }
         switch (entityAction) {
             case EntityMenuAction::Group:
-                GroupEntities(ctx, state, state->editor.selectedEntities, registry);
+                GroupEntities(ctx, state, registry, state->editor.selectedEntities);
                 break;
             case EntityMenuAction::CreateChild:
                 CreateChildEntity(state, state->editor.selectedEntities[0], registry);
@@ -861,13 +861,13 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
                 break;
             }
             case EntityMenuAction::Copy:
-                CopyEntitiesToClipboard(ctx, state, state->editor.selectedEntities, registry);
+                CopyEntitiesToClipboard(ctx, state, registry, state->editor.selectedEntities);
                 break;
             case EntityMenuAction::Paste:
                 PasteEntitiesFromClipboard(ctx, state, registry);
                 break;
             case EntityMenuAction::Duplicate:
-                DuplicateEntities(ctx, state, state->editor.selectedEntities, registry);
+                DuplicateEntities(ctx, state, registry, state->editor.selectedEntities);
                 break;
             case EntityMenuAction::Delete:
                 DeleteSelectedEntities(ctx, state, registry);

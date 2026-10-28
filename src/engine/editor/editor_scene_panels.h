@@ -20,13 +20,13 @@ struct FrameBuffer;
 namespace Engine
 {
 /** Keeps the active scene a loaded one (or none) with its current name. */
-void SyncActiveScene(Engine::EngineContext* ctx, Engine::EngineState* state);
+void SyncActiveScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void DrawScenesPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 }
 
 #endif //WILL_ENGINE_EDITOR_SCENE_PANELS_H

@@ -154,9 +154,9 @@ void CollectSystems(Engine::SystemGraph& graph)
         &UpdateCaneLifts,
         Engine::SystemWhen::WorldRunning,
         Engine::Access<
-            Engine::Reads<Component::CaneLiftComponent, Component::CaneCartComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc, Component::PhysicsBodyRuntime>,
+            Engine::Reads<Component::CaneLiftComponent, Component::CaneCartComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc, Component::PhysicsBodyRuntime, Physics::PhysicsWorld>,
             Engine::DeferredWrites<Component::TransformComponent, Component::DirtyTransformRequest>,
-            Engine::Writes<Component::CaneCartRuntime, Component::CaneLiftRuntime, Component::DissolveKeepTag, Component::DissolvedFlag, Component::PathMoverRuntime, Component::MovingKinematicFlag, Component::DirtyKinematicPhysicsTransformRequest, Component::PhysicsMotionOverrideRuntime, Component::DynamicPhysicsBodyRuntime, Component::SetVelocityRequest, Physics::PhysicsWorld>>());
+            Engine::Writes<Component::CaneCartRuntime, Component::CaneLiftRuntime, Component::DissolveKeepTag, Component::DissolvedFlag, Component::PathMoverRuntime, Component::MovingKinematicFlag, Component::DirtyKinematicPhysicsTransformRequest, Component::PhysicsMotionOverrideRuntime, Component::DynamicPhysicsBodyRuntime, Component::SetVelocityRequest>>());
 
     graph.Add("Ballance/DebugProcessPhysicsCollisions",
         &DebugProcessPhysicsCollisions,
@@ -169,8 +169,7 @@ void CollectSystems(Engine::SystemGraph& graph)
         &DebugApplyGroundForces,
         Engine::SystemWhen::Gameplay,
         Engine::Access<
-            Engine::Reads<Component::AntiGravityTag, Component::PhysicsBodyRuntime>,
-            Engine::Writes<Physics::PhysicsWorld>>());
+            Engine::Reads<Component::AntiGravityTag, Component::PhysicsBodyRuntime, Physics::PhysicsWorld>>());
     graph.Add("Ballance/CheckpointUpdate",
         &CheckpointUpdate,
         Engine::SystemWhen::Gameplay,
@@ -194,8 +193,8 @@ void CollectSystems(Engine::SystemGraph& graph)
         },
         Engine::SystemWhen::Gameplay,
         {
-            .reads = {Engine::TypeSID<Component::GameCameraTag>(), Engine::TypeSID<Component::PhysicsBodyRuntime>(), Engine::TypeSID<Component::DynamicPhysicsBodyRuntime>(), "state.input"_sid, "state.inputContext"_sid, "state.playtest.cameraOverride"_sid, "state.projectConfig"_sid, "state.physics.interpolationAlpha"_sid, "ctx.windowContext"_sid},
-            .writes = {Engine::TypeSID<Component::CameraRuntime>(), Engine::TypeSID<Component::TransformComponent>(), Engine::TypeSID<Physics::PhysicsWorld>(), "ballance.playerController"_sid},
+            .reads = {Engine::TypeSID<Component::GameCameraTag>(), Engine::TypeSID<Component::PhysicsBodyRuntime>(), Engine::TypeSID<Component::DynamicPhysicsBodyRuntime>(), "state.input"_sid, "state.inputContext"_sid, "state.playtest.cameraOverride"_sid, "state.projectConfig"_sid, "state.physics.interpolationAlpha"_sid, "ctx.windowContext"_sid, Engine::TypeSID<Physics::PhysicsWorld>()},
+            .writes = {Engine::TypeSID<Component::CameraRuntime>(), Engine::TypeSID<Component::TransformComponent>(), "ballance.playerController"_sid},
         });
 
     graph.Add("Ballance/DebugUpdate",
@@ -203,10 +202,10 @@ void CollectSystems(Engine::SystemGraph& graph)
         Engine::AccessSet::EXCLUSIVE);
 }
 
-void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
 #ifdef WDEBUG
-    DebugRender(ctx, state, frameBuffer, registry);
+    DebugRender(ctx, state, registry, frameBuffer);
 #endif
 }
 
@@ -232,7 +231,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state)
     Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/PlayStop"};
     PhysicsPlayerController& playerController = ctx->GetGameState<State>()->playerController;
     if (playerController.GetCharacter()) {
-        playerController.Shutdown(ctx->physicsWorld, registry);
+        playerController.Shutdown(&registry.Service<Physics::PhysicsWorld>(), registry);
     }
 }
 } // Ballance

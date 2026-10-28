@@ -67,7 +67,7 @@ static void Release(Engine::EngineContext* ctx, Engine::SystemRegistry& registry
     registry.Set<Component::PhysicsMotionOverrideRuntime>(cart, Component::PhysicsMotionOverrideRuntime{.motionType = Component::PhysicsMotionType::Dynamic});
     runtime.releaseVelocity = velocity;
     if (const auto* body = Component::FindBody(registry, cart)) {
-        ctx->physicsWorld->MakeDynamic(body->bodyID, velocity);
+        registry.Service<Physics::PhysicsWorld>().MakeDynamic(body->bodyID, velocity);
         registry.Set<Component::DynamicPhysicsBodyRuntime>(cart,transform.translation, transform.rotation, transform.translation, transform.rotation);
         runtime.bVelocityApplied = true;
     }

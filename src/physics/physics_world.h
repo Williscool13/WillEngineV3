@@ -99,10 +99,11 @@ public:
     bool IsAwake(BodyHandle body) const;
     uint32_t GetAwakeBodyCount() const;
     BodyCounts GetBodyCounts() const;
-    void AddImpulse(BodyHandle body, const Vec3& impulse);
-    void AddTorque(BodyHandle body, const Vec3& torque);
+    /** Const: Jolt's locking body interface makes body mutators safe to call concurrently. */
+    void AddImpulse(BodyHandle body, const Vec3& impulse) const;
+    void AddTorque(BodyHandle body, const Vec3& torque) const;
     /** Turns a kinematic or dynamic body dynamic in place, awake and moving at linearVelocity. */
-    void MakeDynamic(BodyHandle body, const Vec3& linearVelocity);
+    void MakeDynamic(BodyHandle body, const Vec3& linearVelocity) const;
 
     /** Closest hit along origin + t * direction for t in [0, 1], skipping `ignore` and the layers in `ignoredLayers` (Layers::Bit). */
     bool CastRay(const Vec3& origin, const Vec3& direction, CastHit& hit, BodyHandle ignore = {}, uint32_t ignoredLayers = 0) const;

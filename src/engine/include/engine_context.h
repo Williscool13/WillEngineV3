@@ -53,6 +53,8 @@ class MaterialManager;
 class EngineLogger;
 class AssetManager;
 class SystemGraph;
+class SystemRegistry;
+class WillEngine;
 }
 
 struct ImGuiContext;
@@ -216,6 +218,18 @@ private:
     Core::TimeFrame published{};
 };
 
+/** Reached only through SystemRegistry::Service / ServiceMut, which check them against the caller's access set. */
+class EngineServices
+{
+    friend class SystemRegistry;
+    friend class WillEngine;
+
+    AssetManager* assetManager{nullptr};
+    MaterialManager* materialManager{nullptr};
+    Audio::AudioManager* audioManager{nullptr};
+    Physics::PhysicsWorld* physicsWorld{nullptr};
+};
+
 struct EngineContext
 {
     WindowContext windowContext{};
@@ -227,11 +241,8 @@ struct EngineContext
     Core::VirtualArena editorArena{};
 
     EngineLogger* engineLogger{nullptr};
-    AssetManager* assetManager{nullptr};
-    MaterialManager* materialManager{nullptr};
+    EngineServices services{};
     Render::PipelineManager* pipelineManager{nullptr};
-    Audio::AudioManager* audioManager{nullptr};
-    Physics::PhysicsWorld* physicsWorld{nullptr};
 
     // Global Fn
     //   Defined by engine called by game

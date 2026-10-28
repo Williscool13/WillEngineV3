@@ -684,6 +684,14 @@ StaticModel* AssetManager::GetModel(StaticModelHandle handle)
     return &models[handle.index];
 }
 
+const StaticModel* AssetManager::GetModel(StaticModelHandle handle) const
+{
+    if (!modelAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &models[handle.index];
+}
+
 void AssetManager::UnloadModel(StaticModelHandle handle)
 {
     if (!modelAllocator.IsValid(handle)) {
@@ -982,6 +990,14 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
 }
 
 PhysicsColliderAsset* AssetManager::GetCollider(PhysicsColliderHandle handle)
+{
+    if (!colliderAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &colliders[handle.index];
+}
+
+const PhysicsColliderAsset* AssetManager::GetCollider(PhysicsColliderHandle handle) const
 {
     if (!colliderAllocator.IsValid(handle)) {
         return nullptr;
@@ -2295,6 +2311,14 @@ Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle)
     return &cubemaps[handle.index];
 }
 
+const Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle) const
+{
+    if (!cubemapAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &cubemaps[handle.index];
+}
+
 void AssetManager::UnloadCubemap(CubemapHandle handle)
 {
     if (!cubemapAllocator.IsValid(handle)) {
@@ -2385,6 +2409,14 @@ bool AssetManager::ReloadTextureArray(TextureArrayID textureArrayId)
 }
 
 Render::TextureArray* AssetManager::GetTextureArray(TextureArrayHandle handle)
+{
+    if (!textureArrayAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &textureArrays[handle.index];
+}
+
+const Render::TextureArray* AssetManager::GetTextureArray(TextureArrayHandle handle) const
 {
     if (!textureArrayAllocator.IsValid(handle)) {
         return nullptr;
@@ -2557,6 +2589,14 @@ bool AssetManager::IsFontFrozen(FontID fontId) const
 }
 
 Font* AssetManager::GetFont(FontHandle handle)
+{
+    if (!fontAllocator.IsValid(handle)) {
+        return nullptr;
+    }
+    return &fonts[handle.index];
+}
+
+const Font* AssetManager::GetFont(FontHandle handle) const
 {
     if (!fontAllocator.IsValid(handle)) {
         return nullptr;

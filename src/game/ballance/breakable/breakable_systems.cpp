@@ -128,7 +128,7 @@ void AcquireBreakableAssets(Engine::EngineContext* ctx, Engine::EngineState* sta
     auto view = registry.View<Component::BreakableComponent>(entt::exclude<Component::BreakableRuntime>);
     if (view.size_hint() == 0) { return; }
 
-    Engine::AssetManager* assetManager = ctx->assetManager;
+    Engine::AssetManager* assetManager = &registry.ServiceMut<Engine::AssetManager>();
     auto acquired = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, breakable] : view.each()) {
         const auto* meta = assetManager->GetModelMetadata(breakable.brokenModelId);
@@ -187,7 +187,7 @@ static const Engine::StaticModel* FindBrokenModel(Engine::EngineContext* ctx, en
 {
     const auto* runtime = registry.Has<Component::BreakableComponent>(entity) ? registry.TryGet<Component::BreakableRuntime>(entity) : nullptr;
     if (!runtime) { return nullptr; }
-    const Engine::StaticModel* brokenModel = ctx->assetManager->GetModel(runtime->model);
+    const Engine::StaticModel* brokenModel = registry.Service<Engine::AssetManager>().GetModel(runtime->model);
     return brokenModel && brokenModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded ? brokenModel : nullptr;
 }
 
@@ -220,9 +220,9 @@ static void ApplyBreak(Engine::SystemRegistry& registry, const entt::entity& ent
     glm::vec3 angularVelocity{0.0f};
     glm::vec3 centerOfMass = world.translation;
     if (const auto* body = Component::FindBody(registry, entity)) {
-        linearVelocity = ctx->physicsWorld->GetLinearVelocity(body->bodyID);
-        angularVelocity = ctx->physicsWorld->GetAngularVelocity(body->bodyID);
-        centerOfMass = ctx->physicsWorld->GetCenterOfMassPosition(body->bodyID);
+        linearVelocity = registry.Service<Physics::PhysicsWorld>().GetLinearVelocity(body->bodyID);
+        angularVelocity = registry.Service<Physics::PhysicsWorld>().GetAngularVelocity(body->bodyID);
+        centerOfMass = registry.Service<Physics::PhysicsWorld>().GetCenterOfMassPosition(body->bodyID);
     }
 
     const auto* desc = registry.TryGet<Component::PhysicsBodyDesc>(entity);
@@ -304,6 +304,6 @@ namespace Ballance::Component
 void BreakableRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto* ctx = registry.Context();
-    ReleaseBreakableRuntime(ctx->assetManager, registry.GetMut<BreakableRuntime>(entity));
+    ReleaseBreakableRuntime(&registry.ServiceMut<Engine::AssetManager>(), registry.GetMut<BreakableRuntime>(entity));
 }
 } // Ballance::Component

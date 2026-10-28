@@ -154,7 +154,7 @@ static bool LoadPlayFile(const char* path, Core::Vector<PlaytestSystem::Event>& 
 }
 
 /** bCut drops last frame's view so the move reads as a cut (zero camera motion vectors); false keeps it, so a cam event per frame renders as real camera motion. */
-static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, const glm::vec3& translation, const glm::quat& rotation, Engine::SystemRegistry& registry, bool bCut = true)
+static void TeleportEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const glm::vec3& translation, const glm::quat& rotation, bool bCut = true)
 {
     auto camView = registry.View<Component::EditorCameraTag, Engine::Mut<Component::CameraRuntime>, Engine::Mut<Component::TransformComponent>>();
     const entt::entity camEntity = camView.front();
@@ -196,7 +196,7 @@ static Core::InlineString<32> LocalTimestamp()
     return Core::InlineString<32>(buf);
 }
 
-void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->screenshotPath = {};
 
@@ -276,7 +276,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
             bProfileStashed = false;
         }
         state->inputContext = stashedInputContext;
-        TeleportEditorCamera(ctx, state, stashedCameraTranslation, stashedCameraRotation, registry);
+        TeleportEditorCamera(ctx, state, registry, stashedCameraTranslation, stashedCameraRotation);
         LOG_INFO(Engine, "Run '{}' {}: {} capture(s) -> {}", runName.c_str(), outcome, captureCount, outputDir.c_str());
         bActive = false;
         phase = Phase::Idle;
@@ -295,7 +295,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
         {
             const size_t loadingEntities = CountLoadingEntities(state, registry);
             const bool bQuiet = loadingEntities == 0 &&
-                                !ctx->rescan.bResources && !ctx->frameStatus.bAssetGenerationPending && !ctx->assetManager->HasPendingLoads();
+                                !ctx->rescan.bResources && !ctx->frameStatus.bAssetGenerationPending && !registry.Service<Engine::AssetManager>().HasPendingLoads();
             readyQuietCounter = bQuiet ? readyQuietCounter + 1 : 0;
             ++readyWaitedFrames;
             if (readyQuietCounter >= READY_QUIET_FRAMES) {
@@ -303,8 +303,8 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
             }
             else if (readyWaitedFrames >= READY_TIMEOUT_FRAMES) {
                 LOG_WARN(Engine, "Run: asset readiness timed out after {} frames; continuing anyway. Gates: loadingEntities={} rescan={} generation={} pendingLoads={}", readyWaitedFrames, loadingEntities,
-                         ctx->rescan.bResources, ctx->frameStatus.bAssetGenerationPending, ctx->assetManager->HasPendingLoads());
-                ctx->assetManager->LogPendingLoads();
+                         ctx->rescan.bResources, ctx->frameStatus.bAssetGenerationPending, registry.Service<Engine::AssetManager>().HasPendingLoads());
+                registry.Service<Engine::AssetManager>().LogPendingLoads();
                 phase = Phase::Step;
             }
             return;
@@ -329,13 +329,13 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                             ov.mode = CameraOverride::Mode::Held;
                             ov.rotation = preset.rotation;
                             ov.translation = preset.translation + preset.rotation * e.translation;
-                            TeleportEditorCamera(ctx, state, ov.translation, ov.rotation, registry, e.bFlag);
+                            TeleportEditorCamera(ctx, state, registry, ov.translation, ov.rotation, e.bFlag);
                         }
                         else {
                             ov.mode = e.camMode == CamMode::Held ? CameraOverride::Mode::Held : CameraOverride::Mode::Track;
                             ov.translation = e.translation;
                             ov.rotation = e.rotation;
-                            TeleportEditorCamera(ctx, state, e.translation, e.rotation, registry, e.bFlag);
+                            TeleportEditorCamera(ctx, state, registry, e.translation, e.rotation, e.bFlag);
                         }
                         ++cursor;
                         break;
@@ -347,7 +347,7 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
                                 finish("aborted: game.dll is not loaded");
                                 return;
                             }
-                            if (!IsPlaying(state)) { PlayStart(ctx, state, e.bUseRuntimeScenes, registry); }
+                            if (!IsPlaying(state)) { PlayStart(ctx, state, registry, e.bUseRuntimeScenes); }
                         }
                         else if (IsPlaying(state)) {
                             PlayStop(ctx, state, registry);
@@ -488,9 +488,9 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
     }
 }
 
-void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
-    state->playtest.Tick(ctx, state, frameBuffer, registry);
+    state->playtest.Tick(ctx, state, registry, frameBuffer);
 }
 
 bool CameraRecorder::Start(Engine::EngineContext* ctx, Engine::EngineState* state, const char* recordingName)
@@ -519,7 +519,7 @@ void CameraRecorder::Tick(Engine::EngineState* state, Engine::SystemRegistry& re
     samples.PushBack(Sample{.translation = transform.translation, .rotation = transform.rotation});
 }
 
-Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine::EngineState* state)
+Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (!bActive) {
         return {};
@@ -530,7 +530,7 @@ Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine:
         return {};
     }
     const int32_t fps = glm::max(1, static_cast<int32_t>(glm::round(static_cast<double>(samples.Size()) / seconds)));
-    const auto* sceneMeta = ctx->assetManager->GetSceneMetadata(state->scene.currentSceneId);
+    const auto* sceneMeta = registry.Service<Engine::AssetManager>().GetSceneMetadata(state->scene.currentSceneId);
     const Core::Path folder = sceneMeta ? sceneMeta->source.Parent() : Platform::GetScenePath();
     const Core::Path path = folder / Core::InlineString<160>::Format("%s.wplay", name.c_str()).c_str();
 
@@ -574,7 +574,7 @@ Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine:
     return Core::InlineString<512>(std::string_view(path.c_str()));
 }
 
-void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Core::FrameBuffer*, Engine::SystemRegistry& registry)
+void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer*)
 {
     state->cameraRecorder.Tick(state, registry);
 }

@@ -81,8 +81,8 @@ void PhysicsPreUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, En
 
 static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
-    auto& listener = ctx->physicsWorld->Jolt().GetContactListener();
+    auto& bodyInterface = registry.ServiceMut<Physics::PhysicsWorld>().Jolt().GetBodyInterface();
+    auto& listener = registry.ServiceMut<Physics::PhysicsWorld>().Jolt().GetContactListener();
     uint32_t count = 0;
     for (const auto& [entity, conveyor, physicsBody, world] : registry.View<Component::ConveyorComponent, Component::PhysicsBodyRuntime, Component::WorldTransformRuntime>(entt::exclude<Component::ConveyorHaltedFlag>).each()) {
         if (!conveyor.bEnabled || !physicsBody.bodyID.IsValid()) { continue; }
@@ -125,7 +125,7 @@ static void UpdateConveyors(Engine::EngineContext* ctx, Engine::EngineState* sta
 void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    Physics::PhysicsWorld* physics = ctx->physicsWorld;
+    Physics::PhysicsWorld* physics = &registry.ServiceMut<Physics::PhysicsWorld>();
     state->physics.deltaTimeAccumulator += state->timeFrame->deltaTime * state->physics.timeScale;
     const uint32_t maxSteps = state->physics.timeScale > 1.0f ? Physics::MAX_TIMESCALE_STEPS_PER_FRAME : Physics::MAX_PHYSICS_STEPS_PER_FRAME;
     state->physics.deltaTimeAccumulator = std::min(state->physics.deltaTimeAccumulator, static_cast<float>(maxSteps) * Physics::PHYSICS_TIMESTEP);
@@ -260,13 +260,13 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engin
     state->physics.interpolationAlpha = state->physics.deltaTimeAccumulator / Physics::PHYSICS_TIMESTEP;
 }
 
-Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, const AABB& box, Engine::SystemRegistry& registry)
+Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, Engine::SystemRegistry& registry, const AABB& box)
 {
     Core::Arena* arena = &ctx->gameplayArena.Get();
-    const auto bodies = ctx->physicsWorld->QueryBodiesInBox(arena, box);
+    const auto bodies = registry.Service<Physics::PhysicsWorld>().QueryBodiesInBox(arena, box);
     auto entities = Core::ArenaFixedVector<entt::entity>(arena, std::max(bodies.Size(), size_t{1}));
     for (const Physics::BodyHandle body : bodies) {
-        const entt::entity entity = Component::EntityFromBodyUserData(registry, ctx->physicsWorld->GetUserData(body));
+        const entt::entity entity = Component::EntityFromBodyUserData(registry, registry.Service<Physics::PhysicsWorld>().GetUserData(body));
         if (entity != entt::null) { entities.PushBack(entity); }
     }
     return entities;
@@ -274,7 +274,7 @@ Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* c
 
 void ResolveCollisionEvents(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    Physics::JoltWorld& world = ctx->physicsWorld->Jolt();
+    Physics::JoltWorld& world = registry.ServiceMut<Physics::PhysicsWorld>().Jolt();
     state->physics.resolvedAddedEvents.Clear();
     for (const auto& event : world.GetAddedEvents()) {
         state->physics.resolvedAddedEvents.PushBack({
@@ -340,7 +340,7 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state, Engine::SystemRegist
 void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
+    auto& bodyInterface = registry.ServiceMut<Physics::PhysicsWorld>().Jolt().GetBodyInterface();
     auto view = registry.View<Component::PhysicsBodyRuntime, Component::TransformComponent, Component::DirtyTransformRequest>();
     for (const auto& [entity, physicsBody, transform] : view.each()) {
         const Transform world = Component::ComputeWorldTransform(registry, entity);
@@ -356,7 +356,7 @@ void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 #ifdef WDEBUG
@@ -364,7 +364,7 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     const bool bCasterChanges = state->debug.localShadow.bDrawCasterChangeBodies;
     if (mask == 0 && !bCasterChanges) { return; }
 
-    auto& filter = ctx->physicsWorld->Jolt().GetDebugDrawFilter();
+    auto& filter = registry.ServiceMut<Physics::PhysicsWorld>().Jolt().GetDebugDrawFilter();
     filter.Clear();
 
     if (bCasterChanges) {
@@ -374,7 +374,7 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
     }
 
     const bool bAllBodies = (mask & Engine::PHYSICS_DEBUG_ALL_BODIES) != 0;
-    ctx->physicsWorld->Jolt().SetDebugDrawForceLowestLOD(bAllBodies);
+    registry.ServiceMut<Physics::PhysicsWorld>().Jolt().SetDebugDrawForceLowestLOD(bAllBodies);
 
     if (bAllBodies) {
         for (const auto& [entity, physicsBody] : registry.View<Component::PhysicsBodyRuntime>().each()) {
@@ -402,7 +402,7 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
         filter.SetDrawAwake((mask & Engine::PHYSICS_DEBUG_AWAKE) != 0);
     }
 
-    ctx->physicsWorld->DrawDebug(&frameBuffer->mainViewFamily, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
+    registry.ServiceMut<Physics::PhysicsWorld>().DrawDebug(&frameBuffer->mainViewFamily, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
 #endif
 }
 
@@ -582,7 +582,7 @@ static JPH::ShapeRefC CreateShapeFromCollider(const Engine::PhysicsColliderAsset
     return nullptr;
 }
 
-JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, Engine::AssetManager* assetManager)
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, const Engine::AssetManager* assetManager)
 {
     if (colliderHandle.IsValid() && assetManager) {
         auto* collider = assetManager->GetCollider(colliderHandle);
@@ -633,23 +633,23 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
             if (handle.IsValid()) { continue; }
 
             if (collider->meshSourceModelId.IsValid()) {
-                if (ctx->assetManager->IsModelFrozen(collider->meshSourceModelId)) { allArmed = false; break; }
+                if (registry.Service<Engine::AssetManager>().IsModelFrozen(collider->meshSourceModelId)) { allArmed = false; break; }
 
                 const bool bWantsMesh = collider->bMeshPrecise && !bDynamic;
                 const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
-                handle = ctx->assetManager->LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
+                handle = registry.ServiceMut<Engine::AssetManager>().LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
             }
             else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
-                handle = ctx->assetManager->LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
+                handle = registry.ServiceMut<Engine::AssetManager>().LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
             }
             else if (!collider->splineParams.spline.points.IsEmpty()) {
                 const bool bHollow = collider->bSplineHollow && !bDynamic;
-                handle = ctx->assetManager->LoadSplineCollider(collider->splineParams, bHollow);
+                handle = registry.ServiceMut<Engine::AssetManager>().LoadSplineCollider(collider->splineParams, bHollow);
             }
             else if (collider->text3DSource.IsValid()) {
                 const Component::Text3DShapeSource& t = collider->text3DSource;
-                if (ctx->assetManager->IsFontFrozen(t.fontId)) { allArmed = false; break; }
-                handle = ctx->assetManager->LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
+                if (registry.Service<Engine::AssetManager>().IsFontFrozen(t.fontId)) { allArmed = false; break; }
+                handle = registry.ServiceMut<Engine::AssetManager>().LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
             }
 
             if (!handle.IsValid()) {
@@ -696,7 +696,7 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
         for (const Engine::PhysicsColliderHandle handle : runtime.colliders) {
             if (!handle.IsValid()) { continue; }
 
-            auto* collider = ctx->assetManager->GetCollider(handle);
+            auto* collider = registry.Service<Engine::AssetManager>().GetCollider(handle);
             if (!collider) {
                 LOG_WARN(Engine, "Physics collider not found. Removing loading tag.");
                 shouldAbandon = true;
@@ -764,14 +764,14 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
 
         JPH::ShapeRefC shape;
         if (bodyDesc.shapes.Size() == 1 && bodyDesc.shapes[0].offset == glm::vec3(0.0f)) {
-            shape = CreateShapeFromDesc(bodyDesc.shapes[0], runtime.colliders[0], ctx->assetManager);
+            shape = CreateShapeFromDesc(bodyDesc.shapes[0], runtime.colliders[0], &registry.Service<Engine::AssetManager>());
         }
         else {
             JPH::StaticCompoundShapeSettings compound;
             bool bAnyNull = false;
             for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
                 const Component::PhysicsShapeDesc& shapeDesc = bodyDesc.shapes[i];
-                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, runtime.colliders[i], ctx->assetManager);
+                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, runtime.colliders[i], &registry.Service<Engine::AssetManager>());
                 if (!subShape) {
                     bAnyNull = true;
                     break;
@@ -818,7 +818,7 @@ void PhysicsBodyCreationResolve(Engine::EngineContext* ctx, Engine::EngineState*
     const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
 
-    JPH::BodyInterface& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
+    JPH::BodyInterface& bodyInterface = registry.ServiceMut<Physics::PhysicsWorld>().Jolt().GetBodyInterface();
 
     for (const auto& [entity, bodyDesc, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }

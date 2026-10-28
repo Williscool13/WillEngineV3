@@ -76,7 +76,7 @@ void TextComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity 
     auto& comp = registry.GetMut<TextComponent>(entity);
     auto* ctx = registry.Context();
     const auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
-    const Engine::Font* font = runtime.fontHandle.IsValid() ? ctx->assetManager->GetFont(runtime.fontHandle) : nullptr;
+    const Engine::Font* font = runtime.fontHandle.IsValid() ? registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle) : nullptr;
     const bool bFontCurrent = (font != nullptr && font->fontId == comp.fontId) || registry.Has<TextFontRequest>(entity);
     if (!bFontCurrent) {
         UnloadTextComponent(comp, registry, entity);
@@ -107,19 +107,19 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     const char* fontLabel = "(none)";
     const Engine::AssetManager::CachedFontMetadata* currentMeta = nullptr;
     if (runtime.fontHandle.IsValid()) {
-        Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
+        const Engine::Font* font = registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle);
         if (font) {
-            currentMeta = ctx->assetManager->GetFontMetadata(font->fontId);
+            currentMeta = registry.Service<Engine::AssetManager>().GetFontMetadata(font->fontId);
             if (currentMeta) { fontLabel = currentMeta->name.c_str(); }
         }
     }
 
     if (ImGui::BeginCombo("Font", fontLabel)) {
-        const auto& fontCache = ctx->assetManager->GetFontCache();
+        const auto& fontCache = registry.Service<Engine::AssetManager>().GetFontCache();
         for (const auto& [fontId, meta] : fontCache) {
             bool selected = runtime.fontHandle.IsValid() &&
-                            ctx->assetManager->GetFont(runtime.fontHandle) &&
-                            ctx->assetManager->GetFont(runtime.fontHandle)->fontId == fontId;
+                            registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle) &&
+                            registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle)->fontId == fontId;
             if (ImGui::Selectable(meta.name.c_str(), selected)) {
                 edit.Set(&TextComponent::fontId, fontId);
             }
@@ -130,14 +130,14 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     // TextMaterial picker
     {
         const char* matLabel = "(none)";
-        const Engine::TextMaterial* currentMat = ctx->materialManager->GetTextMaterial(comp.textMaterialId);
+        const Engine::TextMaterial* currentMat = registry.Service<Engine::MaterialManager>().GetTextMaterial(comp.textMaterialId);
         if (currentMat) { matLabel = currentMat->name.c_str(); }
 
         if (ImGui::BeginCombo("Text Material", matLabel)) {
             if (ImGui::Selectable("(none)", !comp.textMaterialId.IsValid())) {
                 edit.Set(&TextComponent::textMaterialId, Engine::TextMaterialID::INVALID);
             }
-            const auto& textMats = ctx->materialManager->GetTextMaterials();
+            const auto& textMats = registry.Service<Engine::MaterialManager>().GetTextMaterials();
             for (const auto& [matId, mat] : textMats) {
                 bool selected = comp.textMaterialId == matId;
                 if (ImGui::Selectable(mat.name.c_str(), selected)) {
@@ -161,7 +161,7 @@ Engine::ComponentEditorResult TextComponent::DrawEditor(Core::ViewFamily& viewFa
     EditWidgets::DragFloat(edit, "Wrap Width", &TextComponent::wrapWidth, 0.05f, 0.0f, 1000.0f, "%.2f");
 
     if (runtime.fontHandle.IsValid()) {
-        Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
+        const Engine::Font* font = registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle);
         if (font) {
             switch (font->loadState) {
                 case Engine::Font::LoadState::Loading:      ImGui::TextDisabled("Loading..."); break;

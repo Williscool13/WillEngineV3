@@ -535,8 +535,8 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         engineContext->windowContext.viewportHeight = h;
         engineContext->windowContext.viewportOffsetX = 0;
         engineContext->windowContext.viewportOffsetY = 0;
-        engineContext->assetManager = assetManager;
-        engineContext->materialManager = materialManager;
+        engineContext->services.assetManager = assetManager;
+        engineContext->services.materialManager = materialManager;
         engineContext->pipelineManager = renderThread->GetPipelineManager();
         engineContext->rendererStatistics = renderThread->GetStatisticsManager();
         MCP::RegisterEngineTools(engineState);
@@ -553,8 +553,8 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         RegisterGameBuildCommands(engineState, &gameBuild);
 #endif
 #endif
-        engineContext->audioManager = audioManager;
-        engineContext->physicsWorld = physicsWorld;
+        engineContext->services.audioManager = audioManager;
+        engineContext->services.physicsWorld = physicsWorld;
         engineContext->scheduler = scheduler;
         engineContext->systemGraph = &systemGraph;
         systemGraph.SetDumpSink(&SystemGraphDumpSink);
@@ -1093,8 +1093,8 @@ void WillEngine::EditorImgui()
                     ImGui::EndTable();
                 }
                 ImGui::Text("Materials  resident %u / %u   definitions %u / %u",
-                            engineContext->materialManager->GetActiveMaterialCount(), Render::BINDLESS_MATERIAL_BUFFER_COUNT,
-                            static_cast<uint32_t>(engineContext->materialManager->GetMaterials().Size()), Engine::MAX_LOADED_MATERIALS);
+                            materialManager->GetActiveMaterialCount(), Render::BINDLESS_MATERIAL_BUFFER_COUNT,
+                            static_cast<uint32_t>(materialManager->GetMaterials().Size()), Engine::MAX_LOADED_MATERIALS);
 
                 ImGui::SeparatorText("GPU");
                 ImGui::Text("Device: %zu allocs / %.3f MB",

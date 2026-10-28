@@ -113,7 +113,7 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, 
     }
 }
 
-void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& mainViewFamily, Engine::SystemRegistry& registry)
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::ViewFamily& mainViewFamily)
 {
     ZoneScoped;
     entt::entity mainCamera;

@@ -17,9 +17,21 @@
 #include "engine/core/deferred_commands.h"
 #include "engine/core/registry.h"
 
+namespace Audio
+{
+class AudioManager;
+}
+
+namespace Physics
+{
+class PhysicsWorld;
+}
+
 namespace Engine
 {
 struct Command;
+class AssetManager;
+class MaterialManager;
 
 /**
  * Exclusive access applies immediately and is unchecked. Non-exclusive access defers Set/Remove/Destroy/PushCommand to the end of the wave
@@ -91,6 +103,21 @@ public:
     {
         CheckWrite<T>();
         return registry.TryGetMut<T>(entity);
+    }
+
+    /** A ctx service (AssetManager, MaterialManager, AudioManager, PhysicsWorld); its const methods are safe to call concurrently. */
+    template<typename T>
+    [[nodiscard]] const T& Service() const
+    {
+        CheckRead<T>();
+        return *ServiceSlot<T>(*Context());
+    }
+
+    template<typename T>
+    [[nodiscard]] T& ServiceMut()
+    {
+        CheckWrite<T>();
+        return *ServiceSlot<T>(*Context());
     }
 
     template<typename... T>
@@ -182,6 +209,17 @@ public:
     }
 
 private:
+    /** Context is a template parameter so EngineContext only has to be complete where a service is used. */
+    template<typename T, typename Context>
+    static T* ServiceSlot(Context& ctx)
+    {
+        if constexpr (std::is_same_v<T, AssetManager>) { return ctx.services.assetManager; }
+        else if constexpr (std::is_same_v<T, MaterialManager>) { return ctx.services.materialManager; }
+        else if constexpr (std::is_same_v<T, Audio::AudioManager>) { return ctx.services.audioManager; }
+        else if constexpr (std::is_same_v<T, Physics::PhysicsWorld>) { return ctx.services.physicsWorld; }
+        else { static_assert(sizeof(T) == 0, "not a service"); }
+    }
+
     template<auto Fn, typename Payload>
     static void ApplyRunExclusive(Registry& storage, entt::entity, void* payload)
     {

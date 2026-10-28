@@ -75,14 +75,14 @@ static uint64_t AuthoredHash(EngineState* state, entt::entity e, Core::Vector<st
 }
 
 /** Empty for an unsaved scene. */
-static Core::Path RuntimeSceneFile(EngineContext* ctx, StringID sceneId)
+static Core::Path RuntimeSceneFile(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
-    const auto* sceneMeta = ctx->assetManager->GetSceneMetadata(sceneId);
+    const auto* sceneMeta = registry.Service<AssetManager>().GetSceneMetadata(sceneId);
     return sceneMeta && !sceneMeta->bUnsaved ? RuntimeScenePath(sceneMeta->source) : Core::Path{};
 }
 
 /** In the run-start snapshot but no longer alive. */
-static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx, EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
+static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
 #if WILL_EDITOR
     for (const Scene& snapshot : state->editor.pieSnapshot) {
@@ -102,7 +102,7 @@ static Core::ArenaVector<uint64_t> DestroyedAuthoredEntities(EngineContext* ctx,
     return Core::ArenaVector<uint64_t>{&ctx->gameplayArena.Get(), 0};
 }
 
-static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, TextWriter& w, Engine::SystemRegistry& registry)
+static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId, TextWriter& w)
 {
     Core::Vector<std::byte> scratch(&ctx->memoryManager->General(), Core::AllocTag::AssetManager);
     auto view = registry.View<Component::SceneRuntime, Component::StableIdComponent>(entt::exclude<Component::DoNotSerializeTag, Component::DoNotRuntimeSaveTag>);
@@ -132,7 +132,7 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
         w.EndBlock();
     }
 
-    const Core::ArenaVector<uint64_t> destroyed = DestroyedAuthoredEntities(ctx, state, sceneId, registry);
+    const Core::ArenaVector<uint64_t> destroyed = DestroyedAuthoredEntities(ctx, state, registry, sceneId);
     w.Count("destroyed", static_cast<uint32_t>(destroyed.Size()));
     for (const uint64_t stableId : destroyed) {
         w.BeginBlock("entity");
@@ -140,7 +140,7 @@ static void WriteRuntimeScene(EngineContext* ctx, EngineState* state, StringID s
         w.EndBlock();
     }
 
-    const Scene spawned = SaveScene(state->componentRegistry, registry, ctx->assetManager, sceneId, SceneSaveFilter::Spawned);
+    const Scene spawned = SaveScene(ctx, state, registry, sceneId, SceneSaveFilter::Spawned);
     w.BeginBlock("spawned");
     w.Raw(spawned.content.Data(), spawned.content.Size());
     w.EndBlock();
@@ -174,7 +174,7 @@ static void ApplyRuntimeScene(EngineState* state, const TextReader& r, Engine::S
     LoadScene(state->componentRegistry, registry, r.Block("spawned"));
 }
 
-static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const Platform::ScopedFileMapping& map, Engine::SystemRegistry& registry)
+static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId, const Platform::ScopedFileMapping& map)
 {
     RuntimeSceneStatus status{.bExists = true};
     const TextReader reader(map.data, map.size);
@@ -198,14 +198,14 @@ static RuntimeSceneStatus ComputeRuntimeSceneStatus(EngineContext* ctx, EngineSt
     return status;
 }
 
-bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
+bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
     ZoneScoped;
     if (!IsRunning(state)) {
         LOG_WARN(Engine, "Runtime scene save refused: only while playing or simulating");
         return false;
     }
-    const Core::Path path = RuntimeSceneFile(ctx, sceneId);
+    const Core::Path path = RuntimeSceneFile(ctx, state, registry, sceneId);
     if (path.IsEmpty()) {
         LOG_WARN(Engine, "Runtime scene save refused: {} has no scene file", sceneId.ToString());
         return false;
@@ -216,7 +216,7 @@ bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, 
     w.Key("wruntimescene", RUNTIME_SCENE_VERSION);
     w.Key("scene_id", sceneId.id);
     WriteClock(state, w);
-    WriteRuntimeScene(ctx, state, sceneId, w, registry);
+    WriteRuntimeScene(ctx, state, registry, sceneId, w);
 
     gRuntimeSceneStatus.Remove(sceneId);
     if (!Platform::WriteFile(path, out.Data(), out.Size())) {
@@ -227,9 +227,9 @@ bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, 
     return true;
 }
 
-bool DeleteRuntimeScene(EngineContext* ctx, StringID sceneId)
+bool DeleteRuntimeScene(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
-    const Core::Path path = RuntimeSceneFile(ctx, sceneId);
+    const Core::Path path = RuntimeSceneFile(ctx, state, registry, sceneId);
     gRuntimeSceneStatus.Remove(sceneId);
     if (path.IsEmpty() || !Platform::FileExists(path) || !Platform::MoveToRecycleBin(path)) {
         LOG_ERROR(Engine, "Failed to delete runtime scene '{}'", path.c_str());
@@ -239,7 +239,7 @@ bool DeleteRuntimeScene(EngineContext* ctx, StringID sceneId)
     return true;
 }
 
-const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
+const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
     constexpr auto REFRESH = std::chrono::milliseconds(500);
     const auto now = std::chrono::steady_clock::now();
@@ -250,8 +250,8 @@ const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState*
         gRuntimeSceneStatus.Clear();
     }
     RuntimeSceneStatus status{};
-    if (const Core::Path path = RuntimeSceneFile(ctx, sceneId); !path.IsEmpty() && Platform::FileExists(path)) {
-        status = ComputeRuntimeSceneStatus(ctx, state, sceneId, Platform::ScopedFileMapping(path), registry);
+    if (const Core::Path path = RuntimeSceneFile(ctx, state, registry, sceneId); !path.IsEmpty() && Platform::FileExists(path)) {
+        status = ComputeRuntimeSceneStatus(ctx, state, registry, sceneId, Platform::ScopedFileMapping(path));
     }
     return gRuntimeSceneStatus.Emplace(sceneId, CachedRuntimeSceneStatus{status, now}).status;
 }
@@ -261,11 +261,11 @@ void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state, Engine::SystemRe
     ZoneScoped;
     bool bApplied = false;
     for (const RuntimeSceneMetadata& meta : state->editor.loadedScenes) {
-        const Core::Path path = RuntimeSceneFile(ctx, meta.sceneId);
+        const Core::Path path = RuntimeSceneFile(ctx, state, registry, meta.sceneId);
         if (path.IsEmpty() || !Platform::FileExists(path)) { continue; }
 
         const Platform::ScopedFileMapping map(path);
-        const RuntimeSceneStatus status = ComputeRuntimeSceneStatus(ctx, state, meta.sceneId, map, registry);
+        const RuntimeSceneStatus status = ComputeRuntimeSceneStatus(ctx, state, registry, meta.sceneId, map);
         if (status.bUnreadable) {
             LOG_ERROR(Engine, "Runtime scene '{}' is unreadable, for another scene, or an unknown version", path.c_str());
             continue;
@@ -283,7 +283,7 @@ void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state, Engine::SystemRe
     }
 
     if (bApplied) {
-        ResolvePrefabLoads(state, ctx->assetManager, registry);
+        ResolvePrefabLoads(ctx, state, registry);
         ResolveHierarchyLinks(state, registry);
         state->requests.bTeleportPhysics = true;
         state->requests.RequestRenderReset(Core::RenderReset::Cut);

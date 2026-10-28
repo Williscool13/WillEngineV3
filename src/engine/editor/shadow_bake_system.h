@@ -42,7 +42,7 @@ struct ShadowBakeSystem
 
     [[nodiscard]] bool IsBusy() const { return requestId != 0 || !queue.IsEmpty(); }
 
-    void Tick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+    void Tick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 };
 
 ShadowBakeKey MakeShadowBakeKey(const LightInfo& light);
@@ -50,7 +50,7 @@ ShadowBakeKey MakeShadowBakeKey(const LightInfo& light);
 /** True when the light still matches the views its map was baked with. */
 bool IsShadowBakeCurrent(const ShadowBakeKey& baked, const LightInfo& light);
 
-void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void ShadowBakeTick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 } // Engine
 
 #endif //WILL_ENGINE_SHADOW_BAKE_SYSTEM_H

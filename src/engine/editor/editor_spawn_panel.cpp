@@ -28,7 +28,7 @@ static void SelectOnly(Engine::EngineState* state, entt::entity entity)
     state->editor.selectedEntities.PushBack(entity);
 }
 
-void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_SPAWN];
     if (!bOpen) { return; }
@@ -50,7 +50,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
 
         ImGui::SeparatorText("Model");
 
-        const auto& modelCache = ctx->assetManager->GetModelCache();
+        const auto& modelCache = registry.Service<Engine::AssetManager>().GetModelCache();
         static int selectedModel = 0;
 
         struct ModelPair
@@ -85,7 +85,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
 
         ImGui::BeginDisabled(modelList.IsEmpty());
         if (ImGui::Button("Spawn Model")) {
-            auto spawned = SpawnModel(ctx, state, modelList[selectedModel].id, registry, spawnPos);
+            auto spawned = SpawnModel(ctx, state, registry, modelList[selectedModel].id, spawnPos);
             if (!spawned.IsEmpty()) {
                 state->editor.selectedFolders.Clear();
                 state->editor.selectedEntities.Clear();
@@ -101,7 +101,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
 
         const bool bEditingPrefab = IsEditingPrefab(state, registry);
         if (bEditingPrefab) {
-            const auto* editMeta = ctx->assetManager->GetPrefabMetadata(state->editor.editingPrefabId);
+            const auto* editMeta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(state->editor.editingPrefabId);
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Editing prefab: %s", editMeta ? editMeta->prefabName.c_str() : "?");
             if (ImGui::Button("Apply##edit")) { ApplyPrefabEdit(ctx, state, registry); }
             ImGui::SameLine();
@@ -119,11 +119,11 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
         ImGui::BeginDisabled(!bCanSaveAsPrefab || !ctx->bGameLoaded);
         ImGui::InputText("##prefab_name", prefabName, sizeof(prefabName));
         if (ImGui::Button("Save as Prefab")) {
-            SaveEntityAsPrefab(state, ctx->assetManager, ctx, selected, prefabName, registry);
+            SaveEntityAsPrefab(ctx, state, registry, selected, prefabName);
         }
         ImGui::EndDisabled();
 
-        const auto& prefabCache = ctx->assetManager->GetPrefabCache();
+        const auto& prefabCache = registry.Service<Engine::AssetManager>().GetPrefabCache();
         static int selectedPrefab = 0;
         struct PrefabPair
         {
@@ -154,7 +154,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
         }
 
         if (ImGui::Button("Spawn Prefab")) {
-            entt::entity spawned = SpawnPrefab(state, ctx->assetManager, prefabList[selectedPrefab].id, registry, spawnPos);
+            entt::entity spawned = SpawnPrefab(ctx, state, registry, prefabList[selectedPrefab].id, spawnPos);
             if (spawned != entt::null) {
                 SelectOnly(state, spawned);
                 MarkSceneModified(state, state->scene.currentSceneId);
@@ -163,7 +163,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
         ImGui::SameLine();
         ImGui::BeginDisabled(bEditingPrefab || IsRunning(state) || !ctx->bGameLoaded);
         if (ImGui::Button("Edit Prefab")) {
-            const entt::entity copy = BeginPrefabEdit(ctx, state, prefabList[selectedPrefab].id, spawnPos, registry);
+            const entt::entity copy = BeginPrefabEdit(ctx, state, registry, prefabList[selectedPrefab].id, spawnPos);
             if (copy != entt::null) { SelectOnly(state, copy); }
         }
         ImGui::EndDisabled();
@@ -181,7 +181,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core
             }
             ImGui::BeginDisabled(prefabList.IsEmpty() || prefabInUse);
             if (ImGui::Button("Delete Prefab")) {
-                ctx->assetManager->DeletePrefab(selectedPrefabId);
+                registry.ServiceMut<Engine::AssetManager>().DeletePrefab(selectedPrefabId);
                 selectedPrefab = 0;
             }
             ImGui::EndDisabled();

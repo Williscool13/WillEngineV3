@@ -19,7 +19,7 @@ namespace Engine
 {
 void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 /**
  * Searchable, grouped list of mutable materials. Must be called inside an open combo, popup or child region; draws its own search field.
@@ -27,10 +27,10 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
  * @param current Highlighted material.
  * @return The material clicked this frame, or INVALID.
  */
-Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::MaterialBrowserState& view, Engine::MaterialID current);
+Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::MaterialBrowserState& view, Engine::MaterialID current);
 
 /** BeginCombo previewing `current`: noneLabel when unset, "--" when mixed, red "Missing <id>" when the id is not registered. */
-bool BeginMaterialCombo(Engine::EngineContext* ctx, const char* label, Engine::MaterialID current, const char* noneLabel, bool bMixed = false);
+bool BeginMaterialCombo(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const char* label, Engine::MaterialID current, const char* noneLabel, bool bMixed = false);
 }
 
 #endif //WILL_ENGINE_EDITOR_MATERIALS_H

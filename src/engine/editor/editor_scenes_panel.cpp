@@ -68,9 +68,9 @@ static bool IsLoaded(const EngineState* state, StringID sceneId)
     return false;
 }
 
-static bool IsNameInUse(EngineContext* ctx, const char* name)
+static bool IsNameInUse(EngineContext* ctx, EngineState* state, SystemRegistry& registry, const char* name)
 {
-    for (const auto& [id, meta] : ctx->assetManager->GetSceneCache()) {
+    for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetSceneCache()) {
         if (meta.sceneName == name) { return true; }
     }
     return false;
@@ -95,15 +95,15 @@ static bool IsInsideFolder(const Core::Path& path, const Core::Path& folder)
     return view.size() > folder.Size() && view.starts_with(folder.View()) && view[folder.Size()] == '/';
 }
 
-static bool IsFolderEmpty(EngineContext* ctx, const Core::Path& folder)
+static bool IsFolderEmpty(EngineContext* ctx, EngineState* state, SystemRegistry& registry, const Core::Path& folder)
 {
-    for (const auto& [id, meta] : ctx->assetManager->GetSceneCache()) {
+    for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetSceneCache()) {
         if (IsInsideFolder(meta.source, folder)) { return false; }
     }
-    for (const auto& [id, run] : ctx->assetManager->GetPlayCache()) {
+    for (const auto& [id, run] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
         if (IsInsideFolder(run.source, folder)) { return false; }
     }
-    for (const Core::Path& other : ctx->assetManager->GetSceneFolders()) {
+    for (const Core::Path& other : registry.Service<Engine::AssetManager>().GetSceneFolders()) {
         if (IsInsideFolder(other, folder)) { return false; }
     }
     return true;
@@ -119,11 +119,11 @@ static void Request(ScenesPopup popup, StringID scene, const Core::Path& folder,
     gScenesPanel.name[len] = '\0';
 }
 
-static void LoadAndActivate(EngineContext* ctx, EngineState* state, StringID sceneId, SystemRegistry& registry)
+static void LoadAndActivate(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId)
 {
-    if (LoadSceneFromFile(state, ctx->assetManager, sceneId, registry).bSuccess) {
+    if (LoadSceneFromFile(ctx, state, registry, sceneId).bSuccess) {
         state->scene.currentSceneId = sceneId;
-        SyncActiveScene(ctx, state);
+        SyncActiveScene(ctx, state, registry);
     }
 }
 
@@ -143,12 +143,12 @@ static void RequestUnload(EngineState* state, Core::Span<const StringID> sceneId
     gScenesPanel.unloadIds.Clear();
 }
 
-void SyncActiveScene(EngineContext* ctx, EngineState* state)
+void SyncActiveScene(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     if (!IsLoaded(state, state->scene.currentSceneId)) {
         state->scene.currentSceneId = state->editor.loadedScenes.IsEmpty() ? StringID{} : state->editor.loadedScenes[0].sceneId;
     }
-    const auto* meta = ctx->assetManager->GetSceneMetadata(state->scene.currentSceneId);
+    const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(state->scene.currentSceneId);
     if (meta) {
         state->scene.currentSceneName = meta->sceneName;
     }
@@ -157,7 +157,7 @@ void SyncActiveScene(EngineContext* ctx, EngineState* state)
     }
 }
 
-static void DrawRunsMenu(EngineContext* ctx, EngineState* state, StringID sceneId)
+static void DrawRunsMenu(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId)
 {
     ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
     ImGui::MenuItem("Skip captures", nullptr, &state->playtest.bSkipCaptures);
@@ -165,7 +165,7 @@ static void DrawRunsMenu(EngineContext* ctx, EngineState* state, StringID sceneI
     ImGui::Separator();
     const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty() || ProbeBakeActive(state);
     uint32_t runCount = 0;
-    for (const auto& [id, run] : ctx->assetManager->GetPlayCache()) {
+    for (const auto& [id, run] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
         if (run.sceneId != sceneId) { continue; }
         ++runCount;
         ImGui::PushID(static_cast<int>(id.id));
@@ -179,14 +179,14 @@ static void DrawRunsMenu(EngineContext* ctx, EngineState* state, StringID sceneI
     }
 }
 
-static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bLoaded, SystemRegistry& registry)
+static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bLoaded)
 {
     if (!bLoaded) {
         const bool bExists = !meta.bUnsaved && Platform::FileExists(RuntimeScenePath(meta.source));
         ImGui::TextUnformatted(bExists ? "Saved (load to check if outdated)" : "None");
         return;
     }
-    const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, sceneId, registry);
+    const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, registry, sceneId);
     if (!status.bExists) {
         ImGui::TextUnformatted("None");
         return;
@@ -205,7 +205,7 @@ static void DrawRuntimeSceneStatus(EngineContext* ctx, EngineState* state, Strin
     if (status.changed > 0) { ImGui::TextColored(ORANGE, "  %u changed, first '%s'", status.changed, status.firstChanged.c_str()); }
 }
 
-static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bShowFolder, SystemRegistry& registry)
+static void DrawSceneRow(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId, const AssetManager::CachedSceneMetadata& meta, bool bShowFolder)
 {
     const bool bLoaded = IsLoaded(state, sceneId);
     const bool bActive = sceneId == state->scene.currentSceneId;
@@ -217,10 +217,10 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
     if (ImGui::Selectable(label.c_str(), bActive, ImGuiSelectableFlags_AllowDoubleClick)) {
         if (bLoaded) {
             state->scene.currentSceneId = sceneId;
-            SyncActiveScene(ctx, state);
+            SyncActiveScene(ctx, state, registry);
         }
         else if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && state->editor.loadedScenes.Size() < MAX_LOADED_SCENES) {
-            LoadAndActivate(ctx, state, sceneId, registry);
+            LoadAndActivate(ctx, state, registry, sceneId);
         }
     }
     if (!bLoaded) { ImGui::PopStyleColor(); }
@@ -230,7 +230,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
         ImGui::SeparatorText("Authored");
         ImGui::TextUnformatted(meta.bUnsaved ? "Never saved" : bModified ? "Unsaved changes" : "Saved");
         ImGui::SeparatorText("Runtime");
-        DrawRuntimeSceneStatus(ctx, state, sceneId, meta, bLoaded, registry);
+        DrawRuntimeSceneStatus(ctx, state, registry, sceneId, meta, bLoaded);
         ImGui::EndTooltip();
     }
     if (ImGui::BeginDragDropSource()) {
@@ -242,30 +242,30 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
     if (ImGui::BeginPopupContextItem()) {
         if (!bLoaded) {
             if (ImGui::MenuItem("Load", nullptr, false, state->editor.loadedScenes.Size() < MAX_LOADED_SCENES)) {
-                LoadAndActivate(ctx, state, sceneId, registry);
+                LoadAndActivate(ctx, state, registry, sceneId);
             }
         }
         else {
             if (ImGui::MenuItem("Make Active", nullptr, false, !bActive)) {
                 state->scene.currentSceneId = sceneId;
-                SyncActiveScene(ctx, state);
+                SyncActiveScene(ctx, state, registry);
             }
             ImGui::SeparatorText("Authored");
             if (ImGui::MenuItem("Save##authored", nullptr, false, bCanSave)) {
-                SaveEditorScene(ctx, state, sceneId, registry);
+                SaveEditorScene(ctx, state, registry, sceneId);
             }
             if (!bCanSave && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                 ImGui::SetTooltip("Only in edit mode");
             }
             ImGui::SeparatorText("Runtime");
             if (ImGui::MenuItem("Save##runtime", nullptr, false, IsRunning(state) && !meta.bUnsaved)) {
-                SaveRuntimeScene(ctx, state, sceneId, registry);
+                SaveRuntimeScene(ctx, state, registry, sceneId);
             }
             if (!IsRunning(state) && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                 ImGui::SetTooltip("Only while playing or simulating");
             }
-            if (ImGui::MenuItem("Delete##runtime", nullptr, false, GetRuntimeSceneStatus(ctx, state, sceneId, registry).bExists)) {
-                DeleteRuntimeScene(ctx, sceneId);
+            if (ImGui::MenuItem("Delete##runtime", nullptr, false, GetRuntimeSceneStatus(ctx, state, registry, sceneId).bExists)) {
+                DeleteRuntimeScene(ctx, state, registry, sceneId);
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Unload")) {
@@ -273,7 +273,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
             }
         }
         if (ImGui::BeginMenu("Runs", bActive)) {
-            DrawRunsMenu(ctx, state, sceneId);
+            DrawRunsMenu(ctx, state, registry, sceneId);
             ImGui::EndMenu();
         }
         ImGui::Separator();
@@ -311,13 +311,13 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, StringID sceneI
     }
 }
 
-static void AcceptSceneDrop(EngineContext* ctx, const Core::Path& folder)
+static void AcceptSceneDrop(EngineContext* ctx, EngineState* state, SystemRegistry& registry, const Core::Path& folder)
 {
     if (!ImGui::BeginDragDropTarget()) { return; }
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SCENE_ASSET")) {
         const StringID sceneId = *static_cast<const StringID*>(payload->Data);
-        if (const auto* meta = ctx->assetManager->GetSceneMetadata(sceneId); meta && meta->source.Parent() != folder) {
-            ctx->assetManager->MoveScene(sceneId, folder / meta->source.Filename());
+        if (const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(sceneId); meta && meta->source.Parent() != folder) {
+            registry.ServiceMut<Engine::AssetManager>().MoveScene(sceneId, folder / meta->source.Filename());
         }
     }
     ImGui::EndDragDropTarget();
@@ -329,12 +329,12 @@ struct SceneEntry
     const AssetManager::CachedSceneMetadata* meta;
 };
 
-static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path& folder, bool bRoot, SystemRegistry& registry)
+static void DrawFolder(EngineContext* ctx, EngineState* state, SystemRegistry& registry, const Core::Path& folder, bool bRoot)
 {
     const std::string_view name = bRoot ? std::string_view{"scenes"} : folder.Filename();
     const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanFullWidth | (bRoot ? ImGuiTreeNodeFlags_DefaultOpen : 0);
     const bool bOpen = ImGui::TreeNodeEx(Core::InlineString<320>::Format("%.*s##%s", static_cast<int>(name.size()), name.data(), folder.c_str()).c_str(), flags);
-    AcceptSceneDrop(ctx, folder);
+    AcceptSceneDrop(ctx, state, registry, folder);
 
     if (ImGui::BeginPopupContextItem()) {
         if (ImGui::MenuItem("New Scene...")) { Request(ScenesPopup::NewScene, {}, folder, "new_scene"); }
@@ -342,7 +342,7 @@ static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path&
         if (!bRoot) {
             ImGui::Separator();
             if (ImGui::MenuItem("Rename...")) { Request(ScenesPopup::RenameFolder, {}, folder, name); }
-            const bool bEmpty = IsFolderEmpty(ctx, folder);
+            const bool bEmpty = IsFolderEmpty(ctx, state, registry, folder);
             if (ImGui::MenuItem("Delete", nullptr, false, bEmpty)) {
                 if (!Platform::RemoveEmptyDirectory(folder)) {
                     LOG_WARN(Engine, "Folder '{}' still holds files; not deleted", folder.c_str());
@@ -355,37 +355,37 @@ static void DrawFolder(EngineContext* ctx, EngineState* state, const Core::Path&
     }
     if (!bOpen) { return; }
 
-    Core::ArenaFixedVector<const Core::Path*> subfolders(&ctx->editorArena.Get(), ctx->assetManager->GetSceneFolders().Size() + 1);
-    for (const Core::Path& other : ctx->assetManager->GetSceneFolders()) {
+    Core::ArenaFixedVector<const Core::Path*> subfolders(&ctx->editorArena.Get(), registry.Service<Engine::AssetManager>().GetSceneFolders().Size() + 1);
+    for (const Core::Path& other : registry.Service<Engine::AssetManager>().GetSceneFolders()) {
         if (other.Parent() == folder) { subfolders.PushBack(&other); }
     }
     std::ranges::sort(subfolders, [](const Core::Path* a, const Core::Path* b) { return a->Filename() < b->Filename(); });
     for (const Core::Path* subfolder : subfolders) {
-        DrawFolder(ctx, state, *subfolder, false, registry);
+        DrawFolder(ctx, state, registry, *subfolder, false);
     }
 
-    const auto& sceneCache = ctx->assetManager->GetSceneCache();
+    const auto& sceneCache = registry.Service<Engine::AssetManager>().GetSceneCache();
     Core::ArenaFixedVector<SceneEntry> scenes(&ctx->editorArena.Get(), sceneCache.Size() + 1);
     for (const auto& [id, meta] : sceneCache) {
         if (meta.source.Parent() == folder) { scenes.PushBack({id, &meta}); }
     }
     std::ranges::sort(scenes, [](const SceneEntry& a, const SceneEntry& b) { return a.meta->sceneName.View() < b.meta->sceneName.View(); });
     for (const SceneEntry& scene : scenes) {
-        DrawSceneRow(ctx, state, scene.id, *scene.meta, false, registry);
+        DrawSceneRow(ctx, state, registry, scene.id, *scene.meta, false);
     }
     ImGui::TreePop();
 }
 
 static void DrawSearchResults(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
-    const auto& sceneCache = ctx->assetManager->GetSceneCache();
+    const auto& sceneCache = registry.Service<Engine::AssetManager>().GetSceneCache();
     Core::ArenaFixedVector<SceneEntry> scenes(&ctx->editorArena.Get(), sceneCache.Size() + 1);
     for (const auto& [id, meta] : sceneCache) {
         if (meta.sceneName.Contains(gScenesPanel.search, Core::CaseSensitivity::Insensitive)) { scenes.PushBack({id, &meta}); }
     }
     std::ranges::sort(scenes, [](const SceneEntry& a, const SceneEntry& b) { return a.meta->sceneName.View() < b.meta->sceneName.View(); });
     for (const SceneEntry& scene : scenes) {
-        DrawSceneRow(ctx, state, scene.id, *scene.meta, true, registry);
+        DrawSceneRow(ctx, state, registry, scene.id, *scene.meta, true);
     }
     if (scenes.IsEmpty()) {
         ImGui::TextDisabled("No scene matches");
@@ -428,17 +428,17 @@ static void DrawPopups(EngineContext* ctx, EngineState* state, SystemRegistry& r
     if (ImGui::BeginPopupModal(PopupTitle(ScenesPopup::NewScene), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         FolderText(gScenesPanel.folder);
         const bool bEnter = NameInput(ImGui::IsWindowAppearing());
-        const bool bInUse = !bNameEmpty && IsNameInUse(ctx, name);
+        const bool bInUse = !bNameEmpty && IsNameInUse(ctx, state, registry, name);
         const bool bFull = state->editor.loadedScenes.Size() >= MAX_LOADED_SCENES;
         if (bInUse) { ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "A scene with this name already exists"); }
         if (bFull) { ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%u scenes are loaded; unload one first", MAX_LOADED_SCENES); }
         if (ConfirmButtons("Create", !bNameEmpty && !bInUse && !bFull, bEnter)) {
             const StringID newId{state->rng()};
-            ctx->assetManager->RegisterScene(newId, gScenesPanel.folder / Core::InlineString<160>::Format("%s.wscene", name).c_str());
+            registry.ServiceMut<Engine::AssetManager>().RegisterScene(newId, gScenesPanel.folder / Core::InlineString<160>::Format("%s.wscene", name).c_str());
             state->editor.loadedScenes.PushBack({newId});
             state->editor.modifiedScenes.PushBack(newId);
             state->scene.currentSceneId = newId;
-            SyncActiveScene(ctx, state);
+            SyncActiveScene(ctx, state, registry);
         }
         ImGui::EndPopup();
     }
@@ -457,15 +457,15 @@ static void DrawPopups(EngineContext* ctx, EngineState* state, SystemRegistry& r
     }
 
     if (ImGui::BeginPopupModal(PopupTitle(ScenesPopup::RenameScene), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        const auto* meta = ctx->assetManager->GetSceneMetadata(gScenesPanel.scene);
+        const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(gScenesPanel.scene);
         const bool bEnter = NameInput(ImGui::IsWindowAppearing());
         const bool bSame = meta && meta->sceneName == name;
-        const bool bInUse = !bNameEmpty && !bSame && IsNameInUse(ctx, name);
+        const bool bInUse = !bNameEmpty && !bSame && IsNameInUse(ctx, state, registry, name);
         if (bInUse) { ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "A scene with this name already exists"); }
         if (ConfirmButtons("Rename", meta && !bNameEmpty && !bSame && !bInUse, bEnter)) {
             const Core::Path target = meta->source.Parent() / Core::InlineString<160>::Format("%s.wscene", name).c_str();
-            if (ctx->assetManager->MoveScene(gScenesPanel.scene, target)) {
-                SyncActiveScene(ctx, state);
+            if (registry.ServiceMut<Engine::AssetManager>().MoveScene(gScenesPanel.scene, target)) {
+                SyncActiveScene(ctx, state, registry);
             }
         }
         ImGui::EndPopup();
@@ -488,12 +488,12 @@ static void DrawPopups(EngineContext* ctx, EngineState* state, SystemRegistry& r
 
     if (ImGui::BeginPopupModal(PopupTitle(ScenesPopup::DeleteScene), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         uint32_t runCount = 0;
-        for (const auto& [id, run] : ctx->assetManager->GetPlayCache()) {
+        for (const auto& [id, run] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
             if (run.sceneId == gScenesPanel.scene) { ++runCount; }
         }
         ImGui::Text("Move '%s' and its %u runs to the recycle bin?", name, runCount);
         if (ConfirmButtons("Delete", !IsLoaded(state, gScenesPanel.scene), false)) {
-            ctx->assetManager->DeleteScene(gScenesPanel.scene);
+            registry.ServiceMut<Engine::AssetManager>().DeleteScene(gScenesPanel.scene);
         }
         ImGui::EndPopup();
     }
@@ -502,14 +502,14 @@ static void DrawPopups(EngineContext* ctx, EngineState* state, SystemRegistry& r
         ImGui::TextUnformatted("These scenes have unsaved changes:");
         for (StringID id : gScenesPanel.unloadIds) {
             if (!state->editor.modifiedScenes.Contains(id)) { continue; }
-            const auto* meta = ctx->assetManager->GetSceneMetadata(id);
+            const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(id);
             ImGui::BulletText("%s", meta ? meta->sceneName.c_str() : "(unregistered)");
         }
         bool bUnload = false;
         ImGui::BeginDisabled(!ctx->bGameLoaded);
         if (ImGui::Button("Save and Unload")) {
             for (StringID id : gScenesPanel.unloadIds) {
-                if (state->editor.modifiedScenes.Contains(id)) { SaveEditorScene(ctx, state, id, registry); }
+                if (state->editor.modifiedScenes.Contains(id)) { SaveEditorScene(ctx, state, registry, id); }
             }
             bUnload = true;
         }
@@ -577,7 +577,7 @@ void DrawScenesPanel(EngineContext* ctx, EngineState* state, SystemRegistry& reg
             DrawSearchResults(ctx, state, registry);
         }
         else {
-            DrawFolder(ctx, state, root, true, registry);
+            DrawFolder(ctx, state, registry, root, true);
         }
         ImGui::EndChild();
 

@@ -13,7 +13,7 @@
 namespace Engine
 {
 /** Pixel advance for a single glyph at the given font size; falls back to a quarter-em box for missing glyphs/fonts. */
-inline float GlyphAdvance(AssetManager* assetManager, FontHandle font, uint32_t codepoint, float fontSize)
+inline float GlyphAdvance(const AssetManager* assetManager, FontHandle font, uint32_t codepoint, float fontSize)
 {
     const Font* f = assetManager->GetFont(font);
     if (!f) { return fontSize * 0.25f; }
@@ -23,7 +23,7 @@ inline float GlyphAdvance(AssetManager* assetManager, FontHandle font, uint32_t 
 }
 
 /** Pixel width of text[0, count); letterSpacing applied between glyphs, matching Clay's own measure-text convention. */
-inline float MeasureText(AssetManager* assetManager, FontHandle font, const char* text, int32_t count, float fontSize, float letterSpacing = 0.0f)
+inline float MeasureText(const AssetManager* assetManager, FontHandle font, const char* text, int32_t count, float fontSize, float letterSpacing = 0.0f)
 {
     float width = 0.0f;
     for (int32_t i = 0; i < count; ++i) {

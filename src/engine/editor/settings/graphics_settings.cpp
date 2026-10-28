@@ -1357,7 +1357,7 @@ void DrawDiagnosticsWindow(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
 
         if (BeginDiagnosticZone("Physics Bodies", &diagnostics.bPhysics, true, nullptr, 3.0f)) {
-            const Physics::BodyCounts b = ctx->physicsWorld->GetBodyCounts();
+            const Physics::BodyCounts b = registry.Service<Physics::PhysicsWorld>().GetBodyCounts();
             ImGui::Text("Total: %u (%u static)", b.total, b.staticBodies);
             ImGui::Text("Dynamic: %u (%u awake, %u asleep)", b.dynamic, b.dynamicAwake, b.dynamic - b.dynamicAwake);
             ImGui::Text("Kinematic: %u (%u awake)", b.kinematic, b.kinematicAwake);

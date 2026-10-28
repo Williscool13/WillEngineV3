@@ -28,17 +28,17 @@ namespace Engine
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId);
 
 /** Refused while playing or without game.dll. */
-void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry);
+void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId);
 
 void SaveModifiedScenes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void MarkEntitiesModified(Engine::EngineState* state, Core::Span<entt::entity> entities, Engine::SystemRegistry& registry);
 
 /** Copies each source's subtree into the active scene, renames the top-level copies and selects them. */
-void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources, Engine::SystemRegistry& registry);
+void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> sources);
 
 /** Puts the sources' subtrees on the system clipboard as scene text. */
-void CopyEntitiesToClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources, Engine::SystemRegistry& registry);
+void CopyEntitiesToClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> sources);
 
 /** Instantiates clipboard entities into the active scene and selects them; non-entity text is ignored. */
 void PasteEntitiesFromClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
@@ -52,18 +52,18 @@ void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* sta
  * Parents the top-level entities under a new group at their centroid, in the first one's folder and parent.
  * @return the new group, or null if nothing could be grouped
  */
-entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> entities, Engine::SystemRegistry& registry);
+entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> entities);
 
 /** Creates an empty entity at the parent's origin, in the parent's folder, and selects it. */
 entt::entity CreateChildEntity(Engine::EngineState* state, entt::entity parent, Engine::SystemRegistry& registry);
 
-void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3& centroid, int transformCount, Engine::SystemRegistry& registry);
+void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Vec3& centroid, int transformCount);
 
 void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

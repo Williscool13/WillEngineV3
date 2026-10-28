@@ -57,7 +57,7 @@ Core::ViewData ComputeOrbitCameraSwept(
     float nearPlane,
     float deltaTime,
     OrbitCameraState& state,
-    Physics::PhysicsWorld* physicsWorld)
+    const Physics::PhysicsWorld* physicsWorld)
 {
     if (!state.initialized) {
         state.currentDistance = params.distance;

@@ -114,7 +114,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
 
         if (!component.modelId.IsValid()) {
             if (ImGui::BeginCombo("Select Model", "")) {
-                const auto& modelCache = ctx->assetManager->GetModelCache();
+                const auto& modelCache = registry.Service<Engine::AssetManager>().GetModelCache();
                 for (const auto& [key, meta] : modelCache) {
                     if (ImGui::Selectable(meta.name.c_str(), false)) {
                         edit.Set(&StaticMeshPrimitiveComponent::modelId, key);
@@ -125,7 +125,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             return {.bRequestRemoval = remove};
         }
 
-        const auto* modelMeta = ctx->assetManager->GetModelMetadata(component.modelId);
+        const auto* modelMeta = registry.Service<Engine::AssetManager>().GetModelMetadata(component.modelId);
         ImGui::Text("Model: %s", edit.IsMixed(&StaticMeshPrimitiveComponent::modelId) ? "--" : modelMeta ? modelMeta->name.c_str() : "(invalid)");
         ImGui::SameLine();
         if (ImGui::SmallButton("X##deselect_model")) {
@@ -137,7 +137,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         }
 
         auto* meshRuntime = registry.TryGet<MeshRuntime>(entity);
-        Engine::StaticModel* model = meshRuntime ? ctx->assetManager->GetModel(meshRuntime->modelHandle) : nullptr;
+        const Engine::StaticModel* model = meshRuntime ? registry.Service<Engine::AssetManager>().GetModel(meshRuntime->modelHandle) : nullptr;
         if (model && model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
             const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
             const Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
@@ -176,11 +176,11 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         Engine::MaterialID pendingMat{};
         bool changed = false;
         bool clear = false;
-        if (Engine::BeginMaterialCombo(ctx, "Material", component.materialOverride, "__synthesized__")) {
+        if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material", component.materialOverride, "__synthesized__")) {
             if (ImGui::Selectable("__synthesized__", !component.materialOverride.IsValid())) {
                 if (component.materialOverride.IsValid()) { clear = true; }
             }
-            const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.materialOverride);
+            const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.materialOverride);
             if (picked.IsValid() && picked != component.materialOverride) {
                 pendingMat = picked;
                 changed = true;

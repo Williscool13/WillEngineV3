@@ -30,12 +30,12 @@ struct RuntimeSceneStatus
 };
 
 /** While running. Authored entities: pose and runtime state; destroyed ones by id. Spawned entities: in full. Plus rng and run clock. */
-bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, StringID sceneId, SystemRegistry& registry);
+bool SaveRuntimeScene(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId);
 
-bool DeleteRuntimeScene(EngineContext* ctx, StringID sceneId);
+bool DeleteRuntimeScene(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId);
 
 /** Loaded scenes only; cached for 500 ms. */
-const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, StringID sceneId, SystemRegistry& registry);
+const RuntimeSceneStatus& GetRuntimeSceneStatus(EngineContext* ctx, EngineState* state, SystemRegistry& registry, StringID sceneId);
 
 /** Over each loaded scene. */
 void ApplyRuntimeScenes(EngineContext* ctx, EngineState* state, SystemRegistry& registry);

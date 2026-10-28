@@ -110,7 +110,7 @@ void ClearGameCommands(Engine::EngineState* state);
 
 void Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void Draw(Engine::EngineContext* ctx, Engine::EngineState* state);
+void Draw(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 }
 
 #endif //WILL_ENGINE_CONSOLE_H

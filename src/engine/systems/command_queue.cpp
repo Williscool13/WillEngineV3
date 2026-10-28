@@ -51,12 +51,12 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 break;
             }
             case CommandType::ColliderRelease: {
-                ctx->assetManager->UnloadCollider(command.payload.colliderHandle);
+                registry.ServiceMut<Engine::AssetManager>().UnloadCollider(command.payload.colliderHandle);
                 break;
             }
             case CommandType::BodyDestroy: {
                 const JPH::BodyID bodyId{command.payload.bodyId};
-                JPH::BodyInterface& bodyInterface = ctx->physicsWorld->Jolt().GetBodyInterface();
+                JPH::BodyInterface& bodyInterface = registry.ServiceMut<Physics::PhysicsWorld>().Jolt().GetBodyInterface();
                 WakeBodiesAround(bodyInterface, bodyId);
                 bodyInterface.RemoveBody(bodyId);
                 bodyInterface.DestroyBody(bodyId);
@@ -66,15 +66,15 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 const MeshReleasePayload& release = command.payload.meshRelease;
                 Core::RangeAllocator::Range range{release.rangeOffset, release.rangeCount};
                 Core::RangeAllocator::Range modelRange{release.modelRangeOffset, release.modelRangeCount};
-                state->instanceStore.ReleaseAndFree(ctx->materialManager, range);
+                state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), range);
                 if (modelRange.IsValid()) {
                     state->modelStore.Free(modelRange);
                 }
                 if (release.modelHandle.IsValid()) {
-                    ctx->assetManager->UnloadModel(release.modelHandle);
+                    registry.ServiceMut<Engine::AssetManager>().UnloadModel(release.modelHandle);
                 }
                 if (release.pendingModelHandle.IsValid()) {
-                    ctx->assetManager->UnloadModel(release.pendingModelHandle);
+                    registry.ServiceMut<Engine::AssetManager>().UnloadModel(release.pendingModelHandle);
                 }
                 break;
             }
@@ -106,11 +106,11 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 break;
             }
             case CommandType::CubemapRelease: {
-                ctx->assetManager->UnloadCubemap(command.payload.cubemapHandle);
+                registry.ServiceMut<Engine::AssetManager>().UnloadCubemap(command.payload.cubemapHandle);
                 break;
             }
             case CommandType::FontRelease: {
-                ctx->assetManager->UnloadFont(command.payload.fontHandle);
+                registry.ServiceMut<Engine::AssetManager>().UnloadFont(command.payload.fontHandle);
                 break;
             }
             case CommandType::ProbeConstruct: {

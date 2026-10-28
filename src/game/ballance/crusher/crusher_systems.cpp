@@ -54,14 +54,14 @@ struct CrateHit
 };
 
 /** Intact crates whose bodies touch the world region, with their bounds in the frame `toLocal` maps into. */
-static Core::ArenaFixedVector<CrateHit> FindCrates(Engine::EngineContext* ctx, Engine::EngineState* state, const AABB& region, const Mat4& toLocal, Engine::SystemRegistry& registry)
+static Core::ArenaFixedVector<CrateHit> FindCrates(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const AABB& region, const Mat4& toLocal)
 {
-    const auto entities = Engine::QueryEntitiesInBox(ctx, state, region, registry);
+    const auto entities = Engine::QueryEntitiesInBox(ctx, state, registry, region);
     auto crates = Core::ArenaFixedVector<CrateHit>(&ctx->gameplayArena.Get(), std::max(entities.Size(), size_t{1}));
     for (const entt::entity entity : entities) {
         const auto* body = Component::FindBody(registry, entity);
         if (!body || !registry.Has<Component::BreakableComponent>(entity)) { continue; }
-        crates.PushBack({entity, ctx->physicsWorld->GetWorldBounds(body->bodyID).Transformed(toLocal)});
+        crates.PushBack({entity, registry.Service<Physics::PhysicsWorld>().GetWorldBounds(body->bodyID).Transformed(toLocal)});
     }
     return crates;
 }
@@ -75,18 +75,18 @@ static AABB RegionBelow(const AABB& headWorld, float above, float depth)
     return region;
 }
 
-static bool AnyCrateWhollyUnder(Engine::EngineContext* ctx, Engine::EngineState* state, const Mat4& toHead, const AABB& head, const AABB& headWorld, float depth, Engine::SystemRegistry& registry)
+static bool AnyCrateWhollyUnder(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Mat4& toHead, const AABB& head, const AABB& headWorld, float depth)
 {
-    for (const CrateHit& crate : FindCrates(ctx, state, RegionBelow(headWorld, 0.0f, depth), toHead, registry)) {
+    for (const CrateHit& crate : FindCrates(ctx, state, registry, RegionBelow(headWorld, 0.0f, depth), toHead)) {
         if (crate.local.min.y < head.min.y && InsideXZ(crate.local, head)) { return true; }
     }
     return false;
 }
 
 /** Rule A: every crate under any part of the head breaks once the head is within `reach` of its top. */
-static void BreakCratesUnderHead(Engine::EngineContext* ctx, Engine::EngineState* state, const Mat4& toHead, const AABB& head, const AABB& headWorld, float reach, Engine::SystemRegistry& registry)
+static void BreakCratesUnderHead(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Mat4& toHead, const AABB& head, const AABB& headWorld, float reach)
 {
-    for (const CrateHit& crate : FindCrates(ctx, state, RegionBelow(headWorld, 0.0f, reach), toHead, registry)) {
+    for (const CrateHit& crate : FindCrates(ctx, state, registry, RegionBelow(headWorld, 0.0f, reach), toHead)) {
         const bool bBelow = crate.local.min.y < head.min.y;
         if (bBelow && crate.local.max.y >= head.min.y - reach && OverlapsXZ(crate.local, head)) {
             Break(ctx, crate.entity, registry);
@@ -95,12 +95,12 @@ static void BreakCratesUnderHead(Engine::EngineContext* ctx, Engine::EngineState
 }
 
 /** Rule C: nothing intact leaves on the pusher. Any crate in what is left of its sweep breaks; one getting this far means the head or the belts let it through. */
-static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity pusher, float remaining, Engine::SystemRegistry& registry)
+static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity pusher, float remaining)
 {
     const Mat4 toWorld = Component::GetMatrix(registry.Get<Component::WorldTransformRuntime>(pusher));
     const Mat4 toLocal = glm::inverse(toWorld);
 
-    const Physics::PhysicsWorld* physics = ctx->physicsWorld;
+    const Physics::PhysicsWorld* physics = &registry.Service<Physics::PhysicsWorld>();
     AABB sweep;
     for (const auto& [entity, hierarchy, body] : registry.View<Component::HierarchyComponent, Component::PhysicsBodyRuntime>().each()) {
         if (hierarchy.parent != pusher || !body.bodyID.IsValid()) { continue; }
@@ -112,7 +112,7 @@ static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineSt
     sweep.min.x = front - remaining;
     sweep.max.x = front + CONTACT_MARGIN;
 
-    for (const CrateHit& crate : FindCrates(ctx, state, sweep.Transformed(toWorld), toLocal, registry)) {
+    for (const CrateHit& crate : FindCrates(ctx, state, registry, sweep.Transformed(toWorld), toLocal)) {
         if (!crate.local.Overlaps(sweep)) { continue; }
         const auto* name = registry.TryGet<Component::NameComponent>(crate.entity);
         WLOG_WARN(Crusher, "Crate '{}' reached the pusher intact; broken there", name ? name->name.c_str() : "Unnamed");
@@ -157,7 +157,7 @@ static void StretchArm(Engine::EngineContext* ctx, Engine::SystemRegistry& regis
     const auto* armBody = Component::FindBody(registry, arm);
     const auto* current = armBody ? registry.TryGet<Component::TransformComponent>(arm) : nullptr;
     if (!current) { return; }
-    const AABB bounds = ctx->physicsWorld->GetLocalBounds(armBody->bodyID);
+    const AABB bounds = registry.Service<Physics::PhysicsWorld>().GetLocalBounds(armBody->bodyID);
     const float length = bounds.max.y - bounds.min.y;
     if (length <= 1e-4f) { return; }
     const float scale = 1.0f + drop / length;
@@ -168,13 +168,13 @@ static void StretchArm(Engine::EngineContext* ctx, Engine::SystemRegistry& regis
     registry.Set<Component::DirtyTransformRequest>(arm);
 }
 
-static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state, const Component::CrusherComponent& crusher, Component::CrusherRuntime& run, float dt, bool bThroatClosed, Engine::SystemRegistry& registry)
+static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Component::CrusherComponent& crusher, Component::CrusherRuntime& run, float dt, bool bThroatClosed)
 {
     const entt::entity head = crusher.head.Get(state, registry);
     const auto* headBody = Component::FindBody(registry, head);
     if (!headBody) { return; }
 
-    const Physics::PhysicsWorld* physics = ctx->physicsWorld;
+    const Physics::PhysicsWorld* physics = &registry.Service<Physics::PhysicsWorld>();
     const Mat4 toHead = glm::inverse(physics->GetCenterOfMassTransform(headBody->bodyID));
     const AABB headLocal = physics->GetLocalBounds(headBody->bodyID);
     const AABB headWorld = physics->GetWorldBounds(headBody->bodyID);
@@ -188,18 +188,18 @@ static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state
         case Component::CrusherPhase::Waiting:
             SetBelts(state, crusher, !bThroatClosed, registry);
             if (bThroatClosed) { break; }
-            if (run.phaseTime >= crusher.restTime && AnyCrateWhollyUnder(ctx, state, toHead, headLocal, headWorld, crusher.stroke + 1.0f, registry)) {
+            if (run.phaseTime >= crusher.restTime && AnyCrateWhollyUnder(ctx, state, registry, toHead, headLocal, headWorld, crusher.stroke + 1.0f)) {
                 SetBelts(state, crusher, false, registry);
                 Enter(run, Component::CrusherPhase::Slam);
             }
             break;
         case Component::CrusherPhase::Slam:
-            BreakCratesUnderHead(ctx, state, toHead, headLocal, headWorld, crusher.slamSpeed * dt * BREAK_LOOKAHEAD_FRAMES, registry);
+            BreakCratesUnderHead(ctx, state, registry, toHead, headLocal, headWorld, crusher.slamSpeed * dt * BREAK_LOOKAHEAD_FRAMES);
             run.drop = glm::min(crusher.stroke, run.drop + crusher.slamSpeed * dt);
             if (run.drop >= crusher.stroke) { Enter(run, Component::CrusherPhase::Hold); }
             break;
         case Component::CrusherPhase::Hold:
-            BreakCratesUnderHead(ctx, state, toHead, headLocal, headWorld, CONTACT_MARGIN, registry);
+            BreakCratesUnderHead(ctx, state, registry, toHead, headLocal, headWorld, CONTACT_MARGIN);
             if (run.phaseTime >= crusher.holdTime) { Enter(run, Component::CrusherPhase::Rise); }
             break;
         case Component::CrusherPhase::Rise:
@@ -207,7 +207,7 @@ static void UpdateCrusher(Engine::EngineContext* ctx, Engine::EngineState* state
             if (run.drop <= 0.0f) { Enter(run, pusher != entt::null ? Component::CrusherPhase::Push : Component::CrusherPhase::Return); }
             break;
         case Component::CrusherPhase::Push:
-            BreakCratesInPusherPath(ctx, state, pusher, crusher.pushDistance - run.pushed, registry);
+            BreakCratesInPusherPath(ctx, state, registry, pusher, crusher.pushDistance - run.pushed);
             run.pushed = glm::min(crusher.pushDistance, run.pushed + crusher.pushSpeed * dt);
             if (run.pushed >= crusher.pushDistance) { Enter(run, Component::CrusherPhase::Return); }
             break;
@@ -236,7 +236,7 @@ static int32_t CountAwakeShards(Engine::EngineContext* ctx, const Engine::System
     int32_t awake = 0;
     for (const entt::entity entity : registry.View<Component::ShardTag>()) {
         const auto* body = Component::FindBody(registry, entity);
-        if (body && ctx->physicsWorld->IsAwake(body->bodyID)) { ++awake; }
+        if (body && registry.Service<Physics::PhysicsWorld>().IsAwake(body->bodyID)) { ++awake; }
     }
     return awake;
 }
@@ -255,7 +255,7 @@ void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state, 
     const int32_t shards = CountAwakeShards(ctx, registry);
     TracyPlot("Ballance/Live shards", static_cast<int64_t>(CountLiveShards(registry)));
     TracyPlot("Ballance/Awake shards", static_cast<int64_t>(shards));
-    TracyPlot("Ballance/Awake bodies", static_cast<int64_t>(ctx->physicsWorld->GetAwakeBodyCount()));
+    TracyPlot("Ballance/Awake bodies", static_cast<int64_t>(registry.Service<Physics::PhysicsWorld>().GetAwakeBodyCount()));
 
     const float dt = state->timeFrame->deltaTime;
     for (const auto& [entity, valve] : registry.View<Component::ThroatValveComponent>().each()) {
@@ -283,7 +283,7 @@ struct CrateSpawn
 
 static void ApplySpawnCrate(Engine::SystemRegistry& registry, const CrateSpawn& spawn)
 {
-    const entt::entity crate = Engine::SpawnPrefab(registry.State(), registry.Context()->assetManager, spawn.prefabId, registry, spawn.position);
+    const entt::entity crate = Engine::SpawnPrefab(registry.Context(), registry.State(), registry, spawn.prefabId, spawn.position);
     if (crate == entt::null) { return; }
     registry.Set<Component::DoNotSerializeTag>(crate);
     auto& transform = registry.GetMut<Component::TransformComponent>(crate);
@@ -333,7 +333,7 @@ void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state, Engi
     for (const auto& [entity, crusher] : view.each()) {
         Component::CrusherRuntime* existing = registry.TryGetMut<Component::CrusherRuntime>(entity);
         Component::CrusherRuntime added{};
-        UpdateCrusher(ctx, state, crusher, existing ? *existing : added, dt, bThroatClosed, registry);
+        UpdateCrusher(ctx, state, registry, crusher, existing ? *existing : added, dt, bThroatClosed);
         if (!existing) { registry.Set<Component::CrusherRuntime>(entity, added); }
     }
 }
@@ -342,7 +342,7 @@ static void PrintFlow(Engine::EngineContext* ctx, Engine::EngineState* state, Co
 {
     Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/b.flow"};
     const auto line = Core::InlineString<256>::Format("  live shards %d (%d awake, %zu stamped asleep), intact breakables %zu, awake bodies %u, throat %s", CountLiveShards(registry), CountAwakeShards(ctx, registry),
-        registry.View<Component::ShardSleepRuntime>().size(), registry.View<Component::BreakableComponent>().size(), ctx->physicsWorld->GetAwakeBodyCount(), AnyThroatClosed(registry) ? "closed" : "open");
+        registry.View<Component::ShardSleepRuntime>().size(), registry.View<Component::BreakableComponent>().size(), registry.Service<Physics::PhysicsWorld>().GetAwakeBodyCount(), AnyThroatClosed(registry) ? "closed" : "open");
     Engine::Console::Print(state, line.c_str());
 }
 

@@ -83,7 +83,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
             ImGui::PushID(slot);
             const char* currentLabel = "(default)";
             if (component.slotMaterials[slot].IsValid()) {
-                if (const Engine::Material* m = ctx->materialManager->GetMaterial(component.slotMaterials[slot])) {
+                if (const Engine::Material* m = registry.Service<Engine::MaterialManager>().GetMaterial(component.slotMaterials[slot])) {
                     currentLabel = m->name.c_str();
                 }
             }
@@ -92,7 +92,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                 if (ImGui::Selectable("(default)", !component.slotMaterials[slot].IsValid())) {
                     edit.Modify<ModuleMeshComponent>([slot](ModuleMeshComponent& c) { c.slotMaterials[slot] = Engine::MaterialID{}; });
                 }
-                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.slotMaterials[slot]);
+                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.slotMaterials[slot]);
                 if (picked.IsValid() && picked != component.slotMaterials[slot]) {
                     edit.Modify<ModuleMeshComponent>([slot, picked](ModuleMeshComponent& c) { c.slotMaterials[slot] = picked; });
                 }

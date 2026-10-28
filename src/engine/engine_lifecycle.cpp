@@ -50,7 +50,7 @@ void CreateDefaultCameras(EngineState* state)
 
 struct UIFontContext
 {
-    AssetManager* assetManager{nullptr};
+    const AssetManager* assetManager{nullptr};
     FontHandle handle{FontHandle::INVALID};
 };
 
@@ -58,12 +58,13 @@ static UIFontContext gUI_FONT_CONTEXT{};
 
 void LoadUIFont(EngineContext* ctx, EngineState* state)
 {
-    const FontID robotoId = ctx->assetManager->FindFontByName("Roboto");
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/LoadUIFont"};
+    const FontID robotoId = registry.Service<Engine::AssetManager>().FindFontByName("Roboto");
     if (robotoId.IsValid()) {
-        state->uiFont = ctx->assetManager->LoadFont(robotoId);
+        state->uiFont = registry.ServiceMut<Engine::AssetManager>().LoadFont(robotoId);
     }
 
-    gUI_FONT_CONTEXT.assetManager = ctx->assetManager;
+    gUI_FONT_CONTEXT.assetManager = &registry.Service<Engine::AssetManager>();
     gUI_FONT_CONTEXT.handle = state->uiFont;
 
     Clay_SetMeasureTextFunction([](Clay_StringSlice text, Clay_TextElementConfig* config, void* userData) -> Clay_Dimensions {
@@ -76,7 +77,8 @@ void LoadUIFont(EngineContext* ctx, EngineState* state)
 
 void LoadStartupScene(EngineContext* ctx, EngineState* state)
 {
-    const auto& sceneCache = ctx->assetManager->GetSceneCache();
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/LoadStartupScene"};
+    const auto& sceneCache = registry.Service<Engine::AssetManager>().GetSceneCache();
     StringID startupScene = state->projectConfig.defaultScene;
     bool bExplicit = false;
     const char* sceneOverride = Args::GetString(*state->launchArgs, ARG_SCENE);
@@ -107,8 +109,7 @@ void LoadStartupScene(EngineContext* ctx, EngineState* state)
         }
         return;
     }
-    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/LoadStartupScene"};
-    const auto res = LoadSceneFromFile(state, ctx->assetManager, startupScene, registry);
+    const auto res = LoadSceneFromFile(ctx, state, registry, startupScene);
     if (res.bSuccess) {
         state->scene.currentSceneId = res.sceneId;
         state->scene.currentSceneName = res.sceneName;
@@ -133,7 +134,7 @@ void HotReloadSave(EngineContext* ctx, EngineState* state)
         }
     }
 
-    state->editor.hotReloadSnapshot = SerializeAll(state->componentRegistry, registry, ctx->assetManager, state->editor.loadedScenes);
+    state->editor.hotReloadSnapshot = SerializeAll(ctx, state, registry, state->editor.loadedScenes);
     Core::InlineVector<StringID, 8> scenesToUnload;
     for (RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);

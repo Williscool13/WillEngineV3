@@ -109,7 +109,7 @@ void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph
 static void TickQuietFrames(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     int32_t& quiet = state->assetLoad.quietFrames;
-    if (CountLoadingEntities(state, registry) > 0 || ctx->assetManager->HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending) {
+    if (CountLoadingEntities(state, registry) > 0 || registry.Service<Engine::AssetManager>().HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending) {
         quiet = 0;
     }
     else if (quiet < INT32_MAX) {
@@ -122,9 +122,9 @@ static void PostUpdateCleanup(EngineContext* ctx, EngineState* state, SystemRegi
     for (const entt::entity entity : registry.View<Component::DirtyTransformRequest>()) {
         registry.Remove<Component::DirtyTransformRequest>(entity);
     }
-    ctx->physicsWorld->ClearCollisionEvents();
-    ctx->physicsWorld->ClearActivationEvents();
-    ctx->materialManager->ProcessRetirements();
+    registry.ServiceMut<Physics::PhysicsWorld>().ClearCollisionEvents();
+    registry.ServiceMut<Physics::PhysicsWorld>().ClearActivationEvents();
+    registry.ServiceMut<Engine::MaterialManager>().ProcessRetirements();
 }
 
 void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph)
@@ -163,7 +163,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
 #else
     graph.Add("PlayStart",
         [](EngineContext* ctx, EngineState* state, SystemRegistry& registry) {
-            if (state->runMode == RunMode::Edit && ctx->bGameLoaded) { PlayStart(ctx, state, false, registry); }
+            if (state->runMode == RunMode::Edit && ctx->bGameLoaded) { PlayStart(ctx, state, registry, false); }
         },
         AccessSet::EXCLUSIVE);
 #endif
@@ -333,7 +333,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
             Writes<Physics::PhysicsWorld, MaterialManager>>());
 }
 
-static void PublishFrameSettings(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, SystemRegistry& registry)
+static void PublishFrameSettings(EngineContext* ctx, EngineState* state, SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
 #if WILL_EDITOR
     {
@@ -438,8 +438,8 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         });
 
     graph.Add("BuildViewFamily",
-        [](EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, SystemRegistry& registry) {
-            BuildViewFamily(ctx, state, frameBuffer->mainViewFamily, registry);
+        [](EngineContext* ctx, EngineState* state, SystemRegistry& registry, Core::FrameBuffer* frameBuffer) {
+            BuildViewFamily(ctx, state, registry, frameBuffer->mainViewFamily);
         },
         {
             .reads = {TypeSID<Component::GameCameraTag>(), TypeSID<Component::EditorCameraTag>(), TypeSID<Component::TransformComponent>(), "state.inputContext"_sid, "state.requests.renderReset"_sid, "state.probeBake"_sid, "engineConfig"_sid},
@@ -485,14 +485,14 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherRenderables",
         &GatherRenderables,
         {
-            .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "engineConfig"_sid, "instanceStore.visibility"_sid},
-            .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, "materialManager.uploadDirty"_sid, "triLightStore"_sid, "viewFamily.renderables"_sid, "viewFamily.volumetricFog"_sid, "viewFamily.settings"_sid},
+            .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), TypeSID<AssetManager>(), "engineConfig"_sid, "instanceStore.visibility"_sid},
+            .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, TypeSID<MaterialManager>(), "triLightStore"_sid, "viewFamily.renderables"_sid, "viewFamily.volumetricFog"_sid, "viewFamily.settings"_sid},
         });
     graph.Add("GatherLights",
         &GatherLights,
         {
-            .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::RenderWorldTransformRuntime>(), TypeSID<Component::AreaLightComponent>(), TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::SphereLightRuntime>(), "instanceStore.visibility"_sid, "instanceStore.worldBounds"_sid, "viewFamily.bakedShadowLights"_sid, "viewFamily.mainView"_sid, TypeSID<MaterialManager>(), "engineConfig"_sid},
-            .writes = {"analyticLightStore"_sid, "triLightStore"_sid, "materialManager.changedDirty"_sid, "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid, "instanceStore.boundsChanges"_sid},
+            .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::RenderWorldTransformRuntime>(), TypeSID<Component::AreaLightComponent>(), TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::SphereLightRuntime>(), "instanceStore.visibility"_sid, "instanceStore.worldBounds"_sid, "viewFamily.bakedShadowLights"_sid, "viewFamily.mainView"_sid, "engineConfig"_sid},
+            .writes = {"analyticLightStore"_sid, "triLightStore"_sid, TypeSID<MaterialManager>(), "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid, "instanceStore.boundsChanges"_sid},
         });
     graph.Add("GatherTextRenderables",
         &GatherTextRenderables,

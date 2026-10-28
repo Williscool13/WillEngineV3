@@ -13,6 +13,8 @@
 namespace Engine
 {
 struct EngineContext;
+struct EngineState;
+class SystemRegistry;
 struct TextureID;
 struct Texture;
 struct Sampler;
@@ -35,8 +37,8 @@ struct EditorTextureResidency
     explicit EditorTextureResidency(Core::TlsfAllocator* allocator);
     ~EditorTextureResidency() = default;
 
-    void Tick(EngineContext* ctx);
-    void Acquire(TextureID id, EngineContext* ctx);
+    void Tick(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
+    void Acquire(EngineContext* ctx, EngineState* state, SystemRegistry& registry, TextureID id);
     uint64_t GetDescSet(TextureID id, EngineContext* ctx);
     void Release(TextureID id, EngineContext* ctx);
     void ReleaseAll(EngineContext* ctx);

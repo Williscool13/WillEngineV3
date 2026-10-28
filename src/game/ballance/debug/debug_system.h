@@ -33,7 +33,7 @@ void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* sta
 
 
 #ifdef WDEBUG
-void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 #endif
 } // Ballance
 

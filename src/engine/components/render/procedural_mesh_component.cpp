@@ -1094,12 +1094,12 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
         // Material selector
         {
-            if (Engine::BeginMaterialCombo(ctx, "Material", component.material, "(none)", edit.IsMixed(&ProceduralMeshComponent::material))) {
+            if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material", component.material, "(none)", edit.IsMixed(&ProceduralMeshComponent::material))) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     component.material = Engine::MaterialID{};
                     bCommit = true;
                 }
-                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.material);
+                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.material);
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
                     bCommit = true;

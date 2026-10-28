@@ -41,10 +41,9 @@
 
 namespace Engine
 {
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, Engine::SystemRegistry& registry, Engine::AssetManager* assetManager, StringID sceneId, SceneSaveFilter filter)
+Engine::Scene SaveScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId, SceneSaveFilter filter)
 {
     ZoneScoped;
-    auto* ctx = registry.Context();
     Core::TlsfAllocator* alloc = &ctx->memoryManager->General();
 
     Engine::Scene outScene(alloc);
@@ -85,7 +84,7 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, Engine::Sy
         if (prefabInst) {
             auto cacheIt = prefabCache.Find(prefabInst->prefabId);
             if (!cacheIt) {
-                if (const auto* meta = assetManager->GetPrefabMetadata(prefabInst->prefabId)) {
+                if (const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabInst->prefabId)) {
                     auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), alloc);
                     if (prefabData) {
                         cacheIt = &prefabCache.Emplace(prefabInst->prefabId, std::move(*prefabData));
@@ -98,7 +97,7 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, Engine::Sy
         }
 
         w.BeginBlock("entity");
-        for (Engine::ComponentEntry& entry : componentRegistry.registry) {
+        for (Engine::ComponentEntry& entry : state->componentRegistry.registry) {
             if (!entry.has(registry, entity)) {
                 continue;
             }
@@ -121,7 +120,7 @@ Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, Engine::Sy
             w.EndBlock();
         }
         if (bSpawned) {
-            for (const Engine::RuntimeStateEntry& entry : componentRegistry.runtimeState) {
+            for (const Engine::RuntimeStateEntry& entry : state->componentRegistry.runtimeState) {
                 if (!entry.has(registry, entity)) { continue; }
                 w.BeginBlock(entry.typeId.id);
                 entry.serialize(registry, entity, w);
@@ -202,13 +201,13 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, Engine::SystemR
     return sceneId;
 }
 
-Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, Engine::SystemRegistry& registry, Engine::AssetManager* assetManager, Core::Span<Engine::RuntimeSceneMetadata> loadedScenes)
+Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<Engine::RuntimeSceneMetadata> loadedScenes)
 {
     ZoneScoped;
     Core::InlineVector<Engine::Scene, 8> snapshots;
     for (int i = 0; i < loadedScenes.Size(); ++i) {
         auto& meta = loadedScenes[i];
-        snapshots.PushBack(SaveScene(componentRegistry, registry, assetManager, meta.sceneId));
+        snapshots.PushBack(SaveScene(ctx, state, registry, meta.sceneId));
         LOG_INFO(Engine, "Saved scene snapshot '{}'", meta.sceneId.ToString());
     }
     return snapshots;
@@ -244,7 +243,7 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
     }
 
     auto* ctx = registry.Context();
-    ResolvePrefabLoads(state, ctx->assetManager, registry);
+    ResolvePrefabLoads(ctx, state, registry);
     ResolveHierarchyLinks(state, registry);
 }
 
@@ -284,19 +283,19 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId, Engine::SystemReg
     });
     state->editor.modifiedScenes.RemoveFirst(sceneId);
 
-    if (const auto* meta = ctx->assetManager->GetSceneMetadata(sceneId); meta && meta->bUnsaved) {
+    if (const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(sceneId); meta && meta->bUnsaved) {
         ctx->rescan.bScenes = true;
     }
 }
 
-void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, Engine::SystemRegistry& registry)
+void SaveSceneToFile(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneID)
 {
     if (!ctx->bGameLoaded) {
         LOG_WARN(Engine, "Scene save refused: game.dll is not loaded, game components would be lost");
         return;
     }
 
-    const auto* it = assetManager->GetSceneCache().Find(sceneID);
+    const auto* it = registry.Service<Engine::AssetManager>().GetSceneCache().Find(sceneID);
     if (!it) {
         LOG_ERROR(Engine, "Scene save refused: {} is not registered", sceneID.ToString());
         return;
@@ -304,7 +303,7 @@ void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::Asset
     const Core::Path path = it->source;
     assert(path.Extension() == ".wscene");
 
-    Engine::Scene s = SaveScene(state->componentRegistry, registry, assetManager, sceneID); {
+    Engine::Scene s = SaveScene(ctx, state, registry, sceneID); {
         auto camView = registry.View<Component::EditorCameraTag, Component::TransformComponent>();
         auto camEntity = camView.front();
         if (camEntity != entt::null) {
@@ -337,12 +336,12 @@ void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::Asset
         return;
     }
 
-    assetManager->UpdateSceneCachePath(sceneID, path, sceneHeader.entityCount);
+    registry.ServiceMut<Engine::AssetManager>().UpdateSceneCachePath(sceneID, path, sceneHeader.entityCount);
 
     LOG_INFO(Engine, "Saved scene '{}' to '{}'", it->sceneName.c_str(), path.c_str());
 }
 
-LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId, Engine::SystemRegistry& registry)
+LoadSceneResult LoadSceneFromFile(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
     ZoneScoped;
     if (std::ranges::any_of(state->editor.loadedScenes, [&](const auto& m) { return m.sceneId == sceneId; })) {
@@ -350,7 +349,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
         return {false, sceneId, {}};
     }
 
-    const auto& sceneCache = assetManager->GetSceneCache();
+    const auto& sceneCache = registry.Service<Engine::AssetManager>().GetSceneCache();
     const auto* it = sceneCache.Find(sceneId);
     if (!it) {
         LOG_ERROR(Engine, "Scene ID not found in registry");
@@ -396,7 +395,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManag
     state->editor.loadedScenes.PushBack({loadedId});
     state->editor.modifiedScenes.RemoveFirst(loadedId);
 
-    ResolvePrefabLoads(state, assetManager, registry);
+    ResolvePrefabLoads(ctx, state, registry);
     ResolveHierarchyLinks(state, registry);
 
     const Engine::TextReader camReader = sceneReader.Block("editor_camera");
@@ -430,7 +429,7 @@ bool SaveSceneSlot(Engine::EngineState* state, int slotIndex)
     return true;
 }
 
-bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int slotIndex, Engine::SystemRegistry& registry)
+bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, int slotIndex)
 {
     ZoneScoped;
     if (slotIndex < 0 || slotIndex >= Engine::MAX_SCENE_SLOTS) { return false; }
@@ -440,17 +439,17 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int s
         LOG_WARN(Engine, "Scene slot {} is empty", slotIndex + 1);
         return false;
     }
-    if (!ctx->assetManager->GetSceneCache().Find(slot.sceneId)) {
+    if (!registry.Service<Engine::AssetManager>().GetSceneCache().Find(slot.sceneId)) {
         LOG_WARN(Engine, "Scene slot {} points at {}, which is no longer registered", slotIndex + 1, slot.sceneId.ToString());
         return false;
     }
-    return LoadSceneExclusive(ctx, state, slot.sceneId, registry);
+    return LoadSceneExclusive(ctx, state, registry, slot.sceneId);
 }
 
-bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
+bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
     ZoneScoped;
-    if (!ctx->assetManager->GetSceneCache().Find(sceneId)) { return false; }
+    if (!registry.Service<Engine::AssetManager>().GetSceneCache().Find(sceneId)) { return false; }
 
     const bool bWasPlaying = IsPlaying(state);
     const bool bWasSimulating = IsSimulating(state);
@@ -467,25 +466,25 @@ bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, 
     }
     UnloadScenes(state, scenesToUnload, registry);
 
-    const LoadSceneResult result = LoadSceneFromFile(state, ctx->assetManager, sceneId, registry);
+    const LoadSceneResult result = LoadSceneFromFile(ctx, state, registry, sceneId);
     if (result.bSuccess) {
         state->scene.currentSceneId = result.sceneId;
         state->scene.currentSceneName = result.sceneName;
     }
 
     if (bWasPlaying) {
-        PlayStart(ctx, state, state->bRunUsesRuntimeScenes, registry);
+        PlayStart(ctx, state, registry, state->bRunUsesRuntimeScenes);
     }
     if (bWasSimulating) {
-        SimulateStart(ctx, state, state->bRunUsesRuntimeScenes, registry);
+        SimulateStart(ctx, state, registry, state->bRunUsesRuntimeScenes);
     }
     return result.bSuccess;
 }
 
-Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, Engine::SystemRegistry& registry, const glm::vec3& offset)
+Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::ModelID modelId, const glm::vec3& offset)
 {
     ZoneScoped;
-    const Engine::AssetManager::CachedModelMetadata* cached = ctx->assetManager->GetModelMetadata(modelId);
+    const Engine::AssetManager::CachedModelMetadata* cached = registry.Service<Engine::AssetManager>().GetModelMetadata(modelId);
     if (!cached) {
         LOG_ERROR(Engine, "SpawnModel: modelId {} not in asset registry", modelId.id);
         return {};
@@ -549,13 +548,13 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
     return child;
 }
 
-uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity parent, Engine::SystemRegistry& registry)
+uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity parent)
 {
     const auto* runtime = registry.TryGet<Component::MeshRuntime>(parent);
     if (!runtime || runtime->range.count == 0) {
         return 0;
     }
-    const Engine::StaticModel* model = ctx->assetManager->GetModel(runtime->modelHandle);
+    const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(runtime->modelHandle);
     if (!model) {
         return 0;
     }
@@ -605,7 +604,7 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
         if (source.sourceNodeIndex >= nodes.Size()) {
             continue;
         }
-        const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
+        const Engine::Material* material = registry.Service<Engine::MaterialManager>().GetMaterial(source.materialID);
         const bool bEmissive = material && material->props.emissiveFactor.w * glm::max(material->props.emissiveFactor.x, glm::max(material->props.emissiveFactor.y, material->props.emissiveFactor.z)) > 0.0f;
 
         const entt::entity nodeEntity = ensureNodeEntity(source.sourceNodeIndex);
@@ -874,7 +873,7 @@ static bool WritePrefabFile(Engine::EngineContext* ctx, const Core::Path& path, 
     return true;
 }
 
-void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName, Engine::SystemRegistry& registry)
+void SaveEntityAsPrefab(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity, std::string_view prefabName)
 {
     if (!ctx->bGameLoaded) {
         LOG_WARN(Engine, "Prefab save refused: game.dll is not loaded, game components would be lost");
@@ -906,15 +905,14 @@ void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetM
     LOG_INFO(Engine, "Saved prefab '{}' to '{}'", prefabName, path.c_str());
 }
 
-entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, Engine::SystemRegistry& registry, const glm::vec3& spawnPosition)
+entt::entity SpawnPrefab(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID prefabId, const glm::vec3& spawnPosition)
 {
-    const auto* meta = assetManager->GetPrefabMetadata(prefabId);
+    const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabId);
     if (!meta) {
         LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
         return entt::null;
     }
 
-    auto* ctx = registry.Context();
     auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), &ctx->memoryManager->AssetsScratch());
     if (!prefabData) {
         LOG_ERROR(Engine, "Failed to read prefab file '{}'", meta->source.c_str());
@@ -930,10 +928,9 @@ entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* asset
     return entity;
 }
 
-void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::SystemRegistry& registry)
+void ResolvePrefabLoads(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto* ctx = registry.Context();
 
     // Cache prefab bodies so each file is read once even with many instances
     Core::InlineMap<StringID, Engine::WPrefabData, 512> prefabCache;
@@ -942,7 +939,7 @@ void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetM
     for (auto entity : view) {
         auto& prefabInst = view.get<Component::PrefabInstanceComponent>(entity);
 
-        const auto* meta = assetManager->GetPrefabMetadata(prefabInst.prefabId);
+        const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabInst.prefabId);
         if (!meta) {
             LOG_WARN(Engine, "Prefab '{}' not found for entity {}, skipping", prefabInst.prefabId.ToString(), entt::to_integral(entity));
             continue;
@@ -971,13 +968,13 @@ bool IsEditingPrefab(Engine::EngineState* state, Engine::SystemRegistry& registr
     return state->editor.editingPrefabEntity != entt::null;
 }
 
-entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, StringID prefabId, const glm::vec3& position, Engine::SystemRegistry& registry)
+entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID prefabId, const glm::vec3& position)
 {
     if (!ctx->bGameLoaded || IsRunning(state) || IsEditingPrefab(state, registry)) {
         LOG_WARN(Engine, "Prefab edit refused: needs the game loaded, edit mode, and no other prefab edit open");
         return entt::null;
     }
-    const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabId);
+    const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabId);
     if (!meta) {
         LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
         return entt::null;
@@ -1049,7 +1046,7 @@ void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
 {
     if (!IsEditingPrefab(state, registry)) { return; }
     const StringID prefabId = state->editor.editingPrefabId;
-    const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabId);
+    const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabId);
     if (!meta) {
         LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
         return;
@@ -1084,7 +1081,7 @@ void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
     LOG_INFO(Engine, "Applied prefab '{}', {} loaded instances updated", prefabName.c_str(), updated);
 }
 
-static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes, Engine::SystemRegistry& registry)
+static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, bool bUseRuntimeScenes)
 {
     entt::entity stuck[16];
     const uint32_t stuckCount = FindStaticBodiesUnderMovers(state, stuck, registry);
@@ -1094,7 +1091,7 @@ static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 
 #if WILL_EDITOR
-    state->editor.pieSnapshot = SerializeAll(state->componentRegistry, registry, ctx->assetManager, state->editor.loadedScenes);
+    state->editor.pieSnapshot = SerializeAll(ctx, state, registry, state->editor.loadedScenes);
 #endif
 
     LockStaticTransforms(state, registry);
@@ -1118,7 +1115,7 @@ static void RestorePIESnapshot(Engine::EngineState* state, Engine::SystemRegistr
 #endif
 }
 
-void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes, Engine::SystemRegistry& registry)
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, bool bUseRuntimeScenes)
 {
     ZoneScoped;
     if (!ctx->bGameLoaded) {
@@ -1143,7 +1140,7 @@ void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUse
         }
     }
 
-    BeginPIESession(ctx, state, bUseRuntimeScenes, registry);
+    BeginPIESession(ctx, state, registry, bUseRuntimeScenes);
 
     state->runMode = Engine::RunMode::Play;
     state->inputContext = Engine::InputContext::Gameplay;
@@ -1178,7 +1175,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::Sy
     }
 }
 
-void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes, Engine::SystemRegistry& registry)
+void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, bool bUseRuntimeScenes)
 {
     ZoneScoped;
     if (!ctx->bGameLoaded) {
@@ -1191,7 +1188,7 @@ void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool 
         return;
     }
 
-    BeginPIESession(ctx, state, bUseRuntimeScenes, registry);
+    BeginPIESession(ctx, state, registry, bUseRuntimeScenes);
     for (size_t i = state->editor.selectedEntities.Size(); i-- > 0;) {
         if (!registry.Valid(state->editor.selectedEntities[i])) {
             state->editor.selectedEntities.RemoveAt(i);

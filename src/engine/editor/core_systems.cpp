@@ -42,7 +42,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, E
         state->requests.bWantsScreenshot |= true;
     }
     if (state->cameraRecorder.bActive && state->input.GetActionState(Actions::ACTION_ESCAPE).pressed) {
-        state->cameraRecorder.Stop(ctx, state);
+        state->cameraRecorder.Stop(ctx, state, registry);
     }
     if (state->input.GetActionState(Actions::ACTION_LOAD_LIGHTING_PROFILE_RESTIR).pressed) {
         LoadLightingProfile(state, "ReSTIR");
@@ -59,7 +59,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, E
             continue;
         }
 #endif
-        LoadSceneSlot(ctx, state, i, registry);
+        LoadSceneSlot(ctx, state, registry, i);
     }
 
 #ifdef WDEBUG
@@ -80,7 +80,7 @@ void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, E
 #endif
 }
 
-void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     if (state->requests.screenshotBurstRemaining > 0) {
         state->requests.screenshotPath = Core::InlineString<512>::Format("%s_%03d.png", state->requests.screenshotBurstBase.c_str(), state->requests.screenshotBurstIndex);

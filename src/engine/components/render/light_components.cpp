@@ -116,7 +116,7 @@ static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
     auto* ctx = registry.Context();
     const uint32_t lightSlot = Component::FindLightSlot(registry, edit.Primary());
 
-    const AssetManager::ShadowMapInfo* info = ctx->assetManager->GetShadowMapInfo(shadowId);
+    const AssetManager::ShadowMapInfo* info = registry.Service<Engine::AssetManager>().GetShadowMapInfo(shadowId);
     if (info == nullptr) {
         ImGui::TextDisabled("Not baked, using dynamic");
     }
@@ -319,7 +319,7 @@ static void ReleaseLightRuntime(Engine::SystemRegistry& registry, entt::entity e
 {
     const auto& runtime = registry.Get<LightRuntime>(entity);
     if (runtime.bakedShadow.IsValid()) {
-        registry.Context()->assetManager->UnloadTextureArray(runtime.bakedShadow);
+        registry.ServiceMut<Engine::AssetManager>().UnloadTextureArray(runtime.bakedShadow);
     }
     if (runtime.lightSlot != AnalyticLightStore::INVALID_SLOT) {
         registry.PushCommand({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
@@ -454,16 +454,16 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
 
     if (open) {
         const auto& comp = edit.Get<SkyboxComponent>();
-        auto* ctx = edit.Registry().Context();
+        Engine::SystemRegistry& registry = edit.Registry();
 
         EditWidgets::Checkbox(edit, "Enabled##sky", &SkyboxComponent::bEnabled);
 
         static bool bShowProbes = false;
 
-        const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.envMap);
+        const Engine::AssetManager::CachedCubemapMetadata* currentMeta = registry.Service<Engine::AssetManager>().GetCubemapMetadata(comp.envMap);
         const char* preview = edit.IsMixed(&SkyboxComponent::envMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Env Map##sky", preview)) {
-            for (const auto& [id, meta] : ctx->assetManager->GetCubemapCache()) {
+            for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetCubemapCache()) {
                 if (!bShowProbes && meta.source.Extension() == ".wprobe" && id != comp.envMap) { continue; }
                 if (ImGui::Selectable(meta.name.c_str(), id == comp.envMap)) {
                     edit.Set(&SkyboxComponent::envMap, Engine::EnvironmentMapID{id});

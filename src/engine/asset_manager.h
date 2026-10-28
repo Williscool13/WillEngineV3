@@ -113,6 +113,7 @@ public: // Models
     StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius);
 
     StaticModel* GetModel(StaticModelHandle handle);
+    const StaticModel* GetModel(StaticModelHandle handle) const;
 
     void UnloadModel(StaticModelHandle handle);
 
@@ -134,7 +135,7 @@ public: // Models
         uint64_t uncompressedBodySize{0};
     };
 
-    const Core::FixedMap<ModelID, CachedModelMetadata>& GetModelCache() { return modelCache; }
+    const Core::FixedMap<ModelID, CachedModelMetadata>& GetModelCache() const { return modelCache; }
 
 public: // Physics colliders (CPU-only, analytic)
     /**
@@ -166,6 +167,7 @@ public: // Physics colliders (CPU-only, analytic)
     PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius, bool bPrecise);
 
     PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
+    const PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle) const;
 
     void UnloadCollider(PhysicsColliderHandle handle);
 
@@ -293,6 +295,7 @@ public: // Cubemaps
     bool ReloadCubemap(EnvironmentMapID cubemapId);
 
     Render::Cubemap* GetCubemap(CubemapHandle handle);
+    const Render::Cubemap* GetCubemap(CubemapHandle handle) const;
 
     void UnloadCubemap(CubemapHandle handle);
 
@@ -336,6 +339,7 @@ public: // Texture arrays
     bool ReloadTextureArray(TextureArrayID textureArrayId);
 
     Render::TextureArray* GetTextureArray(TextureArrayHandle handle);
+    const Render::TextureArray* GetTextureArray(TextureArrayHandle handle) const;
 
     void UnloadTextureArray(TextureArrayHandle handle);
 
@@ -399,6 +403,7 @@ public: // Fonts
     [[nodiscard]] bool IsFontResident(FontID fontId) const { return fontIdToHandle.Contains(fontId); }
 
     Font* GetFont(FontHandle handle);
+    const Font* GetFont(FontHandle handle) const;
 
     /** Returns the glyph info for the given codepoint, or nullptr if not found or not loaded. */
     [[nodiscard]] const WGlyphInfo* GetGlyph(FontHandle handle, uint32_t codepoint) const;
@@ -541,7 +546,7 @@ public: // Scenes
         bool bUnsaved{false};
     };
 
-    const Core::FixedMap<StringID, CachedSceneMetadata>& GetSceneCache() { return sceneCache; }
+    const Core::FixedMap<StringID, CachedSceneMetadata>& GetSceneCache() const { return sceneCache; }
 
     [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
 
@@ -569,7 +574,7 @@ public: // Prefabs
         uint64_t contentVersion{0};
     };
 
-    const Core::FixedMap<StringID, CachedPrefabMetadata>& GetPrefabCache() { return prefabCache; }
+    const Core::FixedMap<StringID, CachedPrefabMetadata>& GetPrefabCache() const { return prefabCache; }
 
     [[nodiscard]] const CachedPrefabMetadata* GetPrefabMetadata(StringID prefabId) const;
 
@@ -586,7 +591,7 @@ public: // Runs (.wplay)
         uint32_t scanGeneration{0};
     };
 
-    const Core::FixedMap<StringID, CachedPlayMetadata>& GetPlayCache() { return playCache; }
+    const Core::FixedMap<StringID, CachedPlayMetadata>& GetPlayCache() const { return playCache; }
 
 private: // Asset Registry
     Core::FixedMap<StringID, ModelID> modelNameToId;

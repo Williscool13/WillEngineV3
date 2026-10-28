@@ -111,7 +111,7 @@ void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state
     state->input.uiScrollAccum += state->input.GetActionState(Actions::ACTION_UI_SCROLL).axis;
 }
 
-void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
 
@@ -224,7 +224,7 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto& materialManager = ctx->materialManager;
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
     Engine::InstanceStore& store = state->instanceStore;
     Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
     emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
@@ -272,15 +272,15 @@ void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* stat
     ZoneScoped;
     for (auto&& [entity, sky] : registry.View<Component::SkyboxComponent>(entt::exclude<Component::SkyboxRuntime>).each()) {
         if (!sky.envMap.IsValid()) { continue; }
-        if (ctx->assetManager->GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
-        registry.Set<Component::SkyboxRuntime>(entity, ctx->assetManager->LoadCubemap(sky.envMap));
+        if (registry.Service<Engine::AssetManager>().GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
+        registry.Set<Component::SkyboxRuntime>(entity, registry.ServiceMut<Engine::AssetManager>().LoadCubemap(sky.envMap));
     }
 }
 
-void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    auto& materialManager = ctx->materialManager;
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
 
 #ifdef WDEBUG
     VerifyGeometryStores(state);
@@ -358,11 +358,11 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     {
         ZoneScopedN("Skybox Selection");
         int32_t bestPriority = INT32_MIN;
-        Render::Cubemap* bestCubemap = nullptr;
+        const Render::Cubemap* bestCubemap = nullptr;
         float bestIntensity = 1.0f;
         for (const auto& [entity, sky, skyRuntime] : registry.View<Component::SkyboxComponent, Component::SkyboxRuntime>().each()) {
             if (!sky.bEnabled || !skyRuntime.handle.IsValid()) { continue; }
-            Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(skyRuntime.handle);
+            const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(skyRuntime.handle);
             if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
                 bestPriority = sky.priority;
                 bestCubemap = cubemap;
@@ -401,7 +401,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, C
     }
 }
 
-void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     auto view = registry.View<Component::TextComponent,Component::TextRuntime, Component::RenderTransformRuntime>(entt::exclude<Component::TextFontRequest>);
@@ -410,7 +410,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (textComp.text.IsEmpty()) { continue; }
         if (!runtime.modelRange.IsValid()) { continue; }
 
-        Engine::Font* font = ctx->assetManager->GetFont(runtime.fontHandle);
+        const Engine::Font* font = registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle);
         if (!font) { continue; }
 
         const float scale = textComp.scale / font->header.emSize;
@@ -418,7 +418,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (lineHeight <= 0.0f) { lineHeight = (font->header.ascender - font->header.descender) * scale; }
         if (lineHeight <= 0.0f) { lineHeight = textComp.scale; }
 
-        const auto rmat = ctx->materialManager->GetRenderTextMaterial(textComp.textMaterialId);
+        const auto rmat = registry.Service<Engine::MaterialManager>().GetRenderTextMaterial(textComp.textMaterialId);
 
         const Engine::WFontHeader& fh = font->header;
         const bool bSdf = fh.sdfUncompressedSize > 0;
@@ -448,7 +448,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         const char* str = textComp.text.c_str();
         const size_t len = textComp.text.Size();
         auto advanceOf = [&](char c) -> float {
-            const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
+            const Engine::WGlyphInfo* g = registry.Service<Engine::AssetManager>().GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
             return g ? g->advance * scale : textComp.scale * 0.25f;
         };
 
@@ -524,7 +524,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             const float penY = baseY - static_cast<float>(li) * lineHeight;
             for (size_t i = lines[li].start; i < lines[li].end; ++i) {
                 const uint32_t codepoint = static_cast<unsigned char>(str[i]);
-                const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(runtime.fontHandle, codepoint);
+                const Engine::WGlyphInfo* g = registry.Service<Engine::AssetManager>().GetGlyph(runtime.fontHandle, codepoint);
                 if (!g) {
                     cursorX += textComp.scale * 0.25f;
                     continue;
@@ -657,9 +657,9 @@ static uint32_t TouchedTileMask(const ShadowViewGPU* views, uint32_t activeTiles
 }
 
 template<typename LightComponent, typename LightRuntime>
-static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, const LightComponent& light, LightRuntime& runtime, bool bActive)
+static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::ViewFamily& vf, const LightComponent& light, LightRuntime& runtime, bool bActive)
 {
-    Engine::AssetManager& assets = *ctx->assetManager;
+    Engine::AssetManager& assets = registry.ServiceMut<Engine::AssetManager>();
     const LightInfo* lights = state->analyticLightStore.Lights();
     const Engine::AssetManager::ShadowMapInfo* info = light.shadowMode == Component::LightShadowMode::Baked ? assets.GetShadowMapInfo(light.shadowId) : nullptr;
     const bool bUsable = info != nullptr && runtime.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT && Engine::IsShadowBakeCurrent(info->key, lights[runtime.lightSlot]);
@@ -679,17 +679,17 @@ static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* 
     }
 }
 
-void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     vf.bakedShadowLights.Clear();
     const bool bActive = state->lighting.localShadows.bEnabled && state->lighting.lightingMode == Core::LightingMode::Analytic;
     for (auto [entity, light, runtime] : registry.View<Component::AreaLightComponent, Engine::Mut<Component::AreaLightRuntime>>().each()) {
-        ResolveBakedShadow(ctx, state, vf, light, runtime, bActive);
+        ResolveBakedShadow(ctx, state, registry, vf, light, runtime, bActive);
     }
     for (auto [entity, light, runtime] : registry.View<Component::SphereLightComponent, Engine::Mut<Component::SphereLightRuntime>>().each()) {
-        ResolveBakedShadow(ctx, state, vf, light, runtime, bActive);
+        ResolveBakedShadow(ctx, state, registry, vf, light, runtime, bActive);
     }
 }
 
@@ -901,7 +901,7 @@ static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* 
     vf.localShadowAtlasExtent = selection.atlasExtent;
 }
 
-void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
@@ -953,7 +953,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
             emissiveDebug.bEntriesTruncated = true;
             return;
         }
-        const Engine::Material* material = ctx->materialManager->GetMaterial(inst.materialID);
+        const Engine::Material* material = registry.Service<Engine::MaterialManager>().GetMaterial(inst.materialID);
         const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(inst.emissiveMeshSlot);
         emissiveDebug.entries.PushBack(Engine::EmissiveDebugEntry{
             .entity = entity,
@@ -979,7 +979,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
 
         const uint32_t meshWatermark = triLightStore.GetMeshWatermark();
         if (ctx->frameStatus.bEmissiveLightsPipelineReady) {
-            ctx->materialManager->DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
+            registry.ServiceMut<Engine::MaterialManager>().DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
                 for (uint32_t g = 0; g < meshWatermark; ++g) {
                     const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
                     if (!reservation.bLive) { continue; }
@@ -1058,7 +1058,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Core::
     }
 }
 
-void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     const auto& config = state->lighting.reflectionProbe;
@@ -1073,7 +1073,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         const bool bPreview = state->debug.bProbePreview;
         if (!probe.bEnabled && !bPreview) { continue; }
         if (!probeRuntime.contentHandle.IsValid()) { continue; }
-        Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(probeRuntime.contentHandle);
+        const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(probeRuntime.contentHandle);
         if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
 
         glm::vec3 srcTranslation = worldTransform.translation;
@@ -1082,7 +1082,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         glm::vec3 srcCaptureOffset = probe.captureOffset;
         float radianceScale = probe.standInIntensity;
         if (probeRuntime.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
-            if (const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+            if (const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{probe.probeId})) {
                 radianceScale = info->radianceScale;
                 const Engine::ProbeBakeSnapshot& snap = info->snapshot;
                 srcTranslation = glm::vec3(snap.translation[0], snap.translation[1], snap.translation[2]);
@@ -1126,7 +1126,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     if (!state->lighting.ddgi.bLocalVolumes) { return; }
@@ -1144,7 +1144,7 @@ void GatherLocalDDGIVolumes(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
@@ -1206,7 +1206,7 @@ void GatherFogVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Co
     }
 }
 
-void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
@@ -1232,7 +1232,7 @@ void ApplyPostProcessVolumes(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
-void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     const uint32_t mask = state->projectConfig.editorSpriteMask;
@@ -1287,7 +1287,7 @@ void GatherEditorSprites(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     const Engine::LightDebugDrawMode mode = state->projectConfig.editorDebugDrawMode;
@@ -1448,7 +1448,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         // Stale baked probes
         const auto* probeRuntime = registry.TryGet<Component::ReflectionProbeRuntime>(entity);
         if (probeRuntime && probeRuntime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
-            const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{probe.probeId});
+            const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{probe.probeId});
             if (info && Component::ReflectionProbeComponent::IsBakeStale(transform, probe, info->snapshot, info->resolution)) {
                 constexpr Vec4 staleColor{1.0f, 0.0f, 0.0f, 1.0f};
                 const Engine::ProbeBakeSnapshot& snap = info->snapshot;
@@ -1467,7 +1467,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
@@ -1484,7 +1484,7 @@ void GatherCSMDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
     if (!state->debug.localShadow.bDrawViews) { return; }

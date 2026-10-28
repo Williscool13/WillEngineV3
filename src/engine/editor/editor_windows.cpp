@@ -69,7 +69,7 @@ static void DrawFileMenu(EngineContext* ctx, EngineState* state, SystemRegistry&
 
     ImGui::BeginDisabled(!bCanSave || !IsSceneLoaded(state, current));
     if (ImGui::MenuItem(Core::InlineString<160>::Format("Save '%s'", state->scene.currentSceneName.c_str()).c_str(), "Ctrl+S")) {
-        SaveEditorScene(ctx, state, current, registry);
+        SaveEditorScene(ctx, state, registry, current);
     }
     ImGui::EndDisabled();
 
@@ -108,7 +108,7 @@ static void DrawQuitPrompt(EngineContext* ctx, EngineState* state, SystemRegistr
 
     ImGui::TextUnformatted("These scenes have unsaved changes:");
     for (StringID sceneId : state->editor.modifiedScenes) {
-        const auto* meta = ctx->assetManager->GetSceneMetadata(sceneId);
+        const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(sceneId);
         ImGui::BulletText("%s", meta ? meta->sceneName.c_str() : "(unregistered)");
     }
 

@@ -68,7 +68,7 @@ struct SystemConditions
 };
 
 using SystemFn = void(*)(EngineContext*, EngineState*, SystemRegistry&);
-using SystemFrameFn = void(*)(EngineContext*, EngineState*, Core::FrameBuffer*, SystemRegistry&);
+using SystemFrameFn = void(*)(EngineContext*, EngineState*, SystemRegistry&, Core::FrameBuffer*);
 
 struct SystemNode
 {
@@ -361,7 +361,7 @@ private:
     {
         ZoneTransientN(zone, node.name, true);
         SystemRegistry registry{*storage, node.access, commands, node.name};
-        if (node.frameFn != nullptr) { node.frameFn(ctx, state, frameBuffer, registry); }
+        if (node.frameFn != nullptr) { node.frameFn(ctx, state, registry, frameBuffer); }
         else { node.fn(ctx, state, registry); }
     }
 

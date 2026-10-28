@@ -138,7 +138,7 @@ void Component::StaticMeshComponent::OnEditCommit(Engine::SystemRegistry& regist
     const auto* runtime = registry.TryGet<MeshRuntime>(entity);
     const Engine::StaticModel* current = nullptr;
     if (runtime) {
-        current = ctx->assetManager->GetModel(runtime->pendingModelHandle.IsValid() ? runtime->pendingModelHandle : runtime->modelHandle);
+        current = registry.Service<Engine::AssetManager>().GetModel(runtime->pendingModelHandle.IsValid() ? runtime->pendingModelHandle : runtime->modelHandle);
     }
     if (!current || current->modelId != component.modelId) {
         registry.Remove<StaticMeshLoadingFlag>(entity);
@@ -196,10 +196,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
         auto* runtime = registry.TryGet<MeshRuntime>(entity);
 
-        const auto* modelMeta = component.modelId.IsValid() ? ctx->assetManager->GetModelMetadata(component.modelId) : nullptr;
+        const auto* modelMeta = component.modelId.IsValid() ? registry.Service<Engine::AssetManager>().GetModelMetadata(component.modelId) : nullptr;
         const char* modelPreview = edit.IsMixed(&StaticMeshComponent::modelId) ? "--" : modelMeta ? modelMeta->name.c_str() : "";
         if (ImGui::BeginCombo("Model", modelPreview, ImGuiComboFlags_HeightLarge)) {
-            for (const auto& [key, meta] : ctx->assetManager->GetModelCache()) {
+            for (const auto& [key, meta] : registry.Service<Engine::AssetManager>().GetModelCache()) {
                 if (ImGui::Selectable(meta.name.c_str(), key == component.modelId) && key != component.modelId) {
                     component.modelId = key;
                     bCommit = true;
@@ -243,7 +243,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             registry.GetMut<StaticMeshComponent>(entity).modelId =Engine::ModelID::INVALID;
             return {.bRequestRemoval = remove};
         }
-        Engine::StaticModel* model = ctx->assetManager->GetModel(runtime->modelHandle);
+        const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(runtime->modelHandle);
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             ImGui::Text("Loading Model...");
             return finish({.bRequestRemoval = remove});
@@ -267,7 +267,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         ImGui::BeginDisabled(edit.IsMulti());
         if (primCount > 0 && ImGui::SmallButton("Split All")) {
             ImGui::EndDisabled();
-            SplitAllMeshPrimitives(ctx, state, entity, registry);
+            SplitAllMeshPrimitives(ctx, state, registry, entity);
             return {.bRequestRemoval = true};
         }
         ImGui::EndDisabled();
@@ -331,14 +331,14 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::Text("%s", slot.name.c_str());
                     ImGui::SameLine();
 
-                    if (Engine::BeginMaterialCombo(ctx, "##override", current, "__synthesized__")) {
+                    if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "##override", current, "__synthesized__")) {
                         if (ImGui::Selectable("__synthesized__", !current.IsValid())) {
                             if (current.IsValid()) {
                                 pendingChangeIdx = slot.origIdx;
                                 pendingChangeMat = Engine::MaterialID::INVALID;
                             }
                         }
-                        const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, current);
+                        const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, current);
                         if (picked.IsValid() && picked != current) {
                             pendingChangeIdx = slot.origIdx;
                             pendingChangeMat = picked;

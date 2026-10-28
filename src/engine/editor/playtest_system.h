@@ -136,7 +136,7 @@ struct PlaytestSystem
     /** Queues a run; it starts on the next tick once no probe bake or other run is active. */
     void Arm(const char* path) { pendingPath = Core::InlineString<512>(std::string_view(path)); }
 
-    void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+    void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 };
 
 /** Editor camera recorder: one held cam + wait|1 per render frame, fps = measured recording rate. `w.record <name>` / `w.record stop` writes <name>.wplay beside the current scene. */
@@ -156,14 +156,14 @@ struct CameraRecorder
     bool Start(Engine::EngineContext* ctx, Engine::EngineState* state, const char* recordingName);
     void Tick(Engine::EngineState* state, Engine::SystemRegistry& registry);
     /** Written path, empty on failure. */
-    Core::InlineString<512> Stop(Engine::EngineContext* ctx, Engine::EngineState* state);
+    Core::InlineString<512> Stop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 };
 
 size_t CountLoadingEntities(Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void CameraRecordTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void CameraRecordTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 
-void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 
 /** Empties debug draws, sprites, probe previews, selection outline, and GPU debug so none of it bakes into the PNGs. */
 void PlaytestScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);

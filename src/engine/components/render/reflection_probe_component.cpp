@@ -25,7 +25,7 @@ static void RequestReflectionProbeLoad(Engine::SystemRegistry& registry, entt::e
     auto* ctx = registry.Context();
 
     registry.Remove<ReflectionProbeLoadingFlag>(entity);
-    const bool bHasBaked = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
+    const bool bHasBaked = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
     if (bHasBaked || comp.standInEnvMap.IsValid()) {
         registry.Set<ReflectionProbeLoadRequest>(entity);
     }
@@ -69,7 +69,7 @@ void ReflectionProbeComponent::OnEditCommit(Engine::SystemRegistry& registry, en
     }
     if (runtime->contentHandle.IsValid()) {
         auto* ctx = registry.Context();
-        ctx->assetManager->UnloadCubemap(runtime->contentHandle);
+        registry.ServiceMut<Engine::AssetManager>().UnloadCubemap(runtime->contentHandle);
         runtime->contentHandle = Engine::CubemapHandle::INVALID;
     }
     RequestReflectionProbeLoad(registry, entity);
@@ -118,10 +118,10 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         EditWidgets::Combo(edit, "Resolution##rp", &ReflectionProbeComponent::resolution, RESOLUTION_LABELS, 2);
 
         auto* ctx = registry.Context();
-        const Engine::AssetManager::CachedCubemapMetadata* currentMeta = ctx->assetManager->GetCubemapMetadata(comp.standInEnvMap);
+        const Engine::AssetManager::CachedCubemapMetadata* currentMeta = registry.Service<Engine::AssetManager>().GetCubemapMetadata(comp.standInEnvMap);
         const char* preview = edit.IsMixed(&ReflectionProbeComponent::standInEnvMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Stand-in Env Map##rp", preview)) {
-            for (const auto& [id, meta] : ctx->assetManager->GetCubemapCache()) {
+            for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetCubemapCache()) {
                 if (ImGui::Selectable(meta.name.c_str(), id == comp.standInEnvMap)) {
                     edit.Set(&ReflectionProbeComponent::standInEnvMap, Engine::EnvironmentMapID{id});
                 }
@@ -161,7 +161,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         }
         ImGui::Text("Content: %s", sourceLabel);
 
-        const Engine::AssetManager::ProbeInfo* probeInfo = ctx->assetManager->GetProbeInfo(Engine::ProbeID{comp.probeId});
+        const Engine::AssetManager::ProbeInfo* probeInfo = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{comp.probeId});
         if (!probeInfo) {
             ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Not baked");
         } else if (const auto* worldTransform = registry.TryGet<WorldTransformRuntime>(entity); worldTransform && IsBakeStale(*worldTransform, comp, probeInfo->snapshot, probeInfo->resolution)) {

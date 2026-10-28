@@ -236,9 +236,9 @@ static int32_t MaterialRefCount(const Engine::MaterialManager* materialManager, 
     return materialManager->GetActiveMaterials()[entryMap.At(id)].refCounter;
 }
 
-static void BuildMaterialEntries(Engine::EngineContext* ctx, const Engine::MaterialBrowserState& view, Core::ArenaFixedVector<MaterialListEntry>& out)
+static void BuildMaterialEntries(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Engine::MaterialBrowserState& view, Core::ArenaFixedVector<MaterialListEntry>& out)
 {
-    const Engine::MaterialManager* materialManager = ctx->materialManager;
+    const Engine::MaterialManager* materialManager = &registry.Service<Engine::MaterialManager>();
 
     for (const auto& [id, mat] : materialManager->GetMaterials()) {
         if (mat.bSynthesized) { continue; }
@@ -412,9 +412,9 @@ static MaterialListResult DrawMaterialEntries(Engine::EngineState* state, Engine
     return result;
 }
 
-bool BeginMaterialCombo(Engine::EngineContext* ctx, const char* label, Engine::MaterialID current, const char* noneLabel, bool bMixed)
+bool BeginMaterialCombo(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const char* label, Engine::MaterialID current, const char* noneLabel, bool bMixed)
 {
-    const Engine::Material* material = current.IsValid() ? ctx->materialManager->GetMaterial(current) : nullptr;
+    const Engine::Material* material = current.IsValid() ? registry.Service<Engine::MaterialManager>().GetMaterial(current) : nullptr;
     const bool bMissing = !bMixed && current.IsValid() && material == nullptr;
     const Core::InlineString<160> preview = bMixed ? Core::InlineString<160>("--")
                                             : bMissing ? Core::InlineString<160>::Format("Missing %016llx", static_cast<unsigned long long>(current.id))
@@ -429,14 +429,14 @@ bool BeginMaterialCombo(Engine::EngineContext* ctx, const char* label, Engine::M
     return bOpen;
 }
 
-Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::MaterialBrowserState& view, Engine::MaterialID current)
+Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::MaterialBrowserState& view, Engine::MaterialID current)
 {
     DrawMaterialListHeader(view);
 
     Core::Arena& arena = ctx->editorArena.Get();
-    const uint32_t materialCount = static_cast<uint32_t>(ctx->materialManager->GetMaterials().Size());
+    const uint32_t materialCount = static_cast<uint32_t>(registry.Service<Engine::MaterialManager>().GetMaterials().Size());
     Core::ArenaFixedVector<MaterialListEntry> entries(&arena, materialCount + 1);
-    BuildMaterialEntries(ctx, view, entries);
+    BuildMaterialEntries(ctx, state, registry, view, entries);
 
     if (entries.IsEmpty()) {
         ImGui::TextDisabled("No matching materials");
@@ -446,9 +446,9 @@ Engine::MaterialID DrawMaterialSelector(Engine::EngineContext* ctx, Engine::Engi
     return DrawMaterialEntries(state, view, entries, current, false).clicked;
 }
 
-static void DrawMaterialBrowserPane(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void DrawMaterialBrowserPane(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    Engine::MaterialManager* materialManager = ctx->materialManager;
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
     Engine::MaterialBrowserState& view = state->editor.materialBrowser;
     const bool bFolderMode = view.group == Engine::MaterialGroup::Folder;
 
@@ -482,7 +482,7 @@ static void DrawMaterialBrowserPane(Engine::EngineContext* ctx, Engine::EngineSt
     Core::Arena& arena = ctx->editorArena.Get();
     const uint32_t materialCount = static_cast<uint32_t>(materialManager->GetMaterials().Size());
     Core::ArenaFixedVector<MaterialListEntry> entries(&arena, materialCount + 1);
-    BuildMaterialEntries(ctx, view, entries);
+    BuildMaterialEntries(ctx, state, registry, view, entries);
 
     static Engine::MaterialID s_deleteCandidate = Engine::MaterialID::INVALID;
     static bool s_deleteRequested = false;
@@ -562,9 +562,9 @@ static void DrawMaterialBrowserPane(Engine::EngineContext* ctx, Engine::EngineSt
     }
 }
 
-static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::MaterialID id, const Engine::Material& mat)
+static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::MaterialID id, const Engine::Material& mat)
 {
-    Engine::MaterialManager* materialManager = ctx->materialManager;
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
 
     ImGui::SeparatorText("Textures");
     static const char* slotNames[] = {"Color", "Metal/Rough", "Normal", "Emissive", "Occlusion", "Packed NRM"};
@@ -572,10 +572,10 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
     static Engine::SamplerDesc samplerEditPending{};
 
     if (!state->editor.textureInfoCache) {
-        const uint32_t count = ctx->assetManager->GetTextureInfoCount();
+        const uint32_t count = registry.Service<Engine::AssetManager>().GetTextureInfoCount();
         state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(
             &ctx->editorArena.Get(), count);
-        ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
+        registry.Service<Engine::AssetManager>().GetAllTextureInfos(*state->editor.textureInfoCache);
     }
     const auto& matTexInfoMap = *state->editor.textureInfoCache;
     bool bPickerDrawn = false;
@@ -647,7 +647,7 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
                                 if (s_texPreviewId.IsValid()) { state->editor.texResidency.Release(s_texPreviewId, ctx); }
                                 s_texPreviewId = info.id;
                                 // todo: ideally only load the lowest mip for preview
-                                state->editor.texResidency.Acquire(info.id, ctx);
+                                state->editor.texResidency.Acquire(ctx, state, registry, info.id);
                             }
                             ImGui::BeginTooltip();
                             const uint64_t ds = state->editor.texResidency.GetDescSet(info.id, ctx);
@@ -767,7 +767,7 @@ static void RetagMeshesUsingMaterial(Engine::EngineState* state, Engine::Materia
 
 static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    Engine::MaterialManager* materialManager = ctx->materialManager;
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
     const Engine::Material* selected = materialManager->GetMaterial(state->editor.selectedMaterial);
     if (!selected || selected->bSynthesized) {
         ImGui::TextDisabled("Select a material");
@@ -931,7 +931,7 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
         }
     }
 
-    DrawMaterialTextureSlots(ctx, state, id, mat);
+    DrawMaterialTextureSlots(ctx, state, registry, id, mat);
 
     ImGui::EndDisabled();
 
@@ -941,9 +941,9 @@ static void DrawMaterialDetailPane(Engine::EngineContext* ctx, Engine::EngineSta
 }
 
 /** Deliberately not shared with the mesh tab: different delete gating, no folders, no filters. */
-static void DrawTextMaterialsTab(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void DrawTextMaterialsTab(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    Engine::MaterialManager* materialManager = ctx->materialManager;
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
     const auto& allTextMaterials = materialManager->GetTextMaterials();
 
     if (!ImGui::BeginTable("##textmatsplit", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) { return; }
@@ -1069,7 +1069,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state,
                     ImGui::TableNextRow();
 
                     ImGui::TableSetColumnIndex(0);
-                    DrawMaterialBrowserPane(ctx, state);
+                    DrawMaterialBrowserPane(ctx, state, registry);
 
                     ImGui::TableSetColumnIndex(1);
                     DrawMaterialDetailPane(ctx, state, registry);
@@ -1080,7 +1080,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state,
             }
 
             if (ImGui::BeginTabItem("Text Materials")) {
-                DrawTextMaterialsTab(ctx, state);
+                DrawTextMaterialsTab(ctx, state, registry);
                 ImGui::EndTabItem();
             }
 
@@ -1093,7 +1093,7 @@ void DrawMaterialsWindow(Engine::EngineContext* ctx, Engine::EngineState* state,
     ImGui::End();
 }
 
-void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     static Engine::TextureID s_previewId = Engine::TextureID::INVALID;
     static char s_search[64] = {};
@@ -1103,10 +1103,10 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     if (!bOpen) { return; }
     if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_TEXTURES].title, &bOpen)) {
         if (!state->editor.textureInfoCache) {
-            const uint32_t count = ctx->assetManager->GetTextureInfoCount();
+            const uint32_t count = registry.Service<Engine::AssetManager>().GetTextureInfoCount();
             state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(
                 &ctx->editorArena.Get(), count);
-            ctx->assetManager->GetAllTextureInfos(*state->editor.textureInfoCache);
+            registry.Service<Engine::AssetManager>().GetAllTextureInfos(*state->editor.textureInfoCache);
         }
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputTextWithHint("##texwindowsearch", "Search...", s_search, sizeof(s_search));
@@ -1150,7 +1150,7 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         if (hoveredId != s_previewId) {
             if (s_previewId.IsValid()) { state->editor.texResidency.Release(s_previewId, ctx); }
             s_previewId = hoveredId;
-            if (s_previewId.IsValid()) { state->editor.texResidency.Acquire(s_previewId, ctx); }
+            if (s_previewId.IsValid()) { state->editor.texResidency.Acquire(ctx, state, registry, s_previewId); }
         }
         if (s_previewId.IsValid()) {
             ImGui::BeginTooltip();

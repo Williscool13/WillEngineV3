@@ -21,7 +21,7 @@ struct FrameBuffer;
 namespace Engine
 {
 void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
-void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 }
 
 #endif //WILL_ENGINE_CORE_SYSTEMS_H

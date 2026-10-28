@@ -317,17 +317,17 @@ BodyCounts PhysicsWorld::GetBodyCounts() const
     };
 }
 
-void PhysicsWorld::AddImpulse(BodyHandle body, const Vec3& impulse)
+void PhysicsWorld::AddImpulse(BodyHandle body, const Vec3& impulse) const
 {
     jolt->GetBodyInterface().AddImpulse(ToJolt(body), ToJolt(impulse));
 }
 
-void PhysicsWorld::AddTorque(BodyHandle body, const Vec3& torque)
+void PhysicsWorld::AddTorque(BodyHandle body, const Vec3& torque) const
 {
     jolt->GetBodyInterface().AddTorque(ToJolt(body), ToJolt(torque));
 }
 
-void PhysicsWorld::MakeDynamic(BodyHandle body, const Vec3& linearVelocity)
+void PhysicsWorld::MakeDynamic(BodyHandle body, const Vec3& linearVelocity) const
 {
     JPH::BodyInterface& bodyInterface = jolt->GetBodyInterface();
     bodyInterface.SetMotionType(ToJolt(body), JPH::EMotionType::Dynamic, JPH::EActivation::Activate);

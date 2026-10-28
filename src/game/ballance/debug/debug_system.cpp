@@ -26,14 +26,14 @@ void DebugUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine:
     if (state->input.GetActionState(Game::Actions::ACTION_DEBUG_PLAY_MUSIC).pressed) {
         auto musicPath = Platform::GetAssetPath() / "audio/the_entertainer.ogg";
         auto _musicPath = Core::Path(musicPath);
-        Core::Handle<Audio::WillAudio> testMusic = ctx->audioManager->LoadAudio("test_music", _musicPath);
-        ctx->audioManager->PlayMusic(testMusic);
+        Core::Handle<Audio::WillAudio> testMusic = registry.ServiceMut<Audio::AudioManager>().LoadAudio("test_music", _musicPath);
+        registry.ServiceMut<Audio::AudioManager>().PlayMusic(testMusic);
     }
     if (state->input.GetActionState(Game::Actions::ACTION_DEBUG_MUSIC_VOL_LOW).pressed) {
-        ctx->audioManager->SetMusicVolume(0.25f);
+        registry.ServiceMut<Audio::AudioManager>().SetMusicVolume(0.25f);
     }
     if (state->input.GetActionState(Game::Actions::ACTION_DEBUG_MUSIC_VOL_FULL).pressed) {
-        ctx->audioManager->SetMusicVolume(1.0f);
+        registry.ServiceMut<Audio::AudioManager>().SetMusicVolume(1.0f);
     }
 }
 
@@ -63,12 +63,12 @@ void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* sta
     ZoneScoped;
     auto view = registry.View<Component::AntiGravityTag, Component::PhysicsBodyRuntime>();
     for (const auto& [entity, body] : view.each()) {
-        ctx->physicsWorld->AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
+        registry.Service<Physics::PhysicsWorld>().AddImpulse(body.bodyID, Vec3(0, 100.0f, 0));
     }
 }
 
 #ifdef WDEBUG
-void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     auto& vf = frameBuffer->mainViewFamily;
     auto view = registry.View<Component::DebugGizmoComponent, Component::TransformComponent>();

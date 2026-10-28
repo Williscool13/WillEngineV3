@@ -53,7 +53,7 @@ static void ApplyStartDissolving(Engine::SystemRegistry& registry, const Dissolv
     if (const auto* body = Component::FindBody(registry, entity)) {
         const auto* ctx = registry.Context();
         const Transform world = Component::ComputeWorldTransform(registry, entity);
-        shrinkPivot = glm::inverse(world.rotation) * (ctx->physicsWorld->GetWorldBounds(body->bodyID).Center() - world.translation) / world.scale;
+        shrinkPivot = glm::inverse(world.rotation) * (registry.Service<Physics::PhysicsWorld>().GetWorldBounds(body->bodyID).Center() - world.translation) / world.scale;
     }
 
     glm::vec3 axis = state->rng.UnitVector();
@@ -99,8 +99,8 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
             const auto* lavaBody = Component::FindBody(registry, lavaEntity);
             if (!body || !lavaBody) { continue; }
             // A cart's origin is its post top, above its body
-            const float top = std::max(ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y, registry.Get<Component::WorldTransformRuntime>(other).translation.y);
-            const float surface = ctx->physicsWorld->GetWorldBounds(lavaBody->bodyID).max.y;
+            const float top = std::max(registry.Service<Physics::PhysicsWorld>().GetWorldBounds(body->bodyID).max.y, registry.Get<Component::WorldTransformRuntime>(other).translation.y);
+            const float surface = registry.Service<Physics::PhysicsWorld>().GetWorldBounds(lavaBody->bodyID).max.y;
             const float depth = std::max(top - surface, 0.0f) + lava->extraDepth;
             StartDissolving(other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees, registry);
         }

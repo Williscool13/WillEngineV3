@@ -123,7 +123,7 @@ struct ProbeBakeSystem
     void EnqueueProbeInterbounce(Engine::EngineState* state, entt::entity probe);
 
     /** Advances the state machine one render frame; owns FrameBuffer::bCaptureProbeFace (cleared every tick, raised on request frames). */
-    void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+    void Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 
     /** Runs the Finishing restoration from any state and returns to Idle without marking faces ready. */
     void Cancel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
@@ -137,7 +137,7 @@ bool ProbeBakeActive(Engine::EngineState* state);
 bool ProbeBakeInFlight(Engine::EngineState* state);
 
 /** Advances the bake state machine one render frame; call before BuildViewFamily so the override lands this frame. */
-void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 
 /** Applies the active bake face's view override onto the main view; call as the last statement of BuildViewFamily so the override lands this frame. No-op when no override is active. */
 void ProbeBakeOverrideView(Engine::EngineState* state, Core::ViewFamily& viewFamily);

@@ -15,12 +15,12 @@ EditorTextureResidency::EditorTextureResidency(Core::TlsfAllocator* allocator)
       pendingRemoval(allocator, Core::AllocTag::EngineContext, 256)
 {}
 
-void EditorTextureResidency::Tick(EngineContext* ctx)
+void EditorTextureResidency::Tick(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end();) {
         if (ctx->currentRenderFrame >= it->freeOnFrame) {
             ctx->removeImguiTextureFn(it->descSet);
-            ctx->assetManager->UnloadTexture(it->texture->textureId);
+            registry.ServiceMut<Engine::AssetManager>().UnloadTexture(it->texture->textureId);
             it = pendingRemoval.Remove(it);
         }
         else {
@@ -29,7 +29,7 @@ void EditorTextureResidency::Tick(EngineContext* ctx)
     }
 }
 
-void EditorTextureResidency::Acquire(TextureID id, EngineContext* ctx)
+void EditorTextureResidency::Acquire(EngineContext* ctx, EngineState* state, SystemRegistry& registry, TextureID id)
 {
     if (entries.Contains(id)) { return; }
 
@@ -46,10 +46,10 @@ void EditorTextureResidency::Acquire(TextureID id, EngineContext* ctx)
         SamplerDesc desc{};
         desc.minFilter = VK_FILTER_NEAREST;
         desc.magFilter = VK_FILTER_NEAREST;
-        sampler = ctx->assetManager->LoadSampler(desc);
+        sampler = registry.ServiceMut<Engine::AssetManager>().LoadSampler(desc);
     }
 
-    entries[id].texture = ctx->assetManager->LoadTexture(id);
+    entries[id].texture = registry.ServiceMut<Engine::AssetManager>().LoadTexture(id);
 }
 
 uint64_t EditorTextureResidency::GetDescSet(TextureID id, EngineContext* ctx)

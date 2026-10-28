@@ -512,12 +512,12 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
         // Material selector
         {
-            if (Engine::BeginMaterialCombo(ctx, "Material##spline", component.material, "(none)", edit.IsMixed(&SplineMeshComponent::material))) {
+            if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material##spline", component.material, "(none)", edit.IsMixed(&SplineMeshComponent::material))) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     component.material = Engine::MaterialID{};
                     dirty = true;
                 }
-                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, state->editor.materialSelector, component.material);
+                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.material);
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
                     dirty = true;

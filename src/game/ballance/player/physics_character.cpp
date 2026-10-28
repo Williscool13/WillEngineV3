@@ -20,10 +20,10 @@ namespace Ballance
 void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition, Engine::SystemRegistry& registry)
 {
     engineState = gameState;
-    physicsWorld = ctx->physicsWorld;
+    physicsWorld = &registry.Service<Physics::PhysicsWorld>();
 
     constexpr StringID WOODEN_BALL_PREFAB_ID{4933586796549546436};
-    entity = Engine::SpawnPrefab(engineState, ctx->assetManager, WOODEN_BALL_PREFAB_ID, registry);
+    entity = Engine::SpawnPrefab(registry.Context(), engineState, registry, WOODEN_BALL_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
     registry.Add<Component::DoNotSerializeTag>(entity);
@@ -34,7 +34,7 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
     registry.Set<Component::DirtyTransformRequest>(entity);
 }
 
-void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, Physics::PhysicsWorld* inPhysicsWorld, Engine::SystemRegistry& registry)
+void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool jumpRequested, const Physics::PhysicsWorld* inPhysicsWorld, Engine::SystemRegistry& registry)
 {
     auto* physicsBody = registry.TryGet<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return;
@@ -64,7 +64,7 @@ void PhysicsCharacter::Update(float deltaTime, const glm::vec3& moveInput, bool 
     }
 }
 
-void PhysicsCharacter::Shutdown(Physics::PhysicsWorld* inPhysicsWorld, Engine::SystemRegistry& registry)
+void PhysicsCharacter::Shutdown(const Physics::PhysicsWorld* inPhysicsWorld, Engine::SystemRegistry& registry)
 {
     if (engineState && registry.Valid(entity)) {
         registry.Destroy(entity);
@@ -102,7 +102,7 @@ bool PhysicsCharacter::IsGrounded() const
     return grounded;
 }
 
-bool PhysicsCharacter::CheckGrounded(Physics::PhysicsWorld* inPhysicsWorld, Engine::SystemRegistry& registry) const
+bool PhysicsCharacter::CheckGrounded(const Physics::PhysicsWorld* inPhysicsWorld, Engine::SystemRegistry& registry) const
 {
     auto* physicsBody = registry.TryGet<Component::PhysicsBodyRuntime>(entity);
     if (!physicsBody) return false;

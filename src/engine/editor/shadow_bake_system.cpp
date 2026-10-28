@@ -74,7 +74,7 @@ static bool LightForBake(EngineState* state, entt::entity entity, uint64_t& outS
     return outLight.range > 0.0f;
 }
 
-static void WriteShadowMap(EngineContext* ctx, uint64_t shadowId, uint32_t resolution, const ShadowBakeKey& key, const Core::HeapArray<uint16_t>& pixels)
+static void WriteShadowMap(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, uint64_t shadowId, uint32_t resolution, const ShadowBakeKey& key, const Core::HeapArray<uint16_t>& pixels)
 {
     const WImageDesc desc{VK_FORMAT_R16_UNORM, resolution, resolution, 1, key.faceCount};
     const size_t blobSize = WImageBlobSize(desc);
@@ -88,7 +88,7 @@ static void WriteShadowMap(EngineContext* ctx, uint64_t shadowId, uint32_t resol
     auto compressed = Core::HeapArray<uint8_t>(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::EngineContext, CompressMaxSize(CompressionType::Zstd, blobSize));
     const size_t compressedSize = Compress(CompressionType::Zstd, blob.Data(), blobSize, compressed.Data(), compressed.Size());
 
-    const AssetManager::ShadowMapInfo* previous = ctx->assetManager->GetShadowMapInfo(shadowId);
+    const AssetManager::ShadowMapInfo* previous = registry.Service<Engine::AssetManager>().GetShadowMapInfo(shadowId);
     WShadowMapHeader header{};
     header.shadowId = shadowId;
     header.contentVersion = previous ? previous->contentVersion + 1 : 1;
@@ -141,7 +141,7 @@ void ShadowBakeSystem::Cancel()
     pixels = {};
 }
 
-void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->shadowBake = {};
     ShadowBakeCaptureStaging& capture = ctx->shadowBakeCapture;
@@ -152,7 +152,7 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameB
             memcpy(pixels.Data() + face * faceTexels, capture.pixels.Data(), faceTexels * sizeof(uint16_t));
             ++face;
             if (face == key.faceCount) {
-                WriteShadowMap(ctx, shadowId, resolution, key, pixels);
+                WriteShadowMap(ctx, state, registry, shadowId, resolution, key, pixels);
                 ++batchDone;
                 requestId = 0;
                 entity = entt::null;
@@ -192,9 +192,9 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Core::FrameB
     }
 }
 
-void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void ShadowBakeTick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
-    state->shadowBake.Tick(ctx, state, frameBuffer, registry);
+    state->shadowBake.Tick(ctx, state, registry, frameBuffer);
 }
 
 #else
@@ -202,8 +202,8 @@ void ShadowBakeTick(EngineContext* ctx, EngineState* state, Core::FrameBuffer* f
 void ShadowBakeSystem::Enqueue(entt::entity) {}
 void ShadowBakeSystem::EnqueueAll(Engine::SystemRegistry&) {}
 void ShadowBakeSystem::Cancel() {}
-void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
-void ShadowBakeTick(EngineContext*, EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
+void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
+void ShadowBakeTick(EngineContext*, EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
 
 #endif
 } // Engine

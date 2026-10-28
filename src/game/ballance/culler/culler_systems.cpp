@@ -46,7 +46,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
     auto sleepers = Core::ArenaFixedVector<Sleeper>(&ctx->gameplayArena.Get(), std::max(shards.size_hint(), size_t{1}));
     for (const entt::entity entity : shards) {
         const auto* body = Component::FindBody(registry, entity);
-        if (body && !ctx->physicsWorld->IsAwake(body->bodyID)) {
+        if (body && !registry.Service<Physics::PhysicsWorld>().IsAwake(body->bodyID)) {
             const auto* sleep = registry.TryGet<Component::ShardSleepRuntime>(entity);
             if (!sleep) { registry.Set<Component::ShardSleepRuntime>(entity, Component::ShardSleepRuntime{now}); }
             sleepers.PushBack({entity, sleep ? sleep->sleepSince : now});
@@ -79,7 +79,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         if (entity == playerEntity || Component::EffectiveMotionType(registry, entity, desc) != Component::PhysicsMotionType::Dynamic) { continue; }
         const auto* body = Component::FindBody(registry, entity);
         if (!body) { continue; }
-        const Vec3 p = ctx->physicsWorld->GetCenterOfMassPosition(body->bodyID);
+        const Vec3 p = registry.Service<Physics::PhysicsWorld>().GetCenterOfMassPosition(body->bodyID);
         const float dx = p.x - center.x;
         const float dz = p.z - center.z;
         if (p.y < culler.killHeight || dx * dx + dz * dz > radiusSq) {

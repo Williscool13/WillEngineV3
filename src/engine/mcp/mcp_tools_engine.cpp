@@ -298,7 +298,8 @@ static ToolResult QueryAssets(EngineContext* ctx, EngineState* state, Call& call
     }
     const std::string_view needle = call.GetString("nameContains", "");
     Page page = ReadPage(call, ASSET_QUERY_DEFAULT_LIMIT, ASSET_QUERY_MAX_LIMIT);
-    AssetManager& am = *ctx->assetManager;
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/query_assets"};
+    const AssetManager& am = registry.Service<Engine::AssetManager>();
 
     call.BeginArray("assets");
 
@@ -529,6 +530,7 @@ static ToolResult SetCamera(EngineContext*, EngineState* state, Call& call)
 
 static ToolResult LoadScene(EngineContext* ctx, EngineState* state, Call& call)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/load_scene"};
     const char* name = call.GetString("name", "");
     if (!*name) {
         call.SetError("Missing name: a scene name or its 16 hex digit id");
@@ -541,12 +543,12 @@ static ToolResult LoadScene(EngineContext* ctx, EngineState* state, Call& call)
 
     StringID sceneId{};
     uint64_t raw = 0;
-    if (ParseHexId(name, raw) && ctx->assetManager->GetSceneMetadata(StringID(raw))) {
+    if (ParseHexId(name, raw) && registry.Service<Engine::AssetManager>().GetSceneMetadata(StringID(raw))) {
         sceneId = StringID(raw);
     }
     else {
         uint32_t matchCount = 0;
-        for (const auto& kv : ctx->assetManager->GetSceneCache()) {
+        for (const auto& kv : registry.Service<Engine::AssetManager>().GetSceneCache()) {
             if (kv.value.sceneName == name) {
                 sceneId = kv.key;
                 ++matchCount;
@@ -562,8 +564,7 @@ static ToolResult LoadScene(EngineContext* ctx, EngineState* state, Call& call)
         }
     }
 
-    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/load_scene"};
-    if (!LoadSceneExclusive(ctx, state, sceneId, registry)) {
+    if (!LoadSceneExclusive(ctx, state, registry, sceneId)) {
         call.SetError("Scene failed to load; see engine.log");
         return ToolResult::Error;
     }
@@ -626,7 +627,7 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
         const auto* name = registry.TryGet<Component::NameComponent>(entity);
         call.SetString("name", name ? name->name.c_str() : "");
         const auto* runtime = registry.TryGet<Component::MeshRuntime>(entity);
-        const StaticModel* model = runtime ? ctx->assetManager->GetModel(runtime->modelHandle) : nullptr;
+        const StaticModel* model = runtime ? registry.Service<Engine::AssetManager>().GetModel(runtime->modelHandle) : nullptr;
         if (model) { call.SetString("modelName", model->name.c_str()); } else { call.SetNull("modelName"); }
     }
     else {
@@ -640,7 +641,7 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
     call.SetInt("modelSlot", source.modelSlot);
     call.SetString("materialId", HexId(source.materialID.id).c_str());
     call.SetInt("materialIndex", source.materialIndex);
-    const Material* material = ctx->materialManager->GetMaterial(source.materialID);
+    const Material* material = registry.Service<Engine::MaterialManager>().GetMaterial(source.materialID);
     if (material) {
         call.SetString("materialName", material->name.c_str());
         call.BeginArray("emissiveFactor");
@@ -659,6 +660,7 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
 
 static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
 {
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/run_play"};
     const char* name = call.GetString("name", "");
     if (!*name) {
         call.SetError("Missing name: a .wplay stem, its header name, or an absolute path");
@@ -672,7 +674,7 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
     const AssetManager::CachedPlayMetadata* found = nullptr;
     uint32_t matchCount = 0;
     bool bFoundCurrent = false;
-    for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
+    for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
         const Core::InlineString<128> stem{meta.source.Stem()};
         if (!(stem == name || meta.name == name || meta.source == name)) { continue; }
         const bool bCurrent = meta.sceneId == state->scene.currentSceneId;
@@ -696,7 +698,7 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
         return ToolResult::Error;
     }
     if (found->sceneId != state->scene.currentSceneId) {
-        const auto* wanted = ctx->assetManager->GetSceneMetadata(found->sceneId);
+        const auto* wanted = registry.Service<Engine::AssetManager>().GetSceneMetadata(found->sceneId);
         call.SetError(Core::InlineString<256>::Format("Run wants scene '%s' but '%s' is current", wanted ? wanted->sceneName.c_str() : "(unregistered)",
                                                       state->scene.currentSceneName.c_str()).c_str());
         return ToolResult::Error;
@@ -743,7 +745,7 @@ static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& 
     call.SetInt("quietFrames", quiet);
     call.SetInt("settledThresholdFrames", AssetLoadState::SETTLED_QUIET_FRAMES);
     call.SetInt("loadingEntities", static_cast<int64_t>(CountLoadingEntities(state, registry)));
-    call.SetBool("pendingAssetLoads", ctx->assetManager->HasPendingLoads());
+    call.SetBool("pendingAssetLoads", registry.Service<Engine::AssetManager>().HasPendingLoads());
     call.SetBool("assetGenerationPending", ctx->frameStatus.bAssetGenerationPending);
     call.SetBool("rescanResources", ctx->rescan.bResources);
     call.SetBool("screenshotInFlight", ctx->frameStatus.bScreenshotInFlight || state->requests.bWantsScreenshot || state->requests.screenshotBurstRemaining > 0);
@@ -754,7 +756,7 @@ static ToolResult GetEngineStatus(EngineContext* ctx, EngineState* state, Call& 
     call.SetString("runMode", RunModeName(state->runMode));
     call.SetFloat("runSeconds", IsRunning(state) ? state->timeFrame->totalTime - state->runStartTime : 0.0);
     call.SetBool("physicsEnabled", state->physics.bEnabled);
-    const Physics::BodyCounts bodies = ctx->physicsWorld->GetBodyCounts();
+    const Physics::BodyCounts bodies = registry.Service<Physics::PhysicsWorld>().GetBodyCounts();
     call.BeginObject("physicsBodies");
     call.SetInt("total", bodies.total);
     call.SetInt("static", bodies.staticBodies);
@@ -792,8 +794,8 @@ static ToolResult SetRunMode(EngineContext* ctx, EngineState* state, Call& call)
     if (IsSimulating(state) && !bSimulate) { SimulateStop(ctx, state, registry); }
     if (IsPlaying(state) && !bPlay) { PlayStop(ctx, state, registry); }
     const bool bUseRuntimeScenes = call.GetBool("useRuntimeScenes", false);
-    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state, bUseRuntimeScenes, registry); }
-    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state, bUseRuntimeScenes, registry); }
+    if (bSimulate && !IsSimulating(state)) { SimulateStart(ctx, state, registry, bUseRuntimeScenes); }
+    if (bPlay && !IsPlaying(state)) { PlayStart(ctx, state, registry, bUseRuntimeScenes); }
 
     call.SetString("runMode", RunModeName(state->runMode));
     return ToolResult::Complete;

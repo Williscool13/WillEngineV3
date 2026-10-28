@@ -310,7 +310,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             return;
         }
         Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.scene"};
-        if (!LoadSceneSlot(ctx, state, slot, registry)) {
+        if (!LoadSceneSlot(ctx, state, registry, slot)) {
             Print(state, Core::InlineString<64>::Format("  scene %d is empty or unregistered", slot + 1).c_str());
             return;
         }
@@ -319,7 +319,7 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
 
     Register(state, Origin::Engine, "w.runtime.save", "Writes the current scene's runtime state to <scene>.wruntimescene (play or simulate)", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
         Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.runtime.save"};
-        Print(state, SaveRuntimeScene(ctx, state, state->scene.currentSceneId, registry) ? "  saved runtime scene" : "  save failed, see the log");
+        Print(state, SaveRuntimeScene(ctx, state, registry, state->scene.currentSceneId) ? "  saved runtime scene" : "  save failed, see the log");
     });
 
     Register(state, Origin::Engine, "w.rescan", "Rescan assets, materials and scenes", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
@@ -334,7 +334,8 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
             return;
         }
         if (strcmp(args[1], "stop") == 0) {
-            const Core::InlineString<512> path = state->cameraRecorder.Stop(ctx, state);
+            Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.record"};
+            const Core::InlineString<512> path = state->cameraRecorder.Stop(ctx, state, registry);
             Print(state, path.IsEmpty() ? "  nothing recorded" : Core::InlineString<512>::Format("  wrote %s", path.c_str()).c_str());
             return;
         }
@@ -379,12 +380,14 @@ void RegisterBuiltinCommands(Engine::EngineState* state)
         if (args.Size() > 1) {
             state->physics.timeScale = std::clamp(std::strtof(args[1], nullptr), 0.1f, 64.0f);
         }
-        const uint32_t awake = ctx->physicsWorld->GetAwakeBodyCount();
+        Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.physics_timescale"};
+        const uint32_t awake = registry.Service<Physics::PhysicsWorld>().GetAwakeBodyCount();
         Print(state, Core::InlineString<96>::Format("  physics_timescale %.2f, %u bodies awake", state->physics.timeScale, awake).c_str());
     });
 
     Register(state, Origin::Engine, "w.physics_bodies", "Prints physics body counts by motion type, awake and asleep", [](Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const char*>) {
-        const Physics::BodyCounts b = ctx->physicsWorld->GetBodyCounts();
+        Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Console/w.physics_bodies"};
+        const Physics::BodyCounts b = registry.Service<Physics::PhysicsWorld>().GetBodyCounts();
         Print(state, Core::InlineString<192>::Format("  %u bodies: %u static, kinematic %u (%u awake), dynamic %u (%u awake, %u asleep)", b.total, b.staticBodies, b.kinematic, b.kinematicAwake, b.dynamic,
             b.dynamicAwake, b.dynamic - b.dynamicAwake).c_str());
     });
@@ -557,7 +560,7 @@ static void UpdateLogFilters(Engine::EngineContext* ctx, Engine::EngineState* st
     }
 }
 
-static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ConsoleState& c = state->console;
 
@@ -627,7 +630,7 @@ static void UpdateWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
         UpdateLogTabScroll(c);
     }
 
-    const UI::TextFieldResult res = UI::TextField(ctx, state, c.uiFocus, inputId, c.input, sizeof(c.input));
+    const UI::TextFieldResult res = UI::TextField(ctx, state, registry, c.uiFocus, inputId, c.input, sizeof(c.input));
     if (res.submitted) {
         if (c.input[0] != '\0') {
             PushHistory(c, c.input);
@@ -669,7 +672,7 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
     const Engine::InstanceSource& source = state->instanceStore[pick.instanceIndex];
     const entt::entity found = Engine::FindEntity(state, StringID(source.stableId), registry);
     const auto* name = found != entt::null ? registry.TryGet<Engine::Component::NameComponent>(found) : nullptr;
-    const Engine::Material* material = ctx->materialManager->GetMaterial(source.materialID);
+    const Engine::Material* material = registry.Service<Engine::MaterialManager>().GetMaterial(source.materialID);
     Print(state, Core::InlineString<256>::Format("  pick: %s, primitive ordinal %u (index %u, node %u), instance %u", name ? name->name.c_str() : "(no entity)", source.modelPrimitiveOrdinal, source.primitiveIndex, source.sourceNodeIndex, pick.instanceIndex).c_str());
     if (material) {
         const auto& e = material->props.emissiveFactor;
@@ -764,7 +767,7 @@ void Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::Syst
     }
 
     if (c.bOpen) {
-        UpdateWindow(ctx, state);
+        UpdateWindow(ctx, state, registry);
     }
 
     if (c.bOpen && !c.bOwnsContext) {
@@ -870,7 +873,7 @@ constexpr uint16_t WRAP_TOGGLE_HEIGHT = 22;
 constexpr uint16_t WRAP_TOGGLE_GAP = 6;
 constexpr uint16_t BOTTOM_CONTROLS_CLEARANCE = RESIZE_HANDLE_OFFSET + WRAP_TOGGLE_HEIGHT + 4;
 
-static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ConsoleState& c = state->console;
 
@@ -903,7 +906,7 @@ static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 
     CLAY(CLAY_ID("Console_InputRow"), { .layout = { .sizing = { CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(32) }, .padding = {6, 6, 4, 4} } }) {
-        UI::TextFieldDraw(ctx, state, c.uiFocus, CLAY_ID("Console_Input"), c.input, { .caretZIndex = static_cast<int16_t>(UI::ZIndex::CONSOLE_WINDOW + 1) });
+        UI::TextFieldDraw(ctx, state, registry, c.uiFocus, CLAY_ID("Console_Input"), c.input, { .caretZIndex = static_cast<int16_t>(UI::ZIndex::CONSOLE_WINDOW + 1) });
     }
 
     CLAY(CLAY_ID("Console_ResizeHandle"), {
@@ -930,10 +933,10 @@ static void DrawWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
     }
 }
 
-void Draw(Engine::EngineContext* ctx, Engine::EngineState* state)
+void Draw(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (state->console.bOpen) {
-        DrawWindow(ctx, state);
+        DrawWindow(ctx, state, registry);
     }
 }
 } // Engine::Console

@@ -69,7 +69,7 @@ DragResult DragBehavior(Engine::EngineState* state, Clay_ElementId id, DragState
 
 // ---- Widgets ----
 
-static int32_t CaretFromLocalX(Engine::AssetManager* assetManager, Engine::FontHandle font, const char* text, int32_t len, float localX, float fontSize)
+static int32_t CaretFromLocalX(const Engine::AssetManager* assetManager, Engine::FontHandle font, const char* text, int32_t len, float localX, float fontSize)
 {
     float x = 0.0f;
     for (int32_t i = 0; i < len; ++i) {
@@ -111,7 +111,7 @@ static int32_t WordStartBefore(const char* buf, int32_t caret)
     return i;
 }
 
-TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state, Context& ui, Clay_ElementId id, char* buf, size_t cap, const TextFieldStyle& style)
+TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Context& ui, Clay_ElementId id, char* buf, size_t cap, const TextFieldStyle& style)
 {
     TextFieldResult result{};
 
@@ -126,7 +126,7 @@ TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state
             if (ed.found) {
                 const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
                 const float localX = state->input.mousePositionAbsolute.x - viewportOffsetX - ed.boundingBox.x;
-                ui.caret = CaretFromLocalX(ctx->assetManager, state->uiFont, buf, len, localX, style.fontSize);
+                ui.caret = CaretFromLocalX(&registry.Service<Engine::AssetManager>(), state->uiFont, buf, len, localX, style.fontSize);
             }
             else {
                 ui.caret = len;
@@ -185,7 +185,7 @@ TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state
     return result;
 }
 
-void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, const Context& ui, Clay_ElementId id, const char* buf, const TextFieldStyle& style)
+void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Context& ui, Clay_ElementId id, const char* buf, const TextFieldStyle& style)
 {
     const bool focused = IsFocused(ui, id);
     const auto len = static_cast<int32_t>(strlen(buf));
@@ -200,7 +200,7 @@ void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, const
             CLAY_TEXT(text, { .textColor = style.textColor, .fontSize = static_cast<uint16_t>(style.fontSize) });
         }
         if (focused) {
-            const float caretX = TEXT_FIELD_PAD_X + Engine::MeasureText(ctx->assetManager, state->uiFont, buf, ui.caret, style.fontSize);
+            const float caretX = TEXT_FIELD_PAD_X + Engine::MeasureText(&registry.Service<Engine::AssetManager>(), state->uiFont, buf, ui.caret, style.fontSize);
             CLAY(CLAY_ID_LOCAL("Caret"), {
                  .layout = { .sizing = { CLAY_SIZING_FIXED(2), CLAY_SIZING_FIXED(style.fontSize * CARET_HEIGHT_SCALE) } },
                  .backgroundColor = style.caretColor,
@@ -322,7 +322,7 @@ static void AppendDiffuseGIModeText(Core::InlineString<48>& out, const Engine::L
     }
 }
 
-void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
 
@@ -332,7 +332,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     Clay_BeginLayout();
 
 #ifdef WDEBUG
-    Console::Draw(ctx, state);
+    Console::Draw(ctx, state, registry);
 #endif
 
 #if WILL_EDITOR
@@ -561,7 +561,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     const auto vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-    const Engine::Font* uiFont = ctx->assetManager->GetFont(state->uiFont);
+    const Engine::Font* uiFont = registry.Service<Engine::AssetManager>().GetFont(state->uiFont);
 
     for (int32_t i = 0; i < renderCommands.length; ++i) {
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
@@ -681,7 +681,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                 for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
                     const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
-                    const Engine::WGlyphInfo* g = ctx->assetManager->GetGlyph(state->uiFont, cp);
+                    const Engine::WGlyphInfo* g = registry.Service<Engine::AssetManager>().GetGlyph(state->uiFont, cp);
                     if (!g) {
                         cursorX += fontSize * 0.25f;
                         continue;

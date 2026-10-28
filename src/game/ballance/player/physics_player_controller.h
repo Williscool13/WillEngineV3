@@ -24,7 +24,7 @@ class PhysicsPlayerController
 public:
     void Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition, Engine::SystemRegistry& registry);
     void Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
-    void Shutdown(Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry);
+    void Shutdown(const Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry);
 
     PhysicsCharacter* GetCharacter() { return character ? &*character : nullptr; }
 

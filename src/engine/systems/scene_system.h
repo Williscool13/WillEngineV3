@@ -35,13 +35,11 @@ enum class SceneSaveFilter : uint8_t
     Spawned,
 };
 
-Engine::Scene SaveScene(Engine::ComponentRegistry& componentRegistry, Engine::SystemRegistry& registry, Engine::AssetManager* assetManager, StringID sceneId,
-                        SceneSaveFilter filter = SceneSaveFilter::Authored);
+Engine::Scene SaveScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId, SceneSaveFilter filter = SceneSaveFilter::Authored);
 
 StringID LoadScene(Engine::ComponentRegistry& componentRegistry, Engine::SystemRegistry& registry, const Engine::TextReader& scene);
 
-Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::ComponentRegistry& componentRegistry, Engine::SystemRegistry& registry, Engine::AssetManager* assetManager,
-                                                  Core::Span<Engine::RuntimeSceneMetadata> loadedScenes);
+Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<Engine::RuntimeSceneMetadata> loadedScenes);
 
 void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots, Engine::SystemRegistry& registry);
 
@@ -56,7 +54,7 @@ void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes, Engin
 
 void UnloadScene(Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry);
 
-void SaveSceneToFile(StringID sceneID, Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, Engine::SystemRegistry& registry);
+void SaveSceneToFile(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneID);
 
 struct LoadSceneResult
 {
@@ -65,7 +63,7 @@ struct LoadSceneResult
     Core::InlineString<128> sceneName;
 };
 
-LoadSceneResult LoadSceneFromFile(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID sceneId, Engine::SystemRegistry& registry);
+LoadSceneResult LoadSceneFromFile(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId);
 
 /**
  * Binds the current scene to a numpad slot and persists it to the project config. Editor-only.
@@ -83,7 +81,7 @@ bool SaveSceneSlot(Engine::EngineState* state, int slotIndex);
  * @param slotIndex zero-based; Numpad 1 is slot 0
  * @return true if the slot's scene was loaded.
  */
-bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int slotIndex, Engine::SystemRegistry& registry);
+bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, int slotIndex);
 
 /**
  * Unloads every loaded scene and loads this one from disk, ending and restarting play if a session is active.
@@ -92,23 +90,23 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, int s
  * @param sceneId
  * @return false if the scene is not registered or failed to load.
  */
-bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry);
+bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId);
 
-void SaveEntityAsPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::EngineContext* ctx, entt::entity entity, std::string_view prefabName, Engine::SystemRegistry& registry);
+void SaveEntityAsPrefab(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity, std::string_view prefabName);
 
-entt::entity SpawnPrefab(Engine::EngineState* state, Engine::AssetManager* assetManager, StringID prefabId, Engine::SystemRegistry& registry, const glm::vec3& spawnPosition = {});
+entt::entity SpawnPrefab(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID prefabId, const glm::vec3& spawnPosition = {});
 
-void ResolvePrefabLoads(Engine::EngineState* state, Engine::AssetManager* assetManager, Engine::SystemRegistry& registry);
+void ResolvePrefabLoads(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 bool IsEditingPrefab(Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, StringID prefabId, const glm::vec3& position, Engine::SystemRegistry& registry);
+entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID prefabId, const glm::vec3& position);
 
 void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void StopPrefabEdit(Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::ModelID modelId, Engine::SystemRegistry& registry, const glm::vec3& offset = {});
+Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::ModelID modelId, const glm::vec3& offset = {});
 
 /**
  * Splits one flattened primitive out of a whole-model static-mesh entity into a new child entity that renders only that primitive (its own material/transform).
@@ -118,7 +116,7 @@ entt::entity SplitOffMeshPrimitive(Engine::EngineState* state, entt::entity pare
 /**
  * Rebuilds the model's node tree under a whole-model static-mesh entity, one primitive per entity; only primitives whose material emits keep EMISSIVE_LIGHT. Returns the primitive count; the caller removes the parent's mesh.
  */
-uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity parent, Engine::SystemRegistry& registry);
+uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity parent);
 
 
 /**
@@ -236,11 +234,11 @@ inline void DestroyComponent(Engine::EngineState* state, entt::entity entity, St
 }
 
 /** bUseRuntimeScenes: layer each loaded scene's .wruntimescene over it. */
-void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes, Engine::SystemRegistry& registry);
+void PlayStart(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, bool bUseRuntimeScenes);
 
 void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, bool bUseRuntimeScenes, Engine::SystemRegistry& registry);
+void SimulateStart(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, bool bUseRuntimeScenes);
 
 void SimulateStop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 

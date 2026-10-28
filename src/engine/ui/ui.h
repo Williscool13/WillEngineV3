@@ -24,7 +24,7 @@ struct FrameBuffer;
 
 namespace Engine
 {
-void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 } // Engine
 
 namespace Engine::UI
@@ -89,9 +89,9 @@ struct TextFieldResult
 };
 
 /** Click-to-focus/position and text editing (insert/backspace/delete/arrows/home/end/submit) against buf in place. */
-TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state, Context& ui, Clay_ElementId id, char* buf, size_t cap, const TextFieldStyle& style = {});
+TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Context& ui, Clay_ElementId id, char* buf, size_t cap, const TextFieldStyle& style = {});
 /** Declares the field's Clay element (background + text + caret) reflecting the already-updated buf/ui. */
-void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, const Context& ui, Clay_ElementId id, const char* buf, const TextFieldStyle& style = {});
+void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Context& ui, Clay_ElementId id, const char* buf, const TextFieldStyle& style = {});
 
 struct ButtonStyle
 {

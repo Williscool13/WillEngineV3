@@ -63,11 +63,11 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 
 static void DrawGameplayWindow(Engine::EngineState* state);
 
-static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry);
+static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 
 static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount, Engine::SystemRegistry& registry);
+static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount);
 
 static void DrawSelectionGizmos(Engine::EngineState* state, const glm::mat4& view, const glm::mat4& proj, const glm::vec3& multiGizmoCentroid, bool bJustSelected, Engine::SystemRegistry& registry);
 
@@ -84,10 +84,10 @@ void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
     }
 }
 
-void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
+void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
-    if (!ctx->bGameLoaded || IsRunning(state) || !ctx->assetManager->GetSceneCache().Contains(sceneId)) { return; }
-    SaveSceneToFile(sceneId, state, ctx->assetManager, ctx, registry);
+    if (!ctx->bGameLoaded || IsRunning(state) || !registry.Service<Engine::AssetManager>().GetSceneCache().Contains(sceneId)) { return; }
+    SaveSceneToFile(ctx, state, registry, sceneId);
     state->editor.modifiedScenes.RemoveFirst(sceneId);
 }
 
@@ -95,7 +95,7 @@ void SaveModifiedScenes(Engine::EngineContext* ctx, Engine::EngineState* state, 
 {
     Core::InlineVector<StringID, 8> modified = state->editor.modifiedScenes;
     for (StringID sceneId : modified) {
-        SaveEditorScene(ctx, state, sceneId, registry);
+        SaveEditorScene(ctx, state, registry, sceneId);
     }
 }
 
@@ -161,7 +161,7 @@ static void WriteEntities(Engine::EngineState* state, Core::Span<const entt::ent
 }
 
 /** Creates the written entities in the active scene with fresh ids, keeping their hierarchy, then selects the top-level ones. */
-static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, const Engine::TextReader& reader, Engine::SystemRegistry& registry)
+static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Engine::TextReader& reader)
 {
     const StringID sceneId = state->scene.currentSceneId;
     if (!sceneId.IsValid() || reader.U64("wentities") != ENTITY_CLIPBOARD_VERSION) { return; }
@@ -244,16 +244,16 @@ static void InstantiateEntities(Engine::EngineContext* ctx, Engine::EngineState*
     MarkSceneModified(state, sceneId);
 }
 
-void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources, Engine::SystemRegistry& registry)
+void DuplicateEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> sources)
 {
     Core::ArenaVector<entt::entity> subtree{&ctx->editorArena.Get(), sources.Size() + 1};
     if (CollectSubtrees(state, sources, subtree, registry) == 0) { return; }
     Core::Vector<std::byte> text(&ctx->memoryManager->General(), Core::AllocTag::Editor);
     WriteEntities(state, subtree, text, registry);
-    InstantiateEntities(ctx, state, Engine::TextReader(text.Data(), text.Size()), registry);
+    InstantiateEntities(ctx, state, registry, Engine::TextReader(text.Data(), text.Size()));
 }
 
-void CopyEntitiesToClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> sources, Engine::SystemRegistry& registry)
+void CopyEntitiesToClipboard(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> sources)
 {
     Core::ArenaVector<entt::entity> subtree{&ctx->editorArena.Get(), sources.Size() + 1};
     if (CollectSubtrees(state, sources, subtree, registry) == 0) { return; }
@@ -268,7 +268,7 @@ void PasteEntitiesFromClipboard(Engine::EngineContext* ctx, Engine::EngineState*
 {
     Core::Vector<char> text(&ctx->memoryManager->General(), Core::AllocTag::Editor);
     if (!ctx->getClipboardTextFn(text, ENTITY_CLIPBOARD_FORMAT)) { return; }
-    InstantiateEntities(ctx, state, Engine::TextReader(text.Data(), text.Size()), registry);
+    InstantiateEntities(ctx, state, registry, Engine::TextReader(text.Data(), text.Size()));
 }
 
 bool CanPasteEntities(Engine::EngineContext* ctx)
@@ -297,7 +297,7 @@ void DeleteSelectedEntities(Engine::EngineContext* ctx, Engine::EngineState* sta
     MarkSceneModified(state, state->scene.currentSceneId);
 }
 
-entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Core::Span<const entt::entity> entities, Engine::SystemRegistry& registry)
+entt::entity GroupEntities(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> entities)
 {
     auto inSet = [&](entt::entity e) { return std::ranges::find(entities, e) != entities.end(); };
     auto hasAncestorInSet = [&](entt::entity e) {
@@ -363,7 +363,7 @@ entt::entity CreateChildEntity(Engine::EngineState* state, entt::entity parent, 
     return child;
 }
 
-void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, const Vec3&, int transformCount, Engine::SystemRegistry& registry)
+void DrawMultiSelectEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const Vec3&, int transformCount)
 {
     auto& entities = state->editor.selectedEntities;
     ImGui::Text("%zu entities selected", entities.Size());
@@ -568,17 +568,17 @@ void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
     HandleEditorHotkeys(ctx, state, registry);
 }
 
-void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    state->editor.texResidency.Tick(ctx);
+    state->editor.texResidency.Tick(ctx, state, registry);
     state->editor.ResetFrameCache();
     state->editor.bExclusiveGizmoActivePrev = state->editor.bExclusiveGizmoActive;
     state->editor.bExclusiveGizmoActive = false;
     state->editor.undo.Tick(state, ImGui::IsAnyItemActive() || ImGuizmo::IsUsingAny() || state->editor.activeDotHandleId >= 0, registry);
 
     const bool bJustSelected = HandleViewportSelection(ctx, state, registry);
-    SyncActiveScene(ctx, state);
+    SyncActiveScene(ctx, state, registry);
 
     DrawDebugViewWindow(ctx, state);
     DrawDiagnosticsWindow(ctx, state, registry);
@@ -597,7 +597,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         static_cast<float>(ctx->windowContext.viewportHeight)
     );
 
-    DrawViewManipulatorAndOverlay(ctx, state, frameBuffer, registry);
+    DrawViewManipulatorAndOverlay(ctx, state, registry, frameBuffer);
 
     const glm::mat4 view = frameBuffer->mainViewFamily.mainView.currentViewData.view;
     const glm::mat4 proj = frameBuffer->mainViewFamily.mainView.currentViewData.proj;
@@ -605,7 +605,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     DrawToolbar(ctx, state, registry);
     DrawScenesPanel(ctx, state, registry);
     DrawOutliner(ctx, state, registry);
-    DrawSpawnPanel(ctx, state, frameBuffer, registry);
+    DrawSpawnPanel(ctx, state, registry, frameBuffer);
 
     glm::vec3 multiGizmoCentroid{0.0f};
     int transformCount = 0;
@@ -619,14 +619,14 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
         multiGizmoCentroid /= static_cast<float>(transformCount);
     }
 
-    DrawDetailsPanel(ctx, state, frameBuffer, multiGizmoCentroid, transformCount, registry);
+    DrawDetailsPanel(ctx, state, registry, frameBuffer, multiGizmoCentroid, transformCount);
     DrawSelectionGizmos(state, view, proj, multiGizmoCentroid, bJustSelected, registry);
 
     DrawPostProcessingWindow(state, registry);
     DrawSceneStatsWindow(state, registry);
     DrawUndoHistoryWindow(state, registry);
     DrawMaterialsWindow(ctx, state, registry);
-    DrawTexturesWindow(ctx, state);
+    DrawTexturesWindow(ctx, state, registry);
 }
 
 static bool HandleViewportSelection(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
@@ -704,7 +704,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 
         if (!rmbHeld) {
             if (!popupOpen && ctrlHeld && state->input.GetActionState(Actions::ACTION_DUPLICATE).pressed) {
-                DuplicateEntities(ctx, state, state->editor.selectedEntities, registry);
+                DuplicateEntities(ctx, state, registry, state->editor.selectedEntities);
             }
 
             if (!popupOpen && ctrlHeld && !ImGui::IsAnyItemActive()) {
@@ -718,10 +718,10 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                 }
                 else if (state->input.GetActionState(Actions::ACTION_SAVE).pressed) {
                     if (shiftHeld) { SaveModifiedScenes(ctx, state, registry); }
-                    else { SaveEditorScene(ctx, state, state->scene.currentSceneId, registry); }
+                    else { SaveEditorScene(ctx, state, registry, state->scene.currentSceneId); }
                 }
                 else if (state->input.GetActionState(Actions::ACTION_COPY).pressed) {
-                    CopyEntitiesToClipboard(ctx, state, state->editor.selectedEntities, registry);
+                    CopyEntitiesToClipboard(ctx, state, registry, state->editor.selectedEntities);
                 }
                 else if (state->input.GetActionState(Actions::ACTION_PASTE).pressed) {
                     PasteEntitiesFromClipboard(ctx, state, registry);
@@ -739,12 +739,12 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
 
             if (!popupOpen && state->input.GetActionState(Actions::ACTION_BEGIN_RENAME).pressed) {
                 if (state->editor.bMaterialListFocused) {
-                    if (const Engine::Material* mat = ctx->materialManager->GetMaterial(state->editor.selectedMaterial)) {
+                    if (const Engine::Material* mat = registry.Service<Engine::MaterialManager>().GetMaterial(state->editor.selectedMaterial)) {
                         state->editor.renamingMaterial = state->editor.selectedMaterial;
                         state->editor.bMaterialRenameRequestFocus = true;
                         strncpy_s(state->editor.materialRenameBuffer, mat->name.c_str(), sizeof(state->editor.materialRenameBuffer) - 1);
                     }
-                    else if (const Engine::TextMaterial* textMat = ctx->materialManager->GetTextMaterial(state->editor.selectedTextMaterial)) {
+                    else if (const Engine::TextMaterial* textMat = registry.Service<Engine::MaterialManager>().GetTextMaterial(state->editor.selectedTextMaterial)) {
                         state->editor.renamingTextMaterial = state->editor.selectedTextMaterial;
                         state->editor.bMaterialRenameRequestFocus = true;
                         strncpy_s(state->editor.materialRenameBuffer, textMat->name.c_str(), sizeof(state->editor.materialRenameBuffer) - 1);
@@ -787,7 +787,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                         }
 
                         if (modelHandle.IsValid()) {
-                            if (const Engine::StaticModel* model = ctx->assetManager->GetModel(modelHandle)) {
+                            if (const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(modelHandle)) {
                                 if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
                                     AABB aabb = model->bounds.aabb;
                                     // Single primitive instead of whole model
@@ -882,7 +882,7 @@ static void DrawGameplayWindow(Engine::EngineState* state)
     ImGui::End();
 }
 
-static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     auto editorCameraView = registry.View<Component::FreeCameraComponent, Engine::Mut<Component::TransformComponent>, Component::EditorCameraTag>();
     assert(editorCameraView.size_hint() > 0);
@@ -944,17 +944,17 @@ static void DrawViewManipulatorAndOverlay(Engine::EngineContext* ctx, Engine::En
 
 static constexpr int MAX_RECORD_SLOTS = 9;
 
-static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* state, const ImVec4& occupiedColor, const ImVec2& buttonSize, Engine::SystemRegistry& registry);
+static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const ImVec4& occupiedColor, const ImVec2& buttonSize);
 
 static Core::InlineString<16> RecordSlotName(int slot)
 {
     return Core::InlineString<16>::Format("rec_%d", slot + 1);
 }
 
-static const Engine::AssetManager::CachedPlayMetadata* FindRecording(Engine::EngineContext* ctx, Engine::EngineState* state, int slot)
+static const Engine::AssetManager::CachedPlayMetadata* FindRecording(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, int slot)
 {
     const Core::InlineString<16> name = RecordSlotName(slot);
-    for (const auto& [id, meta] : ctx->assetManager->GetPlayCache()) {
+    for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
         if (meta.name == name.c_str() && meta.sceneId == state->scene.currentSceneId) {
             return &meta;
         }
@@ -962,14 +962,14 @@ static const Engine::AssetManager::CachedPlayMetadata* FindRecording(Engine::Eng
     return nullptr;
 }
 
-static void DrawRecordSlots(Engine::EngineContext* ctx, Engine::EngineState* state, const ImVec4& occupiedColor, const ImVec2& buttonSize)
+static void DrawRecordSlots(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const ImVec4& occupiedColor, const ImVec2& buttonSize)
 {
     const ImVec4 recordingColor(0.75f, 0.15f, 0.15f, 1.0f);
     Engine::CameraRecorder& recorder = state->cameraRecorder;
     const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty();
     for (int i = 0; i < MAX_RECORD_SLOTS; ++i) {
         const Core::InlineString<16> name = RecordSlotName(i);
-        const Engine::AssetManager::CachedPlayMetadata* meta = FindRecording(ctx, state, i);
+        const Engine::AssetManager::CachedPlayMetadata* meta = FindRecording(ctx, state, registry, i);
         const bool bRecordingThis = recorder.bActive && recorder.name == name.c_str();
         ImGui::SameLine();
         ImGui::PushID(2000 + i);
@@ -981,7 +981,7 @@ static void DrawRecordSlots(Engine::EngineContext* ctx, Engine::EngineState* sta
         }
         if (ImGui::Button(Core::InlineString<8>::Format("%d", i + 1).c_str(), buttonSize)) {
             if (bRecordingThis) {
-                recorder.Stop(ctx, state);
+                recorder.Stop(ctx, state, registry);
             }
             else if (ImGui::GetIO().KeyShift) {
                 recorder.Start(ctx, state, name.c_str());
@@ -1017,11 +1017,11 @@ static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state
     ImGui::SetNextItemWidth(64.0f);
     ImGui::Combo("##bookmark_mode", &state->editor.bookmarkMode, MODE_LABELS, static_cast<int>(std::size(MODE_LABELS)));
     if (state->editor.bookmarkMode == 2) {
-        DrawRecordSlots(ctx, state, occupiedColor, buttonSize);
+        DrawRecordSlots(ctx, state, registry, occupiedColor, buttonSize);
         return;
     }
     if (state->editor.bookmarkMode == 1) {
-        DrawSceneSlots(ctx, state, occupiedColor, buttonSize, registry);
+        DrawSceneSlots(ctx, state, registry, occupiedColor, buttonSize);
         return;
     }
 
@@ -1059,7 +1059,7 @@ static void DrawBookmarks(Engine::EngineContext* ctx, Engine::EngineState* state
     }
 }
 
-static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* state, const ImVec4& occupiedColor, const ImVec2& buttonSize, Engine::SystemRegistry& registry)
+static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const ImVec4& occupiedColor, const ImVec2& buttonSize)
 {
     for (int i = 0; i < Engine::MAX_SCENE_SLOTS; ++i) {
         Engine::SceneSlot& slot = state->projectConfig.sceneSlots[i];
@@ -1074,7 +1074,7 @@ static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* stat
                 SaveSceneSlot(state, i);
             }
             else {
-                LoadSceneSlot(ctx, state, i, registry);
+                LoadSceneSlot(ctx, state, registry, i);
             }
         }
         if (bOccupied) {
@@ -1082,7 +1082,7 @@ static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
         if (ImGui::IsItemHovered()) {
             if (bOccupied) {
-                const auto* meta = ctx->assetManager->GetSceneCache().Find(slot.sceneId);
+                const auto* meta = registry.Service<Engine::AssetManager>().GetSceneCache().Find(slot.sceneId);
                 ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1,
                                   meta ? meta->sceneName.c_str() : "(missing)", i + 1, i + 1);
             }
@@ -1208,7 +1208,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state, 
             bool bAnyRuntime = false;
             bool bAnyOutdated = false;
             for (const RuntimeSceneMetadata& scene : state->editor.loadedScenes) {
-                const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, scene.sceneId, registry);
+                const RuntimeSceneStatus& status = GetRuntimeSceneStatus(ctx, state, registry, scene.sceneId);
                 bAnyRuntime |= status.bExists;
                 bAnyOutdated |= status.bExists && status.IsOutdated();
             }
@@ -1217,12 +1217,12 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state, 
             ImGui::BeginDisabled(!ctx->bGameLoaded);
             if (ImGui::Button("Play")) {
                 stuckCount = FindStaticBodiesUnderMovers(state, stuckBodies, registry);
-                if (stuckCount == 0) { PlayStart(ctx, state, bUseRuntimeScenes, registry); }
+                if (stuckCount == 0) { PlayStart(ctx, state, registry, bUseRuntimeScenes); }
                 else { ImGui::OpenPopup("Hierarchy Problems"); }
             }
             ImGui::SameLine();
             if (ImGui::Button("Simulate")) {
-                SimulateStart(ctx, state, bUseRuntimeScenes, registry);
+                SimulateStart(ctx, state, registry, bUseRuntimeScenes);
             }
             ImGui::EndDisabled();
 
@@ -1256,7 +1256,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state, 
                 if (stuckCount > shown) { ImGui::TextDisabled("and %u more", stuckCount - shown); }
                 if (ImGui::Button("Play Anyway")) {
                     ImGui::CloseCurrentPopup();
-                    PlayStart(ctx, state, bUseRuntimeScenes, registry);
+                    PlayStart(ctx, state, registry, bUseRuntimeScenes);
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) { ImGui::CloseCurrentPopup(); }
@@ -1373,7 +1373,7 @@ static void DrawToolbar(Engine::EngineContext* ctx, Engine::EngineState* state, 
     ImGui::End();
 }
 
-static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount, Engine::SystemRegistry& registry)
+static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer, const glm::vec3& centroid, int transformCount)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_DETAILS];
     if (!bOpen) { return; }
@@ -1391,7 +1391,7 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
             }
 
             if (entity == state->editor.editingPrefabEntity && IsEditingPrefab(state, registry)) {
-                const auto* meta = ctx->assetManager->GetPrefabMetadata(state->editor.editingPrefabId);
+                const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(state->editor.editingPrefabId);
                 ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Editing prefab: %s", meta ? meta->prefabName.c_str() : "?");
                 if (ImGui::Button("Apply")) { ApplyPrefabEdit(ctx, state, registry); }
                 ImGui::SameLine();
@@ -1400,12 +1400,12 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
                 ImGui::Separator();
             }
             else if (const auto* prefabInst = registry.TryGet<Component::PrefabInstanceComponent>(entity)) {
-                const auto* meta = ctx->assetManager->GetPrefabMetadata(prefabInst->prefabId);
+                const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabInst->prefabId);
                 ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "Prefab: %s", meta ? meta->prefabName.c_str() : prefabInst->prefabId.ToString());
                 ImGui::BeginDisabled(!meta || IsEditingPrefab(state, registry) || IsRunning(state) || !ctx->bGameLoaded);
                 if (ImGui::Button("Edit Prefab")) {
                     const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
-                    const entt::entity copy = BeginPrefabEdit(ctx, state, prefabInst->prefabId, viewData.cameraPos + glm::normalize(viewData.cameraForward) * 5.0f, registry);
+                    const entt::entity copy = BeginPrefabEdit(ctx, state, registry, prefabInst->prefabId, viewData.cameraPos + glm::normalize(viewData.cameraForward) * 5.0f);
                     if (copy != entt::null) {
                         state->editor.selectedFolders.Clear();
                         state->editor.selectedEntities.Clear();
@@ -1456,7 +1456,7 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
             }
         }
         else if (state->editor.selectedEntities.Size() > 1) {
-            DrawMultiSelectEditor(ctx, state, centroid, transformCount, registry);
+            DrawMultiSelectEditor(ctx, state, registry, centroid, transformCount);
             DrawComponentPanels(state, frameBuffer, registry);
         }
     }

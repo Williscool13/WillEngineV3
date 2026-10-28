@@ -62,9 +62,9 @@ bool ProbeBakeInFlight(Engine::EngineState* state)
     return ProbeBakeGet(state).phase != ProbeBakeSystem::Phase::Idle;
 }
 
-void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
-    ProbeBakeGet(state).Tick(ctx, state, frameBuffer, registry);
+    ProbeBakeGet(state).Tick(ctx, state, registry, frameBuffer);
 }
 
 void ProbeBakeOverrideView(Engine::EngineState* state, Core::ViewFamily& viewFamily)
@@ -191,7 +191,7 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
     phase = Phase::Idle;
 }
 
-void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer, Engine::SystemRegistry& registry)
+void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     frameBuffer->bCaptureProbeFace = false;
     frameBuffer->probeCaptureCropSize = bBakeActive ? bakeCropSize : 0;
@@ -442,7 +442,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath, bakeProbeId, bakeSnapshot, 1.0f / bakePreExposure);
 
                 if (bInterbounceBatch && bakePass == 1 && !awaitedAssembles.IsFull()) {
-                    const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{bakeProbeId});
+                    const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{bakeProbeId});
                     const uint64_t expectedVersion = (info ? info->contentVersion : 0) + 1;
                     awaitedAssembles.PushBack(AwaitedAssemble{bakeProbeId, expectedVersion, probeEntity});
                 }
@@ -462,14 +462,14 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 stillPending.PushBack(awaited);
 
                 const auto* runtime = registry.TryGet<Component::ReflectionProbeRuntime>(awaited.entity);
-                const Engine::AssetManager::ProbeInfo* info = ctx->assetManager->GetProbeInfo(Engine::ProbeID{awaited.probeId});
+                const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{awaited.probeId});
                 bool bReady = info != nullptr
                     && info->contentVersion >= awaited.expectedVersion
                     && runtime != nullptr
                     && runtime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked
                     && runtime->contentHandle.IsValid();
                 if (bReady) {
-                    const Render::Cubemap* cubemap = ctx->assetManager->GetCubemap(runtime->contentHandle);
+                    const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(runtime->contentHandle);
                     bReady = cubemap != nullptr && cubemap->loadState == Render::Cubemap::LoadState::Loaded;
                 }
                 if (!bReady) { bAllReady = false; }
@@ -510,7 +510,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 bool ProbeBakeActive(Engine::EngineState*) { return false; }
 bool ProbeBakeInFlight(Engine::EngineState*) { return false; }
-void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
+void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
 void ProbeBakeOverrideView(Engine::EngineState*, Core::ViewFamily&) {}
 void ProbeBakeScrubFrame(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
 void ProbeBakeSystem::Start(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
@@ -518,7 +518,7 @@ void ProbeBakeSystem::StartDryRun(Engine::EngineContext*, Engine::EngineState*, 
 void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::EnqueueProbeInterbounce(Engine::EngineState*, entt::entity) {}
-void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*, Engine::SystemRegistry&) {}
+void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
 void ProbeBakeSystem::Cancel(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&) {}
 
 #endif
