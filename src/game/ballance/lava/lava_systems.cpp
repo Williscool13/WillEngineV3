@@ -99,7 +99,7 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
             const auto* lavaBody = Component::FindBody(registry, lavaEntity);
             if (!body || !lavaBody) { continue; }
             // A cart's origin is its post top, above its body
-            const float top = std::max(ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y, Component::ComputeWorldTransform(registry, other).translation.y);
+            const float top = std::max(ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y, registry.Get<Component::WorldTransformRuntime>(other).translation.y);
             const float surface = ctx->physicsWorld->GetWorldBounds(lavaBody->bodyID).max.y;
             const float depth = std::max(top - surface, 0.0f) + lava->extraDepth;
             StartDissolving(other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees, registry);
@@ -110,12 +110,13 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
 void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto view = registry.View<Engine::Mut<Component::DissolvingRuntime>, Engine::Mut<Component::TransformComponent>>();
+    auto view = registry.View<Engine::Mut<Component::DissolvingRuntime>, Component::TransformComponent>();
     if (view.size_hint() == 0) { return; }
 
     const float dt = state->timeFrame->deltaTime;
     auto finished = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
-    for (const auto& [entity, dissolving, transform] : view.each()) {
+    for (const auto& [entity, dissolving, current] : view.each()) {
+        Component::TransformComponent transform = current;
         dissolving.elapsed += dt;
         const float u = std::min(dissolving.elapsed / dissolving.duration, 1.0f);
         const float sinkT = u * u * (3.0f - 2.0f * u);
@@ -123,6 +124,7 @@ void UpdateDissolving(Engine::EngineContext* ctx, Engine::EngineState* state, En
         transform.rotation = dissolving.startRotation * glm::angleAxis(dissolving.tiltRadians * sinkT, dissolving.tiltAxis);
         transform.scale = dissolving.startScale * (1.0f - shrink);
         transform.translation = dissolving.startTranslation + dissolving.sink * sinkT + transform.rotation * (dissolving.startScale * dissolving.shrinkPivot * shrink);
+        registry.Set<Component::TransformComponent>(entity, transform);
         registry.Set<Component::DirtyTransformRequest>(entity);
         if (u >= 1.0f) { finished.PushBack(entity); }
     }

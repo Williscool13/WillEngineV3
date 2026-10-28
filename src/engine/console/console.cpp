@@ -717,10 +717,10 @@ static void VerifyLights(Engine::EngineState* state, Engine::SystemRegistry& reg
     };
 
     auto hidden = [&](entt::entity entity) { return registry.Has<Engine::Component::ProbeBakeHiddenFlag>(entity); };
-    for (auto [entity, light, runtime, world] : registry.View<Engine::Component::AreaLightComponent, Engine::Component::AreaLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, light, runtime, world] : registry.View<Engine::Component::AreaLightComponent, Engine::Component::AreaLightRuntime, Engine::Component::RenderWorldTransformRuntime>().each()) {
         check(entity, runtime.lightSlot, hidden(entity) ? LightInfo{} : Engine::Component::ComputeAreaLightInfo(world, light));
     }
-    for (auto [entity, light, runtime, world] : registry.View<Engine::Component::SphereLightComponent, Engine::Component::SphereLightRuntime, Engine::Component::WorldTransformRuntime>().each()) {
+    for (const auto& [entity, light, runtime, world] : registry.View<Engine::Component::SphereLightComponent, Engine::Component::SphereLightRuntime, Engine::Component::RenderWorldTransformRuntime>().each()) {
         check(entity, runtime.lightSlot, hidden(entity) ? LightInfo{} : Engine::Component::ComputeSphereLightInfo(world, light));
     }
 

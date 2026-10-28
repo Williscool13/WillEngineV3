@@ -61,14 +61,11 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
 void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void MarkRenderTransformsDirty(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
-
 /**
- * Resolves every dirty entity's world transform into WorldTransformRuntime.
- * @param ctx
- * @param state
+ * Resolves RenderWorldTransformRuntime per rendered frame: copies RenderTransformDirtyRequest entities from WorldTransformRuntime,
+ * then interpolates state->physicsDrivenTransforms between physics steps, composing their children from the interpolated parent.
  */
-void ResolveWorldTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
+void ResolveRenderTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 void UpdateUIPointerState(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 

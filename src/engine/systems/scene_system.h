@@ -127,14 +127,6 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
  */
 void ResolveHierarchyLinks(Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-/**
- * Refreshes the hierarchy iteration order iff a topology change flagged it dirty; a no-op otherwise.
- * Called by the children-resolve pass; any system that iterates the depth-sorted HierarchyComponent pool itself should call this first.
- */
-void EnsureHierarchyOrder(Engine::EngineState* state, Engine::SystemRegistry& registry);
-
-/** Tags the descendants of every DirtyTransformRequest entity so physics follows a moved parent; physics-owned dynamic children are left alone while playing. */
-void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 /**
  * Static bodies whose nearest ancestor with a body is kinematic or dynamic; they cannot follow it during play.

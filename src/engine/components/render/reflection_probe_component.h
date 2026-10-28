@@ -7,6 +7,7 @@
 
 #include <entt/entt.hpp>
 
+#include "core/types/transform.h"
 #include "engine/core/registry.h"
 #include "engine/engine_api.h"
 #include "engine/asset_manager_types.h"
@@ -25,8 +26,6 @@ struct ProbeBakeSnapshot;
 
 namespace Engine::Component
 {
-struct WorldTransformRuntime;
-
 struct ReflectionProbeComponent
 {
     static constexpr const char* COMPONENT_NAME = "ReflectionProbeComponent";
@@ -76,7 +75,7 @@ struct ReflectionProbeComponent
     static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
 
     /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
-    static bool IsBakeStale(const WorldTransformRuntime& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
+    static bool IsBakeStale(const Transform& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
 
     static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
 

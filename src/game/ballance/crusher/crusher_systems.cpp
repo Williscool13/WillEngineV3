@@ -143,9 +143,11 @@ static void Enter(Component::CrusherRuntime& run, Component::CrusherPhase phase)
 static void MoveAlong(Engine::SystemRegistry& registry, entt::entity entity, const Vec3& localDirection, float distance)
 {
     if (entity == entt::null || distance == 0.0f) { return; }
-    auto* transform = registry.TryGetMut<Component::TransformComponent>(entity);
-    if (!transform) { return; }
-    transform->translation += transform->rotation * localDirection * distance;
+    const auto* current = registry.TryGet<Component::TransformComponent>(entity);
+    if (!current) { return; }
+    Component::TransformComponent transform = *current;
+    transform.translation += transform.rotation * localDirection * distance;
+    registry.Set<Component::TransformComponent>(entity, transform);
     registry.Set<Component::DirtyTransformRequest>(entity);
 }
 
@@ -153,14 +155,16 @@ static void MoveAlong(Engine::SystemRegistry& registry, entt::entity entity, con
 static void StretchArm(Engine::EngineContext* ctx, Engine::SystemRegistry& registry, entt::entity arm, float drop)
 {
     const auto* armBody = Component::FindBody(registry, arm);
-    auto* transform = armBody ? registry.TryGetMut<Component::TransformComponent>(arm) : nullptr;
-    if (!transform) { return; }
+    const auto* current = armBody ? registry.TryGet<Component::TransformComponent>(arm) : nullptr;
+    if (!current) { return; }
     const AABB bounds = ctx->physicsWorld->GetLocalBounds(armBody->bodyID);
     const float length = bounds.max.y - bounds.min.y;
     if (length <= 1e-4f) { return; }
     const float scale = 1.0f + drop / length;
-    if (transform->scale.y == scale) { return; }
-    transform->scale.y = scale;
+    if (current->scale.y == scale) { return; }
+    Component::TransformComponent transform = *current;
+    transform.scale.y = scale;
+    registry.Set<Component::TransformComponent>(arm, transform);
     registry.Set<Component::DirtyTransformRequest>(arm);
 }
 
@@ -312,7 +316,7 @@ void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state, 
 
         const float angle = state->rng.Range(0.0f, glm::two_pi<float>());
         const float radius = glm::sqrt(state->rng.Range(feeder.minRadius * feeder.minRadius, feeder.maxRadius * feeder.maxRadius));
-        const Vec3 position = Component::ComputeWorldTransform(registry, entity).translation + Vec3(glm::cos(angle) * radius, 0.0f, glm::sin(angle) * radius);
+        const Vec3 position = registry.Get<Component::WorldTransformRuntime>(entity).translation + Vec3(glm::cos(angle) * radius, 0.0f, glm::sin(angle) * radius);
         const glm::quat rotation = glm::angleAxis(state->rng.Range(0.0f, glm::two_pi<float>()), state->rng.UnitVector());
         registry.RunExclusive<&ApplySpawnCrate>(CrateSpawn{.prefabId = feeder.prefabId, .position = position, .rotation = rotation});
         ++intact;

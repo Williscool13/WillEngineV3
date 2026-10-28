@@ -332,6 +332,8 @@ struct EngineState
     Registry registry;
     Core::Map<StringID, entt::entity> stableIdToEntityMap;
     bool bHierarchyOrderDirty{true};
+    /** Dynamic bodies whose render pose still interpolates, and their descendants, parents first. Rebuilt by ResolveWorldTransforms each game frame. */
+    Core::Vector<entt::entity> physicsDrivenTransforms{};
     ComponentRegistry componentRegistry{};
     MCP::ToolRegistry mcpTools{};
     Clay_Arena clayArena{};

@@ -24,12 +24,16 @@ void Engine::Component::TransformComponent::OnConstruct(Engine::SystemRegistry& 
 {
     registry.Set<MultiframeDirtyRequest>(entity);
     registry.Set<WorldTransformRuntime>(entity);
+    registry.Set<RenderWorldTransformRuntime>(entity);
+    registry.Set<DirtyTransformRequest>(entity);
 }
 
 void Engine::Component::TransformComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MultiframeDirtyRequest>(entity);
     registry.Remove<WorldTransformRuntime>(entity);
+    registry.Remove<RenderWorldTransformRuntime>(entity);
+    registry.Remove<RenderTransformDirtyRequest>(entity);
 }
 
 Transform Engine::Component::ComputeWorldTransform(const Engine::SystemRegistry& registry, entt::entity entity)

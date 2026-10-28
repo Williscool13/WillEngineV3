@@ -23,7 +23,8 @@ struct Command;
 
 /**
  * Exclusive access applies immediately and is unchecked. Non-exclusive access defers Set/Remove/Destroy/PushCommand to the end of the wave
- * and checks every touch against the declaration; Add/GetOrAdd/Create/Clear/Sort/ClearAll are exclusive only, or go through RunExclusive.
+ * and checks every touch against the declaration: Get needs any declaration, GetMut needs Writes, Set/Remove need Writes or DeferredWrites.
+ * Add/GetOrAdd/Create/Clear/Sort/ClearAll are exclusive only, or go through RunExclusive.
  */
 class SystemRegistry
 {
@@ -124,7 +125,7 @@ public:
     void Set(entt::entity entity, Args&&... args)
     {
         if (commands != nullptr) {
-            CheckWrite<T>();
+            CheckDeferredWrite<T>();
             commands->Set<T>(entity, std::forward<Args>(args)...);
             return;
         }
@@ -142,8 +143,8 @@ public:
     void Remove(entt::entity entity)
     {
         if (commands != nullptr) {
-            CheckWrite<T>();
-            (CheckWrite<Other>(), ...);
+            CheckDeferredWrite<T>();
+            (CheckDeferredWrite<Other>(), ...);
             commands->Remove<T, Other...>(entity);
             return;
         }
@@ -206,6 +207,16 @@ private:
 #if WILL_ACCESS_CHECK
         if (access.bExclusive) { return; }
         if constexpr (NamedComponent<T>) { CheckWriteAccess(name, access, AccessId<T>()); }
+        else { CheckUnnamedAccess(name, entt::type_name<T>::value()); }
+#endif
+    }
+
+    template<typename T>
+    void CheckDeferredWrite() const
+    {
+#if WILL_ACCESS_CHECK
+        if (access.bExclusive) { return; }
+        if constexpr (NamedComponent<T>) { CheckDeferredWriteAccess(name, access, AccessId<T>()); }
         else { CheckUnnamedAccess(name, entt::type_name<T>::value()); }
 #endif
     }

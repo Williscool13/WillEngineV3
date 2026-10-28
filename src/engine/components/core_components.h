@@ -73,6 +73,8 @@ struct TransformComponent
 /** Play-time lock on a Static entity: transform writes are reverted to this pose. */
 struct StaticTransformLockRuntime
 {
+    static constexpr const char* COMPONENT_NAME = "StaticTransformLockRuntime";
+
     glm::vec3 translation{0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f};
@@ -85,7 +87,7 @@ inline glm::mat4 GetMatrix(const TransformComponent& transform)
 }
 
 /**
- * Resolved world transform, source of truth for rendering and child composition.
+ * Resolved world transform at game rate, with simulated physics poses; what gameplay reads.
  * Runtime-only, on every transform entity.
  */
 struct WorldTransformRuntime
@@ -108,6 +110,31 @@ struct WorldTransformRuntime
 };
 
 inline glm::mat4 GetMatrix(const WorldTransformRuntime& transform)
+{
+    return Transform{transform.translation, transform.rotation, transform.scale}.GetMatrix();
+}
+
+/** WorldTransformRuntime as rendered, with physics poses interpolated between steps; what render-side code reads. */
+struct RenderWorldTransformRuntime
+{
+    static constexpr const char* COMPONENT_NAME = "RenderWorldTransformRuntime";
+
+    glm::vec3 translation{0.0f, 0.0f, 0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 scale{1.0f, 1.0f, 1.0f};
+
+    operator Transform() const { return {translation, rotation, scale}; }
+
+    RenderWorldTransformRuntime& operator=(const Transform& t)
+    {
+        translation = t.translation;
+        rotation = t.rotation;
+        scale = t.scale;
+        return *this;
+    }
+};
+
+inline glm::mat4 GetMatrix(const RenderWorldTransformRuntime& transform)
 {
     return Transform{transform.translation, transform.rotation, transform.scale}.GetMatrix();
 }
@@ -193,6 +220,12 @@ Transform ComputeWorldTransform(const Engine::SystemRegistry& registry, entt::en
 struct DirtyTransformRequest
 {
     static constexpr const char* COMPONENT_NAME = "DirtyTransformRequest";
+};
+
+/** WorldTransformRuntime changed since the last rendered frame and is not physics-driven; ResolveRenderTransforms copies it and removes this. */
+struct RenderTransformDirtyRequest
+{
+    static constexpr const char* COMPONENT_NAME = "RenderTransformDirtyRequest";
 };
 }
 

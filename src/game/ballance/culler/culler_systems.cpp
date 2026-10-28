@@ -71,7 +71,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
     if (const PhysicsCharacter* character = ctx->GetGameState<State>()->playerController.GetCharacter()) {
         playerEntity = character->GetEntity();
     }
-    const Vec3 center = Component::ComputeWorldTransform(registry, cullerEntity).translation;
+    const Vec3 center = registry.Get<Component::WorldTransformRuntime>(cullerEntity).translation;
     const float radiusSq = culler.killRadius * culler.killRadius;
     auto bodies = registry.View<Component::PhysicsBodyDesc>(entt::exclude<Component::DissolvingRuntime>);
     auto lost = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::max(bodies.size_hint(), size_t{1}));

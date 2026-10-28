@@ -24,7 +24,7 @@ void DeferredCommands::Init(Core::TlsfAllocator* allocator_)
     chunks = Core::Vector<Chunk>(allocator, Core::AllocTag::ECS);
 }
 
-void* DeferredCommands::Push(ApplyFn fn, entt::entity entity, size_t payloadSize)
+void* DeferredCommands::Push(ApplyFn fn, entt::entity entity, size_t payloadSize, [[maybe_unused]] StringID setType)
 {
     const uint32_t stride = static_cast<uint32_t>(sizeof(RecordHeader) + ((payloadSize + RECORD_ALIGN - 1) & ~(RECORD_ALIGN - 1)));
     while (true) {
@@ -45,6 +45,9 @@ void* DeferredCommands::Push(ApplyFn fn, entt::entity entity, size_t payloadSize
 
     Chunk& chunk = chunks[current];
     auto* header = new(chunk.data + chunk.used) RecordHeader{fn, entity, stride};
+#if WILL_ACCESS_CHECK
+    header->setType = setType;
+#endif
     chunk.used += stride;
     return header + 1;
 }

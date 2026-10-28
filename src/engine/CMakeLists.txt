@@ -223,7 +223,9 @@ add_library(engine STATIC
         systems/runtime_save.cpp
         systems/runtime_save.h
         systems/scene_system.cpp
+        systems/transform_systems.cpp
         systems/scene_system.h
+        systems/transform_systems.h
         systems/system_graph.h
 
         editor/editor_systems.cpp

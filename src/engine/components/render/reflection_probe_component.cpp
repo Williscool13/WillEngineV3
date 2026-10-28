@@ -31,7 +31,7 @@ static void RequestReflectionProbeLoad(Engine::SystemRegistry& registry, entt::e
     }
 }
 
-bool ReflectionProbeComponent::IsBakeStale(const WorldTransformRuntime& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snap, uint32_t bakedResolutionPx)
+bool ReflectionProbeComponent::IsBakeStale(const Transform& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snap, uint32_t bakedResolutionPx)
 {
     constexpr float kEpsilon = 1e-3f;
 

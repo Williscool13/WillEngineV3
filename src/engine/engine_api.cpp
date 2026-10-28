@@ -113,6 +113,7 @@ EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryMana
     : allocator(allocator),
       commandQueue(allocator),
       stableIdToEntityMap(allocator, Core::AllocTag::EngineState, 64),
+      physicsDrivenTransforms(allocator, Core::AllocTag::EngineState),
       componentRegistry(allocator),
       mcpTools(allocator),
       input(allocator),

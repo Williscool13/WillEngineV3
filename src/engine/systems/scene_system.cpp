@@ -712,52 +712,6 @@ entt::entity FindEntity(const Engine::EngineState* state, StringID stableId, Eng
     return entity && registry.Valid(*entity) ? *entity : entt::null;
 }
 
-static uint16_t HierarchyDepth(const Engine::SystemRegistry& registry, entt::entity entity)
-{
-    uint16_t depth = 0;
-    const auto* node = registry.TryGet<Component::HierarchyComponent>(entity);
-    while (node && node->parent != entt::null && registry.Valid(node->parent)) {
-        node = registry.TryGet<Component::HierarchyComponent>(node->parent);
-        if (++depth >= 1024) { break; }
-    }
-    return depth;
-}
-
-static void RefreshHierarchyOrder(Engine::SystemRegistry& registry)
-{
-    ZoneScoped;
-    for (auto [entity, node] : registry.View<Engine::Mut<Component::HierarchyComponent>>().each()) {
-        node.depth = HierarchyDepth(registry, entity);
-    }
-    registry.Sort<Component::HierarchyComponent>(
-        [](const Component::HierarchyComponent& a, const Component::HierarchyComponent& b) { return a.depth < b.depth; },
-        entt::insertion_sort{});
-}
-
-void EnsureHierarchyOrder(Engine::EngineState* state, Engine::SystemRegistry& registry)
-{
-    if (!state->bHierarchyOrderDirty) { return; }
-    RefreshHierarchyOrder(registry);
-    state->bHierarchyOrderDirty = false;
-}
-
-void PropagateDirtyTransforms(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
-{
-    ZoneScoped;
-    if (registry.View<Component::DirtyTransformRequest>().empty()) { return; }
-
-    const bool bRunning = IsRunning(state);
-    if (bRunning) {
-        RejectStaticTransformWrites(state, registry);
-    }
-    EnsureHierarchyOrder(state, registry);
-    for (auto [entity, node] : registry.View<Component::HierarchyComponent>().each()) {
-        if (!registry.Valid(node.parent) || !registry.Has<Component::DirtyTransformRequest>(node.parent)) { continue; }
-        if (bRunning && registry.Has<Component::DynamicPhysicsBodyRuntime>(entity)) { continue; }
-        registry.Set<Component::DirtyTransformRequest>(entity);
-    }
-}
-
 uint32_t FindStaticBodiesUnderMovers(Engine::EngineState* state, Core::Span<entt::entity> out, Engine::SystemRegistry& registry)
 {
     uint32_t count = 0;

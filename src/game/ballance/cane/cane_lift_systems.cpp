@@ -82,10 +82,11 @@ static void Release(Engine::EngineContext* ctx, Engine::SystemRegistry& registry
 static void Recycle(Engine::SystemRegistry& registry, entt::entity cart, Component::CaneCartRuntime& runtime)
 {
     registry.Remove<Component::DissolvedFlag, Component::PathMoverRuntime, Component::SetVelocityRequest, Component::PhysicsMotionOverrideRuntime>(cart);
-    auto& transform = registry.GetMut<Component::TransformComponent>(cart);
+    Component::TransformComponent transform = registry.Get<Component::TransformComponent>(cart);
     transform.translation = runtime.parkTranslation;
     transform.rotation = runtime.parkRotation;
     transform.scale = runtime.parkScale;
+    registry.Set<Component::TransformComponent>(cart, transform);
     registry.Set<Component::DirtyTransformRequest>(cart);
     registry.RunExclusive<&ApplyResume>(cart);
     runtime.phase = Component::CaneCartPhase::Idle;

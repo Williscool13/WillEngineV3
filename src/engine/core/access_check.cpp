@@ -26,27 +26,42 @@ static bool Declares(const Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& ids
     return false;
 }
 
+static bool FirstReport(uint64_t key)
+{
+    std::lock_guard lock(gReportMutex);
+    return gReported.Insert(key);
+}
+
 static void Report(const char* system, const char* what, std::string_view subject)
 {
-    const uint64_t key = Hash(system, StringIdLength(system)) ^ (Hash(subject.data(), subject.size()) * 31) ^ Hash(what, StringIdLength(what));
-    {
-        std::lock_guard lock(gReportMutex);
-        if (!gReported.Insert(key)) { return; }
-    }
+    if (!FirstReport(Hash(system, StringIdLength(system)) ^ (Hash(subject.data(), subject.size()) * 31) ^ Hash(what, StringIdLength(what)))) { return; }
     LOG_ERROR(Engine, "[AccessCheck] {} {} {}", system, what, subject);
     assert(false && "SystemGraph access violation, see the log");
 }
 
 void CheckReadAccess(const char* system, const AccessSet& access, StringID id)
 {
-    if (Declares(access.reads, id) || Declares(access.writes, id)) { return; }
+    if (Declares(access.reads, id) || Declares(access.writes, id) || Declares(access.deferredWrites, id)) { return; }
     Report(system, "reads undeclared", id.ToString());
 }
 
 void CheckWriteAccess(const char* system, const AccessSet& access, StringID id)
 {
     if (Declares(access.writes, id)) { return; }
+    const char* what = Declares(access.deferredWrites, id) ? "mutates in place, but declares only DeferredWrites for" : Declares(access.reads, id) ? "writes read-only" : "writes undeclared";
+    Report(system, what, id.ToString());
+}
+
+void CheckDeferredWriteAccess(const char* system, const AccessSet& access, StringID id)
+{
+    if (Declares(access.writes, id) || Declares(access.deferredWrites, id)) { return; }
     Report(system, Declares(access.reads, id) ? "writes read-only" : "writes undeclared", id.ToString());
+}
+
+void ReportDeferredWriteCollision(const char* first, const char* second, StringID id, uint32_t entity)
+{
+    if (!FirstReport(Hash(first, StringIdLength(first)) ^ (Hash(second, StringIdLength(second)) * 31) ^ (id.id * 17))) { return; }
+    LOG_WARN(Engine, "[AccessCheck] {} and {} both set {} on entity {} in one wave; {} wins. Add After<> if {} needs {}'s result", first, second, id.ToString(), entity, second, second, first);
 }
 
 void CheckUnnamedAccess(const char* system, std::string_view typeName)

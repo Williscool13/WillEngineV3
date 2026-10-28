@@ -13,7 +13,10 @@
 
 #include <entt/entt.hpp>
 
+#include "core/string_id.h"
 #include "core/containers/vector.h"
+#include "engine/components/component_identity.h"
+#include "engine/core/access_check.h"
 
 namespace Core
 {
@@ -44,7 +47,7 @@ public:
             Push(&ApplySet<T>, entity, 0);
         }
         else {
-            void* payload = Push(&ApplySet<T>, entity, sizeof(T));
+            void* payload = Push(&ApplySet<T>, entity, sizeof(T), SetType<T>());
             if constexpr (std::is_aggregate_v<T>) { new(payload) T{std::forward<Args>(args)...}; }
             else { new(payload) T(std::forward<Args>(args)...); }
         }
@@ -70,6 +73,22 @@ public:
 
     [[nodiscard]] bool IsEmpty() const { return chunks.IsEmpty() || (current == 0 && chunks[0].used == 0); }
 
+#if WILL_ACCESS_CHECK
+    /** Calls fn(type, entity) for every recorded Set of a named, non-empty component. */
+    template<typename Fn>
+    void ForEachSet(Fn&& fn) const
+    {
+        for (uint32_t c = 0; c < chunks.Size() && c <= current; ++c) {
+            const Chunk& chunk = chunks[c];
+            for (uint32_t offset = 0; offset < chunk.used;) {
+                const auto* header = reinterpret_cast<const RecordHeader*>(chunk.data + offset);
+                if (header->setType.IsValid()) { fn(header->setType, header->entity); }
+                offset += header->stride;
+            }
+        }
+    }
+#endif
+
 private:
     static constexpr size_t RECORD_ALIGN = 16;
     static constexpr uint32_t CHUNK_BYTES = 16 * 1024;
@@ -80,6 +99,9 @@ private:
 
         entt::entity entity;
         uint32_t stride;
+#if WILL_ACCESS_CHECK
+        StringID setType;
+#endif
     };
 
     struct Chunk
@@ -89,7 +111,14 @@ private:
         uint32_t capacity{0};
     };
 
-    void* Push(ApplyFn fn, entt::entity entity, size_t payloadSize);
+    void* Push(ApplyFn fn, entt::entity entity, size_t payloadSize, StringID setType = {});
+
+    template<typename T>
+    static StringID SetType()
+    {
+        if constexpr (NamedComponent<T>) { return AccessId<T>(); }
+        else { return {}; }
+    }
 
     template<typename T>
     static void ApplySet(Registry& registry, entt::entity entity, void* payload);
