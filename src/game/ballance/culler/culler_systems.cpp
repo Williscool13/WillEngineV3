@@ -47,7 +47,9 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
     for (const entt::entity entity : shards) {
         const auto* body = Component::FindBody(registry, entity);
         if (body && !ctx->physicsWorld->IsAwake(body->bodyID)) {
-            sleepers.PushBack({entity, registry.GetOrAdd<Component::ShardSleepRuntime>(entity, Component::ShardSleepRuntime{now}).sleepSince});
+            const auto* sleep = registry.TryGet<Component::ShardSleepRuntime>(entity);
+            if (!sleep) { registry.Set<Component::ShardSleepRuntime>(entity, Component::ShardSleepRuntime{now}); }
+            sleepers.PushBack({entity, sleep ? sleep->sleepSince : now});
         }
         else {
             registry.Remove<Component::ShardSleepRuntime>(entity);
@@ -60,7 +62,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         const size_t excess = sleepers.Size() - budget;
         std::nth_element(sleepers.begin(), sleepers.begin() + excess, sleepers.end(), [](const Sleeper& a, const Sleeper& b) { return a.since < b.since; });
         for (size_t i = 0; i < excess; ++i) {
-            StartDissolving(state, sleepers[i].entity, 0.0f, culler.cullSeconds, 0.0f, registry, 0.0f);
+            StartDissolving(sleepers[i].entity, 0.0f, culler.cullSeconds, 0.0f, registry, 0.0f);
         }
         WLOG_DEBUG(Culler, "Culled {} sleeping shards ({} asleep, budget {})", excess, sleepers.Size(), budget);
     }
@@ -87,7 +89,7 @@ void UpdateCuller(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         }
     }
     for (const entt::entity entity : lost) {
-        StartDissolving(state, entity, 0.0f, culler.cullSeconds, 0.0f, registry, 0.0f);
+        StartDissolving(entity, 0.0f, culler.cullSeconds, 0.0f, registry, 0.0f);
     }
 }
 } // Ballance

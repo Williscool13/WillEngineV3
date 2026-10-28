@@ -26,12 +26,22 @@ static constexpr float LOST_SINK_DEPTH = 0.6f;
 static constexpr float LOST_DISSOLVE_SECONDS = 1.5f;
 static constexpr float LOST_TILT_DEGREES = 25.0f;
 
+static void ApplyRequestRebuild(Engine::SystemRegistry& registry, const entt::entity& cart)
+{
+    if (registry.Valid(cart)) { Component::PhysicsBodyDesc::RequestRebuild(registry, cart); }
+}
+
+static void ApplyResume(Engine::SystemRegistry& registry, const entt::entity& cart)
+{
+    if (registry.Valid(cart)) { Component::PhysicsBodyDesc::Resume(registry, cart); }
+}
+
 static void CaptureCarts(Engine::SystemRegistry& registry)
 {
     auto view = registry.View<Component::CaneCartComponent, Component::TransformComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc>(
         entt::exclude<Component::CaneCartRuntime>);
     for (const auto& [entity, link, transform, mover, desc] : view.each()) {
-        registry.Add<Component::CaneCartRuntime>(entity, Component::CaneCartRuntime{.parkTranslation = transform.translation, .parkRotation = transform.rotation, .parkScale = transform.scale});
+        registry.Set<Component::CaneCartRuntime>(entity, Component::CaneCartRuntime{.parkTranslation = transform.translation, .parkRotation = transform.rotation, .parkScale = transform.scale});
         registry.Set<Component::DissolveKeepTag>(entity);
     }
 }
@@ -62,7 +72,7 @@ static void Release(Engine::EngineContext* ctx, Engine::SystemRegistry& registry
         runtime.bVelocityApplied = true;
     }
     else {
-        Component::PhysicsBodyDesc::RequestRebuild(registry, cart);
+        registry.RunExclusive<&ApplyRequestRebuild>(cart);
         runtime.bVelocityApplied = false;
     }
     runtime.fallTime = 0.0f;
@@ -77,7 +87,7 @@ static void Recycle(Engine::SystemRegistry& registry, entt::entity cart, Compone
     transform.rotation = runtime.parkRotation;
     transform.scale = runtime.parkScale;
     registry.Set<Component::DirtyTransformRequest>(cart);
-    Component::PhysicsBodyDesc::Resume(registry, cart);
+    registry.RunExclusive<&ApplyResume>(cart);
     runtime.phase = Component::CaneCartPhase::Idle;
 }
 
@@ -116,14 +126,16 @@ void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
                 runtime.phase = Component::CaneCartPhase::Eaten;
             }
             else if (runtime.fallTime > lift->releaseTimeout || transform.translation.y < lift->killHeight) {
-                StartDissolving(state, cart, LOST_SINK_DEPTH, LOST_DISSOLVE_SECONDS, LOST_TILT_DEGREES, registry);
+                StartDissolving(cart, LOST_SINK_DEPTH, LOST_DISSOLVE_SECONDS, LOST_TILT_DEGREES, registry);
                 runtime.phase = Component::CaneCartPhase::Eaten;
             }
         }
     }
 
     for (const auto& [liftEntity, lift] : registry.View<Component::CaneLiftComponent>().each()) {
-        auto& liftRun = registry.GetOrAdd<Component::CaneLiftRuntime>(liftEntity, Component::CaneLiftRuntime{.timer = lift.startDelay});
+        Component::CaneLiftRuntime* existing = registry.TryGetMut<Component::CaneLiftRuntime>(liftEntity);
+        Component::CaneLiftRuntime added{.timer = lift.startDelay};
+        Component::CaneLiftRuntime& liftRun = existing ? *existing : added;
         liftRun.timer -= dt;
         while (liftRun.timer <= 0.0f) {
             const float carry = -liftRun.timer;
@@ -134,6 +146,7 @@ void UpdateCaneLifts(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
                 break;
             }
         }
+        if (!existing) { registry.Set<Component::CaneLiftRuntime>(liftEntity, added); }
     }
 }
 } // Ballance

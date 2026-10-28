@@ -26,13 +26,24 @@
 
 namespace Ballance
 {
-void StartDissolving(Engine::EngineState* state, entt::entity entity, float sinkDepth, float duration, float tiltDegrees, Engine::SystemRegistry& registry, float shrinkStart)
+struct DissolveStart
 {
-    if (registry.Has<Component::DissolvingRuntime>(entity)) { return; }
+    entt::entity entity;
+    float sinkDepth;
+    float duration;
+    float tiltDegrees;
+    float shrinkStart;
+};
+
+static void ApplyStartDissolving(Engine::SystemRegistry& registry, const DissolveStart& start)
+{
+    const entt::entity entity = start.entity;
+    if (!registry.Valid(entity) || registry.Has<Component::DissolvingRuntime>(entity)) { return; }
+    Engine::EngineState* state = registry.State();
     auto& transform = registry.GetMut<Component::TransformComponent>(entity);
     transform.mobility = Component::Mobility::Movable;
 
-    glm::vec3 sink{0.0f, -sinkDepth, 0.0f};
+    glm::vec3 sink{0.0f, -start.sinkDepth, 0.0f};
     if (const auto* hierarchy = registry.TryGet<Component::HierarchyComponent>(entity); hierarchy && registry.Valid(hierarchy->parent)) {
         const Transform parent = Component::ComputeWorldTransform(registry, hierarchy->parent);
         sink = glm::inverse(parent.rotation) * sink / parent.scale;
@@ -55,11 +66,16 @@ void StartDissolving(Engine::EngineState* state, entt::entity entity, float sink
         .sink = sink,
         .tiltAxis = axisLength > 1e-4f ? glm::inverse(transform.rotation) * (axis / axisLength) : glm::vec3(1.0f, 0.0f, 0.0f),
         .shrinkPivot = shrinkPivot,
-        .tiltRadians = glm::radians(tiltDegrees) * state->rng.Range(0.3f, 1.0f),
-        .duration = duration,
-        .shrinkStart = std::clamp(shrinkStart, 0.0f, 0.99f),
+        .tiltRadians = glm::radians(start.tiltDegrees) * state->rng.Range(0.3f, 1.0f),
+        .duration = start.duration,
+        .shrinkStart = std::clamp(start.shrinkStart, 0.0f, 0.99f),
     });
     if (registry.Has<Component::PhysicsBodyDesc>(entity)) { Component::PhysicsBodyDesc::Suspend(registry, entity); }
+}
+
+void StartDissolving(entt::entity entity, float sinkDepth, float duration, float tiltDegrees, Engine::SystemRegistry& registry, float shrinkStart)
+{
+    registry.RunExclusive<&ApplyStartDissolving>(DissolveStart{.entity = entity, .sinkDepth = sinkDepth, .duration = duration, .tiltDegrees = tiltDegrees, .shrinkStart = shrinkStart});
 }
 
 void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
@@ -86,7 +102,7 @@ void LavaContacts(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
             const float top = std::max(ctx->physicsWorld->GetWorldBounds(body->bodyID).max.y, Component::ComputeWorldTransform(registry, other).translation.y);
             const float surface = ctx->physicsWorld->GetWorldBounds(lavaBody->bodyID).max.y;
             const float depth = std::max(top - surface, 0.0f) + lava->extraDepth;
-            StartDissolving(state, other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees, registry);
+            StartDissolving(other, depth, std::clamp(depth / lava->sinkSpeed, lava->minDuration, std::max(lava->minDuration, lava->maxDuration)), lava->tiltDegrees, registry);
         }
     }
 }

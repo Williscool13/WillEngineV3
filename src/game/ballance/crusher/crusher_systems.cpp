@@ -89,7 +89,7 @@ static void BreakCratesUnderHead(Engine::EngineContext* ctx, Engine::EngineState
     for (const CrateHit& crate : FindCrates(ctx, state, RegionBelow(headWorld, 0.0f, reach), toHead, registry)) {
         const bool bBelow = crate.local.min.y < head.min.y;
         if (bBelow && crate.local.max.y >= head.min.y - reach && OverlapsXZ(crate.local, head)) {
-            Break(ctx, state, crate.entity, registry);
+            Break(ctx, crate.entity, registry);
         }
     }
 }
@@ -116,7 +116,7 @@ static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineSt
         if (!crate.local.Overlaps(sweep)) { continue; }
         const auto* name = registry.TryGet<Component::NameComponent>(crate.entity);
         WLOG_WARN(Crusher, "Crate '{}' reached the pusher intact; broken there", name ? name->name.c_str() : "Unnamed");
-        Break(ctx, state, crate.entity, registry);
+        Break(ctx, crate.entity, registry);
     }
 }
 
@@ -270,6 +270,23 @@ void UpdateThroatValves(Engine::EngineContext* ctx, Engine::EngineState* state, 
     }
 }
 
+struct CrateSpawn
+{
+    StringID prefabId;
+    Vec3 position;
+    glm::quat rotation;
+};
+
+static void ApplySpawnCrate(Engine::SystemRegistry& registry, const CrateSpawn& spawn)
+{
+    const entt::entity crate = Engine::SpawnPrefab(registry.State(), registry.Context()->assetManager, spawn.prefabId, registry, spawn.position);
+    if (crate == entt::null) { return; }
+    registry.Set<Component::DoNotSerializeTag>(crate);
+    auto& transform = registry.GetMut<Component::TransformComponent>(crate);
+    transform.rotation = spawn.rotation;
+    transform.mobility = Component::Mobility::Movable;
+}
+
 void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
@@ -280,7 +297,10 @@ void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state, 
     const bool bThroatClosed = AnyThroatClosed(registry);
     auto intact = static_cast<int32_t>(registry.View<Component::BreakableComponent>().size());
     for (const auto& [entity, feeder] : view.each()) {
-        auto& run = registry.GetOrAdd<Component::CrateFeederRuntime>(entity);
+        Component::CrateFeederRuntime* existing = registry.TryGetMut<Component::CrateFeederRuntime>(entity);
+        Component::CrateFeederRuntime added{};
+        Component::CrateFeederRuntime& run = existing ? *existing : added;
+        if (!existing) { registry.Set<Component::CrateFeederRuntime>(entity, added); }
         if (bThroatClosed || intact >= feeder.maxIntact || feeder.cratesPerSecond <= 0.0f) {
             run.timer = 0.0f;
             continue;
@@ -293,12 +313,8 @@ void UpdateCrateFeeders(Engine::EngineContext* ctx, Engine::EngineState* state, 
         const float angle = state->rng.Range(0.0f, glm::two_pi<float>());
         const float radius = glm::sqrt(state->rng.Range(feeder.minRadius * feeder.minRadius, feeder.maxRadius * feeder.maxRadius));
         const Vec3 position = Component::ComputeWorldTransform(registry, entity).translation + Vec3(glm::cos(angle) * radius, 0.0f, glm::sin(angle) * radius);
-        const entt::entity crate = Engine::SpawnPrefab(state, ctx->assetManager, feeder.prefabId, registry, position);
-        if (crate == entt::null) { continue; }
-        registry.Set<Component::DoNotSerializeTag>(crate);
-        auto& transform = registry.GetMut<Component::TransformComponent>(crate);
-        transform.rotation = glm::angleAxis(state->rng.Range(0.0f, glm::two_pi<float>()), state->rng.UnitVector());
-        transform.mobility = Component::Mobility::Movable;
+        const glm::quat rotation = glm::angleAxis(state->rng.Range(0.0f, glm::two_pi<float>()), state->rng.UnitVector());
+        registry.RunExclusive<&ApplySpawnCrate>(CrateSpawn{.prefabId = feeder.prefabId, .position = position, .rotation = rotation});
         ++intact;
     }
 }
@@ -311,7 +327,10 @@ void UpdateCrushers(Engine::EngineContext* ctx, Engine::EngineState* state, Engi
     const float dt = state->timeFrame->deltaTime;
     const bool bThroatClosed = AnyThroatClosed(registry);
     for (const auto& [entity, crusher] : view.each()) {
-        UpdateCrusher(ctx, state, crusher, registry.GetOrAdd<Component::CrusherRuntime>(entity), dt, bThroatClosed, registry);
+        Component::CrusherRuntime* existing = registry.TryGetMut<Component::CrusherRuntime>(entity);
+        Component::CrusherRuntime added{};
+        UpdateCrusher(ctx, state, crusher, existing ? *existing : added, dt, bThroatClosed, registry);
+        if (!existing) { registry.Set<Component::CrusherRuntime>(entity, added); }
     }
 }
 

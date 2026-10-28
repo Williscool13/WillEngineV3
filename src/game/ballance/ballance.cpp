@@ -10,9 +10,11 @@
 #include "engine/engine_api.h"
 #include "engine/include/engine_context.h"
 #include "engine/components/camera_components.h"
+#include "engine/components/common_components.h"
 #include "engine/components/component_registration.h"
 #include "engine/components/core_components.h"
 #include "engine/components/physics/physics_body_component.h"
+#include "engine/components/physics/physics_body_desc.h"
 #include "engine/components/physics/physics_components.h"
 #include "engine/systems/system_graph.h"
 #include "game/ballance/fwd_components.h"
@@ -94,19 +96,35 @@ void CollectSystems(Engine::SystemGraph& graph)
     graph.Add("Ballance/AcquireBreakableAssets", &AcquireBreakableAssets, Engine::Access<
         Engine::Reads<Component::BreakableComponent>,
         Engine::Writes<Component::BreakableRuntime, Engine::AssetManager>>());
-    graph.Add("Ballance/UpdateSelfDestruct", &UpdateSelfDestruct, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
-    graph.Add("Ballance/ShatterOnContact", &ShatterOnContact, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
+    graph.Add("Ballance/UpdateSelfDestruct", &UpdateSelfDestruct, Engine::SystemWhen::WorldRunning, Engine::Access<
+        Engine::Reads<Component::BreakableComponent, Component::BreakableRuntime, Engine::AssetManager>,
+        Engine::Writes<Component::SelfDestructComponent, Component::SelfDestructRuntime>>());
+    graph.Add("Ballance/ShatterOnContact", &ShatterOnContact, Engine::SystemWhen::WorldRunning, {
+        .reads = {Engine::TypeSID<Component::ShatterOnContactTag>(), Engine::TypeSID<Component::BreakableComponent>(), Engine::TypeSID<Component::BreakableRuntime>(), Engine::TypeSID<Engine::AssetManager>(), "state.physics.resolvedAddedEvents"_sid},
+    });
     graph.Add("Ballance/UpdateThroatValves", &UpdateThroatValves, Engine::SystemWhen::WorldRunning, Engine::Access<
         Engine::Reads<Component::ThroatValveComponent, Component::ShardTag, Component::PhysicsBodyRuntime, Physics::PhysicsWorld>,
         Engine::Writes<Component::ThroatValveRuntime>>());
-    graph.Add("Ballance/UpdateCrateFeeders", &UpdateCrateFeeders, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
-    graph.Add("Ballance/UpdateCrushers", &UpdateCrushers, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
-    graph.Add("Ballance/LavaContacts", &LavaContacts, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
-    graph.Add("Ballance/UpdateCuller", &UpdateCuller, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
+    graph.Add("Ballance/UpdateCrateFeeders", &UpdateCrateFeeders, Engine::SystemWhen::WorldRunning, {
+        .reads = {Engine::TypeSID<Component::CrateFeederComponent>(), Engine::TypeSID<Component::ThroatValveRuntime>(), Engine::TypeSID<Component::BreakableComponent>(), Engine::TypeSID<Component::TransformComponent>(), Engine::TypeSID<Component::HierarchyComponent>()},
+        .writes = {Engine::TypeSID<Component::CrateFeederRuntime>(), "state.rng"_sid},
+    });
+    graph.Add("Ballance/UpdateCrushers", &UpdateCrushers, Engine::SystemWhen::WorldRunning, Engine::Access<
+        Engine::Reads<Component::CrusherComponent, Component::ThroatValveRuntime, Component::BreakableComponent, Component::BreakableRuntime, Engine::AssetManager, Component::PhysicsBodyRuntime, Component::HierarchyComponent, Component::NameComponent, Component::ConveyorComponent, Physics::PhysicsWorld>,
+        Engine::Writes<Component::CrusherRuntime, Component::TransformComponent, Component::DirtyTransformRequest, Component::ConveyorHaltedFlag>>());
+    graph.Add("Ballance/LavaContacts", &LavaContacts, Engine::SystemWhen::WorldRunning, {
+        .reads = {Engine::TypeSID<Component::LavaComponent>(), Engine::TypeSID<Component::PhysicsBodyDesc>(), Engine::TypeSID<Component::PhysicsMotionOverrideRuntime>(), Engine::TypeSID<Component::PhysicsBodyRuntime>(), Engine::TypeSID<Component::TransformComponent>(), Engine::TypeSID<Component::HierarchyComponent>(), Engine::TypeSID<Physics::PhysicsWorld>(), "ballance.playerController"_sid, "state.physics.resolvedAddedEvents"_sid},
+    });
+    graph.Add("Ballance/UpdateCuller", &UpdateCuller, Engine::SystemWhen::WorldRunning, {
+        .reads = {Engine::TypeSID<Component::CullerComponent>(), Engine::TypeSID<Component::ShardTag>(), Engine::TypeSID<Component::PhysicsBodyDesc>(), Engine::TypeSID<Component::PhysicsMotionOverrideRuntime>(), Engine::TypeSID<Component::PhysicsBodyRuntime>(), Engine::TypeSID<Component::TransformComponent>(), Engine::TypeSID<Component::HierarchyComponent>(), Engine::TypeSID<Component::NameComponent>(), Engine::TypeSID<Physics::PhysicsWorld>(), "ballance.playerController"_sid},
+        .writes = {Engine::TypeSID<Component::ShardSleepRuntime>()},
+    });
     graph.Add("Ballance/UpdateDissolving", &UpdateDissolving, Engine::SystemWhen::WorldRunning, Engine::Access<
         Engine::Reads<Component::HierarchyComponent, Component::DissolveKeepTag>,
         Engine::Writes<Component::DissolvingRuntime, Component::TransformComponent, Component::DirtyTransformRequest, Component::DissolvedFlag>>());
-    graph.Add("Ballance/UpdateCaneLifts", &UpdateCaneLifts, Engine::SystemWhen::WorldRunning, Engine::AccessSet::EXCLUSIVE);
+    graph.Add("Ballance/UpdateCaneLifts", &UpdateCaneLifts, Engine::SystemWhen::WorldRunning, Engine::Access<
+        Engine::Reads<Component::CaneLiftComponent, Component::CaneCartComponent, Component::PathMoverComponent, Component::PhysicsBodyDesc, Component::PhysicsBodyRuntime>,
+        Engine::Writes<Component::CaneCartRuntime, Component::CaneLiftRuntime, Component::DissolveKeepTag, Component::DissolvedFlag, Component::PathMoverRuntime, Component::MovingKinematicFlag, Component::DirtyKinematicPhysicsTransformRequest, Component::PhysicsMotionOverrideRuntime, Component::DynamicPhysicsBodyRuntime, Component::SetVelocityRequest, Component::TransformComponent, Component::DirtyTransformRequest, Physics::PhysicsWorld>>());
 
     graph.Add("Ballance/DebugProcessPhysicsCollisions", &DebugProcessPhysicsCollisions, Engine::SystemWhen::Gameplay, {
         .reads = {Engine::TypeSID<Component::FloorTag>(), "state.physics.resolvedAddedEvents"_sid},

@@ -23,7 +23,7 @@ struct Command;
 
 /**
  * Exclusive access applies immediately and is unchecked. Non-exclusive access defers Set/Remove/Destroy/PushCommand to the end of the wave
- * and checks every touch against the declaration; Add/GetOrAdd/Create/Clear/Sort/ClearAll are exclusive only.
+ * and checks every touch against the declaration; Add/GetOrAdd/Create/Clear/Sort/ClearAll are exclusive only, or go through RunExclusive.
  */
 class SystemRegistry
 {
@@ -166,7 +166,30 @@ public:
 
     void PushCommand(const Command& command);
 
+    /**
+     * Calls Fn(SystemRegistry&, const Payload&) with exclusive access: immediately under exclusive access, otherwise when the wave's commands apply, in record order.
+     * For work a declaration cannot cover, such as spawning; the payload is copied, so it must not point at anything the wave frees.
+     */
+    template<auto Fn, typename Payload>
+    void RunExclusive(Payload&& payload)
+    {
+        if (commands != nullptr) {
+            commands->Record(&ApplyRunExclusive<Fn, std::remove_cvref_t<Payload>>, entt::null, std::forward<Payload>(payload));
+            return;
+        }
+        Fn(*this, payload);
+    }
+
 private:
+    template<auto Fn, typename Payload>
+    static void ApplyRunExclusive(Registry& storage, entt::entity, void* payload)
+    {
+        Payload& value = *static_cast<Payload*>(payload);
+        SystemRegistry registry{storage, AccessSet::EXCLUSIVE, nullptr, "RunExclusive"};
+        Fn(registry, std::as_const(value));
+        value.~Payload();
+    }
+
     template<typename T>
     void CheckRead() const
     {

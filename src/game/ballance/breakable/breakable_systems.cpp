@@ -98,7 +98,7 @@ static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
     uint32_t broken = 0;
     for (const entt::entity entity : nearby) {
-        if (Break(ctx, state, entity, registry)) { ++broken; }
+        if (Break(ctx, entity, registry)) { ++broken; }
     }
     Engine::Console::Print(state, Core::InlineString<256>::Format("  broke %u of %zu breakables within %.0f m", broken, nearby.Size(), RADIUS).c_str());
 }
@@ -156,12 +156,15 @@ void UpdateSelfDestruct(Engine::EngineContext* ctx, Engine::EngineState* state, 
     const float dt = state->timeFrame->deltaTime;
     auto due = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, selfDestruct, breakable] : view.each()) {
-        auto& run = registry.GetOrAdd<Component::SelfDestructRuntime>(entity);
+        Component::SelfDestructRuntime* existing = registry.TryGetMut<Component::SelfDestructRuntime>(entity);
+        Component::SelfDestructRuntime added{};
+        Component::SelfDestructRuntime& run = existing ? *existing : added;
         run.elapsed += dt;
         if (run.elapsed >= selfDestruct.delay) { due.PushBack(entity); }
+        if (!existing) { registry.Set<Component::SelfDestructRuntime>(entity, added); }
     }
     for (const entt::entity entity : due) {
-        if (Break(ctx, state, entity, registry)) {
+        if (Break(ctx, entity, registry)) {
             registry.Remove<Component::SelfDestructComponent,Component::SelfDestructRuntime>(entity);
         }
     }
@@ -175,19 +178,28 @@ void ShatterOnContact(Engine::EngineContext* ctx, Engine::EngineState* state, En
     for (const auto& event : state->physics.resolvedAddedEvents) {
         for (const auto [shatterer, other] : {std::pair{event.e1, event.e2}, std::pair{event.e2, event.e1}}) {
             if (shatterer == entt::null || other == entt::null || !registry.Has<Component::ShatterOnContactTag>(shatterer)) { continue; }
-            if (registry.Has<Component::BreakableComponent>(other)) { Break(ctx, state, other, registry); }
+            Break(ctx, other, registry);
         }
     }
 }
 
-bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity entity, Engine::SystemRegistry& registry)
+static const Engine::StaticModel* FindBrokenModel(Engine::EngineContext* ctx, entt::entity entity, const Engine::SystemRegistry& registry)
+{
+    const auto* runtime = registry.Has<Component::BreakableComponent>(entity) ? registry.TryGet<Component::BreakableRuntime>(entity) : nullptr;
+    if (!runtime) { return nullptr; }
+    const Engine::StaticModel* brokenModel = ctx->assetManager->GetModel(runtime->model);
+    return brokenModel && brokenModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded ? brokenModel : nullptr;
+}
+
+static void ApplyBreak(Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     ZoneScoped;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+    if (!registry.Valid(entity)) { return; }
+    const Engine::StaticModel* brokenModel = FindBrokenModel(ctx, entity, registry);
+    if (!brokenModel) { return; }
     const auto* breakable = registry.TryGet<Component::BreakableComponent>(entity);
-    const auto* runtime = registry.TryGet<Component::BreakableRuntime>(entity);
-    if (!breakable || !runtime) { return false; }
-    const Engine::StaticModel* brokenModel = ctx->assetManager->GetModel(runtime->model);
-    if (!brokenModel || brokenModel->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) { return false; }
 
     const Core::HeapArray<Engine::Node>& nodes = brokenModel->modelData.nodes;
     const Core::HeapArray<Engine::MeshInformation>& meshes = brokenModel->modelData.meshes;
@@ -195,7 +207,7 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
     for (const Engine::Node& node : nodes) {
         if (node.meshIndex < meshes.Size()) { ++shardCount; }
     }
-    if (shardCount == 0) { return false; }
+    if (shardCount == 0) { return; }
 
     const Engine::ModelID brokenModelId = breakable->brokenModelId;
     const float scatterSpeed = breakable->scatterSpeed;
@@ -277,6 +289,12 @@ bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity 
 
     registry.Remove<Component::BreakableComponent>(entity);
     registry.PushCommand({.type = Engine::CommandType::DestroyEntity, .entity = entity});
+}
+
+bool Break(Engine::EngineContext* ctx, entt::entity entity, Engine::SystemRegistry& registry)
+{
+    if (!FindBrokenModel(ctx, entity, registry)) { return false; }
+    registry.RunExclusive<&ApplyBreak>(entity);
     return true;
 }
 } // Ballance

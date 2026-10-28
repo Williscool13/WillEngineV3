@@ -44,7 +44,9 @@ struct DirtyKinematicPhysicsTransformRequest
 };
 
 struct MovingKinematicFlag
-{};
+{
+    static constexpr const char* COMPONENT_NAME = "MovingKinematicFlag";
+};
 
 struct PhysicsMeshRequest
 {

@@ -29,9 +29,10 @@ void ShatterOnContact(Engine::EngineContext* ctx, Engine::EngineState* state, En
 
 /**
  * Spawns the entity's broken model as one dynamic shard per mesh node, each moving with the entity's velocity at its centre of mass, and destroys the entity at the end of the frame.
+ * The shards spawn through RunExclusive; breaking an entity twice before they do spawns them once.
  * @return false when the entity has no BreakableComponent or its broken model is not loaded yet
  */
-bool Break(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity entity, Engine::SystemRegistry& registry);
+bool Break(Engine::EngineContext* ctx, entt::entity entity, Engine::SystemRegistry& registry);
 } // Ballance
 
 #endif //WILL_ENGINE_BALLANCE_BREAKABLE_SYSTEMS_H
