@@ -204,9 +204,9 @@ static void SystemGraphDumpSink(EngineState* state, const char* line)
     LOG_INFO(Engine, "{}", line);
 }
 
-static void SystemGraphDotSink(const char* dot, size_t size)
+static void SystemGraphDotSink(const char* name, const char* dot, size_t size)
 {
-    const Core::Path outPath = Platform::GetAssetPath() / "visualizations" / "system_graph.dot";
+    const Core::Path outPath = Platform::GetAssetPath() / "visualizations" / Core::InlineString<64>::Format("system_graph_%s.dot", name).c_str();
     Platform::WriteFile(outPath, dot, size);
     LOG_INFO(Engine, "System graph written to {}", outPath.c_str());
 }

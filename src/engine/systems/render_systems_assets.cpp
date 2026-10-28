@@ -320,54 +320,79 @@ static void PromotePendingModel(Engine::EngineContext* ctx, Engine::EngineState*
     runtime.pendingModelHandle = Engine::StaticModelHandle::INVALID;
 }
 
+/** Records Apply for each entity whose target model finished loading (or failed, or is gone); returns how many are still loading. */
+template<typename TComponent, typename TLoadingFlag, auto Apply>
+static int32_t PollModelResolves(Engine::SystemRegistry& registry)
+{
+    int32_t waiting = 0;
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const auto& [entity, component, runtime] : registry.View<TComponent, TLoadingFlag, Component::MeshRuntime>().each()) {
+        if (budget == 0) { break; }
+        const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(TargetModel(runtime));
+        if (model && model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded && model->modelLoadState != Engine::StaticModel::ModelLoadState::FailedToLoad) {
+            ++waiting;
+            continue;
+        }
+        registry.RunExclusive<Apply>(entity);
+        --budget;
+    }
+    return waiting;
+}
+
+static void ApplyStaticMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponent = registry.TryGet<Component::StaticMeshComponent>(entity);
+    if (!meshComponent) { return; }
+    const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadModel(meshComponent->modelId);
+    if (!handle.IsValid()) { return; }
+    StageModel(registry.Context(), registry.State(), registry, entity, handle);
+    registry.Remove<Component::StaticMeshLoadRequest>(entity);
+    registry.Set<Component::StaticMeshLoadingFlag>(entity);
+}
+
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>();
-    if (view.size_hint() == 0) { return; }
-
-    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (started.Size() >= budget) { break; }
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const auto& [entity, meshComponent] : registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>().each()) {
+        if (budget == 0) { break; }
         if (registry.Service<Engine::AssetManager>().IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
-        const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadModel(meshComponent.modelId);
-        if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state, registry, entity, handle);
-        started.PushBack(entity);
+        registry.RunExclusive<&ApplyStaticMeshKickoff>(entity);
+        --budget;
     }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::StaticMeshLoadRequest>(entity);
-        registry.Set<Component::StaticMeshLoadingFlag>(entity);
+}
+
+static void ApplyReflectionProbeKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* probe = registry.TryGet<Component::ReflectionProbeComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::ReflectionProbeRuntime>(entity);
+    if (!probe || !runtime) { return; }
+    if (registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{probe->probeId})) {
+        runtime->contentHandle = registry.ServiceMut<Engine::AssetManager>().LoadProbe(Engine::ProbeID{probe->probeId});
+        runtime->contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
     }
+    else if (probe->standInEnvMap.IsValid()) {
+        runtime->contentHandle = registry.ServiceMut<Engine::AssetManager>().LoadCubemap(probe->standInEnvMap);
+        runtime->contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
+    }
+    else {
+        runtime->contentSource = Component::ReflectionProbeComponent::ContentSource::None;
+        registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
+        return;
+    }
+    if (!runtime->contentHandle.IsValid()) { return; }
+    registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
+    registry.Set<Component::ReflectionProbeLoadingFlag>(entity);
 }
 
 void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::ReflectionProbeComponent, Engine::Mut<Component::ReflectionProbeRuntime>, Component::ReflectionProbeLoadRequest>();
-    if (view.size_hint() == 0) { return; }
-
-    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, probe, runtime] : view.each()) {
-        if (started.Size() >= budget) { break; }
-        if (registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{probe.probeId})) {
-            runtime.contentHandle = registry.ServiceMut<Engine::AssetManager>().LoadProbe(Engine::ProbeID{probe.probeId});
-            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
-        }
-        else if (probe.standInEnvMap.IsValid()) {
-            runtime.contentHandle = registry.ServiceMut<Engine::AssetManager>().LoadCubemap(probe.standInEnvMap);
-            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
-        }
-        else {
-            runtime.contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-            registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
-            continue;
-        }
-        if (runtime.contentHandle.IsValid()) { started.PushBack(entity); }
-    }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
-        registry.Set<Component::ReflectionProbeLoadingFlag>(entity);
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const entt::entity entity : registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest>()) {
+        if (budget == 0) { break; }
+        registry.RunExclusive<&ApplyReflectionProbeKickoff>(entity);
+        --budget;
     }
 }
 
@@ -451,7 +476,7 @@ void ReflectionProbeLoadResolve(Engine::EngineContext* ctx, Engine::EngineState*
     auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
     for (const auto& [entity, runtime] : view.each()) {
         if (resolved.Size() >= budget) { break; }
-        Render::Cubemap* cubemap = registry.ServiceMut<Engine::AssetManager>().GetCubemap(runtime.contentHandle);
+        const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(runtime.contentHandle);
         if (!cubemap) {
             resolved.PushBack(entity);
             continue;
@@ -538,227 +563,221 @@ static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& node
     return m;
 }
 
-void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
+static void ApplyLightSurfaceResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
 {
-    auto view = registry.View<Component::LightSurfaceRequest>();
-    if (view.size() == 0) { return; }
+    if (!registry.Valid(entity) || !registry.Has<Component::LightSurfaceRequest>(entity)) { return; }
+    Engine::EngineState* state = registry.State();
 
     const Engine::Material* defaultMaterial = registry.Service<Engine::MaterialManager>().GetMaterial(registry.Service<Engine::MaterialManager>().GetDefaultMaterialID());
     if (!defaultMaterial) { return; }
 
-    const size_t budget = std::min(view.size(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const entt::entity entity : view) {
-        if (resolved.Size() >= budget) { break; }
-        const auto* areaLight = registry.TryGet<Component::AreaLightComponent>(entity);
-        const auto* sphereLight = registry.TryGet<Component::SphereLightComponent>(entity);
-        if (!areaLight && !sphereLight) {
-            resolved.PushBack(entity);
-            continue;
-        }
-
-        const Engine::StaticModelHandle handle = areaLight
-            ? (areaLight->bDisk ? state->builtinAssets.GetUnitDisk(&registry.ServiceMut<Engine::AssetManager>()) : state->builtinAssets.GetUnitQuad(&registry.ServiceMut<Engine::AssetManager>()))
-            : state->builtinAssets.GetUnitSphere(&registry.ServiceMut<Engine::AssetManager>());
-        Engine::StaticModel* model = registry.ServiceMut<Engine::AssetManager>().GetModel(handle);
-        if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) { continue; }
-
-        Engine::Material emissive = *defaultMaterial; // black albedo so only emission shows
-        emissive.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        emissive.props.emissiveFactor = areaLight ? glm::vec4(areaLight->color, areaLight->intensity) : glm::vec4(sphereLight->color, sphereLight->intensity);
-        const Engine::MaterialID materialID = registry.ServiceMut<Engine::MaterialManager>().CreateSynthesizedMaterial(emissive);
-
-        glm::mat4 m(1.0f);
-        if (registry.Has<Component::TransformComponent>(entity)) {
-            const Transform world = Component::ComputeWorldTransform(registry, entity);
-            m = areaLight ? Component::ComputeAreaLightQuadMatrix(world, *areaLight) : Component::ComputeSphereLightMatrix(world, *sphereLight);
-        }
-
-        registry.Remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
-        Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
-        if (!modelRange.IsValid()) {
-            resolved.PushBack(entity);
-            continue;
-        }
-        const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), model, materialID, modelRange.offset, false);
-        if (!range.IsValid()) {
-            state->modelStore.Free(modelRange);
-            resolved.PushBack(entity);
-            continue;
-        }
-        state->modelStore.SetModel(modelRange.offset, {m, m});
-        state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(registry, entity));
-        registry.Set<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
-        resolved.PushBack(entity);
-    }
-
-    for (const entt::entity entity : resolved) {
+    const auto* areaLight = registry.TryGet<Component::AreaLightComponent>(entity);
+    const auto* sphereLight = registry.TryGet<Component::SphereLightComponent>(entity);
+    if (!areaLight && !sphereLight) {
         registry.Remove<Component::LightSurfaceRequest>(entity);
+        return;
     }
+
+    const Engine::StaticModelHandle handle = areaLight
+        ? (areaLight->bDisk ? state->builtinAssets.GetUnitDisk(&registry.ServiceMut<Engine::AssetManager>()) : state->builtinAssets.GetUnitQuad(&registry.ServiceMut<Engine::AssetManager>()))
+        : state->builtinAssets.GetUnitSphere(&registry.ServiceMut<Engine::AssetManager>());
+    Engine::StaticModel* model = registry.ServiceMut<Engine::AssetManager>().GetModel(handle);
+    if (!model || model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) { return; }
+
+    Engine::Material emissive = *defaultMaterial; // black albedo so only emission shows
+    emissive.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    emissive.props.emissiveFactor = areaLight ? glm::vec4(areaLight->color, areaLight->intensity) : glm::vec4(sphereLight->color, sphereLight->intensity);
+    const Engine::MaterialID materialID = registry.ServiceMut<Engine::MaterialManager>().CreateSynthesizedMaterial(emissive);
+
+    glm::mat4 m(1.0f);
+    if (registry.Has<Component::TransformComponent>(entity)) {
+        const Transform world = Component::ComputeWorldTransform(registry, entity);
+        m = areaLight ? Component::ComputeAreaLightQuadMatrix(world, *areaLight) : Component::ComputeSphereLightMatrix(world, *sphereLight);
+    }
+
+    registry.Remove<Component::LightSurfaceRequest>(entity);
+    registry.Remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
+    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+    if (!modelRange.IsValid()) { return; }
+    const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), model, materialID, modelRange.offset, false);
+    if (!range.IsValid()) {
+        state->modelStore.Free(modelRange);
+        return;
+    }
+    state->modelStore.SetModel(modelRange.offset, {m, m});
+    state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(registry, entity));
+    registry.Set<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
+}
+
+void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
+{
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const entt::entity entity : registry.View<Component::LightSurfaceRequest>()) {
+        if (budget == 0) { break; }
+        registry.RunExclusive<&ApplyLightSurfaceResolve>(entity);
+        --budget;
+    }
+}
+
+static void ApplyStaticMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponentPtr = registry.TryGet<Component::StaticMeshComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
+    if (!meshComponentPtr || !runtime) { return; }
+    const Component::StaticMeshComponent& meshComponent = *meshComponentPtr;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
+    Engine::InstanceStore& store = state->instanceStore;
+
+    auto releaseExisting = [&] {
+        store.ReleaseAndFree(materialManager,runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+    };
+
+    auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
+    if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+        if (!model) { LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", TargetModel(*runtime).index); }
+        if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
+        registry.Remove<Component::StaticMeshLoadingFlag>(entity);
+        return;
+    }
+    if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+        return;
+    }
+    PromotePendingModel(ctx, state, registry, *runtime);
+
+    const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
+    Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
+
+    const auto* overrides = registry.TryGet<Component::StaticMeshOverridesComponent>(entity);
+
+    auto included = [&](uint32_t ordinal) -> bool {
+        return !overrides || !overrides->primitiveBlacklist.Contains(ordinal);
+    };
+
+    const uint32_t rootNode = meshComponent.nodeIndex < nodes.Size() ? meshComponent.nodeIndex : ~0u;
+    auto inSubtree = [&](uint32_t n) -> bool {
+        for (uint32_t i = n; i != ~0u; i = nodes[i].parent) {
+            if (i == rootNode) { return true; }
+        }
+        return rootNode == ~0u;
+    };
+    const glm::mat4 rootInverse = rootNode != ~0u ? glm::inverse(ComposeNodeModelSpace(nodes, rootNode)) : glm::mat4(1.0f);
+
+    uint32_t totalPrimitives = 0;
+    uint32_t contributingNodes = 0;
+
+    //
+    {
+        uint32_t ordinal = 0;
+        for (uint32_t n = 0; n < nodes.Size(); ++n) {
+            const uint32_t mi = nodes[n].meshIndex;
+            if (mi == ~0u || mi >= meshes.Size()) { continue; }
+            const size_t nodePrimCount = meshes[mi].primitiveProperties.Size();
+            const bool bNodeIn = inSubtree(n);
+            uint32_t nodeIncluded = 0;
+            for (size_t j = 0; j < nodePrimCount; ++j) {
+                if (bNodeIn && included(ordinal)) {
+                    ++totalPrimitives;
+                    ++nodeIncluded;
+                }
+                ++ordinal;
+            }
+            if (nodeIncluded > 0) { ++contributingNodes; }
+        }
+    }
+
+    if (totalPrimitives == 0) {
+        releaseExisting();
+        registry.Remove<Component::StaticMeshLoadingFlag>(entity);
+        return;
+    }
+
+    releaseExisting();
+
+    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(contributingNodes);
+    if (!modelRange.IsValid()) {
+        registry.Remove<Component::StaticMeshLoadingFlag>(entity);
+        return;
+    }
+
+    Engine::InstanceStore::Range range = store.Allocate(totalPrimitives);
+    if (!range.IsValid()) {
+        LOG_ERROR(Engine, "Instance store full; cannot flatten model ({}) needing {} primitives", model->name.c_str(), totalPrimitives);
+        state->modelStore.Free(modelRange);
+        registry.Remove<Component::StaticMeshLoadingFlag>(entity);
+        return;
+    }
+
+    auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
+        if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
+        if (meshComponent.lightingShaderOverride) { mat.lightingShader = meshComponent.lightingShaderOverride; }
+        return mat;
+    };
+
+    const bool bEmissiveLight = HasEmissiveLightFlag(registry, entity);
+    uint32_t writeIndex = range.offset;
+    uint32_t ordinal = 0;
+    uint32_t nodeModelSlot = modelRange.offset - 1;
+    for (uint32_t n = 0; n < nodes.Size(); ++n) {
+        const uint32_t mi = nodes[n].meshIndex;
+        if (mi == ~0u || mi >= meshes.Size()) { continue; }
+
+        const glm::mat4 nodeModelSpace = rootInverse * ComposeNodeModelSpace(nodes, n);
+        Engine::MeshInformation& mesh = meshes[mi];
+        const bool bNodeIn = inSubtree(n);
+
+        bool bNodeSlotAssigned = false;
+        for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
+            const uint32_t thisOrdinal = ordinal++;
+            if (!bNodeIn || !included(thisOrdinal)) { continue; }
+            if (!bNodeSlotAssigned) {
+                ++nodeModelSlot;
+                bNodeSlotAssigned = true;
+            }
+
+            Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
+
+            Engine::MaterialID matID;
+            if (primitive.materialIndex == -1) {
+                matID = materialManager->GetDefaultMaterialID();
+            }
+            else {
+                Engine::MaterialID materialOverride = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(primitive.materialIndex)) : Engine::MaterialID::INVALID;
+                if (AuthoredMaterialExists(registry, materialManager, entity, materialOverride)) {
+                    matID = materialOverride;
+                }
+                else {
+                    matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
+                }
+            }
+
+            store.FillEntry(writeIndex, materialManager,model, primitive, {
+                                .material = matID,
+                                .modelSlot = nodeModelSlot,
+                                .materialSlot = primitive.materialIndex,
+                                .sourceNodeIndex = n,
+                                .modelPrimitiveOrdinal = thisOrdinal,
+                                .modelSpaceTransform = nodeModelSpace,
+                                .bEmissiveLight = bEmissiveLight,
+                            });
+            ++writeIndex;
+        }
+    }
+
+    runtime->range = range;
+    runtime->modelRange = modelRange;
+    EvaluateInstanceRenderState(state, entity, registry);
+    registry.Set<Component::MultiframeDirtyRequest>(entity);
+    registry.Remove<Component::StaticMeshLoadingFlag>(entity);
 }
 
 void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
-    }
-    int32_t modelsWaitingThisTick{0};
-
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (resolved.Size() >= budget) { break; }
-        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
-        if (!runtime) continue;
-
-        Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
-        Engine::InstanceStore& store = state->instanceStore;
-
-        auto releaseExisting = [&] {
-            store.ReleaseAndFree(materialManager,runtime->range);
-            state->modelStore.Free(runtime->modelRange);
-        };
-
-        auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
-        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            if (!model) { LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", TargetModel(*runtime).index); }
-            if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            modelsWaitingThisTick++;
-            continue;
-        }
-        PromotePendingModel(ctx, state, registry, *runtime);
-
-        const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
-        Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
-
-        const auto* overrides = registry.TryGet<Component::StaticMeshOverridesComponent>(entity);
-
-        auto included = [&](uint32_t ordinal) -> bool {
-            return !overrides || !overrides->primitiveBlacklist.Contains(ordinal);
-        };
-
-        const uint32_t rootNode = meshComponent.nodeIndex < nodes.Size() ? meshComponent.nodeIndex : ~0u;
-        auto inSubtree = [&](uint32_t n) -> bool {
-            for (uint32_t i = n; i != ~0u; i = nodes[i].parent) {
-                if (i == rootNode) { return true; }
-            }
-            return rootNode == ~0u;
-        };
-        const glm::mat4 rootInverse = rootNode != ~0u ? glm::inverse(ComposeNodeModelSpace(nodes, rootNode)) : glm::mat4(1.0f);
-
-        uint32_t totalPrimitives = 0;
-        uint32_t contributingNodes = 0;
-
-        //
-        {
-            uint32_t ordinal = 0;
-            for (uint32_t n = 0; n < nodes.Size(); ++n) {
-                const uint32_t mi = nodes[n].meshIndex;
-                if (mi == ~0u || mi >= meshes.Size()) { continue; }
-                const size_t nodePrimCount = meshes[mi].primitiveProperties.Size();
-                const bool bNodeIn = inSubtree(n);
-                uint32_t nodeIncluded = 0;
-                for (size_t j = 0; j < nodePrimCount; ++j) {
-                    if (bNodeIn && included(ordinal)) {
-                        ++totalPrimitives;
-                        ++nodeIncluded;
-                    }
-                    ++ordinal;
-                }
-                if (nodeIncluded > 0) { ++contributingNodes; }
-            }
-        }
-
-        if (totalPrimitives == 0) {
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-
-        releaseExisting();
-
-        Engine::ModelStore::Range modelRange = state->modelStore.Allocate(contributingNodes);
-        if (!modelRange.IsValid()) {
-            resolved.PushBack(entity);
-            continue;
-        }
-
-        Engine::InstanceStore::Range range = store.Allocate(totalPrimitives);
-        if (!range.IsValid()) {
-            LOG_ERROR(Engine, "Instance store full; cannot flatten model ({}) needing {} primitives", model->name.c_str(), totalPrimitives);
-            state->modelStore.Free(modelRange);
-            resolved.PushBack(entity);
-            continue;
-        }
-
-        auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
-            if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
-            if (meshComponent.lightingShaderOverride) { mat.lightingShader = meshComponent.lightingShaderOverride; }
-            return mat;
-        };
-
-        const bool bEmissiveLight = HasEmissiveLightFlag(registry, entity);
-        uint32_t writeIndex = range.offset;
-        uint32_t ordinal = 0;
-        uint32_t nodeModelSlot = modelRange.offset - 1;
-        for (uint32_t n = 0; n < nodes.Size(); ++n) {
-            const uint32_t mi = nodes[n].meshIndex;
-            if (mi == ~0u || mi >= meshes.Size()) { continue; }
-
-            const glm::mat4 nodeModelSpace = rootInverse * ComposeNodeModelSpace(nodes, n);
-            Engine::MeshInformation& mesh = meshes[mi];
-            const bool bNodeIn = inSubtree(n);
-
-            bool bNodeSlotAssigned = false;
-            for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
-                const uint32_t thisOrdinal = ordinal++;
-                if (!bNodeIn || !included(thisOrdinal)) { continue; }
-                if (!bNodeSlotAssigned) {
-                    ++nodeModelSlot;
-                    bNodeSlotAssigned = true;
-                }
-
-                Engine::PrimitiveProperty& primitive = mesh.primitiveProperties[j];
-
-                Engine::MaterialID matID;
-                if (primitive.materialIndex == -1) {
-                    matID = materialManager->GetDefaultMaterialID();
-                }
-                else {
-                    Engine::MaterialID materialOverride = overrides ? overrides->GetMaterialOverride(static_cast<uint32_t>(primitive.materialIndex)) : Engine::MaterialID::INVALID;
-                    if (AuthoredMaterialExists(registry, materialManager, entity, materialOverride)) {
-                        matID = materialOverride;
-                    }
-                    else {
-                        matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[primitive.materialIndex]));
-                    }
-                }
-
-                store.FillEntry(writeIndex, materialManager,model, primitive, {
-                                    .material = matID,
-                                    .modelSlot = nodeModelSlot,
-                                    .materialSlot = primitive.materialIndex,
-                                    .sourceNodeIndex = n,
-                                    .modelPrimitiveOrdinal = thisOrdinal,
-                                    .modelSpaceTransform = nodeModelSpace,
-                                    .bEmissiveLight = bEmissiveLight,
-                                });
-                ++writeIndex;
-            }
-        }
-
-        runtime->range = range;
-        runtime->modelRange = modelRange;
-        EvaluateInstanceRenderState(state, entity, registry);
-        registry.Set<Component::MultiframeDirtyRequest>(entity);
-        resolved.PushBack(entity);
-    }
+    const int32_t modelsWaitingThisTick = PollModelResolves<Component::StaticMeshComponent, Component::StaticMeshLoadingFlag, &ApplyStaticMeshResolve>(registry);
 
     if (modelsWaitingThisTick > 0) {
         state->assetLoad.pendingModelWaitCount += modelsWaitingThisTick;
@@ -768,214 +787,207 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
         LOG_TRACE(Engine, "{} model(s) not yet done loading", state->assetLoad.pendingModelWaitCount);
         state->assetLoad.pendingModelWaitCount = 0;
     }
+}
 
-    for (const auto entity : resolved) {
-        registry.Remove<Component::StaticMeshLoadingFlag>(entity);
-    }
+static void ApplyStaticMeshPrimitiveKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponent = registry.TryGet<Component::StaticMeshPrimitiveComponent>(entity);
+    if (!meshComponent) { return; }
+    const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadModel(meshComponent->modelId);
+    if (!handle.IsValid()) { return; }
+    StageModel(registry.Context(), registry.State(), registry, entity, handle);
+    registry.Remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
+    registry.Set<Component::StaticMeshPrimitiveLoadingFlag>(entity);
 }
 
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>();
-    if (view.size_hint() == 0) { return; }
-
-    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (started.Size() >= budget) { break; }
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const auto& [entity, meshComponent] : registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>().each()) {
+        if (budget == 0) { break; }
         if (registry.Service<Engine::AssetManager>().IsModelFrozen(meshComponent.modelId)) { continue; }
-        const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadModel(meshComponent.modelId);
-        if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state, registry, entity, handle);
-        started.PushBack(entity);
+        registry.RunExclusive<&ApplyStaticMeshPrimitiveKickoff>(entity);
+        --budget;
     }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
-        registry.Set<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+}
+
+static void ApplyStaticMeshPrimitiveResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponentPtr = registry.TryGet<Component::StaticMeshPrimitiveComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
+    if (!meshComponentPtr || !runtime) { return; }
+    const Component::StaticMeshPrimitiveComponent& meshComponent = *meshComponentPtr;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+
+    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
+
+    auto releaseExisting = [&] {
+        state->instanceStore.ReleaseAndFree(materialManager,runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+    };
+
+    auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
+    if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+        if (!model) { LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", TargetModel(*runtime).index); }
+        if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
+        registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        return;
     }
+    if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+        return;
+    }
+    PromotePendingModel(ctx, state, registry, *runtime);
+
+    const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
+    Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
+
+    uint32_t ordinal = 0;
+    uint32_t targetNode = ~0u;
+    Engine::PrimitiveProperty* targetPrim = nullptr;
+    for (uint32_t n = 0; n < nodes.Size() && !targetPrim; ++n) {
+        const uint32_t mi = nodes[n].meshIndex;
+        if (mi == ~0u || mi >= meshes.Size()) { continue; }
+        Engine::MeshInformation& mesh = meshes[mi];
+        for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
+            if (ordinal == meshComponent.primitiveOrdinal) {
+                targetNode = n;
+                targetPrim = &mesh.primitiveProperties[j];
+                break;
+            }
+            ++ordinal;
+        }
+    }
+    if (!targetPrim) {
+        LOG_WARN(Engine, "StaticMeshPrimitive ordinal {} out of range for model ({})", meshComponent.primitiveOrdinal, model->name.c_str());
+        releaseExisting();
+        registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        return;
+    }
+
+    releaseExisting();
+
+    auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
+        if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
+        if (meshComponent.lightingShaderOverride) { mat.lightingShader = meshComponent.lightingShaderOverride; }
+        return mat;
+    };
+
+    Engine::MaterialID matID;
+    if (AuthoredMaterialExists(registry, materialManager, entity, meshComponent.materialOverride)) {
+        matID = meshComponent.materialOverride;
+    }
+    else if (targetPrim->materialIndex == -1) {
+        matID = materialManager->GetDefaultMaterialID();
+    }
+    else {
+        matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[targetPrim->materialIndex]));
+    }
+
+    Engine::InstanceStore& store = state->instanceStore;
+    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+    if (!modelRange.IsValid()) {
+        registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        return;
+    }
+    Engine::InstanceStore::Range range = store.Allocate(1);
+    if (!range.IsValid()) {
+        LOG_ERROR(Engine, "Instance store full; cannot resolve split primitive");
+        state->modelStore.Free(modelRange);
+        registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
+        return;
+    }
+
+    store.FillEntry(range.offset, materialManager,model, *targetPrim, {
+                        .material = matID,
+                        .modelSlot = modelRange.offset,
+                        .materialSlot = targetPrim->materialIndex,
+                        .sourceNodeIndex = targetNode,
+                        .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
+                        .bEmissiveLight = HasEmissiveLightFlag(registry, entity),
+                    });
+    runtime->range = range;
+    runtime->modelRange = modelRange;
+    EvaluateInstanceRenderState(state, entity, registry);
+    registry.Set<Component::MultiframeDirtyRequest>(entity);
+
+    registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
 }
 
 void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) { return; }
+    PollModelResolves<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag, &ApplyStaticMeshPrimitiveResolve>(registry);
+}
 
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (resolved.Size() >= budget) { break; }
-        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
-        if (!runtime) continue;
-
-        Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
-
-        auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(materialManager,runtime->range);
-            state->modelStore.Free(runtime->modelRange);
-        };
-
-        auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
-        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            if (!model) { LOG_ERROR(Engine, "Model ({}) is not in the asset manager after a load request.", TargetModel(*runtime).index); }
-            if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            continue;
-        }
-        PromotePendingModel(ctx, state, registry, *runtime);
-
-        const Core::HeapArray<Engine::Node>& nodes = model->modelData.nodes;
-        Core::HeapArray<Engine::MeshInformation>& meshes = model->modelData.meshes;
-
-        uint32_t ordinal = 0;
-        uint32_t targetNode = ~0u;
-        Engine::PrimitiveProperty* targetPrim = nullptr;
-        for (uint32_t n = 0; n < nodes.Size() && !targetPrim; ++n) {
-            const uint32_t mi = nodes[n].meshIndex;
-            if (mi == ~0u || mi >= meshes.Size()) { continue; }
-            Engine::MeshInformation& mesh = meshes[mi];
-            for (size_t j = 0; j < mesh.primitiveProperties.Size(); ++j) {
-                if (ordinal == meshComponent.primitiveOrdinal) {
-                    targetNode = n;
-                    targetPrim = &mesh.primitiveProperties[j];
-                    break;
-                }
-                ++ordinal;
-            }
-        }
-        if (!targetPrim) {
-            LOG_WARN(Engine, "StaticMeshPrimitive ordinal {} out of range for model ({})", meshComponent.primitiveOrdinal, model->name.c_str());
-            releaseExisting();
-            resolved.PushBack(entity);
-            continue;
-        }
-
-        releaseExisting();
-
-        auto applyShaderOverrides = [&](Engine::Material mat) -> Engine::Material {
-            if (meshComponent.shadingShaderOverride) { mat.fragmentShader = meshComponent.shadingShaderOverride; }
-            if (meshComponent.lightingShaderOverride) { mat.lightingShader = meshComponent.lightingShaderOverride; }
-            return mat;
-        };
-
-        Engine::MaterialID matID;
-        if (AuthoredMaterialExists(registry, materialManager, entity, meshComponent.materialOverride)) {
-            matID = meshComponent.materialOverride;
-        }
-        else if (targetPrim->materialIndex == -1) {
-            matID = materialManager->GetDefaultMaterialID();
-        }
-        else {
-            matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[targetPrim->materialIndex]));
-        }
-
-        Engine::InstanceStore& store = state->instanceStore;
-        Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
-        if (!modelRange.IsValid()) {
-            resolved.PushBack(entity);
-            continue;
-        }
-        Engine::InstanceStore::Range range = store.Allocate(1);
-        if (!range.IsValid()) {
-            LOG_ERROR(Engine, "Instance store full; cannot resolve split primitive");
-            state->modelStore.Free(modelRange);
-            resolved.PushBack(entity);
-            continue;
-        }
-
-        store.FillEntry(range.offset, materialManager,model, *targetPrim, {
-                            .material = matID,
-                            .modelSlot = modelRange.offset,
-                            .materialSlot = targetPrim->materialIndex,
-                            .sourceNodeIndex = targetNode,
-                            .modelPrimitiveOrdinal = meshComponent.primitiveOrdinal,
-                            .bEmissiveLight = HasEmissiveLightFlag(registry, entity),
-                        });
-        runtime->range = range;
-        runtime->modelRange = modelRange;
-        EvaluateInstanceRenderState(state, entity, registry);
-        registry.Set<Component::MultiframeDirtyRequest>(entity);
-
-        resolved.PushBack(entity);
-    }
-
-    for (const auto entity : resolved) {
-        registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
-    }
+static void ApplyProceduralMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponent = registry.TryGet<Component::ProceduralMeshComponent>(entity);
+    if (!meshComponent) { return; }
+    const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadProceduralModel(meshComponent->params, meshComponent->repeat);
+    if (!handle.IsValid()) { return; }
+    StageModel(registry.Context(), registry.State(), registry, entity, handle);
+    registry.Remove<Component::ProceduralMeshLoadRequest>(entity);
+    registry.Set<Component::ProceduralMeshLoadingFlag>(entity);
 }
 
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>();
-    if (view.size_hint() == 0) { return; }
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const entt::entity entity : registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>()) {
+        if (budget == 0) { break; }
+        registry.RunExclusive<&ApplyProceduralMeshKickoff>(entity);
+        --budget;
+    }
+}
 
-    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (auto [entity, meshComponent] : view.each()) {
-        if (started.Size() >= budget) { break; }
-        const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadProceduralModel(meshComponent.params, meshComponent.repeat);
-        if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state, registry, entity, handle);
-        started.PushBack(entity);
+static void ApplyProceduralMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponentPtr = registry.TryGet<Component::ProceduralMeshComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
+    if (!meshComponentPtr || !runtime) { return; }
+    const Component::ProceduralMeshComponent& meshComponent = *meshComponentPtr;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+
+    auto releaseExisting = [&] {
+        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+    };
+
+    auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
+    if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+        if (!model) { LOG_ERROR(Engine, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", TargetModel(*runtime).index); }
+        if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
+        registry.Remove<Component::ProceduralMeshLoadingFlag>(entity);
+        return;
     }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::ProceduralMeshLoadRequest>(entity);
-        registry.Set<Component::ProceduralMeshLoadingFlag>(entity);
+    if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+        return;
     }
+    PromotePendingModel(ctx, state, registry, *runtime);
+
+    Engine::MaterialID matID = registry.Service<Engine::MaterialManager>().GetDefaultMaterialID();
+    if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, meshComponent.material)) {
+        matID = meshComponent.material;
+    }
+    releaseExisting();
+    runtime->modelRange = state->modelStore.Allocate(1);
+    if (runtime->modelRange.IsValid()) {
+        runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+        EvaluateInstanceRenderState(state, entity, registry);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
+    }
+
+    registry.Remove<Component::ProceduralMeshLoadingFlag>(entity);
 }
 
 void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
-    }
-
-    int32_t proceduralWaitingThisTick{0};
-
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (resolved.Size() >= budget) { break; }
-        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
-        if (!runtime) continue;
-
-        auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-            state->modelStore.Free(runtime->modelRange);
-        };
-
-        auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
-        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            if (!model) { LOG_ERROR(Engine, "Procedural model ({}) is not in the asset manager, it should have been requested to load during scene load.", TargetModel(*runtime).index); }
-            if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            proceduralWaitingThisTick++;
-            continue;
-        }
-        PromotePendingModel(ctx, state, registry, *runtime);
-
-        Engine::MaterialID matID = registry.Service<Engine::MaterialManager>().GetDefaultMaterialID();
-        if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, meshComponent.material)) {
-            matID = meshComponent.material;
-        }
-        releaseExisting();
-        runtime->modelRange = state->modelStore.Allocate(1);
-        if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
-            EvaluateInstanceRenderState(state, entity, registry);
-            registry.Set<Component::MultiframeDirtyRequest>(entity);
-        }
-
-        resolved.PushBack(entity);
-    }
+    const int32_t proceduralWaitingThisTick = PollModelResolves<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadingFlag, &ApplyProceduralMeshResolve>(registry);
 
     if (proceduralWaitingThisTick > 0) {
         state->assetLoad.pendingProceduralWaitCount += proceduralWaitingThisTick;
@@ -984,10 +996,6 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
     if (state->assetLoad.pendingProceduralWaitCount > 0 && proceduralWaitingThisTick == 0 && (std::chrono::steady_clock::now() - state->assetLoad.proceduralWaitLastActivity) >= std::chrono::seconds(1)) {
         LOG_TRACE(Engine, "{} procedural model(s) not yet done loading", state->assetLoad.pendingProceduralWaitCount);
         state->assetLoad.pendingProceduralWaitCount = 0;
-    }
-
-    for (const auto entity : resolved) {
-        registry.Remove<Component::ProceduralMeshLoadingFlag>(entity);
     }
 }
 
@@ -1037,68 +1045,66 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
     runtime->modelRange = modelRange;
 }
 
+static void ApplyModuleMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponent = registry.TryGet<Component::ModuleMeshComponent>(entity);
+    if (!meshComponent) { return; }
+    const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadModuleModel(meshComponent->params);
+    if (!handle.IsValid()) { return; }
+    StageModel(registry.Context(), registry.State(), registry, entity, handle);
+    registry.Remove<Component::ModuleMeshLoadRequest>(entity);
+    registry.Set<Component::ModuleMeshLoadingFlag>(entity);
+}
+
 void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>();
-    if (view.size_hint() == 0) { return; }
-
-    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (auto [entity, meshComponent] : view.each()) {
-        if (started.Size() >= budget) { break; }
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const auto& [entity, meshComponent] : registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>().each()) {
+        if (budget == 0) { break; }
         if (meshComponent.params.parts.IsEmpty()) { continue; }
-        const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadModuleModel(meshComponent.params);
-        if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state, registry, entity, handle);
-        started.PushBack(entity);
+        registry.RunExclusive<&ApplyModuleMeshKickoff>(entity);
+        --budget;
     }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::ModuleMeshLoadRequest>(entity);
-        registry.Set<Component::ModuleMeshLoadingFlag>(entity);
+}
+
+static void ApplyModuleMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponentPtr = registry.TryGet<Component::ModuleMeshComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
+    if (!meshComponentPtr || !runtime) { return; }
+    const Component::ModuleMeshComponent& meshComponent = *meshComponentPtr;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+
+    auto releaseExisting = [&] {
+        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+    };
+
+    auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
+    if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+        if (!model) { LOG_ERROR(Engine, "Module model ({}) is not in the asset manager.", TargetModel(*runtime).index); }
+        if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
+        registry.Remove<Component::ModuleMeshLoadingFlag>(entity);
+        return;
     }
+    if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+        return;
+    }
+    PromotePendingModel(ctx, state, registry, *runtime);
+
+    FillModuleMeshRange(ctx, state, registry, runtime, model, meshComponent, HasEmissiveLightFlag(registry, entity));
+    EvaluateInstanceRenderState(state, entity, registry);
+    registry.Set<Component::MultiframeDirtyRequest>(entity);
+
+    registry.Remove<Component::ModuleMeshLoadingFlag>(entity);
 }
 
 void ModuleMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
-    }
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (resolved.Size() >= budget) { break; }
-        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
-        if (!runtime) continue;
-
-        auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-            state->modelStore.Free(runtime->modelRange);
-        };
-
-        auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
-        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            if (!model) { LOG_ERROR(Engine, "Module model ({}) is not in the asset manager.", TargetModel(*runtime).index); }
-            if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            continue;
-        }
-        PromotePendingModel(ctx, state, registry, *runtime);
-
-        FillModuleMeshRange(ctx, state, registry, runtime, model, meshComponent, HasEmissiveLightFlag(registry, entity));
-        EvaluateInstanceRenderState(state, entity, registry);
-        registry.Set<Component::MultiframeDirtyRequest>(entity);
-
-        resolved.PushBack(entity);
-    }
-
-    for (const auto entity : resolved) {
-        registry.Remove<Component::ModuleMeshLoadingFlag>(entity);
-    }
+    PollModelResolves<Component::ModuleMeshComponent, Component::ModuleMeshLoadingFlag, &ApplyModuleMeshResolve>(registry);
 }
 
 /** A railing with no lanes and no posts generates nothing; cross planks need two lanes. */
@@ -1107,181 +1113,179 @@ static bool SplineHasGeometry(const Engine::SplineParams& params)
     return !params.railing.bEnabled || !params.railing.lanes.IsEmpty() || params.railing.bPosts;
 }
 
-void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
+static void ApplySplineMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
 {
-    auto view = registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>();
-    if (view.size_hint() == 0) { return; }
-
-    const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    auto emptied = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (auto [entity, meshComponent] : view.each()) {
-        if (started.Size() + emptied.Size() >= budget) { break; }
-        const Engine::SplineParams params = Component::ToSplineParams(meshComponent);
-        if (!SplineHasGeometry(params)) {
-            emptied.PushBack(entity);
-            continue;
-        }
-        const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadSplineModel(params);
-        if (!handle.IsValid()) { continue; }
-        StageModel(ctx, state, registry, entity, handle);
-        started.PushBack(entity);
-    }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::SplineMeshLoadRequest>(entity);
-        registry.Set<Component::SplineMeshLoadingFlag>(entity);
-    }
-    for (const entt::entity entity : emptied) {
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponent = registry.TryGet<Component::SplineMeshComponent>(entity);
+    if (!meshComponent) { return; }
+    const Engine::SplineParams params = Component::ToSplineParams(*meshComponent);
+    if (!SplineHasGeometry(params)) {
         registry.Remove<Component::SplineMeshLoadRequest>(entity);
         registry.Remove<Component::MeshRuntime>(entity);
+        return;
     }
+    const Engine::StaticModelHandle handle = registry.ServiceMut<Engine::AssetManager>().LoadSplineModel(params);
+    if (!handle.IsValid()) { return; }
+    StageModel(registry.Context(), registry.State(), registry, entity, handle);
+    registry.Remove<Component::SplineMeshLoadRequest>(entity);
+    registry.Set<Component::SplineMeshLoadingFlag>(entity);
+}
+
+void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
+{
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const entt::entity entity : registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>()) {
+        if (budget == 0) { break; }
+        registry.RunExclusive<&ApplySplineMeshKickoff>(entity);
+        --budget;
+    }
+}
+
+static void ApplySplineMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* meshComponentPtr = registry.TryGet<Component::SplineMeshComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
+    if (!meshComponentPtr || !runtime) { return; }
+    const Component::SplineMeshComponent& meshComponent = *meshComponentPtr;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+
+    auto releaseExisting = [&] {
+        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+    };
+
+    auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
+    if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+        if (!model) { LOG_ERROR(Engine, "Spline model ({}) is not in the asset manager.", TargetModel(*runtime).index); }
+        if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
+        registry.Remove<Component::SplineMeshLoadingFlag>(entity);
+        return;
+    }
+    if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+        return;
+    }
+    PromotePendingModel(ctx, state, registry, *runtime);
+
+    Engine::MaterialID matID = registry.Service<Engine::MaterialManager>().GetDefaultMaterialID();
+    if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, meshComponent.material)) {
+        matID = meshComponent.material;
+    }
+    releaseExisting();
+    runtime->modelRange = state->modelStore.Allocate(1);
+    if (runtime->modelRange.IsValid()) {
+        runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+        EvaluateInstanceRenderState(state, entity, registry);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
+    }
+
+    registry.Remove<Component::SplineMeshLoadingFlag>(entity);
 }
 
 void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
+    PollModelResolves<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag, &ApplySplineMeshResolve>(registry);
+}
+
+static void ApplyText3DGenerateKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* textComponent = registry.TryGet<Component::Text3DComponent>(entity);
+    if (!textComponent) { return; }
+    const Engine::StaticModelHandle handle = textComponent->text.Size() > 0
+        ? registry.ServiceMut<Engine::AssetManager>().LoadText3DModel(textComponent->fontId, textComponent->text, textComponent->depth, textComponent->flatness, textComponent->tracking, textComponent->scale, textComponent->bSmoothNormals, textComponent->align, textComponent->anchor, textComponent->wrapWidth, textComponent->bendRadius)
+        : Engine::StaticModelHandle::INVALID;
+    if (handle.IsValid()) {
+        StageModel(registry.Context(), registry.State(), registry, entity, handle);
+        registry.Set<Component::Text3DLoadingFlag>(entity);
     }
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, meshComponent] : view.each()) {
-        if (resolved.Size() >= budget) { break; }
-        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
-        if (!runtime) continue;
-
-        auto releaseExisting = [&] {
-            state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-            state->modelStore.Free(runtime->modelRange);
-        };
-
-        auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
-        if (!model || model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            if (!model) { LOG_ERROR(Engine, "Spline model ({}) is not in the asset manager.", TargetModel(*runtime).index); }
-            if (!DropPendingModel(ctx, state, registry, *runtime)) { releaseExisting(); }
-            resolved.PushBack(entity);
-            continue;
-        }
-        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            continue;
-        }
-        PromotePendingModel(ctx, state, registry, *runtime);
-
-        Engine::MaterialID matID = registry.Service<Engine::MaterialManager>().GetDefaultMaterialID();
-        if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, meshComponent.material)) {
-            matID = meshComponent.material;
-        }
-        releaseExisting();
-        runtime->modelRange = state->modelStore.Allocate(1);
-        if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
-            EvaluateInstanceRenderState(state, entity, registry);
-            registry.Set<Component::MultiframeDirtyRequest>(entity);
-        }
-
-        resolved.PushBack(entity);
+    else {
+        registry.Remove<Component::MeshRuntime>(entity);
     }
-
-    for (const auto entity : resolved) {
-        registry.Remove<Component::SplineMeshLoadingFlag>(entity);
-    }
+    registry.Remove<Component::Text3DGenerateRequest>(entity);
 }
 
 void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::Text3DComponent, Component::Text3DGenerateRequest>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
-    }
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto done = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, textComponent] : view.each()) {
-        if (done.Size() >= budget) { break; }
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (const auto& [entity, textComponent] : registry.View<Component::Text3DComponent, Component::Text3DGenerateRequest>().each()) {
+        if (budget == 0) { break; }
         // Stay pending while the font is missing or frozen (e.g. mid hot-reload drain). The generated mesh takes its own font ref, so we hold none here.
         if (!textComponent.fontId.IsValid() || registry.Service<Engine::AssetManager>().IsFontFrozen(textComponent.fontId)) { continue; }
+        registry.RunExclusive<&ApplyText3DGenerateKickoff>(entity);
+        --budget;
+    }
+}
 
-        const Engine::StaticModelHandle handle = textComponent.text.Size() > 0
-            ? registry.ServiceMut<Engine::AssetManager>().LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius)
-            : Engine::StaticModelHandle::INVALID;
-        if (handle.IsValid()) {
-            StageModel(ctx, state, registry, entity, handle);
-            registry.Set<Component::Text3DLoadingFlag>(entity);
-        }
-        else {
-            registry.Remove<Component::MeshRuntime>(entity);
-        }
-        done.PushBack(entity);
+static void ApplyText3DResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* textComponentPtr = registry.TryGet<Component::Text3DComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
+    if (!textComponentPtr || !runtime) { return; }
+    const Component::Text3DComponent& textComponent = *textComponentPtr;
+    Engine::EngineContext* ctx = registry.Context();
+    Engine::EngineState* state = registry.State();
+
+    if (!TargetModel(*runtime).IsValid()) {
+        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
+        state->modelStore.Free(runtime->modelRange);
+        registry.Remove<Component::Text3DLoadingFlag>(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
+        return;
     }
-    for (const entt::entity entity : done) {
-        registry.Remove<Component::Text3DGenerateRequest>(entity);
+
+    auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
+    if (!model) {
+        LOG_ERROR(Engine, "Text3D model ({}) is not in the asset manager.", TargetModel(*runtime).index);
+        return;
     }
+    if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
+        if (!DropPendingModel(ctx, state, registry, *runtime)) {
+            state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
+            state->modelStore.Free(runtime->modelRange);
+        }
+        registry.Remove<Component::Text3DLoadingFlag>(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
+        return;
+    }
+    if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
+        return;
+    }
+    PromotePendingModel(ctx, state, registry, *runtime);
+
+    Engine::MaterialID matID = registry.Service<Engine::MaterialManager>().GetDefaultMaterialID();
+    if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, textComponent.material)) {
+        matID = textComponent.material;
+    }
+    state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
+    state->modelStore.Free(runtime->modelRange);
+    runtime->modelRange = state->modelStore.Allocate(1);
+    if (runtime->modelRange.IsValid()) {
+        runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+        EvaluateInstanceRenderState(state, entity, registry);
+        registry.Set<Component::MultiframeDirtyRequest>(entity);
+    }
+
+    registry.Remove<Component::Text3DLoadingFlag>(entity);
 }
 
 void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::Text3DComponent, Component::Text3DLoadingFlag>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
-    }
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto resolved = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (const auto& [entity, textComponent] : view.each()) {
-        if (resolved.Size() >= budget) { break; }
-        auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
-        if (!runtime) continue;
+    PollModelResolves<Component::Text3DComponent, Component::Text3DLoadingFlag, &ApplyText3DResolve>(registry);
+}
 
-        if (!TargetModel(*runtime).IsValid()) {
-            state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-            state->modelStore.Free(runtime->modelRange);
-            resolved.PushBack(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
-            continue;
-        }
-
-        auto model = registry.ServiceMut<Engine::AssetManager>().GetModel(TargetModel(*runtime));
-        if (!model) {
-            LOG_ERROR(Engine, "Text3D model ({}) is not in the asset manager.", TargetModel(*runtime).index);
-            continue;
-        }
-        if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
-            if (!DropPendingModel(ctx, state, registry, *runtime)) {
-                state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-                state->modelStore.Free(runtime->modelRange);
-            }
-            resolved.PushBack(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
-            continue;
-        }
-        if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
-            continue;
-        }
-        PromotePendingModel(ctx, state, registry, *runtime);
-
-        Engine::MaterialID matID = registry.Service<Engine::MaterialManager>().GetDefaultMaterialID();
-        if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, textComponent.material)) {
-            matID = textComponent.material;
-        }
-        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-        state->modelStore.Free(runtime->modelRange);
-        runtime->modelRange = state->modelStore.Allocate(1);
-        if (runtime->modelRange.IsValid()) {
-            runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
-            EvaluateInstanceRenderState(state, entity, registry);
-            registry.Set<Component::MultiframeDirtyRequest>(entity);
-        }
-
-        resolved.PushBack(entity);
-    }
-
-    for (const auto entity : resolved) {
-        registry.Remove<Component::Text3DLoadingFlag>(entity);
-    }
+static void ApplyTextFontKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* textComp = registry.TryGet<Component::TextComponent>(entity);
+    auto* runtime = registry.TryGetMut<Component::TextRuntime>(entity);
+    if (!textComp || !runtime || runtime->fontHandle.IsValid()) { return; }
+    runtime->fontHandle = registry.ServiceMut<Engine::AssetManager>().LoadFont(textComp->fontId);
 }
 
 void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto view = registry.View<Component::TextComponent, Engine::Mut<Component::TextRuntime>, Component::TextFontRequest>();
+    auto view = registry.View<Component::TextComponent, Component::TextRuntime, Component::TextFontRequest>();
     if (view.size_hint() == 0) { return; }
 
     const size_t budget = std::min(view.size_hint(), Engine::MAX_ASSET_RESOLVES_PER_TICK);
@@ -1291,11 +1295,11 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
         // Load here (not at construct) so the freeze can hold it pending.
         if (!runtime.fontHandle.IsValid()) {
             if (!textComp.fontId.IsValid() || registry.Service<Engine::AssetManager>().IsFontFrozen(textComp.fontId)) { continue; }
-            runtime.fontHandle = registry.ServiceMut<Engine::AssetManager>().LoadFont(textComp.fontId);
-            if (!runtime.fontHandle.IsValid()) { continue; }
+            registry.RunExclusive<&ApplyTextFontKickoff>(entity);
+            continue;
         }
 
-        Engine::Font* font = registry.ServiceMut<Engine::AssetManager>().GetFont(runtime.fontHandle);
+        const Engine::Font* font = registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle);
         if (!font) { continue; }
         if (font->loadState == Engine::Font::LoadState::FailedToLoad) {
             resolved.PushBack(entity);

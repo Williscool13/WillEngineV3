@@ -6,7 +6,7 @@
 #define WILL_ENGINE_BINDLESS_RESOURCES_SAMPLER_IMAGES_H
 
 #include "core/memory/handle.h"
-#include "core/memory/handle_allocator.h"
+#include "core/memory/lock_free_handle_allocator.h"
 #include "render/render_config.h"
 #include "render/vulkan/vk_resources.h"
 
@@ -42,7 +42,7 @@ using BindlessTextureArrayHandle = Core::Handle<BindlessTextureArray>;
  *   - Binding 3: Array of sampled 2D array images (BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT)
  *
  * Uses Vulkan descriptor buffers (VK_EXT_descriptor_buffer) for bindless access.
- * Handles are managed via HandleAllocator and returned on allocation for shader indexing.
+ * Handles come from lock-free allocators, so allocate, update and release are safe from any thread.
  */
 struct BindlessResourcesSamplerImages
 {
@@ -53,46 +53,36 @@ public:
 public:
     BindlessResourcesSamplerImages();
 
-    explicit BindlessResourcesSamplerImages(VulkanContext* context);
-
     ~BindlessResourcesSamplerImages();
 
     BindlessResourcesSamplerImages(const BindlessResourcesSamplerImages&) = delete;
 
     BindlessResourcesSamplerImages& operator=(const BindlessResourcesSamplerImages&) = delete;
 
-    BindlessResourcesSamplerImages(BindlessResourcesSamplerImages&& other) noexcept;
+    BindlessResourcesSamplerImages(BindlessResourcesSamplerImages&&) = delete;
 
-    BindlessResourcesSamplerImages& operator=(BindlessResourcesSamplerImages&& other) noexcept;
+    BindlessResourcesSamplerImages& operator=(BindlessResourcesSamplerImages&&) = delete;
+
+    void Init(VulkanContext* context);
 
     /**
-     * Not thread-safe
      * Allocate a sampler in the bindless array.
      * @param sampler Vulkan sampler handle to bind
      * @return Handle for the sampler, or Invalid if full
      */
     BindlessSamplerHandle AllocateSampler(VkSampler sampler);
 
-    /**
-     * Not thread-safe
-     * @return
-     */
     BindlessSamplerHandle ReserveAllocateSampler();
 
     bool UpdateSampler(BindlessSamplerHandle handle, VkSampler sampler);
 
     /**
-     * Not thread-safe
      * Allocate a texture in the bindless array.
      * @param imageInfo Descriptor info for the sampled image
      * @return Handle for the texture, or Invalid if full
      */
     BindlessTextureHandle AllocateTexture(const VkDescriptorImageInfo& imageInfo);
 
-    /**
-     * Not thread-safe
-     * @return
-     */
     BindlessTextureHandle ReserveAllocateTexture();
 
     /**
@@ -141,7 +131,7 @@ public:
      */
     bool ReleaseCubemapBinding(BindlessCubemapHandle handle);
 
-    /** Not thread-safe. Reserves a 2D array slot; the descriptor is written later by UpdateTextureArray. */
+    /** Reserves a 2D array slot; the descriptor is written later by UpdateTextureArray. */
     BindlessTextureArrayHandle ReserveAllocateTextureArray();
 
     bool UpdateTextureArray(BindlessTextureArrayHandle handle, const VkDescriptorImageInfo& imageInfo);
@@ -159,10 +149,10 @@ private:
     AllocatedBuffer buffer{};
     VkDeviceSize descriptorSetSize{};
 
-    Core::HandleAllocator<BindlessSampler, BINDLESS_SAMPLER_COUNT> samplerAllocator;
-    Core::HandleAllocator<BindlessTexture, BINDLESS_SAMPLED_IMAGE_COUNT> textureAllocator;
-    Core::HandleAllocator<BindlessCubemap, BINDLESS_SAMPLED_CUBEMAP_COUNT> cubemapAllocator;
-    Core::HandleAllocator<BindlessTextureArray, BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT> textureArrayAllocator;
+    Core::LockFreeHandleAllocator<BindlessSampler, BINDLESS_SAMPLER_COUNT> samplerAllocator;
+    Core::LockFreeHandleAllocator<BindlessTexture, BINDLESS_SAMPLED_IMAGE_COUNT> textureAllocator;
+    Core::LockFreeHandleAllocator<BindlessCubemap, BINDLESS_SAMPLED_CUBEMAP_COUNT> cubemapAllocator;
+    Core::LockFreeHandleAllocator<BindlessTextureArray, BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT> textureArrayAllocator;
 
     void WriteSampledImageDescriptor(uint32_t binding, uint32_t index, const VkDescriptorImageInfo& imageInfo);
 };

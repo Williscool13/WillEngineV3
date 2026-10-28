@@ -101,8 +101,8 @@ public:
 
     void SetDumpSink(void (*sink)(EngineState*, const char*)) { dumpSink = sink; }
 
-    /** Receives the dumped frame as Graphviz DOT at the start of the next frame. */
-    void SetDotSink(void (*sink)(const char*, size_t)) { dotSink = sink; }
+    /** Receives Graphviz DOT: each phase as it executes (name = phase), then the whole frame at the start of the next one (name = "all"). */
+    void SetDotSink(void (*sink)(const char* name, const char* dot, size_t size)) { dotSink = sink; }
 
     void RequestDump() { bDumpPending = true; }
 
@@ -110,7 +110,7 @@ public:
     {
         if (bDumpActive && dotSink != nullptr) {
             Dot().Append("}\n");
-            dotSink(Dot().c_str(), Dot().Size());
+            dotSink("all", Dot().c_str(), Dot().Size());
         }
         nodes.Clear();
         cursor = 0;
@@ -415,6 +415,12 @@ private:
         return dot;
     }
 
+    static Core::InlineString<32768>& PhaseDot()
+    {
+        static Core::InlineString<32768> dot;
+        return dot;
+    }
+
     template<size_t N>
     void AppendAfterNames(Core::InlineString<N>& line, const char* prefix, const AccessSet& access) const
     {
@@ -444,9 +450,12 @@ private:
     /** Edges are the transitive reduction of the conflict predecessors. */
     void DotPhase(uint32_t begin, uint32_t count, const uint64_t* predMasks, const uint64_t* afterMasks, const uint32_t* waveOfNode, uint32_t waveCount)
     {
-        Core::InlineString<65536>& dot = Dot();
+        Core::InlineString<32768>& dot = PhaseDot();
         const uint32_t phase = static_cast<uint32_t>(nodes[begin].phase);
-        dot.Append(Core::InlineString<128>::Format("    subgraph cluster_%u {\n        label=\"%s\"; fontname=\"Consolas\";\n", phase, PhaseName(nodes[begin].phase)));
+        dot.Clear();
+        dot.Append(Core::InlineString<256>::Format("digraph %s {\n    rankdir=TB;\n    nodesep=0.4;\n    ranksep=0.5;\n    node [shape=box fontname=\"Consolas\" style=filled];\n", PhaseName(nodes[begin].phase)));
+        dot.Append(Core::InlineString<128>::Format("    label=\"%s\"; labelloc=t; fontname=\"Consolas\";\n", PhaseName(nodes[begin].phase)));
+        const size_t bodyStart = dot.Size();
         for (uint32_t i = 0; i < count; ++i) {
             const SystemNode& node = nodes[begin + i];
             Core::InlineString<1024> label = Core::InlineString<1024>::Format("%s\\nwave %u", node.name, waveOfNode[i]);
@@ -464,7 +473,6 @@ private:
             }
             dot.Append(" }\n");
         }
-        dot.Append("    }\n");
 
         uint64_t ancestors[MAX_NODES_PER_PHASE];
         for (uint32_t i = 0; i < count; ++i) {
@@ -488,15 +496,23 @@ private:
             }
             if (waveOfNode[i] + 1 == waveCount) { tail = i; }
         }
+
+        Core::InlineString<65536>& all = Dot();
+        all.Append(Core::InlineString<128>::Format("    subgraph cluster_%u {\n        label=\"%s\"; fontname=\"Consolas\";\n", phase, PhaseName(nodes[begin].phase)));
+        all.Append(std::string_view{dot.c_str() + bodyStart, dot.Size() - bodyStart});
+        all.Append("    }\n");
         if (dotPreviousTail != ~0u) {
-            dot.Append(Core::InlineString<96>::Format("    n%u_%u -> n%u_0 [style=dashed color=\"#999999\"];\n", dotPreviousTail >> 8, dotPreviousTail & 0xFF, phase));
+            all.Append(Core::InlineString<96>::Format("    n%u_%u -> n%u_0 [style=dashed color=\"#999999\"];\n", dotPreviousTail >> 8, dotPreviousTail & 0xFF, phase));
         }
         dotPreviousTail = (phase << 8) | tail;
+
+        dot.Append("}\n");
+        dotSink(PhaseName(nodes[begin].phase), dot.c_str(), dot.Size());
     }
 
     enki::TaskScheduler* scheduler{};
     void (*dumpSink)(EngineState*, const char*){};
-    void (*dotSink)(const char*, size_t){};
+    void (*dotSink)(const char*, const char*, size_t){};
     uint32_t dotPreviousTail{~0u};
     bool bDumpPending{};
     bool bDumpActive{};

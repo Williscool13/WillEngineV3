@@ -187,114 +187,110 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
         &PlaybackCommands,
         AccessSet::EXCLUSIVE);
 
-    graph.Add("StaticMeshPendingKickoff",
-        &StaticMeshPendingKickoff,
-        Access<
-            Reads<Component::StaticMeshComponent>,
-            Writes<Component::StaticMeshLoadRequest, Component::StaticMeshLoadingFlag, Component::MeshRuntime, AssetManager>>());
     graph.Add("ReflectionProbeBakeUpgrade",
         &ReflectionProbeBakeUpgrade,
         {
             .writes = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::ReflectionProbeLoadingFlag>(), TypeSID<Component::ReflectionProbeLoadRequest>(), TypeSID<AssetManager>(), "state.rng"_sid},
         });
+    graph.Add("StaticMeshPendingKickoff",
+        &StaticMeshPendingKickoff,
+        Access<
+            Reads<Component::StaticMeshComponent, Component::StaticMeshLoadRequest, AssetManager>>());
     graph.Add("ReflectionProbePendingKickoff",
         &ReflectionProbePendingKickoff,
         Access<
-            Reads<Component::ReflectionProbeComponent>,
-            Writes<Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest, Component::ReflectionProbeLoadingFlag, AssetManager>>());
+            Reads<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest>>());
     graph.Add("StaticMeshPrimitivePendingKickoff",
         &StaticMeshPrimitivePendingKickoff,
         Access<
-            Reads<Component::StaticMeshPrimitiveComponent>,
-            Writes<Component::StaticMeshPrimitiveLoadRequest, Component::StaticMeshPrimitiveLoadingFlag, Component::MeshRuntime, AssetManager>>());
+            Reads<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest, AssetManager>>());
     graph.Add("ProceduralMeshPendingKickoff",
         &ProceduralMeshPendingKickoff,
         Access<
-            Reads<Component::ProceduralMeshComponent>,
-            Writes<Component::ProceduralMeshLoadRequest, Component::ProceduralMeshLoadingFlag, Component::MeshRuntime, AssetManager>>());
+            Reads<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>>());
     graph.Add("SplineMeshPendingKickoff",
         &SplineMeshPendingKickoff,
         Access<
-            Reads<Component::SplineMeshComponent>,
-            Writes<Component::SplineMeshLoadRequest, Component::SplineMeshLoadingFlag, Component::MeshRuntime, AssetManager>>());
+            Reads<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>>());
     graph.Add("ModuleMeshPendingKickoff",
         &ModuleMeshPendingKickoff,
         Access<
-            Reads<Component::ModuleMeshComponent>,
-            Writes<Component::ModuleMeshLoadRequest, Component::ModuleMeshLoadingFlag, Component::MeshRuntime, AssetManager>>());
+            Reads<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>>());
     graph.Add("TextFontPendingKickoff",
         &TextFontPendingKickoff,
         Access<
-            Reads<Component::TextComponent>,
-            Writes<Component::TextRuntime, Component::TextFontRequest, AssetManager>>());
+            Reads<Component::TextComponent, Component::TextRuntime, AssetManager>,
+            Writes<Component::TextFontRequest>>());
     graph.Add("Text3DGeneratePendingKickoff",
         &Text3DGeneratePendingKickoff,
         Access<
-            Reads<Component::Text3DComponent>,
-            Writes<Component::Text3DGenerateRequest, Component::Text3DLoadingFlag, Component::MeshRuntime, AssetManager>>());
+            Reads<Component::Text3DComponent, Component::Text3DGenerateRequest, AssetManager>>());
     graph.Add("PhysicsMeshPendingKickoff",
         &PhysicsMeshPendingKickoff,
         Access<
-            Reads<Component::PhysicsBodyDesc, Component::PhysicsMotionOverrideRuntime>,
-            Writes<Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest, Component::PhysicsMeshLoadingFlag, AssetManager>>());
+            Reads<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest, AssetManager>>());
 
     graph.Add("StaticMeshLoadResolve",
         &StaticMeshLoadResolve,
         {
-            .reads = {TypeSID<Component::StaticMeshComponent>(), TypeSID<Component::StaticMeshOverridesComponent>(), TypeSID<Component::RenderFlagsComponent>(), TypeSID<Component::NameComponent>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::DynamicPhysicsBodyRuntime>(), TypeSID<Component::PhysicsBodyDesc>()},
-            .writes = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::StaticMeshLoadingFlag>(), TypeSID<Component::MultiframeDirtyRequest>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid, "state.assetLoad.pendingModelWait"_sid},
+            .reads = {TypeSID<Component::StaticMeshComponent>(), TypeSID<Component::MeshRuntime>(), TypeSID<AssetManager>()},
+            .writes = {"state.assetLoad.pendingModelWait"_sid},
+            .deferredWrites = {TypeSID<Component::StaticMeshLoadingFlag>()},
+            .after = {SystemId(&StaticMeshPendingKickoff)},
         });
     graph.Add("LightSurfaceResolve",
         &LightSurfaceResolve,
-        {
-            .reads = {TypeSID<Component::AreaLightComponent>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightRuntime>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::HierarchyComponent>()},
-            .writes = {TypeSID<Component::LightSurfaceRequest>(), TypeSID<Component::LightSurfaceRuntime>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "state.builtinAssets"_sid, "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid},
-        });
+        Access<
+            DeferredWrites<Component::LightSurfaceRequest>>());
     graph.Add("ReflectionProbeLoadResolve",
         &ReflectionProbeLoadResolve,
         Access<
-            Reads<Component::ReflectionProbeRuntime>,
-            Writes<Component::ReflectionProbeLoadingFlag, AssetManager>>());
+            Reads<Component::ReflectionProbeRuntime, AssetManager>,
+            DeferredWrites<Component::ReflectionProbeLoadingFlag>,
+            After<&ReflectionProbePendingKickoff>>());
     graph.Add("StaticMeshPrimitiveLoadResolve",
         &StaticMeshPrimitiveLoadResolve,
-        {
-            .reads = {TypeSID<Component::StaticMeshPrimitiveComponent>(), TypeSID<Component::RenderFlagsComponent>(), TypeSID<Component::NameComponent>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::DynamicPhysicsBodyRuntime>(), TypeSID<Component::PhysicsBodyDesc>()},
-            .writes = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::StaticMeshPrimitiveLoadingFlag>(), TypeSID<Component::MultiframeDirtyRequest>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid},
-        });
+        Access<
+            Reads<Component::StaticMeshPrimitiveComponent, Component::MeshRuntime, AssetManager>,
+            DeferredWrites<Component::StaticMeshPrimitiveLoadingFlag>,
+            After<&StaticMeshPrimitivePendingKickoff>>());
     graph.Add("ProceduralMeshLoadResolve",
         &ProceduralMeshLoadResolve,
         {
-            .reads = {TypeSID<Component::ProceduralMeshComponent>(), TypeSID<Component::RenderFlagsComponent>(), TypeSID<Component::NameComponent>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::DynamicPhysicsBodyRuntime>(), TypeSID<Component::PhysicsBodyDesc>()},
-            .writes = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProceduralMeshLoadingFlag>(), TypeSID<Component::MultiframeDirtyRequest>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid, "state.assetLoad.pendingProceduralWait"_sid},
+            .reads = {TypeSID<Component::ProceduralMeshComponent>(), TypeSID<Component::MeshRuntime>(), TypeSID<AssetManager>()},
+            .writes = {"state.assetLoad.pendingProceduralWait"_sid},
+            .deferredWrites = {TypeSID<Component::ProceduralMeshLoadingFlag>()},
+            .after = {SystemId(&ProceduralMeshPendingKickoff)},
         });
     graph.Add("SplineMeshLoadResolve",
         &SplineMeshLoadResolve,
-        {
-            .reads = {TypeSID<Component::SplineMeshComponent>(), TypeSID<Component::RenderFlagsComponent>(), TypeSID<Component::NameComponent>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::DynamicPhysicsBodyRuntime>(), TypeSID<Component::PhysicsBodyDesc>()},
-            .writes = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::SplineMeshLoadingFlag>(), TypeSID<Component::MultiframeDirtyRequest>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid},
-        });
+        Access<
+            Reads<Component::SplineMeshComponent, Component::MeshRuntime, AssetManager>,
+            DeferredWrites<Component::SplineMeshLoadingFlag>,
+            After<&SplineMeshPendingKickoff>>());
     graph.Add("ModuleMeshLoadResolve",
         &ModuleMeshLoadResolve,
-        {
-            .reads = {TypeSID<Component::ModuleMeshComponent>(), TypeSID<Component::RenderFlagsComponent>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::DynamicPhysicsBodyRuntime>(), TypeSID<Component::PhysicsBodyDesc>()},
-            .writes = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ModuleMeshLoadingFlag>(), TypeSID<Component::MultiframeDirtyRequest>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid},
-        });
+        Access<
+            Reads<Component::ModuleMeshComponent, Component::MeshRuntime, AssetManager>,
+            DeferredWrites<Component::ModuleMeshLoadingFlag>,
+            After<&ModuleMeshPendingKickoff>>());
     graph.Add("Text3DLoadResolve",
         &Text3DLoadResolve,
-        {
-            .reads = {TypeSID<Component::Text3DComponent>(), TypeSID<Component::RenderFlagsComponent>(), TypeSID<Component::NameComponent>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::TransformComponent>(), TypeSID<Component::DynamicPhysicsBodyRuntime>(), TypeSID<Component::PhysicsBodyDesc>()},
-            .writes = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::Text3DLoadingFlag>(), TypeSID<Component::MultiframeDirtyRequest>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>(), "modelStore"_sid, "instanceStore"_sid, "instanceStore.dirty"_sid, "instanceStore.boundsChanges"_sid, "instanceStore.visibility"_sid, "triLightStore"_sid},
-        });
+        Access<
+            Reads<Component::Text3DComponent, Component::MeshRuntime, AssetManager>,
+            DeferredWrites<Component::Text3DLoadingFlag>,
+            After<&Text3DGeneratePendingKickoff>>());
     graph.Add("PhysicsMeshLoadResolve",
         &PhysicsMeshLoadResolve,
         Access<
-            Reads<Component::PhysicsShapeRuntime>,
-            Writes<Component::PhysicsMeshLoadingFlag, AssetManager>>());
+            Reads<Component::PhysicsShapeRuntime, AssetManager>,
+            DeferredWrites<Component::PhysicsMeshLoadingFlag>,
+            After<&PhysicsMeshPendingKickoff>>());
     graph.Add("PhysicsShapeCreationResolve",
         &PhysicsShapeCreationResolve,
         Access<
-            Reads<Component::PhysicsBodyDesc, Component::NameComponent, Component::PhysicsMeshRequest, Component::PhysicsMeshLoadingFlag>,
-            Writes<Component::PhysicsShapeRuntime, Component::PhysicsShapeCreationRequest, AssetManager>>());
+            Reads<Component::PhysicsBodyDesc, Component::NameComponent, Component::PhysicsMeshRequest, Component::PhysicsMeshLoadingFlag, AssetManager>,
+            Writes<Component::PhysicsShapeRuntime, Component::PhysicsShapeCreationRequest>>());
     graph.Add("PhysicsBodyCreationResolve",
         &PhysicsBodyCreationResolve,
         Access<

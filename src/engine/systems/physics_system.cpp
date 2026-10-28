@@ -609,72 +609,73 @@ JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engi
     return nullptr;
 }
 
+/** A collider whose source model or font is frozen mid hot-reload stays pending. */
+static bool HasFrozenColliderSource(const Engine::SystemRegistry& registry, const Component::PhysicsBodyDesc& bodyDesc, const Component::PhysicsShapeRuntime& runtime)
+{
+    for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
+        const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
+        if (!collider || runtime.colliders[i].IsValid()) { continue; }
+        if (collider->meshSourceModelId.IsValid()) {
+            if (registry.Service<Engine::AssetManager>().IsModelFrozen(collider->meshSourceModelId)) { return true; }
+            continue;
+        }
+        if (!std::holds_alternative<std::monostate>(collider->proceduralParams) || !collider->splineParams.spline.points.IsEmpty()) { continue; }
+        if (collider->text3DSource.IsValid() && registry.Service<Engine::AssetManager>().IsFontFrozen(collider->text3DSource.fontId)) { return true; }
+    }
+    return false;
+}
+
+static void ApplyPhysicsMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+{
+    if (!registry.Valid(entity)) { return; }
+    const auto* bodyDesc = registry.TryGet<Component::PhysicsBodyDesc>(entity);
+    auto* runtime = registry.TryGetMut<Component::PhysicsShapeRuntime>(entity);
+    if (!bodyDesc || !runtime) { return; }
+    const bool bDynamic = Component::EffectiveMotionType(registry, entity, *bodyDesc) == Component::PhysicsMotionType::Dynamic;
+
+    for (size_t i = 0; i < bodyDesc->shapes.Size(); ++i) {
+        const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc->shapes[i].geometry);
+        if (!collider) { continue; }
+        Engine::PhysicsColliderHandle& handle = runtime->colliders[i];
+        if (handle.IsValid()) { continue; }
+
+        if (collider->meshSourceModelId.IsValid()) {
+            const bool bWantsMesh = collider->bMeshPrecise && !bDynamic;
+            const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
+            handle = registry.ServiceMut<Engine::AssetManager>().LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
+        }
+        else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
+            handle = registry.ServiceMut<Engine::AssetManager>().LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
+        }
+        else if (!collider->splineParams.spline.points.IsEmpty()) {
+            const bool bHollow = collider->bSplineHollow && !bDynamic;
+            handle = registry.ServiceMut<Engine::AssetManager>().LoadSplineCollider(collider->splineParams, bHollow);
+        }
+        else if (collider->text3DSource.IsValid()) {
+            const Component::Text3DShapeSource& t = collider->text3DSource;
+            handle = registry.ServiceMut<Engine::AssetManager>().LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
+        }
+
+        if (!handle.IsValid()) {
+            LOG_WARN(Engine, "Physics collider source could not be loaded. Removing pending tag.");
+            registry.Remove<Component::PhysicsMeshRequest>(entity);
+            return;
+        }
+    }
+
+    registry.Remove<Component::PhysicsMeshRequest>(entity);
+    registry.Set<Component::PhysicsMeshLoadingFlag>(entity);
+}
+
 void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    auto view = registry.View<Component::PhysicsBodyDesc, Engine::Mut<Component::PhysicsShapeRuntime>, Component::PhysicsMeshRequest>();
-    size_t viewCount = view.size_hint();
-    if (viewCount == 0) {
-        return;
-    }
-    const size_t budget = std::min(viewCount, Engine::MAX_ASSET_RESOLVES_PER_TICK);
-    auto started = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    auto abandoned = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), budget);
-    for (auto [entity, bodyDesc, runtime] : view.each()) {
-        if (started.Size() + abandoned.Size() >= budget) { break; }
-        bool allArmed = true;
-        bool shouldAbandon = false;
-        const bool bDynamic = Component::EffectiveMotionType(registry,entity, bodyDesc) == Component::PhysicsMotionType::Dynamic;
-
-        for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
-            const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
-            if (!collider) { continue; }
-            Engine::PhysicsColliderHandle& handle = runtime.colliders[i];
-            if (handle.IsValid()) { continue; }
-
-            if (collider->meshSourceModelId.IsValid()) {
-                if (registry.Service<Engine::AssetManager>().IsModelFrozen(collider->meshSourceModelId)) { allArmed = false; break; }
-
-                const bool bWantsMesh = collider->bMeshPrecise && !bDynamic;
-                const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
-                handle = registry.ServiceMut<Engine::AssetManager>().LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
-            }
-            else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
-                handle = registry.ServiceMut<Engine::AssetManager>().LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
-            }
-            else if (!collider->splineParams.spline.points.IsEmpty()) {
-                const bool bHollow = collider->bSplineHollow && !bDynamic;
-                handle = registry.ServiceMut<Engine::AssetManager>().LoadSplineCollider(collider->splineParams, bHollow);
-            }
-            else if (collider->text3DSource.IsValid()) {
-                const Component::Text3DShapeSource& t = collider->text3DSource;
-                if (registry.Service<Engine::AssetManager>().IsFontFrozen(t.fontId)) { allArmed = false; break; }
-                handle = registry.ServiceMut<Engine::AssetManager>().LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
-            }
-
-            if (!handle.IsValid()) {
-                LOG_WARN(Engine, "Physics collider source could not be loaded. Removing pending tag.");
-                shouldAbandon = true;
-                break;
-            }
-        }
-
-        if (shouldAbandon) {
-            abandoned.PushBack(entity);
-            continue;
-        }
-        if (!allArmed) {
-            continue;
-        }
-        started.PushBack(entity);
-    }
-
-    for (const entt::entity entity : abandoned) {
-        registry.Remove<Component::PhysicsMeshRequest>(entity);
-    }
-    for (const entt::entity entity : started) {
-        registry.Remove<Component::PhysicsMeshRequest>(entity);
-        registry.Set<Component::PhysicsMeshLoadingFlag>(entity);
+    size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
+    for (auto [entity, bodyDesc, runtime] : registry.View<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest>().each()) {
+        if (budget == 0) { break; }
+        if (HasFrozenColliderSource(registry, bodyDesc, runtime)) { continue; }
+        registry.RunExclusive<&ApplyPhysicsMeshKickoff>(entity);
+        --budget;
     }
 }
 

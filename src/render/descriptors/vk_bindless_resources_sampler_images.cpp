@@ -14,9 +14,11 @@ namespace Render
 {
 BindlessResourcesSamplerImages::BindlessResourcesSamplerImages() = default;
 
-BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(VulkanContext* context)
-    : context(context)
+BindlessResourcesSamplerImages::~BindlessResourcesSamplerImages() = default;
+
+void BindlessResourcesSamplerImages::Init(VulkanContext* context_)
 {
+    context = context_;
     DescriptorLayoutBuilder layoutBuilder;
     layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_SAMPLER, BINDLESS_SAMPLER_COUNT);
     layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, BINDLESS_SAMPLED_IMAGE_COUNT);
@@ -39,38 +41,6 @@ BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(VulkanContext* co
     vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
     buffer = AllocatedBuffer::CreateAllocatedBuffer(context, bufferInfo, vmaAllocInfo);
-}
-
-BindlessResourcesSamplerImages::~BindlessResourcesSamplerImages() = default;
-
-BindlessResourcesSamplerImages::BindlessResourcesSamplerImages(BindlessResourcesSamplerImages&& other) noexcept
-    : context(other.context)
-      , buffer(std::move(other.buffer))
-      , descriptorSetLayout(std::move(other.descriptorSetLayout))
-      , descriptorSetSize(other.descriptorSetSize)
-      , samplerAllocator(std::move(other.samplerAllocator))
-      , textureAllocator(std::move(other.textureAllocator))
-      , cubemapAllocator(std::move(other.cubemapAllocator))
-      , textureArrayAllocator(std::move(other.textureArrayAllocator))
-{
-    other.context = nullptr;
-}
-
-BindlessResourcesSamplerImages& BindlessResourcesSamplerImages::operator=(BindlessResourcesSamplerImages&& other) noexcept
-{
-    if (this != &other) {
-        context = other.context;
-        buffer = std::move(other.buffer);
-        descriptorSetLayout = std::move(other.descriptorSetLayout);
-        descriptorSetSize = other.descriptorSetSize;
-        samplerAllocator = std::move(other.samplerAllocator);
-        textureAllocator = std::move(other.textureAllocator);
-        cubemapAllocator = std::move(other.cubemapAllocator);
-        textureArrayAllocator = std::move(other.textureArrayAllocator);
-
-        other.context = nullptr;
-    }
-    return *this;
 }
 
 BindlessSamplerHandle BindlessResourcesSamplerImages::AllocateSampler(VkSampler sampler)
