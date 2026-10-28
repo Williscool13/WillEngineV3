@@ -97,7 +97,7 @@ static void BreakCratesUnderHead(Engine::EngineContext* ctx, Engine::EngineState
 /** Rule C: nothing intact leaves on the pusher. Any crate in what is left of its sweep breaks; one getting this far means the head or the belts let it through. */
 static void BreakCratesInPusherPath(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity pusher, float remaining, Engine::SystemRegistry& registry)
 {
-    const Mat4 toWorld = Component::ComputeWorldTransform(registry, pusher).GetMatrix();
+    const Mat4 toWorld = Component::GetMatrix(registry.Get<Component::WorldTransformRuntime>(pusher));
     const Mat4 toLocal = glm::inverse(toWorld);
 
     const Physics::PhysicsWorld* physics = ctx->physicsWorld;

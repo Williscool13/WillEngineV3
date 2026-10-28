@@ -68,14 +68,26 @@ void PropagateDirtyTransforms(EngineContext* ctx, EngineState* state, SystemRegi
     }
 }
 
+/** A destroyed parent leaves its last composed world in place; an entity that never had a transformed parent was never composed, so its local already is its world. */
 static void ApplyOrphan(SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity) || !registry.Has<Component::WorldTransformRuntime>(entity)) { return; }
-    const auto& world = registry.Get<Component::WorldTransformRuntime>(entity);
+    const auto* node = registry.TryGet<Component::HierarchyComponent>(entity);
+    if (!node) { return; }
+    const entt::entity parent = node->parent;
+    auto& world = registry.GetMut<Component::WorldTransformRuntime>(entity);
     auto& local = registry.GetMut<Component::TransformComponent>(entity);
-    local.translation = world.translation;
-    local.rotation = world.rotation;
-    local.scale = world.scale;
+    if (parent != entt::null && !registry.Valid(parent)) {
+        local.translation = world.translation;
+        local.rotation = world.rotation;
+        local.scale = world.scale;
+    }
+    else {
+        world.translation = local.translation;
+        world.rotation = local.rotation;
+        world.scale = local.scale;
+        registry.Set<Component::RenderTransformDirtyRequest>(entity);
+    }
     registry.Remove<Component::HierarchyComponent>(entity);
 }
 

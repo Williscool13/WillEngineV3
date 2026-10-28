@@ -127,7 +127,7 @@ void CollectSystems(Engine::SystemGraph& graph)
         &UpdateCrushers,
         Engine::SystemWhen::WorldRunning,
         Engine::Access<
-            Engine::Reads<Component::CrusherComponent, Component::ThroatValveRuntime, Component::BreakableComponent, Component::BreakableRuntime, Engine::AssetManager, Component::PhysicsBodyRuntime, Component::HierarchyComponent, Component::NameComponent, Component::ConveyorComponent, Physics::PhysicsWorld>,
+            Engine::Reads<Component::CrusherComponent, Component::ThroatValveRuntime, Component::BreakableComponent, Component::BreakableRuntime, Engine::AssetManager, Component::PhysicsBodyRuntime, Component::HierarchyComponent, Component::WorldTransformRuntime, Component::NameComponent, Component::ConveyorComponent, Physics::PhysicsWorld>,
             Engine::DeferredWrites<Component::TransformComponent, Component::DirtyTransformRequest>,
             Engine::Writes<Component::CrusherRuntime, Component::ConveyorHaltedFlag>>());
     graph.Add("Ballance/LavaContacts",

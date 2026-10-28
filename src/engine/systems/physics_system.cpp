@@ -175,7 +175,7 @@ void PhysicsUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engin
             .bodyID = bodyID,
             .startPosition = {static_cast<float>(p.GetX()), static_cast<float>(p.GetY()), static_cast<float>(p.GetZ())},
             .startRotation = {r.GetW(), r.GetX(), r.GetY(), r.GetZ()},
-            .target = Component::ComputeWorldTransform(registry, entity),
+            .target = registry.Get<Component::WorldTransformRuntime>(entity),
         });
     }
     registry.Clear<Component::DirtyKinematicPhysicsTransformRequest>();

@@ -92,7 +92,7 @@ static void BreakNearCamera(Engine::EngineContext* ctx, Engine::EngineState* sta
     auto view = registry.View<Component::BreakableComponent>();
     auto nearby = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), std::max(view.size(), size_t{1}));
     for (const entt::entity entity : view) {
-        if (glm::distance(Component::ComputeWorldTransform(registry, entity).translation, origin) <= RADIUS) {
+        if (glm::distance(registry.Get<Component::WorldTransformRuntime>(entity).translation, origin) <= RADIUS) {
             nearby.PushBack(entity);
         }
     }
