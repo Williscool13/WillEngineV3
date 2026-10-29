@@ -475,7 +475,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
     {
         ZoneScopedN("GenerateDeclaredTextures");
         for (const auto& pair : assetManager->GetTextureRegistry()) {
-            const AssetManager::DiskTextureDesc& desc = pair.value;
+            const AssetManager::CachedTextureMetadata& desc = pair.value;
             if (!desc.bUngenerated) { continue; }
             auto header = ReadWTextureHeader(desc.source);
             if (!header || header->genSource[0] == '\0') {
@@ -1650,21 +1650,21 @@ void WillEngine::Run()
             materialManager->ResolveMissingTextures();
         }
 
-        for (const Engine::ModelID& id : assetManager->GetChangedModelIds()) {
-            if (engineState->assetLoad.pendingHotReloadModelIds.IsFull()) { break; }
-            engineState->assetLoad.pendingHotReloadModelIds.PushBack(id);
-        }
-        for (const Engine::FontID& id : assetManager->GetChangedFontIds()) {
-            if (engineState->assetLoad.pendingHotReloadFontIds.IsFull()) { break; }
-            engineState->assetLoad.pendingHotReloadFontIds.PushBack(id);
-        }
-        for (const Engine::TextureID& id : assetManager->GetChangedTextureIds()) {
-            if (engineState->assetLoad.pendingHotReloadTextureIds.IsFull()) { break; }
-            engineState->assetLoad.pendingHotReloadTextureIds.PushBack(id);
-        }
-        for (const Engine::EnvironmentMapID& id : assetManager->GetChangedEnvironmentMapIds()) {
-            if (engineState->assetLoad.pendingHotReloadEnvironmentMapIds.IsFull()) { break; }
-            engineState->assetLoad.pendingHotReloadEnvironmentMapIds.PushBack(id);
+        const auto queueHotReloads = [](auto& pending, auto changed, const char* kind) {
+            for (const auto& id : changed) {
+                if (pending.IsFull()) {
+                    LOG_WARN(Asset, "More than {} {} changed at once; the rest will not hot reload", pending.GetCapacity(), kind);
+                    break;
+                }
+                pending.PushBack(id);
+            }
+        };
+        queueHotReloads(engineState->assetLoad.pendingHotReloadModelIds, assetManager->GetChangedModelIds(), "models");
+        queueHotReloads(engineState->assetLoad.pendingHotReloadFontIds, assetManager->GetChangedFontIds(), "fonts");
+        queueHotReloads(engineState->assetLoad.pendingHotReloadTextureIds, assetManager->GetChangedTextureIds(), "textures");
+        queueHotReloads(engineState->assetLoad.pendingHotReloadEnvironmentMapIds, assetManager->GetChangedEnvironmentMapIds(), "environment maps");
+        for (const Engine::TextureArrayID& id : assetManager->GetChangedTextureArrayIds()) {
+            assetManager->ReloadTextureArray(id);
         }
 #endif
 

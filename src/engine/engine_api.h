@@ -275,10 +275,10 @@ struct AssetLoadState
 {
     static constexpr int32_t SETTLED_QUIET_FRAMES = 30;
 
-    Core::InlineVector<ModelID, 16> pendingHotReloadModelIds{};
-    Core::InlineVector<FontID, 16> pendingHotReloadFontIds{};
-    Core::InlineVector<TextureID, 16> pendingHotReloadTextureIds{};
-    Core::InlineVector<EnvironmentMapID, 16> pendingHotReloadEnvironmentMapIds{};
+    Core::InlineVector<ModelID, 256> pendingHotReloadModelIds{};
+    Core::InlineVector<FontID, 256> pendingHotReloadFontIds{};
+    Core::InlineVector<TextureID, 256> pendingHotReloadTextureIds{};
+    Core::InlineVector<EnvironmentMapID, 256> pendingHotReloadEnvironmentMapIds{};
 
     int32_t pendingModelWaitCount{0};
     std::chrono::steady_clock::time_point modelWaitLastActivity{};

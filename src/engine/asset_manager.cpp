@@ -26,21 +26,11 @@ namespace Engine
 {
 AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager)
     : memoryManager(&memoryManager), ctx(ctx), assetLoadManager(assetLoadManager), resourceManager(resourceManager),
-      modelNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
-      modelCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_MODELS),
-      textureNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
-      textureRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES),
-      staticProceduralRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_STATIC_PROCEDURAL_TEXTURES),
-      cubemapNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
-      cubemapCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS),
-      probeRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PROBES),
-      textureArrayCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS),
-      shadowMapRegistry(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS),
-      sceneCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_SCENES),
-      prefabCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PREFABS),
-      playCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_PLAYS),
-      fontNameToId(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
-      fontCache(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_CACHED_FONTS),
+      changedModelIds(&memoryManager.Assets(), Core::AllocTag::AssetManager),
+      changedTextureIds(&memoryManager.Assets(), Core::AllocTag::AssetManager),
+      changedFontIds(&memoryManager.Assets(), Core::AllocTag::AssetManager),
+      changedEnvironmentMapIds(&memoryManager.Assets(), Core::AllocTag::AssetManager),
+      changedTextureArrayIds(&memoryManager.Assets(), Core::AllocTag::AssetManager),
       deferredTextureBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURES),
       deferredCubemapBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS),
       deferredTextureArrayReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURE_ARRAYS)
@@ -56,6 +46,18 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
     cubemaps.Init(&vm, Core::AllocTag::AssetManager, "AssetCubemaps");
     textureArrays.Init(&vm, Core::AllocTag::AssetManager, "AssetTextureArrays");
     fonts.Init(&vm, Core::AllocTag::AssetManager, "AssetFonts");
+
+    Core::TlsfAllocator* assets = &memoryManager.Assets();
+    modelCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_MODELS, "Model");
+    textureRegistry.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_TEXTURES, "Texture");
+    cubemapCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_CUBEMAPS, "Cubemap");
+    probeRegistry.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_PROBES, "Probe");
+    textureArrayCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS, "Texture array");
+    shadowMapRegistry.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_TEXTURE_ARRAYS, "Shadow map");
+    fontCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_FONTS, "Font");
+    sceneCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_SCENES, "Scene");
+    prefabCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_PREFABS, "Prefab");
+    playCache.Init(&vm, assets, Core::AllocTag::AssetManager, MAX_CACHED_PLAYS, "Run");
 
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
@@ -226,7 +228,7 @@ const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID
 
 void AssetManager::RegisterScene(StringID sceneId, const Core::Path& source)
 {
-    CachedSceneMetadata& cached = sceneCache[sceneId];
+    CachedSceneMetadata& cached = sceneCache.Stamp(sceneId, {}, scanGeneration, source).entry;
     cached.source = source;
     cached.sceneName = Core::InlineString<128>(source.Stem());
     cached.entityCount = 0;
@@ -1219,15 +1221,11 @@ ResolveUnloadResult AssetManager::ResolveUnloads()
         }
     });
 
-    const int32_t texturesUnloadedThisTick = textures.Reclaim(currentFrame, [this](Texture& texture, TextureID textureId) {
+    const int32_t texturesUnloadedThisTick = textures.Reclaim(currentFrame, [this](Texture& texture, TextureID) {
         if (bVerboseLogging.load(std::memory_order_relaxed)) {
             LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index));
         }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
-        if (texture.origin == Texture::Origin::RuntimeProcedural) {
-            textureRegistry.Remove(textureId);
-            textureNameToId.Remove(StringID{texture.name.c_str(), texture.name.Size()});
-        }
     });
 
     textureUnloadLog.Tick(texturesUnloadedThisTick, "texture(s) unloaded");
@@ -1273,17 +1271,22 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
     changedTextureIds.Clear();
     changedFontIds.Clear();
     changedEnvironmentMapIds.Clear();
+    changedTextureArrayIds.Clear();
 
     const bool bWalkAssets = ctx->rescan.bResources;
     if (bWalkAssets || ctx->rescan.bScenes) {
         const Core::Path& assetPath = Platform::GetAssetPath();
         const Core::Path& scenePath = Platform::GetScenePath();
-        ++sceneScanGeneration;
+        const uint32_t generation = ++scanGeneration;
         if ((bWalkAssets && Platform::FileExists(assetPath)) || Platform::FileExists(scenePath)) {
             Core::Vector<Core::Path> paths;
             paths = Core::Vector<Core::Path>(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
             if (bWalkAssets && Platform::FileExists(assetPath)) { Platform::RecursiveDirectoryIterator(assetPath, paths); }
             if (Platform::FileExists(scenePath)) { Platform::RecursiveDirectoryIterator(scenePath, paths); }
+
+            const auto skipNoId = [](const char* kind, const Core::Path& path) {
+                LOG_WARN(Asset, "{} '{}' has no id. Regenerate it to fix", kind, path.c_str());
+            };
 
             for (const auto& path : paths) {
                 const auto ext = path.Extension();
@@ -1291,21 +1294,16 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                 if (ext == ".wtexture") {
                     auto header = ReadWTextureHeader(path);
                     if (!header) { continue; }
-                    TextureID id{header->textureId};
-                    const Core::InlineString<128> name{header->name};
-                    const StringID nameSid{name.c_str(), name.Size()};
-                    if (textureNameToId.Contains(nameSid) && *textureNameToId.Find(nameSid) != id) {
-                        if (!ambiguousTextureNames.Contains(nameSid)) {
-                            if (!ambiguousTextureNames.IsFull()) { ambiguousTextureNames.PushBack(nameSid); }
-                            LOG_WARN(Asset, "Texture name '{}' is shared by multiple mounted files (e.g. {}); by-name lookups will pick one arbitrarily", name.c_str(), path.c_str());
-                        }
+                    if (header->textureId == 0) {
+                        skipNoId("Texture", path);
+                        continue;
                     }
-                    const DiskTextureDesc* prev = textureRegistry.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    DiskTextureDesc& cached = textureRegistry[id];
+                    const TextureID id{header->textureId};
+                    const Core::InlineString<128> name{header->name};
+                    const auto [cached, bExisted, prevVersion] = textureRegistry.Stamp(id, StringID{name.c_str(), name.Size()}, generation, path);
+                    cached = {};
                     cached.source = Core::Path(path);
-                    cached.name = Core::InlineString<128>(header->name);
+                    cached.name = name;
                     cached.width = header->width;
                     cached.height = header->height;
                     cached.mipCount = header->mipCount;
@@ -1316,63 +1314,49 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                     cached.contentVersion = header->contentVersion;
                     cached.bUngenerated = header->bUngenerated;
                     cached.category = header->category;
-                    textureNameToId[nameSid] = id;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Texture '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
-                        if (!changedTextureIds.IsFull()) { changedTextureIds.PushBack(id); }
+                        changedTextureIds.PushBack(id);
                     }
                 }
                 else if (ext == ".wsmesh") {
                     auto optModelHeader = ReadWStaticModelHeader(path);
                     if (!optModelHeader) { continue; }
                     if (optModelHeader->modelId == 0) {
-                        LOG_WARN(Asset, "Model '{}' has no modelId. Reimport to fix", path.Stem());
+                        skipNoId("Model", path);
                         continue;
                     }
-                    ModelID id{optModelHeader->modelId};
-
-                    const Core::InlineString<128> name{optModelHeader->name};
-                    const StringID nameSid{name.c_str(), name.Size()};
-                    if (modelNameToId.Contains(nameSid) && *modelNameToId.Find(nameSid) != id) {
-                        LOG_CRITICAL(Asset, "2 Models were mounted that contain the same name. This will cause issues for model lookups by name. ({})", path.c_str());
-                    }
-
                     auto optNodes = ReadWStaticModelNodes(path, *optModelHeader, memoryManager->Assets());
                     if (!optNodes) { continue; }
 
-                    const CachedModelMetadata* prev = modelCache.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    CachedModelMetadata& cached = modelCache[id];
+                    const ModelID id{optModelHeader->modelId};
+                    const Core::InlineString<128> name{optModelHeader->name};
+                    const auto [cached, bExisted, prevVersion] = modelCache.Stamp(id, StringID{name.c_str(), name.Size()}, generation, path);
                     cached.source = Core::Path(path);
-                    cached.name = Core::InlineString(name);
+                    cached.name = name;
                     cached.nodeCount = optModelHeader->nodeCount;
                     cached.meshNodesCount = optModelHeader->meshNodeCount;
                     cached.nodes = std::move(optNodes->nodes);
                     cached.bounds = optNodes->bounds;
                     cached.contentVersion = optModelHeader->contentVersion;
                     cached.uncompressedBodySize = optModelHeader->uncompressedBodySize;
-                    modelNameToId[nameSid] = id;
                     if (bExisted && prevVersion != optModelHeader->contentVersion) {
                         LOG_TRACE(Asset, "Model '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, optModelHeader->contentVersion);
-                        if (!changedModelIds.IsFull()) { changedModelIds.PushBack(id); }
+                        changedModelIds.PushBack(id);
                     }
                 }
                 else if (ext == ".wenvmap") {
                     auto header = ReadWEnvMapHeader(path);
                     if (!header) { continue; }
-                    EnvironmentMapID id{header->environmentMapId};
-                    const Core::InlineString<128> name{header->name};
-                    const StringID nameSid{name.c_str(), name.Size()};
-                    if (cubemapNameToId.Contains(nameSid) && *cubemapNameToId.Find(nameSid) != id) {
-                        LOG_CRITICAL(Asset, "2 Environment maps were mounted that contain the same name. This will cause issues for cubemap lookups by name. ({})", path.c_str());
+                    if (header->environmentMapId == 0) {
+                        skipNoId("Environment map", path);
+                        continue;
                     }
-                    const CachedCubemapMetadata* prev = cubemapCache.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    CachedCubemapMetadata& cached = cubemapCache[id];
+                    const EnvironmentMapID id{header->environmentMapId};
+                    const Core::InlineString<128> name{header->name};
+                    const auto [cached, bExisted, prevVersion] = cubemapCache.Stamp(id, StringID{name.c_str(), name.Size()}, generation, path);
                     cached.source = Core::Path(path);
-                    cached.name = Core::InlineString<128>(header->name);
+                    cached.name = name;
                     cached.width = header->width;
                     cached.height = header->height;
                     cached.mipCount = header->mipCount;
@@ -1381,23 +1365,22 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                     cached.uncompressedSize = header->uncompressedSize;
                     cached.compressionType = header->compressionType;
                     cached.contentVersion = header->contentVersion;
-                    cubemapNameToId[nameSid] = id;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Cubemap '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
-                        if (!changedEnvironmentMapIds.IsFull()) { changedEnvironmentMapIds.PushBack(id); }
+                        changedEnvironmentMapIds.PushBack(id);
                     }
                 }
                 else if (ext == ".wprobe") {
                     auto header = ReadWProbeHeader(path);
                     if (!header) { continue; }
-                    ProbeID probeId{header->probeId};
-                    EnvironmentMapID envMapId{header->environmentMapId};
+                    if (header->probeId == 0 || header->environmentMapId == 0) {
+                        skipNoId("Probe", path);
+                        continue;
+                    }
+                    const ProbeID probeId{header->probeId};
+                    const EnvironmentMapID envMapId{header->environmentMapId};
 
-                    const ProbeInfo* prev = probeRegistry.Find(probeId);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-
-                    ProbeInfo& probeInfo = probeRegistry[probeId];
+                    const auto [probeInfo, bExisted, prevVersion] = probeRegistry.Stamp(probeId, {}, generation, path);
                     probeInfo.source = Core::Path(path);
                     probeInfo.environmentMapId = envMapId;
                     probeInfo.resolution = header->resolution;
@@ -1405,8 +1388,8 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                     probeInfo.contentVersion = header->contentVersion;
                     probeInfo.radianceScale = header->radianceScale;
 
-                    // A probe is a cubemap at runtime; register it into the cubemap cache keyed by its EnvironmentMapID so LoadCubemap and the existing hot-reload path cover probes unchanged.
-                    CachedCubemapMetadata& cached = cubemapCache[envMapId];
+                    // A probe is a cubemap at runtime: its paired cubemap entry (keyed by EnvironmentMapID) lets LoadCubemap and cubemap hot reload cover probes. Stamped together, so they prune together.
+                    CachedCubemapMetadata& cached = cubemapCache.Stamp(envMapId, {}, generation, path).entry;
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(header->name);
                     cached.width = header->width;
@@ -1418,24 +1401,27 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                     cached.compressionType = header->compressionType;
                     cached.contentVersion = header->contentVersion;
                     if (bExisted && prevVersion != header->contentVersion) {
-                        LOG_TRACE(Asset, "Probe '{}' (id {:x}) content changed on disk: v{} -> v{}", Core::InlineString<128>(header->name).c_str(), envMapId.id, prevVersion, header->contentVersion);
-                        if (!changedEnvironmentMapIds.IsFull()) { changedEnvironmentMapIds.PushBack(envMapId); }
+                        LOG_TRACE(Asset, "Probe '{}' (id {:x}) content changed on disk: v{} -> v{}", cached.name.c_str(), envMapId.id, prevVersion, header->contentVersion);
+                        changedEnvironmentMapIds.PushBack(envMapId);
                     }
                 }
                 else if (ext == ".wshadowmap") {
                     auto header = ReadWShadowMapHeader(path);
                     if (!header) { continue; }
-                    const ShadowMapInfo* prev = shadowMapRegistry.Find(header->shadowId);
-                    const bool bChanged = prev != nullptr && prev->contentVersion != header->contentVersion;
+                    if (header->shadowId == 0) {
+                        skipNoId("Shadow map", path);
+                        continue;
+                    }
+                    const TextureArrayID arrayId{header->shadowId};
 
-                    ShadowMapInfo& info = shadowMapRegistry[header->shadowId];
+                    const auto [info, bExisted, prevVersion] = shadowMapRegistry.Stamp(arrayId, {}, generation, path);
                     info.source = Core::Path(path);
                     info.resolution = header->resolution;
                     info.key = header->key;
                     info.contentVersion = header->contentVersion;
 
-                    const TextureArrayID arrayId{header->shadowId};
-                    CachedTextureArrayMetadata& cached = textureArrayCache[arrayId];
+                    // Paired texture array entry, stamped together like probes and their cubemaps.
+                    CachedTextureArrayMetadata& cached = textureArrayCache.Stamp(arrayId, {}, generation, path).entry;
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(path.Stem());
                     cached.dataOffset = header->dataOffset;
@@ -1443,8 +1429,8 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                     cached.uncompressedSize = header->uncompressedSize;
                     cached.compressionType = header->compressionType;
                     cached.contentVersion = header->contentVersion;
-                    if (bChanged) {
-                        ReloadTextureArray(arrayId);
+                    if (bExisted && prevVersion != header->contentVersion) {
+                        changedTextureArrayIds.PushBack(arrayId);
                     }
                 }
                 else if (ext == ".wscene") {
@@ -1456,15 +1442,11 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                         id = StringID{stem.c_str(), stem.Size()};
                         LOG_WARN(Asset, "Scene '{}' has no sceneId, using stem-derived ID. Re-save to fix", stem.c_str());
                     }
-                    const CachedSceneMetadata* prev = sceneCache.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    CachedSceneMetadata& cached = sceneCache[id];
+                    const auto [cached, bExisted, prevVersion] = sceneCache.Stamp(id, {}, generation, path);
                     cached.source = Core::Path(path);
                     cached.sceneName = Core::InlineString<128>(path.Stem());
                     cached.entityCount = header->entityCount;
                     cached.contentVersion = header->contentVersion;
-                    cached.scanGeneration = sceneScanGeneration;
                     cached.bUnsaved = false;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Scene '{}' (id {:x}) content changed on disk: v{} -> v{}", cached.sceneName.c_str(), id.id, prevVersion, header->contentVersion);
@@ -1473,24 +1455,20 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                 else if (ext == ".wsfont") {
                     auto header = ReadWFontHeader(path);
                     if (!header) { continue; }
-                    FontID id{header->fontId};
-                    const Core::InlineString<128> name{header->name};
-                    const StringID nameSid{name.c_str(), name.Size()};
-                    if (fontNameToId.Contains(nameSid) && *fontNameToId.Find(nameSid) != id) {
-                        LOG_CRITICAL(Asset, "Two fonts share the same name; lookups by name will be ambiguous. ({})", path.c_str());
+                    if (header->fontId == 0) {
+                        skipNoId("Font", path);
+                        continue;
                     }
-                    const CachedFontMetadata* prev = fontCache.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    CachedFontMetadata& cached = fontCache[id];
+                    const FontID id{header->fontId};
+                    const Core::InlineString<128> name{header->name};
+                    const auto [cached, bExisted, prevVersion] = fontCache.Stamp(id, StringID{name.c_str(), name.Size()}, generation, path);
                     cached.source = path;
                     cached.name = name;
                     cached.header = *header;
                     cached.contentVersion = header->contentVersion;
-                    fontNameToId[nameSid] = id;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Font '{}' (id {:x}) content changed on disk: v{} -> v{}", name.c_str(), id.id, prevVersion, header->contentVersion);
-                        if (!changedFontIds.IsFull()) { changedFontIds.PushBack(id); }
+                        changedFontIds.PushBack(id);
                     }
                 }
                 else if (ext == ".wprefab") {
@@ -1502,10 +1480,7 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                         id = StringID{stem.c_str(), stem.Size()};
                         LOG_WARN(Asset, "Prefab '{}' has no prefabId, using stem-derived ID. Re-save to fix", stem.c_str());
                     }
-                    const CachedPrefabMetadata* prev = prefabCache.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    CachedPrefabMetadata& cached = prefabCache[id];
+                    const auto [cached, bExisted, prevVersion] = prefabCache.Stamp(id, {}, generation, path);
                     cached.source = Core::Path(path);
                     cached.prefabName = Core::InlineString<128>(header->name);
                     cached.componentCount = header->componentCount;
@@ -1518,16 +1493,12 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
                     auto header = ReadWPlayHeader(path);
                     if (!header) { continue; }
                     const StringID id{path.c_str(), strlen(path.c_str())};
-                    const CachedPlayMetadata* prev = playCache.Find(id);
-                    const bool bExisted = prev != nullptr;
-                    const uint64_t prevVersion = bExisted ? prev->contentVersion : 0;
-                    CachedPlayMetadata& cached = playCache[id];
+                    const auto [cached, bExisted, prevVersion] = playCache.Stamp(id, {}, generation, path);
                     cached.source = Core::Path(path);
                     cached.name = Core::InlineString<128>(header->name);
                     cached.sceneId = StringID{header->sceneId};
                     cached.eventCount = header->eventCount;
                     cached.contentVersion = header->contentVersion;
-                    cached.scanGeneration = sceneScanGeneration;
                     if (bExisted && prevVersion != header->contentVersion) {
                         LOG_TRACE(Asset, "Run '{}' content changed on disk: v{} -> v{}", cached.name.c_str(), prevVersion, header->contentVersion);
                     }
@@ -1548,29 +1519,31 @@ void AssetManager::Scan(Core::Span<const StringID> loadedScenes)
             }
         }
 
-        Core::Vector<StringID> gone(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
-        for (auto [id, meta] : sceneCache) {
-            if (meta.scanGeneration == sceneScanGeneration) { continue; }
-            if (std::ranges::find(loadedScenes, id) != loadedScenes.end()) {
-                if (!meta.bUnsaved) {
-                    LOG_WARN(Asset, "Scene '{}' is loaded but its file is gone from disk; saving writes it back to {}", meta.sceneName.c_str(), meta.source.c_str());
-                    meta.bUnsaved = true;
-                }
-                continue;
+        // Asset kinds are only seen when the asset tree was walked; resident assets keep their entry until they unload.
+        if (bWalkAssets) {
+            modelCache.Prune(generation, [this](ModelID id, const CachedModelMetadata&) { return models.Contains(id); });
+            textureRegistry.Prune(generation, [this](TextureID id, const CachedTextureMetadata&) { return textures.Contains(id); });
+            cubemapCache.Prune(generation, [this](EnvironmentMapID id, const CachedCubemapMetadata&) { return cubemaps.Contains(id); });
+            probeRegistry.Prune(generation, [this](ProbeID, const ProbeInfo& probe) { return cubemaps.Contains(probe.environmentMapId); });
+            textureArrayCache.Prune(generation, [this](TextureArrayID id, const CachedTextureArrayMetadata&) { return textureArrays.Contains(id); });
+            shadowMapRegistry.Prune(generation, [this](TextureArrayID id, const ShadowMapInfo&) { return textureArrays.Contains(id); });
+            fontCache.Prune(generation, [this](FontID id, const CachedFontMetadata&) { return fonts.Contains(id); });
+            prefabCache.Prune(generation, [](StringID, const CachedPrefabMetadata&) { return false; });
+        }
+        sceneCache.Prune(generation, [&loadedScenes](StringID id, CachedSceneMetadata& meta) {
+            if (std::ranges::find(loadedScenes, id) == loadedScenes.end()) { return false; }
+            if (!meta.bUnsaved) {
+                LOG_WARN(Asset, "Scene '{}' is loaded but its file is gone from disk; saving writes it back to {}", meta.sceneName.c_str(), meta.source.c_str());
+                meta.bUnsaved = true;
             }
-            gone.PushBack(id);
-        }
-        for (StringID id : gone) {
-            LOG_INFO(Asset, "Scene '{}' is gone from disk", sceneCache.Find(id)->sceneName.c_str());
-            sceneCache.Remove(id);
-        }
-        gone.Clear();
-        for (const auto& [id, meta] : playCache) {
-            if (meta.scanGeneration != sceneScanGeneration) { gone.PushBack(id); }
-        }
-        for (StringID id : gone) {
-            playCache.Remove(id);
-        }
+            return true;
+        });
+        playCache.Prune(generation, [](StringID, const CachedPlayMetadata&) { return false; });
+
+        modelCache.RebuildNames();
+        textureRegistry.RebuildNames();
+        cubemapCache.RebuildNames();
+        fontCache.RebuildNames();
     }
 
     ctx->rescan.bResources = false;
@@ -1581,37 +1554,41 @@ void AssetManager::RegisterProceduralTextures()
 {
     auto addProceduralToRegistry = [&](Core::InlineString<128> name, StringID pipelineID, uint32_t width, uint32_t height, VkFormat format, bool mipmapped) {
         const TextureID texId{pipelineID.id};
-        StaticProceduralDesc& desc = staticProceduralRegistry[texId];
-        desc.pipelineId = pipelineID;
+        CachedTextureMetadata& desc = textureRegistry.Stamp(texId, StringID{name.c_str(), name.Size()}, CatalogTable<TextureID, CachedTextureMetadata>::PERMANENT, {}).entry;
+        desc.name = name;
         desc.width = width;
         desc.height = height;
+        desc.mipCount = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1u : 1u;
+        desc.category = TextureCategory::Procedural;
+        desc.origin = Texture::Origin::StaticProcedural;
+        desc.pipelineId = pipelineID;
         desc.format = format;
-        desc.mipmapped = mipmapped;
-        desc.name = Core::InlineString<128>(name);
-        textureNameToId[pipelineID] = texId;
+        desc.bMipmapped = mipmapped;
     };
 
     addProceduralToRegistry(Core::InlineString<128>("yellow_texture"), "yellow_texture"_sid, 256, 256, VK_FORMAT_R8G8B8A8_UNORM, true);
     addProceduralToRegistry(Core::InlineString<128>("domain_warp"), "domain_warp"_sid, 512, 512, VK_FORMAT_R8G8B8A8_UNORM, true);
     addProceduralToRegistry(Core::InlineString<128>("greybox"), "greybox"_sid, 1024, 1024, VK_FORMAT_R8G8B8A8_UNORM, true);
+    textureRegistry.RebuildNames();
 }
 
 Texture* AssetManager::LoadTexture(TextureID textureId)
 {
-    if (textureRegistry.Contains(textureId)) {
-        return LoadDiskTexture(textureId);
+    const CachedTextureMetadata* meta = textureRegistry.Find(textureId);
+    if (meta == nullptr) {
+        LOG_ERROR(Asset, "LoadTexture: TextureID {:x} not found in the texture catalog", textureId.id);
+        return nullptr;
     }
-    if (const StaticProceduralDesc* desc = staticProceduralRegistry.Find(textureId)) {
-        return LoadProceduralTexture(desc->pipelineId, desc->width, desc->height, desc->format, desc->mipmapped, Texture::Origin::StaticProcedural, desc->name);
+    if (meta->origin == Texture::Origin::StaticProcedural) {
+        return LoadProceduralTexture(meta->pipelineId, meta->width, meta->height, meta->format, meta->bMipmapped, Texture::Origin::StaticProcedural, meta->name);
     }
-    LOG_ERROR(Asset, "LoadTexture: TextureID {:x} not found in disk cache or static procedural registry", textureId.id);
-    return nullptr;
+    return LoadDiskTexture(textureId);
 }
 
 Texture* AssetManager::LoadDiskTexture(TextureID textureId)
 {
-    const DiskTextureDesc* meta = textureRegistry.Find(textureId);
-    if (meta == nullptr) {
+    const CachedTextureMetadata* meta = textureRegistry.Find(textureId);
+    if (meta == nullptr || meta->origin != Texture::Origin::Disk) {
         LOG_ERROR(Asset, "LoadDiskTexture: TextureID {:x} not in disk cache", textureId.id);
         return nullptr;
     }
@@ -1684,8 +1661,6 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
     }
     if (!bCreated) { return texture; }
 
-    textureNameToId[StringID{name.c_str(), name.Size()}] = textureId;
-
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
         LOG_TRACE(Asset, "Requesting procedural texture load: {:x} ({}x{}, {} mips)", textureId.id, width, height, mipCount);
     }
@@ -1697,14 +1672,13 @@ Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width
 void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const
 {
     for (const auto& [texId, desc] : textureRegistry) {
-        out[texId] = {texId, desc.name, desc.width, desc.height, desc.mipCount, desc.category};
-    }
-    for (const auto& [texId, desc] : staticProceduralRegistry) {
-        uint32_t mipCount = desc.mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(desc.width, desc.height))))) + 1u : 1u;
-        if (const Texture* loaded = textures.Get(textures.Find(texId))) {
-            mipCount = loaded->mipCount;
+        uint32_t mipCount = desc.mipCount;
+        if (desc.origin == Texture::Origin::StaticProcedural) {
+            if (const Texture* loaded = textures.Get(textures.Find(texId))) {
+                mipCount = loaded->mipCount;
+            }
         }
-        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount, TextureCategory::Procedural};
+        out[texId] = {texId, desc.name, desc.width, desc.height, mipCount, desc.category};
     }
     textures.ForEach([&out](TextureHandle, const Texture& tex) {
         if (tex.origin == Texture::Origin::RuntimeProcedural) {
@@ -1740,7 +1714,8 @@ bool AssetManager::ReloadProceduralTexture(TextureID textureId)
 
 bool AssetManager::ReloadTexture(TextureID textureId)
 {
-    if (!textureRegistry.Contains(textureId)) {
+    const CachedTextureMetadata* metaPtr = textureRegistry.Find(textureId);
+    if (metaPtr == nullptr || metaPtr->origin != Texture::Origin::Disk) {
         if (ReloadProceduralTexture(textureId)) {
             return true;
         }
@@ -1755,7 +1730,7 @@ bool AssetManager::ReloadTexture(TextureID textureId)
         return false;
     }
 
-    const DiskTextureDesc& meta = textureRegistry[textureId];
+    const CachedTextureMetadata& meta = *metaPtr;
 
     Texture& texture = *texturePtr;
     if (texture.loadedContentVersion == meta.contentVersion) {
@@ -2022,7 +1997,7 @@ void AssetManager::UnloadTextureArray(TextureArrayHandle handle)
 
 TextureArrayHandle AssetManager::LoadShadowMap(uint64_t shadowId)
 {
-    if (!shadowMapRegistry.Contains(shadowId)) {
+    if (!shadowMapRegistry.Contains(TextureArrayID{shadowId})) {
         return TextureArrayHandle::INVALID;
     }
     return LoadTextureArray(TextureArrayID{shadowId});
