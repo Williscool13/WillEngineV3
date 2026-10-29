@@ -7,6 +7,7 @@
 
 #include "asset_manager_config.h"
 #include "asset_manager_types.h"
+#include "asset_pool.h"
 #include "engine/core/environment_map_id.h"
 #include "engine/core/font_id.h"
 #include "engine/core/model_id.h"
@@ -17,6 +18,7 @@
 #include "engine/resources/environment_map/probe_format.h"
 #include "engine/resources/shadow_map/shadow_map_format.h"
 #include "engine/include/engine_context.h"
+#include "core/containers/concurrent_slot_pool.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
 #include "core/containers/array.h"
@@ -92,11 +94,11 @@ public: // Models
         return found ? *found : ModelID::INVALID;
     }
 
-    [[nodiscard]] uint32_t GetActiveModelCount() const { return modelAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveTextureCount() const { return textureAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveSamplerCount() const { return samplerAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveCubemapCount() const { return cubemapAllocator.GetCount(); }
-    [[nodiscard]] uint32_t GetActiveTextureArrayCount() const { return textureArrayAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveModelCount() const { return models.Count(); }
+    [[nodiscard]] uint32_t GetActiveTextureCount() const { return textures.Count(); }
+    [[nodiscard]] uint32_t GetActiveSamplerCount() const { return samplers.Count(); }
+    [[nodiscard]] uint32_t GetActiveCubemapCount() const { return cubemaps.Count(); }
+    [[nodiscard]] uint32_t GetActiveTextureArrayCount() const { return textureArrays.Count(); }
 
     StaticModelHandle LoadModel(ModelID modelId);
 
@@ -121,7 +123,7 @@ public: // Models
     void FreezeModel(ModelID modelId);
     void UnfreezeModel(ModelID modelId);
     [[nodiscard]] bool IsModelFrozen(ModelID modelId) const;
-    [[nodiscard]] bool IsModelResident(ModelID modelId) const { return modelIdToHandle.Contains(modelId); }
+    [[nodiscard]] bool IsModelResident(ModelID modelId) const { return models.Contains(modelId); }
 
     struct CachedModelMetadata
     {
@@ -171,7 +173,7 @@ public: // Physics colliders (CPU-only, analytic)
 
     void UnloadCollider(PhysicsColliderHandle handle);
 
-    [[nodiscard]] uint32_t GetActiveColliderCount() const { return colliderAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveColliderCount() const { return colliders.Count(); }
 
     [[nodiscard]] const CachedModelMetadata* GetModelMetadata(ModelID modelID) const
     {
@@ -219,14 +221,14 @@ public: // Textures
 
     bool IsTextureLoaded(const TextureID textureId) const
     {
-        return textureIdToHandle.Contains(textureId);
+        return textures.Contains(textureId);
     }
     
     [[nodiscard]] int32_t GetTextureBindlessIndex(const TextureID textureId) const
     {
-        const TextureHandle* handle = textureIdToHandle.Find(textureId);
-        if (handle == nullptr || !textureAllocator.IsValid(*handle)) { return -1; }
-        return static_cast<int32_t>(textures[handle->index].bindlessHandle.index);
+        const Texture* texture = textures.Get(textures.Find(textureId));
+        if (texture == nullptr) { return -1; }
+        return static_cast<int32_t>(texture->bindlessHandle.index);
     }
 
     [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
@@ -262,7 +264,7 @@ public: // Textures
     void UnloadTexture(TextureID id);
 
     /** @return Upper bound on the number of textures GetAllTextureInfos will emit; use for map capacity. */
-    [[nodiscard]] uint32_t GetTextureInfoCount() const { return static_cast<uint32_t>(textureRegistry.Size() + staticProceduralRegistry.Size() + textureIdToHandle.Size()); }
+    [[nodiscard]] uint32_t GetTextureInfoCount() const { return static_cast<uint32_t>(textureRegistry.Size() + staticProceduralRegistry.Size() + textures.Count()); }
 
     /**
      * Populate a caller-owned ArenaFixedMap with info for every known texture (disk + static procedural + loaded runtime procedurals).
@@ -286,7 +288,7 @@ public: // Cubemaps
 
     [[nodiscard]] bool IsCubemapLoaded(const EnvironmentMapID cubemapId) const
     {
-        return cubemapIdToHandle.Contains(cubemapId);
+        return cubemaps.Contains(cubemapId);
     }
 
     CubemapHandle LoadCubemap(EnvironmentMapID cubemapId);
@@ -400,7 +402,7 @@ public: // Fonts
     void FreezeFont(FontID fontId);
     void UnfreezeFont(FontID fontId);
     [[nodiscard]] bool IsFontFrozen(FontID fontId) const;
-    [[nodiscard]] bool IsFontResident(FontID fontId) const { return fontIdToHandle.Contains(fontId); }
+    [[nodiscard]] bool IsFontResident(FontID fontId) const { return fonts.Contains(fontId); }
 
     Font* GetFont(FontHandle handle);
     const Font* GetFont(FontHandle handle) const;
@@ -419,7 +421,7 @@ public: // Fonts
     [[nodiscard]] const Core::FixedMap<StringID, FontID>& GetFontNameToId() const { return fontNameToId; }
     [[nodiscard]] const Core::FixedMap<FontID, CachedFontMetadata>& GetFontCache() const { return fontCache; }
     [[nodiscard]] const CachedFontMetadata* GetFontMetadata(FontID fontId) const { return fontCache.Find(fontId); }
-    [[nodiscard]] uint32_t GetActiveFontCount() const { return fontAllocator.GetCount(); }
+    [[nodiscard]] uint32_t GetActiveFontCount() const { return fonts.Count(); }
 
 public: // Per-Tick calls
     ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer);
@@ -465,74 +467,44 @@ private:
     // OffsetAllocator because it's always contiguous
     OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
-    Core::InlineMap<ModelID, StaticModelHandle, 4096> modelIdToHandle;
-    Core::HandleAllocator<StaticModel, MAX_LOADED_MODELS> modelAllocator;
-    Core::Array<StaticModel, MAX_LOADED_MODELS> models;
+    AssetPool<StaticModel, ModelID, MAX_LOADED_MODELS> models;
 
-    Core::Array<ModuleParams, MAX_LOADED_MODULE_MODELS> moduleParamsPool;
-    Core::InlineVector<uint32_t, MAX_LOADED_MODULE_MODELS> moduleParamsFreeList;
-    Core::Array<SplineParams, MAX_POOLED_SPLINE_PARAMS> splineParamsPool;
-    Core::InlineVector<uint32_t, MAX_POOLED_SPLINE_PARAMS> splineParamsFreeList;
-    Core::Array<Text3DParams, MAX_POOLED_TEXT3D_PARAMS> text3DParamsPool;
-    Core::InlineVector<uint32_t, MAX_POOLED_TEXT3D_PARAMS> text3DParamsFreeList;
+    Core::ConcurrentSlotPool<ModuleParams, MAX_LOADED_MODULE_MODELS> moduleParamsPool;
+    Core::ConcurrentSlotPool<SplineParams, MAX_POOLED_SPLINE_PARAMS> splineParamsPool;
+    Core::ConcurrentSlotPool<Text3DParams, MAX_POOLED_TEXT3D_PARAMS> text3DParamsPool;
 
-    Core::InlineMap<PhysicsColliderID, PhysicsColliderHandle, 4096> colliderIdToHandle;
-    Core::HandleAllocator<PhysicsColliderAsset, MAX_LOADED_COLLIDERS> colliderAllocator;
-    Core::Array<PhysicsColliderAsset, MAX_LOADED_COLLIDERS> colliders;
+    AssetPool<PhysicsColliderAsset, PhysicsColliderID, MAX_LOADED_COLLIDERS> colliders;
+    AssetPool<Texture, TextureID, MAX_LOADED_TEXTURES> textures;
+    AssetPool<Sampler, SamplerID, MAX_LOADED_SAMPLERS> samplers;
+    AssetPool<Render::Cubemap, EnvironmentMapID, MAX_LOADED_CUBEMAPS> cubemaps;
+    AssetPool<Render::TextureArray, TextureArrayID, MAX_LOADED_TEXTURE_ARRAYS> textureArrays;
 
-    Core::HandleAllocator<Texture, MAX_LOADED_TEXTURES> textureAllocator;
-    Core::Array<Texture, MAX_LOADED_TEXTURES> textures{};
-    Core::InlineMap<TextureID, TextureHandle, 4096> textureIdToHandle;
+    /** Batches per-tick counts into one "N <what>" line once activity has been idle ASSET_LOG_IDLE_SECONDS. */
+    struct IdleLogCounter
+    {
+        int32_t pending{0};
+        std::chrono::steady_clock::time_point lastActivity{};
 
-    Core::HandleAllocator<Sampler, MAX_LOADED_SAMPLERS> samplerAllocator;
-    Core::Array<Sampler, MAX_LOADED_SAMPLERS> samplers{};
-    Core::InlineMap<SamplerID, SamplerHandle, 256> samplerIdToHandle;
+        void Tick(int32_t thisTick, const char* what);
+    };
 
-    Core::HandleAllocator<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemapAllocator;
-    Core::Array<Render::Cubemap, MAX_LOADED_CUBEMAPS> cubemaps{};
-    Core::InlineMap<EnvironmentMapID, CubemapHandle, 512> cubemapIdToHandle;
+    IdleLogCounter modelLoadLog{};
+    IdleLogCounter textureLoadLog{};
+    IdleLogCounter proceduralTextureLoadLog{};
+    IdleLogCounter cubemapLoadLog{};
+    IdleLogCounter samplerLoadLog{};
 
-    Core::HandleAllocator<Render::TextureArray, MAX_LOADED_TEXTURE_ARRAYS> textureArrayAllocator;
-    Core::Array<Render::TextureArray, MAX_LOADED_TEXTURE_ARRAYS> textureArrays{};
-    Core::InlineMap<TextureArrayID, TextureArrayHandle, 512> textureArrayIdToHandle;
-
-    int32_t pendingModelLogCount{0};
-    std::chrono::steady_clock::time_point modelLastActivity{};
-
-    int32_t pendingTextureLogCount{0};
-    std::chrono::steady_clock::time_point textureLastActivity{};
-
-    int32_t pendingProceduralTextureLogCount{0};
-    std::chrono::steady_clock::time_point proceduralTextureLastActivity{};
-
-    int32_t pendingCubemapLogCount{0};
-    std::chrono::steady_clock::time_point cubemapLastActivity{};
-
-    int32_t pendingSamplerLogCount{0};
-    std::chrono::steady_clock::time_point samplerLastActivity{};
-
-    Core::HandleAllocator<Font, MAX_LOADED_FONTS> fontAllocator;
-    Core::Array<Font, MAX_LOADED_FONTS> fonts{};
-    Core::InlineMap<FontID, FontHandle, MAX_LOADED_FONTS> fontIdToHandle;
+    AssetPool<Font, FontID, MAX_LOADED_FONTS> fonts;
 
     // Hot-reload freeze sets (editor-only): load resolve systems must not (re)acquire them until unfrozen.
     Core::InlineVector<ModelID, 16> frozenModelIds{};
     Core::InlineVector<FontID, 16> frozenFontIds{};
 
-    int32_t pendingFontLogCount{0};
-    std::chrono::steady_clock::time_point fontLastActivity{};
-
-    int32_t pendingFontUnloadLogCount{0};
-    std::chrono::steady_clock::time_point fontUnloadLastActivity{};
-
-    int32_t pendingModelUnloadLogCount{0};
-    std::chrono::steady_clock::time_point modelUnloadLastActivity{};
-
-    int32_t pendingTextureUnloadLogCount{0};
-    std::chrono::steady_clock::time_point textureUnloadLastActivity{};
-
-    int32_t pendingSamplerUnloadLogCount{0};
-    std::chrono::steady_clock::time_point samplerUnloadLastActivity{};
+    IdleLogCounter fontLoadLog{};
+    IdleLogCounter fontUnloadLog{};
+    IdleLogCounter modelUnloadLog{};
+    IdleLogCounter textureUnloadLog{};
+    IdleLogCounter samplerUnloadLog{};
 
 public: // Scenes
     struct CachedSceneMetadata

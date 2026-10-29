@@ -39,8 +39,6 @@ struct Texture
     uint64_t acquireFrame{UINT64_MAX};
     enum class Origin { Disk, StaticProcedural, RuntimeProcedural };
 
-    uint32_t refCount = 0;
-    uint64_t retireFrame = 0;
     Origin origin{Origin::Disk};
     uint64_t loadedContentVersion{0};
 

@@ -45,15 +45,17 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
       deferredCubemapBindingReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_CUBEMAPS),
       deferredTextureArrayReleases(&memoryManager.Assets(), Core::AllocTag::AssetManager, MAX_LOADED_TEXTURE_ARRAYS)
 {
-    for (uint32_t i = MAX_LOADED_MODULE_MODELS; i > 0; i--) {
-        moduleParamsFreeList.PushBack(i - 1);
-    }
-    for (uint32_t i = MAX_POOLED_SPLINE_PARAMS; i > 0; i--) {
-        splineParamsFreeList.PushBack(i - 1);
-    }
-    for (uint32_t i = MAX_POOLED_TEXT3D_PARAMS; i > 0; i--) {
-        text3DParamsFreeList.PushBack(i - 1);
-    }
+    Core::VirtualMemoryManager& vm = memoryManager.Virtual();
+    models.Init(&vm, Core::AllocTag::AssetManager, "AssetModels");
+    moduleParamsPool.Init(&vm, Core::AllocTag::AssetManager, "AssetModuleParams");
+    splineParamsPool.Init(&vm, Core::AllocTag::AssetManager, "AssetSplineParams");
+    text3DParamsPool.Init(&vm, Core::AllocTag::AssetManager, "AssetText3DParams");
+    colliders.Init(&vm, Core::AllocTag::AssetManager, "AssetColliders");
+    textures.Init(&vm, Core::AllocTag::AssetManager, "AssetTextures");
+    samplers.Init(&vm, Core::AllocTag::AssetManager, "AssetSamplers");
+    cubemaps.Init(&vm, Core::AllocTag::AssetManager, "AssetCubemaps");
+    textureArrays.Init(&vm, Core::AllocTag::AssetManager, "AssetTextureArrays");
+    fonts.Init(&vm, Core::AllocTag::AssetManager, "AssetFonts");
 
 #if WILL_EDITOR
     // Creates white/error if they don't exist. Also creates BRDF LUT
@@ -210,12 +212,11 @@ AssetManager::AssetManager(Core::MemoryManager& memoryManager, Engine::EngineCon
 
 AssetManager::~AssetManager()
 {
-    for (auto& model : models) {
-        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+    models.ForEach([this](StaticModelHandle, StaticModel& model) {
         if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
             model.modelData.Reset(resourceManager);
         }
-    }
+    });
 }
 
 const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID sceneId) const
@@ -320,47 +321,35 @@ bool AssetManager::DeletePrefab(StringID prefabId)
 
 StaticModelHandle AssetManager::LoadModel(ModelID modelId)
 {
-    if (!modelCache.Contains(modelId)) {
+    const CachedModelMetadata* meta = modelCache.Find(modelId);
+    if (meta == nullptr) {
         LOG_ERROR(Asset, "Model '{}' not found in registry", modelId.id);
         return StaticModelHandle::INVALID;
     }
 
-    StaticModelHandle* existingPtr = modelIdToHandle.Find(modelId);
-    if (existingPtr != nullptr) {
-        StaticModelHandle existingHandle = *existingPtr;
-        if (modelAllocator.IsValid(existingHandle)) {
-            StaticModel& model = models[existingHandle.index];
-            model.refCount++;
-            model.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
-            }
-            return existingHandle;
-        }
-        modelIdToHandle.Remove(modelId);
-    }
-
-    StaticModelHandle handle = modelAllocator.Add();
+    const auto [handle, model, bCreated] = models.Acquire(modelId, [&](StaticModel& m, StaticModelHandle h) {
+        m.selfHandle = h;
+        m.name = meta->name;
+        m.source = meta->source;
+        m.uncompressedBodySize = meta->uncompressedBodySize;
+        m.modelId = modelId;
+        m.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+    });
     if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", modelCache[modelId].name.c_str());
+        LOG_ERROR(Asset, "Failed to allocate model slot for: {}", meta->name.c_str());
         return StaticModelHandle::INVALID;
     }
-
-    StaticModel& model = models[handle.index];
-    model.selfHandle = handle;
-    model.name = modelCache[modelId].name;
-    model.source = modelCache[modelId].source;
-    model.uncompressedBodySize = modelCache[modelId].uncompressedBodySize;
-    model.modelId = modelId;
-    model.refCount = 1;
-    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-
-    modelIdToHandle[modelId] = handle;
+    if (!bCreated) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Model already loaded: {}, refCount: {}", model->name.c_str(), models.RefCount(handle));
+        }
+        return handle;
+    }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting model load: {}", model.name.c_str());
+        LOG_TRACE(Asset, "Requesting model load: {}", model->name.c_str());
     }
-    assetLoadManager->RequestModelLoad(&model);
+    assetLoadManager->RequestModelLoad(model);
 
     return handle;
 }
@@ -378,45 +367,32 @@ StaticModelHandle AssetManager::LoadProceduralModel(const ProceduralParams& para
         h.Add(&repeat, sizeof(repeat));
     }
 
-    ModelID proceduralModelId{h.Finish()};
+    const ModelID proceduralModelId{h.Finish()};
 
-    StaticModelHandle* existingPtr = modelIdToHandle.Find(proceduralModelId);
-    if (existingPtr != nullptr) {
-        StaticModelHandle existingHandle = *existingPtr;
-        if (modelAllocator.IsValid(existingHandle)) {
-            StaticModel& model = models[existingHandle.index];
-            model.refCount++;
-            model.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model.name.c_str(), model.refCount);
-            }
-            return existingHandle;
-        }
-        modelIdToHandle.Remove(proceduralModelId);
-    }
-
-    StaticModelHandle handle = modelAllocator.Add();
+    static std::atomic<int32_t> proceduralCounter{0};
+    const auto [handle, model, bCreated] = models.Acquire(proceduralModelId, [&](StaticModel& m, StaticModelHandle mh) {
+        m.selfHandle = mh;
+        m.name = Core::InlineString<128>::Format("Procedural Mesh %d", proceduralCounter.fetch_add(1, std::memory_order_relaxed));
+        m.modelId = proceduralModelId;
+        m.proceduralParams = params;
+        m.proceduralRepeat = repeat.IsActive() ? repeat : ProceduralRepeat{};
+        m.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate model slot for: {}", proceduralModelId.id);
         return StaticModelHandle::INVALID;
     }
-
-    static int32_t proceduralCounter = 0;
-    StaticModel& model = models[handle.index];
-    model.selfHandle = handle;
-    model.name = Core::InlineString<128>::Format("Procedural Mesh %d", proceduralCounter++);
-    model.modelId = proceduralModelId;
-    model.proceduralParams = params;
-    model.proceduralRepeat = repeat.IsActive() ? repeat : ProceduralRepeat{};
-    model.refCount = 1;
-    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-
-    modelIdToHandle[proceduralModelId] = handle;
+    if (!bCreated) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Procedural model already loaded: {}, refCount: {}", model->name.c_str(), models.RefCount(handle));
+        }
+        return handle;
+    }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting procedural model load: {}", model.name.c_str());
+        LOG_TRACE(Asset, "Requesting procedural model load: {}", model->name.c_str());
     }
-    assetLoadManager->RequestProceduralModelLoad(&model);
+    assetLoadManager->RequestProceduralModelLoad(model);
 
     return handle;
 }
@@ -465,53 +441,42 @@ static uint64_t HashSplineParams(const SplineParams& params)
 
 StaticModelHandle AssetManager::LoadSplineModel(const SplineParams& params)
 {
-    ModelID splineModelId{HashSplineParams(params)};
+    const ModelID splineModelId{HashSplineParams(params)};
 
-    StaticModelHandle* existingPtr = modelIdToHandle.Find(splineModelId);
-    if (existingPtr != nullptr) {
-        StaticModelHandle existingHandle = *existingPtr;
-        if (modelAllocator.IsValid(existingHandle)) {
-            StaticModel& model = models[existingHandle.index];
-            model.refCount++;
-            model.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, model.refCount);
-            }
-            return existingHandle;
+    if (const StaticModelHandle existing = models.AddRef(splineModelId); existing.IsValid()) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Spline model already loaded: {}, refCount: {}", splineModelId.id, models.RefCount(existing));
         }
-        modelIdToHandle.Remove(splineModelId);
+        return existing;
     }
 
-    if (splineParamsFreeList.IsEmpty()) {
+    const auto paramsHandle = splineParamsPool.Add();
+    SplineParams* pooledParams = splineParamsPool.Get(paramsHandle);
+    if (pooledParams == nullptr) {
         LOG_ERROR(Asset, "Spline params pool exhausted ({} live spline models/colliders)", MAX_POOLED_SPLINE_PARAMS);
         return StaticModelHandle::INVALID;
     }
+    *pooledParams = params;
 
-    StaticModelHandle handle = modelAllocator.Add();
+    static std::atomic<int32_t> splineCounter{0};
+    const auto [handle, model, bCreated] = models.Acquire(splineModelId, [&](StaticModel& m, StaticModelHandle h) {
+        m.selfHandle = h;
+        m.name = Core::InlineString<128>::Format("Spline Mesh %d", splineCounter.fetch_add(1, std::memory_order_relaxed));
+        m.modelId = splineModelId;
+        m.splineParams = pooledParams;
+        m.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+    });
+    if (!bCreated) { splineParamsPool.Remove(paramsHandle); }
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate model slot for spline");
         return StaticModelHandle::INVALID;
     }
-
-    const uint32_t paramsSlot = splineParamsFreeList.Back();
-    splineParamsFreeList.PopBack();
-    splineParamsPool[paramsSlot] = params;
-
-    static int32_t splineCounter = 0;
-    StaticModel& model = models[handle.index];
-    model.selfHandle = handle;
-    model.name = Core::InlineString<128>::Format("Spline Mesh %d", splineCounter++);
-    model.modelId = splineModelId;
-    model.splineParams = &splineParamsPool[paramsSlot];
-    model.refCount = 1;
-    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-
-    modelIdToHandle[splineModelId] = handle;
+    if (!bCreated) { return handle; }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting spline model load: {}", model.name.c_str());
+        LOG_TRACE(Asset, "Requesting spline model load: {}", model->name.c_str());
     }
-    assetLoadManager->RequestProceduralModelLoad(&model);
+    assetLoadManager->RequestProceduralModelLoad(model);
     return handle;
 }
 
@@ -533,53 +498,42 @@ StaticModelHandle AssetManager::LoadModuleModel(const ModuleParams& params)
         h.Add(part.materialSlot);
     }
 
-    ModelID moduleModelId{h.Finish()};
+    const ModelID moduleModelId{h.Finish()};
 
-    StaticModelHandle* existingPtr = modelIdToHandle.Find(moduleModelId);
-    if (existingPtr != nullptr) {
-        StaticModelHandle existingHandle = *existingPtr;
-        if (modelAllocator.IsValid(existingHandle)) {
-            StaticModel& model = models[existingHandle.index];
-            model.refCount++;
-            model.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Module model already loaded: {}, refCount: {}", moduleModelId.id, model.refCount);
-            }
-            return existingHandle;
+    if (const StaticModelHandle existing = models.AddRef(moduleModelId); existing.IsValid()) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Module model already loaded: {}, refCount: {}", moduleModelId.id, models.RefCount(existing));
         }
-        modelIdToHandle.Remove(moduleModelId);
+        return existing;
     }
 
-    if (moduleParamsFreeList.IsEmpty()) {
+    const auto paramsHandle = moduleParamsPool.Add();
+    ModuleParams* pooledParams = moduleParamsPool.Get(paramsHandle);
+    if (pooledParams == nullptr) {
         LOG_ERROR(Asset, "Module params pool exhausted ({} live module models)", MAX_LOADED_MODULE_MODELS);
         return StaticModelHandle::INVALID;
     }
+    *pooledParams = params;
 
-    StaticModelHandle handle = modelAllocator.Add();
+    static std::atomic<int32_t> moduleCounter{0};
+    const auto [handle, model, bCreated] = models.Acquire(moduleModelId, [&](StaticModel& m, StaticModelHandle mh) {
+        m.selfHandle = mh;
+        m.name = Core::InlineString<128>::Format("Module Mesh %d", moduleCounter.fetch_add(1, std::memory_order_relaxed));
+        m.modelId = moduleModelId;
+        m.moduleParams = pooledParams;
+        m.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+    });
+    if (!bCreated) { moduleParamsPool.Remove(paramsHandle); }
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate model slot for module");
         return StaticModelHandle::INVALID;
     }
-
-    const uint32_t paramsSlot = moduleParamsFreeList.Back();
-    moduleParamsFreeList.PopBack();
-    moduleParamsPool[paramsSlot] = params;
-
-    static int32_t moduleCounter = 0;
-    StaticModel& model = models[handle.index];
-    model.selfHandle = handle;
-    model.name = Core::InlineString<128>::Format("Module Mesh %d", moduleCounter++);
-    model.modelId = moduleModelId;
-    model.moduleParams = &moduleParamsPool[paramsSlot];
-    model.refCount = 1;
-    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-
-    modelIdToHandle[moduleModelId] = handle;
+    if (!bCreated) { return handle; }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting module model load: {}", model.name.c_str());
+        LOG_TRACE(Asset, "Requesting module model load: {}", model->name.c_str());
     }
-    assetLoadManager->RequestProceduralModelLoad(&model);
+    assetLoadManager->RequestProceduralModelLoad(model);
     return handle;
 }
 
@@ -604,24 +558,18 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
         h.Add(bendRadius);
     }
 
-    ModelID textModelId{h.Finish()};
+    const ModelID textModelId{h.Finish()};
 
-    StaticModelHandle* existingPtr = modelIdToHandle.Find(textModelId);
-    if (existingPtr != nullptr) {
-        StaticModelHandle existingHandle = *existingPtr;
-        if (modelAllocator.IsValid(existingHandle)) {
-            StaticModel& model = models[existingHandle.index];
-            model.refCount++;
-            model.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Text3D model already loaded: {}, refCount: {}", textModelId.id, model.refCount);
-            }
-            return existingHandle;
+    if (const StaticModelHandle existing = models.AddRef(textModelId); existing.IsValid()) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Text3D model already loaded: {}, refCount: {}", textModelId.id, models.RefCount(existing));
         }
-        modelIdToHandle.Remove(textModelId);
+        return existing;
     }
 
-    if (text3DParamsFreeList.IsEmpty()) {
+    const auto paramsHandle = text3DParamsPool.Add();
+    Text3DParams* pooledParams = text3DParamsPool.Get(paramsHandle);
+    if (pooledParams == nullptr) {
         LOG_ERROR(Asset, "Text3D params pool exhausted ({} live text3D models/colliders)", MAX_POOLED_TEXT3D_PARAMS);
         return StaticModelHandle::INVALID;
     }
@@ -629,20 +577,11 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     FontHandle fontHandle = LoadFont(fontId);
     if (!fontHandle.IsValid()) {
         LOG_ERROR(Asset, "LoadText3DModel: font {} could not be loaded", fontId.id);
+        text3DParamsPool.Remove(paramsHandle);
         return StaticModelHandle::INVALID;
     }
 
-    StaticModelHandle handle = modelAllocator.Add();
-    if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate model slot for 3D text");
-        UnloadFont(fontHandle);
-        return StaticModelHandle::INVALID;
-    }
-
-    const uint32_t paramsSlot = text3DParamsFreeList.Back();
-    text3DParamsFreeList.PopBack();
-    Text3DParams& params = text3DParamsPool[paramsSlot];
-    params = {};
+    Text3DParams& params = *pooledParams;
     params.fontId = fontId.id;
     params.text = text;
     params.depth = depth;
@@ -656,58 +595,52 @@ StaticModelHandle AssetManager::LoadText3DModel(FontID fontId, const Core::Inlin
     params.anchor = anchor;
     params.font = GetFont(fontHandle);
 
-    static int32_t text3DCounter = 0;
-    StaticModel& model = models[handle.index];
-    model.selfHandle = handle;
-    model.name = Core::InlineString<128>::Format("Text3D Mesh %d", text3DCounter++);
-    model.modelId = textModelId;
-    model.text3DParams = &params;
-    // Generation-scoped font ref: hand the model the ref we took so the worker can read the glyph contours; it keeps the font resident until the model finalizes (released in ResolveLoads).
-    model.text3DFontHandle = fontHandle;
-    model.refCount = 1;
-    model.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
-
-    modelIdToHandle[textModelId] = handle;
+    static std::atomic<int32_t> text3DCounter{0};
+    const auto [handle, model, bCreated] = models.Acquire(textModelId, [&](StaticModel& m, StaticModelHandle mh) {
+        m.selfHandle = mh;
+        m.name = Core::InlineString<128>::Format("Text3D Mesh %d", text3DCounter.fetch_add(1, std::memory_order_relaxed));
+        m.modelId = textModelId;
+        m.text3DParams = pooledParams;
+        // Generation-scoped font ref: hand the model the ref we took so the worker can read the glyph contours; it keeps the font resident until the model finalizes (released in ResolveLoads).
+        m.text3DFontHandle = fontHandle;
+        m.modelLoadState = StaticModel::ModelLoadState::NotLoaded;
+    });
+    if (!bCreated) {
+        text3DParamsPool.Remove(paramsHandle);
+        UnloadFont(fontHandle);
+    }
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate model slot for 3D text");
+        return StaticModelHandle::INVALID;
+    }
+    if (!bCreated) { return handle; }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting Text3D model load: {}", model.name.c_str());
+        LOG_TRACE(Asset, "Requesting Text3D model load: {}", model->name.c_str());
     }
-    assetLoadManager->RequestProceduralModelLoad(&model);
+    assetLoadManager->RequestProceduralModelLoad(model);
     return handle;
 }
 
 StaticModel* AssetManager::GetModel(StaticModelHandle handle)
 {
-    if (!modelAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &models[handle.index];
+    return models.Get(handle);
 }
 
 const StaticModel* AssetManager::GetModel(StaticModelHandle handle) const
 {
-    if (!modelAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &models[handle.index];
+    return models.Get(handle);
 }
 
 void AssetManager::UnloadModel(StaticModelHandle handle)
 {
-    if (!modelAllocator.IsValid(handle)) {
+    if (!models.Release(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid model handle");
         return;
     }
 
-    StaticModel& model = models[handle.index];
-    model.refCount--;
-
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", model.name.c_str(), model.refCount);
-    }
-
-    if (model.refCount == 0) {
-        model.retireFrame = MODEL_RETIRE_PENDING;
+        LOG_TRACE(Asset, "Model refCount decremented: {}, refCount: {}", models.Get(handle)->name.c_str(), models.RefCount(handle));
     }
 }
 
@@ -737,49 +670,38 @@ PhysicsColliderHandle AssetManager::LoadSplineCollider(const SplineParams& param
     h.Add(HashSplineParams(params));
     h.Add(static_cast<uint8_t>(kind));
 
-    PhysicsColliderID colliderId{h.Finish()};
+    const PhysicsColliderID colliderId{h.Finish()};
 
-    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
-    if (existingPtr != nullptr) {
-        PhysicsColliderHandle existingHandle = *existingPtr;
-        if (colliderAllocator.IsValid(existingHandle)) {
-            PhysicsColliderAsset& collider = colliders[existingHandle.index];
-            collider.refCount++;
-            collider.retireFrame = 0;
-            return existingHandle;
-        }
-        colliderIdToHandle.Remove(colliderId);
+    if (const PhysicsColliderHandle existing = colliders.AddRef(colliderId); existing.IsValid()) {
+        return existing;
     }
 
-    if (splineParamsFreeList.IsEmpty()) {
+    const auto paramsHandle = splineParamsPool.Add();
+    SplineParams* pooledParams = splineParamsPool.Get(paramsHandle);
+    if (pooledParams == nullptr) {
         LOG_ERROR(Asset, "Spline params pool exhausted ({} live spline models/colliders)", MAX_POOLED_SPLINE_PARAMS);
         return PhysicsColliderHandle::INVALID;
     }
+    *pooledParams = params;
 
-    PhysicsColliderHandle handle = colliderAllocator.Add();
+    static std::atomic<int32_t> splineColliderCounter{0};
+    const auto [handle, collider, bCreated] = colliders.Acquire(colliderId, [&](PhysicsColliderAsset& c, PhysicsColliderHandle ch) {
+        c.selfHandle = ch;
+        c.name = Core::InlineString<128>::Format("Spline Collider %d", splineColliderCounter.fetch_add(1, std::memory_order_relaxed));
+        c.colliderId = colliderId;
+        c.kind = kind;
+        c.splineParams = pooledParams;
+        c.bSplineHollow = bHollowMesh;
+        c.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+    });
+    if (!bCreated) { splineParamsPool.Remove(paramsHandle); }
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate collider slot for spline");
         return PhysicsColliderHandle::INVALID;
     }
+    if (!bCreated) { return handle; }
 
-    const uint32_t paramsSlot = splineParamsFreeList.Back();
-    splineParamsFreeList.PopBack();
-    splineParamsPool[paramsSlot] = params;
-
-    static int32_t splineColliderCounter = 0;
-    PhysicsColliderAsset& collider = colliders[handle.index];
-    collider.selfHandle = handle;
-    collider.name = Core::InlineString<128>::Format("Spline Collider %d", splineColliderCounter++);
-    collider.colliderId = colliderId;
-    collider.kind = kind;
-    collider.splineParams = &splineParamsPool[paramsSlot];
-    collider.bSplineHollow = bHollowMesh;
-    collider.refCount = 1;
-    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
-
-    colliderIdToHandle[colliderId] = handle;
-
-    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    assetLoadManager->RequestPhysicsColliderLoad(collider);
     return handle;
 }
 
@@ -798,53 +720,39 @@ PhysicsColliderHandle AssetManager::LoadProceduralCollider(const ProceduralParam
     constexpr uint8_t domain = 1;
     h.Add(domain);
 
-    PhysicsColliderID colliderId{h.Finish()};
+    const PhysicsColliderID colliderId{h.Finish()};
 
-    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
-    if (existingPtr != nullptr) {
-        PhysicsColliderHandle existingHandle = *existingPtr;
-        if (colliderAllocator.IsValid(existingHandle)) {
-            PhysicsColliderAsset& collider = colliders[existingHandle.index];
-            collider.refCount++;
-            collider.retireFrame = 0;
-            return existingHandle;
-        }
-        colliderIdToHandle.Remove(colliderId);
-    }
+    static std::atomic<int32_t> proceduralColliderCounter{0};
+    const auto [handle, collider, bCreated] = colliders.Acquire(colliderId, [&](PhysicsColliderAsset& c, PhysicsColliderHandle ch) {
+        c.selfHandle = ch;
+        c.name = Core::InlineString<128>::Format("Procedural Collider %d", proceduralColliderCounter.fetch_add(1, std::memory_order_relaxed));
+        c.colliderId = colliderId;
+        c.proceduralParams = params;
+        c.proceduralRepeat = repeat.IsActive() ? repeat : ProceduralRepeat{};
 
-    PhysicsColliderHandle handle = colliderAllocator.Add();
+        // Analytics are either Compound or Convex Hull (determined in the load slot). Exotics are concave and must use triangle mesh (not allowed to be dynamic)
+        const bool bAnalytic = CanBuildProceduralCollider(params);
+        c.kind = bAnalytic ? PhysicsColliderKind::Compound : PhysicsColliderKind::TriangleMesh;
+        c.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate collider slot for procedural shape");
         return PhysicsColliderHandle::INVALID;
     }
+    if (!bCreated) { return handle; }
 
-    static int32_t proceduralColliderCounter = 0;
-    PhysicsColliderAsset& collider = colliders[handle.index];
-    collider.selfHandle = handle;
-    collider.name = Core::InlineString<128>::Format("Procedural Collider %d", proceduralColliderCounter++);
-    collider.colliderId = colliderId;
-    collider.proceduralParams = params;
-    collider.proceduralRepeat = repeat.IsActive() ? repeat : ProceduralRepeat{};
-
-    // Analytics are either Compound or Convex Hull (determined in the load slot). Exotics are concave and must use triangle mesh (not allowed to be dynamic)
-    const bool bAnalytic = CanBuildProceduralCollider(params);
-    collider.kind = bAnalytic ? PhysicsColliderKind::Compound : PhysicsColliderKind::TriangleMesh;
-    collider.refCount = 1;
-    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
-
-    colliderIdToHandle[colliderId] = handle;
-
-    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    assetLoadManager->RequestPhysicsColliderLoad(collider);
     return handle;
 }
 
 PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind, uint32_t nodeIndex)
 {
-    if (!modelCache.Contains(sourceModelId)) {
+    const CachedModelMetadata* meta = modelCache.Find(sourceModelId);
+    if (meta == nullptr) {
         LOG_ERROR(Asset, "Model '{}' not found in registry for collider", sourceModelId.id);
         return PhysicsColliderHandle::INVALID;
     }
-    if (nodeIndex != ~0u && nodeIndex >= modelCache[sourceModelId].nodes.Size()) {
+    if (nodeIndex != ~0u && nodeIndex >= meta->nodes.Size()) {
         nodeIndex = ~0u;
     }
 
@@ -857,41 +765,26 @@ PhysicsColliderHandle AssetManager::LoadModelCollider(Engine::ModelID sourceMode
         h.Add(nodeIndex);
     }
 
-    PhysicsColliderID colliderId{h.Finish()};
+    const PhysicsColliderID colliderId{h.Finish()};
 
-    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
-    if (existingPtr != nullptr) {
-        PhysicsColliderHandle existingHandle = *existingPtr;
-        if (colliderAllocator.IsValid(existingHandle)) {
-            PhysicsColliderAsset& collider = colliders[existingHandle.index];
-            collider.refCount++;
-            collider.retireFrame = 0;
-            return existingHandle;
-        }
-        colliderIdToHandle.Remove(colliderId);
-    }
-
-    PhysicsColliderHandle handle = colliderAllocator.Add();
+    static std::atomic<int32_t> modelColliderCounter{0};
+    const auto [handle, collider, bCreated] = colliders.Acquire(colliderId, [&](PhysicsColliderAsset& c, PhysicsColliderHandle ch) {
+        c.selfHandle = ch;
+        c.name = Core::InlineString<128>::Format("Model Collider %d", modelColliderCounter.fetch_add(1, std::memory_order_relaxed));
+        c.colliderId = colliderId;
+        c.kind = kind;
+        c.sourceModelId = sourceModelId;
+        c.sourceNodeIndex = nodeIndex;
+        c.source = meta->source;
+        c.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate collider slot for model");
         return PhysicsColliderHandle::INVALID;
     }
+    if (!bCreated) { return handle; }
 
-    static int32_t modelColliderCounter = 0;
-    PhysicsColliderAsset& collider = colliders[handle.index];
-    collider.selfHandle = handle;
-    collider.name = Core::InlineString<128>::Format("Model Collider %d", modelColliderCounter++);
-    collider.colliderId = colliderId;
-    collider.kind = kind;
-    collider.sourceModelId = sourceModelId;
-    collider.sourceNodeIndex = nodeIndex;
-    collider.source = modelCache[sourceModelId].source;
-    collider.refCount = 1;
-    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
-
-    colliderIdToHandle[colliderId] = handle;
-
-    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    assetLoadManager->RequestPhysicsColliderLoad(collider);
     return handle;
 }
 
@@ -921,21 +814,15 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     constexpr uint8_t domain = 3;
     h.Add(domain);
 
-    PhysicsColliderID colliderId{h.Finish()};
+    const PhysicsColliderID colliderId{h.Finish()};
 
-    PhysicsColliderHandle* existingPtr = colliderIdToHandle.Find(colliderId);
-    if (existingPtr != nullptr) {
-        PhysicsColliderHandle existingHandle = *existingPtr;
-        if (colliderAllocator.IsValid(existingHandle)) {
-            PhysicsColliderAsset& collider = colliders[existingHandle.index];
-            collider.refCount++;
-            collider.retireFrame = 0;
-            return existingHandle;
-        }
-        colliderIdToHandle.Remove(colliderId);
+    if (const PhysicsColliderHandle existing = colliders.AddRef(colliderId); existing.IsValid()) {
+        return existing;
     }
 
-    if (text3DParamsFreeList.IsEmpty()) {
+    const auto paramsHandle = text3DParamsPool.Add();
+    Text3DParams* pooledParams = text3DParamsPool.Get(paramsHandle);
+    if (pooledParams == nullptr) {
         LOG_ERROR(Asset, "Text3D params pool exhausted ({} live text3D models/colliders)", MAX_POOLED_TEXT3D_PARAMS);
         return PhysicsColliderHandle::INVALID;
     }
@@ -943,20 +830,11 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     FontHandle fontHandle = LoadFont(fontId);
     if (!fontHandle.IsValid()) {
         LOG_ERROR(Asset, "LoadText3DCollider: font {} could not be loaded", fontId.id);
+        text3DParamsPool.Remove(paramsHandle);
         return PhysicsColliderHandle::INVALID;
     }
 
-    PhysicsColliderHandle handle = colliderAllocator.Add();
-    if (!handle.IsValid()) {
-        LOG_ERROR(Asset, "Failed to allocate collider slot for 3D text");
-        UnloadFont(fontHandle);
-        return PhysicsColliderHandle::INVALID;
-    }
-
-    const uint32_t paramsSlot = text3DParamsFreeList.Back();
-    text3DParamsFreeList.PopBack();
-    Text3DParams& params = text3DParamsPool[paramsSlot];
-    params = {};
+    Text3DParams& params = *pooledParams;
     params.fontId = fontId.id;
     params.text = text;
     params.depth = depth;
@@ -970,53 +848,60 @@ PhysicsColliderHandle AssetManager::LoadText3DCollider(FontID fontId, const Core
     params.anchor = anchor;
     params.font = GetFont(fontHandle);
 
-    static int32_t text3DColliderCounter = 0;
-    PhysicsColliderAsset& collider = colliders[handle.index];
-    collider.selfHandle = handle;
-    collider.name = Core::InlineString<128>::Format("Text3D Collider %d", text3DColliderCounter++);
-    collider.colliderId = colliderId;
-    collider.kind = kind;
-    collider.text3DParams = &params;
-    collider.bPreciseText3D = bPrecise;
-    // Generation-scoped font ref: the worker reads glyph plane bounds; released when the collider finalizes (ResolveLoads).
-    collider.text3DFontHandle = fontHandle;
-    collider.refCount = 1;
-    collider.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+    static std::atomic<int32_t> text3DColliderCounter{0};
+    const auto [handle, collider, bCreated] = colliders.Acquire(colliderId, [&](PhysicsColliderAsset& c, PhysicsColliderHandle ch) {
+        c.selfHandle = ch;
+        c.name = Core::InlineString<128>::Format("Text3D Collider %d", text3DColliderCounter.fetch_add(1, std::memory_order_relaxed));
+        c.colliderId = colliderId;
+        c.kind = kind;
+        c.text3DParams = pooledParams;
+        c.bPreciseText3D = bPrecise;
+        // Generation-scoped font ref: the worker reads glyph plane bounds; released when the collider finalizes (ResolveLoads).
+        c.text3DFontHandle = fontHandle;
+        c.loadState = PhysicsColliderAsset::LoadState::NotLoaded;
+    });
+    if (!bCreated) {
+        text3DParamsPool.Remove(paramsHandle);
+        UnloadFont(fontHandle);
+    }
+    if (!handle.IsValid()) {
+        LOG_ERROR(Asset, "Failed to allocate collider slot for 3D text");
+        return PhysicsColliderHandle::INVALID;
+    }
+    if (!bCreated) { return handle; }
 
-    colliderIdToHandle[colliderId] = handle;
-
-    assetLoadManager->RequestPhysicsColliderLoad(&collider);
+    assetLoadManager->RequestPhysicsColliderLoad(collider);
     return handle;
 }
 
 PhysicsColliderAsset* AssetManager::GetCollider(PhysicsColliderHandle handle)
 {
-    if (!colliderAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &colliders[handle.index];
+    return colliders.Get(handle);
 }
 
 const PhysicsColliderAsset* AssetManager::GetCollider(PhysicsColliderHandle handle) const
 {
-    if (!colliderAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &colliders[handle.index];
+    return colliders.Get(handle);
 }
 
 void AssetManager::UnloadCollider(PhysicsColliderHandle handle)
 {
-    if (!colliderAllocator.IsValid(handle)) {
+    if (!colliders.Release(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid collider handle");
+    }
+}
+
+void AssetManager::IdleLogCounter::Tick(int32_t thisTick, const char* what)
+{
+    const auto now = std::chrono::steady_clock::now();
+    if (thisTick > 0) {
+        pending += thisTick;
+        lastActivity = now;
         return;
     }
-
-    PhysicsColliderAsset& collider = colliders[handle.index];
-    collider.refCount--;
-
-    if (collider.refCount == 0) {
-        collider.retireFrame = COLLIDER_RETIRE_PENDING;
+    if (pending > 0 && now - lastActivity >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
+        LOG_INFO(Asset, "{} {}", pending, what);
+        pending = 0;
     }
 }
 
@@ -1092,14 +977,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
-    if (modelsThisTick > 0) {
-        pendingModelLogCount += modelsThisTick;
-        modelLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingModelLogCount > 0 && modelsThisTick == 0 && (std::chrono::steady_clock::now() - modelLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} model(s) loaded", pendingModelLogCount);
-        pendingModelLogCount = 0;
-    }
+    modelLoadLog.Tick(modelsThisTick, "model(s) loaded");
 
     AssetLoad::TextureLoadComplete textureComplete{};
     int32_t texturesThisTick{0};
@@ -1119,14 +997,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
-    if (texturesThisTick > 0) {
-        pendingTextureLogCount += texturesThisTick;
-        textureLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingTextureLogCount > 0 && texturesThisTick == 0 && (std::chrono::steady_clock::now() - textureLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} texture(s) loaded", pendingTextureLogCount);
-        pendingTextureLogCount = 0;
-    }
+    textureLoadLog.Tick(texturesThisTick, "texture(s) loaded");
 
     AssetLoad::CubemapLoadComplete cubemapComplete{};
     int32_t cubemapsThisTick{0};
@@ -1145,14 +1016,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
-    if (cubemapsThisTick > 0) {
-        pendingCubemapLogCount += cubemapsThisTick;
-        cubemapLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingCubemapLogCount > 0 && cubemapsThisTick == 0 && (std::chrono::steady_clock::now() - cubemapLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} cubemap(s) loaded", pendingCubemapLogCount);
-        pendingCubemapLogCount = 0;
-    }
+    cubemapLoadLog.Tick(cubemapsThisTick, "cubemap(s) loaded");
 
     AssetLoad::TextureArrayLoadComplete arrayComplete{};
     while (assetLoadManager->TryDequeueTextureArrayComplete(arrayComplete)) {
@@ -1183,14 +1047,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
-    if (samplersThisTick > 0) {
-        pendingSamplerLogCount += samplersThisTick;
-        samplerLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingSamplerLogCount > 0 && samplersThisTick == 0 && (std::chrono::steady_clock::now() - samplerLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} sampler(s) loaded", pendingSamplerLogCount);
-        pendingSamplerLogCount = 0;
-    }
+    samplerLoadLog.Tick(samplersThisTick, "sampler(s) loaded");
 
     AssetLoad::ProceduralTextureLoadComplete proceduralTexComplete{};
     int32_t proceduralTexturesThisTick{0};
@@ -1209,14 +1066,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
-    if (proceduralTexturesThisTick > 0) {
-        pendingProceduralTextureLogCount += proceduralTexturesThisTick;
-        proceduralTextureLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingProceduralTextureLogCount > 0 && proceduralTexturesThisTick == 0 && (std::chrono::steady_clock::now() - proceduralTextureLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} procedural texture(s) generated", pendingProceduralTextureLogCount);
-        pendingProceduralTextureLogCount = 0;
-    }
+    proceduralTextureLoadLog.Tick(proceduralTexturesThisTick, "procedural texture(s) generated");
 
     int32_t fontsThisTick{0};
     AssetLoad::FontCurveLoadComplete fontComplete{};
@@ -1240,14 +1090,7 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
         }
     }
 
-    if (fontsThisTick > 0) {
-        pendingFontLogCount += fontsThisTick;
-        fontLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingFontLogCount > 0 && fontsThisTick == 0 && (std::chrono::steady_clock::now() - fontLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} font(s) loaded", pendingFontLogCount);
-        pendingFontLogCount = 0;
-    }
+    fontLoadLog.Tick(fontsThisTick, "font(s) loaded");
 
     return loadCounts;
 }
@@ -1255,117 +1098,72 @@ ResolveLoadResult AssetManager::ResolveLoads(Core::FrameBuffer& stagingFrameBuff
 void AssetManager::KickOffRetires()
 {
     const uint64_t currentFrame = ctx->currentRenderFrame;
-    for (auto& texture : textures) {
-        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
-        if (texture.refCount > 0 || texture.retireFrame != TEXTURE_RETIRE_PENDING) { continue; }
-        if (texture.loadState == Texture::LoadState::Loaded || texture.loadState == Texture::LoadState::FailedToLoad) {
-            texture.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
-        }
-    }
-    for (auto& model : models) {
-        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
-        if (model.refCount > 0 || model.retireFrame != MODEL_RETIRE_PENDING) { continue; }
-        if (model.modelLoadState == StaticModel::ModelLoadState::Loaded || model.modelLoadState == StaticModel::ModelLoadState::FailedToLoad) {
-            model.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
-        }
-    }
-    for (auto& font : fonts) {
-        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
-        if (font.refCount > 0 || font.retireFrame != FONT_RETIRE_PENDING) { continue; }
-        if (font.loadState == Font::LoadState::Loaded || font.loadState == Font::LoadState::FailedToLoad) {
-            font.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
-        }
-    }
-    for (auto& collider : colliders) {
-        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
-        if (collider.refCount > 0 || collider.retireFrame != COLLIDER_RETIRE_PENDING) { continue; }
-        if (collider.loadState == PhysicsColliderAsset::LoadState::Loaded || collider.loadState == PhysicsColliderAsset::LoadState::FailedToLoad) {
-            collider.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
-        }
-    }
-    for (auto& cubemap : cubemaps) {
-        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
-        if (cubemap.refCount > 0 || cubemap.retireFrame != CUBEMAP_RETIRE_PENDING) { continue; }
-        if (cubemap.loadState != Render::Cubemap::LoadState::Loading) {
-            cubemap.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
-        }
-    }
-    for (auto& textureArray : textureArrays) {
-        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
-        if (textureArray.refCount > 0 || textureArray.retireFrame != TEXTURE_ARRAY_RETIRE_PENDING) { continue; }
-        if (textureArray.loadState != Render::TextureArray::LoadState::Loading) {
-            textureArray.retireFrame = currentFrame + Core::FRAME_BUFFER_COUNT * 4;
-        }
-    }
+    constexpr uint64_t retireDelay = Core::FRAME_BUFFER_COUNT * 4;
+    textures.KickOffRetires(currentFrame, retireDelay, [](const Texture& texture) {
+        return texture.loadState == Texture::LoadState::Loaded || texture.loadState == Texture::LoadState::FailedToLoad;
+    });
+    models.KickOffRetires(currentFrame, retireDelay, [](const StaticModel& model) {
+        return model.modelLoadState == StaticModel::ModelLoadState::Loaded || model.modelLoadState == StaticModel::ModelLoadState::FailedToLoad;
+    });
+    fonts.KickOffRetires(currentFrame, retireDelay, [](const Font& font) {
+        return font.loadState == Font::LoadState::Loaded || font.loadState == Font::LoadState::FailedToLoad;
+    });
+    colliders.KickOffRetires(currentFrame, retireDelay, [](const PhysicsColliderAsset& collider) {
+        return collider.loadState == PhysicsColliderAsset::LoadState::Loaded || collider.loadState == PhysicsColliderAsset::LoadState::FailedToLoad;
+    });
+    cubemaps.KickOffRetires(currentFrame, retireDelay, [](const Render::Cubemap& cubemap) {
+        return cubemap.loadState != Render::Cubemap::LoadState::Loading;
+    });
+    textureArrays.KickOffRetires(currentFrame, retireDelay, [](const Render::TextureArray& textureArray) {
+        return textureArray.loadState != Render::TextureArray::LoadState::Loading;
+    });
+    samplers.KickOffRetires(currentFrame, retireDelay, [](const Sampler&) { return true; });
 }
 
 bool AssetManager::HasPendingLoads() const
 {
-    for (const auto& texture : textures) {
-        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
-        if (texture.loadState == Texture::LoadState::Loading) { return true; }
-    }
-    for (const auto& model : models) {
-        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
-        if (model.modelLoadState == StaticModel::ModelLoadState::NotLoaded) { return true; }
-    }
-    for (const auto& font : fonts) {
-        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
-        if (font.loadState == Font::LoadState::Loading) { return true; }
-    }
-    for (const auto& collider : colliders) {
-        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
-        if (collider.loadState == PhysicsColliderAsset::LoadState::NotLoaded) { return true; }
-    }
-    for (const auto& cubemap : cubemaps) {
-        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
-        if (cubemap.loadState == Render::Cubemap::LoadState::Loading) { return true; }
-    }
-    for (const auto& textureArray : textureArrays) {
-        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
-        if (textureArray.loadState == Render::TextureArray::LoadState::Loading) { return true; }
-    }
-    return false;
+    bool bPending = false;
+    textures.ForEach([&](TextureHandle, const Texture& texture) { bPending |= texture.loadState == Texture::LoadState::Loading; });
+    models.ForEach([&](StaticModelHandle, const StaticModel& model) { bPending |= model.modelLoadState == StaticModel::ModelLoadState::NotLoaded; });
+    fonts.ForEach([&](FontHandle, const Font& font) { bPending |= font.loadState == Font::LoadState::Loading; });
+    colliders.ForEach([&](PhysicsColliderHandle, const PhysicsColliderAsset& collider) { bPending |= collider.loadState == PhysicsColliderAsset::LoadState::NotLoaded; });
+    cubemaps.ForEach([&](CubemapHandle, const Render::Cubemap& cubemap) { bPending |= cubemap.loadState == Render::Cubemap::LoadState::Loading; });
+    textureArrays.ForEach([&](TextureArrayHandle, const Render::TextureArray& textureArray) { bPending |= textureArray.loadState == Render::TextureArray::LoadState::Loading; });
+    return bPending;
 }
 
 void AssetManager::LogPendingLoads() const
 {
-    for (const auto& texture : textures) {
-        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
+    textures.ForEach([this](TextureHandle handle, const Texture& texture) {
         if (texture.loadState == Texture::LoadState::Loading) {
-            LOG_WARN(Asset, "Pending load: texture '{}' (refCount {})", texture.name.c_str(), texture.refCount);
+            LOG_WARN(Asset, "Pending load: texture '{}' (refCount {})", texture.name.c_str(), textures.RefCount(handle));
         }
-    }
-    for (const auto& model : models) {
-        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
+    });
+    models.ForEach([this](StaticModelHandle handle, const StaticModel& model) {
         if (model.modelLoadState == StaticModel::ModelLoadState::NotLoaded) {
-            LOG_WARN(Asset, "Pending load: model '{}' (refCount {})", model.name.c_str(), model.refCount);
+            LOG_WARN(Asset, "Pending load: model '{}' (refCount {})", model.name.c_str(), models.RefCount(handle));
         }
-    }
-    for (const auto& font : fonts) {
-        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
+    });
+    fonts.ForEach([this](FontHandle handle, const Font& font) {
         if (font.loadState == Font::LoadState::Loading) {
-            LOG_WARN(Asset, "Pending load: font '{}' (refCount {})", font.name.c_str(), font.refCount);
+            LOG_WARN(Asset, "Pending load: font '{}' (refCount {})", font.name.c_str(), fonts.RefCount(handle));
         }
-    }
-    for (const auto& collider : colliders) {
-        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
+    });
+    colliders.ForEach([this](PhysicsColliderHandle handle, const PhysicsColliderAsset& collider) {
         if (collider.loadState == PhysicsColliderAsset::LoadState::NotLoaded) {
-            LOG_WARN(Asset, "Pending load: collider '{}' (refCount {})", collider.name.c_str(), collider.refCount);
+            LOG_WARN(Asset, "Pending load: collider '{}' (refCount {})", collider.name.c_str(), colliders.RefCount(handle));
         }
-    }
-    for (const auto& cubemap : cubemaps) {
-        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
+    });
+    cubemaps.ForEach([this](CubemapHandle handle, const Render::Cubemap& cubemap) {
         if (cubemap.loadState == Render::Cubemap::LoadState::Loading) {
-            LOG_WARN(Asset, "Pending load: cubemap '{}' (refCount {})", cubemap.name.c_str(), cubemap.refCount);
+            LOG_WARN(Asset, "Pending load: cubemap '{}' (refCount {})", cubemap.name.c_str(), cubemaps.RefCount(handle));
         }
-    }
-    for (const auto& textureArray : textureArrays) {
-        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
+    });
+    textureArrays.ForEach([this](TextureArrayHandle handle, const Render::TextureArray& textureArray) {
         if (textureArray.loadState == Render::TextureArray::LoadState::Loading) {
-            LOG_WARN(Asset, "Pending load: texture array '{}' (refCount {})", textureArray.name.c_str(), textureArray.refCount);
+            LOG_WARN(Asset, "Pending load: texture array '{}' (refCount {})", textureArray.name.c_str(), textureArrays.RefCount(handle));
         }
-    }
+    });
 }
 
 ResolveUnloadResult AssetManager::ResolveUnloads()
@@ -1391,149 +1189,68 @@ ResolveUnloadResult AssetManager::ResolveUnloads()
         deferredTextureArrayReleases.SwapRemove(i);
     }
 
-    int32_t modelsUnloadedThisTick{0};
-    for (auto& model : models) {
-        if (!modelAllocator.IsValid(model.selfHandle)) { continue; }
-        if (model.refCount > 0 || model.retireFrame == 0 || model.retireFrame == MODEL_RETIRE_PENDING || currentFrame < model.retireFrame) { continue; }
-
+    const int32_t modelsUnloadedThisTick = models.Reclaim(currentFrame, [this](StaticModel& model, ModelID modelId) {
         if (model.modelLoadState == StaticModel::ModelLoadState::Loaded) {
             model.modelData.Reset(resourceManager);
         }
-
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Model unloaded: {}", model.name.c_str()); }
-        StaticModelHandle* stored = modelIdToHandle.Find(model.modelId);
-        // If the model in the handle map is still the same one we're unloading here.
-        if (stored && *stored == model.selfHandle) {
-            modelIdToHandle.Remove(model.modelId);
-        }
-        UnfreezeModel(model.modelId); // drained: lift any hot-reload freeze
+        UnfreezeModel(modelId); // drained: lift any hot-reload freeze
         assert(!model.text3DFontHandle.IsValid() && "Text3D font ref must be released at finalize (ResolveLoads) before a model can be reclaimed");
         if (model.moduleParams != nullptr) {
-            moduleParamsFreeList.PushBack(static_cast<uint32_t>(model.moduleParams - moduleParamsPool.Data()));
+            moduleParamsPool.Remove(moduleParamsPool.HandleOf(model.moduleParams));
         }
         if (model.splineParams != nullptr) {
-            splineParamsFreeList.PushBack(static_cast<uint32_t>(model.splineParams - splineParamsPool.Data()));
+            splineParamsPool.Remove(splineParamsPool.HandleOf(model.splineParams));
         }
         if (model.text3DParams != nullptr) {
-            text3DParamsFreeList.PushBack(static_cast<uint32_t>(model.text3DParams - text3DParamsPool.Data()));
+            text3DParamsPool.Remove(text3DParamsPool.HandleOf(model.text3DParams));
         }
-        modelAllocator.Remove(model.selfHandle);
-        model = {};
-        modelsUnloadedThisTick++;
-    }
+    });
 
-    if (modelsUnloadedThisTick > 0) {
-        pendingModelUnloadLogCount += modelsUnloadedThisTick;
-        modelUnloadLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingModelUnloadLogCount > 0 && modelsUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - modelUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} model(s) unloaded", pendingModelUnloadLogCount);
-        pendingModelUnloadLogCount = 0;
-    }
+    modelUnloadLog.Tick(modelsUnloadedThisTick, "model(s) unloaded");
 
-    for (auto& collider : colliders) {
-        if (!colliderAllocator.IsValid(collider.selfHandle)) { continue; }
-        if (collider.refCount > 0 || collider.retireFrame == 0 || collider.retireFrame == COLLIDER_RETIRE_PENDING || currentFrame < collider.retireFrame) { continue; }
-
+    colliders.Reclaim(currentFrame, [this](PhysicsColliderAsset& collider, PhysicsColliderID) {
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Collider unloaded: {}", collider.name.c_str()); }
-        PhysicsColliderHandle* stored = colliderIdToHandle.Find(collider.colliderId);
-        if (stored && *stored == collider.selfHandle) {
-            colliderIdToHandle.Remove(collider.colliderId);
-        }
         if (collider.splineParams != nullptr) {
-            splineParamsFreeList.PushBack(static_cast<uint32_t>(collider.splineParams - splineParamsPool.Data()));
+            splineParamsPool.Remove(splineParamsPool.HandleOf(collider.splineParams));
         }
         if (collider.text3DParams != nullptr) {
-            text3DParamsFreeList.PushBack(static_cast<uint32_t>(collider.text3DParams - text3DParamsPool.Data()));
+            text3DParamsPool.Remove(text3DParamsPool.HandleOf(collider.text3DParams));
         }
-        colliderAllocator.Remove(collider.selfHandle);
-        collider = {};
-    }
+    });
 
-    int32_t texturesUnloadedThisTick{0};
-    for (auto& texture : textures) {
-        if (!textureAllocator.IsValid(texture.selfHandle)) { continue; }
-        if (texture.refCount > 0 || texture.retireFrame == 0 || texture.retireFrame == TEXTURE_RETIRE_PENDING || currentFrame < texture.retireFrame) { continue; }
-
+    const int32_t texturesUnloadedThisTick = textures.Reclaim(currentFrame, [this](Texture& texture, TextureID textureId) {
         if (bVerboseLogging.load(std::memory_order_relaxed)) {
             LOG_TRACE(Asset, "Texture unloaded: {} (bindless index: {})", texture.name.c_str(), static_cast<uint32_t>(texture.bindlessHandle.index));
         }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(texture.bindlessHandle);
-        textureIdToHandle.Remove(texture.textureId);
         if (texture.origin == Texture::Origin::RuntimeProcedural) {
-            textureRegistry.Remove(texture.textureId);
+            textureRegistry.Remove(textureId);
             textureNameToId.Remove(StringID{texture.name.c_str(), texture.name.Size()});
         }
-        textureAllocator.Remove(texture.selfHandle);
-        texture = {};
-        texturesUnloadedThisTick++;
-    }
+    });
 
-    if (texturesUnloadedThisTick > 0) {
-        pendingTextureUnloadLogCount += texturesUnloadedThisTick;
-        textureUnloadLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingTextureUnloadLogCount > 0 && texturesUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - textureUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} texture(s) unloaded", pendingTextureUnloadLogCount);
-        pendingTextureUnloadLogCount = 0;
-    }
+    textureUnloadLog.Tick(texturesUnloadedThisTick, "texture(s) unloaded");
 
-    for (auto& cubemap : cubemaps) {
-        if (!cubemapAllocator.IsValid(cubemap.selfHandle)) { continue; }
-        if (cubemap.refCount > 0 || cubemap.retireFrame == 0 || cubemap.retireFrame == CUBEMAP_RETIRE_PENDING || currentFrame < cubemap.retireFrame) { continue; }
-
+    cubemaps.Reclaim(currentFrame, [this](Render::Cubemap& cubemap, EnvironmentMapID) {
         if (bVerboseLogging.load(std::memory_order_relaxed)) {
             LOG_TRACE(Asset, "Cubemap unloaded: {} (bindless index: {})", cubemap.name.c_str(), static_cast<uint32_t>(cubemap.bindlessHandle.index));
         }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseCubemapBinding(cubemap.bindlessHandle);
-        CubemapHandle* storedCubemap = cubemapIdToHandle.Find(cubemap.cubemapId);
-        if (storedCubemap && *storedCubemap == cubemap.selfHandle) {
-            cubemapIdToHandle.Remove(cubemap.cubemapId);
-        }
-        cubemapAllocator.Remove(cubemap.selfHandle);
-        cubemap = {};
-    }
+    });
 
-    for (auto& textureArray : textureArrays) {
-        if (!textureArrayAllocator.IsValid(textureArray.selfHandle)) { continue; }
-        if (textureArray.refCount > 0 || textureArray.retireFrame == 0 || textureArray.retireFrame == TEXTURE_ARRAY_RETIRE_PENDING || currentFrame < textureArray.retireFrame) { continue; }
-
+    textureArrays.Reclaim(currentFrame, [this](Render::TextureArray& textureArray, TextureArrayID) {
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureArrayBinding(textureArray.bindlessHandle);
-        TextureArrayHandle* stored = textureArrayIdToHandle.Find(textureArray.textureArrayId);
-        if (stored && *stored == textureArray.selfHandle) {
-            textureArrayIdToHandle.Remove(textureArray.textureArrayId);
-        }
-        textureArrayAllocator.Remove(textureArray.selfHandle);
-        textureArray = {};
-    }
+    });
 
-    int32_t samplersUnloadedThisTick{0};
-    for (auto& sampler : samplers) {
-        if (!samplerAllocator.IsValid(sampler.selfHandle)) { continue; }
-        if (sampler.refCount > 0 || sampler.retireFrame == 0 || currentFrame < sampler.retireFrame) { continue; }
-
+    const int32_t samplersUnloadedThisTick = samplers.Reclaim(currentFrame, [this](Sampler& sampler, SamplerID) {
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Sampler unloaded (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index)); }
         resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseSamplerBinding(sampler.bindlessHandle);
-        samplerIdToHandle.Remove(sampler.id);
-        samplerAllocator.Remove(sampler.selfHandle);
-        sampler = {};
-        samplersUnloadedThisTick++;
-    }
+    });
 
-    if (samplersUnloadedThisTick > 0) {
-        pendingSamplerUnloadLogCount += samplersUnloadedThisTick;
-        samplerUnloadLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingSamplerUnloadLogCount > 0 && samplersUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - samplerUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} sampler(s) unloaded", pendingSamplerUnloadLogCount);
-        pendingSamplerUnloadLogCount = 0;
-    }
+    samplerUnloadLog.Tick(samplersUnloadedThisTick, "sampler(s) unloaded");
 
-    int32_t fontsUnloadedThisTick{0};
-    for (auto& font : fonts) {
-        if (!fontAllocator.IsValid(font.selfHandle)) { continue; }
-        if (font.refCount > 0 || font.retireFrame == 0 || font.retireFrame == FONT_RETIRE_PENDING || currentFrame < font.retireFrame) { continue; }
-
+    const int32_t fontsUnloadedThisTick = fonts.Reclaim(currentFrame, [this](Font& font, FontID fontId) {
         if (bVerboseLogging.load(std::memory_order_relaxed)) { LOG_TRACE(Asset, "Font unloaded: {}", font.name.c_str()); }
         if (font.loadState != Font::LoadState::Loading && font.curveAllocation.offset != OffsetAllocator::Allocation::NO_SPACE) {
             std::lock_guard lock(resourceManager->fontCurveAllocatorMutex);
@@ -1542,25 +1259,10 @@ ResolveUnloadResult AssetManager::ResolveUnloads()
         if (font.header.sdfUncompressedSize > 0) {
             resourceManager->bindlessSamplerTextureDescriptorBuffer.ReleaseTextureBinding(font.atlasBindlessHandle);
         }
-        FontHandle* storedFont = fontIdToHandle.Find(font.fontId);
-        // If the font in the handle map is still the same one we're unloading here.
-        if (storedFont && *storedFont == font.selfHandle) {
-            fontIdToHandle.Remove(font.fontId);
-        }
-        UnfreezeFont(font.fontId); // drained: lift any hot-reload freeze
-        fontAllocator.Remove(font.selfHandle);
-        font = {};
-        fontsUnloadedThisTick++;
-    }
+        UnfreezeFont(fontId); // drained: lift any hot-reload freeze
+    });
 
-    if (fontsUnloadedThisTick > 0) {
-        pendingFontUnloadLogCount += fontsUnloadedThisTick;
-        fontUnloadLastActivity = std::chrono::steady_clock::now();
-    }
-    if (pendingFontUnloadLogCount > 0 && fontsUnloadedThisTick == 0 && (std::chrono::steady_clock::now() - fontUnloadLastActivity) >= std::chrono::seconds(ASSET_LOG_IDLE_SECONDS)) {
-        LOG_INFO(Asset, "{} font(s) unloaded", pendingFontUnloadLogCount);
-        pendingFontUnloadLogCount = 0;
-    }
+    fontUnloadLog.Tick(fontsUnloadedThisTick, "font(s) unloaded");
 
     return {.modelUnloadedCount = modelsUnloadedThisTick, .fontUnloadedCount = fontsUnloadedThisTick};
 }
@@ -1908,113 +1610,88 @@ Texture* AssetManager::LoadTexture(TextureID textureId)
 
 Texture* AssetManager::LoadDiskTexture(TextureID textureId)
 {
-    if (!textureRegistry.Contains(textureId)) {
+    const DiskTextureDesc* meta = textureRegistry.Find(textureId);
+    if (meta == nullptr) {
         LOG_ERROR(Asset, "LoadDiskTexture: TextureID {:x} not in disk cache", textureId.id);
         return nullptr;
     }
 
-    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
-    if (existingPtr != nullptr) {
-        TextureHandle existingHandle = *existingPtr;
-        if (textureAllocator.IsValid(existingHandle)) {
-            Texture& texture = textures[existingHandle.index];
-            texture.refCount++;
-            texture.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture.name.c_str(), texture.refCount);
-            }
-            return &texture;
+    if (const TextureHandle existing = textures.AddRef(textureId); existing.IsValid()) {
+        Texture* texture = textures.Get(existing);
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Texture already loaded: {}, refCount: {}", texture->name.c_str(), textures.RefCount(existing));
         }
-        textureIdToHandle.Remove(textureId);
+        return texture;
     }
 
-    const DiskTextureDesc& meta = textureRegistry[textureId];
-    if (meta.bUngenerated) {
-        LOG_WARN(Asset, "Texture '{}' is declared but not generated yet", meta.name.c_str());
+    if (meta->bUngenerated) {
+        LOG_WARN(Asset, "Texture '{}' is declared but not generated yet", meta->name.c_str());
         return nullptr;
     }
 
-    TextureHandle handle = textureAllocator.Add();
+    const auto [handle, texture, bCreated] = textures.Acquire(textureId, [&](Texture& t, TextureHandle th) {
+        t.selfHandle = th;
+        t.source = meta->source;
+        t.textureId = textureId;
+        t.name = Core::InlineString(meta->name);
+        t.width = meta->width;
+        t.height = meta->height;
+        t.mipCount = meta->mipCount;
+        t.dataOffset = meta->dataOffset;
+        t.dataSize = meta->dataSize;
+        t.uncompressedSize = meta->uncompressedSize;
+        t.compressionType = meta->compressionType;
+        t.loadState = Texture::LoadState::Loading;
+        t.loadedContentVersion = meta->contentVersion;
+        t.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate texture slot for {:x}", textureId.id);
         return nullptr;
     }
-
-    Texture& texture = textures[handle.index];
-    texture.selfHandle = handle;
-    texture.source = meta.source;
-    texture.textureId = textureId;
-    texture.name = Core::InlineString(meta.name);
-    texture.width = meta.width;
-    texture.height = meta.height;
-    texture.mipCount = meta.mipCount;
-    texture.dataOffset = meta.dataOffset;
-    texture.dataSize = meta.dataSize;
-    texture.uncompressedSize = meta.uncompressedSize;
-    texture.compressionType = meta.compressionType;
-    texture.loadState = Texture::LoadState::Loading;
-    texture.refCount = 1;
-    texture.loadedContentVersion = meta.contentVersion;
-    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-
-    textureIdToHandle[textureId] = handle;
+    if (!bCreated) { return texture; }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting texture load: {}", texture.name.c_str());
+        LOG_TRACE(Asset, "Requesting texture load: {}", texture->name.c_str());
     }
-    assetLoadManager->RequestTextureLoad(&texture);
+    assetLoadManager->RequestTextureLoad(texture);
 
-    return &texture;
+    return texture;
 }
 
 Texture* AssetManager::LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin, Core::InlineString<128> displayName)
 {
-    TextureID textureId{pipelineId.id};
+    const TextureID textureId{pipelineId.id};
 
-    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
-    if (existingPtr != nullptr) {
-        if (textureAllocator.IsValid(*existingPtr)) {
-            Texture& existing = textures[existingPtr->index];
-            existing.refCount++;
-            existing.retireFrame = 0;
-            return &existing;
-        }
-        textureIdToHandle.Remove(textureId);
-    }
+    const uint32_t mipCount = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1u : 1u;
+    const Core::InlineString<128> name = displayName.IsEmpty() ? Core::InlineString<128>::Format("procedural_%llu", textureId.id) : displayName;
 
-    TextureHandle handle = textureAllocator.Add();
+    const auto [handle, texture, bCreated] = textures.Acquire(textureId, [&](Texture& t, TextureHandle th) {
+        t.selfHandle = th;
+        t.textureId = textureId;
+        t.name = name;
+        t.width = width;
+        t.height = height;
+        t.mipCount = mipCount;
+        t.format = format;
+        t.loadState = Texture::LoadState::Loading;
+        t.origin = origin;
+        t.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "LoadProceduralTexture: no texture slots available");
         return nullptr;
     }
+    if (!bCreated) { return texture; }
 
-    uint32_t mipCount = mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1u : 1u;
-
-    Core::InlineString<128> name = displayName.IsEmpty() ? Core::InlineString<128>::Format("procedural_%llu", textureId.id) : displayName;
-    const StringID nameSid{name.c_str(), name.Size()};
-
-    Texture& texture = textures[handle.index];
-    texture.selfHandle = handle;
-    texture.textureId = textureId;
-    texture.name = name;
-    texture.width = width;
-    texture.height = height;
-    texture.mipCount = mipCount;
-    texture.format = format;
-    texture.loadState = Texture::LoadState::Loading;
-    texture.refCount = 1;
-    texture.origin = origin;
-    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-
-    textureIdToHandle[textureId] = handle;
-    textureNameToId[nameSid] = textureId;
+    textureNameToId[StringID{name.c_str(), name.Size()}] = textureId;
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
         LOG_TRACE(Asset, "Requesting procedural texture load: {:x} ({}x{}, {} mips)", textureId.id, width, height, mipCount);
     }
-    assetLoadManager->RequestProceduralTextureLoad(&texture, pipelineId);
+    assetLoadManager->RequestProceduralTextureLoad(texture, pipelineId);
 
-    return &texture;
+    return texture;
 }
 
 void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const
@@ -2024,42 +1701,39 @@ void AssetManager::GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextu
     }
     for (const auto& [texId, desc] : staticProceduralRegistry) {
         uint32_t mipCount = desc.mipmapped ? static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(std::max(desc.width, desc.height))))) + 1u : 1u;
-        if (const TextureHandle* lh = textureIdToHandle.Find(texId); lh && textureAllocator.IsValid(*lh)) {
-            mipCount = textures[lh->index].mipCount;
+        if (const Texture* loaded = textures.Get(textures.Find(texId))) {
+            mipCount = loaded->mipCount;
         }
         out[texId] = {texId, desc.name, desc.width, desc.height, mipCount, TextureCategory::Procedural};
     }
-    for (const auto& [texId, handle] : textureIdToHandle) {
-        if (!textureAllocator.IsValid(handle)) { continue; }
-        const Texture& tex = textures[handle.index];
+    textures.ForEach([&out](TextureHandle, const Texture& tex) {
         if (tex.origin == Texture::Origin::RuntimeProcedural) {
-            out[texId] = {texId, tex.name, tex.width, tex.height, tex.mipCount, TextureCategory::Procedural};
+            out[tex.textureId] = {tex.textureId, tex.name, tex.width, tex.height, tex.mipCount, TextureCategory::Procedural};
         }
-    }
+    });
 }
 
 bool AssetManager::ReloadProceduralTexture(TextureID textureId)
 {
-    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
-    if (existingPtr == nullptr || !textureAllocator.IsValid(*existingPtr)) {
+    Texture* texture = textures.Get(textures.Find(textureId));
+    if (texture == nullptr) {
         return false;
     }
 
-    Texture& texture = textures[existingPtr->index];
-    if (texture.origin == Texture::Origin::Disk) {
+    if (texture->origin == Texture::Origin::Disk) {
         return false;
     }
-    if (texture.loadState == Texture::LoadState::Loading) {
-        LOG_WARN(Asset, "Procedural texture '{}' reload requested while still generating; skipping", texture.name.c_str());
+    if (texture->loadState == Texture::LoadState::Loading) {
+        LOG_WARN(Asset, "Procedural texture '{}' reload requested while still generating; skipping", texture->name.c_str());
         return false;
     }
 
-    texture.loadState = Texture::LoadState::Loading;
-    deferredTextureBindingReleases.PushBack({texture.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4, std::move(texture.image), std::move(texture.imageView)});
-    texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+    texture->loadState = Texture::LoadState::Loading;
+    deferredTextureBindingReleases.PushBack({texture->bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4, std::move(texture->image), std::move(texture->imageView)});
+    texture->bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
 
-    LOG_INFO(Asset, "Regenerating procedural texture '{}'", texture.name.c_str());
-    assetLoadManager->RequestProceduralTextureLoad(&texture, StringID{textureId.id});
+    LOG_INFO(Asset, "Regenerating procedural texture '{}'", texture->name.c_str());
+    assetLoadManager->RequestProceduralTextureLoad(texture, StringID{textureId.id});
 
     return true;
 }
@@ -2074,15 +1748,16 @@ bool AssetManager::ReloadTexture(TextureID textureId)
         return false;
     }
 
-    TextureHandle* existingPtr = textureIdToHandle.Find(textureId);
-    if (existingPtr == nullptr) {
+    const TextureHandle handle = textures.Find(textureId);
+    Texture* texturePtr = textures.Get(handle);
+    if (texturePtr == nullptr) {
         LOG_ERROR(Asset, "Texture {:x} requested reload but it is not currently loaded", textureId.id);
         return false;
     }
 
     const DiskTextureDesc& meta = textureRegistry[textureId];
 
-    Texture& texture = textures[existingPtr->index];
+    Texture& texture = *texturePtr;
     if (texture.loadedContentVersion == meta.contentVersion) {
         return false;
     }
@@ -2090,7 +1765,7 @@ bool AssetManager::ReloadTexture(TextureID textureId)
         LOG_WARN(Asset, "Texture '{}' reload requested while still loading; skipping", texture.name.c_str());
         return false;
     }
-    texture.selfHandle = *existingPtr;
+    texture.selfHandle = handle;
     texture.source = meta.source;
     texture.textureId = textureId;
     texture.name = Core::InlineString(meta.name);
@@ -2102,7 +1777,6 @@ bool AssetManager::ReloadTexture(TextureID textureId)
     texture.uncompressedSize = meta.uncompressedSize;
     texture.compressionType = meta.compressionType;
     texture.loadState = Texture::LoadState::Loading;
-    texture.refCount = 1;
     texture.loadedContentVersion = meta.contentVersion;
     deferredTextureBindingReleases.PushBack({texture.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4});
     texture.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
@@ -2117,97 +1791,58 @@ bool AssetManager::ReloadTexture(TextureID textureId)
 
 void AssetManager::UnloadTexture(TextureID id)
 {
-    TextureHandle* handlePtr = textureIdToHandle.Find(id);
-    if (handlePtr == nullptr) {
-        LOG_WARN(Asset, "Attempted to unload texture not in registry");
+    const TextureHandle handle = textures.Find(id);
+    if (!textures.Release(handle)) {
+        LOG_WARN(Asset, "Attempted to unload texture that is not loaded");
         return;
     }
-
-    TextureHandle handle = *handlePtr;
-    if (!textureAllocator.IsValid(handle)) {
-        LOG_WARN(Asset, "Attempted to unload invalid texture handle");
-        return;
-    }
-
-    Texture& texture = textures[handle.index];
-    texture.refCount--;
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", texture.name.c_str(), texture.refCount);
-    }
-
-    if (texture.refCount == 0) {
-        texture.retireFrame = TEXTURE_RETIRE_PENDING;
+        LOG_TRACE(Asset, "Texture refCount decremented: {}, refCount: {}", textures.Get(handle)->name.c_str(), textures.RefCount(handle));
     }
 }
 
 Sampler* AssetManager::LoadSampler(SamplerDesc& samplerDesc)
 {
-    SamplerID id{Hash(&samplerDesc, sizeof(samplerDesc))};
+    const SamplerID id{Hash(&samplerDesc, sizeof(samplerDesc))};
 
-    SamplerHandle* existingPtr = samplerIdToHandle.Find(id);
-    if (existingPtr != nullptr) {
-        SamplerHandle existingHandle = *existingPtr;
-        if (samplerAllocator.IsValid(existingHandle)) {
-            Sampler& existing = samplers[existingHandle.index];
-            existing.refCount++;
-            existing.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Sampler already loaded (bindless index: {}), refCount: {}", static_cast<uint32_t>(existing.bindlessHandle.index), existing.refCount);
-            }
-            return &existing;
-        }
-        samplerIdToHandle.Remove(id);
-    }
-
-    SamplerHandle handle = samplerAllocator.Add();
+    const auto [handle, sampler, bCreated] = samplers.Acquire(id, [&](Sampler& s, SamplerHandle sh) {
+        s.desc = samplerDesc;
+        s.id = id;
+        s.selfHandle = sh;
+        s.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateSampler();
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate sampler slot");
         return nullptr;
     }
-
-    Sampler& sampler = samplers[handle.index];
-    sampler.desc = samplerDesc;
-    sampler.id = id;
-    sampler.selfHandle = handle;
-    sampler.refCount = 1;
-    sampler.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateSampler();
-
-    samplerIdToHandle[id] = handle;
+    if (!bCreated) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Sampler already loaded (bindless index: {}), refCount: {}", static_cast<uint32_t>(sampler->bindlessHandle.index), samplers.RefCount(handle));
+        }
+        return sampler;
+    }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting sampler load (bindless index: {})", static_cast<uint32_t>(sampler.bindlessHandle.index));
+        LOG_TRACE(Asset, "Requesting sampler load (bindless index: {})", static_cast<uint32_t>(sampler->bindlessHandle.index));
     }
-    assetLoadManager->RequestSamplerLoad(&sampler);
+    assetLoadManager->RequestSamplerLoad(sampler);
 
-    return &sampler;
+    return sampler;
 }
 
 void AssetManager::UnloadSampler(SamplerDesc& desc)
 {
-    SamplerID id{Hash(&desc, sizeof(desc))};
+    const SamplerID id{Hash(&desc, sizeof(desc))};
 
-    SamplerHandle* handlePtr = samplerIdToHandle.Find(id);
-    if (handlePtr == nullptr) {
-        LOG_WARN(Asset, "Attempted to unload sampler not in registry");
+    const SamplerHandle handle = samplers.Find(id);
+    if (!samplers.Release(handle)) {
+        LOG_WARN(Asset, "Attempted to unload sampler that is not loaded");
         return;
     }
-
-    SamplerHandle handle = *handlePtr;
-    if (!samplerAllocator.IsValid(handle)) {
-        LOG_WARN(Asset, "Attempted to unload invalid sampler handle");
-        return;
-    }
-
-    Sampler& sampler = samplers[handle.index];
-    sampler.refCount--;
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Sampler refCount decremented: {}, refCount: {}", sampler.id.id, sampler.refCount);
-    }
-
-    if (sampler.refCount == 0) {
-        sampler.retireFrame = ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4;
+        LOG_TRACE(Asset, "Sampler refCount decremented: {}, refCount: {}", id.id, samplers.RefCount(handle));
     }
 }
 
@@ -2218,79 +1853,65 @@ CubemapHandle AssetManager::LoadCubemap(EnvironmentMapID cubemapId)
         return CubemapHandle::INVALID;
     }
 
-    if (!cubemapCache.Contains(cubemapId)) {
+    const CachedCubemapMetadata* meta = cubemapCache.Find(cubemapId);
+    if (meta == nullptr) {
         LOG_ERROR(Asset, "Cubemap {:x} not found in registry", cubemapId.id);
         return CubemapHandle::INVALID;
     }
 
-    CubemapHandle* existingPtr = cubemapIdToHandle.Find(cubemapId);
-    if (existingPtr != nullptr) {
-        CubemapHandle existingHandle = *existingPtr;
-        if (cubemapAllocator.IsValid(existingHandle)) {
-            Render::Cubemap& existing = cubemaps[existingHandle.index];
-            existing.refCount++;
-            existing.retireFrame = 0;
-            LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", existing.name.c_str(), existing.refCount);
-            return existingHandle;
-        }
-        cubemapIdToHandle.Remove(cubemapId);
-    }
-
-    CubemapHandle handle = cubemapAllocator.Add();
+    const auto [handle, cubemap, bCreated] = cubemaps.Acquire(cubemapId, [&](Render::Cubemap& c, CubemapHandle ch) {
+        c.source = meta->source;
+        c.name = meta->name;
+        c.cubemapId = cubemapId;
+        c.selfHandle = ch;
+        c.dataOffset = meta->dataOffset;
+        c.dataSize = meta->dataSize;
+        c.uncompressedSize = meta->uncompressedSize;
+        c.compressionType = meta->compressionType;
+        c.loadState = Render::Cubemap::LoadState::Loading;
+        c.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate cubemap slot for: {:x}", cubemapId.id);
         return CubemapHandle::INVALID;
     }
-
-    const CachedCubemapMetadata& meta = cubemapCache[cubemapId];
-    Render::Cubemap& cubemap = cubemaps[handle.index];
-    cubemap.source = meta.source;
-    cubemap.name = meta.name;
-    cubemap.cubemapId = cubemapId;
-    cubemap.selfHandle = handle;
-    cubemap.dataOffset = meta.dataOffset;
-    cubemap.dataSize = meta.dataSize;
-    cubemap.uncompressedSize = meta.uncompressedSize;
-    cubemap.compressionType = meta.compressionType;
-    cubemap.refCount = 1;
-    cubemap.retireFrame = 0;
-    cubemap.loadState = Render::Cubemap::LoadState::Loading;
-    cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
-
-    cubemapIdToHandle[cubemapId] = handle;
+    if (!bCreated) {
+        LOG_TRACE(Asset, "Cubemap already loaded: {}, refCount: {}", cubemap->name.c_str(), cubemaps.RefCount(handle));
+        return handle;
+    }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap.name.c_str());
+        LOG_TRACE(Asset, "Requesting cubemap load: {}", cubemap->name.c_str());
     }
-    assetLoadManager->RequestCubemapLoad(&cubemap);
+    assetLoadManager->RequestCubemapLoad(cubemap);
 
     return handle;
 }
 
 bool AssetManager::ReloadCubemap(EnvironmentMapID cubemapId)
 {
-    if (!cubemapCache.Contains(cubemapId)) {
+    const CachedCubemapMetadata* meta = cubemapCache.Find(cubemapId);
+    if (meta == nullptr) {
         LOG_ERROR(Asset, "Cubemap {:x} not found in registry", cubemapId.id);
         return false;
     }
 
-    CubemapHandle* existingPtr = cubemapIdToHandle.Find(cubemapId);
-    if (existingPtr == nullptr) {
+    const CubemapHandle handle = cubemaps.Find(cubemapId);
+    Render::Cubemap* cubemapPtr = cubemaps.Get(handle);
+    if (cubemapPtr == nullptr) {
         LOG_ERROR(Asset, "Cubemap {:x} requested reload but it is not currently loaded", cubemapId.id);
         return false;
     }
 
-    const CachedCubemapMetadata& meta = cubemapCache[cubemapId];
-
-    Render::Cubemap& cubemap = cubemaps[existingPtr->index];
-    cubemap.selfHandle = *existingPtr;
-    cubemap.source = meta.source;
-    cubemap.name = Core::InlineString(meta.name);
+    Render::Cubemap& cubemap = *cubemapPtr;
+    cubemap.selfHandle = handle;
+    cubemap.source = meta->source;
+    cubemap.name = Core::InlineString(meta->name);
     cubemap.cubemapId = cubemapId;
-    cubemap.dataOffset = meta.dataOffset;
-    cubemap.dataSize = meta.dataSize;
-    cubemap.uncompressedSize = meta.uncompressedSize;
-    cubemap.compressionType = meta.compressionType;
+    cubemap.dataOffset = meta->dataOffset;
+    cubemap.dataSize = meta->dataSize;
+    cubemap.uncompressedSize = meta->uncompressedSize;
+    cubemap.compressionType = meta->compressionType;
     cubemap.loadState = Render::Cubemap::LoadState::Loading;
     deferredCubemapBindingReleases.PushBack({cubemap.bindlessHandle, ctx->currentRenderFrame + Core::FRAME_BUFFER_COUNT * 4});
     cubemap.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateCubemap();
@@ -2305,36 +1926,23 @@ bool AssetManager::ReloadCubemap(EnvironmentMapID cubemapId)
 
 Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle)
 {
-    if (!cubemapAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &cubemaps[handle.index];
+    return cubemaps.Get(handle);
 }
 
 const Render::Cubemap* AssetManager::GetCubemap(CubemapHandle handle) const
 {
-    if (!cubemapAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &cubemaps[handle.index];
+    return cubemaps.Get(handle);
 }
 
 void AssetManager::UnloadCubemap(CubemapHandle handle)
 {
-    if (!cubemapAllocator.IsValid(handle)) {
+    if (!cubemaps.Release(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid cubemap handle");
         return;
     }
 
-    Render::Cubemap& cubemap = cubemaps[handle.index];
-    cubemap.refCount--;
-
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemap.name.c_str(), cubemap.refCount);
-    }
-
-    if (cubemap.refCount == 0) {
-        cubemap.retireFrame = CUBEMAP_RETIRE_PENDING;
+        LOG_TRACE(Asset, "Cubemap refCount decremented: {}, refCount: {}", cubemaps.Get(handle)->name.c_str(), cubemaps.RefCount(handle));
     }
 }
 
@@ -2346,50 +1954,37 @@ TextureArrayHandle AssetManager::LoadTextureArray(TextureArrayID textureArrayId)
         return TextureArrayHandle::INVALID;
     }
 
-    if (TextureArrayHandle* existing = textureArrayIdToHandle.Find(textureArrayId)) {
-        if (textureArrayAllocator.IsValid(*existing)) {
-            Render::TextureArray& textureArray = textureArrays[existing->index];
-            textureArray.refCount++;
-            textureArray.retireFrame = 0;
-            return *existing;
-        }
-        textureArrayIdToHandle.Remove(textureArrayId);
-    }
-
-    const TextureArrayHandle handle = textureArrayAllocator.Add();
+    const auto [handle, textureArray, bCreated] = textureArrays.Acquire(textureArrayId, [&](Render::TextureArray& a, TextureArrayHandle ah) {
+        a.source = meta->source;
+        a.name = meta->name;
+        a.textureArrayId = textureArrayId;
+        a.selfHandle = ah;
+        a.dataOffset = meta->dataOffset;
+        a.dataSize = meta->dataSize;
+        a.uncompressedSize = meta->uncompressedSize;
+        a.compressionType = meta->compressionType;
+        a.loadState = Render::TextureArray::LoadState::Loading;
+        a.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTextureArray();
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate texture array slot for: {:x}", textureArrayId.id);
         return TextureArrayHandle::INVALID;
     }
+    if (!bCreated) { return handle; }
 
-    Render::TextureArray& textureArray = textureArrays[handle.index];
-    textureArray.source = meta->source;
-    textureArray.name = meta->name;
-    textureArray.textureArrayId = textureArrayId;
-    textureArray.selfHandle = handle;
-    textureArray.dataOffset = meta->dataOffset;
-    textureArray.dataSize = meta->dataSize;
-    textureArray.uncompressedSize = meta->uncompressedSize;
-    textureArray.compressionType = meta->compressionType;
-    textureArray.refCount = 1;
-    textureArray.retireFrame = 0;
-    textureArray.loadState = Render::TextureArray::LoadState::Loading;
-    textureArray.bindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTextureArray();
-    textureArrayIdToHandle[textureArrayId] = handle;
-
-    assetLoadManager->RequestTextureArrayLoad(&textureArray);
+    assetLoadManager->RequestTextureArrayLoad(textureArray);
     return handle;
 }
 
 bool AssetManager::ReloadTextureArray(TextureArrayID textureArrayId)
 {
     const CachedTextureArrayMetadata* meta = textureArrayCache.Find(textureArrayId);
-    TextureArrayHandle* existing = textureArrayIdToHandle.Find(textureArrayId);
-    if (meta == nullptr || existing == nullptr || !textureArrayAllocator.IsValid(*existing)) {
+    Render::TextureArray* textureArrayPtr = textureArrays.Get(textureArrays.Find(textureArrayId));
+    if (meta == nullptr || textureArrayPtr == nullptr) {
         return false;
     }
 
-    Render::TextureArray& textureArray = textureArrays[existing->index];
+    Render::TextureArray& textureArray = *textureArrayPtr;
     if (textureArray.loadState == Render::TextureArray::LoadState::Loading) {
         LOG_WARN(Asset, "Texture array '{}' reload requested mid-load; skipped", textureArray.name.c_str());
         return false;
@@ -2410,31 +2005,18 @@ bool AssetManager::ReloadTextureArray(TextureArrayID textureArrayId)
 
 Render::TextureArray* AssetManager::GetTextureArray(TextureArrayHandle handle)
 {
-    if (!textureArrayAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &textureArrays[handle.index];
+    return textureArrays.Get(handle);
 }
 
 const Render::TextureArray* AssetManager::GetTextureArray(TextureArrayHandle handle) const
 {
-    if (!textureArrayAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &textureArrays[handle.index];
+    return textureArrays.Get(handle);
 }
 
 void AssetManager::UnloadTextureArray(TextureArrayHandle handle)
 {
-    if (!textureArrayAllocator.IsValid(handle)) {
+    if (!textureArrays.Release(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid texture array handle");
-        return;
-    }
-
-    Render::TextureArray& textureArray = textureArrays[handle.index];
-    textureArray.refCount--;
-    if (textureArray.refCount == 0) {
-        textureArray.retireFrame = TEXTURE_ARRAY_RETIRE_PENDING;
     }
 }
 
@@ -2469,104 +2051,82 @@ void AssetManager::UnloadProbe(CubemapHandle handle)
 
 FontHandle AssetManager::LoadFont(FontID id)
 {
-    if (!fontCache.Contains(id)) {
+    const CachedFontMetadata* meta = fontCache.Find(id);
+    if (meta == nullptr) {
         LOG_ERROR(Asset, "Font {:x} not found in registry", id.id);
         return FontHandle::INVALID;
     }
 
-    FontHandle* existingPtr = fontIdToHandle.Find(id);
-    if (existingPtr != nullptr) {
-        FontHandle existingHandle = *existingPtr;
-        if (fontAllocator.IsValid(existingHandle)) {
-            Font& font = fonts[existingHandle.index];
-            font.refCount++;
-            font.retireFrame = 0;
-            if (bVerboseLogging.load(std::memory_order_relaxed)) {
-                LOG_TRACE(Asset, "Font already loaded: {}, refCount: {}", font.name.c_str(), font.refCount);
-            }
-            return existingHandle;
+    if (const FontHandle existing = fonts.AddRef(id); existing.IsValid()) {
+        if (bVerboseLogging.load(std::memory_order_relaxed)) {
+            LOG_TRACE(Asset, "Font already loaded: {}, refCount: {}", fonts.Get(existing)->name.c_str(), fonts.RefCount(existing));
         }
-        fontIdToHandle.Remove(id);
+        return existing;
     }
 
-    FontHandle handle = fontAllocator.Add();
+    Font loaded{};
+    {
+        Platform::ScopedFileMapping map(meta->source);
+        if (!map.data || meta->header.glyphDataOffset + meta->header.glyphCount * sizeof(WGlyphInfo) > map.size) {
+            LOG_ERROR(Asset, "Failed to open font file: {}", meta->source.c_str());
+            return FontHandle::INVALID;
+        }
+        loaded.glyphs = Core::HeapArray<WGlyphInfo>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta->header.glyphCount);
+        memcpy(loaded.glyphs.Data(), map.data + meta->header.glyphDataOffset, meta->header.glyphCount * sizeof(WGlyphInfo));
+
+        // 3D Text
+        if (meta->header.contourGlyphCount != 0) {
+            if (meta->header.edgeDataOffset + meta->header.edgeCount * sizeof(WFontEdge) > map.size) {
+                LOG_ERROR(Asset, "Failed to read contour data for font: {}", meta->name.c_str());
+                return FontHandle::INVALID;
+            }
+            loaded.glyphContourRanges = Core::HeapArray<WGlyphContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta->header.contourGlyphCount);
+            loaded.contourRanges = Core::HeapArray<WContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta->header.contourCount);
+            loaded.contourEdges = Core::HeapArray<WFontEdge>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta->header.edgeCount);
+            memcpy(loaded.glyphContourRanges.Data(), map.data + meta->header.glyphContourRangeOffset, meta->header.contourGlyphCount * sizeof(WGlyphContourRange));
+            memcpy(loaded.contourRanges.Data(), map.data + meta->header.contourRangeOffset, meta->header.contourCount * sizeof(WContourRange));
+            memcpy(loaded.contourEdges.Data(), map.data + meta->header.edgeDataOffset, meta->header.edgeCount * sizeof(WFontEdge));
+        }
+    }
+
+    const auto [handle, font, bCreated] = fonts.Acquire(id, [&](Font& f, FontHandle fh) {
+        f = std::move(loaded);
+        f.selfHandle = fh;
+        f.fontId = id;
+        f.name = meta->name;
+        f.source = meta->source;
+        f.header = meta->header;
+        f.loadState = Font::LoadState::Loading;
+        f.curveAllocation = {};
+        f.curveByteOffset = 0;
+        f.atlasAcquireBarrier = {};
+        if (f.header.sdfUncompressedSize > 0) {
+            f.atlasBindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
+        }
+    });
     if (!handle.IsValid()) {
         LOG_ERROR(Asset, "Failed to allocate font slot for {:x}", id.id);
         return FontHandle::INVALID;
     }
-
-    const CachedFontMetadata& meta = fontCache[id];
-    Font& font = fonts[handle.index];
-    font.selfHandle = handle;
-    font.fontId = id;
-    font.name = meta.name;
-    font.source = meta.source;
-    font.header = meta.header;
-    font.refCount = 1;
-    font.loadState = Font::LoadState::Loading;
-
-    //
-    {
-        Platform::ScopedFileMapping map(meta.source);
-        if (!map.data || meta.header.glyphDataOffset + meta.header.glyphCount * sizeof(WGlyphInfo) > map.size) {
-            LOG_ERROR(Asset, "Failed to open font file: {}", meta.source.c_str());
-            fontAllocator.Remove(handle);
-            font = {};
-            return FontHandle::INVALID;
-        }
-        font.glyphs = Core::HeapArray<WGlyphInfo>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.glyphCount);
-        memcpy(font.glyphs.Data(), map.data + meta.header.glyphDataOffset, meta.header.glyphCount * sizeof(WGlyphInfo));
-
-        // 3D Text
-        if (meta.header.contourGlyphCount != 0) {
-            if (meta.header.edgeDataOffset + meta.header.edgeCount * sizeof(WFontEdge) > map.size) {
-                LOG_ERROR(Asset, "Failed to read contour data for font: {}", meta.name.c_str());
-                fontAllocator.Remove(handle);
-                font = {};
-                return FontHandle::INVALID;
-            }
-            font.glyphContourRanges = Core::HeapArray<WGlyphContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourGlyphCount);
-            font.contourRanges = Core::HeapArray<WContourRange>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.contourCount);
-            font.contourEdges = Core::HeapArray<WFontEdge>(&memoryManager->Assets(), Core::AllocTag::AssetManager, meta.header.edgeCount);
-            memcpy(font.glyphContourRanges.Data(), map.data + meta.header.glyphContourRangeOffset, meta.header.contourGlyphCount * sizeof(WGlyphContourRange));
-            memcpy(font.contourRanges.Data(), map.data + meta.header.contourRangeOffset, meta.header.contourCount * sizeof(WContourRange));
-            memcpy(font.contourEdges.Data(), map.data + meta.header.edgeDataOffset, meta.header.edgeCount * sizeof(WFontEdge));
-        }
-    }
-
-    font.curveAllocation = {};
-    font.curveByteOffset = 0;
-    font.atlasAcquireBarrier = {};
-    if (font.header.sdfUncompressedSize > 0) {
-        font.atlasBindlessHandle = resourceManager->bindlessSamplerTextureDescriptorBuffer.ReserveAllocateTexture();
-    }
-
-    fontIdToHandle[id] = handle;
+    if (!bCreated) { return handle; }
 
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Requesting font curve load: {}", font.name.c_str());
+        LOG_TRACE(Asset, "Requesting font curve load: {}", font->name.c_str());
     }
-    assetLoadManager->RequestFontCurveLoad(&font);
+    assetLoadManager->RequestFontCurveLoad(font);
 
     return handle;
 }
 
 void AssetManager::UnloadFont(FontHandle handle)
 {
-    if (!fontAllocator.IsValid(handle)) {
+    if (!fonts.Release(handle)) {
         LOG_WARN(Asset, "Attempted to unload invalid font handle");
         return;
     }
 
-    Font& font = fonts[handle.index];
-    font.refCount--;
-
     if (bVerboseLogging.load(std::memory_order_relaxed)) {
-        LOG_TRACE(Asset, "Font refCount decremented: {}, refCount: {}", font.name.c_str(), font.refCount);
-    }
-
-    if (font.refCount == 0) {
-        font.retireFrame = FONT_RETIRE_PENDING;
+        LOG_TRACE(Asset, "Font refCount decremented: {}, refCount: {}", fonts.Get(handle)->name.c_str(), fonts.RefCount(handle));
     }
 }
 
@@ -2590,34 +2150,24 @@ bool AssetManager::IsFontFrozen(FontID fontId) const
 
 Font* AssetManager::GetFont(FontHandle handle)
 {
-    if (!fontAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &fonts[handle.index];
+    return fonts.Get(handle);
 }
 
 const Font* AssetManager::GetFont(FontHandle handle) const
 {
-    if (!fontAllocator.IsValid(handle)) {
-        return nullptr;
-    }
-    return &fonts[handle.index];
+    return fonts.Get(handle);
 }
 
 const WGlyphInfo* AssetManager::GetGlyph(FontHandle handle, uint32_t codepoint) const
 {
-    if (!fontAllocator.IsValid(handle)) {
+    const Font* font = fonts.Get(handle);
+    if (font == nullptr || font->loadState != Font::LoadState::Loaded) {
         return nullptr;
     }
 
-    const Font& font = fonts[handle.index];
-    if (font.loadState != Font::LoadState::Loaded) {
-        return nullptr;
-    }
-
-    for (uint32_t i = 0; i < font.glyphs.Size(); ++i) {
-        if (font.glyphs[i].codepoint == codepoint) {
-            return &font.glyphs[i];
+    for (uint32_t i = 0; i < font->glyphs.Size(); ++i) {
+        if (font->glyphs[i].codepoint == codepoint) {
+            return &font->glyphs[i];
         }
     }
     return nullptr;

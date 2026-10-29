@@ -36,8 +36,6 @@ struct Cubemap
     uint64_t uncompressedSize{0};
     Engine::CompressionType compressionType{Engine::DEFAULT_ENV_MAP_COMPRESSION};
     LoadState loadState{LoadState::NotLoaded};
-    uint32_t refCount = 0;
-    uint64_t retireFrame{0};
     BindlessCubemapHandle bindlessHandle{};
 
     AllocatedImage image;

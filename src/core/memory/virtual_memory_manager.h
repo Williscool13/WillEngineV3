@@ -40,7 +40,7 @@ class VirtualMemoryManager
 public:
     using Handle = uint32_t;
     static constexpr Handle INVALID_HANDLE = UINT32_MAX;
-    static constexpr size_t MAX_RESERVATIONS = 32;
+    static constexpr size_t MAX_RESERVATIONS = 64;
     static constexpr size_t COMMIT_STEP = 1ull * 1024 * 1024;
 
     struct Reservation

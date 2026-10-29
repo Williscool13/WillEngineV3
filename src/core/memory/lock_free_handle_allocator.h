@@ -34,14 +34,30 @@ class LockFreeHandleAllocator
     static uint32_t HeadIndex(uint64_t head) { return static_cast<uint32_t>(head); }
 
 public:
-    LockFreeHandleAllocator()
+    LockFreeHandleAllocator() : LockFreeHandleAllocator(MaxSize) {}
+
+    /** Only [0, initialCount) start free; Grow hands out the rest. */
+    explicit LockFreeHandleAllocator(uint32_t initialCount)
     {
         for (uint32_t i = 0; i < MaxSize; ++i) {
             nodes[i].generation.store(1, std::memory_order_relaxed);
+            nodes[i].nextFree.store(i + 1 < initialCount ? i + 1 : INVALID, std::memory_order_relaxed);
+        }
+        freeListHead.store(initialCount > 0 ? PackHead(0, 1) : PackHead(INVALID, 0), std::memory_order_relaxed);
+    }
+
+    /** Pushes never-used indices [begin, end) onto the free list, begin on top. Each index must be pushed once. */
+    void Grow(uint32_t begin, uint32_t end)
+    {
+        if (begin >= end) { return; }
+        for (uint32_t i = begin; i + 1 < end; ++i) {
             nodes[i].nextFree.store(i + 1, std::memory_order_relaxed);
         }
-        nodes[MaxSize - 1].nextFree.store(INVALID, std::memory_order_relaxed);
-        freeListHead.store(PackHead(0, 1), std::memory_order_relaxed);
+        const uint64_t newHead = PackHead(begin, nodes[begin].generation.load(std::memory_order_relaxed));
+        uint64_t oldHead = freeListHead.load(std::memory_order_acquire);
+        do {
+            nodes[end - 1].nextFree.store(HeadIndex(oldHead), std::memory_order_release);
+        } while (!freeListHead.compare_exchange_weak(oldHead, newHead, std::memory_order_release, std::memory_order_acquire));
     }
 
     Handle<T> Add()

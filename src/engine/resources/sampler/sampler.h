@@ -68,8 +68,6 @@ struct Sampler
 
     SamplerHandle selfHandle{SamplerHandle::INVALID};
     LoadState loadState{LoadState::NotLoaded};
-    uint32_t refCount = 0;
-    uint64_t retireFrame = 0;
 
     Render::Sampler sampler;
     Render::BindlessSamplerHandle bindlessHandle{Render::BindlessSamplerHandle::INVALID};

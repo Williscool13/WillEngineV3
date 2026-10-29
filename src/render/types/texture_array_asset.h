@@ -33,8 +33,6 @@ struct TextureArray
     uint64_t uncompressedSize{0};
     Engine::CompressionType compressionType{Engine::CompressionType::Zstd};
     LoadState loadState{LoadState::NotLoaded};
-    uint32_t refCount = 0;
-    uint64_t retireFrame{0};
     BindlessTextureArrayHandle bindlessHandle{};
 
     AllocatedImage image;

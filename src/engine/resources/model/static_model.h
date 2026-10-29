@@ -84,7 +84,6 @@ public:
     ModelID modelId{};
     ModelLoadState modelLoadState{ModelLoadState::NotLoaded};
     uint64_t acquireFrame{UINT64_MAX};
-    uint64_t retireFrame{0};
 
     // Populated by AssetManager, Only for normal models
     Core::Path source{};
@@ -93,9 +92,6 @@ public:
     // Populated by AssetManager, Only for (simple) procedural models
     ProceduralParams proceduralParams{};
     ProceduralRepeat proceduralRepeat{};
-
-    // Populated by AssetManager, sometimes changed
-    uint32_t refCount = 0;
 
     // Populated in AssetLoadThread
     StaticModelData modelData{};

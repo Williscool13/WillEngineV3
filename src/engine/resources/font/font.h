@@ -50,8 +50,6 @@ struct Font
     Core::ImageAcquireOperation atlasAcquireBarrier{};
 
     LoadState loadState{LoadState::NotLoaded};
-    uint32_t refCount{0};
-    uint64_t retireFrame{0};
 };
 } // Engine
 

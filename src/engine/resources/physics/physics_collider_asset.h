@@ -83,9 +83,7 @@ struct PhysicsColliderAsset
     PhysicsColliderID colliderId{};
     PhysicsColliderKind kind{PhysicsColliderKind::Compound};
     LoadState loadState{LoadState::NotLoaded};
-    uint32_t refCount{0};
     uint64_t acquireFrame{UINT64_MAX};
-    uint64_t retireFrame{0};
 
     // Source spec (exactly one populated). Mirrors StaticModel; the disk source (model/font) freeze-gates hot-reload.
     Engine::ModelID sourceModelId{};
