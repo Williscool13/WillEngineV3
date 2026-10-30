@@ -155,6 +155,9 @@ private:
     Core::LockFreeHandleAllocator<BindlessTextureArray, BINDLESS_SAMPLED_TEXTURE_ARRAY_COUNT> textureArrayAllocator;
 
     void WriteSampledImageDescriptor(uint32_t binding, uint32_t index, const VkDescriptorImageInfo& imageInfo);
+
+    /** A reserved index is readable before its load writes a descriptor, so a released one must not keep pointing at freed memory. */
+    void ClearSampledImageDescriptor(uint32_t binding, uint32_t index);
 };
 } // Render
 

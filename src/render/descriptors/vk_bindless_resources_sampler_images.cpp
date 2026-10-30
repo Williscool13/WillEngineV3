@@ -164,6 +164,8 @@ bool BindlessResourcesSamplerImages::ReleaseSamplerBinding(BindlessSamplerHandle
 
 bool BindlessResourcesSamplerImages::ReleaseTextureBinding(BindlessTextureHandle handle)
 {
+    if (!textureAllocator.IsValid(handle)) { return false; }
+    ClearSampledImageDescriptor(1, handle.index);
     return textureAllocator.Remove(handle);
 }
 
@@ -227,6 +229,8 @@ bool BindlessResourcesSamplerImages::UpdateCubemap(BindlessCubemapHandle cubemap
 
 bool BindlessResourcesSamplerImages::ReleaseCubemapBinding(BindlessCubemapHandle handle)
 {
+    if (!cubemapAllocator.IsValid(handle)) { return false; }
+    ClearSampledImageDescriptor(2, handle.index);
     return cubemapAllocator.Remove(handle);
 }
 
@@ -252,6 +256,8 @@ bool BindlessResourcesSamplerImages::UpdateTextureArray(BindlessTextureArrayHand
 
 bool BindlessResourcesSamplerImages::ReleaseTextureArrayBinding(BindlessTextureArrayHandle handle)
 {
+    if (!textureArrayAllocator.IsValid(handle)) { return false; }
+    ClearSampledImageDescriptor(3, handle.index);
     return textureArrayAllocator.Remove(handle);
 }
 
@@ -268,6 +274,16 @@ void BindlessResourcesSamplerImages::WriteSampledImageDescriptor(uint32_t bindin
 
     const size_t sampledImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
     vkGetDescriptorEXT(context->device, &descriptorGetInfo, sampledImageDescriptorSize, basePtr + index * sampledImageDescriptorSize);
+}
+
+void BindlessResourcesSamplerImages::ClearSampledImageDescriptor(uint32_t binding, uint32_t index)
+{
+    size_t bindingOffset;
+    vkGetDescriptorSetLayoutBindingOffsetEXT(context->device, descriptorSetLayout.handle, binding, &bindingOffset);
+    char* basePtr = static_cast<char*>(buffer.allocationInfo.pMappedData) + bindingOffset;
+
+    const size_t sampledImageDescriptorSize = VulkanContext::deviceInfo.descriptorBufferProps.sampledImageDescriptorSize;
+    memset(basePtr + index * sampledImageDescriptorSize, 0, sampledImageDescriptorSize);
 }
 
 VkDescriptorBufferBindingInfoEXT BindlessResourcesSamplerImages::GetBindingInfo() const
