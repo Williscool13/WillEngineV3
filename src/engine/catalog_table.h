@@ -117,6 +117,16 @@ public:
         return {row.entry, false, 0};
     }
 
+    /** Renames an entry in place (editor renames); call RebuildNames after. */
+    bool SetName(Id id, StringID name)
+    {
+        const uint32_t* index = idToRow.Find(id);
+        if (index == nullptr) { return false; }
+        rows[*index].name = name;
+        bNamesDirty = true;
+        return true;
+    }
+
     bool Remove(Id id)
     {
         const uint32_t* found = idToRow.Find(id);

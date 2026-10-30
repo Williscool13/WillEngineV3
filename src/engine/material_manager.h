@@ -18,6 +18,7 @@
 #include "core/memory/memory_manager.h"
 #include "engine/core/material_id.h"
 #include "engine/core/text_material_id.h"
+#include "engine/catalog_table.h"
 #include "render/render_config.h"
 #include "render/interface/render_params.h"
 #include "render/shaders/model_interop.h"
@@ -32,6 +33,15 @@ class MaterialManager
 {
 public:
     static constexpr const char* COMPONENT_NAME = "MaterialManager";
+
+    /** Catalog record of a .wmaterial or .wtextmaterial; the definition itself lives in GetMaterials / GetTextMaterials. */
+    struct CachedMaterialFile
+    {
+        Core::Path source;
+        Core::InlineString<128> name;
+        /** Hash of the file; the format has no content version. */
+        uint64_t contentVersion{0};
+    };
 
     MaterialManager(Core::MemoryManager& memoryManager, EngineContext* ctx, AssetManager* assetManager);
 
@@ -77,8 +87,6 @@ public:
     void ResolveMissingTextures();
 
     void RebindTexture(TextureID textureId, int32_t bindlessIndex);
-
-    void LoadMutableMaterials();
 
     // TextMaterial management
     void CreateTextMaterial(std::string_view name);
@@ -148,6 +156,10 @@ private:
 
     void MarkDirtyIndex(uint32_t index);
 
+    void ScanMaterialFile(const Core::Path& path, uint32_t generation);
+
+    void ScanTextMaterialFile(const Core::Path& path, uint32_t generation);
+
 private:
     EngineContext* ctx;
     Core::MemoryManager* memoryManager;
@@ -166,10 +178,10 @@ private:
     /**
      * Contains:
      *  - Runtime generated materials from models. Immutable so we can alias by hashing.
-     *  - User defined materials referenced by String ID (see `nameToMaterialMap`). Designed to be modifiable at runtime.
+     *  - User defined materials from .wmaterial files (see `materialCatalog`). Designed to be modifiable at runtime.
      */
     Core::FixedMap<MaterialID, Material> materials;
-    Core::FixedMap<StringID, MaterialID> nameToMaterialMap;
+    CatalogTable<MaterialID, CachedMaterialFile> materialCatalog;
 
     int32_t pendingMaterialLoadLogCount{0};
     std::chrono::steady_clock::time_point materialLoadLastActivity{};
@@ -180,7 +192,8 @@ private:
     Core::Random mutableIdRng{};
 
     Core::FixedMap<TextMaterialID, TextMaterial> textMaterials;
-    Core::FixedMap<StringID, TextMaterialID> nameToTextMaterialMap;
+    CatalogTable<TextMaterialID, CachedMaterialFile> textMaterialCatalog;
+    uint32_t scanGeneration{0};
 
     Core::Random textMaterialIdRng{};
 };

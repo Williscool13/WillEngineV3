@@ -12,6 +12,7 @@
 #include "asset_manager_config.h"
 
 #include "core/containers/vector.h"
+#include "core/hash/xxh3.h"
 #include "engine/serialization/text_parse.h"
 #include "engine/serialization/text_reader.h"
 #include "engine/serialization/text_writer.h"
@@ -50,11 +51,10 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
       assetManager(assetManager),
       idToEntryMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MATERIALS),
       materials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
-      nameToMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
-      textMaterials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS),
-      nameToTextMaterialMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS)
-
+      textMaterials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS)
 {
+    materialCatalog.Init(&memoryManager.Virtual(), &memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS, "Material");
+    textMaterialCatalog.Init(&memoryManager.Virtual(), &memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS, "Text material");
     uploadDirty.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, Core::FRAME_BUFFER_COUNT, &memoryManager.Persistent(), Core::AllocTag::AssetManager);
     changedDirty.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, 1, &memoryManager.Persistent(), Core::AllocTag::AssetManager);
 
@@ -88,7 +88,8 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
     // Default material is always resident
     AcquireMaterial(defaultMaterial);
 
-    LoadMutableMaterials();
+    ctx->rescan.bMaterials.store(true, std::memory_order_release);
+    Scan();
 }
 
 MaterialID MaterialManager::CreateSynthesizedMaterial(const Material& mat)
@@ -405,12 +406,7 @@ void MaterialManager::SetLightingMode(Core::LightingMode mode)
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const
 {
-    const MaterialID* mat = nameToMaterialMap.Find(name);;
-    if (mat == nullptr) {
-        return MaterialID::INVALID;
-    }
-
-    return *mat;
+    return materialCatalog.FindByName(name);
 }
 
 const Material* MaterialManager::GetMaterial(MaterialID id) const
@@ -455,6 +451,7 @@ bool MaterialManager::MoveMutableMaterial(MaterialID id, std::string_view subDir
     Platform::CreateDirectories(newDir.c_str());
     if (!Platform::RenameFile(mat->sourcePath, newPath)) { return false; }
     mat->sourcePath = newPath;
+    if (CachedMaterialFile* file = materialCatalog.Find(id)) { file->source = newPath; }
     return true;
 }
 
@@ -469,8 +466,8 @@ bool MaterialManager::DeleteMutableMaterial(MaterialID id)
         return false;
     }
 
-    StringID sid(it->name.c_str(), it->name.Size());
-    nameToMaterialMap.Remove(sid);
+    materialCatalog.Remove(id);
+    materialCatalog.RebuildNames();
     materials.Remove(id);
     return true;
 }
@@ -481,10 +478,7 @@ bool MaterialManager::RenameMutableMaterial(MaterialID id, std::string_view newN
     if (!mat || mat->bSynthesized) { return false; }
 
     const StringID newSid(newName.data(), newName.size());
-    if (nameToMaterialMap.Contains(newSid)) { return false; }
-
-    const StringID oldSid(mat->name.c_str(), mat->name.Size());
-    nameToMaterialMap.Remove(oldSid);
+    if (materialCatalog.FindByName(newSid).IsValid()) { return false; }
 
     mat->name = Core::InlineString<128>(newName);
 
@@ -505,7 +499,12 @@ bool MaterialManager::RenameMutableMaterial(MaterialID id, std::string_view newN
         SaveMaterialFile(&memoryManager->AssetsScratch(), newPath, header, *mat);
     }
 
-    nameToMaterialMap[newSid] = id;
+    if (CachedMaterialFile* file = materialCatalog.Find(id)) {
+        file->name = mat->name;
+        file->source = mat->sourcePath;
+    }
+    materialCatalog.SetName(id, newSid);
+    materialCatalog.RebuildNames();
     return true;
 }
 
@@ -543,76 +542,113 @@ void MaterialManager::CreateMaterial(std::string_view name, std::string_view sub
 void MaterialManager::Scan()
 {
     bool expectedRescan = true;
-    if (ctx->rescan.bMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) {
-        Core::Vector<Core::Path> paths(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
-        Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
+    if (!ctx->rescan.bMaterials.compare_exchange_strong(expectedRescan, false, std::memory_order::acq_rel, std::memory_order::relaxed)) { return; }
 
-        for (uint32_t i = 0; i < paths.Size(); ++i) {
-            if (paths[i].Extension() == ".wmaterial") {
-                Platform::ScopedFileMapping map(paths[i]);
-                if (!map.data) { continue; }
-                auto header = ReadWMaterialHeader(map.data, map.size);
-                if (!header) { continue; }
-
-                StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
-                if (nameToMaterialMap.Contains(sid)) { continue; }
-
-                const TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
-                Material mat = DeserializeMaterial(r, paths[i]);
-                materials[mat.id] = mat;
-                nameToMaterialMap[sid] = mat.id;
-            }
-            else if (paths[i].Extension() == ".wtextmaterial") {
-                Platform::ScopedFileMapping map(paths[i]);
-                if (!map.data) { continue; }
-                auto header = ReadWTextMaterialHeader(map.data, map.size);
-                if (!header) { continue; }
-
-                StringID sid(header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH));
-                if (nameToTextMaterialMap.Contains(sid)) { continue; }
-
-                const TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
-                TextMaterial mat = DeserializeTextMaterial(r, paths[i]);
-                textMaterials[mat.id] = mat;
-                nameToTextMaterialMap[sid] = mat.id;
-            }
-        }
-    }
-}
-
-void MaterialManager::LoadMutableMaterials()
-{
+    const uint32_t generation = ++scanGeneration;
     Core::Vector<Core::Path> paths(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
     Platform::RecursiveDirectoryIterator(Platform::GetAssetPath(), paths);
-
-    for (uint32_t i = 0; i < paths.Size(); ++i) {
-        if (paths[i].Extension() == ".wmaterial") {
-            Platform::ScopedFileMapping map(paths[i]);
-            auto header = map.data ? ReadWMaterialHeader(map.data, map.size) : std::nullopt;
-            if (!header) {
-                LOG_WARN(Asset, "Skipping {} - missing or invalid wmaterial header", paths[i].c_str());
-                continue;
-            }
-            StringID sid(header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH));
-            const TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
-            Material mat = DeserializeMaterial(r, paths[i]);
-            materials[mat.id] = mat;
-            nameToMaterialMap[sid] = mat.id;
-        }
-        else if (paths[i].Extension() == ".wtextmaterial") {
-            Platform::ScopedFileMapping map(paths[i]);
-            auto header = map.data ? ReadWTextMaterialHeader(map.data, map.size) : std::nullopt;
-            if (!header) {
-                LOG_WARN(Asset, "Skipping {} - missing or invalid wstextmat header", paths[i].c_str());
-                continue;
-            }
-            StringID sid(header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH));
-            const TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
-            TextMaterial mat = DeserializeTextMaterial(r, paths[i]);
-            textMaterials[mat.id] = mat;
-            nameToTextMaterialMap[sid] = mat.id;
-        }
+    for (const Core::Path& path : paths) {
+        const auto ext = path.Extension();
+        if (ext == ".wmaterial") { ScanMaterialFile(path, generation); }
+        else if (ext == ".wtextmaterial") { ScanTextMaterialFile(path, generation); }
     }
+
+    // In-use materials keep their entry and definition until they retire.
+    materialCatalog.Prune(generation, [this](MaterialID id, const CachedMaterialFile&) { return idToEntryMap.Contains(id); });
+    textMaterialCatalog.Prune(generation, [](TextMaterialID, const CachedMaterialFile&) { return false; });
+    materialCatalog.RebuildNames();
+    textMaterialCatalog.RebuildNames();
+
+    Core::Vector<MaterialID> goneMaterials(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    for (const auto& [id, mat] : materials) {
+        if (!mat.bSynthesized && !materialCatalog.Contains(id)) { goneMaterials.PushBack(id); }
+    }
+    for (const MaterialID id : goneMaterials) { materials.Remove(id); }
+
+    Core::Vector<TextMaterialID> goneTextMaterials(&memoryManager->AssetsScratch(), Core::AllocTag::AssetManager);
+    for (const auto& [id, mat] : textMaterials) {
+        if (!textMaterialCatalog.Contains(id)) { goneTextMaterials.PushBack(id); }
+    }
+    for (const TextMaterialID id : goneTextMaterials) { textMaterials.Remove(id); }
+}
+
+void MaterialManager::ScanMaterialFile(const Core::Path& path, uint32_t generation)
+{
+    Platform::ScopedFileMapping map(path);
+    const auto header = map.data ? ReadWMaterialHeader(map.data, map.size) : std::nullopt;
+    if (!header) {
+        LOG_WARN(Asset, "Skipping {} - missing or invalid wmaterial header", path.c_str());
+        return;
+    }
+    if (header->materialId == 0) {
+        LOG_WARN(Asset, "Material '{}' has no id. Re-save it to fix", path.c_str());
+        return;
+    }
+
+    const MaterialID id{header->materialId};
+    const Core::InlineString<128> name{std::string_view{header->name, strnlen(header->name, WMATERIAL_NAME_LENGTH)}};
+    const uint64_t contentVersion = Hash(map.data, map.size);
+    const auto [file, bExisted, prevVersion] = materialCatalog.Stamp(id, StringID{name.c_str(), name.Size()}, generation, path);
+    file.source = path;
+    file.name = name;
+    file.contentVersion = contentVersion;
+    if (bExisted && prevVersion == contentVersion) { return; }
+    
+    // TEMPORARY: permanently loads every definition at scan. Moves behind an acquire in the material revamp, leaving Scan catalog-only.
+    const TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
+    Material mat = DeserializeMaterial(r, path);
+    mat.id = id;
+
+    Material* existing = materials.Find(id);
+    if (existing == nullptr) {
+        materials[id] = mat;
+        return;
+    }
+
+    // Changed on disk: re-apply through the update path so resolved textures and samplers follow.
+    LOG_TRACE(Asset, "Material '{}' (id {:x}) changed on disk", name.c_str(), id.id);
+    existing->name = mat.name;
+    existing->sourcePath = mat.sourcePath;
+    UpdateMutableMaterial(id, mat, false);
+}
+
+void MaterialManager::ScanTextMaterialFile(const Core::Path& path, uint32_t generation)
+{
+    Platform::ScopedFileMapping map(path);
+    const auto header = map.data ? ReadWTextMaterialHeader(map.data, map.size) : std::nullopt;
+    if (!header) {
+        LOG_WARN(Asset, "Skipping {} - missing or invalid wtextmaterial header", path.c_str());
+        return;
+    }
+    if (header->textMaterialId == 0) {
+        LOG_WARN(Asset, "Text material '{}' has no id. Re-save it to fix", path.c_str());
+        return;
+    }
+
+    const TextMaterialID id{header->textMaterialId};
+    const Core::InlineString<128> name{std::string_view{header->name, strnlen(header->name, WTEXT_MATERIAL_NAME_LENGTH)}};
+    const uint64_t contentVersion = Hash(map.data, map.size);
+    const auto [file, bExisted, prevVersion] = textMaterialCatalog.Stamp(id, StringID{name.c_str(), name.Size()}, generation, path);
+    file.source = path;
+    file.name = name;
+    file.contentVersion = contentVersion;
+    if (bExisted && prevVersion == contentVersion) { return; }
+
+    // TEMPORARY: permanently loads every definition at scan. Moves behind an acquire in the material revamp, leaving Scan catalog-only.
+    const TextReader r(map.data + header->dataOffset, map.size - header->dataOffset);
+    TextMaterial mat = DeserializeTextMaterial(r, path);
+    mat.id = id;
+
+    TextMaterial* existing = textMaterials.Find(id);
+    if (existing == nullptr) {
+        textMaterials[id] = mat;
+        return;
+    }
+
+    LOG_TRACE(Asset, "Text material '{}' (id {:x}) changed on disk", name.c_str(), id.id);
+    existing->name = mat.name;
+    existing->sourcePath = mat.sourcePath;
+    UpdateTextMaterial(id, mat, false);
 }
 
 void MaterialManager::CreateTextMaterial(std::string_view name)
@@ -636,9 +672,11 @@ void MaterialManager::CreateTextMaterial(std::string_view name)
 
     SaveTextMaterialFile(&memoryManager->AssetsScratch(), matPath, header, mat);
 
-    StringID sid(mat.name.c_str(), mat.name.Size());
     textMaterials[mat.id] = mat;
-    nameToTextMaterialMap[sid] = mat.id;
+    CachedMaterialFile& file = textMaterialCatalog.Stamp(mat.id, StringID{mat.name.c_str(), mat.name.Size()}, scanGeneration, matPath).entry;
+    file.source = matPath;
+    file.name = mat.name;
+    textMaterialCatalog.RebuildNames();
 
     ctx->rescan.bMaterials.store(true, std::memory_order_release);
 }
@@ -676,8 +714,8 @@ bool MaterialManager::DeleteTextMaterial(TextMaterialID id)
         return false;
     }
 
-    StringID sid(mat->name.c_str(), mat->name.Size());
-    nameToTextMaterialMap.Remove(sid);
+    textMaterialCatalog.Remove(id);
+    textMaterialCatalog.RebuildNames();
     textMaterials.Remove(id);
     return true;
 }
@@ -689,10 +727,7 @@ bool MaterialManager::RenameTextMaterial(TextMaterialID id, std::string_view new
     if (!mat) { return false; }
 
     const StringID newSid(newName.data(), newName.size());
-    if (nameToTextMaterialMap.Contains(newSid)) { return false; }
-
-    const StringID oldSid(mat->name.c_str(), mat->name.Size());
-    nameToTextMaterialMap.Remove(oldSid);
+    if (textMaterialCatalog.FindByName(newSid).IsValid()) { return false; }
 
     mat->name = Core::InlineString<128>(newName);
 
@@ -713,14 +748,18 @@ bool MaterialManager::RenameTextMaterial(TextMaterialID id, std::string_view new
         SaveTextMaterialFile(&memoryManager->AssetsScratch(), newPath, header, *mat);
     }
 
-    nameToTextMaterialMap[newSid] = id;
+    if (CachedMaterialFile* file = textMaterialCatalog.Find(id)) {
+        file->name = mat->name;
+        file->source = mat->sourcePath;
+    }
+    textMaterialCatalog.SetName(id, newSid);
+    textMaterialCatalog.RebuildNames();
     return true;
 }
 
 TextMaterialID MaterialManager::FindTextMaterial(StringID name) const
 {
-    const TextMaterialID* id = nameToTextMaterialMap.Find(name);
-    return id ? *id : TextMaterialID::INVALID;
+    return textMaterialCatalog.FindByName(name);
 }
 
 const TextMaterial* MaterialManager::GetTextMaterial(TextMaterialID id) const
