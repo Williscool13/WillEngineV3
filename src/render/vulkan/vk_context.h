@@ -45,6 +45,7 @@ struct VulkanContext
     uint32_t transferQueueFamily{};
     VmaAllocator allocator{};
     VkDebugUtilsMessengerEXT debugMessenger{};
+    VkDebugUtilsMessengerEXT addressBindingMessenger{};
 
     // May be null
     VkQueue computeQueue{};
@@ -92,6 +93,7 @@ struct VulkanContext
     bool bMaintenance9Enabled{false};
     bool bMeshShaderQueriesEnabled{false};
     bool bPipelineExecutablePropertiesEnabled{false};
+    bool bDeviceFaultEnabled{false};
 
     VmaVulkanFunctions vulkanFunctions{};
 

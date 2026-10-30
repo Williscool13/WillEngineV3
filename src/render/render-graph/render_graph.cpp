@@ -1550,6 +1550,9 @@ void RenderGraph::Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd)
     }
 
     gpuTimestampQuery.BeginFrame(cmd, currentFrameIndex);
+#ifdef WDEBUG
+    BeginGpuMarkerFrame();
+#endif
 
     auto GetPhysical = [this](uint32_t texIndex) -> PhysicalResource& {
         return physicalResources[textures[texIndex].physicalIndex];
@@ -1619,6 +1622,7 @@ void RenderGraph::Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd)
                 label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
                 label.pLabelName = pass->renderPassId.ToString();
                 allocFns.cmdBeginDebugUtilsLabel(waveCmd, &label);
+                WriteGpuPassMarker(waveCmd, bAsyncWave, false, pi, pass->renderPassId.ToString());
 #endif
                 if (!bAsyncWave) {
                     gpuTimestampQuery.BeginPass(waveCmd, currentFrameIndex, pass->category);
@@ -1630,6 +1634,7 @@ void RenderGraph::Execute(VkCommandBuffer asyncCmd, VkCommandBuffer cmd)
                     gpuTimestampQuery.EndPass(waveCmd, currentFrameIndex);
                 }
 #ifdef WDEBUG
+                WriteGpuPassMarker(waveCmd, bAsyncWave, true, pi, pass->renderPassId.ToString());
                 allocFns.cmdEndDebugUtilsLabel(waveCmd);
 #endif
             }

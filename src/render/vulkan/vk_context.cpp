@@ -4,7 +4,10 @@
 
 #include "vk_context.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cstring>
+#include <mutex>
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -16,11 +19,200 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include "engine/logging/engine_log.h"
+#include "render/vulkan/vk_utils.h"
 
 namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
 bool VulkanContext::bForceNoREBAR{false};
+
+static VkDevice gFaultReportDevice{VK_NULL_HANDLE};
+
+#ifdef WDEBUG
+struct AddressBindingEvent
+{
+    VkDeviceAddress base;
+    VkDeviceSize size;
+    uint64_t handle;
+    uint64_t tickMs;
+    VkObjectType objectType;
+    VkDeviceAddressBindingTypeEXT bindingType;
+    char name[48];
+};
+
+static constexpr uint32_t ADDRESS_BINDING_CAPACITY = 1 << 16;
+static AddressBindingEvent gAddressBindings[ADDRESS_BINDING_CAPACITY];
+static std::atomic<uint32_t> gAddressBindingCount{0};
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL AddressBindingCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT,
+    VkDebugUtilsMessageTypeFlagsEXT,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+    void*)
+{
+    for (const auto* next = static_cast<const VkBaseInStructure*>(pCallbackData->pNext); next != nullptr; next = next->pNext) {
+        if (next->sType != VK_STRUCTURE_TYPE_DEVICE_ADDRESS_BINDING_CALLBACK_DATA_EXT) { continue; }
+
+        const auto* binding = reinterpret_cast<const VkDeviceAddressBindingCallbackDataEXT*>(next);
+        AddressBindingEvent& event = gAddressBindings[gAddressBindingCount.fetch_add(1, std::memory_order_relaxed) % ADDRESS_BINDING_CAPACITY];
+        event.base = binding->baseAddress;
+        event.size = binding->size;
+        event.bindingType = binding->bindingType;
+        event.tickMs = SDL_GetTicks();
+        event.handle = pCallbackData->objectCount > 0 ? pCallbackData->pObjects[0].objectHandle : 0;
+        event.objectType = pCallbackData->objectCount > 0 ? pCallbackData->pObjects[0].objectType : VK_OBJECT_TYPE_UNKNOWN;
+        const char* objectName = pCallbackData->objectCount > 0 ? pCallbackData->pObjects[0].pObjectName : nullptr;
+        strncpy_s(event.name, sizeof(event.name), objectName ? objectName : "", _TRUNCATE);
+        break;
+    }
+    return VK_FALSE;
+}
+
+static constexpr uint32_t GPU_MARKER_FRAME_HISTORY = 16;
+static constexpr uint32_t GPU_MARKER_MAX_PASSES = 1024;
+static VkBuffer gGpuMarkerBuffer{VK_NULL_HANDLE};
+static VmaAllocation gGpuMarkerAllocation{VK_NULL_HANDLE};
+static volatile uint32_t* gGpuMarkerValues{nullptr};
+static uint32_t gGpuMarkerFrame{0};
+static const char* gGpuMarkerPassNames[GPU_MARKER_FRAME_HISTORY][GPU_MARKER_MAX_PASSES];
+
+void BeginGpuMarkerFrame()
+{
+    gGpuMarkerFrame = (gGpuMarkerFrame + 1) & 0xFFFF;
+}
+
+void WriteGpuPassMarker(VkCommandBuffer cmd, bool bAsync, bool bEnd, uint32_t passIndex, const char* passName)
+{
+    if (gGpuMarkerBuffer == VK_NULL_HANDLE || passIndex >= GPU_MARKER_MAX_PASSES) { return; }
+    gGpuMarkerPassNames[gGpuMarkerFrame % GPU_MARKER_FRAME_HISTORY][passIndex] = passName;
+    const VkPipelineStageFlagBits stage = bEnd ? VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    const VkDeviceSize offset = ((bAsync ? 2u : 0u) + (bEnd ? 1u : 0u)) * sizeof(uint32_t);
+    vkCmdWriteBufferMarkerAMD(cmd, stage, gGpuMarkerBuffer, offset, gGpuMarkerFrame << 16 | passIndex);
+}
+
+static void LogGpuMarker(const char* label, uint32_t value)
+{
+    if (value == 0) {
+        LOG_ERROR(Engine, "Device fault marker {}: none written", label);
+        return;
+    }
+    const uint32_t frame = value >> 16;
+    const uint32_t passIndex = value & 0xFFFF;
+    const char* name = gGpuMarkerPassNames[frame % GPU_MARKER_FRAME_HISTORY][passIndex];
+    LOG_ERROR(Engine, "Device fault marker {}: frame {} pass {} '{}' (latest recorded frame {})", label, frame, passIndex, name ? name : "?", gGpuMarkerFrame);
+}
+
+static void ReportGpuMarkers()
+{
+    if (gGpuMarkerValues == nullptr) {
+        LOG_ERROR(Engine, "Device fault markers: VK_AMD_buffer_marker is not enabled");
+        return;
+    }
+    LogGpuMarker("graphics started", gGpuMarkerValues[0]);
+    LogGpuMarker("graphics finished", gGpuMarkerValues[1]);
+    LogGpuMarker("async started", gGpuMarkerValues[2]);
+    LogGpuMarker("async finished", gGpuMarkerValues[3]);
+
+    const uint32_t started = gGpuMarkerValues[0];
+    const uint32_t finished = gGpuMarkerValues[1];
+    if (started >> 16 == finished >> 16) {
+        const uint32_t frame = started >> 16;
+        for (uint32_t pass = (finished & 0xFFFF) + 1; pass <= (started & 0xFFFF) + 2 && pass < GPU_MARKER_MAX_PASSES; ++pass) {
+            const char* name = gGpuMarkerPassNames[frame % GPU_MARKER_FRAME_HISTORY][pass];
+            LOG_ERROR(Engine, "Device fault marker graphics candidate: pass {} '{}'", pass, name ? name : "?");
+        }
+    }
+}
+
+static void LogAddressBinding(const char* label, const AddressBindingEvent& event, uint64_t nowMs)
+{
+    LOG_ERROR(Engine, "Device fault history {}: {} {} 0x{:x} '{}' [0x{:x}, 0x{:x}) {} ms ago", label,
+              event.bindingType == VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT ? "bind" : "unbind", string_VkObjectType(event.objectType),
+              event.handle, event.name, event.base, event.base + event.size, nowMs - event.tickMs);
+}
+
+static void ReportAddressHistory(VkDeviceAddress address, VkDeviceSize precision)
+{
+    constexpr uint32_t MAX_LOGGED = 12;
+    const VkDeviceAddress pageBegin = address & ~(precision - 1);
+    const VkDeviceAddress pageEnd = pageBegin + precision;
+    const uint32_t total = gAddressBindingCount.load(std::memory_order_relaxed);
+    const uint32_t recorded = std::min(total, ADDRESS_BINDING_CAPACITY);
+    const uint64_t nowMs = SDL_GetTicks();
+    LOG_ERROR(Engine, "Device fault history: {} binding events seen, searching newest {}", total, recorded);
+
+    uint32_t logged = 0;
+    const AddressBindingEvent* below = nullptr;
+    const AddressBindingEvent* above = nullptr;
+    for (uint32_t i = 0; i < recorded; ++i) {
+        const AddressBindingEvent& event = gAddressBindings[(total - 1 - i) % ADDRESS_BINDING_CAPACITY];
+        if (event.base < pageEnd && pageBegin < event.base + event.size) {
+            if (logged < MAX_LOGGED) { LogAddressBinding("overlap", event, nowMs); }
+            ++logged;
+            continue;
+        }
+        if (event.base + event.size <= pageBegin && (below == nullptr || event.base + event.size > below->base + below->size)) { below = &event; }
+        if (event.base >= pageEnd && (above == nullptr || event.base < above->base)) { above = &event; }
+    }
+    LOG_ERROR(Engine, "Device fault history: {} event(s) overlap the faulting page", logged);
+    if (logged == 0) {
+        if (below != nullptr) { LogAddressBinding("nearest below", *below, nowMs); }
+        if (above != nullptr) { LogAddressBinding("nearest above", *above, nowMs); }
+    }
+}
+#endif
+
+void ReportDeviceFault()
+{
+    static std::once_flag reportOnce;
+    std::call_once(reportOnce, [] {
+        if (gFaultReportDevice == VK_NULL_HANDLE) {
+            LOG_ERROR(Engine, "Device fault: VK_EXT_device_fault is not enabled");
+            return;
+        }
+
+        constexpr uint32_t MAX_ADDRESS_INFOS = 32;
+        constexpr uint32_t MAX_VENDOR_INFOS = 32;
+        VkDeviceFaultCountsEXT counts{.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT};
+        VkResult res = vkGetDeviceFaultInfoEXT(gFaultReportDevice, &counts, nullptr);
+        if (res != VK_SUCCESS) {
+            LOG_ERROR(Engine, "Device fault: count query failed: {}", string_VkResult(res));
+            return;
+        }
+        LOG_ERROR(Engine, "Device fault: {} address info(s), {} vendor info(s), {} vendor binary bytes", counts.addressInfoCount, counts.vendorInfoCount, counts.vendorBinarySize);
+
+        VkDeviceFaultAddressInfoEXT addressInfos[MAX_ADDRESS_INFOS]{};
+        VkDeviceFaultVendorInfoEXT vendorInfos[MAX_VENDOR_INFOS]{};
+        counts.addressInfoCount = std::min(counts.addressInfoCount, MAX_ADDRESS_INFOS);
+        counts.vendorInfoCount = std::min(counts.vendorInfoCount, MAX_VENDOR_INFOS);
+        counts.vendorBinarySize = 0;
+
+        VkDeviceFaultInfoEXT info{.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT};
+        info.pAddressInfos = addressInfos;
+        info.pVendorInfos = vendorInfos;
+        res = vkGetDeviceFaultInfoEXT(gFaultReportDevice, &counts, &info);
+        if (res != VK_SUCCESS && res != VK_INCOMPLETE) {
+            LOG_ERROR(Engine, "Device fault: info query failed: {}", string_VkResult(res));
+            return;
+        }
+
+        LOG_ERROR(Engine, "Device fault: {}", info.description);
+        for (uint32_t i = 0; i < counts.addressInfoCount; ++i) {
+            const VkDeviceFaultAddressInfoEXT& address = addressInfos[i];
+            LOG_ERROR(Engine, "Device fault address {}: {} at 0x{:x} (precision 0x{:x})", i, string_VkDeviceFaultAddressTypeEXT(address.addressType), address.reportedAddress, address.addressPrecision);
+#ifdef WDEBUG
+            ReportAddressHistory(address.reportedAddress, address.addressPrecision);
+#endif
+        }
+        for (uint32_t i = 0; i < counts.vendorInfoCount; ++i) {
+            const VkDeviceFaultVendorInfoEXT& vendor = vendorInfos[i];
+            LOG_ERROR(Engine, "Device fault vendor {}: {} (code 0x{:x}, data 0x{:x})", i, vendor.description, vendor.vendorFaultCode, vendor.vendorFaultData);
+        }
+#ifdef WDEBUG
+        ReportGpuMarkers();
+#endif
+    });
+}
 
 static void* VKAPI_PTR VkHostAlloc(void* pUserData, size_t size, size_t alignment, VkSystemAllocationScope)
 {
@@ -211,6 +403,17 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 std::abort();
             }
         }
+
+#ifdef WDEBUG
+        VkDebugUtilsMessengerCreateInfoEXT addressBindingInfo{.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+        addressBindingInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+        addressBindingInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT;
+        addressBindingInfo.pfnUserCallback = AddressBindingCallback;
+        res = vkCreateDebugUtilsMessengerEXT(instance, &addressBindingInfo, &hostAllocationCallbacks, &addressBindingMessenger);
+        if (res != VK_SUCCESS) {
+            LOG_ERROR(Engine, "Failed to create address binding messenger: {}", string_VkResult(res));
+        }
+#endif
     }
 
     SDL_Vulkan_CreateSurface(window, instance, &hostAllocationCallbacks, &surface);
@@ -226,6 +429,12 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
     VkPhysicalDeviceMaintenance9FeaturesKHR maintenance9Features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR};
     VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
     VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
+    VkPhysicalDeviceFaultFeaturesEXT deviceFaultFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
+#ifdef WDEBUG
+    VkPhysicalDeviceAddressBindingReportFeaturesEXT addressBindingFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
+    bool bAddressBindingEnabled = false;
+    bool bGpuMarkersEnabled = false;
+#endif
 #ifdef ENABLE_VULKAN_VALIDATION
     VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR pipelineExecutablePropertiesFeatures{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR};
 #endif
@@ -260,6 +469,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         bool selectedIsDiscrete = false;
         bool selectedMaintenance9 = false;
         bool selectedMeshShaderQueries = false;
+        bool selectedDeviceFault = false;
 #ifdef ENABLE_VULKAN_VALIDATION
         bool selectedPipelineExecProps = false;
 #endif
@@ -446,6 +656,14 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 }
             }
 
+            bool hasDeviceFault = false;
+            for (uint32_t j = 0; j < extCount; j++) {
+                if (strcmp(exts[j].extensionName, VK_EXT_DEVICE_FAULT_EXTENSION_NAME) == 0) {
+                    hasDeviceFault = true;
+                    break;
+                }
+            }
+
 #ifdef ENABLE_VULKAN_VALIDATION
             bool hasPipelineExecProps = false;
             for (uint32_t j = 0; j < extCount; j++) {
@@ -465,6 +683,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
                 selectedComputeQueueIndex = computeQueueIndexForFamily;
                 selectedMaintenance9 = hasMaintenance9;
                 selectedMeshShaderQueries = static_cast<bool>(qMesh.meshShaderQueries);
+                selectedDeviceFault = hasDeviceFault;
                 selectedIsDiscrete = isDiscrete;
 #ifdef ENABLE_VULKAN_VALIDATION
                 selectedPipelineExecProps = hasPipelineExecProps;
@@ -484,6 +703,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         computeQueueIndex = selectedComputeQueueIndex;
         bMaintenance9Enabled = selectedMaintenance9;
         bMeshShaderQueriesEnabled = selectedMeshShaderQueries;
+        bDeviceFaultEnabled = selectedDeviceFault;
 #ifdef ENABLE_VULKAN_VALIDATION
         bPipelineExecutablePropertiesEnabled = selectedPipelineExecProps;
 #endif
@@ -572,8 +792,33 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
             }
         }
 #endif
+        if (bDeviceFaultEnabled) {
+            deviceFaultFeatures.deviceFault = VK_TRUE;
+            deviceFaultFeatures.pNext = features11.pNext;
+            features11.pNext = &deviceFaultFeatures;
+        }
+#ifdef WDEBUG
+        uint32_t addressBindingExtCount = 0;
+        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &addressBindingExtCount, nullptr);
+        assert(addressBindingExtCount <= 512);
+        Core::Array<VkExtensionProperties, 512> addressBindingExts;
+        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &addressBindingExtCount, addressBindingExts.Data());
+        for (uint32_t i = 0; i < addressBindingExtCount; ++i) {
+            if (strcmp(addressBindingExts[i].extensionName, VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME) == 0) {
+                bAddressBindingEnabled = addressBindingMessenger != VK_NULL_HANDLE;
+            }
+            if (strcmp(addressBindingExts[i].extensionName, VK_AMD_BUFFER_MARKER_EXTENSION_NAME) == 0) {
+                bGpuMarkersEnabled = true;
+            }
+        }
+        if (bAddressBindingEnabled) {
+            addressBindingFeatures.reportAddressBinding = VK_TRUE;
+            addressBindingFeatures.pNext = features11.pNext;
+            features11.pNext = &addressBindingFeatures;
+        }
+#endif
 
-        Core::InlineVector<const char*, 12> deviceExts;
+        Core::InlineVector<const char*, 16> deviceExts;
         deviceExts.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         deviceExts.PushBack(VK_EXT_MESH_SHADER_EXTENSION_NAME);
@@ -587,6 +832,17 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         if (bMaintenance9Enabled) {
             deviceExts.PushBack(VK_KHR_MAINTENANCE_9_EXTENSION_NAME);
         }
+        if (bDeviceFaultEnabled) {
+            deviceExts.PushBack(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+        }
+#ifdef WDEBUG
+        if (bAddressBindingEnabled) {
+            deviceExts.PushBack(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
+        }
+        if (bGpuMarkersEnabled) {
+            deviceExts.PushBack(VK_AMD_BUFFER_MARKER_EXTENSION_NAME);
+        }
+#endif
 #ifdef ENABLE_VULKAN_VALIDATION
         if (bPipelineExecutablePropertiesEnabled) {
             deviceExts.PushBack(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
@@ -617,6 +873,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
             std::abort();
         }
         volkLoadDevice(device);
+        if (bDeviceFaultEnabled) { gFaultReportDevice = device; }
     }
 
     vkGetDeviceQueue(device, graphicsQueueFamily, 0, &graphicsQueue);
@@ -685,6 +942,26 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
 #endif
     vmaCreateAllocator(&allocatorInfo, &allocator);
 
+#ifdef WDEBUG
+    if (bGpuMarkersEnabled) {
+        VkBufferCreateInfo markerBufferInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        markerBufferInfo.size = 4 * sizeof(uint32_t);
+        markerBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        const VkBufferCreateInfo sharedMarkerBufferInfo = ApplyBufferSharing(markerBufferInfo);
+        VmaAllocationCreateInfo markerAllocInfo{};
+        markerAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        markerAllocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        VmaAllocationInfo markerInfo{};
+        res = vmaCreateBuffer(allocator, &sharedMarkerBufferInfo, &markerAllocInfo, &gGpuMarkerBuffer, &gGpuMarkerAllocation, &markerInfo);
+        if (res == VK_SUCCESS) {
+            gGpuMarkerValues = static_cast<volatile uint32_t*>(markerInfo.pMappedData);
+        }
+        else {
+            LOG_ERROR(Engine, "Failed to create GPU marker buffer: {}", string_VkResult(res));
+        }
+    }
+#endif
+
     deviceInfo.properties.pNext = &deviceInfo.descriptorBufferProps;
     deviceInfo.descriptorBufferProps.pNext = &deviceInfo.meshShaderProps;
     deviceInfo.meshShaderProps.pNext = &deviceInfo.subgroupProps;
@@ -746,6 +1023,14 @@ VulkanContext::~VulkanContext()
     TracyVkDestroy(tracyContext);
 #endif
 
+#ifdef WDEBUG
+    if (gGpuMarkerBuffer != VK_NULL_HANDLE) {
+        vmaDestroyBuffer(allocator, gGpuMarkerBuffer, gGpuMarkerAllocation);
+        gGpuMarkerBuffer = VK_NULL_HANDLE;
+        gGpuMarkerValues = nullptr;
+    }
+#endif
+
     if (allocator) {
         vmaDestroyAllocator(allocator);
     }
@@ -760,6 +1045,10 @@ VulkanContext::~VulkanContext()
 
     if (debugMessenger != VK_NULL_HANDLE) {
         vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, &hostAllocationCallbacks);
+    }
+
+    if (addressBindingMessenger != VK_NULL_HANDLE) {
+        vkDestroyDebugUtilsMessengerEXT(instance, addressBindingMessenger, &hostAllocationCallbacks);
     }
 
     if (instance) {
