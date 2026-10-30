@@ -21,6 +21,7 @@
 #include "engine_lifecycle.h"
 #include "engine_tick.h"
 #include "resource_ids.h"
+#include "engine/editor/playtest_system.h"
 #include "engine/include/game_interface.h"
 #include "engine/input/input_manager.h"
 #include "components/component_registration.h"
@@ -475,7 +476,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
     {
         ZoneScopedN("GenerateDeclaredTextures");
         for (const auto& pair : assetManager->GetTextureRegistry()) {
-            const AssetManager::CachedTextureMetadata& desc = pair.value;
+            const IAssetLoader::CachedTextureMetadata& desc = pair.value;
             if (!desc.bUngenerated) { continue; }
             auto header = ReadWTextureHeader(desc.source);
             if (!header || header->genSource[0] == '\0') {
@@ -536,6 +537,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         engineContext->windowContext.viewportOffsetX = 0;
         engineContext->windowContext.viewportOffsetY = 0;
         engineContext->services.assetManager = assetManager;
+        engineContext->services.assetLoader = assetManager;
         engineContext->services.materialManager = materialManager;
         engineContext->pipelineManager = renderThread->GetPipelineManager();
         engineContext->rendererStatistics = renderThread->GetStatisticsManager();
@@ -1430,6 +1432,18 @@ void WillEngine::EditorImgui()
 #endif
 }
 
+static void TickQuietFrames(EngineContext* ctx, EngineState* state)
+{
+    SystemRegistry registry{state->registry, AccessSet::EXCLUSIVE, nullptr, "TickQuietFrames"};
+    int32_t& quiet = state->assetLoad.quietFrames;
+    if (CountLoadingEntities(state, registry) > 0 || registry.Service<AssetManager>().HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending) {
+        quiet = 0;
+    }
+    else if (quiet < INT32_MAX) {
+        quiet++;
+    }
+}
+
 void WillEngine::Run()
 {
     renderThread->Start();
@@ -1596,7 +1610,9 @@ void WillEngine::Run()
 
         ResolveLoadResult loadCounts = assetManager->ResolveLoads(*engineRenderSynchronization->GetCurrentFrameBuffer());
         assetManager->KickOffRetires();
-        const ResolveUnloadResult unloadCounts = assetManager->ResolveUnloads(); {
+        const ResolveUnloadResult unloadCounts = assetManager->ResolveUnloads();
+        TickQuietFrames(engineContext, engineState);
+        {
             constexpr uint32_t SCRATCH_RELEASE_QUIET_FRAMES = 120;
             const uint32_t activeScratchLoads = asyncAssetLoadManager->GetActiveModelLoadCount() + asyncAssetLoadManager->GetActiveProceduralModelLoadCount()
                                                 + asyncAssetLoadManager->GetActiveTextureLoadCount() + asyncAssetLoadManager->GetActiveCubemapLoadCount()

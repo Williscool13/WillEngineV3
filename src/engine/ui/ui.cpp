@@ -69,11 +69,11 @@ DragResult DragBehavior(Engine::EngineState* state, Clay_ElementId id, DragState
 
 // ---- Widgets ----
 
-static int32_t CaretFromLocalX(const Engine::AssetManager* assetManager, Engine::FontHandle font, const char* text, int32_t len, float localX, float fontSize)
+static int32_t CaretFromLocalX(const Engine::IAssetLoader* assetLoader, Engine::FontHandle font, const char* text, int32_t len, float localX, float fontSize)
 {
     float x = 0.0f;
     for (int32_t i = 0; i < len; ++i) {
-        const float advance = Engine::GlyphAdvance(assetManager, font, static_cast<unsigned char>(text[i]), fontSize);
+        const float advance = Engine::GlyphAdvance(assetLoader, font, static_cast<unsigned char>(text[i]), fontSize);
         if (localX < x + advance * 0.5f) { return i; }
         x += advance;
     }
@@ -126,7 +126,7 @@ TextFieldResult TextField(Engine::EngineContext* ctx, Engine::EngineState* state
             if (ed.found) {
                 const float viewportOffsetX = static_cast<float>(ctx->windowContext.viewportOffsetX);
                 const float localX = state->input.mousePositionAbsolute.x - viewportOffsetX - ed.boundingBox.x;
-                ui.caret = CaretFromLocalX(&registry.Service<Engine::AssetManager>(), state->uiFont, buf, len, localX, style.fontSize);
+                ui.caret = CaretFromLocalX(&registry.Assets(), state->uiFont, buf, len, localX, style.fontSize);
             }
             else {
                 ui.caret = len;
@@ -200,7 +200,7 @@ void TextFieldDraw(Engine::EngineContext* ctx, Engine::EngineState* state, Engin
             CLAY_TEXT(text, { .textColor = style.textColor, .fontSize = static_cast<uint16_t>(style.fontSize) });
         }
         if (focused) {
-            const float caretX = TEXT_FIELD_PAD_X + Engine::MeasureText(&registry.Service<Engine::AssetManager>(), state->uiFont, buf, ui.caret, style.fontSize);
+            const float caretX = TEXT_FIELD_PAD_X + Engine::MeasureText(&registry.Assets(), state->uiFont, buf, ui.caret, style.fontSize);
             CLAY(CLAY_ID_LOCAL("Caret"), {
                  .layout = { .sizing = { CLAY_SIZING_FIXED(2), CLAY_SIZING_FIXED(style.fontSize * CARET_HEIGHT_SCALE) } },
                  .backgroundColor = style.caretColor,
@@ -561,7 +561,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     const auto vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
 
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
-    const Engine::Font* uiFont = registry.Service<Engine::AssetManager>().GetFont(state->uiFont);
+    const Engine::Font* uiFont = registry.Assets().GetFont(state->uiFont);
 
     for (int32_t i = 0; i < renderCommands.length; ++i) {
         const Clay_RenderCommand& cmd = renderCommands.internalArray[i];
@@ -681,7 +681,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
 
                 for (int32_t ci = 0; ci < td.stringContents.length; ++ci) {
                     const uint32_t cp = static_cast<unsigned char>(td.stringContents.chars[ci]);
-                    const Engine::WGlyphInfo* g = registry.Service<Engine::AssetManager>().GetGlyph(state->uiFont, cp);
+                    const Engine::WGlyphInfo* g = registry.Assets().GetGlyph(state->uiFont, cp);
                     if (!g) {
                         cursorX += fontSize * 0.25f;
                         continue;

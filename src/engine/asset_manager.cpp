@@ -221,7 +221,7 @@ AssetManager::~AssetManager()
     });
 }
 
-const AssetManager::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID sceneId) const
+const IAssetLoader::CachedSceneMetadata* AssetManager::GetSceneMetadata(StringID sceneId) const
 {
     return sceneCache.Find(sceneId);
 }
@@ -246,7 +246,7 @@ void AssetManager::UpdateSceneCachePath(StringID sceneId, const Core::Path& path
     it->bUnsaved = false;
 }
 
-const AssetManager::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(StringID prefabId) const
+const IAssetLoader::CachedPrefabMetadata* AssetManager::GetPrefabMetadata(StringID prefabId) const
 {
     return prefabCache.Find(prefabId);
 }

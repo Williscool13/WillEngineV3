@@ -27,7 +27,7 @@
 namespace Engine
 {
 struct EngineContext;
-class AssetManager;
+class IAssetLoader;
 
 class MaterialManager
 {
@@ -43,7 +43,7 @@ public:
         uint64_t contentVersion{0};
     };
 
-    MaterialManager(Core::MemoryManager& memoryManager, EngineContext* ctx, AssetManager* assetManager);
+    MaterialManager(Core::MemoryManager& memoryManager, EngineContext* ctx, IAssetLoader* assetLoader);
 
     MaterialID CreateSynthesizedMaterial(const Material& mat);
 
@@ -163,7 +163,7 @@ private:
 private:
     EngineContext* ctx;
     Core::MemoryManager* memoryManager;
-    AssetManager* assetManager;
+    IAssetLoader* assetLoader;
 
     MaterialID defaultMaterial{MaterialID::INVALID};
 

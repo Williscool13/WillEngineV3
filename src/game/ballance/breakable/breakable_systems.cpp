@@ -59,11 +59,11 @@ static glm::vec3 LimitAlignment(const glm::vec3& v, const glm::vec3& axis, float
     return length * (std::copysign(maxCos, c) * axis + std::sqrt(1.0f - maxCos * maxCos) * side);
 }
 
-static void ReleaseBreakableRuntime(Engine::AssetManager* assetManager, Component::BreakableRuntime& runtime)
+static void ReleaseBreakableRuntime(Engine::IAssetLoader* assetLoader, Component::BreakableRuntime& runtime)
 {
-    if (runtime.model.IsValid()) { assetManager->UnloadModel(runtime.model); }
+    if (runtime.model.IsValid()) { assetLoader->UnloadModel(runtime.model); }
     for (const Engine::PhysicsColliderHandle handle : runtime.colliders) {
-        if (handle.IsValid()) { assetManager->UnloadCollider(handle); }
+        if (handle.IsValid()) { assetLoader->UnloadCollider(handle); }
     }
     runtime.model = {};
     runtime.colliders.Clear();
@@ -128,20 +128,20 @@ void AcquireBreakableAssets(Engine::EngineContext* ctx, Engine::EngineState* sta
     auto view = registry.View<Component::BreakableComponent>(entt::exclude<Component::BreakableRuntime>);
     if (view.size_hint() == 0) { return; }
 
-    Engine::AssetManager* assetManager = &registry.ServiceMut<Engine::AssetManager>();
+    Engine::IAssetLoader* assetLoader = &registry.Assets();
     auto acquired = Core::ArenaFixedVector<entt::entity>(&ctx->gameplayArena.Get(), view.size_hint());
     for (const auto& [entity, breakable] : view.each()) {
-        const auto* meta = assetManager->GetModelMetadata(breakable.brokenModelId);
-        if (!meta || assetManager->IsModelFrozen(breakable.brokenModelId)) { continue; }
+        const auto* meta = assetLoader->GetModelMetadata(breakable.brokenModelId);
+        if (!meta || assetLoader->IsModelFrozen(breakable.brokenModelId)) { continue; }
         acquired.PushBack(entity);
     }
     for (const entt::entity entity : acquired) {
         const Engine::ModelID brokenModelId = registry.Get<Component::BreakableComponent>(entity).brokenModelId;
-        const auto* meta = assetManager->GetModelMetadata(brokenModelId);
-        Component::BreakableRuntime runtime{.model = assetManager->LoadModel(brokenModelId)};
+        const auto* meta = assetLoader->GetModelMetadata(brokenModelId);
+        Component::BreakableRuntime runtime{.model = assetLoader->LoadModel(brokenModelId)};
         for (uint32_t n = 0; n < meta->nodes.Size() && !runtime.colliders.IsFull(); ++n) {
             if (meta->nodes[n].meshIndex == ~0u) { continue; }
-            runtime.colliders.PushBack(assetManager->LoadModelCollider(brokenModelId, Engine::PhysicsColliderKind::ConvexHull, n));
+            runtime.colliders.PushBack(assetLoader->LoadModelCollider(brokenModelId, Engine::PhysicsColliderKind::ConvexHull, n));
         }
         registry.Set<Component::BreakableRuntime>(entity, runtime);
     }
@@ -187,7 +187,7 @@ static const Engine::StaticModel* FindBrokenModel(Engine::EngineContext* ctx, en
 {
     const auto* runtime = registry.Has<Component::BreakableComponent>(entity) ? registry.TryGet<Component::BreakableRuntime>(entity) : nullptr;
     if (!runtime) { return nullptr; }
-    const Engine::StaticModel* brokenModel = registry.Service<Engine::AssetManager>().GetModel(runtime->model);
+    const Engine::StaticModel* brokenModel = registry.Assets().GetModel(runtime->model);
     return brokenModel && brokenModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded ? brokenModel : nullptr;
 }
 
@@ -304,6 +304,6 @@ namespace Ballance::Component
 void BreakableRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto* ctx = registry.Context();
-    ReleaseBreakableRuntime(&registry.ServiceMut<Engine::AssetManager>(), registry.GetMut<BreakableRuntime>(entity));
+    ReleaseBreakableRuntime(&registry.Assets(), registry.GetMut<BreakableRuntime>(entity));
 }
 } // Ballance::Component

@@ -50,7 +50,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engi
 
         ImGui::SeparatorText("Model");
 
-        const auto& modelCache = registry.Service<Engine::AssetManager>().GetModelCache();
+        const auto& modelCache = registry.Assets().GetModelCache();
         static int selectedModel = 0;
 
         struct ModelPair
@@ -101,7 +101,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engi
 
         const bool bEditingPrefab = IsEditingPrefab(state, registry);
         if (bEditingPrefab) {
-            const auto* editMeta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(state->editor.editingPrefabId);
+            const auto* editMeta = registry.Assets().GetPrefabMetadata(state->editor.editingPrefabId);
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Editing prefab: %s", editMeta ? editMeta->prefabName.c_str() : "?");
             if (ImGui::Button("Apply##edit")) { ApplyPrefabEdit(ctx, state, registry); }
             ImGui::SameLine();
@@ -123,7 +123,7 @@ void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engi
         }
         ImGui::EndDisabled();
 
-        const auto& prefabCache = registry.Service<Engine::AssetManager>().GetPrefabCache();
+        const auto& prefabCache = registry.Assets().GetPrefabCache();
         static int selectedPrefab = 0;
         struct PrefabPair
         {

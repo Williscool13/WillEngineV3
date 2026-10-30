@@ -272,8 +272,8 @@ void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* stat
     ZoneScoped;
     for (auto&& [entity, sky] : registry.View<Component::SkyboxComponent>(entt::exclude<Component::SkyboxRuntime>).each()) {
         if (!sky.envMap.IsValid()) { continue; }
-        if (registry.Service<Engine::AssetManager>().GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
-        registry.Set<Component::SkyboxRuntime>(entity, registry.ServiceMut<Engine::AssetManager>().LoadCubemap(sky.envMap));
+        if (registry.Assets().GetCubemapMetadata(sky.envMap) == nullptr) { continue; }
+        registry.Set<Component::SkyboxRuntime>(entity, registry.Assets().LoadCubemap(sky.envMap));
     }
 }
 
@@ -362,7 +362,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
         float bestIntensity = 1.0f;
         for (const auto& [entity, sky, skyRuntime] : registry.View<Component::SkyboxComponent, Component::SkyboxRuntime>().each()) {
             if (!sky.bEnabled || !skyRuntime.handle.IsValid()) { continue; }
-            const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(skyRuntime.handle);
+            const Render::Cubemap* cubemap = registry.Assets().GetCubemap(skyRuntime.handle);
             if (cubemap && cubemap->loadState == Render::Cubemap::LoadState::Loaded && sky.priority > bestPriority) {
                 bestPriority = sky.priority;
                 bestCubemap = cubemap;
@@ -410,7 +410,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (textComp.text.IsEmpty()) { continue; }
         if (!runtime.modelRange.IsValid()) { continue; }
 
-        const Engine::Font* font = registry.Service<Engine::AssetManager>().GetFont(runtime.fontHandle);
+        const Engine::Font* font = registry.Assets().GetFont(runtime.fontHandle);
         if (!font) { continue; }
 
         const float scale = textComp.scale / font->header.emSize;
@@ -448,7 +448,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         const char* str = textComp.text.c_str();
         const size_t len = textComp.text.Size();
         auto advanceOf = [&](char c) -> float {
-            const Engine::WGlyphInfo* g = registry.Service<Engine::AssetManager>().GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
+            const Engine::WGlyphInfo* g = registry.Assets().GetGlyph(runtime.fontHandle, static_cast<unsigned char>(c));
             return g ? g->advance * scale : textComp.scale * 0.25f;
         };
 
@@ -524,7 +524,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
             const float penY = baseY - static_cast<float>(li) * lineHeight;
             for (size_t i = lines[li].start; i < lines[li].end; ++i) {
                 const uint32_t codepoint = static_cast<unsigned char>(str[i]);
-                const Engine::WGlyphInfo* g = registry.Service<Engine::AssetManager>().GetGlyph(runtime.fontHandle, codepoint);
+                const Engine::WGlyphInfo* g = registry.Assets().GetGlyph(runtime.fontHandle, codepoint);
                 if (!g) {
                     cursorX += textComp.scale * 0.25f;
                     continue;
@@ -659,9 +659,9 @@ static uint32_t TouchedTileMask(const ShadowViewGPU* views, uint32_t activeTiles
 template<typename LightComponent, typename LightRuntime>
 static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::ViewFamily& vf, const LightComponent& light, LightRuntime& runtime, bool bActive)
 {
-    Engine::AssetManager& assets = registry.ServiceMut<Engine::AssetManager>();
+    Engine::IAssetLoader& assets = registry.Assets();
     const LightInfo* lights = state->analyticLightStore.Lights();
-    const Engine::AssetManager::ShadowMapInfo* info = light.shadowMode == Component::LightShadowMode::Baked ? assets.GetShadowMapInfo(light.shadowId) : nullptr;
+    const Engine::IAssetLoader::ShadowMapInfo* info = light.shadowMode == Component::LightShadowMode::Baked ? assets.GetShadowMapInfo(light.shadowId) : nullptr;
     const bool bUsable = info != nullptr && runtime.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT && Engine::IsShadowBakeCurrent(info->key, lights[runtime.lightSlot]);
     if (!bUsable) {
         if (runtime.bakedShadow.IsValid()) {
@@ -1073,7 +1073,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         const bool bPreview = state->debug.bProbePreview;
         if (!probe.bEnabled && !bPreview) { continue; }
         if (!probeRuntime.contentHandle.IsValid()) { continue; }
-        const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(probeRuntime.contentHandle);
+        const Render::Cubemap* cubemap = registry.Assets().GetCubemap(probeRuntime.contentHandle);
         if (!cubemap || cubemap->loadState != Render::Cubemap::LoadState::Loaded) { continue; }
 
         glm::vec3 srcTranslation = worldTransform.translation;
@@ -1082,7 +1082,7 @@ void GatherReflectionProbes(Engine::EngineContext* ctx, Engine::EngineState* sta
         glm::vec3 srcCaptureOffset = probe.captureOffset;
         float radianceScale = probe.standInIntensity;
         if (probeRuntime.contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
-            if (const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+            if (const Engine::IAssetLoader::ProbeInfo* info = registry.Assets().GetProbeInfo(Engine::ProbeID{probe.probeId})) {
                 radianceScale = info->radianceScale;
                 const Engine::ProbeBakeSnapshot& snap = info->snapshot;
                 srcTranslation = glm::vec3(snap.translation[0], snap.translation[1], snap.translation[2]);
@@ -1448,7 +1448,7 @@ void GatherLightDebugDraws(Engine::EngineContext* ctx, Engine::EngineState* stat
         // Stale baked probes
         const auto* probeRuntime = registry.TryGet<Component::ReflectionProbeRuntime>(entity);
         if (probeRuntime && probeRuntime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked) {
-            const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{probe.probeId});
+            const Engine::IAssetLoader::ProbeInfo* info = registry.Assets().GetProbeInfo(Engine::ProbeID{probe.probeId});
             if (info && Component::ReflectionProbeComponent::IsBakeStale(transform, probe, info->snapshot, info->resolution)) {
                 constexpr Vec4 staleColor{1.0f, 0.0f, 0.0f, 1.0f};
                 const Engine::ProbeBakeSnapshot& snap = info->snapshot;

@@ -5,40 +5,17 @@
 #ifndef WILL_ENGINE_ASSET_MANAGER_H
 #define WILL_ENGINE_ASSET_MANAGER_H
 
+#include "asset_loader.h"
 #include "asset_manager_config.h"
-#include "asset_manager_types.h"
 #include "asset_pool.h"
-#include "catalog_table.h"
-#include "engine/core/environment_map_id.h"
-#include "engine/core/font_id.h"
-#include "engine/core/model_id.h"
-#include "engine/core/probe_id.h"
-#include "engine/core/texture_array_id.h"
-#include "engine/core/physics_collider_id.h"
-#include "core/sampler_id.h"
-#include "engine/resources/environment_map/probe_format.h"
-#include "engine/resources/shadow_map/shadow_map_format.h"
 #include "engine/include/engine_context.h"
 #include "core/containers/concurrent_slot_pool.h"
 #include "core/memory/handle_allocator.h"
 #include "core/memory/memory_manager.h"
 #include "core/containers/array.h"
 #include "core/containers/fixed_map.h"
-#include "core/containers/arena_fixed_map.h"
 #include "core/containers/inline_map.h"
-#include "core/containers/inline_path.h"
-#include "core/containers/inline_string.h"
-#include "core/containers/span.h"
 #include "core/containers/vector.h"
-#include "engine/resources/sampler/sampler.h"
-#include "render/types/cubemap_asset.h"
-#include "render/types/texture_array_asset.h"
-#include "resources/model/model_types.h"
-#include "engine/resources/font/font.h"
-#include "engine/resources/texture/texture.h"
-#include "engine/resources/model/static_model.h"
-#include "engine/resources/physics/physics_collider_asset.h"
-#include "engine/components/render_components.h"
 #include "logging/engine_log.h"
 
 namespace AssetLoad
@@ -70,10 +47,11 @@ struct ResolveUnloadResult
     int32_t fontUnloadedCount{0};
 };
 
-class AssetManager
+class AssetManager final : public IAssetLoader
 {
 public:
     static constexpr const char* COMPONENT_NAME = "AssetManager";
+    static constexpr bool EXCLUSIVE_ONLY = true;
 
     AssetManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetLoad::AsyncAssetLoadManager* assetLoadManager, Render::ResourceManager* resourceManager);
 
@@ -87,173 +65,107 @@ public:
 
     AssetManager& operator=(AssetManager&&) = delete;
 
-public: // Models
-    [[nodiscard]] ModelID FindModelByName(std::string_view name) const
-    {
-        return FindByName(modelCache, name);
-    }
+public: // IAssetLoader
+    [[nodiscard]] ModelID FindModelByName(std::string_view name) const override { return FindByName(modelCache, name); }
+    [[nodiscard]] uint32_t GetActiveModelCount() const override { return models.Count(); }
+    [[nodiscard]] uint32_t GetActiveTextureCount() const override { return textures.Count(); }
+    [[nodiscard]] uint32_t GetActiveSamplerCount() const override { return samplers.Count(); }
+    [[nodiscard]] uint32_t GetActiveCubemapCount() const override { return cubemaps.Count(); }
+    [[nodiscard]] uint32_t GetActiveTextureArrayCount() const override { return textureArrays.Count(); }
+    StaticModelHandle LoadModel(ModelID modelId) override;
+    StaticModelHandle LoadProceduralModel(const ProceduralParams& params, const ProceduralRepeat& repeat = {}) override;
+    StaticModelHandle LoadSplineModel(const SplineParams& params) override;
+    StaticModelHandle LoadModuleModel(const ModuleParams& params) override;
+    StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius) override;
+    StaticModel* GetModel(StaticModelHandle handle) override;
+    const StaticModel* GetModel(StaticModelHandle handle) const override;
+    void UnloadModel(StaticModelHandle handle) override;
+    [[nodiscard]] bool IsModelFrozen(ModelID modelId) const override;
+    [[nodiscard]] bool IsModelResident(ModelID modelId) const override { return models.Contains(modelId); }
+    [[nodiscard]] const CatalogTable<ModelID, CachedModelMetadata>& GetModelCache() const override { return modelCache; }
+    [[nodiscard]] const CachedModelMetadata* GetModelMetadata(ModelID modelID) const override { return modelCache.Find(modelID); }
 
-    [[nodiscard]] uint32_t GetActiveModelCount() const { return models.Count(); }
-    [[nodiscard]] uint32_t GetActiveTextureCount() const { return textures.Count(); }
-    [[nodiscard]] uint32_t GetActiveSamplerCount() const { return samplers.Count(); }
-    [[nodiscard]] uint32_t GetActiveCubemapCount() const { return cubemaps.Count(); }
-    [[nodiscard]] uint32_t GetActiveTextureArrayCount() const { return textureArrays.Count(); }
+    PhysicsColliderHandle LoadSplineCollider(const SplineParams& params, bool bHollow) override;
+    PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params, const ProceduralRepeat& repeat = {}) override;
+    PhysicsColliderHandle LoadModelCollider(ModelID sourceModelId, PhysicsColliderKind kind, uint32_t nodeIndex = ~0u) override;
+    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius, bool bPrecise) override;
+    PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle) override;
+    const PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle) const override;
+    void UnloadCollider(PhysicsColliderHandle handle) override;
+    [[nodiscard]] uint32_t GetActiveColliderCount() const override { return colliders.Count(); }
 
-    StaticModelHandle LoadModel(ModelID modelId);
-
-    StaticModelHandle LoadProceduralModel(const ProceduralParams& params, const ProceduralRepeat& repeat = {});
-
-    StaticModelHandle LoadSplineModel(const SplineParams& params);
-
-    StaticModelHandle LoadModuleModel(const ModuleParams& params);
-
-    /**
-     * Loads (or dedups) an extruded 3D-text model, resolving the font by id. Dedup key is the identity (font + text + depth + flatness + tracking + scale + smoothNormals).
-     * The model holds a font ref until it finalizes so the generation worker can read the glyph contours.
-     */
-    StaticModelHandle LoadText3DModel(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius);
-
-    StaticModel* GetModel(StaticModelHandle handle);
-    const StaticModel* GetModel(StaticModelHandle handle) const;
-
-    void UnloadModel(StaticModelHandle handle);
-
-    /** Hot-reload: while frozen, the load resolve systems skip (re)acquiring this model so it can drain and retire. */
-    void FreezeModel(ModelID modelId);
-    void UnfreezeModel(ModelID modelId);
-    [[nodiscard]] bool IsModelFrozen(ModelID modelId) const;
-    [[nodiscard]] bool IsModelResident(ModelID modelId) const { return models.Contains(modelId); }
-
-    struct CachedModelMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> name{};
-        uint32_t nodeCount{};
-        uint32_t meshNodesCount{};
-        Core::HeapArray<Node> nodes;
-        ModelBounds bounds{};
-        uint64_t contentVersion{0};
-        uint64_t uncompressedBodySize{0};
-    };
-
-    const CatalogTable<ModelID, CachedModelMetadata>& GetModelCache() const { return modelCache; }
-
-public: // Physics colliders (CPU-only, analytic)
-    /**
-     * Loads (or dedups) a Compound collider built analytically from a spline. Keyed by hash(spline) x kind.
-     * @param params
-     * @param bHollow a TriangleMesh of the open tube surface instead; ignored unless CanBuildHollowSplineCollider
-     * @return
-     */
-    PhysicsColliderHandle LoadSplineCollider(const SplineParams& params, bool bHollow);
-
-
-    /**
-     * Loads (or dedups) a collider for a procedural shape. Analytic types (primitive/compound) pick their own kind; the non-analytic "exotic" types (Bowl/CurvedRamp/Klein/Trefoil) generate + simplify geometry into a concave TriangleMesh (they are Static/Kinematic-only, never dynamic). Keyed by hash(params).
-     */
-    PhysicsColliderHandle LoadProceduralCollider(const ProceduralParams& params, const ProceduralRepeat& repeat = {});
-
-    /**
-     * Loads (or dedups) a collider read from an imported model's .wsmesh geometry (CPU-only, simplified). ConvexHull for dynamic bodies, TriangleMesh for static. Keyed by hash(modelId, nodeIndex) x kind; freeze-gate on the source ModelID at the call site.
-     * @param sourceModelId
-     * @param kind
-     * @param nodeIndex ~0u for the whole model; otherwise that node and its descendants, in the node's local space
-     * @return
-     */
-    PhysicsColliderHandle LoadModelCollider(Engine::ModelID sourceModelId, PhysicsColliderKind kind, uint32_t nodeIndex = ~0u);
-
-    /**
-     * Loads (or dedups) a collider for extruded 3D text: one Box per glyph from the glyph plane bounds (Compound), or with @p bPrecise, the exact extruded glyph mesh simplified into a concave TriangleMesh. Takes a generation-scoped font ref (released when the collider finalizes); freeze-gate on the FontID at the call site.
-     */
-    PhysicsColliderHandle LoadText3DCollider(FontID fontId, const Core::InlineString<256>& text, float depth, float flatness, float tracking, float scale, bool bSmoothNormals, Text3DAlign align, Text3DAnchor anchor, float wrapWidth, float bendRadius, bool bPrecise);
-
-    PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle);
-    const PhysicsColliderAsset* GetCollider(PhysicsColliderHandle handle) const;
-
-    void UnloadCollider(PhysicsColliderHandle handle);
-
-    [[nodiscard]] uint32_t GetActiveColliderCount() const { return colliders.Count(); }
-
-    [[nodiscard]] const CachedModelMetadata* GetModelMetadata(ModelID modelID) const
-    {
-        return modelCache.Find(modelID);
-    }
-
-public: // Textures
-    /** A disk texture, or (origin StaticProcedural) one registered at startup and generated by a compute pipeline. */
-    struct CachedTextureMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> name;
-        uint32_t width{};
-        uint32_t height{};
-        uint32_t mipCount{};
-        uint64_t dataOffset{};
-        uint64_t dataSize{};
-        uint64_t uncompressedSize{};
-        CompressionType compressionType{DEFAULT_TEXTURE_COMPRESSION};
-        uint64_t contentVersion{0};
-        bool bUngenerated{false};
-        TextureCategory category{TextureCategory::Standalone};
-        Texture::Origin origin{Texture::Origin::Disk};
-        StringID pipelineId{};
-        VkFormat format{};
-        bool bMipmapped{false};
-    };
-
-    const CatalogTable<TextureID, CachedTextureMetadata>& GetTextureRegistry() const { return textureRegistry; }
-
-    struct EditorTextureInfo
-    {
-        TextureID id;
-        Core::InlineString<128> name;
-        uint32_t width;
-        uint32_t height;
-        uint32_t mipCount;
-        TextureCategory category{TextureCategory::Standalone};
-    };
-
-    bool IsTextureLoaded(const TextureID textureId) const
-    {
-        return textures.Contains(textureId);
-    }
-    
-    [[nodiscard]] int32_t GetTextureBindlessIndex(const TextureID textureId) const
+    [[nodiscard]] const CatalogTable<TextureID, CachedTextureMetadata>& GetTextureRegistry() const override { return textureRegistry; }
+    [[nodiscard]] bool IsTextureLoaded(const TextureID textureId) const override { return textures.Contains(textureId); }
+    [[nodiscard]] int32_t GetTextureBindlessIndex(const TextureID textureId) const override
     {
         const Texture* texture = textures.Get(textures.Find(textureId));
         if (texture == nullptr) { return -1; }
         return static_cast<int32_t>(texture->bindlessHandle.index);
     }
+    [[nodiscard]] TextureID FindTextureByName(std::string_view name) const override { return FindByName(textureRegistry, name); }
+    Texture* LoadTexture(TextureID textureId) override;
+    Texture* LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin, Core::InlineString<128> displayName = {}) override;
+    void UnloadTexture(TextureID id) override;
+    [[nodiscard]] uint32_t GetTextureInfoCount() const override { return static_cast<uint32_t>(textureRegistry.Size() + textures.Count()); }
 
-    [[nodiscard]] TextureID FindTextureByName(std::string_view name) const
-    {
-        return FindByName(textureRegistry, name);
-    }
+    Sampler* LoadSampler(SamplerDesc& samplerDesc) override;
+    void UnloadSampler(SamplerDesc& desc) override;
 
-    Texture* LoadTexture(TextureID textureId);
+    [[nodiscard]] EnvironmentMapID FindCubemapByName(std::string_view name) const override { return FindByName(cubemapCache, name); }
+    [[nodiscard]] bool IsCubemapLoaded(const EnvironmentMapID cubemapId) const override { return cubemaps.Contains(cubemapId); }
+    CubemapHandle LoadCubemap(EnvironmentMapID cubemapId) override;
+    Render::Cubemap* GetCubemap(CubemapHandle handle) override;
+    const Render::Cubemap* GetCubemap(CubemapHandle handle) const override;
+    void UnloadCubemap(CubemapHandle handle) override;
+    [[nodiscard]] const CatalogTable<EnvironmentMapID, CachedCubemapMetadata>& GetCubemapCache() const override { return cubemapCache; }
+    [[nodiscard]] const CachedCubemapMetadata* GetCubemapMetadata(EnvironmentMapID cubemapId) const override { return cubemapCache.Find(cubemapId); }
+
+    TextureArrayHandle LoadTextureArray(TextureArrayID textureArrayId) override;
+    Render::TextureArray* GetTextureArray(TextureArrayHandle handle) override;
+    const Render::TextureArray* GetTextureArray(TextureArrayHandle handle) const override;
+    void UnloadTextureArray(TextureArrayHandle handle) override;
+    [[nodiscard]] const CachedTextureArrayMetadata* GetTextureArrayMetadata(TextureArrayID textureArrayId) const override { return textureArrayCache.Find(textureArrayId); }
+
+    [[nodiscard]] const ShadowMapInfo* GetShadowMapInfo(uint64_t shadowId) const override { return shadowMapRegistry.Find(TextureArrayID{shadowId}); }
+    TextureArrayHandle LoadShadowMap(uint64_t shadowId) override;
+
+    CubemapHandle LoadProbe(ProbeID probeId) override;
+    void UnloadProbe(CubemapHandle handle) override;
+    [[nodiscard]] const ProbeInfo* GetProbeInfo(ProbeID probeId) const override { return probeRegistry.Find(probeId); }
+
+    [[nodiscard]] FontID FindFontByName(std::string_view name) const override { return FindByName(fontCache, name); }
+    FontHandle LoadFont(FontID id) override;
+    void UnloadFont(FontHandle handle) override;
+    [[nodiscard]] bool IsFontFrozen(FontID fontId) const override;
+    [[nodiscard]] bool IsFontResident(FontID fontId) const override { return fonts.Contains(fontId); }
+    Font* GetFont(FontHandle handle) override;
+    const Font* GetFont(FontHandle handle) const override;
+    [[nodiscard]] const WGlyphInfo* GetGlyph(FontHandle handle, uint32_t codepoint) const override;
+    [[nodiscard]] const CatalogTable<FontID, CachedFontMetadata>& GetFontCache() const override { return fontCache; }
+    [[nodiscard]] const CachedFontMetadata* GetFontMetadata(FontID fontId) const override { return fontCache.Find(fontId); }
+    [[nodiscard]] uint32_t GetActiveFontCount() const override { return fonts.Count(); }
+
+    [[nodiscard]] const CatalogTable<StringID, CachedSceneMetadata>& GetSceneCache() const override { return sceneCache; }
+    [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const override;
+    [[nodiscard]] Core::Span<const Core::Path> GetSceneFolders() const override { return sceneFolders; }
+    [[nodiscard]] const CatalogTable<StringID, CachedPrefabMetadata>& GetPrefabCache() const override { return prefabCache; }
+    [[nodiscard]] const CachedPrefabMetadata* GetPrefabMetadata(StringID prefabId) const override;
+    [[nodiscard]] const CatalogTable<StringID, CachedPlayMetadata>& GetPlayCache() const override { return playCache; }
+
+public: // Exclusive-only
+    void FreezeModel(ModelID modelId);
+    void UnfreezeModel(ModelID modelId);
+    void FreezeFont(FontID fontId);
+    void UnfreezeFont(FontID fontId);
 
     bool ReloadTexture(TextureID textureId);
-
     bool ReloadProceduralTexture(TextureID textureId);
 
-    /**
-     * Load a procedurally generated texture. If already loaded, returns the existing instance (deduplication by pipelineId).
-     * Pre-reserves a bindless slot and enqueues a compute dispatch via AsyncAssetLoadManager.
-     * @param pipelineId Compute pipeline that generates the texture; also serves as the TextureID.
-     * @param width Texture width in pixels.
-     * @param height Texture height in pixels.
-     * @param format VkFormat; must support VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT.
-     * @param mipmapped Generate full mip chain after dispatch.
-     * @param origin StaticProcedural if loaded via registry, RuntimeProcedural if called explicitly.
-     * @param displayName Optional display name override; auto-generated from textureId if null.
-     * @return Pointer to the Texture (LoadState::Loading until generation completes), or nullptr on failure.
-     */
-    Texture* LoadProceduralTexture(StringID pipelineId, uint32_t width, uint32_t height, VkFormat format, bool mipmapped, Texture::Origin origin, Core::InlineString<128> displayName = {});
+    /** Hot-reload: refreshes an already-loaded cubemap's runtime fields from cubemapCache metadata and re-requests the async load. No-op if the cubemap is not currently resident. */
+    bool ReloadCubemap(EnvironmentMapID cubemapId);
 
-    void UnloadTexture(TextureID id);
-
-    /** @return Upper bound on the number of textures GetAllTextureInfos will emit; use for map capacity. */
-    [[nodiscard]] uint32_t GetTextureInfoCount() const { return static_cast<uint32_t>(textureRegistry.Size() + textures.Count()); }
+    /** Hot-reload: re-reads an already-loaded texture array from textureArrayCache. No-op if it is not resident. */
+    bool ReloadTextureArray(TextureArrayID textureArrayId);
 
     /**
      * Populate a caller-owned ArenaFixedMap with info for every known texture (catalog + loaded runtime procedurals).
@@ -262,161 +174,16 @@ public: // Textures
      */
     void GetAllTextureInfos(Core::ArenaFixedMap<TextureID, EditorTextureInfo>& out) const;
 
-public: // Samplers
-    Sampler* LoadSampler(SamplerDesc& samplerDesc);
+    [[nodiscard]] bool HasPendingLoads() const;
 
-    void UnloadSampler(SamplerDesc& desc);
+    void LogPendingLoads() const;
 
-public: // Cubemaps
-    [[nodiscard]] EnvironmentMapID FindCubemapByName(std::string_view name) const
-    {
-        return FindByName(cubemapCache, name);
-    }
-
-    [[nodiscard]] bool IsCubemapLoaded(const EnvironmentMapID cubemapId) const
-    {
-        return cubemaps.Contains(cubemapId);
-    }
-
-    CubemapHandle LoadCubemap(EnvironmentMapID cubemapId);
-
-    /** Hot-reload: refreshes an already-loaded cubemap's runtime fields from cubemapCache metadata and re-requests the async load. No-op if the cubemap is not currently resident. */
-    bool ReloadCubemap(EnvironmentMapID cubemapId);
-
-    Render::Cubemap* GetCubemap(CubemapHandle handle);
-    const Render::Cubemap* GetCubemap(CubemapHandle handle) const;
-
-    void UnloadCubemap(CubemapHandle handle);
-
-    struct CachedCubemapMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> name;
-        uint32_t width{};
-        uint32_t height{};
-        uint32_t mipCount{};
-        uint64_t dataOffset{};
-        uint64_t dataSize{};
-        uint64_t uncompressedSize{};
-        CompressionType compressionType{DEFAULT_ENV_MAP_COMPRESSION};
-        uint64_t contentVersion{0};
-    };
-
-    [[nodiscard]] const CatalogTable<EnvironmentMapID, CachedCubemapMetadata>& GetCubemapCache() const { return cubemapCache; }
-
-    [[nodiscard]] const CachedCubemapMetadata* GetCubemapMetadata(EnvironmentMapID cubemapId) const
-    {
-        return cubemapCache.Find(cubemapId);
-    }
-
-public: // Texture arrays
-    struct CachedTextureArrayMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> name;
-        uint64_t dataOffset{};
-        uint64_t dataSize{};
-        uint64_t uncompressedSize{};
-        CompressionType compressionType{CompressionType::Zstd};
-        uint64_t contentVersion{0};
-    };
-
-    TextureArrayHandle LoadTextureArray(TextureArrayID textureArrayId);
-
-    /** Hot-reload: re-reads an already-loaded texture array from textureArrayCache. No-op if it is not resident. */
-    bool ReloadTextureArray(TextureArrayID textureArrayId);
-
-    Render::TextureArray* GetTextureArray(TextureArrayHandle handle);
-    const Render::TextureArray* GetTextureArray(TextureArrayHandle handle) const;
-
-    void UnloadTextureArray(TextureArrayHandle handle);
-
-    [[nodiscard]] const CachedTextureArrayMetadata* GetTextureArrayMetadata(TextureArrayID textureArrayId) const
-    {
-        return textureArrayCache.Find(textureArrayId);
-    }
-
-public: // Baked shadow maps
-    struct ShadowMapInfo
-    {
-        Core::Path source;
-        uint32_t resolution{0};
-        ShadowBakeKey key{};
-        uint64_t contentVersion{0};
-    };
-
-    [[nodiscard]] const ShadowMapInfo* GetShadowMapInfo(uint64_t shadowId) const { return shadowMapRegistry.Find(TextureArrayID{shadowId}); }
-
-    TextureArrayHandle LoadShadowMap(uint64_t shadowId);
-
-public: // Reflection probes
-    struct ProbeInfo
-    {
-        Core::Path source;
-        EnvironmentMapID environmentMapId{};
-        uint32_t resolution{};
-        ProbeBakeSnapshot snapshot{};
-        uint64_t contentVersion{0};
-        float radianceScale{1.0f};
-    };
-
-    /** Resolves a probe to its runtime cubemap and loads it through the shared cubemap path (keyed by the probe's EnvironmentMapID). @returns INVALID if the probe is not in the registry. */
-    CubemapHandle LoadProbe(ProbeID probeId);
-
-    /** Releases a probe cubemap handle acquired from LoadProbe. */
-    void UnloadProbe(CubemapHandle handle);
-
-    /** @returns the cached probe registry entry (path + EnvironmentMapID + resolution + bake snapshot), or null if not registered. */
-    [[nodiscard]] const ProbeInfo* GetProbeInfo(ProbeID probeId) const
-    {
-        return probeRegistry.Find(probeId);
-    }
-
-public: // Fonts
-    [[nodiscard]] FontID FindFontByName(std::string_view name) const
-    {
-        return FindByName(fontCache, name);
-    }
-
-    FontHandle LoadFont(FontID id);
-
-    void UnloadFont(FontHandle handle);
-
-    /** Hot-reload: while frozen, the load resolve systems skip (re)acquiring this font so it can drain and retire. */
-    void FreezeFont(FontID fontId);
-    void UnfreezeFont(FontID fontId);
-    [[nodiscard]] bool IsFontFrozen(FontID fontId) const;
-    [[nodiscard]] bool IsFontResident(FontID fontId) const { return fonts.Contains(fontId); }
-
-    Font* GetFont(FontHandle handle);
-    const Font* GetFont(FontHandle handle) const;
-
-    /** Returns the glyph info for the given codepoint, or nullptr if not found or not loaded. */
-    [[nodiscard]] const WGlyphInfo* GetGlyph(FontHandle handle, uint32_t codepoint) const;
-
-    struct CachedFontMetadata
-    {
-        Core::Path source{};
-        Core::InlineString<128> name{};
-        WFontHeader header{};
-        uint64_t contentVersion{0};
-    };
-
-    [[nodiscard]] const CatalogTable<FontID, CachedFontMetadata>& GetFontCache() const { return fontCache; }
-    [[nodiscard]] const CachedFontMetadata* GetFontMetadata(FontID fontId) const { return fontCache.Find(fontId); }
-    [[nodiscard]] uint32_t GetActiveFontCount() const { return fonts.Count(); }
-
-public: // Per-Tick calls
     ResolveLoadResult ResolveLoads(Core::FrameBuffer& stagingFrameBuffer);
 
     void KickOffRetires();
 
-    /** Reclaims drained assets. Returns true if a model/font was reclaimed (which may have lifted a hot-reload freeze). */
+    /** Reclaims drained assets. A reclaimed model or font may have lifted a hot-reload freeze. */
     ResolveUnloadResult ResolveUnloads();
-
-    [[nodiscard]] bool HasPendingLoads() const;
-
-    void LogPendingLoads() const;
 
     /**
      * Scan for assets. Done once in constructor, but editor calls this frequently to gather generated assets.
@@ -433,11 +200,19 @@ public: // Per-Tick calls
     [[nodiscard]] Core::Span<const EnvironmentMapID> GetChangedEnvironmentMapIds() const { return {changedEnvironmentMapIds.Data(), changedEnvironmentMapIds.Size()}; }
     [[nodiscard]] Core::Span<const TextureArrayID> GetChangedTextureArrayIds() const { return {changedTextureArrayIds.Data(), changedTextureArrayIds.Size()}; }
 
-public:
-    OffsetAllocator::Allocator& GetJointMatrixAllocator()
-    {
-        return jointMatrixAllocator;
-    }
+    void RegisterScene(StringID sceneId, const Core::Path& source);
+
+    void UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount);
+
+    bool DeleteScene(StringID sceneId);
+
+    /**
+     * Renames or moves a scene's file (if it has one) and the runs beside it; the scene's name becomes the new stem.
+     * @return false if the destination exists or the move fails
+     */
+    bool MoveScene(StringID sceneId, const Core::Path& newSource);
+
+    bool DeletePrefab(StringID prefabId);
 
     std::atomic<bool> bVerboseLogging{false};
 
@@ -446,10 +221,6 @@ private:
     Engine::EngineContext* ctx;
     AssetLoad::AsyncAssetLoadManager* assetLoadManager;
     Render::ResourceManager* resourceManager;
-
-    // todo: figure out whats happening to this guy
-    // OffsetAllocator because it's always contiguous
-    OffsetAllocator::Allocator jointMatrixAllocator{Render::BINDLESS_MODEL_BUFFER_SIZE};
 
     AssetPool<StaticModel, ModelID, MAX_LOADED_MODELS> models;
 
@@ -489,63 +260,6 @@ private:
     IdleLogCounter modelUnloadLog{};
     IdleLogCounter textureUnloadLog{};
     IdleLogCounter samplerUnloadLog{};
-
-public: // Scenes
-    struct CachedSceneMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> sceneName{};
-        uint32_t entityCount{};
-        uint64_t contentVersion{0};
-        /** No file on disk; kept registered only while loaded. */
-        bool bUnsaved{false};
-    };
-
-    const CatalogTable<StringID, CachedSceneMetadata>& GetSceneCache() const { return sceneCache; }
-
-    [[nodiscard]] const CachedSceneMetadata* GetSceneMetadata(StringID sceneId) const;
-
-    void RegisterScene(StringID sceneId, const Core::Path& source);
-
-    void UpdateSceneCachePath(StringID sceneId, const Core::Path& path, uint32_t entityCount);
-
-    bool DeleteScene(StringID sceneId);
-
-    /**
-     * Renames or moves a scene's file (if it has one) and the runs beside it; the scene's name becomes the new stem.
-     * @return false if the destination exists or the move fails
-     */
-    bool MoveScene(StringID sceneId, const Core::Path& newSource);
-
-    /** Every directory under the scenes root, as of the last scene scan. */
-    Core::Span<const Core::Path> GetSceneFolders() const { return sceneFolders; }
-
-public: // Prefabs
-    struct CachedPrefabMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> prefabName{};
-        uint32_t componentCount{};
-        uint64_t contentVersion{0};
-    };
-
-    const CatalogTable<StringID, CachedPrefabMetadata>& GetPrefabCache() const { return prefabCache; }
-
-    [[nodiscard]] const CachedPrefabMetadata* GetPrefabMetadata(StringID prefabId) const;
-
-    bool DeletePrefab(StringID prefabId);
-
-public: // Runs (.wplay)
-    struct CachedPlayMetadata
-    {
-        Core::Path source;
-        Core::InlineString<128> name{};
-        StringID sceneId{};
-        uint32_t eventCount{};
-        uint64_t contentVersion{0};
-    };
-
-    const CatalogTable<StringID, CachedPlayMetadata>& GetPlayCache() const { return playCache; }
 
 private: // Asset Registry
     template<typename Id, typename Entry>

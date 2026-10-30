@@ -9,7 +9,7 @@
 
 namespace Engine
 {
-class AssetManager;
+class IAssetLoader;
 
 /**
  * Owns engine-provided built-in assets that are generated on demand rather than authored on disk. Handles are loaded lazily on first request and kept resident for the engine's lifetime.
@@ -19,31 +19,31 @@ class AssetManager;
 class BuiltinAssets
 {
 public:
-    StaticModelHandle GetUnitQuad(AssetManager* assetManager); // 1x1 XZ plane, +Y normal
+    StaticModelHandle GetUnitQuad(IAssetLoader* assetLoader); // 1x1 XZ plane, +Y normal
 
-    StaticModelHandle GetUnitDisk(AssetManager* assetManager);
+    StaticModelHandle GetUnitDisk(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitCube(AssetManager* assetManager);
+    StaticModelHandle GetUnitCube(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitSphere(AssetManager* assetManager);
+    StaticModelHandle GetUnitSphere(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitCylinder(AssetManager* assetManager);
+    StaticModelHandle GetUnitCylinder(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitCone(AssetManager* assetManager);
+    StaticModelHandle GetUnitCone(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitCapsule(AssetManager* assetManager);
+    StaticModelHandle GetUnitCapsule(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitTorus(AssetManager* assetManager);
+    StaticModelHandle GetUnitTorus(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitHemisphere(AssetManager* assetManager);
+    StaticModelHandle GetUnitHemisphere(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitTetrahedron(AssetManager* assetManager);
+    StaticModelHandle GetUnitTetrahedron(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitOctahedron(AssetManager* assetManager);
+    StaticModelHandle GetUnitOctahedron(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitIcosahedron(AssetManager* assetManager);
+    StaticModelHandle GetUnitIcosahedron(IAssetLoader* assetLoader);
 
-    StaticModelHandle GetUnitDodecahedron(AssetManager* assetManager);
+    StaticModelHandle GetUnitDodecahedron(IAssetLoader* assetLoader);
 
 private:
     StaticModelHandle unitQuad{};

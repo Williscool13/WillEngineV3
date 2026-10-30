@@ -44,7 +44,7 @@ static Engine::TextureID s_texPreviewId = Engine::TextureID::INVALID;
 static Core::InlineString<128> s_selectedGroup{};
 static char s_texturePickerSearch[64] = {};
 
-static bool IsTextureFiltered(const Engine::AssetManager::EditorTextureInfo& info)
+static bool IsTextureFiltered(const Engine::IAssetLoader::EditorTextureInfo& info)
 {
     if (!INCLUDE_MODEL_TEXTURES && info.category == Engine::TextureCategory::Model) { return true; }
     if (!INCLUDE_BUILTIN_TEXTURES && info.category == Engine::TextureCategory::Builtin) { return true; }
@@ -572,8 +572,8 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
     static Engine::SamplerDesc samplerEditPending{};
 
     if (!state->editor.textureInfoCache) {
-        const uint32_t count = registry.Service<Engine::AssetManager>().GetTextureInfoCount();
-        state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(
+        const uint32_t count = registry.Assets().GetTextureInfoCount();
+        state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::IAssetLoader::EditorTextureInfo> >(
             &ctx->editorArena.Get(), count);
         registry.Service<Engine::AssetManager>().GetAllTextureInfos(*state->editor.textureInfoCache);
     }
@@ -592,7 +592,7 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
 
             const Engine::TextureID& texId = mat.textureRefs[slot];
             const char* currentTexName = "None";
-            if (const Engine::AssetManager::EditorTextureInfo* info = texId.IsValid() ? matTexInfoMap.Find(texId) : nullptr) {
+            if (const Engine::IAssetLoader::EditorTextureInfo* info = texId.IsValid() ? matTexInfoMap.Find(texId) : nullptr) {
                 currentTexName = info->name.c_str();
             }
 
@@ -626,13 +626,13 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
                 ImGui::Checkbox("Include Procedural Textures", &INCLUDE_PROCEDURAL_TEXTURES);
 
                 const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
-                auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount + 1);
+                auto sorted = Core::ArenaFixedVector<Engine::IAssetLoader::EditorTextureInfo>(&ctx->editorArena.Get(), texCount + 1);
                 for (const auto& [texId2, info] : *state->editor.textureInfoCache) {
                     if (IsTextureFiltered(info)) { continue; }
                     if (!MatchesSearch(info.name.c_str(), s_texturePickerSearch)) { continue; }
                     sorted.EmplaceBack(info);
                 }
-                std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
+                std::ranges::sort(sorted, {}, &Engine::IAssetLoader::EditorTextureInfo::name);
 
                 if (ImGui::BeginChild("##texlist", {400.0f, 300.0f}, ImGuiChildFlags_Borders)) {
                     if (ImGui::Selectable("(None)", !texEditPending.IsValid())) {
@@ -1103,8 +1103,8 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state, 
     if (!bOpen) { return; }
     if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_TEXTURES].title, &bOpen)) {
         if (!state->editor.textureInfoCache) {
-            const uint32_t count = registry.Service<Engine::AssetManager>().GetTextureInfoCount();
-            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::AssetManager::EditorTextureInfo> >(
+            const uint32_t count = registry.Assets().GetTextureInfoCount();
+            state->editor.textureInfoCache = ctx->editorArena.Get().Alloc<Core::ArenaFixedMap<Engine::TextureID, Engine::IAssetLoader::EditorTextureInfo> >(
                 &ctx->editorArena.Get(), count);
             registry.Service<Engine::AssetManager>().GetAllTextureInfos(*state->editor.textureInfoCache);
         }
@@ -1114,13 +1114,13 @@ void DrawTexturesWindow(Engine::EngineContext* ctx, Engine::EngineState* state, 
         ImGui::SameLine();
         ImGui::Checkbox("Include Builtin Textures", &INCLUDE_BUILTIN_TEXTURES);
         const uint32_t texCount = static_cast<uint32_t>(state->editor.textureInfoCache->Size());
-        auto sorted = Core::ArenaFixedVector<Engine::AssetManager::EditorTextureInfo>(&ctx->editorArena.Get(), texCount + 1);
+        auto sorted = Core::ArenaFixedVector<Engine::IAssetLoader::EditorTextureInfo>(&ctx->editorArena.Get(), texCount + 1);
         for (const auto& [texId, info] : *state->editor.textureInfoCache) {
             if (IsTextureFiltered(info)) { continue; }
             if (!MatchesSearch(info.name.c_str(), s_search)) { continue; }
             sorted.EmplaceBack(info);
         }
-        std::ranges::sort(sorted, {}, &Engine::AssetManager::EditorTextureInfo::name);
+        std::ranges::sort(sorted, {}, &Engine::IAssetLoader::EditorTextureInfo::name);
 
         if (ImGui::BeginTable("##textures", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupScrollFreeze(0, 1);

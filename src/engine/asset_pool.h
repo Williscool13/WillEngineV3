@@ -55,6 +55,7 @@ public:
 
     /**
      * Takes a ref on id's asset, creating it if absent. On creation init(T&, HandleT) runs before any other thread can see the asset.
+     * Threads asking for the same id wait until init returns, so init must not block or touch this pool.
      * @return INVALID handle when the pool is full
      */
     template<typename Init>

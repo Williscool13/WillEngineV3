@@ -106,17 +106,6 @@ void CollectPreUpdate(EngineContext* ctx, EngineState* state, SystemGraph& graph
             DeferredWrites<Component::DirtyTransformRequest>>());
 }
 
-static void TickQuietFrames(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
-{
-    int32_t& quiet = state->assetLoad.quietFrames;
-    if (CountLoadingEntities(state, registry) > 0 || registry.Service<Engine::AssetManager>().HasPendingLoads() || ctx->frameStatus.bAssetGenerationPending) {
-        quiet = 0;
-    }
-    else if (quiet < INT32_MAX) {
-        quiet++;
-    }
-}
-
 static void PostUpdateCleanup(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     for (const entt::entity entity : registry.View<Component::DirtyTransformRequest>()) {
@@ -190,12 +179,12 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("ReflectionProbeBakeUpgrade",
         &ReflectionProbeBakeUpgrade,
         {
-            .writes = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::ReflectionProbeLoadingFlag>(), TypeSID<Component::ReflectionProbeLoadRequest>(), TypeSID<AssetManager>(), "state.rng"_sid},
+            .writes = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::ReflectionProbeLoadingFlag>(), TypeSID<Component::ReflectionProbeLoadRequest>(), "state.rng"_sid},
         });
     graph.Add("StaticMeshPendingKickoff",
         &StaticMeshPendingKickoff,
         Access<
-            Reads<Component::StaticMeshComponent, Component::StaticMeshLoadRequest, AssetManager>>());
+            Reads<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>>());
     graph.Add("ReflectionProbePendingKickoff",
         &ReflectionProbePendingKickoff,
         Access<
@@ -203,7 +192,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("StaticMeshPrimitivePendingKickoff",
         &StaticMeshPrimitivePendingKickoff,
         Access<
-            Reads<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest, AssetManager>>());
+            Reads<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>>());
     graph.Add("ProceduralMeshPendingKickoff",
         &ProceduralMeshPendingKickoff,
         Access<
@@ -219,21 +208,21 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("TextFontPendingKickoff",
         &TextFontPendingKickoff,
         Access<
-            Reads<Component::TextComponent, Component::TextRuntime, AssetManager>,
+            Reads<Component::TextComponent, Component::TextRuntime>,
             Writes<Component::TextFontRequest>>());
     graph.Add("Text3DGeneratePendingKickoff",
         &Text3DGeneratePendingKickoff,
         Access<
-            Reads<Component::Text3DComponent, Component::Text3DGenerateRequest, AssetManager>>());
+            Reads<Component::Text3DComponent, Component::Text3DGenerateRequest>>());
     graph.Add("PhysicsMeshPendingKickoff",
         &PhysicsMeshPendingKickoff,
         Access<
-            Reads<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest, AssetManager>>());
+            Reads<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest>>());
 
     graph.Add("StaticMeshLoadResolve",
         &StaticMeshLoadResolve,
         {
-            .reads = {TypeSID<Component::StaticMeshComponent>(), TypeSID<Component::MeshRuntime>(), TypeSID<AssetManager>()},
+            .reads = {TypeSID<Component::StaticMeshComponent>(), TypeSID<Component::MeshRuntime>()},
             .writes = {"state.assetLoad.pendingModelWait"_sid},
             .deferredWrites = {TypeSID<Component::StaticMeshLoadingFlag>()},
             .after = {SystemId(&StaticMeshPendingKickoff)},
@@ -245,19 +234,19 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("ReflectionProbeLoadResolve",
         &ReflectionProbeLoadResolve,
         Access<
-            Reads<Component::ReflectionProbeRuntime, AssetManager>,
+            Reads<Component::ReflectionProbeRuntime>,
             DeferredWrites<Component::ReflectionProbeLoadingFlag>,
             After<&ReflectionProbePendingKickoff>>());
     graph.Add("StaticMeshPrimitiveLoadResolve",
         &StaticMeshPrimitiveLoadResolve,
         Access<
-            Reads<Component::StaticMeshPrimitiveComponent, Component::MeshRuntime, AssetManager>,
+            Reads<Component::StaticMeshPrimitiveComponent, Component::MeshRuntime>,
             DeferredWrites<Component::StaticMeshPrimitiveLoadingFlag>,
             After<&StaticMeshPrimitivePendingKickoff>>());
     graph.Add("ProceduralMeshLoadResolve",
         &ProceduralMeshLoadResolve,
         {
-            .reads = {TypeSID<Component::ProceduralMeshComponent>(), TypeSID<Component::MeshRuntime>(), TypeSID<AssetManager>()},
+            .reads = {TypeSID<Component::ProceduralMeshComponent>(), TypeSID<Component::MeshRuntime>()},
             .writes = {"state.assetLoad.pendingProceduralWait"_sid},
             .deferredWrites = {TypeSID<Component::ProceduralMeshLoadingFlag>()},
             .after = {SystemId(&ProceduralMeshPendingKickoff)},
@@ -265,43 +254,37 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("SplineMeshLoadResolve",
         &SplineMeshLoadResolve,
         Access<
-            Reads<Component::SplineMeshComponent, Component::MeshRuntime, AssetManager>,
+            Reads<Component::SplineMeshComponent, Component::MeshRuntime>,
             DeferredWrites<Component::SplineMeshLoadingFlag>,
             After<&SplineMeshPendingKickoff>>());
     graph.Add("ModuleMeshLoadResolve",
         &ModuleMeshLoadResolve,
         Access<
-            Reads<Component::ModuleMeshComponent, Component::MeshRuntime, AssetManager>,
+            Reads<Component::ModuleMeshComponent, Component::MeshRuntime>,
             DeferredWrites<Component::ModuleMeshLoadingFlag>,
             After<&ModuleMeshPendingKickoff>>());
     graph.Add("Text3DLoadResolve",
         &Text3DLoadResolve,
         Access<
-            Reads<Component::Text3DComponent, Component::MeshRuntime, AssetManager>,
+            Reads<Component::Text3DComponent, Component::MeshRuntime>,
             DeferredWrites<Component::Text3DLoadingFlag>,
             After<&Text3DGeneratePendingKickoff>>());
     graph.Add("PhysicsMeshLoadResolve",
         &PhysicsMeshLoadResolve,
         Access<
-            Reads<Component::PhysicsShapeRuntime, AssetManager>,
+            Reads<Component::PhysicsShapeRuntime>,
             DeferredWrites<Component::PhysicsMeshLoadingFlag>,
             After<&PhysicsMeshPendingKickoff>>());
     graph.Add("PhysicsShapeCreationResolve",
         &PhysicsShapeCreationResolve,
         Access<
-            Reads<Component::PhysicsBodyDesc, Component::NameComponent, Component::PhysicsMeshRequest, Component::PhysicsMeshLoadingFlag, AssetManager>,
+            Reads<Component::PhysicsBodyDesc, Component::NameComponent, Component::PhysicsMeshRequest, Component::PhysicsMeshLoadingFlag>,
             Writes<Component::PhysicsShapeRuntime, Component::PhysicsShapeCreationRequest>>());
     graph.Add("PhysicsBodyCreationResolve",
         &PhysicsBodyCreationResolve,
         Access<
             Reads<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsShapeCreationRequest, Component::TransformComponent, Component::HierarchyComponent, Component::PhysicsMotionOverrideRuntime>,
             Writes<Component::PhysicsBodyCreationRequest, Component::PhysicsBodyRuntime, Component::DynamicPhysicsBodyRuntime, Physics::PhysicsWorld>>());
-    graph.Add("TickQuietFrames",
-        &TickQuietFrames,
-        {
-            .reads = {TypeSID<Component::StaticMeshLoadingFlag>(), TypeSID<Component::StaticMeshPrimitiveLoadingFlag>(), TypeSID<Component::ProceduralMeshLoadingFlag>(), TypeSID<Component::SplineMeshLoadingFlag>(), TypeSID<Component::ModuleMeshLoadingFlag>(), TypeSID<Component::Text3DLoadingFlag>(), TypeSID<Component::ReflectionProbeLoadingFlag>(), TypeSID<Component::PhysicsMeshLoadingFlag>(), TypeSID<Component::StaticMeshLoadRequest>(), TypeSID<Component::StaticMeshPrimitiveLoadRequest>(), TypeSID<Component::ProceduralMeshLoadRequest>(), TypeSID<Component::SplineMeshLoadRequest>(), TypeSID<Component::ModuleMeshLoadRequest>(), TypeSID<Component::Text3DGenerateRequest>(), TypeSID<Component::ReflectionProbeLoadRequest>(), TypeSID<Component::PhysicsMeshRequest>(), TypeSID<Component::PhysicsShapeCreationRequest>(), TypeSID<Component::PhysicsBodyCreationRequest>(), TypeSID<Component::LightSurfaceRequest>(), TypeSID<Component::TextFontRequest>(), TypeSID<AssetManager>(), "ctx.frameStatus"_sid},
-            .writes = {"state.assetLoad.quietFrames"_sid},
-        });
     graph.Add("RunLaunchExec",
         &Args::RunLaunchExec,
         AccessSet::EXCLUSIVE);
@@ -471,17 +454,17 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         &ResolveSkyboxCubemaps,
         Access<
             Reads<Component::SkyboxComponent>,
-            Writes<Component::SkyboxRuntime, AssetManager>>());
+            Writes<Component::SkyboxRuntime>>());
     graph.Add("ResolveBakedShadows",
         &ResolveBakedShadows,
         {
             .reads = {TypeSID<Component::AreaLightComponent>(), TypeSID<Component::SphereLightComponent>(), "analyticLightStore"_sid, "engineConfig"_sid},
-            .writes = {TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightRuntime>(), TypeSID<AssetManager>(), "viewFamily.bakedShadowLights"_sid},
+            .writes = {TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightRuntime>(), "viewFamily.bakedShadowLights"_sid},
         });
     graph.Add("GatherRenderables",
         &GatherRenderables,
         {
-            .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), TypeSID<AssetManager>(), "engineConfig"_sid, "instanceStore.visibility"_sid},
+            .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), "engineConfig"_sid, "instanceStore.visibility"_sid},
             .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, TypeSID<MaterialManager>(), "triLightStore"_sid, "viewFamily.renderables"_sid, "viewFamily.volumetricFog"_sid, "viewFamily.settings"_sid},
         });
     graph.Add("GatherLights",
@@ -493,13 +476,13 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherTextRenderables",
         &GatherTextRenderables,
         {
-            .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), TypeSID<AssetManager>(), TypeSID<MaterialManager>()},
+            .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), TypeSID<MaterialManager>()},
             .writes = {"viewFamily.text"_sid},
         });
     graph.Add("GatherReflectionProbes",
         &GatherReflectionProbes,
         {
-            .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::RenderWorldTransformRuntime>(), TypeSID<AssetManager>(), "engineConfig"_sid},
+            .reads = {TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::RenderWorldTransformRuntime>(), "engineConfig"_sid},
             .writes = {"viewFamily.probes"_sid},
         });
     graph.Add("GatherLocalDDGIVolumes",
@@ -544,7 +527,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherLightDebugDraws",
         &GatherLightDebugDraws,
         {
-            .reads = {TypeSID<Component::AreaLightComponent>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::LocalDDGIVolumeComponent>(), TypeSID<Component::PostProcessVolumeComponent>(), TypeSID<Component::FogVolumeComponent>(), TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::RenderWorldTransformRuntime>(), TypeSID<AssetManager>(), "engineConfig"_sid, "state.editor.selection"_sid},
+            .reads = {TypeSID<Component::AreaLightComponent>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::LocalDDGIVolumeComponent>(), TypeSID<Component::PostProcessVolumeComponent>(), TypeSID<Component::FogVolumeComponent>(), TypeSID<Component::ReflectionProbeComponent>(), TypeSID<Component::ReflectionProbeRuntime>(), TypeSID<Component::RenderWorldTransformRuntime>(), "engineConfig"_sid, "state.editor.selection"_sid},
             .writes = {"viewFamily.debugDraws"_sid},
         });
     graph.Add("GatherCSMDebugDraws",

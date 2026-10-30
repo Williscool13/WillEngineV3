@@ -582,10 +582,10 @@ static JPH::ShapeRefC CreateShapeFromCollider(const Engine::PhysicsColliderAsset
     return nullptr;
 }
 
-JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, const Engine::AssetManager* assetManager)
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, const Engine::IAssetLoader* assetLoader)
 {
-    if (colliderHandle.IsValid() && assetManager) {
-        auto* collider = assetManager->GetCollider(colliderHandle);
+    if (colliderHandle.IsValid() && assetLoader) {
+        auto* collider = assetLoader->GetCollider(colliderHandle);
         if (!collider || collider->loadState != Engine::PhysicsColliderAsset::LoadState::Loaded) { return nullptr; }
         return CreateShapeFromCollider(*collider, desc.bakedScale);
     }
@@ -616,11 +616,11 @@ static bool HasFrozenColliderSource(const Engine::SystemRegistry& registry, cons
         const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
         if (!collider || runtime.colliders[i].IsValid()) { continue; }
         if (collider->meshSourceModelId.IsValid()) {
-            if (registry.Service<Engine::AssetManager>().IsModelFrozen(collider->meshSourceModelId)) { return true; }
+            if (registry.Assets().IsModelFrozen(collider->meshSourceModelId)) { return true; }
             continue;
         }
         if (!std::holds_alternative<std::monostate>(collider->proceduralParams) || !collider->splineParams.spline.points.IsEmpty()) { continue; }
-        if (collider->text3DSource.IsValid() && registry.Service<Engine::AssetManager>().IsFontFrozen(collider->text3DSource.fontId)) { return true; }
+        if (collider->text3DSource.IsValid() && registry.Assets().IsFontFrozen(collider->text3DSource.fontId)) { return true; }
     }
     return false;
 }
@@ -642,18 +642,18 @@ static void ApplyPhysicsMeshKickoff(Engine::SystemRegistry& registry, const entt
         if (collider->meshSourceModelId.IsValid()) {
             const bool bWantsMesh = collider->bMeshPrecise && !bDynamic;
             const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
-            handle = registry.ServiceMut<Engine::AssetManager>().LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
+            handle = registry.Assets().LoadModelCollider(collider->meshSourceModelId, kind, collider->meshSourceNodeIndex);
         }
         else if (!std::holds_alternative<std::monostate>(collider->proceduralParams)) {
-            handle = registry.ServiceMut<Engine::AssetManager>().LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
+            handle = registry.Assets().LoadProceduralCollider(collider->proceduralParams, collider->proceduralRepeat);
         }
         else if (!collider->splineParams.spline.points.IsEmpty()) {
             const bool bHollow = collider->bSplineHollow && !bDynamic;
-            handle = registry.ServiceMut<Engine::AssetManager>().LoadSplineCollider(collider->splineParams, bHollow);
+            handle = registry.Assets().LoadSplineCollider(collider->splineParams, bHollow);
         }
         else if (collider->text3DSource.IsValid()) {
             const Component::Text3DShapeSource& t = collider->text3DSource;
-            handle = registry.ServiceMut<Engine::AssetManager>().LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
+            handle = registry.Assets().LoadText3DCollider(t.fontId, t.text, t.depth, t.flatness, t.tracking, t.scale, t.bSmoothNormals, t.align, t.anchor, t.wrapWidth, t.bendRadius, t.bPrecise);
         }
 
         if (!handle.IsValid()) {
@@ -697,7 +697,7 @@ void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* sta
         for (const Engine::PhysicsColliderHandle handle : runtime.colliders) {
             if (!handle.IsValid()) { continue; }
 
-            auto* collider = registry.Service<Engine::AssetManager>().GetCollider(handle);
+            auto* collider = registry.Assets().GetCollider(handle);
             if (!collider) {
                 LOG_WARN(Engine, "Physics collider not found. Removing loading tag.");
                 shouldAbandon = true;
@@ -765,14 +765,14 @@ void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState
 
         JPH::ShapeRefC shape;
         if (bodyDesc.shapes.Size() == 1 && bodyDesc.shapes[0].offset == glm::vec3(0.0f)) {
-            shape = CreateShapeFromDesc(bodyDesc.shapes[0], runtime.colliders[0], &registry.Service<Engine::AssetManager>());
+            shape = CreateShapeFromDesc(bodyDesc.shapes[0], runtime.colliders[0], &registry.Assets());
         }
         else {
             JPH::StaticCompoundShapeSettings compound;
             bool bAnyNull = false;
             for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
                 const Component::PhysicsShapeDesc& shapeDesc = bodyDesc.shapes[i];
-                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, runtime.colliders[i], &registry.Service<Engine::AssetManager>());
+                JPH::ShapeRefC subShape = CreateShapeFromDesc(shapeDesc, runtime.colliders[i], &registry.Assets());
                 if (!subShape) {
                     bAnyNull = true;
                     break;

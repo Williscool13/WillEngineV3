@@ -126,11 +126,11 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     ImGui::BeginDisabled(busy);
 
     const char* fontLabel = "(none)";
-    if (const Engine::AssetManager::CachedFontMetadata* meta = registry.Service<Engine::AssetManager>().GetFontMetadata(comp.fontId)) {
+    if (const Engine::IAssetLoader::CachedFontMetadata* meta = registry.Assets().GetFontMetadata(comp.fontId)) {
         fontLabel = meta->name.c_str();
     }
     if (ImGui::BeginCombo("Font", edit.IsMixed(&Text3DComponent::fontId) ? "--" : fontLabel)) {
-        const auto& fontCache = registry.Service<Engine::AssetManager>().GetFontCache();
+        const auto& fontCache = registry.Assets().GetFontCache();
         for (const auto& [fontId, meta] : fontCache) {
             if (ImGui::Selectable(meta.name.c_str(), comp.fontId == fontId)) {
                 edit.Set(&Text3DComponent::fontId, fontId);
@@ -192,7 +192,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     }
     ImGui::EndDisabled();
 
-    if (const Engine::AssetManager::CachedFontMetadata* meta = registry.Service<Engine::AssetManager>().GetFontMetadata(comp.fontId)) {
+    if (const Engine::IAssetLoader::CachedFontMetadata* meta = registry.Assets().GetFontMetadata(comp.fontId)) {
         if (meta->header.contourGlyphCount == 0) {
             ImGui::TextColored({1, 0.6f, 0, 1}, "Font has no contours; regenerate it with the updated importer.");
         }

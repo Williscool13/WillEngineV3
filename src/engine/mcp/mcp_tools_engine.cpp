@@ -543,12 +543,12 @@ static ToolResult LoadScene(EngineContext* ctx, EngineState* state, Call& call)
 
     StringID sceneId{};
     uint64_t raw = 0;
-    if (ParseHexId(name, raw) && registry.Service<Engine::AssetManager>().GetSceneMetadata(StringID(raw))) {
+    if (ParseHexId(name, raw) && registry.Assets().GetSceneMetadata(StringID(raw))) {
         sceneId = StringID(raw);
     }
     else {
         uint32_t matchCount = 0;
-        for (const auto& kv : registry.Service<Engine::AssetManager>().GetSceneCache()) {
+        for (const auto& kv : registry.Assets().GetSceneCache()) {
             if (kv.value.sceneName == name) {
                 sceneId = kv.key;
                 ++matchCount;
@@ -627,7 +627,7 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
         const auto* name = registry.TryGet<Component::NameComponent>(entity);
         call.SetString("name", name ? name->name.c_str() : "");
         const auto* runtime = registry.TryGet<Component::MeshRuntime>(entity);
-        const StaticModel* model = runtime ? registry.Service<Engine::AssetManager>().GetModel(runtime->modelHandle) : nullptr;
+        const StaticModel* model = runtime ? registry.Assets().GetModel(runtime->modelHandle) : nullptr;
         if (model) { call.SetString("modelName", model->name.c_str()); } else { call.SetNull("modelName"); }
     }
     else {
@@ -671,10 +671,10 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
         return ToolResult::Error;
     }
 
-    const AssetManager::CachedPlayMetadata* found = nullptr;
+    const IAssetLoader::CachedPlayMetadata* found = nullptr;
     uint32_t matchCount = 0;
     bool bFoundCurrent = false;
-    for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
+    for (const auto& [id, meta] : registry.Assets().GetPlayCache()) {
         const Core::InlineString<128> stem{meta.source.Stem()};
         if (!(stem == name || meta.name == name || meta.source == name)) { continue; }
         const bool bCurrent = meta.sceneId == state->scene.currentSceneId;
@@ -698,7 +698,7 @@ static ToolResult RunPlay(EngineContext* ctx, EngineState* state, Call& call)
         return ToolResult::Error;
     }
     if (found->sceneId != state->scene.currentSceneId) {
-        const auto* wanted = registry.Service<Engine::AssetManager>().GetSceneMetadata(found->sceneId);
+        const auto* wanted = registry.Assets().GetSceneMetadata(found->sceneId);
         call.SetError(Core::InlineString<256>::Format("Run wants scene '%s' but '%s' is current", wanted ? wanted->sceneName.c_str() : "(unregistered)",
                                                       state->scene.currentSceneName.c_str()).c_str());
         return ToolResult::Error;

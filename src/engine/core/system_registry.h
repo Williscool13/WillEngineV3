@@ -31,6 +31,7 @@ namespace Engine
 {
 struct Command;
 class AssetManager;
+class IAssetLoader;
 class MaterialManager;
 
 /**
@@ -105,19 +106,27 @@ public:
         return registry.TryGetMut<T>(entity);
     }
 
-    /** A ctx service (AssetManager, MaterialManager, AudioManager, PhysicsWorld); its const methods are safe to call concurrently. */
+    /** A ctx service (MaterialManager, AudioManager, PhysicsWorld); its const methods are safe to call concurrently. A service with EXCLUSIVE_ONLY is only available to exclusive systems. */
     template<typename T>
     [[nodiscard]] const T& Service() const
     {
-        CheckRead<T>();
+        if constexpr (requires { T::EXCLUSIVE_ONLY; }) { CheckExclusiveOnly<T>(); }
+        else { CheckRead<T>(); }
         return *ServiceSlot<T>(*Context());
     }
 
     template<typename T>
     [[nodiscard]] T& ServiceMut()
     {
-        CheckWrite<T>();
+        if constexpr (requires { T::EXCLUSIVE_ONLY; }) { CheckExclusiveOnly<T>(); }
+        else { CheckWrite<T>(); }
         return *ServiceSlot<T>(*Context());
+    }
+
+    template<typename Ctx = EngineContext>
+    [[nodiscard]] IAssetLoader& Assets() const
+    {
+        return *static_cast<Ctx*>(Context())->services.assetLoader;
     }
 
     template<typename... T>
@@ -227,6 +236,14 @@ private:
         SystemRegistry registry{storage, AccessSet::EXCLUSIVE, nullptr, "RunExclusive"};
         Fn(registry, std::as_const(value));
         value.~Payload();
+    }
+
+    template<typename T>
+    void CheckExclusiveOnly() const
+    {
+#if WILL_ACCESS_CHECK
+        if (!access.bExclusive) { CheckStructuralAccess(name, T::COMPONENT_NAME); }
+#endif
     }
 
     template<typename T>

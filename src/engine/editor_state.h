@@ -142,7 +142,7 @@ struct EditorState
     // ImGui textures
     EditorTextureResidency texResidency{};
 
-    Core::ArenaFixedMap<TextureID, AssetManager::EditorTextureInfo>* textureInfoCache{nullptr};
+    Core::ArenaFixedMap<TextureID, IAssetLoader::EditorTextureInfo>* textureInfoCache{nullptr};
 
     void ResetFrameCache()
     {

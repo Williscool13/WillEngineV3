@@ -116,7 +116,7 @@ static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
     auto* ctx = registry.Context();
     const uint32_t lightSlot = Component::FindLightSlot(registry, edit.Primary());
 
-    const AssetManager::ShadowMapInfo* info = registry.Service<Engine::AssetManager>().GetShadowMapInfo(shadowId);
+    const IAssetLoader::ShadowMapInfo* info = registry.Assets().GetShadowMapInfo(shadowId);
     if (info == nullptr) {
         ImGui::TextDisabled("Not baked, using dynamic");
     }
@@ -319,7 +319,7 @@ static void ReleaseLightRuntime(Engine::SystemRegistry& registry, entt::entity e
 {
     const auto& runtime = registry.Get<LightRuntime>(entity);
     if (runtime.bakedShadow.IsValid()) {
-        registry.ServiceMut<Engine::AssetManager>().UnloadTextureArray(runtime.bakedShadow);
+        registry.Assets().UnloadTextureArray(runtime.bakedShadow);
     }
     if (runtime.lightSlot != AnalyticLightStore::INVALID_SLOT) {
         registry.PushCommand({.type = CommandType::LightSlotFree, .payload = {.lightSlot = runtime.lightSlot}});
@@ -460,10 +460,10 @@ Engine::ComponentEditorResult Component::SkyboxComponent::DrawEditor(Core::ViewF
 
         static bool bShowProbes = false;
 
-        const Engine::AssetManager::CachedCubemapMetadata* currentMeta = registry.Service<Engine::AssetManager>().GetCubemapMetadata(comp.envMap);
+        const Engine::IAssetLoader::CachedCubemapMetadata* currentMeta = registry.Assets().GetCubemapMetadata(comp.envMap);
         const char* preview = edit.IsMixed(&SkyboxComponent::envMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Env Map##sky", preview)) {
-            for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetCubemapCache()) {
+            for (const auto& [id, meta] : registry.Assets().GetCubemapCache()) {
                 if (!bShowProbes && meta.source.Extension() == ".wprobe" && id != comp.envMap) { continue; }
                 if (ImGui::Selectable(meta.name.c_str(), id == comp.envMap)) {
                     edit.Set(&SkyboxComponent::envMap, Engine::EnvironmentMapID{id});

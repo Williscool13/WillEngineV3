@@ -530,7 +530,7 @@ Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine:
         return {};
     }
     const int32_t fps = glm::max(1, static_cast<int32_t>(glm::round(static_cast<double>(samples.Size()) / seconds)));
-    const auto* sceneMeta = registry.Service<Engine::AssetManager>().GetSceneMetadata(state->scene.currentSceneId);
+    const auto* sceneMeta = registry.Assets().GetSceneMetadata(state->scene.currentSceneId);
     const Core::Path folder = sceneMeta ? sceneMeta->source.Parent() : Platform::GetScenePath();
     const Core::Path path = folder / Core::InlineString<160>::Format("%s.wplay", name.c_str()).c_str();
 

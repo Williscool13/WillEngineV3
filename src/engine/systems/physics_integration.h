@@ -15,14 +15,14 @@
 
 namespace Engine
 {
-class AssetManager;
+class IAssetLoader;
 
 /** Activates every body overlapping this body's bounds; moving or removing a body does not wake what rests on it by itself. */
 void WakeBodiesAround(JPH::BodyInterface& bodyInterface, const JPH::BodyID& bodyId);
 
 JPH::BodyID CreateBodyFromShape(JPH::BodyInterface& bodyInterface, const Component::PhysicsBodyDesc& desc, Component::PhysicsMotionType motionType, const JPH::ShapeRefC& shapeRef,
                                 JPH::RVec3 position, JPH::Quat rotation, uint64_t userData, uint16_t layerOverride = Component::NO_LAYER_OVERRIDE);
-JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, const Engine::AssetManager* assetManager);
+JPH::ShapeRefC CreateShapeFromDesc(const Component::PhysicsShapeDesc& desc, Engine::PhysicsColliderHandle colliderHandle, const Engine::IAssetLoader* assetLoader);
 } // Engine
 
 #endif //WILL_ENGINE_PHYSICS_INTEGRATION_H

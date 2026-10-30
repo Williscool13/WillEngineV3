@@ -245,11 +245,11 @@ static ToolResult FindEntities(Engine::EngineContext* ctx, Engine::EngineState* 
 static bool ResolvePrefabArg(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const char* text, StringID& outId)
 {
     uint64_t raw = 0;
-    if (Engine::MCP::ParseHexId(text, raw) && registry.Service<Engine::AssetManager>().GetPrefabMetadata(StringID(raw))) {
+    if (Engine::MCP::ParseHexId(text, raw) && registry.Assets().GetPrefabMetadata(StringID(raw))) {
         outId = StringID(raw);
         return true;
     }
-    for (const auto kv : registry.Service<Engine::AssetManager>().GetPrefabCache()) {
+    for (const auto kv : registry.Assets().GetPrefabCache()) {
         if (kv.value.prefabName == text) {
             outId = kv.key;
             return true;
@@ -261,11 +261,11 @@ static bool ResolvePrefabArg(Engine::EngineContext* ctx, Engine::EngineState* st
 static bool ResolveModelArg(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const char* text, Engine::ModelID& outId)
 {
     uint64_t raw = 0;
-    if (Engine::MCP::ParseHexId(text, raw) && registry.Service<Engine::AssetManager>().GetModelMetadata(Engine::ModelID(raw))) {
+    if (Engine::MCP::ParseHexId(text, raw) && registry.Assets().GetModelMetadata(Engine::ModelID(raw))) {
         outId = Engine::ModelID(raw);
         return true;
     }
-    for (const auto kv : registry.Service<Engine::AssetManager>().GetModelCache()) {
+    for (const auto kv : registry.Assets().GetModelCache()) {
         if (kv.value.name == text) {
             outId = kv.key;
             return true;

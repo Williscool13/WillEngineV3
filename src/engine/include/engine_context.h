@@ -52,6 +52,7 @@ namespace Engine
 class MaterialManager;
 class EngineLogger;
 class AssetManager;
+class IAssetLoader;
 class SystemGraph;
 class SystemRegistry;
 class WillEngine;
@@ -218,13 +219,14 @@ private:
     Core::TimeFrame published{};
 };
 
-/** Reached only through SystemRegistry::Service / ServiceMut, which check them against the caller's access set. */
+/** Reached only through SystemRegistry::Service / ServiceMut, which check them against the caller's access set, and SystemRegistry::Assets. */
 class EngineServices
 {
     friend class SystemRegistry;
     friend class WillEngine;
 
     AssetManager* assetManager{nullptr};
+    IAssetLoader* assetLoader{nullptr};
     MaterialManager* materialManager{nullptr};
     Audio::AudioManager* audioManager{nullptr};
     Physics::PhysicsWorld* physicsWorld{nullptr};

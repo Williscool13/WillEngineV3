@@ -97,18 +97,18 @@ void CollectSystems(Engine::SystemGraph& graph)
         &AcquireBreakableAssets,
         Engine::Access<
             Engine::Reads<Component::BreakableComponent>,
-            Engine::Writes<Component::BreakableRuntime, Engine::AssetManager>>());
+            Engine::Writes<Component::BreakableRuntime>>());
     graph.Add("Ballance/UpdateSelfDestruct",
         &UpdateSelfDestruct,
         Engine::SystemWhen::WorldRunning,
         Engine::Access<
-            Engine::Reads<Component::BreakableComponent, Component::BreakableRuntime, Engine::AssetManager>,
+            Engine::Reads<Component::BreakableComponent, Component::BreakableRuntime>,
             Engine::Writes<Component::SelfDestructComponent, Component::SelfDestructRuntime>>());
     graph.Add("Ballance/ShatterOnContact",
         &ShatterOnContact,
         Engine::SystemWhen::WorldRunning,
         {
-            .reads = {Engine::TypeSID<Component::ShatterOnContactTag>(), Engine::TypeSID<Component::BreakableComponent>(), Engine::TypeSID<Component::BreakableRuntime>(), Engine::TypeSID<Engine::AssetManager>(), "state.physics.resolvedAddedEvents"_sid},
+            .reads = {Engine::TypeSID<Component::ShatterOnContactTag>(), Engine::TypeSID<Component::BreakableComponent>(), Engine::TypeSID<Component::BreakableRuntime>(), "state.physics.resolvedAddedEvents"_sid},
         });
     graph.Add("Ballance/UpdateThroatValves",
         &UpdateThroatValves,
@@ -127,7 +127,7 @@ void CollectSystems(Engine::SystemGraph& graph)
         &UpdateCrushers,
         Engine::SystemWhen::WorldRunning,
         Engine::Access<
-            Engine::Reads<Component::CrusherComponent, Component::ThroatValveRuntime, Component::BreakableComponent, Component::BreakableRuntime, Engine::AssetManager, Component::PhysicsBodyRuntime, Component::HierarchyComponent, Component::WorldTransformRuntime, Component::NameComponent, Component::ConveyorComponent, Physics::PhysicsWorld>,
+            Engine::Reads<Component::CrusherComponent, Component::ThroatValveRuntime, Component::BreakableComponent, Component::BreakableRuntime, Component::PhysicsBodyRuntime, Component::HierarchyComponent, Component::WorldTransformRuntime, Component::NameComponent, Component::ConveyorComponent, Physics::PhysicsWorld>,
             Engine::DeferredWrites<Component::TransformComponent, Component::DirtyTransformRequest>,
             Engine::Writes<Component::CrusherRuntime, Component::ConveyorHaltedFlag>>());
     graph.Add("Ballance/LavaContacts",

@@ -51,7 +51,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 break;
             }
             case CommandType::ColliderRelease: {
-                registry.ServiceMut<Engine::AssetManager>().UnloadCollider(command.payload.colliderHandle);
+                registry.Assets().UnloadCollider(command.payload.colliderHandle);
                 break;
             }
             case CommandType::BodyDestroy: {
@@ -71,10 +71,10 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                     state->modelStore.Free(modelRange);
                 }
                 if (release.modelHandle.IsValid()) {
-                    registry.ServiceMut<Engine::AssetManager>().UnloadModel(release.modelHandle);
+                    registry.Assets().UnloadModel(release.modelHandle);
                 }
                 if (release.pendingModelHandle.IsValid()) {
-                    registry.ServiceMut<Engine::AssetManager>().UnloadModel(release.pendingModelHandle);
+                    registry.Assets().UnloadModel(release.pendingModelHandle);
                 }
                 break;
             }
@@ -106,11 +106,11 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 break;
             }
             case CommandType::CubemapRelease: {
-                registry.ServiceMut<Engine::AssetManager>().UnloadCubemap(command.payload.cubemapHandle);
+                registry.Assets().UnloadCubemap(command.payload.cubemapHandle);
                 break;
             }
             case CommandType::FontRelease: {
-                registry.ServiceMut<Engine::AssetManager>().UnloadFont(command.payload.fontHandle);
+                registry.Assets().UnloadFont(command.payload.fontHandle);
                 break;
             }
             case CommandType::ProbeConstruct: {

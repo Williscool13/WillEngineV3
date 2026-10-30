@@ -20,7 +20,7 @@ void EditorTextureResidency::Tick(EngineContext* ctx, EngineState* state, System
     for (auto it = pendingRemoval.begin(); it != pendingRemoval.end();) {
         if (ctx->currentRenderFrame >= it->freeOnFrame) {
             ctx->removeImguiTextureFn(it->descSet);
-            registry.ServiceMut<Engine::AssetManager>().UnloadTexture(it->texture->textureId);
+            registry.Assets().UnloadTexture(it->texture->textureId);
             it = pendingRemoval.Remove(it);
         }
         else {
@@ -46,10 +46,10 @@ void EditorTextureResidency::Acquire(EngineContext* ctx, EngineState* state, Sys
         SamplerDesc desc{};
         desc.minFilter = VK_FILTER_NEAREST;
         desc.magFilter = VK_FILTER_NEAREST;
-        sampler = registry.ServiceMut<Engine::AssetManager>().LoadSampler(desc);
+        sampler = registry.Assets().LoadSampler(desc);
     }
 
-    entries[id].texture = registry.ServiceMut<Engine::AssetManager>().LoadTexture(id);
+    entries[id].texture = registry.Assets().LoadTexture(id);
 }
 
 uint64_t EditorTextureResidency::GetDescSet(TextureID id, EngineContext* ctx)

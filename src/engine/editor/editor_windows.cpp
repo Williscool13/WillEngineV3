@@ -108,7 +108,7 @@ static void DrawQuitPrompt(EngineContext* ctx, EngineState* state, SystemRegistr
 
     ImGui::TextUnformatted("These scenes have unsaved changes:");
     for (StringID sceneId : state->editor.modifiedScenes) {
-        const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(sceneId);
+        const auto* meta = registry.Assets().GetSceneMetadata(sceneId);
         ImGui::BulletText("%s", meta ? meta->sceneName.c_str() : "(unregistered)");
     }
 

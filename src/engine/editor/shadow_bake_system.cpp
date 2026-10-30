@@ -88,7 +88,7 @@ static void WriteShadowMap(EngineContext* ctx, EngineState* state, Engine::Syste
     auto compressed = Core::HeapArray<uint8_t>(&ctx->memoryManager->AssetsScratch(), Core::AllocTag::EngineContext, CompressMaxSize(CompressionType::Zstd, blobSize));
     const size_t compressedSize = Compress(CompressionType::Zstd, blob.Data(), blobSize, compressed.Data(), compressed.Size());
 
-    const AssetManager::ShadowMapInfo* previous = registry.Service<Engine::AssetManager>().GetShadowMapInfo(shadowId);
+    const IAssetLoader::ShadowMapInfo* previous = registry.Assets().GetShadowMapInfo(shadowId);
     WShadowMapHeader header{};
     header.shadowId = shadowId;
     header.contentVersion = previous ? previous->contentVersion + 1 : 1;

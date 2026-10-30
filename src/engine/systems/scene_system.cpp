@@ -84,7 +84,7 @@ Engine::Scene SaveScene(Engine::EngineContext* ctx, Engine::EngineState* state, 
         if (prefabInst) {
             auto cacheIt = prefabCache.Find(prefabInst->prefabId);
             if (!cacheIt) {
-                if (const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabInst->prefabId)) {
+                if (const auto* meta = registry.Assets().GetPrefabMetadata(prefabInst->prefabId)) {
                     auto prefabData = Engine::ReadWPrefab(meta->source.c_str(), alloc);
                     if (prefabData) {
                         cacheIt = &prefabCache.Emplace(prefabInst->prefabId, std::move(*prefabData));
@@ -283,7 +283,7 @@ void UnloadScene(Engine::EngineState* state, StringID sceneId, Engine::SystemReg
     });
     state->editor.modifiedScenes.RemoveFirst(sceneId);
 
-    if (const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(sceneId); meta && meta->bUnsaved) {
+    if (const auto* meta = registry.Assets().GetSceneMetadata(sceneId); meta && meta->bUnsaved) {
         ctx->rescan.bScenes = true;
     }
 }
@@ -295,7 +295,7 @@ void SaveSceneToFile(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
         return;
     }
 
-    const auto* it = registry.Service<Engine::AssetManager>().GetSceneCache().Find(sceneID);
+    const auto* it = registry.Assets().GetSceneCache().Find(sceneID);
     if (!it) {
         LOG_ERROR(Engine, "Scene save refused: {} is not registered", sceneID.ToString());
         return;
@@ -349,7 +349,7 @@ LoadSceneResult LoadSceneFromFile(Engine::EngineContext* ctx, Engine::EngineStat
         return {false, sceneId, {}};
     }
 
-    const auto& sceneCache = registry.Service<Engine::AssetManager>().GetSceneCache();
+    const auto& sceneCache = registry.Assets().GetSceneCache();
     const auto* it = sceneCache.Find(sceneId);
     if (!it) {
         LOG_ERROR(Engine, "Scene ID not found in registry");
@@ -439,7 +439,7 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, Engin
         LOG_WARN(Engine, "Scene slot {} is empty", slotIndex + 1);
         return false;
     }
-    if (!registry.Service<Engine::AssetManager>().GetSceneCache().Find(slot.sceneId)) {
+    if (!registry.Assets().GetSceneCache().Find(slot.sceneId)) {
         LOG_WARN(Engine, "Scene slot {} points at {}, which is no longer registered", slotIndex + 1, slot.sceneId.ToString());
         return false;
     }
@@ -449,7 +449,7 @@ bool LoadSceneSlot(Engine::EngineContext* ctx, Engine::EngineState* state, Engin
 bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
     ZoneScoped;
-    if (!registry.Service<Engine::AssetManager>().GetSceneCache().Find(sceneId)) { return false; }
+    if (!registry.Assets().GetSceneCache().Find(sceneId)) { return false; }
 
     const bool bWasPlaying = IsPlaying(state);
     const bool bWasSimulating = IsSimulating(state);
@@ -484,7 +484,7 @@ bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, 
 Core::ArenaVector<entt::entity> SpawnModel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::ModelID modelId, const glm::vec3& offset)
 {
     ZoneScoped;
-    const Engine::AssetManager::CachedModelMetadata* cached = registry.Service<Engine::AssetManager>().GetModelMetadata(modelId);
+    const Engine::IAssetLoader::CachedModelMetadata* cached = registry.Assets().GetModelMetadata(modelId);
     if (!cached) {
         LOG_ERROR(Engine, "SpawnModel: modelId {} not in asset registry", modelId.id);
         return {};
@@ -554,7 +554,7 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
     if (!runtime || runtime->range.count == 0) {
         return 0;
     }
-    const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(runtime->modelHandle);
+    const Engine::StaticModel* model = registry.Assets().GetModel(runtime->modelHandle);
     if (!model) {
         return 0;
     }
@@ -907,7 +907,7 @@ void SaveEntityAsPrefab(Engine::EngineContext* ctx, Engine::EngineState* state, 
 
 entt::entity SpawnPrefab(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID prefabId, const glm::vec3& spawnPosition)
 {
-    const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabId);
+    const auto* meta = registry.Assets().GetPrefabMetadata(prefabId);
     if (!meta) {
         LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
         return entt::null;
@@ -939,7 +939,7 @@ void ResolvePrefabLoads(Engine::EngineContext* ctx, Engine::EngineState* state, 
     for (auto entity : view) {
         auto& prefabInst = view.get<Component::PrefabInstanceComponent>(entity);
 
-        const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabInst.prefabId);
+        const auto* meta = registry.Assets().GetPrefabMetadata(prefabInst.prefabId);
         if (!meta) {
             LOG_WARN(Engine, "Prefab '{}' not found for entity {}, skipping", prefabInst.prefabId.ToString(), entt::to_integral(entity));
             continue;
@@ -974,7 +974,7 @@ entt::entity BeginPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* st
         LOG_WARN(Engine, "Prefab edit refused: needs the game loaded, edit mode, and no other prefab edit open");
         return entt::null;
     }
-    const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabId);
+    const auto* meta = registry.Assets().GetPrefabMetadata(prefabId);
     if (!meta) {
         LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
         return entt::null;
@@ -1046,7 +1046,7 @@ void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
 {
     if (!IsEditingPrefab(state, registry)) { return; }
     const StringID prefabId = state->editor.editingPrefabId;
-    const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabId);
+    const auto* meta = registry.Assets().GetPrefabMetadata(prefabId);
     if (!meta) {
         LOG_ERROR(Engine, "Prefab '{}' not found in registry", prefabId.ToString());
         return;

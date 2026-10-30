@@ -50,7 +50,7 @@ void CreateDefaultCameras(EngineState* state)
 
 struct UIFontContext
 {
-    const AssetManager* assetManager{nullptr};
+    const IAssetLoader* assetLoader{nullptr};
     FontHandle handle{FontHandle::INVALID};
 };
 
@@ -59,17 +59,17 @@ static UIFontContext gUI_FONT_CONTEXT{};
 void LoadUIFont(EngineContext* ctx, EngineState* state)
 {
     Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/LoadUIFont"};
-    const FontID robotoId = registry.Service<Engine::AssetManager>().FindFontByName("Roboto");
+    const FontID robotoId = registry.Assets().FindFontByName("Roboto");
     if (robotoId.IsValid()) {
-        state->uiFont = registry.ServiceMut<Engine::AssetManager>().LoadFont(robotoId);
+        state->uiFont = registry.Assets().LoadFont(robotoId);
     }
 
-    gUI_FONT_CONTEXT.assetManager = &registry.Service<Engine::AssetManager>();
+    gUI_FONT_CONTEXT.assetLoader = &registry.Assets();
     gUI_FONT_CONTEXT.handle = state->uiFont;
 
     Clay_SetMeasureTextFunction([](Clay_StringSlice text, Clay_TextElementConfig* config, void* userData) -> Clay_Dimensions {
         auto* fc = static_cast<UIFontContext*>(userData);
-        const float width = MeasureText(fc->assetManager, fc->handle, text.chars, text.length, config->fontSize, config->letterSpacing);
+        const float width = MeasureText(fc->assetLoader, fc->handle, text.chars, text.length, config->fontSize, config->letterSpacing);
         const float height = config->lineHeight > 0 ? static_cast<float>(config->lineHeight) : static_cast<float>(config->fontSize);
         return {width, height};
     }, &gUI_FONT_CONTEXT);
@@ -78,7 +78,7 @@ void LoadUIFont(EngineContext* ctx, EngineState* state)
 void LoadStartupScene(EngineContext* ctx, EngineState* state)
 {
     Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Lifecycle/LoadStartupScene"};
-    const auto& sceneCache = registry.Service<Engine::AssetManager>().GetSceneCache();
+    const auto& sceneCache = registry.Assets().GetSceneCache();
     StringID startupScene = state->projectConfig.defaultScene;
     bool bExplicit = false;
     const char* sceneOverride = Args::GetString(*state->launchArgs, ARG_SCENE);

@@ -45,10 +45,10 @@ static bool SaveTextMaterialFile(Core::TlsfAllocator* scratch, const Core::Path&
     return Platform::WriteFile(path, out.Data(), out.Size());
 }
 
-MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, AssetManager* assetManager)
+MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, IAssetLoader* assetLoader)
     : ctx(ctx),
       memoryManager(&memoryManager),
-      assetManager(assetManager),
+      assetLoader(assetLoader),
       idToEntryMap(&memoryManager.Persistent(), Core::AllocTag::AssetManager, 2 * MAX_LOADED_MATERIALS),
       materials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS),
       textMaterials(&memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS)
@@ -139,12 +139,12 @@ void MaterialManager::AcquireMaterial(MaterialID materialID)
     if (!mat.bIsRuntimeLoaded) {
         auto resolveTexture = [&](TextureID id) -> int32_t {
             if (!id.IsValid()) return -1;
-            Texture* tex = assetManager->LoadTexture(id);
+            Texture* tex = assetLoader->LoadTexture(id);
             return tex ? static_cast<int32_t>(tex->bindlessHandle.index) : -1;
         };
 
         auto resolveSampler = [&](SamplerDesc& desc) -> int32_t {
-            Sampler* s = assetManager->LoadSampler(desc);
+            Sampler* s = assetLoader->LoadSampler(desc);
             return s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_LINEAR_BINDLESS_INDEX;
         };
 
@@ -208,11 +208,11 @@ void MaterialManager::ProcessRetirements()
                 Material& mat = *it;
                 for (TextureID texID : mat.textureRefs) {
                     if (texID.IsValid()) {
-                        assetManager->UnloadTexture(texID);
+                        assetLoader->UnloadTexture(texID);
                     }
                 }
                 for (SamplerDesc desc : mat.samplerDesc) {
-                    assetManager->UnloadSampler(desc);
+                    assetLoader->UnloadSampler(desc);
                 }
 
                 assert(mat.bIsRuntimeLoaded && "Material released but it was never runtime loaded to begin with");
@@ -310,17 +310,17 @@ void MaterialManager::UpdateMutableMaterial(MaterialID id, const Material& newMa
     for (int32_t i = 0; i < 6; ++i) {
         if (mat.textureRefs[i] != newMat.textureRefs[i]) {
             if (mat.textureRefs[i].IsValid()) {
-                assetManager->UnloadTexture(mat.textureRefs[i]);
+                assetLoader->UnloadTexture(mat.textureRefs[i]);
             }
             mat.textureRefs[i] = newMat.textureRefs[i];
-            Texture* tex = newMat.textureRefs[i].IsValid() ? assetManager->LoadTexture(newMat.textureRefs[i]) : nullptr;
+            Texture* tex = newMat.textureRefs[i].IsValid() ? assetLoader->LoadTexture(newMat.textureRefs[i]) : nullptr;
             texIdxRef(i) = tex ? static_cast<int32_t>(tex->bindlessHandle.index) : -1;
         }
 
         if (mat.samplerDesc[i] != newMat.samplerDesc[i]) {
-            assetManager->UnloadSampler(mat.samplerDesc[i]);
+            assetLoader->UnloadSampler(mat.samplerDesc[i]);
             mat.samplerDesc[i] = newMat.samplerDesc[i];
-            Sampler* s = assetManager->LoadSampler(mat.samplerDesc[i]);
+            Sampler* s = assetLoader->LoadSampler(mat.samplerDesc[i]);
             samplerIdxRef(i) = s ? static_cast<int32_t>(s->bindlessHandle.index) : ASSET_SAMPLER_LINEAR_BINDLESS_INDEX;
         }
     }
@@ -349,7 +349,7 @@ void MaterialManager::ResolveMissingTextures()
 
         for (int32_t i = 0; i < 6; ++i) {
             if (!mat.textureRefs[i].IsValid() || texIdxRef(i) != -1) { continue; }
-            Texture* tex = assetManager->LoadTexture(mat.textureRefs[i]);
+            Texture* tex = assetLoader->LoadTexture(mat.textureRefs[i]);
             if (tex) {
                 texIdxRef(i) = static_cast<int32_t>(tex->bindlessHandle.index);
                 resolvedCount++;

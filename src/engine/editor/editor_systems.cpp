@@ -86,7 +86,7 @@ void MarkSceneModified(Engine::EngineState* state, StringID sceneId)
 
 void SaveEditorScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
-    if (!ctx->bGameLoaded || IsRunning(state) || !registry.Service<Engine::AssetManager>().GetSceneCache().Contains(sceneId)) { return; }
+    if (!ctx->bGameLoaded || IsRunning(state) || !registry.Assets().GetSceneCache().Contains(sceneId)) { return; }
     SaveSceneToFile(ctx, state, registry, sceneId);
     state->editor.modifiedScenes.RemoveFirst(sceneId);
 }
@@ -787,7 +787,7 @@ static void HandleEditorHotkeys(Engine::EngineContext* ctx, Engine::EngineState*
                         }
 
                         if (modelHandle.IsValid()) {
-                            if (const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(modelHandle)) {
+                            if (const Engine::StaticModel* model = registry.Assets().GetModel(modelHandle)) {
                                 if (model->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded) {
                                     AABB aabb = model->bounds.aabb;
                                     // Single primitive instead of whole model
@@ -951,10 +951,10 @@ static Core::InlineString<16> RecordSlotName(int slot)
     return Core::InlineString<16>::Format("rec_%d", slot + 1);
 }
 
-static const Engine::AssetManager::CachedPlayMetadata* FindRecording(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, int slot)
+static const Engine::IAssetLoader::CachedPlayMetadata* FindRecording(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, int slot)
 {
     const Core::InlineString<16> name = RecordSlotName(slot);
-    for (const auto& [id, meta] : registry.Service<Engine::AssetManager>().GetPlayCache()) {
+    for (const auto& [id, meta] : registry.Assets().GetPlayCache()) {
         if (meta.name == name.c_str() && meta.sceneId == state->scene.currentSceneId) {
             return &meta;
         }
@@ -969,7 +969,7 @@ static void DrawRecordSlots(Engine::EngineContext* ctx, Engine::EngineState* sta
     const bool bRunBusy = state->playtest.bActive || !state->playtest.pendingPath.IsEmpty();
     for (int i = 0; i < MAX_RECORD_SLOTS; ++i) {
         const Core::InlineString<16> name = RecordSlotName(i);
-        const Engine::AssetManager::CachedPlayMetadata* meta = FindRecording(ctx, state, registry, i);
+        const Engine::IAssetLoader::CachedPlayMetadata* meta = FindRecording(ctx, state, registry, i);
         const bool bRecordingThis = recorder.bActive && recorder.name == name.c_str();
         ImGui::SameLine();
         ImGui::PushID(2000 + i);
@@ -1082,7 +1082,7 @@ static void DrawSceneSlots(Engine::EngineContext* ctx, Engine::EngineState* stat
         }
         if (ImGui::IsItemHovered()) {
             if (bOccupied) {
-                const auto* meta = registry.Service<Engine::AssetManager>().GetSceneCache().Find(slot.sceneId);
+                const auto* meta = registry.Assets().GetSceneCache().Find(slot.sceneId);
                 ImGui::SetTooltip("Numpad %d: '%s'\nClick or press Numpad %d to unload everything and load it.\nShift-click or Ctrl+Numpad %d to rebind to the current scene.", i + 1,
                                   meta ? meta->sceneName.c_str() : "(missing)", i + 1, i + 1);
             }
@@ -1391,7 +1391,7 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
             }
 
             if (entity == state->editor.editingPrefabEntity && IsEditingPrefab(state, registry)) {
-                const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(state->editor.editingPrefabId);
+                const auto* meta = registry.Assets().GetPrefabMetadata(state->editor.editingPrefabId);
                 ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Editing prefab: %s", meta ? meta->prefabName.c_str() : "?");
                 if (ImGui::Button("Apply")) { ApplyPrefabEdit(ctx, state, registry); }
                 ImGui::SameLine();
@@ -1400,7 +1400,7 @@ static void DrawDetailsPanel(Engine::EngineContext* ctx, Engine::EngineState* st
                 ImGui::Separator();
             }
             else if (const auto* prefabInst = registry.TryGet<Component::PrefabInstanceComponent>(entity)) {
-                const auto* meta = registry.Service<Engine::AssetManager>().GetPrefabMetadata(prefabInst->prefabId);
+                const auto* meta = registry.Assets().GetPrefabMetadata(prefabInst->prefabId);
                 ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "Prefab: %s", meta ? meta->prefabName.c_str() : prefabInst->prefabId.ToString());
                 ImGui::BeginDisabled(!meta || IsEditingPrefab(state, registry) || IsRunning(state) || !ctx->bGameLoaded);
                 if (ImGui::Button("Edit Prefab")) {

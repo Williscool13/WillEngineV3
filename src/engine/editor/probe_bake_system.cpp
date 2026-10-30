@@ -442,7 +442,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 ctx->SubmitProbeAssemble(faceBuffers, captureSize, bakeTargetResolution, outputPath, bakeProbeId, bakeSnapshot, 1.0f / bakePreExposure);
 
                 if (bInterbounceBatch && bakePass == 1 && !awaitedAssembles.IsFull()) {
-                    const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{bakeProbeId});
+                    const Engine::IAssetLoader::ProbeInfo* info = registry.Assets().GetProbeInfo(Engine::ProbeID{bakeProbeId});
                     const uint64_t expectedVersion = (info ? info->contentVersion : 0) + 1;
                     awaitedAssembles.PushBack(AwaitedAssemble{bakeProbeId, expectedVersion, probeEntity});
                 }
@@ -462,14 +462,14 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
                 stillPending.PushBack(awaited);
 
                 const auto* runtime = registry.TryGet<Component::ReflectionProbeRuntime>(awaited.entity);
-                const Engine::AssetManager::ProbeInfo* info = registry.Service<Engine::AssetManager>().GetProbeInfo(Engine::ProbeID{awaited.probeId});
+                const Engine::IAssetLoader::ProbeInfo* info = registry.Assets().GetProbeInfo(Engine::ProbeID{awaited.probeId});
                 bool bReady = info != nullptr
                     && info->contentVersion >= awaited.expectedVersion
                     && runtime != nullptr
                     && runtime->contentSource == Component::ReflectionProbeComponent::ContentSource::Baked
                     && runtime->contentHandle.IsValid();
                 if (bReady) {
-                    const Render::Cubemap* cubemap = registry.Service<Engine::AssetManager>().GetCubemap(runtime->contentHandle);
+                    const Render::Cubemap* cubemap = registry.Assets().GetCubemap(runtime->contentHandle);
                     bReady = cubemap != nullptr && cubemap->loadState == Render::Cubemap::LoadState::Loaded;
                 }
                 if (!bReady) { bAllReady = false; }

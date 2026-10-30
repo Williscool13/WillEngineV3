@@ -138,7 +138,7 @@ void Component::StaticMeshComponent::OnEditCommit(Engine::SystemRegistry& regist
     const auto* runtime = registry.TryGet<MeshRuntime>(entity);
     const Engine::StaticModel* current = nullptr;
     if (runtime) {
-        current = registry.Service<Engine::AssetManager>().GetModel(runtime->pendingModelHandle.IsValid() ? runtime->pendingModelHandle : runtime->modelHandle);
+        current = registry.Assets().GetModel(runtime->pendingModelHandle.IsValid() ? runtime->pendingModelHandle : runtime->modelHandle);
     }
     if (!current || current->modelId != component.modelId) {
         registry.Remove<StaticMeshLoadingFlag>(entity);
@@ -196,10 +196,10 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
 
         auto* runtime = registry.TryGet<MeshRuntime>(entity);
 
-        const auto* modelMeta = component.modelId.IsValid() ? registry.Service<Engine::AssetManager>().GetModelMetadata(component.modelId) : nullptr;
+        const auto* modelMeta = component.modelId.IsValid() ? registry.Assets().GetModelMetadata(component.modelId) : nullptr;
         const char* modelPreview = edit.IsMixed(&StaticMeshComponent::modelId) ? "--" : modelMeta ? modelMeta->name.c_str() : "";
         if (ImGui::BeginCombo("Model", modelPreview, ImGuiComboFlags_HeightLarge)) {
-            for (const auto& [key, meta] : registry.Service<Engine::AssetManager>().GetModelCache()) {
+            for (const auto& [key, meta] : registry.Assets().GetModelCache()) {
                 if (ImGui::Selectable(meta.name.c_str(), key == component.modelId) && key != component.modelId) {
                     component.modelId = key;
                     bCommit = true;
@@ -243,7 +243,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             registry.GetMut<StaticMeshComponent>(entity).modelId =Engine::ModelID::INVALID;
             return {.bRequestRemoval = remove};
         }
-        const Engine::StaticModel* model = registry.Service<Engine::AssetManager>().GetModel(runtime->modelHandle);
+        const Engine::StaticModel* model = registry.Assets().GetModel(runtime->modelHandle);
         if (model->modelLoadState != Engine::StaticModel::ModelLoadState::Loaded) {
             ImGui::Text("Loading Model...");
             return finish({.bRequestRemoval = remove});

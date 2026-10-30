@@ -43,7 +43,7 @@ void DrawOutliner(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##active_scene", state->scene.currentSceneId.IsValid() ? state->scene.currentSceneName.c_str() : "No scene loaded")) {
             for (const RuntimeSceneMetadata& loaded : state->editor.loadedScenes) {
-                const auto* meta = registry.Service<Engine::AssetManager>().GetSceneMetadata(loaded.sceneId);
+                const auto* meta = registry.Assets().GetSceneMetadata(loaded.sceneId);
                 const bool bModified = state->editor.modifiedScenes.Contains(loaded.sceneId);
                 const Core::InlineString<160> label = Core::InlineString<160>::Format("%s%s##%llu", meta ? meta->sceneName.c_str() : "(unregistered)", bModified ? " *" : "",
                                                                                       static_cast<unsigned long long>(loaded.sceneId.id));

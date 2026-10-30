@@ -89,7 +89,7 @@ void PhysicsBodyDesc::DeferredConstruct(Engine::SystemRegistry& registry, entt::
 
         if (auto* sm = registry.TryGet<StaticMeshComponent>(entity); sm && sm->modelId.IsValid()) {
             PhysicsShapeDesc box{};
-            const auto* meta = registry.Service<Engine::AssetManager>().GetModelMetadata(sm->modelId);
+            const auto* meta = registry.Assets().GetModelMetadata(sm->modelId);
             if (meta && meta->bounds.aabb.min.x <= meta->bounds.aabb.max.x) {
                 box.geometry = BoxShape{meta->bounds.aabb.HalfExtents() * scale};
                 box.offset = meta->bounds.aabb.Center() * scale;
@@ -288,7 +288,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             if (auto* rt = registry.TryGet<MeshRuntime>(entity)) {
                 fitHandle = rt->modelHandle;
             }
-            const Engine::StaticModel* fitModel = fitHandle.IsValid() ? registry.Service<Engine::AssetManager>().GetModel(fitHandle) : nullptr;
+            const Engine::StaticModel* fitModel = fitHandle.IsValid() ? registry.Assets().GetModel(fitHandle) : nullptr;
             const bool bModelLoaded = fitModel && fitModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded;
 
             static constexpr const char* kShapeTypes[] = {"Box", "Sphere", "Capsule", "Collider"};
@@ -347,7 +347,7 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             }
             else if (auto* collider = std::get_if<ColliderShape>(&shape.geometry)) {
                 bool bHasAny = false;
-                const auto* meta = registry.Service<Engine::AssetManager>().GetModelMetadata(collider->meshSourceModelId);
+                const auto* meta = registry.Assets().GetModelMetadata(collider->meshSourceModelId);
                 static constexpr Core::Array<const char*, 33> kProceduralNames = {
                     nullptr, "Staircase", "Box", "Cylinder", "Capsule", "Torus", "Arch",
                     "Wedge", "Cone", "Door", "Plane", "Sphere", "Subdivided Sphere",

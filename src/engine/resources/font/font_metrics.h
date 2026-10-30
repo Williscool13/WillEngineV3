@@ -8,26 +8,26 @@
 #include <cstdint>
 
 #include "font.h"
-#include "engine/asset_manager.h"
+#include "engine/asset_loader.h"
 
 namespace Engine
 {
 /** Pixel advance for a single glyph at the given font size; falls back to a quarter-em box for missing glyphs/fonts. */
-inline float GlyphAdvance(const AssetManager* assetManager, FontHandle font, uint32_t codepoint, float fontSize)
+inline float GlyphAdvance(const IAssetLoader* assetLoader, FontHandle font, uint32_t codepoint, float fontSize)
 {
-    const Font* f = assetManager->GetFont(font);
+    const Font* f = assetLoader->GetFont(font);
     if (!f) { return fontSize * 0.25f; }
-    const WGlyphInfo* g = assetManager->GetGlyph(font, codepoint);
+    const WGlyphInfo* g = assetLoader->GetGlyph(font, codepoint);
     if (!g) { return fontSize * 0.25f; }
     return g->advance * (fontSize / f->header.emSize);
 }
 
 /** Pixel width of text[0, count); letterSpacing applied between glyphs, matching Clay's own measure-text convention. */
-inline float MeasureText(const AssetManager* assetManager, FontHandle font, const char* text, int32_t count, float fontSize, float letterSpacing = 0.0f)
+inline float MeasureText(const IAssetLoader* assetLoader, FontHandle font, const char* text, int32_t count, float fontSize, float letterSpacing = 0.0f)
 {
     float width = 0.0f;
     for (int32_t i = 0; i < count; ++i) {
-        width += GlyphAdvance(assetManager, font, static_cast<unsigned char>(text[i]), fontSize);
+        width += GlyphAdvance(assetLoader, font, static_cast<unsigned char>(text[i]), fontSize);
         if (letterSpacing != 0.0f && i < count - 1) { width += letterSpacing; }
     }
     return width;

@@ -7,6 +7,7 @@ add_library(engine STATIC
         engine_tick.h
         engine_lifecycle.cpp
         engine_lifecycle.h
+        asset_loader.h
         asset_manager.cpp
         asset_manager.h
         asset_manager_config.h

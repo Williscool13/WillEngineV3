@@ -77,7 +77,7 @@ static uint64_t AuthoredHash(EngineState* state, entt::entity e, Core::Vector<st
 /** Empty for an unsaved scene. */
 static Core::Path RuntimeSceneFile(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
-    const auto* sceneMeta = registry.Service<AssetManager>().GetSceneMetadata(sceneId);
+    const auto* sceneMeta = registry.Assets().GetSceneMetadata(sceneId);
     return sceneMeta && !sceneMeta->bUnsaved ? RuntimeScenePath(sceneMeta->source) : Core::Path{};
 }
 
