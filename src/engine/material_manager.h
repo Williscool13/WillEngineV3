@@ -19,6 +19,7 @@
 #include "engine/core/material_id.h"
 #include "engine/core/text_material_id.h"
 #include "engine/catalog_table.h"
+#include "engine/material_store.h"
 #include "render/render_config.h"
 #include "render/interface/render_params.h"
 #include "render/shaders/model_interop.h"
@@ -29,7 +30,51 @@ namespace Engine
 struct EngineContext;
 class IAssetLoader;
 
-class MaterialManager
+/** Active material slots whose GPU payload changed, one set per host buffer slot. A service of its own so draining it does not conflict with MaterialManager readers. */
+class MaterialUploadDirty
+{
+public:
+    static constexpr const char* COMPONENT_NAME = "MaterialUploadDirty";
+
+    void Init(Core::TlsfAllocator* alloc, Core::AllocTag tag);
+
+    void Mark(uint32_t slot) { bits.Mark(slot); }
+
+    void SetLightingMode(Core::LightingMode mode)
+    {
+        if (mode == uploadedLightingMode) { return; }
+        uploadedLightingMode = mode;
+        bits.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
+    }
+
+    /** Fn: emit(offset, count) */
+    template<typename Fn>
+    void Drain(uint32_t setIndex, uint32_t limit, Fn&& emit) { bits.Drain(setIndex, limit, std::forward<Fn>(emit)); }
+
+private:
+    Core::DirtyBits bits;
+    Core::LightingMode uploadedLightingMode{Core::LightingMode::Analytic};
+};
+
+/** Active material slots whose payload changed since the last drain, independent of upload. */
+class MaterialChangedDirty
+{
+public:
+    static constexpr const char* COMPONENT_NAME = "MaterialChangedDirty";
+
+    void Init(Core::TlsfAllocator* alloc, Core::AllocTag tag) { bits.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, 1, alloc, tag); }
+
+    void Mark(uint32_t slot) { bits.Mark(slot); }
+
+    /** Fn: emit(offset, count) */
+    template<typename Fn>
+    void Drain(uint32_t limit, Fn&& emit) { bits.Drain(0, limit, std::forward<Fn>(emit)); }
+
+private:
+    Core::DirtyBits bits;
+};
+
+class MaterialManager final : public IMaterialStore
 {
 public:
     static constexpr const char* COMPONENT_NAME = "MaterialManager";
@@ -96,7 +141,6 @@ public:
     bool RenameTextMaterial(TextMaterialID id, std::string_view newName);
     [[nodiscard]] TextMaterialID FindTextMaterial(StringID name) const;
     [[nodiscard]] const TextMaterial* GetTextMaterial(TextMaterialID id) const;
-    [[nodiscard]] TextRenderMaterial GetRenderTextMaterial(TextMaterialID id) const;
     [[nodiscard]] const Core::FixedMap<TextMaterialID, TextMaterial>& GetTextMaterials() const { return textMaterials; }
 
     [[nodiscard]] MaterialID GetDefaultMaterialID() const { return defaultMaterial; }
@@ -116,14 +160,19 @@ public:
 
     [[nodiscard]] MaterialProperties GetProperties(MaterialID id) const;
 
-    [[nodiscard]] RenderMaterial GetRenderMaterial(MaterialID id) const;
-
-    [[nodiscard]] const Material* GetMaterial(MaterialID id) const;
-
     [[nodiscard]] const uint32_t GetActiveMaterialCount() const { return activeMaterialAllocator.GetCount(); }
     [[nodiscard]] const Core::FixedMap<MaterialID, Material>& GetMaterials() const { return materials; }
-    [[nodiscard]] const Core::Array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const { return activeMaterialBuffer; }
 
+public: // IMaterialStore
+    [[nodiscard]] const Core::Array<MaterialEntry, Render::BINDLESS_MATERIAL_BUFFER_COUNT>& GetActiveMaterials() const override { return activeMaterialBuffer; }
+
+    [[nodiscard]] RenderMaterial GetRenderMaterial(MaterialID id) const override;
+
+    [[nodiscard]] const Material* GetMaterial(MaterialID id) const override;
+
+    [[nodiscard]] TextRenderMaterial GetRenderTextMaterial(TextMaterialID id) const override;
+
+public:
     uint32_t GetMaterialIndex(MaterialID id)
     {
         if (idToEntryMap.Contains(id)) {
@@ -133,23 +182,8 @@ public:
         return UINT32_MAX;
     }
 
-    /**
-     * Active slots whose GPU payload changed, one set per host buffer slot
-     * Fn: emit(offset, count)
-     */
-    template<typename Fn>
-    void DrainUploadDirty(uint32_t setIndex, uint32_t limit, Fn&& emit) { uploadDirty.Drain(setIndex, limit, std::forward<Fn>(emit)); }
-
-    /**
-     * Active slots whose payload changed since the last drain, independent of upload
-     * Fn: emit(offset, count).
-     */
-    template<typename Fn>
-    void DrainChangedDirty(uint32_t limit, Fn&& emit) { changedDirty.Drain(0, limit, std::forward<Fn>(emit)); }
-
-    void MarkAllDirty();
-
-    void SetLightingMode(Core::LightingMode mode);
+    [[nodiscard]] MaterialUploadDirty* GetUploadDirty() { return &uploadDirty; }
+    [[nodiscard]] MaterialChangedDirty* GetChangedDirty() { return &changedDirty; }
 
 private:
     void MarkDirty(MaterialID id);
@@ -171,9 +205,8 @@ private:
     Core::HandleAllocator<MaterialProperties, Render::BINDLESS_MATERIAL_BUFFER_COUNT> activeMaterialAllocator;
 
     Core::FixedMap<MaterialID, uint32_t> idToEntryMap;
-    Core::DirtyBits uploadDirty;
-    Core::DirtyBits changedDirty;
-    Core::LightingMode uploadedLightingMode{Core::LightingMode::Analytic};
+    MaterialUploadDirty uploadDirty;
+    MaterialChangedDirty changedDirty;
 
     /**
      * Contains:

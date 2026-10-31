@@ -45,6 +45,11 @@ static bool SaveTextMaterialFile(Core::TlsfAllocator* scratch, const Core::Path&
     return Platform::WriteFile(path, out.Data(), out.Size());
 }
 
+void MaterialUploadDirty::Init(Core::TlsfAllocator* alloc, Core::AllocTag tag)
+{
+    bits.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, Core::FRAME_BUFFER_COUNT, alloc, tag);
+}
+
 MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::EngineContext* ctx, IAssetLoader* assetLoader)
     : ctx(ctx),
       memoryManager(&memoryManager),
@@ -55,8 +60,8 @@ MaterialManager::MaterialManager(Core::MemoryManager& memoryManager, Engine::Eng
 {
     materialCatalog.Init(&memoryManager.Virtual(), &memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_MATERIALS, "Material");
     textMaterialCatalog.Init(&memoryManager.Virtual(), &memoryManager.Persistent(), Core::AllocTag::AssetManager, MAX_LOADED_TEXT_MATERIALS, "Text material");
-    uploadDirty.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, Core::FRAME_BUFFER_COUNT, &memoryManager.Persistent(), Core::AllocTag::AssetManager);
-    changedDirty.Init(Render::BINDLESS_MATERIAL_BUFFER_COUNT, 1, &memoryManager.Persistent(), Core::AllocTag::AssetManager);
+    uploadDirty.Init(&memoryManager.Persistent(), Core::AllocTag::AssetManager);
+    changedDirty.Init(&memoryManager.Persistent(), Core::AllocTag::AssetManager);
 
     Material defaultMat{};
     defaultMat.props = {
@@ -103,6 +108,7 @@ MaterialID MaterialManager::CreateSynthesizedMaterial(const Material& mat)
     m.name = Core::InlineString<128>("__synthesized__");
     m.id = matId;
     m.bSynthesized = true;
+    m.bIsRuntimeLoaded = false;
 
     materials[matId] = m;
     pendingMaterialLoadLogCount++;
@@ -389,19 +395,6 @@ void MaterialManager::MarkDirtyIndex(uint32_t index)
 {
     uploadDirty.Mark(index);
     changedDirty.Mark(index);
-}
-
-void MaterialManager::MarkAllDirty()
-{
-    uploadDirty.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
-    changedDirty.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
-}
-
-void MaterialManager::SetLightingMode(Core::LightingMode mode)
-{
-    if (mode == uploadedLightingMode) { return; }
-    uploadedLightingMode = mode;
-    uploadDirty.MarkRange(0, Render::BINDLESS_MATERIAL_BUFFER_COUNT);
 }
 
 MaterialID MaterialManager::FindMutableMaterial(StringID name) const

@@ -34,6 +34,36 @@ struct AccessSet
 
 inline const AccessSet AccessSet::EXCLUSIVE{.bExclusive = true};
 
+/** Accessing a parent is accessing all of its parts. Declare a part instead to overlap with systems touching the others. */
+struct AccessGroup
+{
+    StringID parent;
+    StringID parts[3];
+};
+
+inline constexpr AccessGroup ACCESS_GROUPS[] = {
+    {"MaterialManager"_sid, {"MaterialStore"_sid, "MaterialUploadDirty"_sid, "MaterialChangedDirty"_sid}},
+};
+
+inline void ExpandAccessList(Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& list)
+{
+    for (const AccessGroup& group : ACCESS_GROUPS) {
+        const uint32_t count = static_cast<uint32_t>(list.Size());
+        for (uint32_t i = 0; i < count; ++i) {
+            if (list[i] != group.parent) { continue; }
+            for (const StringID part : group.parts) { list.PushBack(part); }
+            break;
+        }
+    }
+}
+
+inline void ExpandAccessGroups(AccessSet& set)
+{
+    ExpandAccessList(set.reads);
+    ExpandAccessList(set.writes);
+    ExpandAccessList(set.deferredWrites);
+}
+
 template<typename... T>
 struct Reads
 {};

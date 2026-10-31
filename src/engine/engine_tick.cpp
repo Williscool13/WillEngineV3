@@ -46,6 +46,7 @@
 #include "engine/systems/motion_systems.h"
 #include "engine/systems/physics_system.h"
 #include "engine/systems/render_systems.h"
+#include "engine/systems/render_systems_helpers.h"
 #include "engine/systems/scene_system.h"
 #include "engine/systems/system_graph.h"
 #include "engine/systems/transform_systems.h"
@@ -217,7 +218,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
     graph.Add("PhysicsMeshPendingKickoff",
         &PhysicsMeshPendingKickoff,
         Access<
-            Reads<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest>>());
+            Reads<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest, Component::PhysicsMotionOverrideRuntime>>());
 
     graph.Add("StaticMeshLoadResolve",
         &StaticMeshLoadResolve,
@@ -464,19 +465,19 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherRenderables",
         &GatherRenderables,
         {
-            .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), "engineConfig"_sid, "instanceStore.visibility"_sid},
-            .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, TypeSID<MaterialManager>(), "triLightStore"_sid, "viewFamily.renderables"_sid, "viewFamily.volumetricFog"_sid, "viewFamily.settings"_sid},
+            .reads = {TypeSID<Component::SkyboxComponent>(), TypeSID<Component::SkyboxRuntime>(), TypeSID<Component::VolumetricFogComponent>(), TypeSID<IMaterialStore>(), "engineConfig"_sid, "instanceStore.visibility"_sid},
+            .writes = {"instanceStore.dirty"_sid, "modelStore"_sid, TypeSID<MaterialUploadDirty>(), "viewFamily.renderables"_sid, "viewFamily.volumetricFog"_sid, "viewFamily.settings"_sid},
         });
     graph.Add("GatherLights",
         &GatherLights,
         {
-            .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::RenderWorldTransformRuntime>(), TypeSID<Component::AreaLightComponent>(), TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::SphereLightRuntime>(), "instanceStore.visibility"_sid, "instanceStore.worldBounds"_sid, "viewFamily.bakedShadowLights"_sid, "viewFamily.mainView"_sid, "engineConfig"_sid},
-            .writes = {"analyticLightStore"_sid, "triLightStore"_sid, TypeSID<MaterialManager>(), "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid, "instanceStore.boundsChanges"_sid},
+            .reads = {TypeSID<Component::MeshRuntime>(), TypeSID<Component::ProbeBakeHiddenFlag>(), TypeSID<Component::DirectionalLightComponent>(), TypeSID<Component::RenderWorldTransformRuntime>(), TypeSID<Component::AreaLightComponent>(), TypeSID<Component::AreaLightRuntime>(), TypeSID<Component::SphereLightComponent>(), TypeSID<Component::SphereLightRuntime>(), TypeSID<IMaterialStore>(), "instanceStore.visibility"_sid, "instanceStore.worldBounds"_sid, "viewFamily.bakedShadowLights"_sid, "viewFamily.mainView"_sid, "engineConfig"_sid},
+            .writes = {"analyticLightStore"_sid, "triLightStore"_sid, TypeSID<MaterialChangedDirty>(), "viewFamily.lights"_sid, "debug.emissive"_sid, "localShadowSelection"_sid, "instanceStore.boundsChanges"_sid},
         });
     graph.Add("GatherTextRenderables",
         &GatherTextRenderables,
         {
-            .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), TypeSID<MaterialManager>()},
+            .reads = {TypeSID<Component::TextComponent>(), TypeSID<Component::TextRuntime>(), TypeSID<Component::RenderTransformRuntime>(), TypeSID<Component::TextFontRequest>(), TypeSID<Component::StableIdComponent>(), TypeSID<IMaterialStore>()},
             .writes = {"viewFamily.text"_sid},
         });
     graph.Add("GatherReflectionProbes",
@@ -503,13 +504,17 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
             .reads = {TypeSID<Component::FogVolumeComponent>(), TypeSID<Component::RenderWorldTransformRuntime>(), "viewFamily.mainView"_sid},
             .writes = {"viewFamily.volumetricFog"_sid, "viewFamily.fogVolumes"_sid},
         });
-    graph.Add("ClearVerifyStores",
-        [](EngineContext* ctx, EngineState* state, SystemRegistry& registry) {
-            state->debug.bVerifyStoresOnce = false;
-        },
-        {
-            .writes = {"engineConfig"_sid},
-        });
+    if (state->debug.bVerifyStoresOnce) {
+        graph.Add("VerifyStores",
+            [](EngineContext* ctx, EngineState* state, SystemRegistry& registry) {
+#ifdef WDEBUG
+                VerifyAnalyticLightStore(state, registry);
+                VerifyGeometryStores(state);
+#endif
+                state->debug.bVerifyStoresOnce = false;
+            },
+            AccessSet::EXCLUSIVE);
+    }
     graph.Add("GatherUIRenderables",
         &GatherUIRenderables,
         AccessSet::EXCLUSIVE);

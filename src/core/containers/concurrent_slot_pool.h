@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstddef>
 #include <new>
+#include <thread>
 
 #include "core/memory/lock_free_handle_allocator.h"
 #include "core/memory/virtual_memory_manager.h"
@@ -62,6 +63,7 @@ public:
         vm->Release(reservation);
         slots = nullptr;
         committedSlots.store(0, std::memory_order_relaxed);
+        publishedSlots.store(0, std::memory_order_relaxed);
     }
 
     /** @return INVALID when the pool is at Capacity */
@@ -132,7 +134,12 @@ private:
     bool Grow()
     {
         uint32_t begin = committedSlots.load(std::memory_order_acquire);
-        if (begin >= Capacity) { return false; }
+        if (begin >= Capacity) {
+            // Fully claimed is not full: a claimed step is unavailable until its owner frees it into the allocator.
+            if (publishedSlots.load(std::memory_order_acquire) >= Capacity) { return false; }
+            std::this_thread::yield();
+            return true;
+        }
         const uint32_t end = (std::min)(begin + SLOTS_PER_STEP, Capacity);
         // Losing the race means another thread is growing; the caller retries Add.
         if (!committedSlots.compare_exchange_strong(begin, end, std::memory_order_acq_rel, std::memory_order_acquire)) { return true; }
@@ -142,6 +149,7 @@ private:
             new (&slots[i]) Slot{};
         }
         allocator.Grow(begin, end);
+        publishedSlots.fetch_add(end - begin, std::memory_order_acq_rel);
         return true;
     }
 
@@ -149,6 +157,7 @@ private:
     VirtualMemoryManager::Handle reservation{VirtualMemoryManager::INVALID_HANDLE};
     Slot* slots{nullptr};
     std::atomic<uint32_t> committedSlots{0};
+    std::atomic<uint32_t> publishedSlots{0};
     LockFreeHandleAllocator<HandleTag, Capacity> allocator{0};
 };
 } // Core

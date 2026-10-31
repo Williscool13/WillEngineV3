@@ -135,11 +135,13 @@ public:
     void Add(const char* name, SystemFn fn, const AccessSet& access = {})
     {
         nodes.PushBack({.name = name, .fn = fn, .phase = currentPhase, .access = access});
+        ExpandAccessGroups(nodes[nodes.Size() - 1].access);
     }
 
     void Add(const char* name, SystemFrameFn fn, const AccessSet& access = {})
     {
         nodes.PushBack({.name = name, .frameFn = fn, .phase = currentPhase, .access = access});
+        ExpandAccessGroups(nodes[nodes.Size() - 1].access);
     }
 
     void Add(const char* name, SystemFn fn, SystemWhen when, const AccessSet& access = {})

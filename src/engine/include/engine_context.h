@@ -50,6 +50,9 @@ struct ResourceManager;
 namespace Engine
 {
 class MaterialManager;
+class IMaterialStore;
+class MaterialUploadDirty;
+class MaterialChangedDirty;
 class EngineLogger;
 class AssetManager;
 class IAssetLoader;
@@ -228,6 +231,9 @@ class EngineServices
     AssetManager* assetManager{nullptr};
     IAssetLoader* assetLoader{nullptr};
     MaterialManager* materialManager{nullptr};
+    IMaterialStore* materialStore{nullptr};
+    MaterialUploadDirty* materialUploadDirty{nullptr};
+    MaterialChangedDirty* materialChangedDirty{nullptr};
     Audio::AudioManager* audioManager{nullptr};
     Physics::PhysicsWorld* physicsWorld{nullptr};
 };

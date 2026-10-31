@@ -78,6 +78,7 @@ class RenderThread;
 namespace Engine
 {
 inline constexpr Args::ArgDesc ARG_NO_REBAR = Args::BoolArg("no-rebar", "report no resizable BAR, forcing per frame data through the staged upload path");
+inline constexpr Args::ArgDesc ARG_UNATTENDED = Args::BoolArg("unattended", "open on a secondary monitor without taking focus, as --play does");
 
 static constexpr Core::Array<const char*, 64> TASK_THREAD_NAMES{
     "TaskThread0", "TaskThread1", "TaskThread2", "TaskThread3",

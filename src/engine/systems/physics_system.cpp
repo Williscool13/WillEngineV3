@@ -625,20 +625,41 @@ static bool HasFrozenColliderSource(const Engine::SystemRegistry& registry, cons
     return false;
 }
 
-static void ApplyPhysicsMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+struct PhysicsMeshKickoff
 {
-    if (!registry.Valid(entity)) { return; }
-    const auto* bodyDesc = registry.TryGet<Component::PhysicsBodyDesc>(entity);
-    auto* runtime = registry.TryGetMut<Component::PhysicsShapeRuntime>(entity);
-    if (!bodyDesc || !runtime) { return; }
-    const bool bDynamic = Component::EffectiveMotionType(registry, entity, *bodyDesc) == Component::PhysicsMotionType::Dynamic;
+    entt::entity entity{entt::null};
+    Core::InlineVector<Engine::PhysicsColliderHandle, 8> loaded{};
+    bool bFailed{false};
+};
 
-    for (size_t i = 0; i < bodyDesc->shapes.Size(); ++i) {
-        const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc->shapes[i].geometry);
-        if (!collider) { continue; }
-        Engine::PhysicsColliderHandle& handle = runtime->colliders[i];
-        if (handle.IsValid()) { continue; }
+static void ApplyPhysicsMeshKickoff(Engine::SystemRegistry& registry, const PhysicsMeshKickoff& kickoff)
+{
+        auto* runtime = registry.Valid(kickoff.entity) ? registry.TryGetMut<Component::PhysicsShapeRuntime>(kickoff.entity) : nullptr;
+    if (!runtime || runtime->colliders.Size() != kickoff.loaded.Size()) {
+        for (const Engine::PhysicsColliderHandle handle : kickoff.loaded) {
+            if (handle.IsValid()) { registry.Assets().UnloadCollider(handle); }
+        }
+        return;
+    }
 
+    for (size_t i = 0; i < kickoff.loaded.Size(); ++i) {
+        if (kickoff.loaded[i].IsValid()) { runtime->colliders[i] = kickoff.loaded[i]; }
+    }
+    registry.Remove<Component::PhysicsMeshRequest>(kickoff.entity);
+    if (!kickoff.bFailed) { registry.Set<Component::PhysicsMeshLoadingFlag>(kickoff.entity); }
+}
+
+static PhysicsMeshKickoff LoadColliderSources(Engine::SystemRegistry& registry, entt::entity entity, const Component::PhysicsBodyDesc& bodyDesc, const Component::PhysicsShapeRuntime& runtime)
+{
+    PhysicsMeshKickoff kickoff{.entity = entity};
+    for (size_t i = 0; i < runtime.colliders.Size(); ++i) { kickoff.loaded.PushBack({}); }
+    const bool bDynamic = Component::EffectiveMotionType(registry, entity, bodyDesc) == Component::PhysicsMotionType::Dynamic;
+
+    for (size_t i = 0; i < bodyDesc.shapes.Size(); ++i) {
+        const auto* collider = std::get_if<Component::ColliderShape>(&bodyDesc.shapes[i].geometry);
+        if (!collider || runtime.colliders[i].IsValid()) { continue; }
+
+        Engine::PhysicsColliderHandle handle = Engine::PhysicsColliderHandle::INVALID;
         if (collider->meshSourceModelId.IsValid()) {
             const bool bWantsMesh = collider->bMeshPrecise && !bDynamic;
             const Engine::PhysicsColliderKind kind = bWantsMesh ? Engine::PhysicsColliderKind::TriangleMesh : Engine::PhysicsColliderKind::ConvexHull;
@@ -658,13 +679,12 @@ static void ApplyPhysicsMeshKickoff(Engine::SystemRegistry& registry, const entt
 
         if (!handle.IsValid()) {
             LOG_WARN(Engine, "Physics collider source could not be loaded. Removing pending tag.");
-            registry.Remove<Component::PhysicsMeshRequest>(entity);
-            return;
+            kickoff.bFailed = true;
+            return kickoff;
         }
+        kickoff.loaded[i] = handle;
     }
-
-    registry.Remove<Component::PhysicsMeshRequest>(entity);
-    registry.Set<Component::PhysicsMeshLoadingFlag>(entity);
+    return kickoff;
 }
 
 void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
@@ -674,7 +694,7 @@ void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* 
     for (auto [entity, bodyDesc, runtime] : registry.View<Component::PhysicsBodyDesc, Component::PhysicsShapeRuntime, Component::PhysicsMeshRequest>().each()) {
         if (budget == 0) { break; }
         if (HasFrozenColliderSource(registry, bodyDesc, runtime)) { continue; }
-        registry.RunExclusive<&ApplyPhysicsMeshKickoff>(entity);
+        registry.RunExclusive<&ApplyPhysicsMeshKickoff>(LoadColliderSources(registry, entity, bodyDesc, runtime));
         --budget;
     }
 }

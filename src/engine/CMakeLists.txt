@@ -18,6 +18,7 @@ add_library(engine STATIC
         project_config.h
         material_manager.cpp
         material_manager.h
+        material_store.h
         logging/engine_logger.cpp
         logging/engine_logger.h
         logging/imgui_sink.h
@@ -303,6 +304,9 @@ if(WILL_ENGINE_GAME_STATIC)
 endif()
 
 target_compile_definitions(engine PRIVATE ENGINE_EXPORTS)
+if (MSVC)
+    set_source_files_properties(components/component_registration.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
+endif ()
 
 # w.build_game console command
 if(MSVC AND NOT WILL_ENGINE_GAME_STATIC AND CMAKE_GENERATOR MATCHES "^Ninja$")

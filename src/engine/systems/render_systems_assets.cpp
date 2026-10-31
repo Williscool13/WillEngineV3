@@ -339,16 +339,31 @@ static int32_t PollModelResolves(Engine::SystemRegistry& registry)
     return waiting;
 }
 
-static void ApplyStaticMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+struct ModelKickoff
+{
+    entt::entity entity{entt::null};
+    Engine::StaticModelHandle handle{Engine::StaticModelHandle::INVALID};
+};
+
+/** The kickoff system took the model ref; this stages it, or gives it back if the entity went away in the same wave. */
+template<typename TComponent, typename TRequest, typename TLoadingFlag>
+static void ApplyModelKickoff(Engine::SystemRegistry& registry, const ModelKickoff& kickoff)
+{
+    if (!registry.Valid(kickoff.entity) || !registry.Has<TComponent>(kickoff.entity)) {
+        registry.Assets().UnloadModel(kickoff.handle);
+        return;
+    }
+    StageModel(registry.Context(), registry.State(), registry, kickoff.entity, kickoff.handle);
+    registry.Remove<TRequest>(kickoff.entity);
+    registry.Set<TLoadingFlag>(kickoff.entity);
+}
+
+template<typename TRequest>
+static void ApplyMeshCleared(Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
-    const auto* meshComponent = registry.TryGet<Component::StaticMeshComponent>(entity);
-    if (!meshComponent) { return; }
-    const Engine::StaticModelHandle handle = registry.Assets().LoadModel(meshComponent->modelId);
-    if (!handle.IsValid()) { return; }
-    StageModel(registry.Context(), registry.State(), registry, entity, handle);
-    registry.Remove<Component::StaticMeshLoadRequest>(entity);
-    registry.Set<Component::StaticMeshLoadingFlag>(entity);
+    registry.Remove<TRequest>(entity);
+    registry.Remove<Component::MeshRuntime>(entity);
 }
 
 void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
@@ -357,41 +372,53 @@ void StaticMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     for (const auto& [entity, meshComponent] : registry.View<Component::StaticMeshComponent, Component::StaticMeshLoadRequest>().each()) {
         if (budget == 0) { break; }
         if (registry.Assets().IsModelFrozen(meshComponent.modelId)) { continue; } // stay pending while frozen
-        registry.RunExclusive<&ApplyStaticMeshKickoff>(entity);
+        const Engine::StaticModelHandle handle = registry.Assets().LoadModel(meshComponent.modelId);
+        if (!handle.IsValid()) { continue; }
+        registry.RunExclusive<&ApplyModelKickoff<Component::StaticMeshComponent, Component::StaticMeshLoadRequest, Component::StaticMeshLoadingFlag>>(ModelKickoff{entity, handle});
         --budget;
     }
 }
 
-static void ApplyReflectionProbeKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+struct ReflectionProbeKickoff
 {
-    if (!registry.Valid(entity)) { return; }
-    const auto* probe = registry.TryGet<Component::ReflectionProbeComponent>(entity);
-    auto* runtime = registry.TryGetMut<Component::ReflectionProbeRuntime>(entity);
-    if (!probe || !runtime) { return; }
-    if (registry.Assets().GetProbeInfo(Engine::ProbeID{probe->probeId})) {
-        runtime->contentHandle = registry.Assets().LoadProbe(Engine::ProbeID{probe->probeId});
-        runtime->contentSource = Component::ReflectionProbeComponent::ContentSource::Baked;
-    }
-    else if (probe->standInEnvMap.IsValid()) {
-        runtime->contentHandle = registry.Assets().LoadCubemap(probe->standInEnvMap);
-        runtime->contentSource = Component::ReflectionProbeComponent::ContentSource::StandIn;
-    }
-    else {
-        runtime->contentSource = Component::ReflectionProbeComponent::ContentSource::None;
-        registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
+    entt::entity entity{entt::null};
+    Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
+    Component::ReflectionProbeComponent::ContentSource source{Component::ReflectionProbeComponent::ContentSource::None};
+};
+
+static void ApplyReflectionProbeKickoff(Engine::SystemRegistry& registry, const ReflectionProbeKickoff& kickoff)
+{
+    auto* runtime = registry.Valid(kickoff.entity) ? registry.TryGetMut<Component::ReflectionProbeRuntime>(kickoff.entity) : nullptr;
+    if (!runtime) {
+        if (kickoff.handle.IsValid()) { registry.Assets().UnloadCubemap(kickoff.handle); }
         return;
     }
-    if (!runtime->contentHandle.IsValid()) { return; }
-    registry.Remove<Component::ReflectionProbeLoadRequest>(entity);
-    registry.Set<Component::ReflectionProbeLoadingFlag>(entity);
+    runtime->contentSource = kickoff.source;
+    if (kickoff.source == Component::ReflectionProbeComponent::ContentSource::None) {
+        registry.Remove<Component::ReflectionProbeLoadRequest>(kickoff.entity);
+        return;
+    }
+    runtime->contentHandle = kickoff.handle;
+    if (!kickoff.handle.IsValid()) { return; }
+    registry.Remove<Component::ReflectionProbeLoadRequest>(kickoff.entity);
+    registry.Set<Component::ReflectionProbeLoadingFlag>(kickoff.entity);
 }
 
 void ReflectionProbePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
-    for (const entt::entity entity : registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest>()) {
+    for (const auto& [entity, probe, runtime] : registry.View<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::ReflectionProbeLoadRequest>().each()) {
         if (budget == 0) { break; }
-        registry.RunExclusive<&ApplyReflectionProbeKickoff>(entity);
+        ReflectionProbeKickoff kickoff{.entity = entity};
+        if (registry.Assets().GetProbeInfo(Engine::ProbeID{probe.probeId})) {
+            kickoff.handle = registry.Assets().LoadProbe(Engine::ProbeID{probe.probeId});
+            kickoff.source = Component::ReflectionProbeComponent::ContentSource::Baked;
+        }
+        else if (probe.standInEnvMap.IsValid()) {
+            kickoff.handle = registry.Assets().LoadCubemap(probe.standInEnvMap);
+            kickoff.source = Component::ReflectionProbeComponent::ContentSource::StandIn;
+        }
+        registry.RunExclusive<&ApplyReflectionProbeKickoff>(kickoff);
         --budget;
     }
 }
@@ -789,25 +816,15 @@ void StaticMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     }
 }
 
-static void ApplyStaticMeshPrimitiveKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
-{
-    if (!registry.Valid(entity)) { return; }
-    const auto* meshComponent = registry.TryGet<Component::StaticMeshPrimitiveComponent>(entity);
-    if (!meshComponent) { return; }
-    const Engine::StaticModelHandle handle = registry.Assets().LoadModel(meshComponent->modelId);
-    if (!handle.IsValid()) { return; }
-    StageModel(registry.Context(), registry.State(), registry, entity, handle);
-    registry.Remove<Component::StaticMeshPrimitiveLoadRequest>(entity);
-    registry.Set<Component::StaticMeshPrimitiveLoadingFlag>(entity);
-}
-
 void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
     for (const auto& [entity, meshComponent] : registry.View<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest>().each()) {
         if (budget == 0) { break; }
         if (registry.Assets().IsModelFrozen(meshComponent.modelId)) { continue; }
-        registry.RunExclusive<&ApplyStaticMeshPrimitiveKickoff>(entity);
+        const Engine::StaticModelHandle handle = registry.Assets().LoadModel(meshComponent.modelId);
+        if (!handle.IsValid()) { continue; }
+        registry.RunExclusive<&ApplyModelKickoff<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadRequest, Component::StaticMeshPrimitiveLoadingFlag>>(ModelKickoff{entity, handle});
         --budget;
     }
 }
@@ -921,24 +938,14 @@ void StaticMeshPrimitiveLoadResolve(Engine::EngineContext* ctx, Engine::EngineSt
     PollModelResolves<Component::StaticMeshPrimitiveComponent, Component::StaticMeshPrimitiveLoadingFlag, &ApplyStaticMeshPrimitiveResolve>(registry);
 }
 
-static void ApplyProceduralMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
-{
-    if (!registry.Valid(entity)) { return; }
-    const auto* meshComponent = registry.TryGet<Component::ProceduralMeshComponent>(entity);
-    if (!meshComponent) { return; }
-    const Engine::StaticModelHandle handle = registry.Assets().LoadProceduralModel(meshComponent->params, meshComponent->repeat);
-    if (!handle.IsValid()) { return; }
-    StageModel(registry.Context(), registry.State(), registry, entity, handle);
-    registry.Remove<Component::ProceduralMeshLoadRequest>(entity);
-    registry.Set<Component::ProceduralMeshLoadingFlag>(entity);
-}
-
 void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
-    for (const entt::entity entity : registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>()) {
+    for (const auto& [entity, meshComponent] : registry.View<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest>().each()) {
         if (budget == 0) { break; }
-        registry.RunExclusive<&ApplyProceduralMeshKickoff>(entity);
+        const Engine::StaticModelHandle handle = registry.Assets().LoadProceduralModel(meshComponent.params, meshComponent.repeat);
+        if (!handle.IsValid()) { continue; }
+        registry.RunExclusive<&ApplyModelKickoff<Component::ProceduralMeshComponent, Component::ProceduralMeshLoadRequest, Component::ProceduralMeshLoadingFlag>>(ModelKickoff{entity, handle});
         --budget;
     }
 }
@@ -1045,25 +1052,15 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
     runtime->modelRange = modelRange;
 }
 
-static void ApplyModuleMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
-{
-    if (!registry.Valid(entity)) { return; }
-    const auto* meshComponent = registry.TryGet<Component::ModuleMeshComponent>(entity);
-    if (!meshComponent) { return; }
-    const Engine::StaticModelHandle handle = registry.Assets().LoadModuleModel(meshComponent->params);
-    if (!handle.IsValid()) { return; }
-    StageModel(registry.Context(), registry.State(), registry, entity, handle);
-    registry.Remove<Component::ModuleMeshLoadRequest>(entity);
-    registry.Set<Component::ModuleMeshLoadingFlag>(entity);
-}
-
 void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
     for (const auto& [entity, meshComponent] : registry.View<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest>().each()) {
         if (budget == 0) { break; }
         if (meshComponent.params.parts.IsEmpty()) { continue; }
-        registry.RunExclusive<&ApplyModuleMeshKickoff>(entity);
+        const Engine::StaticModelHandle handle = registry.Assets().LoadModuleModel(meshComponent.params);
+        if (!handle.IsValid()) { continue; }
+        registry.RunExclusive<&ApplyModelKickoff<Component::ModuleMeshComponent, Component::ModuleMeshLoadRequest, Component::ModuleMeshLoadingFlag>>(ModelKickoff{entity, handle});
         --budget;
     }
 }
@@ -1113,30 +1110,20 @@ static bool SplineHasGeometry(const Engine::SplineParams& params)
     return !params.railing.bEnabled || !params.railing.lanes.IsEmpty() || params.railing.bPosts;
 }
 
-static void ApplySplineMeshKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
-{
-    if (!registry.Valid(entity)) { return; }
-    const auto* meshComponent = registry.TryGet<Component::SplineMeshComponent>(entity);
-    if (!meshComponent) { return; }
-    const Engine::SplineParams params = Component::ToSplineParams(*meshComponent);
-    if (!SplineHasGeometry(params)) {
-        registry.Remove<Component::SplineMeshLoadRequest>(entity);
-        registry.Remove<Component::MeshRuntime>(entity);
-        return;
-    }
-    const Engine::StaticModelHandle handle = registry.Assets().LoadSplineModel(params);
-    if (!handle.IsValid()) { return; }
-    StageModel(registry.Context(), registry.State(), registry, entity, handle);
-    registry.Remove<Component::SplineMeshLoadRequest>(entity);
-    registry.Set<Component::SplineMeshLoadingFlag>(entity);
-}
-
 void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
-    for (const entt::entity entity : registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>()) {
+    for (const auto& [entity, meshComponent] : registry.View<Component::SplineMeshComponent, Component::SplineMeshLoadRequest>().each()) {
         if (budget == 0) { break; }
-        registry.RunExclusive<&ApplySplineMeshKickoff>(entity);
+        const Engine::SplineParams params = Component::ToSplineParams(meshComponent);
+        if (!SplineHasGeometry(params)) {
+            registry.RunExclusive<&ApplyMeshCleared<Component::SplineMeshLoadRequest>>(entity);
+            --budget;
+            continue;
+        }
+        const Engine::StaticModelHandle handle = registry.Assets().LoadSplineModel(params);
+        if (!handle.IsValid()) { continue; }
+        registry.RunExclusive<&ApplyModelKickoff<Component::SplineMeshComponent, Component::SplineMeshLoadRequest, Component::SplineMeshLoadingFlag>>(ModelKickoff{entity, handle});
         --budget;
     }
 }
@@ -1188,24 +1175,6 @@ void SplineMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* stat
     PollModelResolves<Component::SplineMeshComponent, Component::SplineMeshLoadingFlag, &ApplySplineMeshResolve>(registry);
 }
 
-static void ApplyText3DGenerateKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
-{
-    if (!registry.Valid(entity)) { return; }
-    const auto* textComponent = registry.TryGet<Component::Text3DComponent>(entity);
-    if (!textComponent) { return; }
-    const Engine::StaticModelHandle handle = textComponent->text.Size() > 0
-        ? registry.Assets().LoadText3DModel(textComponent->fontId, textComponent->text, textComponent->depth, textComponent->flatness, textComponent->tracking, textComponent->scale, textComponent->bSmoothNormals, textComponent->align, textComponent->anchor, textComponent->wrapWidth, textComponent->bendRadius)
-        : Engine::StaticModelHandle::INVALID;
-    if (handle.IsValid()) {
-        StageModel(registry.Context(), registry.State(), registry, entity, handle);
-        registry.Set<Component::Text3DLoadingFlag>(entity);
-    }
-    else {
-        registry.Remove<Component::MeshRuntime>(entity);
-    }
-    registry.Remove<Component::Text3DGenerateRequest>(entity);
-}
-
 void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     size_t budget = Engine::MAX_ASSET_RESOLVES_PER_TICK;
@@ -1213,7 +1182,15 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
         if (budget == 0) { break; }
         // Stay pending while the font is missing or frozen (e.g. mid hot-reload drain). The generated mesh takes its own font ref, so we hold none here.
         if (!textComponent.fontId.IsValid() || registry.Assets().IsFontFrozen(textComponent.fontId)) { continue; }
-        registry.RunExclusive<&ApplyText3DGenerateKickoff>(entity);
+        const Engine::StaticModelHandle handle = textComponent.text.Size() > 0
+            ? registry.Assets().LoadText3DModel(textComponent.fontId, textComponent.text, textComponent.depth, textComponent.flatness, textComponent.tracking, textComponent.scale, textComponent.bSmoothNormals, textComponent.align, textComponent.anchor, textComponent.wrapWidth, textComponent.bendRadius)
+            : Engine::StaticModelHandle::INVALID;
+        if (handle.IsValid()) {
+            registry.RunExclusive<&ApplyModelKickoff<Component::Text3DComponent, Component::Text3DGenerateRequest, Component::Text3DLoadingFlag>>(ModelKickoff{entity, handle});
+        }
+        else {
+            registry.RunExclusive<&ApplyMeshCleared<Component::Text3DGenerateRequest>>(entity);
+        }
         --budget;
     }
 }
@@ -1274,13 +1251,20 @@ void Text3DLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, E
     PollModelResolves<Component::Text3DComponent, Component::Text3DLoadingFlag, &ApplyText3DResolve>(registry);
 }
 
-static void ApplyTextFontKickoff(Engine::SystemRegistry& registry, const entt::entity& entity)
+struct TextFontKickoff
 {
-    if (!registry.Valid(entity)) { return; }
-    const auto* textComp = registry.TryGet<Component::TextComponent>(entity);
-    auto* runtime = registry.TryGetMut<Component::TextRuntime>(entity);
-    if (!textComp || !runtime || runtime->fontHandle.IsValid()) { return; }
-    runtime->fontHandle = registry.Assets().LoadFont(textComp->fontId);
+    entt::entity entity{entt::null};
+    Engine::FontHandle handle{Engine::FontHandle::INVALID};
+};
+
+static void ApplyTextFontKickoff(Engine::SystemRegistry& registry, const TextFontKickoff& kickoff)
+{
+    auto* runtime = registry.Valid(kickoff.entity) ? registry.TryGetMut<Component::TextRuntime>(kickoff.entity) : nullptr;
+    if (!runtime || runtime->fontHandle.IsValid()) {
+        registry.Assets().UnloadFont(kickoff.handle);
+        return;
+    }
+    runtime->fontHandle = kickoff.handle;
 }
 
 void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
@@ -1295,7 +1279,8 @@ void TextFontPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* sta
         // Load here (not at construct) so the freeze can hold it pending.
         if (!runtime.fontHandle.IsValid()) {
             if (!textComp.fontId.IsValid() || registry.Assets().IsFontFrozen(textComp.fontId)) { continue; }
-            registry.RunExclusive<&ApplyTextFontKickoff>(entity);
+            const Engine::FontHandle handle = registry.Assets().LoadFont(textComp.fontId);
+            if (handle.IsValid()) { registry.RunExclusive<&ApplyTextFontKickoff>(TextFontKickoff{entity, handle}); }
             continue;
         }
 

@@ -11,7 +11,6 @@
 #include <tracy/Tracy.hpp>
 
 #include "scene_system.h"
-#include "render_systems_helpers.h"
 #include "core/containers/arena_fixed_vector.h"
 #include "core/containers/arena_vector.h"
 #include "core/containers/inline_vector.h"
@@ -280,11 +279,8 @@ void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* stat
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
 {
     ZoneScoped;
-    Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
+    const Engine::IMaterialStore* materialStore = &registry.Service<Engine::IMaterialStore>();
 
-#ifdef WDEBUG
-    VerifyGeometryStores(state);
-#endif
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
     //
     {
@@ -319,20 +315,21 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
     {
         ZoneScopedN("Material Recording");
         uint32_t watermark = 0;
-        const auto& entries = materialManager->GetActiveMaterials();
+        const auto& entries = materialStore->GetActiveMaterials();
         for (uint32_t i = 0; i < static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT); ++i) {
             const Engine::MaterialEntry& entry = entries[i];
             if (!entry.handle.IsValid() || entry.refCounter <= 0) { continue; }
             watermark = i + 1u;
-            vf.activeMaterials.PushBack({i, materialManager->GetRenderMaterial(entry.id)});
+            vf.activeMaterials.PushBack({i, materialStore->GetRenderMaterial(entry.id)});
         }
         vf.materialCount = watermark;
         vf.materialPayload.Clear();
         vf.materialRuns.Clear();
         const Core::LightingMode lightingMode = state->lighting.lightingMode;
         Render::PipelineManager* pipelineManager = ctx->pipelineManager;
-        materialManager->SetLightingMode(lightingMode);
-        materialManager->DrainUploadDirty(static_cast<uint32_t>(ctx->currentRenderFrame), watermark, [&](uint32_t offset, uint32_t count) {
+        Engine::MaterialUploadDirty& uploadDirty = registry.ServiceMut<Engine::MaterialUploadDirty>();
+        uploadDirty.SetLightingMode(lightingMode);
+        uploadDirty.Drain(static_cast<uint32_t>(ctx->currentRenderFrame), watermark, [&](uint32_t offset, uint32_t count) {
             const size_t base = vf.materialPayload.Size();
             vf.materialPayload.ResizeUninitialized(base + count);
             for (uint32_t i = 0; i < count; ++i) {
@@ -343,7 +340,7 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
                     props = MaterialProperties{};
                     continue;
                 }
-                const Engine::RenderMaterial material = materialManager->GetRenderMaterial(entry.id);
+                const Engine::RenderMaterial material = materialStore->GetRenderMaterial(entry.id);
                 props = material.props;
                 props.shadingBucketIndex = slot;
                 const StringID lightingShader = pipelineManager->ResolveLightingShaderForMode(material.lightingShader, lightingMode);
@@ -418,7 +415,7 @@ void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* stat
         if (lineHeight <= 0.0f) { lineHeight = (font->header.ascender - font->header.descender) * scale; }
         if (lineHeight <= 0.0f) { lineHeight = textComp.scale; }
 
-        const auto rmat = registry.Service<Engine::MaterialManager>().GetRenderTextMaterial(textComp.textMaterialId);
+        const auto rmat = registry.Service<Engine::IMaterialStore>().GetRenderTextMaterial(textComp.textMaterialId);
 
         const Engine::WFontHeader& fh = font->header;
         const bool bSdf = fh.sdfUncompressedSize > 0;
@@ -909,10 +906,6 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
     state->analyticLightStore.Tick(ctx->currentRenderFrame);
     state->triLightStore.Tick(ctx->currentRenderFrame);
 
-#ifdef WDEBUG
-    VerifyAnalyticLightStore(state, registry);
-#endif
-
     const uint32_t analyticWatermark = state->analyticLightStore.GetWatermark();
     const LightInfo* storeLights = state->analyticLightStore.Lights();
     vf.analyticLightCount = analyticWatermark;
@@ -953,7 +946,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
             emissiveDebug.bEntriesTruncated = true;
             return;
         }
-        const Engine::Material* material = registry.Service<Engine::MaterialManager>().GetMaterial(inst.materialID);
+        const Engine::Material* material = registry.Service<Engine::IMaterialStore>().GetMaterial(inst.materialID);
         const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(inst.emissiveMeshSlot);
         emissiveDebug.entries.PushBack(Engine::EmissiveDebugEntry{
             .entity = entity,
@@ -979,7 +972,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
 
         const uint32_t meshWatermark = triLightStore.GetMeshWatermark();
         if (ctx->frameStatus.bEmissiveLightsPipelineReady) {
-            registry.ServiceMut<Engine::MaterialManager>().DrainChangedDirty(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
+            registry.ServiceMut<Engine::MaterialChangedDirty>().Drain(static_cast<uint32_t>(Render::BINDLESS_MATERIAL_BUFFER_COUNT), [&](uint32_t offset, uint32_t count) {
                 for (uint32_t g = 0; g < meshWatermark; ++g) {
                     const Engine::TriLightStore::Reservation& reservation = triLightStore.Get(g);
                     if (!reservation.bLive) { continue; }

@@ -307,6 +307,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
 
     Args::RegisterEngineArgs(*launchArgs);
     const bool bPlayRun = Args::Has(*launchArgs, ARG_PLAY);
+    const bool bUnattendedWindow = bPlayRun || Args::GetBool(*launchArgs, ARG_UNATTENDED);
 
     tracy::SetThreadName("EngineThread");
     Platform::SetThreadName("EngineThread");
@@ -363,7 +364,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
 
         SDL_DisplayID targetDisplay = SDL_GetPrimaryDisplay();
         SDL_WindowFlags extraFlags = SDL_WINDOW_MAXIMIZED;
-        if (bPlayRun) {
+        if (bUnattendedWindow) {
             // 1. Scripted runs render unattended
             // 2. Don't yank focus from the user
             // 3. Prefer a secondary monitor
@@ -390,7 +391,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
             rect.w, rect.h,
             SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | extraFlags);
 
-        if (bPlayRun) {
+        if (bUnattendedWindow) {
             SDL_SetWindowPosition(window, rect.x, rect.y);
         }
         SDL_ShowWindow(window);
@@ -539,6 +540,9 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         engineContext->services.assetManager = assetManager;
         engineContext->services.assetLoader = assetManager;
         engineContext->services.materialManager = materialManager;
+        engineContext->services.materialStore = materialManager;
+        engineContext->services.materialUploadDirty = materialManager->GetUploadDirty();
+        engineContext->services.materialChangedDirty = materialManager->GetChangedDirty();
         engineContext->pipelineManager = renderThread->GetPipelineManager();
         engineContext->rendererStatistics = renderThread->GetStatisticsManager();
         MCP::RegisterEngineTools(engineState);

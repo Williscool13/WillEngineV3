@@ -102,7 +102,7 @@ target_include_directories(will-engine PRIVATE
 )
 
 if (NOT WILL_ENGINE_GAME_STATIC)
-    target_link_libraries(will-engine PRIVATE engine-runtime SDL3::SDL3)
+    target_link_libraries(will-engine PRIVATE engine-runtime SDL3::SDL3 tracy_interface)
 else ()
     target_link_libraries(will-engine PUBLIC engine)
 endif ()

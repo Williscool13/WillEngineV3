@@ -19,6 +19,7 @@ static constexpr const ArgDesc* ENGINE_ARGS[] = {
     &ARG_OUT,
     &ARG_EXIT,
     &ARG_NO_REBAR,
+    &ARG_UNATTENDED,
 #if WILL_EDITOR
     &MCP::ARG_MCP_PORT,
 #endif

@@ -33,6 +33,9 @@ struct Command;
 class AssetManager;
 class IAssetLoader;
 class MaterialManager;
+class IMaterialStore;
+class MaterialUploadDirty;
+class MaterialChangedDirty;
 
 /**
  * Exclusive access applies immediately and is unchecked. Non-exclusive access defers Set/Remove/Destroy/PushCommand to the end of the wave
@@ -224,6 +227,9 @@ private:
     {
         if constexpr (std::is_same_v<T, AssetManager>) { return ctx.services.assetManager; }
         else if constexpr (std::is_same_v<T, MaterialManager>) { return ctx.services.materialManager; }
+        else if constexpr (std::is_same_v<T, IMaterialStore>) { return ctx.services.materialStore; }
+        else if constexpr (std::is_same_v<T, MaterialUploadDirty>) { return ctx.services.materialUploadDirty; }
+        else if constexpr (std::is_same_v<T, MaterialChangedDirty>) { return ctx.services.materialChangedDirty; }
         else if constexpr (std::is_same_v<T, Audio::AudioManager>) { return ctx.services.audioManager; }
         else if constexpr (std::is_same_v<T, Physics::PhysicsWorld>) { return ctx.services.physicsWorld; }
         else { static_assert(sizeof(T) == 0, "not a service"); }
