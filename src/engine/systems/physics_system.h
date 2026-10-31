@@ -10,12 +10,6 @@
 #include "engine/core/registry.h"
 
 
-namespace Core
-{
-struct FrameBuffer;
-struct ViewFamily;
-}
-
 namespace Engine
 {
 struct EngineContext;
@@ -33,7 +27,7 @@ void MarkPhysicsTransformsDirty(Engine::EngineState* state, Engine::SystemRegist
 /** Entities whose bodies' broadphase bounds touch the world box, from the gameplay arena. */
 Core::ArenaFixedVector<entt::entity> QueryEntitiesInBox(Engine::EngineContext* ctx, const Engine::EngineState* state, Engine::SystemRegistry& registry, const AABB& box);
 void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
-void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 void PhysicsMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 void PhysicsMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 void PhysicsShapeCreationResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);

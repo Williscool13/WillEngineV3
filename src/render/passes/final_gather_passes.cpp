@@ -159,13 +159,13 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     pass.WriteStorageImage(gatherData);
     pass.WriteStorageImage(gatherGuide);
 
-    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
+    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
+    const bool bProbeBrute = viewFamily.probes.bReflectionProbeBruteForce;
     pass.Execute([&scene, pipelineManager, sceneIndex, frameNumber, gatherExtent, renderExtent, gatherScale, gatherRayCount, bCascades, bScreenSpace, gatherShR, gatherShG, gatherShB, gatherSkyVis, gatherData, gatherGuide,
             gatherHits, reflectionProbeCount, bProbeBrute, bTouch, touchEntries, probeGrid, litHistory, depthHistory, gbufferOneHistory, bScreenDiffuse, screenDiffuseHistory,
             cacheEntries = radianceCache.entries, cacheKeys = radianceCache.keys, cacheCells = radianceCache.cells, ddgiCascades = ddgi.cascades,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
-            skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f), maxRayRadiance = glm::max(maxRayRadiance, 0.0f)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity, bounceIntensity = glm::clamp(bounceIntensity, 0.0f, 1.0f), maxRayRadiance = glm::max(maxRayRadiance, 0.0f)](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_gather_shade"_sid);
         if (!pipelineEntry) {
             return;
@@ -343,7 +343,7 @@ FinalGatherFrame SetupFinalGather(RenderGraph& graph, PipelineManager* pipelineM
     upscale.Execute([&scene, pipelineManager, sceneIndex, gatherExtent, renderExtent, gatherScale, bTemporal, bFastHistory, bSkyVisHistory, bNoiseHistory, bBentNormals, bUpscaleCascades, reflectionProbeCount, bProbeBrute, gatherHistory, fastHistory, skyVisHistory, noiseHistory, depthHistory, gbufferOneHistory,
             shR, shG, shB, skyVis, gatherData, gatherGuide, bentNormals, probeGrid, historyOut, fastOut, skyVisOut, noiseOut, guideNormal, ddgiCascades = ddgi.cascades,
             gbufferOne = targets.gbufferOne, depth = targets.depthCopy,
-            skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("gi_upscale"_sid);
         if (!pipelineEntry) {
             return;

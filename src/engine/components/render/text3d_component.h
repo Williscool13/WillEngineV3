@@ -17,7 +17,6 @@
 #include "engine/components/component_types.h"
 #include "engine/components/render_components.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -60,12 +59,12 @@ struct Text3DComponent
         WILL_FIELD(renderOffset, .speed = 0.01f),
         WILL_FIELD(renderRotation))
 
-    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static bool CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /** Mesh needs (re)generating; the kickoff generates it (freeze-gated on the source font). */

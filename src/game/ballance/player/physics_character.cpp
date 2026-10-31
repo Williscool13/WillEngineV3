@@ -23,7 +23,7 @@ void PhysicsCharacter::Initialize(Engine::EngineState* gameState, Engine::Engine
     physicsWorld = &registry.Service<Physics::PhysicsWorld>();
 
     constexpr StringID WOODEN_BALL_PREFAB_ID{4933586796549546436};
-    entity = Engine::SpawnPrefab(registry.Context(), engineState, registry, WOODEN_BALL_PREFAB_ID);
+    entity = Engine::SpawnPrefab(ctx, engineState, registry, WOODEN_BALL_PREFAB_ID);
     assert(entity != entt::null && "Failed to spawn player character prefab.");
 
     registry.Add<Component::DoNotSerializeTag>(entity);

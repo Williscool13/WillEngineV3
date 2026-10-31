@@ -68,7 +68,7 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
     const RDGBuffer lightsVS = graph.CreateBuffer("restir_lights_vs"_sid, MAX_LIGHTS * sizeof(LightVSData), false);
     restir.lightsVS = lightsVS;
 
-    const uint32_t liveLightCount = viewFamily.analyticLightCount + viewFamily.triLightCount;
+    const uint32_t liveLightCount = viewFamily.lights.analyticLightCount + viewFamily.lights.triLightCount;
 
     RenderPass& transformPass = graph.AddPass("[ReSTIR DI] Transform Lights"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ReSTIRDI);
     transformPass.AsyncCompute();
@@ -406,7 +406,7 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
     }
 
     RDGTexture sunFlip{};
-    if (restirParams.bSunLight && viewFamily.directionalLight.bEnabled && viewFamily.directionalLight.intensity > 0.0f && bHasTLAS) {
+    if (restirParams.bSunLight && viewFamily.lights.directionalLight.bEnabled && viewFamily.lights.directionalLight.intensity > 0.0f && bHasTLAS) {
         const uint32_t sunField = restirParams.bCheckerboardFullRateResolve ? 0u : activeCheckerboardField;
         // Packed like the reservoir buffers were: one texel per dispatched lane, so the checkerboard leaves no unwritten texels in the aliased target.
         const uint32_t sunVisWidth = (sunField != 0u) ? ((renderExtent.width + 1u) >> 1u) : renderExtent.width;
@@ -434,7 +434,7 @@ ReSTIRFrame SetupReSTIRPasses(RenderGraph& graph,
         if (bHasPrevTlas) { sunPass.ReadTLASBuffer(prevTlas); }
         sunPass.WriteStorageImage(sunVis);
         if (bSunFlip) { sunPass.WriteStorageImage(sunFlip); }
-        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = sunField, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, alphaTestMaxDistance = restirParams.sunAlphaTestMaxDistance, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy,
+        sunPass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasPrevTlas, prevTlas, bSunFlip, field = sunField, bAlphaTest = viewFamily.settings.sigmaParams.bAlphaTest, alphaTestMaxDistance = restirParams.sunAlphaTestMaxDistance, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, shadowOriginOffset = targets.shadowOriginOffset, depth = targets.depthCopy,
                 sunVis, sunFlip](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("restir_di_sun"_sid);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);
@@ -653,7 +653,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
     lightingResolve.Execute([&, pipelineManager, sceneIndex, frameNumber, renderExtent, bDiffuseRatio,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
-            diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.skyboxIndex,
+            diffuseOut = targets.intermediateOne, specularOut = targets.intermediateTwo, skyboxIndex = viewFamily.settings.skyboxIndex,
             field = activeCheckerboardField, packed = bCheckerboardPacked, fullRate = bFullRateResolve,
             bMergedReflections, specNoisy, reservoirFinal, sunVis, lightsVS, tileList, diffuseRatio](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkDeviceAddress tileListAddress = graph.GetBufferAddress(tileList);
@@ -661,7 +661,7 @@ void SetupReSTIRLightingResolvePass(RenderGraph& graph,
             for (const LightingPipelineInfo& entry : pipelineManager->GetLightingPipelines()) {
                 if (!entry.id) { continue; }
 
-                StringID shaderToUse = viewFamily.lightingShaderOverride ? viewFamily.lightingShaderOverride : entry.id;
+                StringID shaderToUse = viewFamily.settings.lightingShaderOverride ? viewFamily.settings.lightingShaderOverride : entry.id;
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
                 if (!pipelineEntry) { pipelineEntry = pipelineManager->GetPipelineEntry("default_unlit"_sid); }
                 if (!pipelineEntry) { continue; }
@@ -768,10 +768,10 @@ void SetupReSTIRRemodulatePass(RenderGraph& graph,
         pass.ReadSampledImage(diffuseRatio);
         pass.WriteStorageImage(screenDiffuse);
     }
-    const int32_t skyboxIndex = viewFamily.skyboxIndex;
-    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-    const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute, bScreenDiffuse,
+    const int32_t skyboxIndex = viewFamily.settings.skyboxIndex;
+    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
+    const bool bProbeBrute = viewFamily.probes.bReflectionProbeBruteForce;
+    pass.Execute([pipelineManager, sceneIndex, outputMode, width, height, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.settings.indirectIntensity, bDDGI, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giGatherMode, reflectionProbeCount, bProbeBrute, bScreenDiffuse,
             diffuse = targets.intermediateOne, specular = targets.intermediateTwo,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows, output = targets.colorOutput,

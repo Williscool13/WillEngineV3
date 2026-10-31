@@ -17,12 +17,6 @@ struct EngineState;
 class SystemRegistry;
 }
 
-namespace Core
-{
-struct FrameBuffer;
-struct ViewFamily;
-}
-
 namespace Engine
 {
 void MarkSceneModified(Engine::EngineState* state, StringID sceneId);
@@ -63,7 +57,7 @@ void EditorUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
 
 void EditorTickInput(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
-void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
+void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 }
 
 #endif //WILL_ENGINE_EDITOR_SYSTEMS_H

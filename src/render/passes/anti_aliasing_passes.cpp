@@ -28,7 +28,7 @@ RDGTexture SetupSubpixelMorphologicalAntiAliasing(RenderGraph& graph, PipelineMa
     const RDGTexture smaaBlend = graph.CreateTexture("smaa_blend"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
     const RDGTexture smaaOutput = graph.CreateTexture("smaa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
-    const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
+    const Core::SMAAConfiguration& smaaConfig = viewFamily.settings.aaConfig.smaa;
 
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass("SMAA Edge Detection"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
@@ -132,7 +132,7 @@ RDGTexture SetupSMAA_T2X(RenderGraph& graph,
     const RDGTexture current = currentRing.Current();
     const RDGTexture history = currentRing.Version(1);
 
-    const Core::SMAAConfiguration& smaaConfig = viewFamily.aaConfig.smaa;
+    const Core::SMAAConfiguration& smaaConfig = viewFamily.settings.aaConfig.smaa;
 
     // Pass 1: Edge Detection
     RenderPass& edgePass = graph.AddPass("SMAA T2X Edge Detection"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
@@ -304,7 +304,7 @@ RDGTexture SetupTemporalAntiAliasing(RenderGraph& graph,
     // taa_current doubles as next frame's history, so downstream passes get their own copy written by the same dispatch
     const RDGTexture taaOutput = graph.CreateTexture("taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
-    const Core::TAAConfiguration& taaConfig = viewFamily.aaConfig.taa;
+    const Core::TAAConfiguration& taaConfig = viewFamily.settings.aaConfig.taa;
 
     RenderPass& taaPass = graph.AddPass("TAA Main"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer(scene.sceneData);
@@ -369,7 +369,7 @@ RDGTexture SetupDonutTemporalAntiAliasing(RenderGraph& graph,
     const RDGTexture donutOutput = graph.CreateTexture("donut_taa_output"_sid, TextureInfo{COLOR_ATTACHMENT_FORMAT, outputExtent.width, outputExtent.height, 1}, CLEAR_COLOR_EMPTY, true);
 
     const bool bHasHistory = feedbackHistory.IsValid();
-    const Core::DonutTAAConfiguration& donutConfig = viewFamily.aaConfig.donutTaa;
+    const Core::DonutTAAConfiguration& donutConfig = viewFamily.settings.aaConfig.donutTaa;
 
     RenderPass& taaPass = graph.AddPass("Donut TAA Main"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::AntiAliasing);
     taaPass.ReadBuffer(scene.sceneData);
@@ -453,7 +453,7 @@ RDGTexture SetupFsr2(RenderGraph& graph,
 {
     ZoneScoped;
     static constexpr uint32_t INVALID_INDEX = 0xFFFFFFFFu;
-    const Core::Fsr2Configuration& config = viewFamily.aaConfig.fsr2;
+    const Core::Fsr2Configuration& config = viewFamily.settings.aaConfig.fsr2;
     const RDGTexture preOverlayColor = targets.preOverlayColor;
     const bool bHasPreOverlayColor = preOverlayColor.IsValid();
 
@@ -512,7 +512,7 @@ RDGTexture SetupFsr2(RenderGraph& graph,
     const RDGTexture prevDilatedMotion = bHasPrevMotion ? dilatedMotionRing.Version(1) : dilatedMotion;
 
     const glm::mat4& proj = viewFamily.mainView.currentViewData.proj;
-    const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(Core::AntiAliasingMode::FSR2, viewFamily.resolutionScale);
+    const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(Core::AntiAliasingMode::FSR2, viewFamily.settings.resolutionScale);
     const HaltonSample jitterSample = ComputeJitterSample(Core::AntiAliasingMode::FSR2, frameNumber, jitterPhaseCount);
 
     Fsr2Constants constants{

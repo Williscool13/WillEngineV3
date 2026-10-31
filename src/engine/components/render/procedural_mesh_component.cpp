@@ -23,14 +23,14 @@
 
 namespace Engine::Component
 {
-void ProceduralMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void ProceduralMeshComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<ProceduralMeshComponent>(entity);
     RecreateProceduralMesh(component, registry, entity);
 }
 
-void ProceduralMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void ProceduralMeshComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<ProceduralMeshLoadRequest>(entity);
@@ -58,7 +58,7 @@ void RecreateProceduralMesh(ProceduralMeshComponent& component, Engine::SystemRe
 
 namespace Engine
 {
-bool Component::ProceduralMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool Component::ProceduralMeshComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::ProceduralMeshComponent>(registry, entity);
 }
@@ -133,7 +133,7 @@ static void CreateSpiralRailingEntity(Engine::EngineState* state, Engine::System
     MarkSceneModified(state, state->scene.currentSceneId);
 }
 
-void Component::ProceduralMeshComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::ProceduralMeshComponent::OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& component = registry.Get<ProceduralMeshComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -143,7 +143,7 @@ void Component::ProceduralMeshComponent::OnEditPreview(Engine::SystemRegistry& r
     }
 }
 
-void Component::ProceduralMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::ProceduralMeshComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     RecreateProceduralMesh(registry.GetMut<ProceduralMeshComponent>(entity), registry, entity);
 }
@@ -212,17 +212,14 @@ static bool DrawChamferEditor(float* chamferX, float* chamferY, float* chamferZ,
  * @return true when the size changed this frame
  */
 template<typename SetSize>
-static bool DrawExtentFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const Component::ProceduralMeshComponent& component, Vec3 size, SetSize&& setSize,
+static bool DrawExtentFaceHandles(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const Component::ProceduralMeshComponent& component, Vec3 size, SetSize&& setSize,
                                   bool& bOutMovedEntity)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
-    auto* state = edit.State();
-    auto* ctx = registry.Context();
     auto* transform = registry.TryGetMut<Component::TransformComponent>(entity);
     if (!transform) { return false; }
 
-    const auto& vd = viewFamily.mainView.currentViewData;
+    const auto& vd = registry.Frame<Core::RenderView>().currentViewData;
     const Vec4 viewport{
         static_cast<float>(ctx->windowContext.viewportOffsetX),
         static_cast<float>(ctx->windowContext.viewportOffsetY),
@@ -263,7 +260,7 @@ static bool DrawExtentFaceHandles(Core::ViewFamily& viewFamily, Engine::EditCont
                                       bResized = true;
                                       if (!bHigh) {
                                           transform->translation += Vec3(glm::inverse(parentWorld) * Vec4(-axisWorld * delta, 0.0f));
-                                          Component::TransformComponent::OnEditPreview(registry, entity);
+                                          Component::TransformComponent::OnEditPreview(ctx, state, registry, entity);
                                           bOutMovedEntity = true;
                                       }
                                   },
@@ -278,15 +275,15 @@ static bool HasFaceHandles(const Engine::ProceduralParams& params)
     return std::holds_alternative<Engine::BoxParams>(params) || std::holds_alternative<Engine::StaircaseParams>(params) || std::holds_alternative<Engine::WedgeParams>(params);
 }
 
-static bool DrawShapeFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, Component::ProceduralMeshComponent& component, bool& bOutMovedEntity)
+static bool DrawShapeFaceHandles(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, Component::ProceduralMeshComponent& component, bool& bOutMovedEntity)
 {
     if (auto* box = std::get_if<Engine::BoxParams>(&component.params)) {
         float* sizes[3] = {&box->sizeX, &box->sizeY, &box->sizeZ};
-        return DrawExtentFaceHandles(viewFamily, edit, component, {box->sizeX, box->sizeY, box->sizeZ}, [&](int axis, float v) { *sizes[axis] = v; }, bOutMovedEntity);
+        return DrawExtentFaceHandles(ctx, state, registry, edit, component, {box->sizeX, box->sizeY, box->sizeZ}, [&](int axis, float v) { *sizes[axis] = v; }, bOutMovedEntity);
     }
     if (auto* wedge = std::get_if<Engine::WedgeParams>(&component.params)) {
         const float base = glm::max(wedge->baseHeight, 0.0f);
-        return DrawExtentFaceHandles(viewFamily, edit, component, {wedge->sizeX, base + wedge->sizeY, wedge->sizeZ}, [&](int axis, float v) {
+        return DrawExtentFaceHandles(ctx, state, registry, edit, component, {wedge->sizeX, base + wedge->sizeY, wedge->sizeZ}, [&](int axis, float v) {
             if (axis == 0) { wedge->sizeX = v; }
             else if (axis == 1) { wedge->sizeY = glm::max(v - base, 0.01f); }
             else { wedge->sizeZ = v; }
@@ -294,7 +291,7 @@ static bool DrawShapeFaceHandles(Core::ViewFamily& viewFamily, Engine::EditConte
     }
     if (auto* stairs = std::get_if<Engine::StaircaseParams>(&component.params)) {
         const int32_t steps = std::max(stairs->stepCount, 1);
-        return DrawExtentFaceHandles(viewFamily, edit, component, {stairs->width, stairs->totalHeight, Engine::StaircaseTotalDepth(*stairs)}, [&](int axis, float v) {
+        return DrawExtentFaceHandles(ctx, state, registry, edit, component, {stairs->width, stairs->totalHeight, Engine::StaircaseTotalDepth(*stairs)}, [&](int axis, float v) {
             if (axis == 0) {
                 stairs->width = v;
             }
@@ -313,9 +310,8 @@ static bool DrawShapeFaceHandles(Core::ViewFamily& viewFamily, Engine::EditConte
     return false;
 }
 
-Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditingOffset = false;
@@ -334,8 +330,6 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     const ProceduralMeshComponent before = edit.Get<ProceduralMeshComponent>();
     ProceduralMeshComponent component = before;
     bool bCommit = false;
-    auto* ctx = registry.Context();
-    auto* state = edit.State();
 
     if (bEditingOffset) { state->editor.bExclusiveGizmoActive = true; }
 
@@ -1094,12 +1088,12 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
 
         // Material selector
         {
-            if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material", component.material, "(none)", edit.IsMixed(&ProceduralMeshComponent::material))) {
+            if (Engine::BeginMaterialCombo(ctx, state, registry, "Material", component.material, "(none)", edit.IsMixed(&ProceduralMeshComponent::material))) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     component.material = Engine::MaterialID{};
                     bCommit = true;
                 }
-                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.material);
+                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, registry, state->editor.materialSelector, component.material);
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
                     bCommit = true;
@@ -1175,8 +1169,8 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 pivotWorld = Vec3(entityMat * Vec4(component.renderOffset, 1.0f));
 
-            const Mat4 view = viewFamily.mainView.currentViewData.view;
-            const Mat4 proj = viewFamily.mainView.currentViewData.proj;
+            const Mat4 view = registry.Frame<Core::RenderView>().currentViewData.view;
+            const Mat4 proj = registry.Frame<Core::RenderView>().currentViewData.proj;
 
             float snapArr[3] = {};
             float* snap = nullptr;
@@ -1210,7 +1204,7 @@ Engine::ComponentEditorResult Component::ProceduralMeshComponent::DrawEditor(Cor
     if (bFaceHandles && !bEditingOffset && !edit.IsMulti() && HasFaceHandles(component.params)) {
         const auto* transform = registry.TryGet<TransformComponent>(entity);
         if (!bFaceDragging && transform) { faceDragStartTranslation = transform->translation; }
-        bFaceResized = DrawShapeFaceHandles(viewFamily, edit, component, bFaceMovedEntity);
+        bFaceResized = DrawShapeFaceHandles(ctx, state, registry, edit, component, bFaceMovedEntity);
         bFaceDragging |= bFaceResized;
         const int32_t activeDot = state->editor.activeDotHandleId;
         const bool bFaceActive = activeDot >= Editor::DotHandleId::PROCEDURAL_FACE_BASE && activeDot < Editor::DotHandleId::PROCEDURAL_FACE_BASE + 6;

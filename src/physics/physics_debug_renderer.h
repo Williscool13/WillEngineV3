@@ -9,10 +9,11 @@
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Renderer/DebugRenderer.h>
+#include <glm/glm.hpp>
 
 namespace Core
 {
-struct ViewFamily;
+struct ViewFamilyDebugDraws;
 }
 
 namespace Physics
@@ -23,7 +24,7 @@ public:
     DebugRenderer();
     ~DebugRenderer() override;
 
-    void SetViewFamily(Core::ViewFamily* _viewFamily);
+    void SetDebugDraws(Core::ViewFamilyDebugDraws* debugDraws_, const glm::vec3& cameraPos_);
 
     void SetForceLowestLOD(bool bForce) { forceLowestLOD = bForce; }
 
@@ -59,7 +60,7 @@ public:
     };
 
 private:
-    Core::ViewFamily* viewFamily = nullptr;
+    Core::ViewFamilyDebugDraws* debugDraws = nullptr;
     JPH::RVec3 cameraPos;
     bool cameraPosSet = false;
     bool forceLowestLOD = false;

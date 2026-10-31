@@ -12,7 +12,7 @@
 
 namespace Core
 {
-struct ViewFamily;
+struct ViewFamilyDebugDraws;
 }
 
 namespace Engine::Component
@@ -37,14 +37,14 @@ struct LocalDDGIVolumeComponent
 
     static void Sanitize(LocalDDGIVolumeComponent& comp);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
     /**
      * Draws the fully-owned interior (the window minus its one-cell fade band); the outer window is never drawn. Face crosses only when bCrosses (selected / editing).
      */
-    static void DrawWindow(Core::ViewFamily& viewFamily, const Vec3& centre, float spacing, const Vec4& color, float lineWidth, bool bCrosses);
+    static void DrawWindow(Core::ViewFamilyDebugDraws& debugDraws, const Vec3& centre, float spacing, const Vec4& color, float lineWidth, bool bCrosses);
 
     /** Lattice min corner for an authored centre. */
     static Vec3 WindowCorner(const Vec3& centre, float spacing);

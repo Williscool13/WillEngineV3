@@ -68,9 +68,9 @@ void DebugApplyGroundForces(Engine::EngineContext* ctx, Engine::EngineState* sta
 }
 
 #ifdef WDEBUG
-void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    auto& vf = frameBuffer->mainViewFamily;
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     auto view = registry.View<Component::DebugGizmoComponent, Component::TransformComponent>();
     for (auto entity : view) {
         auto& gizmo = view.get<Component::DebugGizmoComponent>(entity);
@@ -78,7 +78,7 @@ void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Engine:
 
         switch (gizmo.shape) {
         case Component::DebugGizmoShape::Sphere:
-            DEBUG_ADD_SPHERE(vf.debugSpheres, Core::DebugSphere{
+            DEBUG_ADD_SPHERE(debugDraws.debugSpheres, Core::DebugSphere{
                 .center = transform.translation,
                 .radius = gizmo.extents.x,
                 .color = gizmo.color,
@@ -86,7 +86,7 @@ void DebugRender(Engine::EngineContext* ctx, Engine::EngineState* state, Engine:
             });
             break;
         case Component::DebugGizmoShape::Box:
-            DEBUG_ADD_BOX(vf.debugBoxes, Core::DebugBox{
+            DEBUG_ADD_BOX(debugDraws.debugBoxes, Core::DebugBox{
                 .center = transform.translation,
                 .extents = gizmo.extents,
                 .rotation = transform.rotation,

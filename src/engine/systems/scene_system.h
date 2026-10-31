@@ -41,7 +41,7 @@ StringID LoadScene(Engine::ComponentRegistry& componentRegistry, Engine::SystemR
 
 Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<Engine::RuntimeSceneMetadata> loadedScenes);
 
-void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots, Engine::SystemRegistry& registry);
+void DeserializeAll(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<Engine::Scene> snapshots);
 
 /**
  * Span must be consistent for this whole function call. Ensure that modification to the following is safe:
@@ -50,9 +50,9 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
  * @param state
  * @param scenes
  */
-void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes, Engine::SystemRegistry& registry);
+void UnloadScenes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<StringID> scenes);
 
-void UnloadScene(Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry);
+void UnloadScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId);
 
 void SaveSceneToFile(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneID);
 
@@ -195,18 +195,6 @@ inline entt::entity CopySceneEntity(Engine::EngineState* state, entt::entity src
 }
 
 template<typename T>
-bool CreateComponent(Engine::EngineState* state, entt::entity entity, Engine::SystemRegistry& registry)
-{
-    auto it = state->componentRegistry.registryMapping.Find(TypeSID<T>());
-    assert(it != nullptr && "Component type not registered");
-    if (it == nullptr) { return false; }
-    Engine::ComponentEntry& entry = state->componentRegistry.registry[*it];
-    if (!entry.canAdd(registry, entity)) { return false; }
-    entry.emplaceDefault(registry, entity);
-    return true;
-}
-
-template<typename T>
 void DestroyComponent(Engine::EngineState* state, entt::entity entity, Engine::SystemRegistry& registry)
 {
     auto it = state->componentRegistry.registryMapping.Find(TypeSID<T>());
@@ -215,12 +203,12 @@ void DestroyComponent(Engine::EngineState* state, entt::entity entity, Engine::S
     entry.remove(registry, entity);
 }
 
-inline bool CreateComponent(Engine::EngineState* state, entt::entity entity, StringID typeId, Engine::SystemRegistry& registry)
+inline bool CreateComponent(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity, StringID typeId)
 {
     auto it = state->componentRegistry.registryMapping.Find(typeId);
     assert(it != nullptr && "Component type not registered");
     Engine::ComponentEntry& entry = state->componentRegistry.registry[*it];
-    if (!entry.canAdd(registry, entity)) { return false; }
+    if (!entry.canAdd(ctx, state, registry, entity)) { return false; }
     entry.emplaceDefault(registry, entity);
     return true;
 }

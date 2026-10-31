@@ -13,15 +13,10 @@ struct EngineState;
 class SystemRegistry;
 }
 
-namespace Core
-{
-struct FrameBuffer;
-}
-
 namespace Engine
 {
 void FunctionKeyUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
-void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
+void FunctionKeyRenderUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 }
 
 #endif //WILL_ENGINE_CORE_SYSTEMS_H

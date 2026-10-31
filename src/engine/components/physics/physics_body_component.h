@@ -18,7 +18,7 @@ struct PhysicsBodyRuntime
 
     Physics::BodyHandle bodyID;
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 static_assert(sizeof(entt::entity) == sizeof(uint32_t), "body user data stores the entity in 32 bits");

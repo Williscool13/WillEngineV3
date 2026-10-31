@@ -34,21 +34,31 @@ concept InstanceOnly = requires { { T::INSTANCE_ONLY } -> std::convertible_to<bo
 // Editor hooks
 
 template<typename T>
-concept HasDrawEditor = requires(Core::ViewFamily& vf, Engine::EditContext& edit, const char* n) {
-    { T::DrawEditor(vf, edit, n) } -> std::same_as<Engine::ComponentEditorResult>;
+concept HasDrawEditor = requires(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* n) {
+    { T::DrawEditor(ctx, state, registry, edit, n) } -> std::same_as<Engine::ComponentEditorResult>;
 };
 
 template<typename T>
-concept HasCanAdd = requires(const SystemRegistry& r, entt::entity e) {
-    { T::CanAdd(r, e) } -> std::same_as<bool>;
+concept HasCanAdd = requires(const EngineContext* ctx, const EngineState* state, const SystemRegistry& r, entt::entity e) {
+    { T::CanAdd(ctx, state, r, e) } -> std::same_as<bool>;
 };
 
 template<typename C>
-concept HasOnEditPreview = requires(SystemRegistry& r, entt::entity e) { C::OnEditPreview(r, e); };
+concept HasOnEditPreview = requires(EngineContext* ctx, EngineState* state, SystemRegistry& r, entt::entity e) { C::OnEditPreview(ctx, state, r, e); };
 
 /** Also runs after undo/redo, which never call OnEditPreview, so it must cover everything OnEditPreview does. */
 template<typename C>
-concept HasOnEditCommit = requires(SystemRegistry& r, entt::entity e) { C::OnEditCommit(r, e); };
+concept HasOnEditCommit = requires(EngineContext* ctx, EngineState* state, SystemRegistry& r, entt::entity e) { C::OnEditCommit(ctx, state, r, e); };
+
+/** The Has concepts are false on a wrong signature, which would silently skip the hook. */
+template<typename C>
+void CheckComponentHooks()
+{
+    if constexpr (requires { &C::DrawEditor; }) { static_assert(HasDrawEditor<C>, "DrawEditor has the wrong signature"); }
+    if constexpr (requires { &C::CanAdd; }) { static_assert(HasCanAdd<C>, "CanAdd has the wrong signature"); }
+    if constexpr (requires { &C::OnEditPreview; }) { static_assert(HasOnEditPreview<C>, "OnEditPreview has the wrong signature"); }
+    if constexpr (requires { &C::OnEditCommit; }) { static_assert(HasOnEditCommit<C>, "OnEditCommit has the wrong signature"); }
+}
 }
 
 #endif //WILL_ENGINE_COMPONENT_TRAITS_H

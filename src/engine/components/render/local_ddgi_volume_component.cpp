@@ -22,9 +22,8 @@ void LocalDDGIVolumeComponent::Sanitize(LocalDDGIVolumeComponent& comp)
     comp.probeSpacing = glm::clamp(comp.probeSpacing, 0.25f, 2.0f);
 }
 
-Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -34,7 +33,6 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
         bEditing = false;
     }
 
-    auto* state = registry.State();
     auto* transform = registry.TryGet<TransformComponent>(entity);
     if (bEditing) {
         state->editor.bExclusiveGizmoActive = true;
@@ -71,8 +69,7 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
 
     if (transform && bEditing) {
         const auto& comp = edit.Get<LocalDDGIVolumeComponent>();
-        auto* ctx = registry.Context();
-        const auto& vd = viewFamily.mainView.currentViewData;
+        const auto& vd = registry.Frame<Core::RenderView>().currentViewData;
         const Vec4 viewport{
             static_cast<float>(ctx->windowContext.viewportOffsetX),
             static_cast<float>(ctx->windowContext.viewportOffsetY),
@@ -104,17 +101,16 @@ Engine::ComponentEditorResult LocalDDGIVolumeComponent::DrawEditor(Core::ViewFam
 
     if (transform && (open || bEditing)) {
         const auto& comp = edit.Get<LocalDDGIVolumeComponent>();
-        DrawWindow(viewFamily, transform->translation, comp.probeSpacing, Core::Math::HashColor(comp.volumeId, 0u, 0.08f, 0.84f), state->projectConfig.reflectionProbeLineWidth, true);
+        DrawWindow(registry.FrameMut<Core::ViewFamilyDebugDraws>(), transform->translation, comp.probeSpacing, Core::Math::HashColor(comp.volumeId, 0u, 0.08f, 0.84f), state->projectConfig.reflectionProbeLineWidth, true);
     }
 
     return {.bRequestRemoval = remove};
 }
 
 
-void LocalDDGIVolumeComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void LocalDDGIVolumeComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<LocalDDGIVolumeComponent>(entity);
-    auto* state = registry.State();
     if (comp.volumeId == 0) {
         comp.volumeId = state->rng();
     }
@@ -125,13 +121,13 @@ Vec3 LocalDDGIVolumeComponent::WindowCorner(const Vec3& centre, float spacing)
     return centre - Vec3(static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * 0.5f * glm::max(spacing, 0.25f));
 }
 
-void LocalDDGIVolumeComponent::DrawWindow(Core::ViewFamily& viewFamily, const Vec3& centre, float spacing, const Vec4& color, float lineWidth, bool bCrosses)
+void LocalDDGIVolumeComponent::DrawWindow(Core::ViewFamilyDebugDraws& debugDraws, const Vec3& centre, float spacing, const Vec4& color, float lineWidth, bool bCrosses)
 {
     const float s = glm::max(spacing, 0.25f);
     const Vec3 ownedHalf = Vec3((static_cast<float>(Core::LOCAL_DDGI_PROBES_PER_AXIS - 1) * 0.5f - 1.0f) * s);
     constexpr Quat identity{1.0f, 0.0f, 0.0f, 0.0f};
 
-    DEBUG_ADD_BOX(viewFamily.debugBoxes, {centre, ownedHalf, identity, color, lineWidth});
+    DEBUG_ADD_BOX(debugDraws.debugBoxes, {centre, ownedHalf, identity, color, lineWidth});
     if (!bCrosses) {
         return;
     }
@@ -143,8 +139,8 @@ void LocalDDGIVolumeComponent::DrawWindow(Core::ViewFamily& viewFamily, const Ve
         for (int side = 0; side < 2; ++side) {
             Vec3 faceCenter = centre;
             faceCenter[i] += side == 0 ? ownedHalf[i] : -ownedHalf[i];
-            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u - v, faceCenter + u + v, color, lineWidth});
-            DEBUG_ADD_LINE(viewFamily.debugLines, {faceCenter - u + v, faceCenter + u - v, color, lineWidth});
+            DEBUG_ADD_LINE(debugDraws.debugLines, {faceCenter - u - v, faceCenter + u + v, color, lineWidth});
+            DEBUG_ADD_LINE(debugDraws.debugLines, {faceCenter - u + v, faceCenter + u - v, color, lineWidth});
         }
     }
 }

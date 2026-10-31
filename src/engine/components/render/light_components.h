@@ -17,7 +17,7 @@
 
 namespace Core
 {
-struct ViewFamily;
+struct ViewFamilyDebugDraws;
 }
 
 namespace Engine::Component
@@ -85,16 +85,16 @@ struct AreaLightComponent
 
     static void Sanitize(AreaLightComponent& comp);
 
-    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /**
@@ -138,15 +138,15 @@ struct SphereLightComponent
         WILL_FIELD(bMovingObjectShadows, .key = "movingObjectShadows"),
         WILL_FIELD(shadowId))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
-    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /**
@@ -166,7 +166,7 @@ struct AreaLightRuntime
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct SphereLightRuntime
@@ -175,7 +175,7 @@ struct SphereLightRuntime
     uint32_t lightSlot{Engine::AnalyticLightStore::INVALID_SLOT};
     Engine::TextureArrayHandle bakedShadow{Engine::TextureArrayHandle::INVALID};
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** The analytic light slot of an area or sphere light, or INVALID_SLOT. */
@@ -194,8 +194,8 @@ struct LightSurfaceRuntime
     Engine::MaterialID materialID{};
     uint64_t stableId{StableIdComponent::NO_ID};
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct LightSurfaceRequest
@@ -220,7 +220,7 @@ struct DirectionalLightComponent
         WILL_FIELD(angularRadiusDegrees, .min = 0.0f, .max = 30.0f, .speed = 0.02f),
         WILL_FIELD(volumetricScale, .min = 0.0f, .max = 100.0f, .speed = 0.01f))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /**
@@ -241,11 +241,11 @@ struct SkyboxComponent
         WILL_FIELD(priority),
         WILL_FIELD(bEnabled))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** The refcounted cubemap of envMap, acquired lazily by ResolveSkyboxCubemaps. */
@@ -254,7 +254,7 @@ struct SkyboxRuntime
     static constexpr const char* COMPONENT_NAME = "SkyboxRuntime";
     Engine::CubemapHandle handle{Engine::CubemapHandle::INVALID};
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /**
@@ -285,7 +285,7 @@ struct VolumetricFogComponent
         WILL_FIELD(priority),
         WILL_FIELD(bEnabled))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /**
@@ -327,9 +327,9 @@ struct FogVolumeComponent
         WILL_FIELD(localLightScale, .min = 0.0f, .max = 10.0f, .speed = 0.01f),
         WILL_FIELD(bEnabled))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
-    static void DrawBounds(Core::ViewFamily& viewFamily, const FogVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected);
+    static void DrawBounds(Core::ViewFamilyDebugDraws& debugDraws, const FogVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected);
 };
 }
 

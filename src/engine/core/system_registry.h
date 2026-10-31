@@ -27,6 +27,24 @@ namespace Physics
 class PhysicsWorld;
 }
 
+namespace Core
+{
+struct FrameBuffer;
+struct RenderView;
+struct ViewFamily;
+struct ViewFamilyRenderables;
+struct ViewFamilyText;
+struct ViewFamilySprites;
+struct ViewFamilyFog;
+struct ViewFamilyLights;
+struct ViewFamilyBakedShadows;
+struct ViewFamilyProbes;
+struct ViewFamilyDDGIVolumes;
+struct ViewFamilySettings;
+struct ViewFamilyDebugDraws;
+struct ViewFamilyUI;
+}
+
 namespace Engine
 {
 struct Command;
@@ -63,8 +81,6 @@ public:
     SystemRegistry(const SystemRegistry&) = delete;
     SystemRegistry& operator=(const SystemRegistry&) = delete;
 
-    [[nodiscard]] EngineState* State() const { return registry.State(); }
-    [[nodiscard]] EngineContext* Context() const { return registry.Context(); }
     [[nodiscard]] const char* Name() const { return name; }
 
     [[nodiscard]] entt::entity Create()
@@ -133,6 +149,21 @@ public:
         if constexpr (requires { T::EXCLUSIVE_ONLY; }) { CheckExclusiveOnly<T>(); }
         else { CheckWrite<T>(); }
         return *ServiceSlot<T>(*Context());
+    }
+
+    /** The frame buffer being prepared, or a part of its view family. Only available during PrepareFrame. */
+    template<typename T>
+    [[nodiscard]] const T& Frame() const
+    {
+        CheckRead<T>();
+        return FrameSlot<T>(*Context());
+    }
+
+    template<typename T>
+    [[nodiscard]] T& FrameMut()
+    {
+        CheckWrite<T>();
+        return FrameSlot<T>(*Context());
     }
 
     template<typename Ctx = EngineContext>
@@ -216,7 +247,7 @@ public:
     void PushCommand(const Command& command);
 
     /**
-     * Calls Fn(SystemRegistry&, const Payload&) with exclusive access: immediately under exclusive access, otherwise when the wave's commands apply, in record order.
+     * Calls Fn(ctx, state, registry, const Payload&) with exclusive access: immediately under exclusive access, otherwise when the wave's commands apply, in record order.
      * For work a declaration cannot cover, such as spawning; the payload is copied, so it must not point at anything the wave frees.
      */
     template<auto Fn, typename Payload>
@@ -226,10 +257,15 @@ public:
             commands->Record(&ApplyRunExclusive<Fn, std::remove_cvref_t<Payload>>, entt::null, std::forward<Payload>(payload));
             return;
         }
-        Fn(*this, payload);
+        Fn(Context(), State(), *this, payload);
     }
 
 private:
+    [[nodiscard]] EngineState* State() const { return registry.State(); }
+    [[nodiscard]] EngineContext* Context() const { return registry.Context(); }
+
+    static void ApplyPushCommand(Registry& registry, entt::entity, void* payload);
+
     /** Context is a template parameter so EngineContext only has to be complete where a service is used. */
     template<typename T, typename Context>
     static T* ServiceSlot(Context& ctx)
@@ -253,12 +289,34 @@ private:
         else { static_assert(sizeof(T) == 0, "not a service"); }
     }
 
+    template<typename T, typename Context>
+    static T& FrameSlot(Context& ctx)
+    {
+        assert(ctx.services.frameBuffer != nullptr && "The frame buffer is only available during PrepareFrame");
+        auto& family = ctx.services.frameBuffer->mainViewFamily;
+        if constexpr (std::is_same_v<T, Core::FrameBuffer>) { return *ctx.services.frameBuffer; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamily>) { return family; }
+        else if constexpr (std::is_same_v<T, Core::RenderView>) { return family.mainView; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyRenderables>) { return family.renderables; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyText>) { return family.text; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilySprites>) { return family.spriteDraws; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyFog>) { return family.fog; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyLights>) { return family.lights; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyBakedShadows>) { return family.bakedShadows; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyProbes>) { return family.probes; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyDDGIVolumes>) { return family.ddgiVolumes; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilySettings>) { return family.settings; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyDebugDraws>) { return family.debugDraws; }
+        else if constexpr (std::is_same_v<T, Core::ViewFamilyUI>) { return family.ui; }
+        else { static_assert(sizeof(T) == 0, "not part of the frame buffer"); }
+    }
+
     template<auto Fn, typename Payload>
     static void ApplyRunExclusive(Registry& storage, entt::entity, void* payload)
     {
         Payload& value = *static_cast<Payload*>(payload);
         SystemRegistry registry{storage, AccessSet::EXCLUSIVE, nullptr, "RunExclusive"};
-        Fn(registry, std::as_const(value));
+        Fn(storage.Context(), storage.State(), registry, std::as_const(value));
         value.~Payload();
     }
 
@@ -324,7 +382,7 @@ template<RegistryHook Fn>
 void Registry::HookThunk(Registry& self, entt::registry&, entt::entity entity)
 {
     SystemRegistry registry{self, AccessSet::EXCLUSIVE, nullptr, "Hook"};
-    Fn(registry, entity);
+    Fn(self.Context(), self.State(), registry, entity);
 }
 } // Engine
 

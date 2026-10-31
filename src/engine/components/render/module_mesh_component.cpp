@@ -20,7 +20,7 @@
 
 namespace Engine::Component
 {
-void ModuleMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void ModuleMeshComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.Get<ModuleMeshComponent>(entity);
@@ -33,7 +33,7 @@ void ModuleMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::en
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void ModuleMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void ModuleMeshComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<ModuleMeshLoadRequest>(entity);
@@ -44,22 +44,19 @@ void ModuleMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::enti
 
 namespace Engine
 {
-bool Component::ModuleMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool Component::ModuleMeshComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::ModuleMeshComponent>(registry, entity);
 }
 
-void Component::ModuleMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::ModuleMeshComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<ModuleMeshLoadingFlag>(entity);
 }
 
-Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const auto& component = edit.Get<ModuleMeshComponent>();
-    auto* ctx = registry.Context();
-    auto* state = edit.State();
 
     bool open = ImGui::CollapsingHeader("Module Mesh", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -92,7 +89,7 @@ Engine::ComponentEditorResult Component::ModuleMeshComponent::DrawEditor(Core::V
                 if (ImGui::Selectable("(default)", !component.slotMaterials[slot].IsValid())) {
                     edit.Modify<ModuleMeshComponent>([slot](ModuleMeshComponent& c) { c.slotMaterials[slot] = Engine::MaterialID{}; });
                 }
-                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.slotMaterials[slot]);
+                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, registry, state->editor.materialSelector, component.slotMaterials[slot]);
                 if (picked.IsValid() && picked != component.slotMaterials[slot]) {
                     edit.Modify<ModuleMeshComponent>([slot, picked](ModuleMeshComponent& c) { c.slotMaterials[slot] = picked; });
                 }

@@ -20,7 +20,7 @@ inline constexpr uint32_t MAX_AFTER_ENTRIES = 4;
 /**
  * Writes conflict with every other access to the same id. DeferredWrites apply after the wave in registration order, so they do not conflict
  * with each other, only with Reads and Writes. After names earlier-registered systems that must finish first.
- * Engine state only needs a name if two systems in one phase touch it and one writes. State that only exclusive systems write stays undeclared; they run alone.
+ * Plain engine state only needs a name if two systems in one phase touch it and one writes. State that only exclusive systems write stays undeclared; they run alone.
  */
 struct AccessSet
 {

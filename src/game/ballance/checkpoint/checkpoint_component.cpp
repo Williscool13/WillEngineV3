@@ -14,19 +14,18 @@
 
 namespace Ballance::Component
 {
-void CheckpointComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void CheckpointComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<CheckpointComponent>(entity);
     if (comp.checkpointId.id == 0) {
-        auto* state = registry.State();
         comp.checkpointId = StringID(state->rng());
     }
 }
 
 
-Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<CheckpointComponent>();
     bool open = ImGui::CollapsingHeader("Checkpoint", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -40,7 +39,6 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
         ImGui::TextUnformatted(edit.IsMixed(&CheckpointComponent::checkpointId) ? "ID: --" : idLabel.c_str());
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 50.f);
         if (ImGui::SmallButton("Regenerate")) {
-            Engine::EngineState* state = edit.State();
             edit.Modify<CheckpointComponent>([state](CheckpointComponent& c) { c.checkpointId = StringID(state->rng()); });
         }
         Engine::EditWidgets::DragInt(edit, "Priority", &CheckpointComponent::priority);
@@ -60,7 +58,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
         constexpr float kSphereRadius = 0.15f;
         constexpr float kArrowLength = 1.0f;
 
-        DEBUG_ADD_SPHERE(viewFamily.debugSpheres, Core::DebugSphere{
+        DEBUG_ADD_SPHERE(debugDraws.debugSpheres, Core::DebugSphere{
             .center = spawnPos,
             .radius = kSphereRadius,
             .color = kSpawnColor,
@@ -68,7 +66,7 @@ Engine::ComponentEditorResult CheckpointComponent::DrawEditor(Core::ViewFamily& 
 
         const glm::quat rot = glm::quat(glm::radians(component.spawnRotation));
         const glm::vec3 forward = rot * glm::vec3(0.0f, 0.0f, -1.0f);
-        DEBUG_ADD_LINE(viewFamily.debugLines, Core::DebugLine{
+        DEBUG_ADD_LINE(debugDraws.debugLines, Core::DebugLine{
             .start = spawnPos,
             .end = spawnPos + forward * kArrowLength,
             .color = kSpawnColor,

@@ -14,9 +14,8 @@
 namespace Engine::Component
 {
 
-Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const auto& comp = edit.Get<EntityFolderComponent>();
     bool open = ImGui::CollapsingHeader("Folder##entityfolder", ImGuiTreeNodeFlags_DefaultOpen);
 
@@ -52,7 +51,7 @@ Engine::ComponentEditorResult EntityFolderComponent::DrawEditor(Core::ViewFamily
     return {};
 }
 
-bool SceneFolderComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool SceneFolderComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return false;
 }

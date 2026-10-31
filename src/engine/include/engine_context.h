@@ -31,6 +31,11 @@ namespace enki
 class TaskScheduler;
 }
 
+namespace Core
+{
+struct FrameBuffer;
+}
+
 namespace Audio
 {
 class AudioManager;
@@ -251,6 +256,8 @@ class EngineServices
     LocalShadowSelection* localShadowSelection{nullptr};
     Audio::AudioManager* audioManager{nullptr};
     Physics::PhysicsWorld* physicsWorld{nullptr};
+    /** Only set while the PrepareFrame phase runs. */
+    Core::FrameBuffer* frameBuffer{nullptr};
 
     friend class SystemRegistry;
     friend class WillEngine;

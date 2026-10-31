@@ -25,7 +25,7 @@ GTAOFrame SetupGroundTruthAmbientOcclusion(RenderGraph& graph,
                                            uint32_t sceneIndex)
 {
     ZoneScoped;
-    const Core::GTAOConfiguration& gtaoConfig = viewFamily.gtaoConfig;
+    const Core::GTAOConfiguration& gtaoConfig = viewFamily.settings.gtaoConfig;
 
     uint32_t denoisePassCount = static_cast<uint32_t>(gtaoConfig.denoisePasses + 0.5f);
     denoisePassCount = denoisePassCount < 1u ? 1u : (denoisePassCount > 8u ? 8u : denoisePassCount);

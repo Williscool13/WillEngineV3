@@ -486,9 +486,9 @@ void NrdDenoiser::StageSettings(const Core::ViewFamily& viewFamily, Core::Extent
     stagedCommon.isMotionVectorInWorldSpace = false;
 
     // Same sample sequence and indexing as GenerateSceneData/ComputeRelaxJitterDelta, in pixel units
-    const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(viewFamily.aaConfig.mode, viewFamily.resolutionScale);
-    const HaltonSample currJitter = ComputeJitterSample(viewFamily.aaConfig.mode, frameNumber, jitterPhaseCount);
-    const HaltonSample prevJitter = ComputeJitterSample(viewFamily.aaConfig.mode, frameNumber - 1, jitterPhaseCount);
+    const uint32_t jitterPhaseCount = ComputeJitterPhaseCount(viewFamily.settings.aaConfig.mode, viewFamily.settings.resolutionScale);
+    const HaltonSample currJitter = ComputeJitterSample(viewFamily.settings.aaConfig.mode, frameNumber, jitterPhaseCount);
+    const HaltonSample prevJitter = ComputeJitterSample(viewFamily.settings.aaConfig.mode, frameNumber - 1, jitterPhaseCount);
     stagedCommon.cameraJitter[0] = currJitter.x;
     stagedCommon.cameraJitter[1] = currJitter.y;
     stagedCommon.cameraJitterPrev[0] = prevJitter.x;

@@ -9,15 +9,14 @@
 
 namespace Engine::Component
 {
-void StableIdComponent::OnUpdate(Engine::SystemRegistry& registry, entt::entity entity)
+void StableIdComponent::OnUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     assert(false && "StableIdComponent should never be updated");
 }
 
-void StableIdComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void StableIdComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<StableIdComponent>(entity);
-    auto* state = registry.State();
 
     while (comp.id.id == 0 || state->stableIdToEntityMap.Contains(comp.id)) {
         comp.id = Generate(state->rng);
@@ -26,10 +25,9 @@ void StableIdComponent::OnConstruct(Engine::SystemRegistry& registry, entt::enti
 }
 
 
-void StableIdComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void StableIdComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& comp = registry.Get<StableIdComponent>(entity);
-    auto* state = registry.State();
     state->stableIdToEntityMap.Remove(comp.id);
 }
 
@@ -37,7 +35,7 @@ void StableIdComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity
 
 namespace Engine
 {
-Engine::ComponentEditorResult Component::StableIdComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::StableIdComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
     const auto& component = edit.Get<Component::StableIdComponent>();
     char headerLabel[64];

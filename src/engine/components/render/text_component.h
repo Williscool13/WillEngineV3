@@ -16,7 +16,6 @@
 #include "engine/resources/model/model_store.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -43,10 +42,10 @@ struct TextComponent
         WILL_FIELD(anchor),
         WILL_FIELD(wrapWidth, .min = 0.0f, .max = 1000.0f, .speed = 0.05f))
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 struct TextRuntime
@@ -59,7 +58,7 @@ struct TextRuntime
      */
     Engine::ModelStore::Range modelRange{};
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct TextFontRequest
@@ -68,7 +67,7 @@ struct TextFontRequest
 };
 
 void UnloadTextComponent(TextComponent& comp, Engine::SystemRegistry& registry, entt::entity entity);
-void LoadTextComponent(TextComponent& comp, Engine::SystemRegistry& registry, entt::entity entity);
+void LoadTextComponent(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, TextComponent& comp, entt::entity entity);
 } // Engine::Component
 
 #endif //WILL_ENGINE_TEXT_COMPONENT_H

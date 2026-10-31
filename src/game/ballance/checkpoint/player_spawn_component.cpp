@@ -12,7 +12,7 @@
 namespace Ballance
 {
 
-Engine::ComponentEditorResult Component::PlayerSpawnComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::PlayerSpawnComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Player Spawn", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

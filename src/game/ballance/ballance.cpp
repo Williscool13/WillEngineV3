@@ -194,10 +194,10 @@ void CollectSystems(Engine::SystemGraph& graph)
         Engine::AccessSet::EXCLUSIVE);
 }
 
-void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void PrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
 #ifdef WDEBUG
-    DebugRender(ctx, state, registry, frameBuffer);
+    DebugRender(ctx, state, registry);
 #endif
 }
 

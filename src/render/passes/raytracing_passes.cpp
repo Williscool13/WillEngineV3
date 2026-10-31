@@ -33,7 +33,7 @@ RDGBufferRing SetupTLASBuild(RenderGraph& graph,
                              const SceneResources& scene)
 {
     ZoneScoped;
-    const uint32_t slotCount = viewFamily.instanceCount;
+    const uint32_t slotCount = viewFamily.renderables.instanceCount;
     if (slotCount == 0) { return {}; }
     if (!scene.instances.IsValid() || !scene.models.IsValid() || !scene.materials.IsValid()) { return {}; }
 
@@ -197,7 +197,7 @@ SunShadowFrame SetupRTSunShadow(RenderGraph& graph,
         pass.WriteStorageImage(sunShadow.depth);
         pass.WriteStorageImage(sunShadow.gbuffer);
     }
-    pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, frameNumber, bAlphaTest = viewFamily.sigmaParams.bAlphaTest, &scene,
+    pass.Execute([pipelineManager, sceneIndex, shadowExtent, fullExtent, pixelScale, bHalfRes, frameNumber, bAlphaTest = viewFamily.settings.sigmaParams.bAlphaTest, &scene,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   shadowOut = sunShadow.shadow, depthOut = sunShadow.depth, gbufferOut = sunShadow.gbuffer](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_sun_shadow"_sid);
@@ -280,7 +280,7 @@ bool SetupRTGroundTruthDI(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, &scene, accum,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity, &scene, accum,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_ground_truth_di"_sid);
@@ -364,7 +364,7 @@ bool SetupRTGroundTruthGI(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, &scene, accum,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity, &scene, accum,
                   depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_ground_truth_gi"_sid);
@@ -450,9 +450,9 @@ bool SetupRTGroundTruthFull(RenderGraph& graph,
     pass.ReadSampledImage(targets.gbufferOne);
     pass.ReadSampledImage(targets.gbufferTwo);
     pass.WriteStorageImage(targets.colorOutput);
-    const uint32_t dofPacked = glm::packHalf2x16(glm::vec2(glm::max(0.0f, viewFamily.groundTruthDofAperture), viewFamily.postProcessConfig.dofFocusDistance));
+    const uint32_t dofPacked = glm::packHalf2x16(glm::vec2(glm::max(0.0f, viewFamily.settings.groundTruthDofAperture), viewFamily.settings.postProcessConfig.dofFocusDistance));
 
-    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, samplesPerFrame, dofPacked, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
+    pass.Execute([pipelineManager, sceneIndex, accumulationCount, frameNumber, renderExtent, samplesPerFrame, dofPacked, skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity,
                   &scene, accum, depth = targets.depthCopy, gbufferOne = targets.gbufferOne,
                   gbufferTwo = targets.gbufferTwo, output = targets.colorOutput](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("rt_ground_truth_full"_sid);

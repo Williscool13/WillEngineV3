@@ -28,12 +28,12 @@ static void SelectOnly(Engine::EngineState* state, entt::entity entity)
     state->editor.selectedEntities.PushBack(entity);
 }
 
-void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void DrawSpawnPanel(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_SPAWN];
     if (!bOpen) { return; }
     if (ImGui::Begin(EDITOR_WINDOWS[EDITOR_WINDOW_SPAWN].title, &bOpen)) {
-        const auto& viewData = frameBuffer->mainViewFamily.mainView.currentViewData;
+        const auto& viewData = registry.Frame<Core::RenderView>().currentViewData;
         const glm::vec3 spawnPos = viewData.cameraPos + normalize(viewData.cameraForward) * 5.0f;
         const bool bHasScene = state->scene.currentSceneId.IsValid();
         if (!bHasScene) {

@@ -15,7 +15,6 @@
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -42,7 +41,7 @@ struct DebugGizmoComponent
         WILL_FIELD(color),
         WILL_FIELD(lineWidth, .min = 0.01f, .max = 1.0f, .speed = 0.005f))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 }
 

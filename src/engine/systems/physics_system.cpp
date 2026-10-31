@@ -356,7 +356,7 @@ void UpdatePhysicsEditor(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
 #ifdef WDEBUG
@@ -402,7 +402,7 @@ void DebugRenderPhysics(Engine::EngineContext* ctx, Engine::EngineState* state, 
         filter.SetDrawAwake((mask & Engine::PHYSICS_DEBUG_AWAKE) != 0);
     }
 
-    registry.ServiceMut<Physics::PhysicsWorld>().DrawDebug(&frameBuffer->mainViewFamily, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
+    registry.ServiceMut<Physics::PhysicsWorld>().DrawDebug(&registry.FrameMut<Core::ViewFamilyDebugDraws>(), registry.Frame<Core::RenderView>().currentViewData.cameraPos, true, (mask & Engine::PHYSICS_DEBUG_SLEEP_COLOR) != 0);
 #endif
 }
 
@@ -632,7 +632,7 @@ struct PhysicsMeshKickoff
     bool bFailed{false};
 };
 
-static void ApplyPhysicsMeshKickoff(Engine::SystemRegistry& registry, const PhysicsMeshKickoff& kickoff)
+static void ApplyPhysicsMeshKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const PhysicsMeshKickoff& kickoff)
 {
         auto* runtime = registry.Valid(kickoff.entity) ? registry.TryGetMut<Component::PhysicsShapeRuntime>(kickoff.entity) : nullptr;
     if (!runtime || runtime->colliders.Size() != kickoff.loaded.Size()) {

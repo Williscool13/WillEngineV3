@@ -55,13 +55,13 @@ static RDGTexture SetupShadowViewDepth(RenderGraph& graph,
                                        uint32_t sceneIndex)
 {
     ZoneScoped;
-    if (viewFamily.instanceCount == 0 || viewCount == 0) {
+    if (viewFamily.renderables.instanceCount == 0 || viewCount == 0) {
         return {};
     }
 
     const char* prefix = desc.passPrefix;
     constexpr RenderCategory CATEGORY = RenderCategory::ShadowMaps;
-    const uint32_t instanceCount = viewFamily.instanceCount;
+    const uint32_t instanceCount = viewFamily.renderables.instanceCount;
     const uint32_t elementCount = instanceCount * viewCount;
     const uint32_t meshletUpperBound = cullSizes.visibleMeshletUpperBound;
     const auto lodBias = static_cast<int32_t>(LOD_BIAS);
@@ -236,8 +236,8 @@ RDGTexture SetupCSMDepth(RenderGraph& graph,
         .atlasName = "csm_atlas"_sid,
         .opaquePipeline = "csm_depth"_sid,
         .cutoutPipeline = "csm_depth_cutout"_sid,
-        .atlasExtent = CSMAtlasExtent(cascadeCount, static_cast<uint32_t>(viewFamily.csm.resolution)),
-        .slopeBias = viewFamily.csm.slopeBias,
+        .atlasExtent = CSMAtlasExtent(cascadeCount, static_cast<uint32_t>(viewFamily.settings.csm.resolution)),
+        .slopeBias = viewFamily.settings.csm.slopeBias,
         .readbackOffset = offsetof(ReadbackStruct, shadowMeshletCount),
         .requiredInstanceFlags = 0,
     };
@@ -254,14 +254,14 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
 {
     ZoneScoped;
     constexpr StringID ATLAS_NAME = "local_shadow_atlas"_sid;
-    const glm::uvec2 atlasExtent = viewFamily.localShadowAtlasExtent;
+    const glm::uvec2 atlasExtent = viewFamily.lights.localShadowAtlasExtent;
     const bool bFresh = liveAtlasExtent != atlasExtent || !graph.ResourceHasVersion(ATLAS_NAME, 0);
     const RDGTexture atlas = graph.CreateVersionedTexture(ATLAS_NAME, TextureInfo{CSM_DEPTH_FORMAT, atlasExtent.x, atlasExtent.y, 1}, 0, bFresh ? VersionSource::Fresh : VersionSource::NoShiftReadWrite, false,
                                                           VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, false, CLEAR_DEPTH_FAR).Current();
     liveAtlasExtent = atlasExtent;
 
     // A fresh atlas holds nothing, so every active tile draws; otherwise only the tiles the engine marked dirty.
-    const uint32_t drawTiles = bFresh ? viewFamily.localShadowActiveTiles : viewFamily.localShadowDirtyTiles & viewFamily.localShadowActiveTiles;
+    const uint32_t drawTiles = bFresh ? viewFamily.lights.localShadowActiveTiles : viewFamily.lights.localShadowDirtyTiles & viewFamily.lights.localShadowActiveTiles;
     if (drawTiles == 0u) {
         return atlas;
     }
@@ -271,12 +271,12 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
         .bufferPrefix = "local_shadow_",
         .atlas = atlas,
         .clearTiles = bFresh ? 0u : drawTiles,
-        .tileViews = viewFamily.localShadowViews.Data(),
+        .tileViews = viewFamily.lights.localShadowViews.Data(),
         .atlasName = ATLAS_NAME,
         .opaquePipeline = "local_shadow_depth"_sid,
         .cutoutPipeline = "local_shadow_depth_cutout"_sid,
         .atlasExtent = atlasExtent,
-        .slopeBias = viewFamily.localShadows.slopeBias,
+        .slopeBias = viewFamily.settings.localShadows.slopeBias,
         .readbackOffset = offsetof(ReadbackStruct, localShadowMeshletCount),
         .requiredInstanceFlags = 0,
     };
@@ -286,7 +286,7 @@ RDGTexture SetupLocalShadowDepth(RenderGraph& graph,
     uint32_t viewCount = 0;
     for (uint32_t tile = 0; tile < LOCAL_SHADOW_MAX_VIEWS; ++tile) {
         if ((drawTiles & (1u << tile)) == 0u) { continue; }
-        const ShadowViewGPU& view = viewFamily.localShadowViews[tile];
+        const ShadowViewGPU& view = viewFamily.lights.localShadowViews[tile];
         views[viewCount++] = view;
     }
     SetupShadowViewDepth(graph, pipelineManager, viewFamily, bufferSizes.localShadowCull, scene, drawViews.buffer, viewCount, desc, sceneIndex);
@@ -371,7 +371,7 @@ RDGTexture SetupContactShadows(RenderGraph& graph,
     RenderPass& pass = graph.AddPass("Contact Shadows"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, RenderCategory::ShadowMaps);
     pass.ReadSampledImage(targets.depthCopy);
     pass.WriteStorageImage(mask);
-    const Core::CSMParams& csm = viewFamily.csm;
+    const Core::CSMParams& csm = viewFamily.settings.csm;
     const glm::vec3 tuning{glm::max(csm.contactThickness, 1e-5f), csm.contactBilinearThreshold, glm::max(csm.contactContrast, 1.0f)};
     const bool bIgnoreEdges = csm.bContactIgnoreEdges;
     const bool bDebugEdges = csm.bContactDebugEdges;
@@ -486,8 +486,8 @@ void SetupShadowsResolve(RenderGraph& graph,
         shadowsResolvePass.ReadSampledImage(gtaoFiltered);
     }
 
-    const float temporalMaxAccum = viewFamily.gtaoConfig.temporalMaxAccum;
-    const float temporalClampScale = viewFamily.gtaoConfig.temporalClampScale;
+    const float temporalMaxAccum = viewFamily.settings.gtaoConfig.temporalMaxAccum;
+    const float temporalClampScale = viewFamily.settings.gtaoConfig.temporalClampScale;
     const bool bTemporal = bHasGTAO && temporalMaxAccum > 0.0f;
     RDGTextureRing gtaoTemporal{};
     if (bTemporal) {
@@ -630,7 +630,7 @@ SigmaDenoiseFrame SetupSigmaShadowDenoise(RenderGraph& graph,
     ZoneScoped;
     if (!sunShadow.shadow.IsValid()) { return {}; }
 
-    const Core::SIGMAParams& sigma = viewFamily.sigmaParams;
+    const Core::SIGMAParams& sigma = viewFamily.settings.sigmaParams;
     const RDGTexture rtShadow = sunShadow.shadow;
     // Half res denoises in half-res space against the trace's aux guides; full res uses the full gbuffer.
     const RDGTexture sigmaDepth = sigma.bHalfRes ? sunShadow.depth : targets.depthCopy;
@@ -713,7 +713,7 @@ void SetupSigmaShadowTemporal(RenderGraph& graph,
     ZoneScoped;
     if (!sunShadow.sigmaShadow.IsValid()) { return; }
 
-    const Core::SIGMAParams& sigma = viewFamily.sigmaParams;
+    const Core::SIGMAParams& sigma = viewFamily.settings.sigmaParams;
     const RDGTexture shadowTex = denoise.blurred;
     const RDGTexture tilesSmoothed = denoise.tilesSmoothed;
     const RDGTexture sigmaDepth = sigma.bHalfRes ? sunShadow.depth : targets.depthCopy;

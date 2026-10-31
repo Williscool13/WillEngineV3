@@ -162,14 +162,14 @@ void SanitizeViewFamily(Core::ViewFamily& viewFamily, PipelineManager* pipelineM
         return exists;
     };
 
-    for (Core::ActiveMaterial& active : viewFamily.activeMaterials) {
+    for (Core::ActiveMaterial& active : viewFamily.renderables.activeMaterials) {
         if (!checkExists(active.material.fragmentShader)) {
             active.material.fragmentShader = "error_unlit"_sid;
         }
     }
 
-    if (viewFamily.lightingShaderOverride) {
-        viewFamily.lightingShaderOverride = pipelineManager->ResolveLightingShaderForMode(viewFamily.lightingShaderOverride, viewFamily.lightingMode);
+    if (viewFamily.settings.lightingShaderOverride) {
+        viewFamily.settings.lightingShaderOverride = pipelineManager->ResolveLightingShaderForMode(viewFamily.settings.lightingShaderOverride, viewFamily.settings.lightingMode);
     }
 }
 
@@ -178,8 +178,8 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
     // Text finalization
     {
         // Sort quads by (fontCurveByteOffset, textMaterialIndex) so each dispatch is wave-uniform on font curve data.
-        auto& quads = viewFamily.worldGlyphQuads;
-        const auto& cpuInsts = viewFamily.textInstances;
+        auto& quads = viewFamily.text.worldGlyphQuads;
+        const auto& cpuInsts = viewFamily.text.textInstances;
         std::sort(quads.Data(), quads.Data() + quads.Size(), [&](const WorldGlyphQuad& a, const WorldGlyphQuad& b) {
             const Core::TextInstanceDataFull& ia = cpuInsts[a.drawCallIndex];
             const Core::TextInstanceDataFull& ib = cpuInsts[b.drawCallIndex];
@@ -189,7 +189,7 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
             return ia.textMaterialIndex < ib.textMaterialIndex;
         });
 
-        auto& drawCalls = viewFamily.textDrawCalls;
+        auto& drawCalls = viewFamily.text.textDrawCalls;
         if (!quads.IsEmpty()) {
             uint32_t runStart = 0;
             const Core::TextInstanceDataFull* prev = &cpuInsts[quads[0].drawCallIndex];
@@ -207,13 +207,13 @@ void PrepareRenderFamily(Core::ViewFamily& viewFamily)
 
     // Sprite batch finalization
     {
-        auto& sprites = viewFamily.sprites;
+        auto& sprites = viewFamily.spriteDraws.sprites;
         std::sort(sprites.Data(), sprites.Data() + sprites.Size(), [](const Core::Sprite& a, const Core::Sprite& b) {
             if (a.textureIndex != b.textureIndex) { return a.textureIndex < b.textureIndex; }
             return a.samplerIndex < b.samplerIndex;
         });
 
-        auto& batches = viewFamily.spriteBatches;
+        auto& batches = viewFamily.spriteDraws.spriteBatches;
         if (!sprites.IsEmpty()) {
             uint32_t runStart = 0;
             uint32_t prevTex = sprites[0].textureIndex;
@@ -262,19 +262,19 @@ SceneBufferSizes ComputeSceneBufferSizes(Core::ViewFamily& viewFamily, ReadbackS
 {
     SceneBufferSizes sizes{};
 
-    _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.modelCount));
+    _limits.highestModelCount = std::max(_limits.highestModelCount, NextPowerOfTwo(viewFamily.renderables.modelCount));
     _limits.highestLightingCount = std::max(_limits.highestLightingCount, NextPowerOfTwo(_pipelineManager->GetLightingPipelines().Size()));
 
-    uint32_t totalInstanceCountThisFrame = viewFamily.instanceCount;
+    uint32_t totalInstanceCountThisFrame = viewFamily.renderables.instanceCount;
     _limits.highestInstanceCount = std::max(_limits.highestInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestTLASInstanceCount = std::max(_limits.highestTLASInstanceCount, NextPowerOfTwo(totalInstanceCountThisFrame));
     _limits.highestMeshletCount = std::max(_limits.highestMeshletCount, NextPowerOfTwo(readbackData->meshletCount));
     _limits.highestShadowMeshletCount = std::max(_limits.highestShadowMeshletCount, NextPowerOfTwo(readbackData->shadowMeshletCount));
     _limits.highestLocalShadowMeshletCount = std::max(_limits.highestLocalShadowMeshletCount, NextPowerOfTwo(readbackData->localShadowMeshletCount));
-    _limits.highestGlyphQuadCount = std::max(_limits.highestGlyphQuadCount, NextPowerOfTwo(viewFamily.worldGlyphQuads.Size()));
-    _limits.highestUIGlyphQuadCount = std::max(_limits.highestUIGlyphQuadCount, NextPowerOfTwo(viewFamily.uiGlyphQuads.Size()));
-    _limits.highestTextInstanceCount = std::max(_limits.highestTextInstanceCount, NextPowerOfTwo(viewFamily.textInstances.Size()));
-    _limits.highestTextMaterialCount = std::max(_limits.highestTextMaterialCount, NextPowerOfTwo(viewFamily.textMaterials.Size()));
+    _limits.highestGlyphQuadCount = std::max(_limits.highestGlyphQuadCount, NextPowerOfTwo(viewFamily.text.worldGlyphQuads.Size()));
+    _limits.highestUIGlyphQuadCount = std::max(_limits.highestUIGlyphQuadCount, NextPowerOfTwo(viewFamily.ui.uiGlyphQuads.Size()));
+    _limits.highestTextInstanceCount = std::max(_limits.highestTextInstanceCount, NextPowerOfTwo(viewFamily.text.textInstances.Size()));
+    _limits.highestTextMaterialCount = std::max(_limits.highestTextMaterialCount, NextPowerOfTwo(viewFamily.text.textMaterials.Size()));
 
 
     sizes.modelBufferSize = _limits.highestModelCount * sizeof(Model);

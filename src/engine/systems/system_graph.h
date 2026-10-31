@@ -22,11 +22,6 @@
 #include "engine/core/deferred_commands.h"
 #include "engine/core/system_registry.h"
 
-namespace Core
-{
-struct FrameBuffer;
-}
-
 namespace Engine
 {
 struct EngineContext;
@@ -69,17 +64,15 @@ struct SystemConditions
 };
 
 using SystemFn = void(*)(EngineContext*, EngineState*, SystemRegistry&);
-using SystemFrameFn = void(*)(EngineContext*, EngineState*, SystemRegistry&, Core::FrameBuffer*);
 
 struct SystemNode
 {
     const char* name{};
     SystemFn fn{};
-    SystemFrameFn frameFn{};
     SystemPhase phase{SystemPhase::PreUpdate};
     AccessSet access{};
 
-    [[nodiscard]] const void* Id() const { return fn != nullptr ? SystemId(fn) : SystemId(frameFn); }
+    [[nodiscard]] const void* Id() const { return SystemId(fn); }
 };
 
 /**
@@ -138,17 +131,7 @@ public:
         nodes.PushBack({.name = name, .fn = fn, .phase = currentPhase, .access = access});
     }
 
-    void Add(const char* name, SystemFrameFn fn, const AccessSet& access = {})
-    {
-        nodes.PushBack({.name = name, .frameFn = fn, .phase = currentPhase, .access = access});
-    }
-
     void Add(const char* name, SystemFn fn, SystemWhen when, const AccessSet& access = {})
-    {
-        if (Holds(when)) { Add(name, fn, access); }
-    }
-
-    void Add(const char* name, SystemFrameFn fn, SystemWhen when, const AccessSet& access = {})
     {
         if (Holds(when)) { Add(name, fn, access); }
     }
@@ -165,7 +148,7 @@ public:
         return false;
     }
 
-    void ExecutePhase(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+    void ExecutePhase(EngineContext* ctx, EngineState* state)
     {
         const uint32_t begin = static_cast<uint32_t>(cursor);
         const uint32_t count = static_cast<uint32_t>(nodes.Size()) - begin;
@@ -228,7 +211,7 @@ public:
             ZoneValue(waveCount);
             if (waveCount == 1 || scheduler == nullptr) {
                 for (uint32_t t = 0; t < waveCount; ++t) {
-                    RunNode(nodes[wave[t]], ctx, state, frameBuffer, CommandsFor(begin, wave[t]));
+                    RunNode(nodes[wave[t]], ctx, state, CommandsFor(begin, wave[t]));
                 }
             }
             else {
@@ -241,7 +224,7 @@ public:
 #endif
                 enki::TaskSet waveTask(waveCount, [&](enki::TaskSetPartition range, uint32_t) {
                     for (uint32_t t = range.start; t < range.end; ++t) {
-                        RunNode(nodes[wave[t]], ctx, state, frameBuffer, CommandsFor(begin, wave[t]));
+                        RunNode(nodes[wave[t]], ctx, state, CommandsFor(begin, wave[t]));
                     }
                 });
                 scheduler->AddTaskSetToPipe(&waveTask);
@@ -373,12 +356,11 @@ private:
         return nodes[node].access.bExclusive ? nullptr : &commandBuffers[node - begin];
     }
 
-    void RunNode(const SystemNode& node, EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer, DeferredCommands* commands)
+    void RunNode(const SystemNode& node, EngineContext* ctx, EngineState* state, DeferredCommands* commands)
     {
         ZoneTransientN(zone, node.name, true);
         SystemRegistry registry{*storage, node.access, commands, node.name};
-        if (node.frameFn != nullptr) { node.frameFn(ctx, state, registry, frameBuffer); }
-        else { node.fn(ctx, state, registry); }
+        node.fn(ctx, state, registry);
     }
 
     static const char* PhaseName(SystemPhase phase)

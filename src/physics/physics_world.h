@@ -14,7 +14,7 @@
 namespace Core
 {
 struct TimeFrame;
-struct ViewFamily;
+struct ViewFamilyDebugDraws;
 class MemoryManager;
 }
 
@@ -112,7 +112,7 @@ public:
     /** Bodies within maxSeparation of this body's shape, at most `capacity` of them. */
     Core::ArenaFixedVector<BodyTouch> QueryTouching(Core::Arena* arena, BodyHandle body, float maxSeparation, size_t capacity) const;
 
-    void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter = true, bool bSleepColor = false);
+    void DrawDebug(Core::ViewFamilyDebugDraws* debugDraws, const glm::vec3& cameraPos, bool bUseFilter = true, bool bSleepColor = false);
 
     // Must be called before any Jolt allocation; safe to call from game DLL on load.
     static void RegisterAllocators(Core::MemoryManager& memoryManager);

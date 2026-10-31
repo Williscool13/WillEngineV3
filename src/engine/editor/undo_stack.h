@@ -21,6 +21,7 @@ class TlsfAllocator;
 
 namespace Engine
 {
+struct EngineContext;
 struct EngineState;
 class SystemRegistry;
 
@@ -56,8 +57,8 @@ public:
     /** Closes an interaction whose widget went inactive without committing. */
     void Tick(EngineState* state, bool bAnyItemActive, SystemRegistry& registry);
 
-    bool Undo(EngineState* state, SystemRegistry& registry);
-    bool Redo(EngineState* state, SystemRegistry& registry);
+    bool Undo(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
+    bool Redo(EngineContext* ctx, EngineState* state, SystemRegistry& registry);
     void Clear();
 
     [[nodiscard]] bool CanUndo() const { return !undo.IsEmpty(); }
@@ -69,7 +70,7 @@ public:
     [[nodiscard]] const UndoRecord* Pending() const { return bPending ? &pending : nullptr; }
 
 private:
-    void Apply(EngineState* state, const UndoRecord& record, bool bBefore, SystemRegistry& registry);
+    void Apply(EngineContext* ctx, EngineState* state, SystemRegistry& registry, const UndoRecord& record, bool bBefore);
     void Push(UndoRecord&& record);
 
     Core::TlsfAllocator* allocator{nullptr};

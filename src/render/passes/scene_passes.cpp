@@ -32,7 +32,7 @@ void SetupSkyboxRendering(RenderGraph& graph,
     skyboxPass.WriteColorAttachment(targets.colorOutput);
     skyboxPass.ReadWriteDepthAttachment(targets.depthStencil);
     skyboxPass.Execute([&, pipelineManager, renderExtent, sceneIndex,
-            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.skyboxIndex, skyboxLOD = viewFamily.skyboxLOD, skyIntensity = viewFamily.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            outputColor = targets.colorOutput, depthStencil = targets.depthStencil, skyboxIndex = viewFamily.settings.skyboxIndex, skyboxLOD = viewFamily.settings.skyboxLOD, skyIntensity = viewFamily.settings.iblIntensity](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             VkViewport viewport = VkHelpers::GenerateViewport(renderExtent.width, renderExtent.height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
             VkRect2D scissor = VkHelpers::GenerateScissor(renderExtent.width, renderExtent.height);
@@ -71,7 +71,7 @@ void SetupTextForwardPass(RenderGraph& graph,
                           const SceneResources& scene)
 {
     ZoneScoped;
-    if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
+    if (viewFamily.text.worldGlyphQuads.IsEmpty()) { return; }
     if (!scene.textGlyphQuads.IsValid() || !scene.textInstances.IsValid() || !scene.textMaterials.IsValid() || !scene.fontCurves.IsValid()) { return; }
 
     const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("text_default"_sid);
@@ -119,7 +119,7 @@ void SetupTextForwardPass(RenderGraph& graph,
         VkDeviceAddress matAddr = graph.GetBufferAddress(scene.textMaterials);
         VkDeviceAddress fontCurveAddr = graph.GetBufferAddress(scene.fontCurves);
 
-        for (const Core::TextDrawCall& dc : viewFamily.textDrawCalls) {
+        for (const Core::TextDrawCall& dc : viewFamily.text.textDrawCalls) {
             uint32_t groupCount = (dc.quadCount + 15) / 16;
             TextRenderPushConstant pc{
                 .sceneData = sceneDataAddr,
@@ -146,7 +146,7 @@ void SetupTextForwardPass(RenderGraph& graph,
 void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const RenderTargets& targets, const SceneResources& scene)
 {
     ZoneScoped;
-    if (viewFamily.spriteBatches.IsEmpty()) {
+    if (viewFamily.spriteDraws.spriteBatches.IsEmpty()) {
         return;
     }
 
@@ -181,7 +181,7 @@ void SetupSpritesPass(RenderGraph& graph, PipelineManager* pipelineManager, cons
         const VkDeviceAddress sceneDataAddr = graph.GetBufferAddress(scene.sceneData);
         const VkDeviceAddress spritesAddr = graph.GetBufferAddress(scene.sprites);
 
-        for (const Core::SpriteBatch& batch : viewFamily.spriteBatches) {
+        for (const Core::SpriteBatch& batch : viewFamily.spriteDraws.spriteBatches) {
             SpritePushConstant pc{
                 .sceneData = sceneDataAddr,
                 .sprites = spritesAddr,

@@ -11,7 +11,7 @@
 
 namespace Engine
 {
-Engine::ComponentEditorResult Component::ConveyorComponent::DrawEditor(Core::ViewFamily& viewFamily, EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::ConveyorComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Conveyor", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

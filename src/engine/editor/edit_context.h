@@ -42,16 +42,14 @@ bool ValuesEqual(const V& a, const V& b)
 class EditContext
 {
 public:
-    EditContext(EngineState* state, Core::Span<const entt::entity> targets, Engine::SystemRegistry& registry);
+    EditContext(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::Span<const entt::entity> targets);
 
     [[nodiscard]] entt::entity Primary() const { return targets[0]; }
-    [[nodiscard]] Engine::SystemRegistry& Registry() const;
-    [[nodiscard]] EngineState* State() const { return state; }
     [[nodiscard]] Core::Span<const entt::entity> Targets() const { return targets; }
     [[nodiscard]] bool IsMulti() const { return targets.Size() > 1; }
 
     template<typename C>
-    [[nodiscard]] C& Get() const { return Registry().template GetMut<C>(Primary()); }
+    [[nodiscard]] C& Get() const { return registry.template GetMut<C>(Primary()); }
 
     template<typename C, typename Fn>
     void Preview(Fn&& fn)
@@ -71,7 +69,7 @@ public:
                 C::Sanitize(*c);
             }
             if constexpr (HasOnEditPreview<C>) {
-                C::OnEditPreview(registry, e);
+                C::OnEditPreview(ctx, state, registry, e);
             }
         }
     }
@@ -82,7 +80,7 @@ public:
         if constexpr (HasOnEditCommit<C>) {
             for (const entt::entity e : targets) {
                 if (registry.Has<C>(e)) {
-                    C::OnEditCommit(registry, e);
+                    C::OnEditCommit(ctx, state, registry, e);
                 }
             }
         }
@@ -144,9 +142,10 @@ private:
     void BeginUndo(StringID typeId);
     void EndUndo(StringID typeId);
 
+    EngineContext* ctx{nullptr};
     EngineState* state{nullptr};
-    Core::Span<const entt::entity> targets{};
     Engine::SystemRegistry& registry;
+    Core::Span<const entt::entity> targets{};
 };
 }
 

@@ -15,10 +15,6 @@
 #include "core/containers/inline_vector.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core
-{
-struct ViewFamily;
-}
 
 namespace Engine::Component
 {
@@ -112,7 +108,7 @@ struct PathMoverComponent
 
     static void Sanitize(PathMoverComponent& comp);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 struct PathMoverRuntime

@@ -322,11 +322,12 @@ static void AppendDiffuseGIModeText(Core::InlineString<48>& out, const Engine::L
     }
 }
 
-void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
+    const Core::FrameBuffer& frameBuffer = registry.Frame<Core::FrameBuffer>();
     Clay_SetLayoutDimensions({static_cast<float>(ctx->windowContext.viewportWidth), static_cast<float>(ctx->windowContext.viewportHeight)});
 
-    Clay_UpdateScrollContainers(true, Clay_Vector2{state->input.uiScrollAccum.x, state->input.uiScrollAccum.y}, frameBuffer->timeFrame.deltaTime);
+    Clay_UpdateScrollContainers(true, Clay_Vector2{state->input.uiScrollAccum.x, state->input.uiScrollAccum.y}, frameBuffer.timeFrame.deltaTime);
     state->input.uiScrollAccum = {};
 
     Clay_BeginLayout();
@@ -463,7 +464,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
         }
 #endif
 
-        const Core::TimeFrame& tf = frameBuffer->timeFrame;
+        const Core::TimeFrame& tf = frameBuffer.timeFrame;
         const auto renderFpsText = Core::InlineString<48>::Format("Render: %.0f FPS (%.2f ms)", tf.renderWallMs > 0.0f ? 1000.0f / tf.renderWallMs : 0.0f, tf.renderWallMs);
         const auto gpuText = Core::InlineString<48>::Format("GPU: %.2f ms", tf.gpuFrameMs);
         const auto gameFpsText = Core::InlineString<48>::Format("Game: %.0f FPS (%.2f ms)", tf.gameFps, tf.gameFps > 0.0f ? 1000.0f / tf.gameFps : 0.0f);
@@ -555,12 +556,12 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
     } // state->debug.bEnableUI
 #endif
 
-    Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer->timeFrame.deltaTime);
+    Clay_RenderCommandArray renderCommands = Clay_EndLayout(frameBuffer.timeFrame.deltaTime);
 
     const auto vpWidth = static_cast<float>(ctx->windowContext.viewportWidth);
     const auto vpHeight = static_cast<float>(ctx->windowContext.viewportHeight);
 
-    Core::ViewFamily& vf = frameBuffer->mainViewFamily;
+    Core::ViewFamilyUI& ui = registry.FrameMut<Core::ViewFamilyUI>();
     const Engine::Font* uiFont = registry.Assets().GetFont(state->uiFont);
 
     for (int32_t i = 0; i < renderCommands.length; ++i) {
@@ -572,12 +573,12 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                 const Clay_BoundingBox& bb = cmd.boundingBox;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::ScissorPush};
                 dc.scissor = Core::UIScissorCommand{static_cast<int32_t>(bb.x), static_cast<int32_t>(bb.y), static_cast<uint32_t>(bb.width), static_cast<uint32_t>(bb.height)};
-                vf.uiDrawList.PushBack(dc);
+                ui.uiDrawList.PushBack(dc);
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_SCISSOR_END:
             {
-                vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::ScissorPop});
+                ui.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::ScissorPop});
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_START:
@@ -585,12 +586,12 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                 const Clay_Color& c = cmd.renderData.overlayColor.color;
                 Core::UIDrawCommand dc{.type = Core::UICommandType::OverlayPush};
                 dc.overlay = Core::UIOverlayColorCommand{.color = {c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f}};
-                vf.uiDrawList.PushBack(dc);
+                ui.uiDrawList.PushBack(dc);
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_END:
             {
-                vf.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::OverlayPop});
+                ui.uiDrawList.PushBack(Core::UIDrawCommand{.type = Core::UICommandType::OverlayPop});
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_RECTANGLE:
@@ -606,7 +607,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                     .pxMax = {bb.x + bb.width, bb.y + bb.height},
                     .zIndex = cmd.zIndex,
                 };
-                vf.uiDrawList.PushBack(dc);
+                ui.uiDrawList.PushBack(dc);
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_IMAGE:
@@ -631,7 +632,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                     .imageBindlessIndex = bindlessIndex,
                     .zIndex = cmd.zIndex,
                 };
-                vf.uiDrawList.PushBack(dc);
+                ui.uiDrawList.PushBack(dc);
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_BORDER:
@@ -658,7 +659,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                     .pxMax = {bb.x + bb.width, bb.y + bb.height},
                     .zIndex = cmd.zIndex,
                 };
-                vf.uiDrawList.PushBack(dc);
+                ui.uiDrawList.PushBack(dc);
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_TEXT:
@@ -670,7 +671,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                 const float scale = fontSize / uiFont->header.emSize;
                 const Vec4 color{td.textColor.r / 255.0f, td.textColor.g / 255.0f, td.textColor.b / 255.0f, td.textColor.a / 255.0f};
 
-                const auto quadStart = static_cast<uint32_t>(vf.uiGlyphQuads.Size());
+                const auto quadStart = static_cast<uint32_t>(ui.uiGlyphQuads.Size());
                 uint32_t quadCount = 0;
 
                 float cursorX = bb.x;
@@ -693,7 +694,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                         const float yMin = (baselineY - g->planeTop * scale - dilatePx) / vpHeight * 2.0f - 1.0f;
                         const float yMax = (baselineY - g->planeBottom * scale + dilatePx) / vpHeight * 2.0f - 1.0f;
 
-                        vf.uiGlyphQuads.PushBack(UIGlyphQuad{
+                        ui.uiGlyphQuads.PushBack(UIGlyphQuad{
                             .color = {color.x, color.y, color.z, color.w},
                             .posMin = {xMin, yMin},
                             .posMax = {xMax, yMax},
@@ -716,7 +717,7 @@ void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state,
                     .fontCurveByteOffset = uiFont->curveByteOffset,
                     .zIndex = cmd.zIndex,
                 };
-                vf.uiDrawList.PushBack(dc);
+                ui.uiDrawList.PushBack(dc);
                 break;
             }
             default: break;

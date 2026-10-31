@@ -134,16 +134,16 @@ static void DrawQuitPrompt(EngineContext* ctx, EngineState* state, SystemRegistr
     ImGui::EndPopup();
 }
 
-static void DrawEditMenu(EngineState* state, SystemRegistry& registry)
+static void DrawEditMenu(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     UndoStack& undo = state->editor.undo;
     const bool bEditing = state->inputContext == InputContext::Editor;
 
     ImGui::BeginDisabled(!bEditing || !undo.CanUndo());
-    if (ImGui::MenuItem("Undo", "Ctrl+Z")) { undo.Undo(state, registry); }
+    if (ImGui::MenuItem("Undo", "Ctrl+Z")) { undo.Undo(ctx, state, registry); }
     ImGui::EndDisabled();
     ImGui::BeginDisabled(!bEditing || !undo.CanRedo());
-    if (ImGui::MenuItem("Redo", "Ctrl+Y")) { undo.Redo(state, registry); }
+    if (ImGui::MenuItem("Redo", "Ctrl+Y")) { undo.Redo(ctx, state, registry); }
     ImGui::EndDisabled();
 
     ImGui::Separator();
@@ -171,7 +171,7 @@ void DrawEditorMenuBar(EngineContext* ctx, EngineState* state)
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Edit")) {
-            DrawEditMenu(state, registry);
+            DrawEditMenu(ctx, state, registry);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Window")) {

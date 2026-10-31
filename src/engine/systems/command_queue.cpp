@@ -39,7 +39,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
             }
             case CommandType::PhysicsBodyConstruct: {
                 if (registry.Valid(command.entity) && registry.Has<Component::PhysicsBodyDesc>(command.entity)) {
-                    Component::PhysicsBodyDesc::DeferredConstruct(registry, command.entity);
+                    Component::PhysicsBodyDesc::DeferredConstruct(ctx, state, registry, command.entity);
                 }
                 break;
             }
@@ -115,14 +115,14 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
             }
             case CommandType::ProbeConstruct: {
                 if (registry.Valid(command.entity) && registry.Has<Component::ReflectionProbeComponent>(command.entity)) {
-                    Component::ReflectionProbeComponent::DeferredConstruct(registry, command.entity);
+                    Component::ReflectionProbeComponent::DeferredConstruct(ctx, state, registry, command.entity);
                 }
                 break;
             }
             case CommandType::TextConstruct: {
                 if (registry.Valid(command.entity)) {
                     if (auto* text = registry.TryGetMut<Component::TextComponent>(command.entity)) {
-                        Component::LoadTextComponent(*text, registry, command.entity);
+                        Component::LoadTextComponent(ctx, state, registry, *text, command.entity);
                     }
                 }
                 break;

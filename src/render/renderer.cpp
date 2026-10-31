@@ -22,7 +22,7 @@ RDGTexture SetupPostProcessing(RenderGraph& graph,
 {
     PostProcessContext ctx{
         .graph = graph,
-        .config = viewFamily.postProcessConfig,
+        .config = viewFamily.settings.postProcessConfig,
         .targets = targets,
         .scene = scene,
         .view = viewFamily,

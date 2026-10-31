@@ -29,7 +29,7 @@ void StubCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine:
 
 }
 
-void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, FrameBuffer* frameBuffer)
+void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
 
 }

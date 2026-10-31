@@ -21,22 +21,22 @@
 
 namespace Engine::Component
 {
-static PostProcessOverrideField FloatField(const char* name, const char* label, const char* group, float min, float max, float speed, void* (*resolve)(Core::ViewFamily&))
+static PostProcessOverrideField FloatField(const char* name, const char* label, const char* group, float min, float max, float speed, void* (*resolve)(Core::ViewFamilySettings&, Core::ViewFamilyFog&))
 {
     return {name, label, group, PostProcessOverrideKind::Float, min, max, speed, resolve, {}, 0};
 }
 
-static PostProcessOverrideField ColorField(const char* name, const char* label, const char* group, void* (*resolve)(Core::ViewFamily&))
+static PostProcessOverrideField ColorField(const char* name, const char* label, const char* group, void* (*resolve)(Core::ViewFamilySettings&, Core::ViewFamilyFog&))
 {
     return {name, label, group, PostProcessOverrideKind::Color, 0.0f, 1.0f, 0.01f, resolve, {}, 0};
 }
 
-static PostProcessOverrideField BoolField(const char* name, const char* label, const char* group, void* (*resolve)(Core::ViewFamily&))
+static PostProcessOverrideField BoolField(const char* name, const char* label, const char* group, void* (*resolve)(Core::ViewFamilySettings&, Core::ViewFamilyFog&))
 {
     return {name, label, group, PostProcessOverrideKind::Bool, 0.0f, 1.0f, 0.0f, resolve, {}, 0};
 }
 
-static PostProcessOverrideField EnumField(const char* name, const char* label, const char* group, Core::Span<const char* const> options, int32_t optionOffset, void* (*resolve)(Core::ViewFamily&))
+static PostProcessOverrideField EnumField(const char* name, const char* label, const char* group, Core::Span<const char* const> options, int32_t optionOffset, void* (*resolve)(Core::ViewFamilySettings&, Core::ViewFamilyFog&))
 {
     return {name, label, group, PostProcessOverrideKind::Enum, 0.0f, 0.0f, 0.0f, resolve, options, optionOffset};
 }
@@ -44,8 +44,8 @@ static PostProcessOverrideField EnumField(const char* name, const char* label, c
 static const char* const EXPOSURE_MODES[] = {"Auto", "Manual EV100", "Physical Camera"};
 static const char* const TONEMAP_OPERATORS[] = {"None", "[Simple] ACES (Hill)", "[Simple] Hable", "[Simple] Reinhard", "[Simple] Lottes", "[Simple] Reinhard-Jodie", "[Simple] Clamp", "[Filmic] Hejl-Burgess-Dawson", "[Filmic] Uchimura", "[Filmic] ACES (Narkowicz)", "[Modern] AgX", "[Modern] Khronos PBR Neutral"};
 
-#define PP_RESOLVE(member) [](Core::ViewFamily& v) -> void* { return &v.postProcessConfig.member; }
-#define FOG_RESOLVE(member) [](Core::ViewFamily& v) -> void* { return &v.volumetricFog.member; }
+#define PP_RESOLVE(member) [](Core::ViewFamilySettings& settings, Core::ViewFamilyFog&) -> void* { return &settings.postProcessConfig.member; }
+#define FOG_RESOLVE(member) [](Core::ViewFamilySettings&, Core::ViewFamilyFog& fog) -> void* { return &fog.volumetricFog.member; }
 
 static const PostProcessOverrideField OVERRIDE_FIELDS[] = {
     EnumField("exposureMode", "Exposure Mode", "Exposure", EXPOSURE_MODES, 0, PP_RESOLVE(exposureMode)),
@@ -126,9 +126,9 @@ const PostProcessOverrideField* FindPostProcessOverrideField(std::string_view na
     return nullptr;
 }
 
-Vec3 ReadPostProcessOverrideField(const PostProcessOverrideField& field, Core::ViewFamily& viewFamily)
+Vec3 ReadPostProcessOverrideField(const PostProcessOverrideField& field, Core::ViewFamilySettings& settings, Core::ViewFamilyFog& fog)
 {
-    void* p = field.resolve(viewFamily);
+    void* p = field.resolve(settings, fog);
     switch (field.kind) {
         case PostProcessOverrideKind::Float:
             return {*static_cast<float*>(p), 0.0f, 0.0f};
@@ -145,9 +145,9 @@ Vec3 ReadPostProcessOverrideField(const PostProcessOverrideField& field, Core::V
     return Vec3{0.0f};
 }
 
-void ApplyPostProcessOverride(const PostProcessOverrideField& field, Core::ViewFamily& viewFamily, const Vec3& value, float weight)
+void ApplyPostProcessOverride(const PostProcessOverrideField& field, Core::ViewFamilySettings& settings, Core::ViewFamilyFog& fog, const Vec3& value, float weight)
 {
-    void* p = field.resolve(viewFamily);
+    void* p = field.resolve(settings, fog);
     switch (field.kind) {
         case PostProcessOverrideKind::Float: {
             float& f = *static_cast<float*>(p);
@@ -196,7 +196,7 @@ float PostProcessVolumeComponent::CameraWeight(const PostProcessVolumeComponent&
     return volume.blendWeight * (1.0f - glm::clamp(distance / volume.blendRadius, 0.0f, 1.0f));
 }
 
-void PostProcessVolumeComponent::DrawBounds(Core::ViewFamily& viewFamily, const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected)
+void PostProcessVolumeComponent::DrawBounds(Core::ViewFamilyDebugDraws& debugDraws, const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected)
 {
     if (volume.bUnbound) {
         return;
@@ -205,9 +205,9 @@ void PostProcessVolumeComponent::DrawBounds(Core::ViewFamily& viewFamily, const 
     constexpr Vec4 bandColor{0.4f, 0.25f, 0.6f, 1.0f};
     constexpr Vec4 disabledColor{0.45f, 0.45f, 0.45f, 1.0f};
     const Vec3 half = glm::abs(scale);
-    DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, half, rotation, volume.bEnabled ? boxColor : disabledColor, lineWidth});
+    DEBUG_ADD_BOX(debugDraws.debugBoxes, {center, half, rotation, volume.bEnabled ? boxColor : disabledColor, lineWidth});
     if (bSelected && volume.blendRadius > 0.0f) {
-        DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, half + Vec3{volume.blendRadius}, rotation, volume.bEnabled ? bandColor : disabledColor, lineWidth});
+        DEBUG_ADD_BOX(debugDraws.debugBoxes, {center, half + Vec3{volume.blendRadius}, rotation, volume.bEnabled ? bandColor : disabledColor, lineWidth});
     }
 }
 
@@ -221,7 +221,7 @@ static int32_t FindOverride(const PostProcessVolumeComponent& comp, std::string_
     return -1;
 }
 
-static void AddToMissing(Engine::EditContext& edit, const char* name, const Vec3& value)
+static void AddToMissing(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name, const Vec3& value)
 {
     edit.Modify<PostProcessVolumeComponent>([name, &value](PostProcessVolumeComponent& c) {
         if (FindOverride(c, name) >= 0 || c.overrides.IsFull()) { return; }
@@ -232,7 +232,7 @@ static void AddToMissing(Engine::EditContext& edit, const char* name, const Vec3
     });
 }
 
-static void RemoveFromAll(Engine::EditContext& edit, std::string_view name)
+static void RemoveFromAll(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, std::string_view name)
 {
     edit.Modify<PostProcessVolumeComponent>([name](PostProcessVolumeComponent& c) {
         const int32_t index = FindOverride(c, name);
@@ -242,7 +242,7 @@ static void RemoveFromAll(Engine::EditContext& edit, std::string_view name)
     });
 }
 
-static void PreviewValue(Engine::EditContext& edit, const char* name, const Vec3& value)
+static void PreviewValue(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name, const Vec3& value)
 {
     edit.Preview<PostProcessVolumeComponent>([name, &value](PostProcessVolumeComponent& c) {
         const int32_t index = FindOverride(c, name);
@@ -252,12 +252,12 @@ static void PreviewValue(Engine::EditContext& edit, const char* name, const Vec3
     });
 }
 
-static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverrideField& f, Vec3 value, bool bMixed)
+static void DrawOverrideRow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const PostProcessOverrideField& f, Vec3 value, bool bMixed)
 {
     switch (f.kind) {
         case PostProcessOverrideKind::Float:
             if (ImGui::DragFloat(f.label, &value.x, f.speed, f.min, f.max, bMixed ? "--" : "%.4f")) {
-                PreviewValue(edit, f.name, value);
+                PreviewValue(ctx, state, registry, edit, f.name, value);
             }
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 edit.Commit<PostProcessVolumeComponent>();
@@ -266,7 +266,7 @@ static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverride
         case PostProcessOverrideKind::Color:
             ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, bMixed);
             if (ImGui::ColorEdit3(f.label, &value.x, ImGuiColorEditFlags_Float)) {
-                PreviewValue(edit, f.name, value);
+                PreviewValue(ctx, state, registry, edit, f.name, value);
             }
             ImGui::PopItemFlag();
             if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -279,7 +279,7 @@ static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverride
             const bool bChanged = ImGui::Checkbox(f.label, &b);
             ImGui::PopItemFlag();
             if (bChanged) {
-                PreviewValue(edit, f.name, Vec3{b ? 1.0f : 0.0f, 0.0f, 0.0f});
+                PreviewValue(ctx, state, registry, edit, f.name, Vec3{b ? 1.0f : 0.0f, 0.0f, 0.0f});
                 edit.Commit<PostProcessVolumeComponent>();
             }
             break;
@@ -291,7 +291,7 @@ static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverride
             if (ImGui::BeginCombo(f.label, preview)) {
                 for (int32_t i = 0; i < count; ++i) {
                     if (ImGui::Selectable(f.options[i], !bMixed && i == current)) {
-                        PreviewValue(edit, f.name, Vec3{static_cast<float>(i + f.optionOffset), 0.0f, 0.0f});
+                        PreviewValue(ctx, state, registry, edit, f.name, Vec3{static_cast<float>(i + f.optionOffset), 0.0f, 0.0f});
                         edit.Commit<PostProcessVolumeComponent>();
                     }
                 }
@@ -302,9 +302,8 @@ static void DrawOverrideRow(Engine::EditContext& edit, const PostProcessOverride
     }
 }
 
-static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edit)
+static void DrawOverrides(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit)
 {
-    const Engine::SystemRegistry& registry = edit.Registry();
     uint32_t volumeCount = 0;
     bool bAllFull = true;
     for (const entt::entity e : edit.Targets()) {
@@ -337,20 +336,20 @@ static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edi
 
         ImGui::PushID(f.name);
         if (ImGui::SmallButton("X")) {
-            RemoveFromAll(edit, f.name);
+            RemoveFromAll(ctx, state, registry, edit, f.name);
             ImGui::PopID();
             continue;
         }
         ImGui::SameLine();
         if (holders < volumeCount) {
             if (ImGui::SmallButton("+")) {
-                AddToMissing(edit, f.name, value);
+                AddToMissing(ctx, state, registry, edit, f.name, value);
             }
             ImGui::SameLine();
             ImGui::TextDisabled("%u/%u", holders, volumeCount);
             ImGui::SameLine();
         }
-        DrawOverrideRow(edit, f, value, bMixed);
+        DrawOverrideRow(ctx, state, registry, edit, f, value, bMixed);
         ImGui::PopID();
     }
 
@@ -361,7 +360,7 @@ static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edi
         ImGui::PushID(static_cast<int>(i));
         const Core::InlineString<32> unknown = o.field;
         if (ImGui::SmallButton("X")) {
-            RemoveFromAll(edit, unknown.View());
+            RemoveFromAll(ctx, state, registry, edit, unknown.View());
             ImGui::PopID();
             break;
         }
@@ -393,18 +392,16 @@ static void DrawOverrides(Core::ViewFamily& viewFamily, Engine::EditContext& edi
                 ImGui::SeparatorText(group);
             }
             if (ImGui::MenuItem(f.label)) {
-                AddToMissing(edit, f.name, ReadPostProcessOverrideField(f, viewFamily));
+                AddToMissing(ctx, state, registry, edit, f.name, ReadPostProcessOverrideField(f, registry.FrameMut<Core::ViewFamilySettings>(), registry.FrameMut<Core::ViewFamilyFog>()));
             }
         }
         ImGui::EndPopup();
     }
 }
 
-static void DrawFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const TransformComponent& transform)
+static void DrawFaceHandles(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const TransformComponent& transform)
 {
-    auto* ctx = edit.Registry().Context();
-    Engine::EngineState* state = edit.State();
-    const auto& vd = viewFamily.mainView.currentViewData;
+    const auto& vd = registry.Frame<Core::RenderView>().currentViewData;
     const Vec4 viewport{
         static_cast<float>(ctx->windowContext.viewportOffsetX),
         static_cast<float>(ctx->windowContext.viewportOffsetY),
@@ -435,9 +432,8 @@ static void DrawFaceHandles(Core::ViewFamily& viewFamily, Engine::EditContext& e
     }
 }
 
-Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -447,7 +443,6 @@ Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Core::ViewF
         bEditing = false;
     }
 
-    Engine::EngineState* state = edit.State();
     if (bEditing) {
         state->editor.bExclusiveGizmoActive = true;
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
@@ -481,13 +476,13 @@ Engine::ComponentEditorResult PostProcessVolumeComponent::DrawEditor(Core::ViewF
         ImGui::PopStyleColor();
         ImGui::EndDisabled();
         EditWidgets::SliderFloat(edit, "Blend Weight##ppv", &PostProcessVolumeComponent::blendWeight, 0.0f, 1.0f);
-        DrawOverrides(viewFamily, edit);
+        DrawOverrides(ctx, state, registry, edit);
     }
 
     const auto* transform = registry.TryGet<TransformComponent>(entity);
     if (transform && bEditing) {
-        DrawFaceHandles(viewFamily, edit, *transform);
-        DrawBounds(viewFamily, edit.Get<PostProcessVolumeComponent>(),transform->translation, transform->rotation, transform->scale, state->projectConfig.reflectionProbeLineWidth, true);
+        DrawFaceHandles(ctx, state, registry, edit, *transform);
+        DrawBounds(registry.FrameMut<Core::ViewFamilyDebugDraws>(), edit.Get<PostProcessVolumeComponent>(),transform->translation, transform->rotation, transform->scale, state->projectConfig.reflectionProbeLineWidth, true);
     }
 
     return {.bRequestRemoval = remove};

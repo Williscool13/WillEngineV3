@@ -69,7 +69,7 @@ void PropagateDirtyTransforms(EngineContext* ctx, EngineState* state, SystemRegi
 }
 
 /** A destroyed parent leaves its last composed world in place; an entity that never had a transformed parent was never composed, so its local already is its world. */
-static void ApplyOrphan(SystemRegistry& registry, const entt::entity& entity)
+static void ApplyOrphan(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity) || !registry.Has<Component::WorldTransformRuntime>(entity)) { return; }
     const auto* node = registry.TryGet<Component::HierarchyComponent>(entity);

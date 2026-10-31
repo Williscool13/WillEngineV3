@@ -32,7 +32,7 @@ void SetupVolumetricFog(RenderGraph& graph,
                         bool bResetHistory)
 {
     ZoneScoped;
-    const Core::VolumetricFog& fog = viewFamily.volumetricFog;
+    const Core::VolumetricFog& fog = viewFamily.fog.volumetricFog;
     if (!fog.bEnabled) { return; }
 
     const Core::Array<uint32_t, 2> gridSize{(renderExtent.width + VOLUMETRIC_FOG_TILE_SIZE - 1) / VOLUMETRIC_FOG_TILE_SIZE, (renderExtent.height + VOLUMETRIC_FOG_TILE_SIZE - 1) / VOLUMETRIC_FOG_TILE_SIZE};
@@ -56,11 +56,11 @@ void SetupVolumetricFog(RenderGraph& graph,
     const RDGBuffer worldGridLights = worldGrid.lightGrid;
     const RDGBuffer worldGridIndices = worldGrid.indexList;
 
-    const auto volumeCount = static_cast<uint32_t>(viewFamily.fogVolumes.Size());
+    const auto volumeCount = static_cast<uint32_t>(viewFamily.fog.fogVolumes.Size());
     RDGBuffer volumes{};
     if (volumeCount > 0) {
         const HostBufferMapping mapping = graph.OpenHostBuffer("fog_volumes"_sid, VOLUMETRIC_FOG_MAX_VOLUMES * sizeof(FogVolumeGPU));
-        memcpy(mapping.data, viewFamily.fogVolumes.Data(), volumeCount * sizeof(FogVolumeGPU));
+        memcpy(mapping.data, viewFamily.fog.fogVolumes.Data(), volumeCount * sizeof(FogVolumeGPU));
         volumes = mapping.buffer;
     }
 
@@ -101,8 +101,8 @@ void SetupVolumetricFog(RenderGraph& graph,
     const bool bDDGI = bDDGIApply && ddgi.IsValid();
     if (bDDGI) { scatterPass.ReadBuffer(ddgi.cascades); }
     scatterPass.WriteStorageImage(scatter);
-    scatterPass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, bDDGI, debugMode, frameIndex, skyboxIndex = viewFamily.skyboxIndex,
-            iblIntensity = viewFamily.iblIntensity, worldGridLights, worldGridIndices, ddgiCascades = ddgi.cascades, scatter, tileDepth, volumes, volumeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+    scatterPass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, fog, bTLAS, bWorldGrid, bHistory, scatterHistory, bDDGI, debugMode, frameIndex, skyboxIndex = viewFamily.settings.skyboxIndex,
+            iblIntensity = viewFamily.settings.iblIntensity, worldGridLights, worldGridIndices, ddgiCascades = ddgi.cascades, scatter, tileDepth, volumes, volumeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_scatter"_sid);
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
@@ -189,7 +189,7 @@ void SetupVolumetricFog(RenderGraph& graph,
         applyPass.ReadBuffer(volumes);
     }
     applyPass.Execute([&scene, pipelineManager, sceneIndex, renderExtent, gridSize, maxDistance, bPreOverlayCopy, bDebug, debugMode, frameIndex, fog, depth = targets.depthCopy, color = targets.colorOutput,
-            preOverlay = targets.preOverlayColor, integrated, debugTarget, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity, volumes, volumeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            preOverlay = targets.preOverlayColor, integrated, debugTarget, skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity, volumes, volumeCount](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipeline = pipelineManager->GetPipelineEntry("volumetric_fog_apply"_sid);
             if (!pipeline) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);

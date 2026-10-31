@@ -14,10 +14,6 @@
 #include "engine/core/environment_map_id.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core
-{
-struct ViewFamily;
-}
 
 namespace Engine
 {
@@ -70,18 +66,18 @@ struct ReflectionProbeComponent
         WILL_FIELD(standInEnvMap),
         WILL_FIELD(standInIntensity, .min = 0.0f, .max = 1.0e9f))
 
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
     /** True when the live world transform, captureOffset, or resolution no longer matches the .wprobe bake snapshot; shading uses the snapshot until rebaked. */
     static bool IsBakeStale(const Transform& world, const ReflectionProbeComponent& comp, const Engine::ProbeBakeSnapshot& snapshot, uint32_t bakedResolutionPx);
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void DeferredConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** Emplaced by the probe's OnConstruct. contentHandle is the resident cubemap for the current content, recorded on load kickoff. */
@@ -91,7 +87,7 @@ struct ReflectionProbeRuntime
     Engine::CubemapHandle contentHandle{Engine::CubemapHandle::INVALID};
     ReflectionProbeComponent::ContentSource contentSource{ReflectionProbeComponent::ContentSource::None};
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** Queues the probe for a bake; the probe bake system consumes it. */

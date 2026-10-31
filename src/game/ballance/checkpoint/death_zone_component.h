@@ -11,7 +11,6 @@
 #include "engine/components/component_types.h"
 #include "game/ballance/fwd_components.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Ballance::Component
 {
@@ -20,7 +19,7 @@ struct DeathZoneTag
     static constexpr const char* COMPONENT_DOMAIN = BALLANCE_DOMAIN;
     static constexpr const char* COMPONENT_NAME = "DeathZoneTag";
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 }
 

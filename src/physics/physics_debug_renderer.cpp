@@ -18,21 +18,18 @@ DebugRenderer::DebugRenderer()
 
 DebugRenderer::~DebugRenderer() = default;
 
-void DebugRenderer::SetViewFamily(Core::ViewFamily* _viewFamily)
+void DebugRenderer::SetDebugDraws(Core::ViewFamilyDebugDraws* debugDraws_, const glm::vec3& cameraPos_)
 {
-    viewFamily = _viewFamily;
-    if (viewFamily != nullptr) {
-        const glm::vec3& cp = viewFamily->mainView.currentViewData.cameraPos;
-        cameraPos = JPH::RVec3(cp.x, cp.y, cp.z);
-        cameraPosSet = true;
-    }
+    debugDraws = debugDraws_;
+    cameraPos = JPH::RVec3(cameraPos_.x, cameraPos_.y, cameraPos_.z);
+    cameraPosSet = true;
 }
 
 void DebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, const JPH::ColorArg inColor)
 {
-    if (!viewFamily) return;
+    if (!debugDraws) return;
 
-    DEBUG_ADD_LINE(viewFamily->debugLines, {
+    DEBUG_ADD_LINE(debugDraws->debugLines, {
         .start = PhysicsHelpers::ToGLM(inFrom),
         .end = PhysicsHelpers::ToGLM(inTo),
         .color = PhysicsHelpers::ToGLM(inColor)
@@ -42,7 +39,7 @@ void DebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, const JPH
 void DebugRenderer::DrawTriangle(JPH::RVec3Arg inV1, JPH::RVec3Arg inV2, JPH::RVec3Arg inV3,
                                  JPH::ColorArg inColor, ECastShadow inCastShadow)
 {
-    if (!viewFamily) return;
+    if (!debugDraws) return;
 
     glm::vec3 v1 = PhysicsHelpers::ToGLM(inV1);
     glm::vec3 v2 = PhysicsHelpers::ToGLM(inV2);
@@ -50,9 +47,9 @@ void DebugRenderer::DrawTriangle(JPH::RVec3Arg inV1, JPH::RVec3Arg inV2, JPH::RV
     glm::vec4 color = PhysicsHelpers::ToGLM(inColor);
 
 
-    DEBUG_ADD_LINE(viewFamily->debugLines,{.start = v1, .end = v2, .color = color});
-    DEBUG_ADD_LINE(viewFamily->debugLines,{.start = v2, .end = v3, .color = color});
-    DEBUG_ADD_LINE(viewFamily->debugLines,{.start = v3, .end = v1, .color = color});
+    DEBUG_ADD_LINE(debugDraws->debugLines,{.start = v1, .end = v2, .color = color});
+    DEBUG_ADD_LINE(debugDraws->debugLines,{.start = v2, .end = v3, .color = color});
+    DEBUG_ADD_LINE(debugDraws->debugLines,{.start = v3, .end = v1, .color = color});
 }
 
 JPH::DebugRenderer::Batch DebugRenderer::CreateTriangleBatch(const Triangle* inTriangles, int inTriangleCount)

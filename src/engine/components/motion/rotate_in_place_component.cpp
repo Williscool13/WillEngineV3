@@ -14,12 +14,13 @@
 #include "engine/components/component_editor.h"
 #include "engine/components/core_components.h"
 #include "engine/components/fwd_components.h"
+#include "engine/include/engine_context.h"
 
 namespace Engine::Component
 {
-Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<RotateInPlaceComponent>();
 
@@ -47,7 +48,7 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
             const glm::vec3 localAxis = axisLen > DIVISION_EPSILON ? component.axis / axisLen : glm::vec3(0.0f, 1.0f, 0.0f);
             const glm::vec3 worldAxis = component.bWorldSpace ? localAxis : transform->rotation * localAxis;
 
-            DEBUG_ADD_ARROW(viewFamily.debugArrows, Core::DebugArrow{
+            DEBUG_ADD_ARROW(debugDraws.debugArrows, Core::DebugArrow{
                 .start = center - worldAxis * kAxisLength,
                 .end = center + worldAxis * kAxisLength,
                 .color = kAxisColor,
@@ -61,7 +62,7 @@ Engine::ComponentEditorResult RotateInPlaceComponent::DrawEditor(Core::ViewFamil
             for (int i = 1; i <= kCircleSegments; i++) {
                 const float a = (static_cast<float>(i) / static_cast<float>(kCircleSegments)) * glm::two_pi<float>();
                 const glm::vec3 cur = center + (glm::cos(a) * u + glm::sin(a) * v) * kCircleRadius;
-                DEBUG_ADD_LINE(viewFamily.debugLines, Core::DebugLine{.start = prev, .end = cur, .color = kCircleColor, .width = 0.03f});
+                DEBUG_ADD_LINE(debugDraws.debugLines, Core::DebugLine{.start = prev, .end = cur, .color = kCircleColor, .width = 0.03f});
                 prev = cur;
             }
         }

@@ -99,13 +99,12 @@ void PathMoverComponent::Sanitize(PathMoverComponent& comp)
     }
 }
 
-Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     const entt::entity entity = edit.Primary();
     const PathMoverComponent before = edit.Get<PathMoverComponent>();
     PathMoverComponent component = before;
-    auto* state = edit.State();
 
     static int editPointIdx = -1;
     static entt::entity editEntity = entt::null;
@@ -251,8 +250,8 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
         if (hasGizmoClaim && editPointIdx < cpCount) {
             auto* transform = registry.TryGet<TransformComponent>(entity);
             if (transform) {
-                const glm::mat4 view = viewFamily.mainView.currentViewData.view;
-                const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
+                const glm::mat4 view = registry.Frame<Core::RenderView>().currentViewData.view;
+                const glm::mat4 proj = registry.Frame<Core::RenderView>().currentViewData.proj;
                 const glm::mat4 entityMat = glm::translate(glm::mat4(1.0f), transform->translation) * glm::mat4_cast(transform->rotation);
                 const glm::mat4 entityMatInv = glm::inverse(entityMat);
                 const int idx = editPointIdx;
@@ -304,7 +303,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
 
             for (int i = 0; i < cpCount; i++) {
                 glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.spline.points[i].pos, 1.0f));
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
             }
 
             // Draw the actual spline curve
@@ -320,7 +319,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                     for (int step = 1; step <= kCurveSubdivisions; step++) {
                         float t = static_cast<float>(step) / static_cast<float>(kCurveSubdivisions);
                         glm::vec3 curPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, t), 1.0f));
-                        DEBUG_ADD_LINE(viewFamily.debugLines, {prevPos, curPos, kCurveColor, 0.03f});
+                        DEBUG_ADD_LINE(debugDraws.debugLines, {prevPos, curPos, kCurveColor, 0.03f});
                         prevPos = curPos;
                     }
                 }
@@ -333,7 +332,7 @@ Engine::ComponentEditorResult PathMoverComponent::DrawEditor(Core::ViewFamily& v
                                        ? (source + progress.direction + cpCount) % cpCount
                                        : std::clamp(source + progress.direction, 0, cpCount - 1);
                 glm::vec3 progressPos = glm::vec3(entityMat * glm::vec4(component.spline.EvaluatePosition(source, target, progress.progress), 1.0f));
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {progressPos, kPointRadius * 1.5f, kProgressColor});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {progressPos, kPointRadius * 1.5f, kProgressColor});
             }
         }
     }

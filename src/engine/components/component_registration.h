@@ -21,6 +21,8 @@ template<DataComponent T> requires NamedComponent<T>
 void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin origin, bool hidden, bool hideInInspector)
 {
     static_assert(ReflectedSerializable<T>, "data components must be reflected, with FieldTraits for every field type");
+    if constexpr (requires { &T::Sanitize; }) { static_assert(HasSanitize<T>, "Sanitize has the wrong signature"); }
+    CheckComponentHooks<T>();
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
     assert(componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
@@ -35,9 +37,9 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
             DeserializeFields(comp, r);
             reg.Set<T>(e, std::move(comp));
         },
-        [](const Engine::SystemRegistry& reg, entt::entity e) -> bool {
+        [](const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& reg, entt::entity e) -> bool {
             if constexpr (HasCanAdd<T>) {
-                return T::CanAdd(reg, e);
+                return T::CanAdd(ctx, state, reg, e);
             }
             else {
                 return true;
@@ -52,12 +54,12 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         [](const Engine::SystemRegistry& srcReg, entt::entity srcEntity, Engine::SystemRegistry& dstReg, entt::entity dstEntity) {
             dstReg.Set<T>(dstEntity, srcReg.Get<T>(srcEntity));
         },
-        [](Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* n) {
+        [](Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* n) {
             if constexpr (HasDrawEditor<T>) {
-                return T::DrawEditor(viewFamily, edit, n);
+                return T::DrawEditor(ctx, state, registry, edit, n);
             }
             else {
-                return DrawReflectedComponentEditor<T>(edit, n);
+                return DrawReflectedComponentEditor<T>(ctx, state, registry, edit, n);
             }
         },
         [](const Engine::SystemRegistry& reg, entt::entity e) -> bool {
@@ -68,13 +70,13 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         hideInInspector
     });
 
-    componentRegistry.registry[index].restore = [](Engine::SystemRegistry& reg, entt::entity e, const Engine::TextReader& r) {
+    componentRegistry.registry[index].restore = [](Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& reg, entt::entity e, const Engine::TextReader& r) {
         T fresh{};
         DeserializeFields(fresh, r);
         T& live = reg.GetMut<T>(e);
         ForEachField<T>([&live, &fresh](const auto& f) { AssignValue(live.*f.member, fresh.*f.member); });
         if constexpr (HasOnEditCommit<T>) {
-            T::OnEditCommit(reg, e);
+            T::OnEditCommit(ctx, state, reg, e);
         }
     };
 
@@ -84,7 +86,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         SerializeFields(comp, w);
     };
 
-    componentRegistry.registry[index].propagate = [](Engine::SystemRegistry& reg, entt::entity e, const Engine::TextReader& before, const Engine::TextReader& after) -> bool {
+    componentRegistry.registry[index].propagate = [](Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& reg, entt::entity e, const Engine::TextReader& before, const Engine::TextReader& after) -> bool {
         T b{};
         T a{};
         DeserializeFields(b, before);
@@ -96,7 +98,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         if (DeepEqual(updated, live)) { return false; }
         ForEachField<T>([&live, &updated](const auto& f) { AssignValue(live.*f.member, updated.*f.member); });
         if constexpr (HasOnEditCommit<T>) {
-            T::OnEditCommit(reg, e);
+            T::OnEditCommit(ctx, state, reg, e);
         }
         return true;
     };
@@ -122,6 +124,7 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
 template<TagComponent T> requires NamedComponent<T>
 void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin origin, bool hidden, bool hideInInspector)
 {
+    CheckComponentHooks<T>();
     auto typeId = TypeSID<T>();
     auto index = componentRegistry.registry.Size();
     assert(componentRegistry.registryMapping.Find(typeId) == nullptr && "COMPONENT_NAME collision");
@@ -132,9 +135,9 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         [](Engine::SystemRegistry& reg, entt::entity e, const Engine::TextReader&) {
             (void) reg.GetOrAdd<T>(e);
         },
-        [](const Engine::SystemRegistry& reg, entt::entity e) -> bool {
+        [](const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& reg, entt::entity e) -> bool {
             if constexpr (HasCanAdd<T>) {
-                return T::CanAdd(reg, e);
+                return T::CanAdd(ctx, state, reg, e);
             }
             else {
                 return true;
@@ -149,9 +152,9 @@ void RegisterComponent(Engine::ComponentRegistry& componentRegistry, Origin orig
         [](const Engine::SystemRegistry&, entt::entity, Engine::SystemRegistry& dstReg, entt::entity dstEntity) {
             (void) dstReg.GetOrAdd<T>(dstEntity);
         },
-        [](Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* n) {
+        [](Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* n) {
             if constexpr (HasDrawEditor<T>) {
-                return T::DrawEditor(viewFamily, edit, n);
+                return T::DrawEditor(ctx, state, registry, edit, n);
             }
             else {
                 return DefaultDrawComponentEditor(n);

@@ -35,7 +35,6 @@
 #include "engine/components/render/reflection_probe_component.h"
 #include "engine/components/render/text_component.h"
 #include "engine/console/console.h"
-#include "engine/core/frame_resources.h"
 #include "engine/editor/playtest_system.h"
 #include "engine/editor/core_systems.h"
 #include "engine/editor/ddgi_converge_boost.h"
@@ -306,77 +305,81 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
             Writes<Physics::PhysicsWorld, MaterialManager>>());
 }
 
-static void PublishFrameSettings(EngineContext* ctx, EngineState* state, SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+static void PublishFrameSettings(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
+    Core::FrameBuffer& frameBuffer = registry.FrameMut<Core::FrameBuffer>();
 #if WILL_EDITOR
     {
-        frameBuffer->selectedStableId = 0;
+        frameBuffer.selectedStableId = 0;
         if (!state->editor.selectedEntities.IsEmpty()) {
             entt::entity selected = state->editor.selectedEntities.Front();
             if (auto* stable = registry.TryGet<Component::StableIdComponent>(selected)) {
-                frameBuffer->selectedStableId = stable->id.id;
+                frameBuffer.selectedStableId = stable->id.id;
             }
         }
     }
 #endif
 
-    frameBuffer->debug = state->debug.render;
-    frameBuffer->debug.bReGIRCursorCell = state->debug.diagnostics.bReGIRCursor;
-    frameBuffer->debug.bWorldGridCursorCell = state->debug.diagnostics.bWorldGridCursor;
-    frameBuffer->debug.pickRequestId = state->debug.pick.bPending ? state->debug.pick.requestId : 0u;
-    frameBuffer->debug.pickU = state->debug.pick.u;
-    frameBuffer->debug.pickV = state->debug.pick.v;
+    Core::ViewFamilySettings& settings = registry.FrameMut<Core::ViewFamilySettings>();
+    const Core::RenderView& mainView = registry.Frame<Core::RenderView>();
+
+    frameBuffer.debug = state->debug.render;
+    frameBuffer.debug.bReGIRCursorCell = state->debug.diagnostics.bReGIRCursor;
+    frameBuffer.debug.bWorldGridCursorCell = state->debug.diagnostics.bWorldGridCursor;
+    frameBuffer.debug.pickRequestId = state->debug.pick.bPending ? state->debug.pick.requestId : 0u;
+    frameBuffer.debug.pickU = state->debug.pick.u;
+    frameBuffer.debug.pickV = state->debug.pick.v;
     if (!state->debug.bGIFreeze) {
-        frameBuffer->debug.bFreezeGIField = false;
-        frameBuffer->debug.bFreezeScreenFeedback = false;
+        frameBuffer.debug.bFreezeGIField = false;
+        frameBuffer.debug.bFreezeScreenFeedback = false;
     }
-    frameBuffer->restir = state->debug.restir;
-    frameBuffer->ddgi = state->lighting.ddgi;
-    frameBuffer->reflection = state->lighting.reflection;
-    frameBuffer->reflectionProbe = state->lighting.reflectionProbe;
-    frameBuffer->mainViewFamily.lightingMode = state->lighting.lightingMode;
-    frameBuffer->mainViewFamily.groundTruthMode = state->lighting.groundTruthMode;
-    frameBuffer->mainViewFamily.bResetGroundTruth = state->lighting.bResetGroundTruth;
-    frameBuffer->mainViewFamily.groundTruthSpp = static_cast<uint32_t>(glm::max(1, state->lighting.groundTruthSpp));
-    frameBuffer->mainViewFamily.groundTruthDofAperture = state->lighting.groundTruthDofAperture;
-    if (frameBuffer->mainViewFamily.groundTruthMode != Core::GroundTruthMode::None) {
-        const Core::RenderView& rv = frameBuffer->mainViewFamily.mainView;
+    frameBuffer.restir = state->debug.restir;
+    frameBuffer.ddgi = state->lighting.ddgi;
+    frameBuffer.reflection = state->lighting.reflection;
+    frameBuffer.reflectionProbe = state->lighting.reflectionProbe;
+    settings.lightingMode = state->lighting.lightingMode;
+    settings.groundTruthMode = state->lighting.groundTruthMode;
+    settings.bResetGroundTruth = state->lighting.bResetGroundTruth;
+    settings.groundTruthSpp = static_cast<uint32_t>(glm::max(1, state->lighting.groundTruthSpp));
+    settings.groundTruthDofAperture = state->lighting.groundTruthDofAperture;
+    if (settings.groundTruthMode != Core::GroundTruthMode::None) {
+        const Core::RenderView& rv = mainView;
         if (rv.currentViewData.view != rv.previousViewData.view) {
-            frameBuffer->mainViewFamily.bResetGroundTruth = true;
+            settings.bResetGroundTruth = true;
         }
         static float prevGtAperture = -1.0f;
         static float prevGtFocus = -1.0f;
         const float gtFocus = state->lighting.postProcess.dofFocusDistance;
         if (state->lighting.groundTruthDofAperture != prevGtAperture || (state->lighting.groundTruthDofAperture > 0.0f && gtFocus != prevGtFocus)) {
-            frameBuffer->mainViewFamily.bResetGroundTruth = true;
+            settings.bResetGroundTruth = true;
         }
         prevGtAperture = state->lighting.groundTruthDofAperture;
         prevGtFocus = gtFocus;
     }
 
     state->lighting.bResetGroundTruth = false;
-    frameBuffer->renderReset = state->requests.renderReset;
+    frameBuffer.renderReset = state->requests.renderReset;
     state->requests.renderReset = Core::RenderReset::None;
-    frameBuffer->mainViewFamily.shadingShaderOverride = state->debug.shadingShaderOverride;
-    frameBuffer->mainViewFamily.lightingShaderOverride = state->debug.lightingShaderOverride;
-    frameBuffer->mainViewFamily.postProcessConfig = state->lighting.postProcess;
-    frameBuffer->mainViewFamily.screenFade = state->screenFade;
-    frameBuffer->mainViewFamily.gtaoConfig = state->lighting.gtaoConfig;
-    frameBuffer->mainViewFamily.aaConfig = state->lighting.aaConfig;
-    frameBuffer->mainViewFamily.sigmaParams = state->lighting.sigmaParams;
-    frameBuffer->mainViewFamily.sunShadowMode = state->lighting.sunShadowMode;
-    frameBuffer->mainViewFamily.csm = state->lighting.csm;
-    frameBuffer->mainViewFamily.localShadows = state->lighting.localShadows;
+    settings.shadingShaderOverride = state->debug.shadingShaderOverride;
+    settings.lightingShaderOverride = state->debug.lightingShaderOverride;
+    settings.postProcessConfig = state->lighting.postProcess;
+    settings.screenFade = state->screenFade;
+    settings.gtaoConfig = state->lighting.gtaoConfig;
+    settings.aaConfig = state->lighting.aaConfig;
+    settings.sigmaParams = state->lighting.sigmaParams;
+    settings.sunShadowMode = state->lighting.sunShadowMode;
+    settings.csm = state->lighting.csm;
+    settings.localShadows = state->lighting.localShadows;
     if (!state->debug.csm.bFreeze) {
-        state->debug.csm.frozenAnchor = frameBuffer->mainViewFamily.mainView.currentViewData.cameraPos;
+        state->debug.csm.frozenAnchor = mainView.currentViewData.cameraPos;
     }
-    frameBuffer->mainViewFamily.csmAnchor = state->debug.csm.frozenAnchor;
-    frameBuffer->mainViewFamily.iblIntensity = state->lighting.iblIntensity;
-    frameBuffer->mainViewFamily.indirectIntensity = state->lighting.indirectIntensity;
-    frameBuffer->mainViewFamily.resolutionScale = state->projectConfig.resolutionScale;
-    frameBuffer->mainViewFamily.debugResourceName = state->debug.resourceName;
-    frameBuffer->mainViewFamily.debugTransformationType = state->debug.transformationType;
-    frameBuffer->mainViewFamily.debugViewAspect = state->debug.viewAspect;
+    settings.csmAnchor = state->debug.csm.frozenAnchor;
+    settings.iblIntensity = state->lighting.iblIntensity;
+    settings.indirectIntensity = state->lighting.indirectIntensity;
+    settings.resolutionScale = state->projectConfig.resolutionScale;
+    settings.debugResourceName = state->debug.resourceName;
+    settings.debugTransformationType = state->debug.transformationType;
+    settings.debugViewAspect = state->debug.viewAspect;
 }
 
 void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph)
@@ -403,12 +406,11 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
 
     graph.Add("FunctionKeyRenderUpdate",
         &FunctionKeyRenderUpdate,
-        Access<>());
+        Access<
+            Writes<Core::FrameBuffer>>());
 
     graph.Add("BuildViewFamily",
-        [](EngineContext* ctx, EngineState* state, SystemRegistry& registry, Core::FrameBuffer* frameBuffer) {
-            BuildViewFamily(ctx, state, registry, frameBuffer->mainViewFamily);
-        },
+        &BuildViewFamily,
         Access<
             Reads<Component::GameCameraTag, Component::EditorCameraTag, Component::TransformComponent, FrameRequests>,
             Writes<Component::CameraRuntime, Core::RenderView>>());
@@ -416,7 +418,7 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         &PublishFrameSettings,
         Access<
             Reads<Component::StableIdComponent, Core::RenderView, Core::DDGIParams>,
-            Writes<ViewFamilySettings, FrameRequests>>());
+            Writes<Core::FrameBuffer, Core::ViewFamilySettings, FrameRequests>>());
 
     graph.Add("ResolveRenderTransforms",
         &ResolveRenderTransforms,
@@ -443,44 +445,47 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
         &ResolveBakedShadows,
         Access<
             Reads<Component::AreaLightComponent, Component::SphereLightComponent, AnalyticLightStore>,
-            Writes<Component::AreaLightRuntime, Component::SphereLightRuntime, ViewFamilyBakedShadowLights>>());
+            Writes<Component::AreaLightRuntime, Component::SphereLightRuntime, Core::ViewFamilyBakedShadows>>());
     graph.Add("GatherSkyAndFog",
         &GatherSkyAndFog,
         Access<
             Reads<Component::SkyboxComponent, Component::SkyboxRuntime, Component::VolumetricFogComponent>,
-            Writes<ViewFamilySettings, Core::VolumetricFog>>());
+            Writes<Core::ViewFamilySettings, Core::ViewFamilyFog>>());
     graph.Add("GatherRenderables",
         &GatherRenderables,
         Access<
             Reads<IMaterialStore, InstanceRecords>,
-            Writes<InstanceDirty, ModelStore, MaterialUploadDirty>>());
+            Writes<InstanceDirty, ModelStore, MaterialUploadDirty, Core::ViewFamilyRenderables>>());
     graph.Add("GatherLights",
         &GatherLights,
         Access<
-            Reads<Component::MeshRuntime, Component::ProbeBakeHiddenFlag, Component::DirectionalLightComponent, Component::RenderWorldTransformRuntime, Component::AreaLightComponent, Component::AreaLightRuntime, Component::SphereLightComponent, Component::SphereLightRuntime, IMaterialStore, InstanceRecords, InstanceWorldBounds, ViewFamilyBakedShadowLights, Core::RenderView>,
-            Writes<AnalyticLightStore, TriLightStore, MaterialChangedDirty, ViewFamilyLights, LocalShadowSelection, InstanceBoundsChanges>>());
+            Reads<Component::MeshRuntime, Component::ProbeBakeHiddenFlag, Component::DirectionalLightComponent, Component::RenderWorldTransformRuntime, Component::AreaLightComponent, Component::AreaLightRuntime, Component::SphereLightComponent, Component::SphereLightRuntime, IMaterialStore, InstanceRecords, InstanceWorldBounds, Core::ViewFamilyBakedShadows, Core::RenderView>,
+            Writes<AnalyticLightStore, TriLightStore, MaterialChangedDirty, Core::ViewFamilyLights, LocalShadowSelection, InstanceBoundsChanges>>());
     graph.Add("GatherTextRenderables",
         &GatherTextRenderables,
         Access<
-            Reads<Component::TextComponent, Component::TextRuntime, Component::RenderTransformRuntime, Component::TextFontRequest, Component::StableIdComponent, IMaterialStore>>());
+            Reads<Component::TextComponent, Component::TextRuntime, Component::RenderTransformRuntime, Component::TextFontRequest, Component::StableIdComponent, IMaterialStore>,
+            Writes<Core::ViewFamilyText>>());
     graph.Add("GatherReflectionProbes",
         &GatherReflectionProbes,
         Access<
-            Reads<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::RenderWorldTransformRuntime>>());
+            Reads<Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::RenderWorldTransformRuntime>,
+            Writes<Core::ViewFamilyProbes>>());
     graph.Add("GatherLocalDDGIVolumes",
         &GatherLocalDDGIVolumes,
         Access<
-            Reads<Component::LocalDDGIVolumeComponent, Component::RenderWorldTransformRuntime, Core::DDGIParams>>());
+            Reads<Component::LocalDDGIVolumeComponent, Component::RenderWorldTransformRuntime, Core::DDGIParams>,
+            Writes<Core::ViewFamilyDDGIVolumes>>());
     graph.Add("ApplyPostProcessVolumes",
         &ApplyPostProcessVolumes,
         Access<
             Reads<Component::PostProcessVolumeComponent, Component::RenderWorldTransformRuntime, Core::RenderView>,
-            Writes<Core::VolumetricFog, ViewFamilySettings>>());
+            Writes<Core::ViewFamilyFog, Core::ViewFamilySettings>>());
     graph.Add("GatherFogVolumes",
         &GatherFogVolumes,
         Access<
             Reads<Component::FogVolumeComponent, Component::RenderWorldTransformRuntime, Core::RenderView>,
-            Writes<Core::VolumetricFog>>());
+            Writes<Core::ViewFamilyFog>>());
     if (state->debug.bVerifyStoresOnce) {
         graph.Add("VerifyStores",
             [](EngineContext* ctx, EngineState* state, SystemRegistry& registry) {
@@ -503,37 +508,39 @@ void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& gr
     graph.Add("GatherEditorSprites",
         &GatherEditorSprites,
         Access<
-            Reads<Component::AreaLightComponent, Component::SphereLightComponent, Component::DirectionalLightComponent, Component::ReflectionProbeComponent, Component::LocalDDGIVolumeComponent, Component::PostProcessVolumeComponent, Component::FogVolumeComponent, Component::RenderWorldTransformRuntime, Component::StableIdComponent>>());
+            Reads<Component::AreaLightComponent, Component::SphereLightComponent, Component::DirectionalLightComponent, Component::ReflectionProbeComponent, Component::LocalDDGIVolumeComponent, Component::PostProcessVolumeComponent, Component::FogVolumeComponent, Component::RenderWorldTransformRuntime, Component::StableIdComponent>,
+            Writes<Core::ViewFamilySprites>>());
     graph.Add("GatherLightDebugDraws",
         &GatherLightDebugDraws,
         Access<
             Reads<Component::AreaLightComponent, Component::SphereLightComponent, Component::DirectionalLightComponent, Component::LocalDDGIVolumeComponent, Component::PostProcessVolumeComponent, Component::FogVolumeComponent, Component::ReflectionProbeComponent, Component::ReflectionProbeRuntime, Component::RenderWorldTransformRuntime>,
-            Writes<ViewFamilyDebugDraws>>());
+            Writes<Core::ViewFamilyDebugDraws>>());
     graph.Add("GatherCSMDebugDraws",
         &GatherCSMDebugDraws,
         Access<
-            Reads<Core::RenderView, ViewFamilyLights, ViewFamilySettings>,
-            Writes<ViewFamilyDebugDraws>>());
+            Reads<Core::RenderView, Core::ViewFamilyLights, Core::ViewFamilySettings>,
+            Writes<Core::ViewFamilyDebugDraws>>());
     graph.Add("GatherLocalShadowDebugDraws",
         &GatherLocalShadowDebugDraws,
         Access<
             Reads<LocalShadowSelection>,
-            Writes<ViewFamilyDebugDraws>>());
+            Writes<Core::ViewFamilyDebugDraws>>());
 #endif
 
 #ifdef WDEBUG
     graph.Add("DebugRenderPhysics",
         &DebugRenderPhysics,
         Access<
-            Reads<Component::MeshRuntime, Component::MultiframeDirtyRequest, Component::PhysicsBodyRuntime, Component::PhysicsBodyDesc, Component::DrawPhysicsDebugTag>,
-            Writes<Physics::PhysicsWorld, ViewFamilyDebugDraws>>());
+            Reads<Component::MeshRuntime, Component::MultiframeDirtyRequest, Component::PhysicsBodyRuntime, Component::PhysicsBodyDesc, Component::DrawPhysicsDebugTag, Core::RenderView>,
+            Writes<Physics::PhysicsWorld, Core::ViewFamilyDebugDraws>>());
 #endif
 }
 
-void ScrubFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer)
+void ScrubFrame(EngineContext* ctx, EngineState* state)
 {
-    ProbeBakeScrubFrame(ctx, state, frameBuffer);
-    PlaytestScrubFrame(ctx, state, frameBuffer);
+    SystemRegistry registry{state->registry, AccessSet::EXCLUSIVE, nullptr, "ScrubFrame"};
+    ProbeBakeScrubFrame(ctx, state, registry);
+    PlaytestScrubFrame(ctx, state, registry);
 }
 
 void EndFrame(EngineContext* ctx)

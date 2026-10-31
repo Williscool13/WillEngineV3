@@ -20,7 +20,7 @@
 #include "engine/systems/render_systems.h"
 
 
-void Engine::Component::TransformComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<MultiframeDirtyRequest>(entity);
     registry.Set<WorldTransformRuntime>(entity);
@@ -28,7 +28,7 @@ void Engine::Component::TransformComponent::OnConstruct(Engine::SystemRegistry& 
     registry.Set<DirtyTransformRequest>(entity);
 }
 
-void Engine::Component::TransformComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MultiframeDirtyRequest>(entity);
     registry.Remove<WorldTransformRuntime>(entity);
@@ -46,15 +46,15 @@ Transform Engine::Component::ComputeWorldTransform(const Engine::SystemRegistry&
     return ComposeWorldTransform(ComputeWorldTransform(registry, node->parent), local);
 }
 
-void Engine::Component::TransformComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<DirtyTransformRequest>(entity);
 }
 
-void Engine::Component::TransformComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Engine::Component::TransformComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<DirtyTransformRequest>(entity);
-    Engine::EvaluateInstanceRenderState(registry.State(), entity, registry);
+    Engine::EvaluateInstanceRenderState(state, entity, registry);
 }
 
 namespace Engine
@@ -64,7 +64,7 @@ static entt::entity gTransformExprEntity = entt::null;
 static bool gTransformExprFocus = false;
 static char gTransformExprBuf[64]{};
 
-Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
     TransformComponent component = edit.Get<TransformComponent>();
     if (gTransformExprField != 0 && (edit.IsMulti() || gTransformExprEntity != edit.Primary())) {
@@ -92,7 +92,6 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
 
     bool dirty = false;
     bool bReleased = false;
-    Engine::EngineState* state = edit.State();
 
     const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
     const float outerSpacing = ImGui::GetStyle().ItemSpacing.x;
@@ -168,7 +167,7 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
     const float resetW = bOverridden ? ImGui::CalcTextSize("R").x + ImGui::GetStyle().FramePadding.x * 2.0f + innerSpacing : 0.0f;
     const float mobilityW = (ImGui::GetContentRegionAvail().x - resetW) / 2.0f;
     const ImVec4 activeColor = bOverridden ? ImVec4(0.2f, 0.55f, 0.25f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-    const bool bMovesAtRuntime = !edit.IsMulti() && IsMovedAtRuntime(state, edit.Primary(), edit.Registry());
+    const bool bMovesAtRuntime = !edit.IsMulti() && IsMovedAtRuntime(state, edit.Primary(), registry);
     for (int32_t i = 0; i < 2; ++i) {
         const Mobility option = static_cast<Mobility>(i);
         const bool bActive = !bMobilityMixed && component.mobility == option;
@@ -191,7 +190,7 @@ Engine::ComponentEditorResult Component::TransformComponent::DrawEditor(Core::Vi
         if (ImGui::Button("R##mobility")) {
             edit.Set(&TransformComponent::bMobilityLocked, false);
             if (!edit.IsMulti()) {
-                edit.Set(&TransformComponent::mobility, IsMovedAtRuntime(state, edit.Primary(), edit.Registry()) ? Mobility::Movable : Mobility::Static);
+                edit.Set(&TransformComponent::mobility, IsMovedAtRuntime(state, edit.Primary(), registry) ? Mobility::Movable : Mobility::Static);
             }
         }
         if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Clear the override; Assign Mobility decides again"); }

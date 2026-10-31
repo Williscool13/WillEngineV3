@@ -113,8 +113,9 @@ void UpdateEditorCamera(Engine::EngineContext* ctx, Engine::EngineState* state, 
     }
 }
 
-void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::ViewFamily& mainViewFamily)
+void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
+    Core::RenderView& mainView = registry.FrameMut<Core::RenderView>();
     ZoneScoped;
     entt::entity mainCamera;
 #if WILL_EDITOR
@@ -142,8 +143,8 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
     if (state->requests.renderReset != Core::RenderReset::None) {
         cam.previousViewData = cam.currentViewData;
     }
-    mainViewFamily.mainView.currentViewData = cam.currentViewData;
-    mainViewFamily.mainView.previousViewData = cam.previousViewData;
+    mainView.currentViewData = cam.currentViewData;
+    mainView.previousViewData = cam.previousViewData;
     cam.previousViewData = cam.currentViewData;
 
 #ifdef WDEBUG
@@ -156,13 +157,13 @@ void BuildViewFamily(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
     if (bGameView && profileSlot >= 0 && state->projectConfig.cameraPresets[profileSlot].bSet) {
         const CameraPreset& preset = state->projectConfig.cameraPresets[profileSlot];
         const float aspect = state->projectConfig.ResolvedGameAspect(static_cast<float>(ctx->windowContext.viewportWidth) / static_cast<float>(ctx->windowContext.viewportHeight));
-        mainViewFamily.mainView.currentViewData = BuildPerspectiveView(preset.translation, preset.rotation * WORLD_FORWARD, WORLD_UP, aspect,
+        mainView.currentViewData = BuildPerspectiveView(preset.translation, preset.rotation * WORLD_FORWARD, WORLD_UP, aspect,
                                                                        glm::radians(state->projectConfig.gameCameraFovDegrees), state->projectConfig.gameCameraNearPlane);
-        mainViewFamily.mainView.previousViewData = mainViewFamily.mainView.currentViewData;
+        mainView.previousViewData = mainView.currentViewData;
     }
 #endif
 
-    ProbeBakeOverrideView(state, mainViewFamily);
+    ProbeBakeOverrideView(state, mainView);
 }
 
 } // Engine

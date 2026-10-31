@@ -16,10 +16,6 @@
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core
-{
-struct ViewFamily;
-}
 
 namespace Engine::Component
 {
@@ -59,15 +55,15 @@ struct TransformComponent
         WILL_FIELD(mobility),
         WILL_FIELD(bMobilityLocked, .key = "mobilityLocked"))
 
-    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 /** Play-time lock on a Static entity: transform writes are reverted to this pose. */

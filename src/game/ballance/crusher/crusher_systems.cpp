@@ -281,9 +281,9 @@ struct CrateSpawn
     glm::quat rotation;
 };
 
-static void ApplySpawnCrate(Engine::SystemRegistry& registry, const CrateSpawn& spawn)
+static void ApplySpawnCrate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const CrateSpawn& spawn)
 {
-    const entt::entity crate = Engine::SpawnPrefab(registry.Context(), registry.State(), registry, spawn.prefabId, spawn.position);
+    const entt::entity crate = Engine::SpawnPrefab(ctx, state, registry, spawn.prefabId, spawn.position);
     if (crate == entt::null) { return; }
     registry.Set<Component::DoNotSerializeTag>(crate);
     auto& transform = registry.GetMut<Component::TransformComponent>(crate);

@@ -13,7 +13,7 @@ namespace Engine::Component
 {
 
 
-Engine::ComponentEditorResult NameComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult NameComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
     if (ImGui::CollapsingHeader("Name##componentname", ImGuiTreeNodeFlags_DefaultOpen)) {
         EditWidgets::InputText(edit, "Name", &NameComponent::name);

@@ -127,7 +127,7 @@ static void LoadAndActivate(EngineContext* ctx, EngineState* state, SystemRegist
     }
 }
 
-static void RequestUnload(EngineState* state, Core::Span<const StringID> sceneIds, SystemRegistry& registry)
+static void RequestUnload(EngineContext* ctx, EngineState* state, SystemRegistry& registry, Core::Span<const StringID> sceneIds)
 {
     gScenesPanel.unloadIds.Clear();
     bool bAnyModified = false;
@@ -139,7 +139,7 @@ static void RequestUnload(EngineState* state, Core::Span<const StringID> sceneId
         gScenesPanel.request = ScenesPopup::ConfirmUnload;
         return;
     }
-    UnloadScenes(state, gScenesPanel.unloadIds, registry);
+    UnloadScenes(ctx, state, registry, gScenesPanel.unloadIds);
     gScenesPanel.unloadIds.Clear();
 }
 
@@ -269,7 +269,7 @@ static void DrawSceneRow(EngineContext* ctx, EngineState* state, SystemRegistry&
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Unload")) {
-                RequestUnload(state, Core::Span<const StringID>(&sceneId, 1), registry);
+                RequestUnload(ctx, state, registry, Core::Span<const StringID>(&sceneId, 1));
             }
         }
         if (ImGui::BeginMenu("Runs", bActive)) {
@@ -522,7 +522,7 @@ static void DrawPopups(EngineContext* ctx, EngineState* state, SystemRegistry& r
             ImGui::CloseCurrentPopup();
         }
         if (bUnload) {
-            UnloadScenes(state, gScenesPanel.unloadIds, registry);
+            UnloadScenes(ctx, state, registry, gScenesPanel.unloadIds);
             gScenesPanel.unloadIds.Clear();
             ImGui::CloseCurrentPopup();
         }
@@ -549,11 +549,11 @@ void DrawScenesPanel(EngineContext* ctx, EngineState* state, SystemRegistry& reg
             if (scene.sceneId != state->scene.currentSceneId) { others.PushBack(scene.sceneId); }
         }
         ImGui::BeginDisabled(loaded.IsEmpty());
-        if (ImGui::Button("Unload All")) { RequestUnload(state, loaded, registry); }
+        if (ImGui::Button("Unload All")) { RequestUnload(ctx, state, registry, loaded); }
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(others.IsEmpty());
-        if (ImGui::Button("Unload Others")) { RequestUnload(state, others, registry); }
+        if (ImGui::Button("Unload Others")) { RequestUnload(ctx, state, registry, others); }
         ImGui::EndDisabled();
         ImGui::SameLine();
 

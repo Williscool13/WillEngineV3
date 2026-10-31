@@ -13,7 +13,6 @@
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -107,7 +106,7 @@ struct ConveyorComponent
         WILL_FIELD(referenceRadius, .min = 0.01f, .speed = 0.05f),
         WILL_FIELD(bEnabled))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /** Stops an enabled conveyor at runtime without touching its authored bEnabled. */

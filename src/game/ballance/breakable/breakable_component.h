@@ -40,7 +40,7 @@ struct BreakableRuntime
     Engine::StaticModelHandle model{};
     Core::InlineVector<Engine::PhysicsColliderHandle, 32> colliders{};
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 struct ShatterOnContactTag

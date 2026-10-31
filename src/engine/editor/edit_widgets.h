@@ -147,10 +147,10 @@ bool Combo(EditContext& edit, const char* label, E C::* member, const char* cons
 bool EntityRefPicker(EngineState* state, const char* label, EntityRef& ref, bool bMixed, Engine::SystemRegistry& registry);
 
 template<typename C>
-bool EntityRefField(EditContext& edit, const char* label, EntityRef C::* member)
+bool EntityRefField(EngineState* state, Engine::SystemRegistry& registry, EditContext& edit, const char* label, EntityRef C::* member)
 {
     EntityRef v = edit.Get<C>().*member;
-    const bool bChanged = EntityRefPicker(edit.State(), label, v, edit.IsMixed(member), edit.Registry());
+    const bool bChanged = EntityRefPicker(state, label, v, edit.IsMixed(member), registry);
     if (bChanged) {
         edit.Set(member, v);
     }

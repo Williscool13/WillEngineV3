@@ -70,17 +70,15 @@ static bool BodyHasConcaveExotic(const PhysicsBodyDesc& component)
     return false;
 }
 
-void PhysicsBodyDesc::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.PushCommand({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsBodyDesc::DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void PhysicsBodyDesc::DeferredConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     if (registry.Has<PhysicsSuspendedFlag>(entity)) { return; }
     auto& component = registry.GetMut<PhysicsBodyDesc>(entity);
-    auto* ctx = registry.Context();
-    auto* state = registry.State();
 
     // Default shape automatically fits to procedurals (static meshes just get box)
     if (component.shapes.IsEmpty()) {
@@ -155,12 +153,12 @@ void PhysicsBodyDesc::RequestRebuild(Engine::SystemRegistry& registry, entt::ent
     registry.PushCommand({.type = CommandType::PhysicsBodyConstruct, .entity = entity});
 }
 
-void PhysicsShapeRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void PhysicsShapeRuntime::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     ReleaseColliders(registry, entity);
 }
 
-void PhysicsBodyDesc::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void PhysicsBodyDesc::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<PhysicsShapeRuntime>(entity);
     registry.PushCommand({.type = CommandType::PhysicsBodyRemove, .entity = entity});
@@ -184,15 +182,15 @@ void PhysicsBodyDesc::Resume(Engine::SystemRegistry& registry, entt::entity enti
 
 namespace Engine
 {
-void Component::PhysicsBodyDesc::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::PhysicsBodyDesc::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     RequestRebuild(registry, entity);
 }
 
 /** Multi-edit replaces a whole shape list with the primary's, so shapes are edited on single selections only. */
-Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     const entt::entity entity = edit.Primary();
     const PhysicsBodyDesc before = edit.Get<PhysicsBodyDesc>();
     PhysicsBodyDesc component = before;
@@ -201,8 +199,6 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
     static entt::entity editEntity = entt::null;
     static bool bGizmoWasDragging = false;
 
-    auto state = edit.State();
-    auto ctx = registry.Context();
 
     if (editEntity != entity || edit.IsMulti()) {
         editShapeIdx = -1;
@@ -271,8 +267,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
         ImGui::BeginDisabled(edit.IsMulti());
         if (edit.IsMulti()) { ImGui::TextDisabled("Shapes are edited one entity at a time"); }
 
-        const glm::mat4 view = viewFamily.mainView.currentViewData.view;
-        const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
+        const glm::mat4 view = registry.Frame<Core::RenderView>().currentViewData.view;
+        const glm::mat4 proj = registry.Frame<Core::RenderView>().currentViewData.proj;
         auto* transform = registry.TryGet<TransformComponent>(entity);
 
         auto renderShapeContent = [&](PhysicsShapeDesc& shape) {
@@ -469,9 +465,8 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             const Vec3 entityRight = world.rotation * Vec3(1.0f, 0.0f, 0.0f);
             const Vec3 entityUp = world.rotation * Vec3(0.0f, 1.0f, 0.0f);
             const Vec3 entityForward = world.rotation * Vec3(0.0f, 0.0f, 1.0f);
-            const auto& vd = viewFamily.mainView.currentViewData;
+            const auto& vd = registry.Frame<Core::RenderView>().currentViewData;
 
-            auto* ctx = registry.Context();
             const Vec4 viewport{
                 static_cast<float>(ctx->windowContext.viewportOffsetX),
                 static_cast<float>(ctx->windowContext.viewportOffsetY),
@@ -545,17 +540,17 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
             constexpr Vec4 editColorY = Editor::DEBUG_AXIS_Y;
             constexpr Vec4 editColorZ = Editor::DEBUG_AXIS_Z;
             if (const auto* sphere = std::get_if<SphereShape>(&shape.geometry)) {
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {shapeCenter, sphere->radius, editColorX});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {shapeCenter, sphere->radius, editColorX});
             }
             else if (const auto* capsule = std::get_if<CapsuleShape>(&shape.geometry)) {
                 const Vec3 top = shapeCenter + entityUp * capsule->halfHeight;
                 const Vec3 bot = shapeCenter - entityUp * capsule->halfHeight;
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {top, capsule->radius, editColorY});
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {bot, capsule->radius, editColorY});
-                DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityRight * capsule->radius, bot + entityRight * capsule->radius, editColorX});
-                DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityRight * capsule->radius, bot - entityRight * capsule->radius, editColorX});
-                DEBUG_ADD_LINE(viewFamily.debugLines, {top + entityForward * capsule->radius, bot + entityForward * capsule->radius, editColorZ});
-                DEBUG_ADD_LINE(viewFamily.debugLines, {top - entityForward * capsule->radius, bot - entityForward * capsule->radius, editColorZ});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {top, capsule->radius, editColorY});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {bot, capsule->radius, editColorY});
+                DEBUG_ADD_LINE(debugDraws.debugLines, {top + entityRight * capsule->radius, bot + entityRight * capsule->radius, editColorX});
+                DEBUG_ADD_LINE(debugDraws.debugLines, {top - entityRight * capsule->radius, bot - entityRight * capsule->radius, editColorX});
+                DEBUG_ADD_LINE(debugDraws.debugLines, {top + entityForward * capsule->radius, bot + entityForward * capsule->radius, editColorZ});
+                DEBUG_ADD_LINE(debugDraws.debugLines, {top - entityForward * capsule->radius, bot - entityForward * capsule->radius, editColorZ});
             }
             else if (const auto* box = std::get_if<BoxShape>(&shape.geometry)) {
                 const glm::vec3 he = box->halfExtents;
@@ -563,12 +558,12 @@ Engine::ComponentEditorResult Component::PhysicsBodyDesc::DrawEditor(Core::ViewF
                 const Vec3 bx = boxRot * Vec3(he.x, 0.0f, 0.0f);
                 const Vec3 by = boxRot * Vec3(0.0f, he.y, 0.0f);
                 const Vec3 bz = boxRot * Vec3(0.0f, 0.0f, he.z);
-                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bx, he.y, he.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
-                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bx, he.y, he.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
-                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + by, he.x, he.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
-                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - by, he.x, he.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
-                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter + bz, he.x, he.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
-                DEBUG_ADD_RECT(viewFamily.debugRects, {shapeCenter - bz, he.x, he.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
+                DEBUG_ADD_RECT(debugDraws.debugRects, {shapeCenter + bx, he.y, he.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
+                DEBUG_ADD_RECT(debugDraws.debugRects, {shapeCenter - bx, he.y, he.z, glm::normalize(by), glm::normalize(bz), editColorX, 0.02f});
+                DEBUG_ADD_RECT(debugDraws.debugRects, {shapeCenter + by, he.x, he.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
+                DEBUG_ADD_RECT(debugDraws.debugRects, {shapeCenter - by, he.x, he.z, glm::normalize(bx), glm::normalize(bz), editColorY, 0.02f});
+                DEBUG_ADD_RECT(debugDraws.debugRects, {shapeCenter + bz, he.x, he.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
+                DEBUG_ADD_RECT(debugDraws.debugRects, {shapeCenter - bz, he.x, he.y, glm::normalize(bx), glm::normalize(by), editColorZ, 0.02f});
             }
         };
 

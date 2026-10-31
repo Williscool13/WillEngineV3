@@ -213,7 +213,7 @@ Core::InlineVector<Engine::Scene, 8> SerializeAll(Engine::EngineContext* ctx, En
     return snapshots;
 }
 
-void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapshots, Engine::SystemRegistry& registry)
+void DeserializeAll(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<Engine::Scene> snapshots)
 {
     ZoneScoped;
     for (Engine::Scene& scene : snapshots) {
@@ -242,24 +242,22 @@ void DeserializeAll(Engine::EngineState* state, Core::Span<Engine::Scene> snapsh
         LOG_INFO(Engine, "Loaded scene snapshot '{}'", loadedId.ToString());
     }
 
-    auto* ctx = registry.Context();
     ResolvePrefabLoads(ctx, state, registry);
     ResolveHierarchyLinks(state, registry);
 }
 
-void UnloadScenes(Engine::EngineState* state, Core::Span<StringID> scenes, Engine::SystemRegistry& registry)
+void UnloadScenes(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::Span<StringID> scenes)
 {
     ZoneScoped;
     for (const StringID sceneId : scenes) {
-        UnloadScene(state, sceneId, registry);
+        UnloadScene(ctx, state, registry, sceneId);
         LOG_INFO(Engine, "Unloaded scene '{}'", sceneId.ToString());
     }
 }
 
-void UnloadScene(Engine::EngineState* state, StringID sceneId, Engine::SystemRegistry& registry)
+void UnloadScene(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, StringID sceneId)
 {
     ZoneScoped;
-    auto* ctx = registry.Context();
     auto view = registry.View<Component::SceneRuntime>();
 
     auto size = view.size();
@@ -464,7 +462,7 @@ bool LoadSceneExclusive(Engine::EngineContext* ctx, Engine::EngineState* state, 
     for (const Engine::RuntimeSceneMetadata& scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);
     }
-    UnloadScenes(state, scenesToUnload, registry);
+    UnloadScenes(ctx, state, registry, scenesToUnload);
 
     const LoadSceneResult result = LoadSceneFromFile(ctx, state, registry, sceneId);
     if (result.bSuccess) {
@@ -1007,8 +1005,7 @@ void StopPrefabEdit(Engine::EngineState* state, Engine::SystemRegistry& registry
 }
 
 /** Pushes the old -> new prefab change into one instance; components it overrode, added or removed are left alone. */
-static bool PropagatePrefabChange(Engine::EngineState* state, entt::entity entity, const Engine::TextReader& oldBody, const Engine::TextReader& newBody,
-                                  Core::Vector<std::byte>& fragment, Engine::SystemRegistry& registry)
+static bool PropagatePrefabChange(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity, const Engine::TextReader& oldBody, const Engine::TextReader& newBody, Core::Vector<std::byte>& fragment)
 {
     bool bChanged = false;
     newBody.ForEachBlock([&](std::string_view opener, const Engine::TextReader& after) {
@@ -1016,7 +1013,7 @@ static bool PropagatePrefabChange(Engine::EngineState* state, entt::entity entit
         if (!entry) { return; }
         const Engine::TextReader before = oldBody.Block(Core::ShortString(opener).c_str());
         if (entry->has(registry, entity)) {
-            if (before.IsValid() && entry->propagate && entry->propagate(registry, entity, before, after)) {
+            if (before.IsValid() && entry->propagate && entry->propagate(ctx, state, registry, entity, before, after)) {
                 if (entry->typeId == TypeSID<Component::TransformComponent>()) {
                     registry.Set<Component::DirtyTransformRequest>(entity);
                 }
@@ -1071,7 +1068,7 @@ void ApplyPrefabEdit(Engine::EngineContext* ctx, Engine::EngineState* state, Eng
     auto view = registry.View<Component::PrefabInstanceComponent>();
     for (auto entity : view) {
         if (view.get<Component::PrefabInstanceComponent>(entity).prefabId != prefabId) { continue; }
-        if (!PropagatePrefabChange(state, entity, oldData->Body(), newBody, fragment, registry)) { continue; }
+        if (!PropagatePrefabChange(ctx, state, registry, entity, oldData->Body(), newBody, fragment)) { continue; }
         ++updated;
         if (const auto* sc = registry.TryGet<Component::SceneRuntime>(entity); sc && !state->editor.modifiedScenes.Contains(sc->sceneId)) {
             state->editor.modifiedScenes.PushBack(sc->sceneId);
@@ -1102,15 +1099,15 @@ static void BeginPIESession(Engine::EngineContext* ctx, Engine::EngineState* sta
     }
 }
 
-static void RestorePIESnapshot(Engine::EngineState* state, Engine::SystemRegistry& registry)
+static void RestorePIESnapshot(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
 #if WILL_EDITOR
     Core::InlineVector<StringID, 8> scenesToUnload;
     for (Engine::RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);
     }
-    UnloadScenes(state, scenesToUnload, registry);
-    DeserializeAll(state, state->editor.pieSnapshot, registry);
+    UnloadScenes(ctx, state, registry, scenesToUnload);
+    DeserializeAll(ctx, state, registry, state->editor.pieSnapshot);
     state->editor.pieSnapshot = {};
 #endif
 }
@@ -1159,7 +1156,7 @@ void PlayStop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::Sy
         ctx->playStopFn(ctx, state);
     }
 
-    RestorePIESnapshot(state, registry);
+    RestorePIESnapshot(ctx, state, registry);
 
     state->runMode = Engine::RunMode::Edit;
     state->inputContext = Engine::InputContext::Editor;
@@ -1209,7 +1206,7 @@ void SimulateStop(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
         }
     }
 
-    RestorePIESnapshot(state, registry);
+    RestorePIESnapshot(ctx, state, registry);
     state->runMode = Engine::RunMode::Edit;
 
     state->editor.selectedEntities.Clear();

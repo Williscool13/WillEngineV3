@@ -100,7 +100,7 @@ void UndoStack::Push(UndoRecord&& record)
     redo.Clear();
 }
 
-void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore, SystemRegistry& registry)
+void UndoStack::Apply(EngineContext* ctx, EngineState* state, SystemRegistry& registry, const UndoRecord& record, bool bBefore)
 {
     const ComponentEntry* entry = FindEntry(state, record.typeId);
     if (entry == nullptr || entry->restore == nullptr) { return; }
@@ -110,29 +110,29 @@ void UndoStack::Apply(EngineState* state, const UndoRecord& record, bool bBefore
         if (e == entt::null || !entry->has(registry, e)) { continue; }
         const uint32_t offset = bBefore ? u.beforeOffset : u.afterOffset;
         const uint32_t size = bBefore ? u.beforeSize : u.afterSize;
-        entry->restore(registry, e, TextReader(record.data.Data() + offset, size));
+        entry->restore(ctx, state, registry, e, TextReader(record.data.Data() + offset, size));
         if (auto* sc = registry.TryGet<Component::SceneRuntime>(e)) {
             MarkSceneModified(state, sc->sceneId);
         }
     }
 }
 
-bool UndoStack::Undo(EngineState* state, SystemRegistry& registry)
+bool UndoStack::Undo(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     if (undo.IsEmpty()) { return false; }
     bPending = false;
     UndoRecord record = undo.PopBackValue();
-    Apply(state, record, true, registry);
+    Apply(ctx, state, registry, record, true);
     redo.PushBack(std::move(record));
     return true;
 }
 
-bool UndoStack::Redo(EngineState* state, SystemRegistry& registry)
+bool UndoStack::Redo(EngineContext* ctx, EngineState* state, SystemRegistry& registry)
 {
     if (redo.IsEmpty()) { return false; }
     bPending = false;
     UndoRecord record = redo.PopBackValue();
-    Apply(state, record, false, registry);
+    Apply(ctx, state, registry, record, false);
     undo.PushBack(std::move(record));
     return true;
 }

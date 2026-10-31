@@ -35,11 +35,10 @@ struct DissolveStart
     float shrinkStart;
 };
 
-static void ApplyStartDissolving(Engine::SystemRegistry& registry, const DissolveStart& start)
+static void ApplyStartDissolving(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const DissolveStart& start)
 {
     const entt::entity entity = start.entity;
     if (!registry.Valid(entity) || registry.Has<Component::DissolvingRuntime>(entity)) { return; }
-    Engine::EngineState* state = registry.State();
     auto& transform = registry.GetMut<Component::TransformComponent>(entity);
     transform.mobility = Component::Mobility::Movable;
 
@@ -51,7 +50,6 @@ static void ApplyStartDissolving(Engine::SystemRegistry& registry, const Dissolv
 
     glm::vec3 shrinkPivot{0.0f};
     if (const auto* body = Component::FindBody(registry, entity)) {
-        const auto* ctx = registry.Context();
         const Transform world = Component::ComputeWorldTransform(registry, entity);
         shrinkPivot = glm::inverse(world.rotation) * (registry.Service<Physics::PhysicsWorld>().GetWorldBounds(body->bodyID).Center() - world.translation) / world.scale;
     }

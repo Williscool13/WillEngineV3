@@ -18,7 +18,7 @@ static_assert(std::size(SHAPE_NAMES) == static_cast<size_t>(Engine::Component::D
 namespace Engine
 {
 
-Engine::ComponentEditorResult Component::DebugGizmoComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::DebugGizmoComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
     bool open = ImGui::CollapsingHeader("Debug Gizmo", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);

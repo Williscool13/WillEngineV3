@@ -16,7 +16,6 @@
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -63,11 +62,11 @@ struct SplineMeshComponent
         WILL_FIELD(bFacetNormals))
 
     static void Sanitize(SplineMeshComponent& comp);
-    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static bool CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /** Generation requested; StartSplineMeshLoads kicks the model build. */

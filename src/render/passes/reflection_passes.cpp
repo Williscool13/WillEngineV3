@@ -158,7 +158,7 @@ ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
     const RDGTexture depthHistory = targets.depthCopyHistory;
     const RDGTexture gbufferOneHistory = targets.gbufferOneHistory;
     const bool bScreenSpace = (reflectionConfig.bScreenSpaceLighting || bSSRSource) && !bDisableScreenTier && litHistory.IsValid() && depthHistory.IsValid() && gbufferOneHistory.IsValid();
-    const int32_t skyboxIndex = viewFamily.skyboxIndex;
+    const int32_t skyboxIndex = viewFamily.settings.skyboxIndex;
 
     const RDGTexture specNoisy = graph.CreateTexture(REFLECTION_SPEC_NOISY_TARGET, TextureInfo{COLOR_ATTACHMENT_FORMAT, renderExtent.width, renderExtent.height, 1}, VkClearValue{.color = {{0.0f, 0.0f, 0.0f, 0.0f}}}, true);
     reflection.specNoisy = specNoisy;
@@ -204,12 +204,12 @@ ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
         pass.WriteStorageImage(hitDelta);
     }
 
-    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
+    const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
 
     const uint32_t sunMode = (!bHasTLAS && reflectionConfig.sunMode == Core::ReflectionConfiguration::SunMode::ShadowRay)
         ? static_cast<uint32_t>(Core::ReflectionConfiguration::SunMode::AlwaysLit)
         : static_cast<uint32_t>(reflectionConfig.sunMode);
-    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, bHitDelta, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, iblIntensity = viewFamily.iblIntensity, bCheckerboardPacked, sunMode,
+    pass.Execute([&, pipelineManager, sceneIndex, renderExtent, frameNumber, bHasTLAS, bDDGI, bWorldGrid, bScreenSpace, bHitDelta, skyboxIndex, reflectionRoughnessMax, intensity = reflectionConfig.intensity, iblIntensity = viewFamily.settings.iblIntensity, bCheckerboardPacked, sunMode,
             field = activeCheckerboardField, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo, depth = targets.depthCopy, reflectionProbeCount, litHistory, depthHistory, gbufferOneHistory,
             hitDescriptors, ddgiCascades, worldLightGrid, worldIndexList, probeGrid, specNoisy, hitDelta](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const uint32_t tlasIndex = bHasTLAS ? graph.GetAccelerationStructureDescriptorIndex(scene.tlas) : ~0u;
@@ -247,7 +247,7 @@ ReflectionFrame SetupReflectionShadePass(RenderGraph& graph,
                 .gbufferOneHistoryIndex = bScreenSpace ? graph.GetSampledImageViewDescriptorIndex(gbufferOneHistory) : ~0u,
                 .reflectionProbeCount = reflectionProbeCount,
                 .reflectionProbes = reflectionProbeCount > 0u ? graph.GetBufferAddress(scene.reflectionProbes) : 0,
-                .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && probeGrid.IsValid()) ? graph.GetBufferAddress(probeGrid) : 0,
+                .worldGridProbeGrid = (!viewFamily.probes.bReflectionProbeBruteForce && probeGrid.IsValid()) ? graph.GetBufferAddress(probeGrid) : 0,
                 .sunMode = sunMode,
                 .maxRayIntensity = reflectionConfig.maxRayIntensity,
                 .iblIntensity = iblIntensity,

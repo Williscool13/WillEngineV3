@@ -7,11 +7,6 @@
 
 #include "engine/core/registry.h"
 
-namespace Core
-{
-struct FrameBuffer;
-}
-
 namespace Engine
 {
 struct EngineContext;
@@ -26,7 +21,7 @@ void CollectPostUpdate(EngineContext* ctx, EngineState* state, SystemGraph& grap
 
 void CollectPrepareFrame(EngineContext* ctx, EngineState* state, SystemGraph& graph);
 
-void ScrubFrame(EngineContext* ctx, EngineState* state, Core::FrameBuffer* frameBuffer);
+void ScrubFrame(EngineContext* ctx, EngineState* state);
 
 void EndFrame(EngineContext* ctx);
 } // Engine

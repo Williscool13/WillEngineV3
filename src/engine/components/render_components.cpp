@@ -17,14 +17,14 @@
 
 namespace Engine::Component
 {
-void RenderFlagsComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
+void RenderFlagsComponent::OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
-    EvaluateInstanceRenderState(registry.State(), entity, registry);
+    EvaluateInstanceRenderState(state, entity, registry);
 }
 
-void RenderFlagsComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void RenderFlagsComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
-    EvaluateInstanceRenderState(registry.State(), entity, registry);
+    EvaluateInstanceRenderState(state, entity, registry);
 }
 
 bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
@@ -62,14 +62,14 @@ bool DrawRenderFlagToggles(Engine::EditContext& edit, uint32_t toggles)
     return bEmissiveChanged;
 }
 
-void MeshRuntime::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void MeshRuntime::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     if (const auto* stable = registry.TryGet<StableIdComponent>(entity)) {
         registry.GetMut<MeshRuntime>(entity).stableId = stable->id.id;
     }
 }
 
-void MeshRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void MeshRuntime::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& runtime = registry.GetMut<MeshRuntime>(entity);
 

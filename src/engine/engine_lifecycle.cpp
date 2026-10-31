@@ -139,7 +139,7 @@ void HotReloadSave(EngineContext* ctx, EngineState* state)
     for (RuntimeSceneMetadata scene : state->editor.loadedScenes) {
         scenesToUnload.PushBack(scene.sceneId);
     }
-    UnloadScenes(state, scenesToUnload, registry);
+    UnloadScenes(ctx, state, registry, scenesToUnload);
     LOG_INFO(Engine, "Hot reload: snapshot saved ({} scene(s))", state->editor.hotReloadSnapshot.Size());
 
     registry.ClearAll();
@@ -153,7 +153,7 @@ void HotReloadRestore(EngineContext* ctx, EngineState* state)
     CreateCameras(state, state->editor.pieCameraTranslation, state->editor.pieCameraRotation, registry);
 
     if (!state->editor.hotReloadSnapshot.IsEmpty()) {
-        DeserializeAll(state, state->editor.hotReloadSnapshot, registry);
+        DeserializeAll(ctx, state, registry, state->editor.hotReloadSnapshot);
         state->editor.hotReloadSnapshot.Clear();
         LOG_INFO(Engine, "Hot reload: snapshot restored");
     }

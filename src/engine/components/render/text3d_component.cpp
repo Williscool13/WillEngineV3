@@ -48,7 +48,7 @@ void LoadText3DFont(Text3DComponent& component, Engine::SystemRegistry& registry
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Text3DComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void Text3DComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<Text3DComponent>(entity);
@@ -60,7 +60,7 @@ void Text3DComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void Text3DComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void Text3DComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     UnloadText3DFont(registry, entity);
     registry.Remove<RenderTransformRuntime>(entity);
@@ -69,13 +69,13 @@ void Text3DComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity e
 
 namespace Engine
 {
-bool Component::Text3DComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool Component::Text3DComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::Text3DComponent>(registry, entity);
 }
 
 
-void Component::Text3DComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::Text3DComponent::OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& comp = registry.Get<Text3DComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -85,7 +85,7 @@ void Component::Text3DComponent::OnEditPreview(Engine::SystemRegistry& registry,
     }
 }
 
-void Component::Text3DComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::Text3DComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.Get<Text3DComponent>(entity);
     if (!comp.fontId.IsValid()) {
@@ -93,16 +93,13 @@ void Component::Text3DComponent::OnEditCommit(Engine::SystemRegistry& registry, 
         return;
     }
     registry.Set<Text3DGenerateRequest>(entity);
-    OnEditPreview(registry, entity);
+    OnEditPreview(ctx, state, registry, entity);
 }
 
-Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& comp = edit.Get<Text3DComponent>();
-    auto* ctx = registry.Context();
-    auto* state = edit.State();
     const bool busy = registry.HasAny<Text3DGenerateRequest, Text3DLoadingFlag>(entity);
 
     bool open = ImGui::CollapsingHeader("3D Text", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -166,11 +163,11 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     ImGui::EndDisabled();
 
     {
-        if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material", comp.material, "(none)", edit.IsMixed(&Text3DComponent::material))) {
+        if (Engine::BeginMaterialCombo(ctx, state, registry, "Material", comp.material, "(none)", edit.IsMixed(&Text3DComponent::material))) {
             if (ImGui::Selectable("(none)", !comp.material.IsValid())) {
                 edit.Set(&Text3DComponent::material, Engine::MaterialID{});
             }
-            const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, comp.material);
+            const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, registry, state->editor.materialSelector, comp.material);
             if (picked.IsValid() && picked != comp.material) {
                 edit.Set(&Text3DComponent::material, picked);
             }
@@ -187,7 +184,7 @@ Engine::ComponentEditorResult Component::Text3DComponent::DrawEditor(Core::ViewF
     EditWidgets::CommitOnRelease<Text3DComponent>(edit, false);
     ImGui::BeginDisabled(edit.IsMulti());
     Vec3 pivotOffset = comp.renderOffset;
-    if (Editor::MeshPivotPresets(ctx, edit.Registry(), edit.Primary(), comp.renderRotation, pivotOffset)) {
+    if (Editor::MeshPivotPresets(ctx, registry, edit.Primary(), comp.renderRotation, pivotOffset)) {
         edit.Set(&Text3DComponent::renderOffset, pivotOffset);
     }
     ImGui::EndDisabled();

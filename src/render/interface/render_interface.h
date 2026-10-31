@@ -18,6 +18,7 @@
 #include "core/memory/virtual_arena.h"
 #include "core/time/time_frame.h"
 #include "core/types/transform.h"
+#include "engine/core/access_set.h"
 #include "engine/material_manager.h"
 #include "core/containers/inline_vector.h"
 #include "core/containers/array.h"
@@ -28,6 +29,16 @@
 #include "render/shaders/reflection_probe_interop.h"
 #include "render/shaders/text_interop.h"
 
+
+namespace Engine
+{
+class SystemRegistry;
+}
+
+namespace Render
+{
+class RenderThread;
+}
 
 namespace Core
 {
@@ -77,8 +88,6 @@ struct DirectionalLight
 
 struct VolumetricFog
 {
-    static constexpr const char* COMPONENT_NAME = "VolumetricFog";
-
     glm::vec3 albedo{1.0f, 1.0f, 1.0f};
     float density{0.005f}; // extinction per metre at baseHeight
     float heightFalloff{0.1f}; // per metre above baseHeight
@@ -457,8 +466,168 @@ struct BakedShadowLight
     bool bMovingObjectShadows{true};
 };
 
+struct ViewFamilyRenderables
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyRenderables";
+
+    uint32_t instanceCount{0};
+    ArenaVector<Instance> instancePayload{};
+    ArenaVector<DirtyRun> instanceRuns{};
+
+    uint32_t modelCount{0};
+    ArenaVector<Model> modelPayload{};
+    ArenaVector<DirtyRun> modelRuns{};
+
+    uint32_t materialCount{0};
+    ArenaVector<MaterialProperties> materialPayload{};
+    ArenaVector<DirtyRun> materialRuns{};
+
+    ArenaVector<ActiveMaterial> activeMaterials{};
+};
+
+struct ViewFamilyText
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyText";
+
+    ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
+    ArenaVector<TextInstanceDataFull> textInstances{};
+    /** Indexes into text materials vector */
+    ArenaMap<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
+    ArenaVector<TextRenderMaterial> textMaterials{};
+    ArenaVector<TextDrawCall> textDrawCalls{};
+};
+
+struct ViewFamilySprites
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilySprites";
+
+    ArenaVector<Sprite> sprites{};
+    ArenaVector<SpriteBatch> spriteBatches{};
+};
+
+struct ViewFamilyFog
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyFog";
+
+    VolumetricFog volumetricFog{};
+    /** Camera-culled local fog volumes, nearest first. */
+    InlineVector<FogVolumeGPU, VOLUMETRIC_FOG_MAX_VOLUMES> fogVolumes{};
+};
+
+struct ViewFamilyLights
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyLights";
+
+    DirectionalLight directionalLight{};
+    uint32_t analyticLightCount{0};
+    /** Only the analytic slots that changed, concatenated in lightRuns order. */
+    ArenaVector<LightInfo> lightPayload{};
+    ArenaVector<DirtyRun> lightRuns{};
+    uint32_t triLightCount{0};
+
+    /** Meshlet and mesh watermarks of the TriLightStore; LightData reads meshlets/meshes below them. */
+    uint32_t emissiveMeshletCount{0};
+    uint32_t emissiveMeshCount{0};
+    ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
+
+    uint32_t localShadowLightCount{0};
+    Core::Array<LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> localShadowLights{};
+    // Indexed by atlas tile
+    Core::Array<ShadowViewGPU, LOCAL_SHADOW_MAX_VIEWS> localShadowViews{};
+    uint32_t localShadowActiveTiles{0};
+    uint32_t localShadowDirtyTiles{0};
+    glm::uvec2 localShadowAtlasExtent{0};
+    ArenaFixedVector<glm::vec4> boundsChanges{};
+    bool bBoundsChangesOverflow{false};
+};
+
+struct ViewFamilyBakedShadows
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyBakedShadows";
+
+    InlineVector<BakedShadowLight, MAX_BAKED_SHADOW_LIGHTS> bakedShadowLights{};
+};
+
+struct ViewFamilyProbes
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyProbes";
+
+    ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
+    ProbePreviewSettings probePreviewSettings{};
+    ArenaFixedVector<ProbePreviewSphere> probePreviews{};
+    bool bReflectionProbeBruteForce{false};
+};
+
+struct ViewFamilyDDGIVolumes
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyDDGIVolumes";
+
+    ArenaFixedVector<LocalDDGIVolume> localDDGIVolumes{};
+};
+
+/** Includes post process settings; volume overrides reach any of it by field name. */
+struct ViewFamilySettings
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilySettings";
+
+    int32_t skyboxIndex{-1};
+    int32_t skyboxLOD{0};
+
+    GTAOConfiguration gtaoConfig{};
+    AntiAliasingConfiguration aaConfig{};
+    PostProcessConfiguration postProcessConfig{};
+    ScreenFadeState screenFade{};
+    SIGMAParams sigmaParams{};
+    SunShadowMode sunShadowMode{SunShadowMode::RayTraced};
+    CSMParams csm{};
+    glm::vec3 csmAnchor{0.0f};
+    LocalShadowParams localShadows{};
+    float iblIntensity{1.0f};
+    float indirectIntensity{1.0f};
+    float resolutionScale{1.0f};
+
+    // Debugging
+    InlineString<> debugResourceName{};
+    DebugTransformationType debugTransformationType{};
+    DebugViewAspect debugViewAspect{};
+
+    // Lighting
+    LightingMode lightingMode{LightingMode::Analytic};
+    GroundTruthMode groundTruthMode{GroundTruthMode::None};
+    bool bResetGroundTruth{false};
+    uint32_t groundTruthSpp{1};
+    float groundTruthDofAperture{0.0f};
+    StringID shadingShaderOverride{};
+    StringID lightingShaderOverride{};
+};
+
+struct ViewFamilyDebugDraws
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyDebugDraws";
+
+    ArenaVector<DebugLine> debugLines{};
+    ArenaVector<DebugBox> debugBoxes{};
+    ArenaVector<DebugSphere> debugSpheres{};
+    ArenaVector<DebugRect> debugRects{};
+    ArenaVector<DebugArrow> debugArrows{};
+    ArenaVector<DebugCapsule> debugCapsules{};
+    ArenaVector<DebugCylinder> debugCylinders{};
+};
+
+/** UI: ordered draw list mirrors Clay's command sequence for correct scissor interleaving */
+struct ViewFamilyUI
+{
+    static constexpr const char* COMPONENT_NAME = "ViewFamilyUI";
+
+    ArenaVector<UIDrawCommand> uiDrawList{};
+    ArenaVector<UIGlyphQuad> uiGlyphQuads{};
+};
+
 struct ViewFamily
 {
+    static constexpr const char* COMPONENT_NAME = "ViewFamily";
+    using ACCESS_PARTS = Engine::AccessParts<RenderView, ViewFamilyRenderables, ViewFamilyText, ViewFamilySprites, ViewFamilyFog, ViewFamilyLights, ViewFamilyBakedShadows, ViewFamilyProbes, ViewFamilyDDGIVolumes, ViewFamilySettings, ViewFamilyDebugDraws, ViewFamilyUI>;
+
     ViewFamily() = default;
 
     explicit ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm = {});
@@ -474,104 +643,17 @@ struct ViewFamily
     ViewFamily& operator=(ViewFamily&&) = default;
 
     RenderView mainView{};
-
-    uint32_t instanceCount{0};
-    ArenaVector<Instance> instancePayload{};
-    ArenaVector<DirtyRun> instanceRuns{};
-
-    uint32_t modelCount{0};
-    ArenaVector<Model> modelPayload{};
-    ArenaVector<DirtyRun> modelRuns{};
-
-    uint32_t materialCount{0};
-    ArenaVector<MaterialProperties> materialPayload{};
-    ArenaVector<DirtyRun> materialRuns{};
-
-    ArenaVector<ActiveMaterial> activeMaterials{};
-
-    ArenaVector<WorldGlyphQuad> worldGlyphQuads{};
-    ArenaVector<TextInstanceDataFull> textInstances{};
-    /** Indexes into text materials vector */
-    ArenaMap<Engine::TextMaterialID, uint32_t> activeTextMaterials{};
-    ArenaVector<TextRenderMaterial> textMaterials{};
-
-    ArenaVector<Sprite> sprites{};
-
-    int32_t skyboxIndex{-1};
-    int32_t skyboxLOD{0};
-
-    DirectionalLight directionalLight{};
-    VolumetricFog volumetricFog{};
-    /** Camera-culled local fog volumes, nearest first. */
-    InlineVector<FogVolumeGPU, VOLUMETRIC_FOG_MAX_VOLUMES> fogVolumes{};
-    uint32_t analyticLightCount{0};
-    /** Only the analytic slots that changed, concatenated in lightRuns order. */
-    ArenaVector<LightInfo> lightPayload{};
-    ArenaVector<DirtyRun> lightRuns{};
-    uint32_t triLightCount{0};
-
-    /** Meshlet and mesh watermarks of the TriLightStore; LightData reads meshlets/meshes below them. */
-    uint32_t emissiveMeshletCount{0};
-    uint32_t emissiveMeshCount{0};
-    ArenaFixedVector<EmissiveTriLightWork> emissiveTriWork{};
-
-    ArenaFixedVector<ReflectionProbeGPU> reflectionProbes{};
-    ProbePreviewSettings probePreviewSettings{};
-    ArenaFixedVector<ProbePreviewSphere> probePreviews{};
-    ArenaFixedVector<LocalDDGIVolume> localDDGIVolumes{};
-
-    GTAOConfiguration gtaoConfig{};
-    AntiAliasingConfiguration aaConfig{};
-    PostProcessConfiguration postProcessConfig{};
-    ScreenFadeState screenFade{};
-    SIGMAParams sigmaParams{};
-    SunShadowMode sunShadowMode{SunShadowMode::RayTraced};
-    CSMParams csm{};
-    glm::vec3 csmAnchor{0.0f};
-    LocalShadowParams localShadows{};
-    uint32_t localShadowLightCount{0};
-    Core::Array<LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> localShadowLights{};
-    // Indexed by atlas tile
-    Core::Array<ShadowViewGPU, LOCAL_SHADOW_MAX_VIEWS> localShadowViews{};
-    uint32_t localShadowActiveTiles{0};
-    uint32_t localShadowDirtyTiles{0};
-    glm::uvec2 localShadowAtlasExtent{0};
-    InlineVector<BakedShadowLight, MAX_BAKED_SHADOW_LIGHTS> bakedShadowLights{};
-    ArenaFixedVector<glm::vec4> boundsChanges{};
-    bool bBoundsChangesOverflow{false};
-    float iblIntensity{1.0f};
-    float indirectIntensity{1.0f};
-    bool bReflectionProbeBruteForce{false};
-    float resolutionScale{1.0f};
-
-    // Debugging
-    InlineString<> debugResourceName{};
-    DebugTransformationType debugTransformationType{};
-    DebugViewAspect debugViewAspect{};
-
-    ArenaVector<DebugLine> debugLines{};
-    ArenaVector<DebugBox> debugBoxes{};
-    ArenaVector<DebugSphere> debugSpheres{};
-    ArenaVector<DebugRect> debugRects{};
-    ArenaVector<DebugArrow> debugArrows{};
-    ArenaVector<DebugCapsule> debugCapsules{};
-    ArenaVector<DebugCylinder> debugCylinders{};
-
-    // UI: ordered draw list mirrors Clay's command sequence for correct scissor interleaving
-    ArenaVector<UIDrawCommand> uiDrawList{};
-    ArenaVector<UIGlyphQuad> uiGlyphQuads{};
-
-    // Lighting
-    LightingMode lightingMode{LightingMode::Analytic};
-    GroundTruthMode groundTruthMode{GroundTruthMode::None};
-    bool bResetGroundTruth{false};
-    uint32_t groundTruthSpp{1};
-    float groundTruthDofAperture{0.0f};
-    StringID shadingShaderOverride{};
-    StringID lightingShaderOverride{};
-
-    ArenaVector<TextDrawCall> textDrawCalls{};
-    ArenaVector<SpriteBatch> spriteBatches{};
+    ViewFamilyRenderables renderables{};
+    ViewFamilyText text{};
+    ViewFamilySprites spriteDraws{};
+    ViewFamilyFog fog{};
+    ViewFamilyLights lights{};
+    ViewFamilyBakedShadows bakedShadows{};
+    ViewFamilyProbes probes{};
+    ViewFamilyDDGIVolumes ddgiVolumes{};
+    ViewFamilySettings settings{};
+    ViewFamilyDebugDraws debugDraws{};
+    ViewFamilyUI ui{};
 };
 
 
@@ -598,6 +680,9 @@ struct ShadowBakeRequest
 
 struct FrameBuffer
 {
+    /** Everything except the view family, whose parts are declared on their own. Do not list ViewFamily in ACCESS_PARTS: a frame buffer write would conflict with every gather. */
+    static constexpr const char* COMPONENT_NAME = "FrameBuffer";
+
     FrameBuffer() = default;
 
     ~FrameBuffer() = default;
@@ -625,7 +710,6 @@ struct FrameBuffer
 
     ViewFamilyWatermarks maxWatermarks{};
     ViewFamilyWatermarks windowWatermarks{};
-    ViewFamily mainViewFamily{};
 
     TimeFrame timeFrame{};
     uint32_t currentFrameBuffer{};
@@ -658,6 +742,13 @@ struct FrameBuffer
     uint32_t probeCaptureCropSize{0};
     ShadowBakeRequest shadowBake{};
     RenderReset renderReset = RenderReset::None;
+
+private:
+    /** Systems reach it through SystemRegistry::Frame, so access is checked. */
+    ViewFamily mainViewFamily{};
+
+    friend class Engine::SystemRegistry;
+    friend class Render::RenderThread;
 };
 } // Core
 

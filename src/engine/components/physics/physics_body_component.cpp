@@ -9,7 +9,7 @@
 
 namespace Engine::Component
 {
-void PhysicsBodyRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void PhysicsBodyRuntime::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& physics = registry.Get<PhysicsBodyRuntime>(entity);
 

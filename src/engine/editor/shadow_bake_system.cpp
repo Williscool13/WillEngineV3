@@ -141,9 +141,10 @@ void ShadowBakeSystem::Cancel()
     pixels = {};
 }
 
-void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry)
 {
-    frameBuffer->shadowBake = {};
+    Core::FrameBuffer& frameBuffer = registry.FrameMut<Core::FrameBuffer>();
+    frameBuffer.shadowBake = {};
     ShadowBakeCaptureStaging& capture = ctx->shadowBakeCapture;
 
     if (capture.bReady.load(std::memory_order_acquire)) {
@@ -182,7 +183,7 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Engine::Syst
     }
 
     if (requestId != 0) {
-        frameBuffer->shadowBake = {
+        frameBuffer.shadowBake = {
             .requestId = requestId,
             .light = light,
             .face = face,
@@ -192,9 +193,9 @@ void ShadowBakeSystem::Tick(EngineContext* ctx, EngineState* state, Engine::Syst
     }
 }
 
-void ShadowBakeTick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void ShadowBakeTick(EngineContext* ctx, EngineState* state, Engine::SystemRegistry& registry)
 {
-    state->shadowBake.Tick(ctx, state, registry, frameBuffer);
+    state->shadowBake.Tick(ctx, state, registry);
 }
 
 #else
@@ -202,8 +203,8 @@ void ShadowBakeTick(EngineContext* ctx, EngineState* state, Engine::SystemRegist
 void ShadowBakeSystem::Enqueue(entt::entity) {}
 void ShadowBakeSystem::EnqueueAll(Engine::SystemRegistry&) {}
 void ShadowBakeSystem::Cancel() {}
-void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
-void ShadowBakeTick(EngineContext*, EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
+void ShadowBakeSystem::Tick(EngineContext*, EngineState*, Engine::SystemRegistry&) {}
+void ShadowBakeTick(EngineContext*, EngineState*, Engine::SystemRegistry&) {}
 
 #endif
 } // Engine

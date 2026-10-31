@@ -9,7 +9,7 @@
 
 namespace Engine
 {
-static void ApplyPushCommand(Registry& registry, entt::entity, void* payload)
+void SystemRegistry::ApplyPushCommand(Registry& registry, entt::entity, void* payload)
 {
     registry.State()->commandQueue.Push(*static_cast<const Command*>(payload));
 }

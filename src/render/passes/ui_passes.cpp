@@ -18,9 +18,9 @@ namespace Render
 void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, Core::Extent2D renderExtent, const SceneResources& scene, RDGTexture targetImage)
 {
     ZoneScoped;
-    if (viewFamily.uiDrawList.IsEmpty()) { return; }
+    if (viewFamily.ui.uiDrawList.IsEmpty()) { return; }
 
-    const bool bHasText = !viewFamily.uiGlyphQuads.IsEmpty() && scene.uiGlyphQuads.IsValid() && scene.fontCurves.IsValid();
+    const bool bHasText = !viewFamily.ui.uiGlyphQuads.IsEmpty() && scene.uiGlyphQuads.IsValid() && scene.fontCurves.IsValid();
 
     RenderPass& uiPass = graph.AddPass("UI Render"_sid, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Render::RenderCategory::UI);
     if (bHasText) {
@@ -52,7 +52,7 @@ void SetupUIRender(RenderGraph& graph, PipelineManager* pipelineManager, const C
         Core::UICommandType boundPipeline = Core::UICommandType::ScissorPop; // sentinel: nothing bound
         glm::vec4 overlayColor{1.0f, 1.0f, 1.0f, 1.0f};
 
-        for (const Core::UIDrawCommand& drawCmd : viewFamily.uiDrawList) {
+        for (const Core::UIDrawCommand& drawCmd : viewFamily.ui.uiDrawList) {
             switch (drawCmd.type) {
                 case Core::UICommandType::ScissorPush:
                 {

@@ -168,7 +168,7 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
     rc.gSpecMaxFastAccumulatedFrameNum = glm::min(params.specMaxFastAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
     rc.gDiffMaxAccumulatedFrameNum = glm::min(params.diffMaxAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
     rc.gDiffMaxFastAccumulatedFrameNum = glm::min(params.diffMaxFastAccumFrames * params.framerateScale, RELAX_MAX_ACCUM_FRAME_NUM);
-    const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.aaConfig.mode, frameNumber, viewFamily.resolutionScale);
+    const float jitterDelta = ComputeRelaxJitterDelta(viewFamily.settings.aaConfig.mode, frameNumber, viewFamily.settings.resolutionScale);
     const float disocclusionThresholdBonus = (1.0f + jitterDelta) / static_cast<float>(height);
     rc.gDisocclusionThreshold = params.disocclusionThreshold + disocclusionThresholdBonus;
     rc.gDenoisingRange = params.denoisingRange;
@@ -298,7 +298,7 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
     const RDGTexture diffFast = graph.CreateTexture("relax_diff_fast"_sid, colorInfo, {std::nullopt}, true);
     const RDGTexture specReprojConfidence = graph.CreateTexture("relax_spec_reproj_confidence"_sid, reprConfInfo, {std::nullopt}, true);
 
-    const bool bVirtualMotion = (viewFamily.postProcessConfig.bMotionBlurEnabled || viewFamily.aaConfig.mode == Core::AntiAliasingMode::FSR2) && reflectionConfig.bEnabled;
+    const bool bVirtualMotion = (viewFamily.settings.postProcessConfig.bMotionBlurEnabled || viewFamily.settings.aaConfig.mode == Core::AntiAliasingMode::FSR2) && reflectionConfig.bEnabled;
     RDGTexture virtualMotion{};
     if (bVirtualMotion) {
         virtualMotion = graph.CreateTexture("reflection_virtual_motion"_sid,TextureInfo{VK_FORMAT_R16G16_SFLOAT, width, height, 1}, {std::nullopt}, true);
@@ -660,10 +660,10 @@ RDGTexture SetupRELAXDenoiser(RenderGraph& graph,
         }
         pass.WriteStorageImage(noisyInput);
 
-        const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-        const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-        pass.Execute([pipelineManager, &scene, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI,
+        const int32_t skyboxIndex = viewFamily.settings.skyboxIndex;
+        const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
+        const bool bProbeBrute = viewFamily.probes.bReflectionProbeBruteForce;
+        pass.Execute([pipelineManager, &scene, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.settings.indirectIntensity, bDDGI,
                 ddgiCascades, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giResolved, giData, giSkyVis, giGatherMode, reflectionProbeCount, bProbeBrute, probeGrid,
                 bScreenDiffuse, diffuseRatio, screenDiffuse, bDirectSun](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{
@@ -1324,10 +1324,10 @@ void SetupReBLURDenoiser(RenderGraph& graph,
         }
         pass.WriteStorageImage(noisyInput);
 
-        const int32_t skyboxIndex = viewFamily.skyboxIndex;
-        const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
-        const bool bProbeBrute = viewFamily.bReflectionProbeBruteForce;
-        pass.Execute([pipelineManager, &scene, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.indirectIntensity, bDDGI,
+        const int32_t skyboxIndex = viewFamily.settings.skyboxIndex;
+        const uint32_t reflectionProbeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
+        const bool bProbeBrute = viewFamily.probes.bReflectionProbeBruteForce;
+        pass.Execute([pipelineManager, &scene, diffInput, specInput, gbufferOne, gbufferTwo, depth, noisyInput, width, height, remodulateOutputMode, skyboxIndex, iblIntensity, indirectIntensity = viewFamily.settings.indirectIntensity, bDDGI,
                 ddgiCascades, shadows, bReflection, bReflectionMerged, reflectionRoughnessMax, reflectionTarget, bGIGather, giResolved, giData, giSkyVis, giGatherMode, reflectionProbeCount, bProbeBrute, probeGrid,
                 bScreenDiffuse, diffuseRatio, screenDiffuse, bDirectSun](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             ReSTIRRemodulatePushConstant pc{

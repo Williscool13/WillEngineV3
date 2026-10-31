@@ -50,7 +50,7 @@ Engine::SplineParams ToSplineParams(const SplineMeshComponent& component)
     return params;
 }
 
-void SplineMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void SplineMeshComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<SplineMeshComponent>(entity);
@@ -65,7 +65,7 @@ void SplineMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::en
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void SplineMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void SplineMeshComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<MeshRuntime>(entity);
     registry.Remove<SplineMeshLoadRequest>(entity);
@@ -76,7 +76,7 @@ void SplineMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::enti
 
 namespace Engine
 {
-bool Component::SplineMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool Component::SplineMeshComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return Component::MeshSources::NoneOtherThan<Component::SplineMeshComponent>(registry, entity);
 }
@@ -90,7 +90,7 @@ void Component::SplineMeshComponent::Sanitize(SplineMeshComponent& comp)
     }
 }
 
-void Component::SplineMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::SplineMeshComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<SplineMeshLoadingFlag>(entity);
     registry.Set<SplineMeshLoadRequest>(entity);
@@ -109,9 +109,9 @@ void Component::SplineMeshComponent::OnEditCommit(Engine::SystemRegistry& regist
     if (bResynced) { PhysicsBodyDesc::RequestRebuild(registry, entity); }
 }
 
-Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     const entt::entity entity = edit.Primary();
     const SplineMeshComponent before = edit.Get<SplineMeshComponent>();
     SplineMeshComponent component = before;
@@ -119,8 +119,6 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
     static entt::entity editEntity = entt::null;
     static bool wasUsingGizmo = false;
 
-    auto* ctx = registry.Context();
-    auto* state = edit.State();
 
     if (editEntity != entity || edit.IsMulti()) {
         editPointIdx = -1;
@@ -439,8 +437,8 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
         if (editPointIdx == -1) { hasGizmoClaim = false; }
         if (hasGizmoClaim && transform && editPointIdx < liveCpCount) {
-            const glm::mat4 view = viewFamily.mainView.currentViewData.view;
-            const glm::mat4 proj = viewFamily.mainView.currentViewData.proj;
+            const glm::mat4 view = registry.Frame<Core::RenderView>().currentViewData.view;
+            const glm::mat4 proj = registry.Frame<Core::RenderView>().currentViewData.proj;
             const int idx = editPointIdx;
 
             const auto& points = component.spline.points;
@@ -501,23 +499,23 @@ Engine::ComponentEditorResult Component::SplineMeshComponent::DrawEditor(Core::V
 
             for (int i = 0; i < liveCpCount; i++) {
                 glm::vec3 wp = glm::vec3(entityMat * glm::vec4(component.spline.points[i].pos, 1.0f));
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {wp, kPointRadius, (i == editPointIdx) ? kEditColor : kPointColor});
                 const int nextI = component.spline.bClosed ? (i + 1) % liveCpCount : i + 1;
                 if (nextI < liveCpCount || component.spline.bClosed) {
                     glm::vec3 wp2 = glm::vec3(entityMat * glm::vec4(component.spline.points[nextI].pos, 1.0f));
-                    DEBUG_ADD_LINE(viewFamily.debugLines, {wp, wp2, kLineColor});
+                    DEBUG_ADD_LINE(debugDraws.debugLines, {wp, wp2, kLineColor});
                 }
             }
         }
 
         // Material selector
         {
-            if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material##spline", component.material, "(none)", edit.IsMixed(&SplineMeshComponent::material))) {
+            if (Engine::BeginMaterialCombo(ctx, state, registry, "Material##spline", component.material, "(none)", edit.IsMixed(&SplineMeshComponent::material))) {
                 if (ImGui::Selectable("(none)", !component.material.IsValid())) {
                     component.material = Engine::MaterialID{};
                     dirty = true;
                 }
-                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.material);
+                const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, registry, state->editor.materialSelector, component.material);
                 if (picked.IsValid() && picked != component.material) {
                     component.material = picked;
                     dirty = true;

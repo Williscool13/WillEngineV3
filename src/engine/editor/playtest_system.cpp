@@ -196,9 +196,10 @@ static Core::InlineString<32> LocalTimestamp()
     return Core::InlineString<32>(buf);
 }
 
-void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    frameBuffer->screenshotPath = {};
+    Core::FrameBuffer& frameBuffer = registry.FrameMut<Core::FrameBuffer>();
+    frameBuffer.screenshotPath = {};
 
     if (!bActive) {
         if (pendingPath.IsEmpty() && !bCliConsumed) {
@@ -488,9 +489,9 @@ void PlaytestSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state
     }
 }
 
-void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void PlaytestTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    state->playtest.Tick(ctx, state, registry, frameBuffer);
+    state->playtest.Tick(ctx, state, registry);
 }
 
 bool CameraRecorder::Start(Engine::EngineContext* ctx, Engine::EngineState* state, const char* recordingName)
@@ -574,27 +575,28 @@ Core::InlineString<512> CameraRecorder::Stop(Engine::EngineContext* ctx, Engine:
     return Core::InlineString<512>(std::string_view(path.c_str()));
 }
 
-void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer*)
+void CameraRecordTick(Engine::EngineContext*, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     state->cameraRecorder.Tick(state, registry);
 }
 
-void PlaytestScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void PlaytestScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
+    Core::FrameBuffer& frameBuffer = registry.FrameMut<Core::FrameBuffer>();
     if (!state->playtest.bActive) { return; }
 
-    Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
-    viewFamily.debugLines.Clear();
-    viewFamily.debugBoxes.Clear();
-    viewFamily.debugSpheres.Clear();
-    viewFamily.debugRects.Clear();
-    viewFamily.debugArrows.Clear();
-    viewFamily.debugCapsules.Clear();
-    viewFamily.debugCylinders.Clear();
-    viewFamily.sprites.Clear();
-    viewFamily.probePreviews.Clear();
+    Core::ViewFamily& viewFamily = registry.FrameMut<Core::ViewFamily>();
+    viewFamily.debugDraws.debugLines.Clear();
+    viewFamily.debugDraws.debugBoxes.Clear();
+    viewFamily.debugDraws.debugSpheres.Clear();
+    viewFamily.debugDraws.debugRects.Clear();
+    viewFamily.debugDraws.debugArrows.Clear();
+    viewFamily.debugDraws.debugCapsules.Clear();
+    viewFamily.debugDraws.debugCylinders.Clear();
+    viewFamily.spriteDraws.sprites.Clear();
+    viewFamily.probes.probePreviews.Clear();
 
-    frameBuffer->selectedStableId = 0;
-    frameBuffer->debug.bEnableGPUDebug = false;
+    frameBuffer.selectedStableId = 0;
+    frameBuffer.debug.bEnableGPUDebug = false;
 }
 } // Engine

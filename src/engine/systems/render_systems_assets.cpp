@@ -224,7 +224,7 @@ void FontHotReload(Engine::EngineContext* ctx, Engine::EngineState* state, Engin
     for (auto [entity, textComp, runtime] : registry.View<Engine::Mut<Component::TextComponent>, Component::TextRuntime>().each()) {
         if (!isHot(textComp.fontId)) { continue; }
         Component::UnloadTextComponent(textComp, registry, entity);
-        Component::LoadTextComponent(textComp, registry, entity);
+        Component::LoadTextComponent(ctx, state, registry, textComp, entity);
     }
     for (auto [entity, text3DComp] : registry.View<Engine::Mut<Component::Text3DComponent>>().each()) {
         if (!isHot(text3DComp.fontId)) { continue; }
@@ -347,19 +347,19 @@ struct ModelKickoff
 
 /** The kickoff system took the model ref; this stages it, or gives it back if the entity went away in the same wave. */
 template<typename TComponent, typename TRequest, typename TLoadingFlag>
-static void ApplyModelKickoff(Engine::SystemRegistry& registry, const ModelKickoff& kickoff)
+static void ApplyModelKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const ModelKickoff& kickoff)
 {
     if (!registry.Valid(kickoff.entity) || !registry.Has<TComponent>(kickoff.entity)) {
         registry.Assets().UnloadModel(kickoff.handle);
         return;
     }
-    StageModel(registry.Context(), registry.State(), registry, kickoff.entity, kickoff.handle);
+    StageModel(ctx, state, registry, kickoff.entity, kickoff.handle);
     registry.Remove<TRequest>(kickoff.entity);
     registry.Set<TLoadingFlag>(kickoff.entity);
 }
 
 template<typename TRequest>
-static void ApplyMeshCleared(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyMeshCleared(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     registry.Remove<TRequest>(entity);
@@ -386,7 +386,7 @@ struct ReflectionProbeKickoff
     Component::ReflectionProbeComponent::ContentSource source{Component::ReflectionProbeComponent::ContentSource::None};
 };
 
-static void ApplyReflectionProbeKickoff(Engine::SystemRegistry& registry, const ReflectionProbeKickoff& kickoff)
+static void ApplyReflectionProbeKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const ReflectionProbeKickoff& kickoff)
 {
     auto* runtime = registry.Valid(kickoff.entity) ? registry.TryGetMut<Component::ReflectionProbeRuntime>(kickoff.entity) : nullptr;
     if (!runtime) {
@@ -590,10 +590,9 @@ static glm::mat4 ComposeNodeModelSpace(const Core::HeapArray<Engine::Node>& node
     return m;
 }
 
-static void ApplyLightSurfaceResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyLightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity) || !registry.Has<Component::LightSurfaceRequest>(entity)) { return; }
-    Engine::EngineState* state = registry.State();
 
     const Engine::Material* defaultMaterial = registry.Service<Engine::MaterialManager>().GetMaterial(registry.Service<Engine::MaterialManager>().GetDefaultMaterialID());
     if (!defaultMaterial) { return; }
@@ -646,15 +645,13 @@ void LightSurfaceResolve(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-static void ApplyStaticMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyStaticMeshResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     const auto* meshComponentPtr = registry.TryGet<Component::StaticMeshComponent>(entity);
     auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
     if (!meshComponentPtr || !runtime) { return; }
     const Component::StaticMeshComponent& meshComponent = *meshComponentPtr;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
 
     Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
     Engine::InstanceStore& store = registry.ServiceMut<Engine::InstanceStore>();
@@ -829,15 +826,13 @@ void StaticMeshPrimitivePendingKickoff(Engine::EngineContext* ctx, Engine::Engin
     }
 }
 
-static void ApplyStaticMeshPrimitiveResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyStaticMeshPrimitiveResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     const auto* meshComponentPtr = registry.TryGet<Component::StaticMeshPrimitiveComponent>(entity);
     auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
     if (!meshComponentPtr || !runtime) { return; }
     const Component::StaticMeshPrimitiveComponent& meshComponent = *meshComponentPtr;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
 
     Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
 
@@ -950,15 +945,13 @@ void ProceduralMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     }
 }
 
-static void ApplyProceduralMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyProceduralMeshResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     const auto* meshComponentPtr = registry.TryGet<Component::ProceduralMeshComponent>(entity);
     auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
     if (!meshComponentPtr || !runtime) { return; }
     const Component::ProceduralMeshComponent& meshComponent = *meshComponentPtr;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
 
     auto releaseExisting = [&] {
         registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
@@ -1065,15 +1058,13 @@ void ModuleMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     }
 }
 
-static void ApplyModuleMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyModuleMeshResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     const auto* meshComponentPtr = registry.TryGet<Component::ModuleMeshComponent>(entity);
     auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
     if (!meshComponentPtr || !runtime) { return; }
     const Component::ModuleMeshComponent& meshComponent = *meshComponentPtr;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
 
     auto releaseExisting = [&] {
         registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
@@ -1128,15 +1119,13 @@ void SplineMeshPendingKickoff(Engine::EngineContext* ctx, Engine::EngineState* s
     }
 }
 
-static void ApplySplineMeshResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplySplineMeshResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     const auto* meshComponentPtr = registry.TryGet<Component::SplineMeshComponent>(entity);
     auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
     if (!meshComponentPtr || !runtime) { return; }
     const Component::SplineMeshComponent& meshComponent = *meshComponentPtr;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
 
     auto releaseExisting = [&] {
         registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
@@ -1195,15 +1184,13 @@ void Text3DGeneratePendingKickoff(Engine::EngineContext* ctx, Engine::EngineStat
     }
 }
 
-static void ApplyText3DResolve(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyText3DResolve(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     if (!registry.Valid(entity)) { return; }
     const auto* textComponentPtr = registry.TryGet<Component::Text3DComponent>(entity);
     auto* runtime = registry.TryGetMut<Component::MeshRuntime>(entity);
     if (!textComponentPtr || !runtime) { return; }
     const Component::Text3DComponent& textComponent = *textComponentPtr;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
 
     if (!TargetModel(*runtime).IsValid()) {
         registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
@@ -1257,7 +1244,7 @@ struct TextFontKickoff
     Engine::FontHandle handle{Engine::FontHandle::INVALID};
 };
 
-static void ApplyTextFontKickoff(Engine::SystemRegistry& registry, const TextFontKickoff& kickoff)
+static void ApplyTextFontKickoff(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const TextFontKickoff& kickoff)
 {
     auto* runtime = registry.Valid(kickoff.entity) ? registry.TryGetMut<Component::TextRuntime>(kickoff.entity) : nullptr;
     if (!runtime || runtime->fontHandle.IsValid()) {

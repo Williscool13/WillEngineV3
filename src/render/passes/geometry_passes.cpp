@@ -413,11 +413,11 @@ RDGTexture SetupGeometryPass(RenderGraph& graph,
                              uint32_t sceneIndex)
 {
     ZoneScoped;
-    if (viewFamily.instanceCount == 0) {
+    if (viewFamily.renderables.instanceCount == 0) {
         return {};
     }
 
-    const uint32_t instanceCount = viewFamily.instanceCount;
+    const uint32_t instanceCount = viewFamily.renderables.instanceCount;
     auto lodBias = static_cast<int32_t>(LOD_BIAS);
     auto highestMeshletCount = bufferSizes.geometryCull.visibleMeshletUpperBound;
 
@@ -725,7 +725,7 @@ GeometryFrame SetupVisibilityBucketingPass(RenderGraph& graph,
     const uint32_t tilesY = (renderExtent.height + BUCKET_TILE_SIZE - 1) / BUCKET_TILE_SIZE;
     const uint32_t tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height);
     const uint32_t lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size());
-    const RDGBuffer shadingTileList = graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.materialCount) * tileCapacity * sizeof(uint32_t));
+    const RDGBuffer shadingTileList = graph.CreateBuffer(SHADING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(viewFamily.renderables.materialCount) * tileCapacity * sizeof(uint32_t));
     const RDGBuffer lightingTileList = graph.CreateBuffer(LIGHTING_TILE_LIST_BUFFER, static_cast<VkDeviceSize>(lightingCount) * tileCapacity * sizeof(uint32_t));
     outTiles.shadingTileList = shadingTileList;
 
@@ -779,7 +779,7 @@ GeometryFrame SetupVisibilityBucketingPass(RenderGraph& graph,
     dispatchCountPass.ReadBuffer(scene.lightingBucketingDispatches);
     dispatchCountPass.ReadWriteBuffer(scene.readback);
     dispatchCountPass.Execute([&, pipelineManager,
-            materialCount = viewFamily.materialCount,
+            materialCount = viewFamily.renderables.materialCount,
             lightingCount = static_cast<uint32_t>(pipelineManager->GetLightingPipelines().Size())](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             BucketDispatchCountPushConstant pc{
                 .shadeDispatchBuffer = graph.GetBufferAddress(scene.shadingBucketingDispatches),
@@ -815,10 +815,10 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
         StringID fragmentShader{};
     };
 
-    const auto materialCount = static_cast<uint32_t>(viewFamily.activeMaterials.Size());
+    const auto materialCount = static_cast<uint32_t>(viewFamily.renderables.activeMaterials.Size());
     auto* sortedMaterials = arena.AllocArray<MaterialEntry>(materialCount);
     for (uint32_t i = 0; i < materialCount; ++i) {
-        sortedMaterials[i] = {viewFamily.activeMaterials[i].materialSlot, viewFamily.activeMaterials[i].material.fragmentShader};
+        sortedMaterials[i] = {viewFamily.renderables.activeMaterials[i].materialSlot, viewFamily.renderables.activeMaterials[i].material.fragmentShader};
     }
     std::sort(sortedMaterials, sortedMaterials + materialCount, [](const MaterialEntry& a, const MaterialEntry& b) {
         return a.fragmentShader < b.fragmentShader;
@@ -854,7 +854,7 @@ void SetupVisibilityShadingPass(RenderGraph& graph,
                 const MaterialEntry& entry = sortedMaterials[i];
                 if (!entry.fragmentShader) { continue; }
 
-                StringID shaderToUse = viewFamily.shadingShaderOverride ? viewFamily.shadingShaderOverride : entry.fragmentShader;
+                StringID shaderToUse = viewFamily.settings.shadingShaderOverride ? viewFamily.settings.shadingShaderOverride : entry.fragmentShader;
                 if (shaderToUse != boundShader) {
                     pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
                     assert(pipelineEntry && "Pipeline missing even after sanitization");

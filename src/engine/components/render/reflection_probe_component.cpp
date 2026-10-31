@@ -19,10 +19,9 @@
 
 namespace Engine::Component
 {
-static void RequestReflectionProbeLoad(Engine::SystemRegistry& registry, entt::entity entity)
+static void RequestReflectionProbeLoad(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.Get<ReflectionProbeComponent>(entity);
-    auto* ctx = registry.Context();
 
     registry.Remove<ReflectionProbeLoadingFlag>(entity);
     const bool bHasBaked = registry.Assets().GetProbeInfo(Engine::ProbeID{comp.probeId}) != nullptr;
@@ -61,23 +60,22 @@ bool ReflectionProbeComponent::IsBakeStale(const Transform& world, const Reflect
     return false;
 }
 
-void ReflectionProbeComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto* runtime = registry.TryGetMut<ReflectionProbeRuntime>(entity);
     if (!runtime || runtime->contentSource == ContentSource::Baked) {
         return;
     }
     if (runtime->contentHandle.IsValid()) {
-        auto* ctx = registry.Context();
         registry.Assets().UnloadCubemap(runtime->contentHandle);
         runtime->contentHandle = Engine::CubemapHandle::INVALID;
     }
-    RequestReflectionProbeLoad(registry, entity);
+    RequestReflectionProbeLoad(ctx, state, registry, entity);
 }
 
-Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
+    Core::ViewFamilyDebugDraws& debugDraws = registry.FrameMut<Core::ViewFamilyDebugDraws>();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditing = false;
@@ -87,7 +85,6 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         bEditing = false;
     }
 
-    auto* state = edit.State();
     if (bEditing) {
         state->editor.bExclusiveGizmoActive = true;
         const bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
@@ -117,7 +114,6 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
         static constexpr const char* RESOLUTION_LABELS[] = {"128", "256"};
         EditWidgets::Combo(edit, "Resolution##rp", &ReflectionProbeComponent::resolution, RESOLUTION_LABELS, 2);
 
-        auto* ctx = registry.Context();
         const Engine::IAssetLoader::CachedCubemapMetadata* currentMeta = registry.Assets().GetCubemapMetadata(comp.standInEnvMap);
         const char* preview = edit.IsMixed(&ReflectionProbeComponent::standInEnvMap) ? "--" : currentMeta ? currentMeta->name.c_str() : "None";
         if (ImGui::BeginCombo("Stand-in Env Map##rp", preview)) {
@@ -180,8 +176,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
     const auto* transform = registry.TryGet<TransformComponent>(entity);
     if (transform && bEditing) {
         const auto& comp = edit.Get<ReflectionProbeComponent>();
-        auto* ctx = registry.Context();
-        const auto& vd = viewFamily.mainView.currentViewData;
+        const auto& vd = registry.Frame<Core::RenderView>().currentViewData;
         const Vec3 center = transform->translation;
         const Quat rot = transform->rotation;
         const bool bSphere = comp.shape == Shape::Sphere;
@@ -257,7 +252,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
             if (bSphere) {
                 const float r = glm::max(glm::max(transform->scale.x, transform->scale.y), transform->scale.z);
                 const float inner = glm::max(0.01f, r - comp.fadeMargin);
-                DEBUG_ADD_SPHERE(viewFamily.debugSpheres, {center, inner, shellColor, lineWidth});
+                DEBUG_ADD_SPHERE(debugDraws.debugSpheres, {center, inner, shellColor, lineWidth});
             }
             else {
                 const Vec3 innerExtents{
@@ -265,7 +260,7 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
                     glm::max(0.01f, transform->scale.y - comp.fadeMargin),
                     glm::max(0.01f, transform->scale.z - comp.fadeMargin),
                 };
-                DEBUG_ADD_BOX(viewFamily.debugBoxes, {center, innerExtents, rot, shellColor, lineWidth});
+                DEBUG_ADD_BOX(debugDraws.debugBoxes, {center, innerExtents, rot, shellColor, lineWidth});
             }
         }
     }
@@ -274,10 +269,9 @@ Engine::ComponentEditorResult ReflectionProbeComponent::DrawEditor(Core::ViewFam
 }
 
 
-void ReflectionProbeComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& comp = registry.GetMut<ReflectionProbeComponent>(entity);
-    auto* state = registry.State();
 
     registry.Set<ReflectionProbeRuntime>(entity);
     if (comp.probeId == 0) {
@@ -286,12 +280,12 @@ void ReflectionProbeComponent::OnConstruct(Engine::SystemRegistry& registry, ent
     registry.PushCommand({.type = CommandType::ProbeConstruct, .entity = entity});
 }
 
-void ReflectionProbeComponent::DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void ReflectionProbeComponent::DeferredConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
-    RequestReflectionProbeLoad(registry, entity);
+    RequestReflectionProbeLoad(ctx, state, registry, entity);
 }
 
-void ReflectionProbeRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void ReflectionProbeRuntime::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& runtime = registry.Get<ReflectionProbeRuntime>(entity);
     if (runtime.contentHandle.IsValid()) {
@@ -299,7 +293,7 @@ void ReflectionProbeRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::e
     }
 }
 
-void ReflectionProbeComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void ReflectionProbeComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<ReflectionProbeRuntime, ReflectionProbeLoadRequest, ReflectionProbeLoadingFlag, ReflectionProbeBakeRequest>(entity);
 }

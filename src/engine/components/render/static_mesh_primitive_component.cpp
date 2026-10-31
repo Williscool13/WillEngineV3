@@ -42,7 +42,7 @@ void LoadStaticMeshPrimitive(StaticMeshPrimitiveComponent& component, Engine::Sy
     registry.Set<MultiframeDirtyRequest>(entity);
 }
 
-void StaticMeshPrimitiveComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<StaticMeshPrimitiveComponent>(entity);
@@ -52,19 +52,19 @@ void StaticMeshPrimitiveComponent::OnConstruct(Engine::SystemRegistry& registry,
     LoadStaticMeshPrimitive(component, registry, entity);
 }
 
-void StaticMeshPrimitiveComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     UnloadStaticMeshPrimitive(registry, entity);
     registry.Remove<RenderTransformRuntime>(entity);
 }
 
-bool StaticMeshPrimitiveComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool StaticMeshPrimitiveComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return MeshSources::NoneOtherThan<StaticMeshPrimitiveComponent>(registry, entity);
 }
 
 
-void StaticMeshPrimitiveComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& component = registry.Get<StaticMeshPrimitiveComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -74,7 +74,7 @@ void StaticMeshPrimitiveComponent::OnEditPreview(Engine::SystemRegistry& registr
     }
 }
 
-void StaticMeshPrimitiveComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void StaticMeshPrimitiveComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& component = registry.GetMut<StaticMeshPrimitiveComponent>(entity);
     if (!component.modelId.IsValid()) {
@@ -90,16 +90,13 @@ void StaticMeshPrimitiveComponent::OnEditCommit(Engine::SystemRegistry& registry
     if (component.primitiveOrdinal != ~0u) {
         registry.Set<StaticMeshPrimitiveLoadingFlag>(entity);
     }
-    OnEditPreview(registry, entity);
+    OnEditPreview(ctx, state, registry, entity);
 }
 
-Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     const auto& component = edit.Get<StaticMeshPrimitiveComponent>();
-    auto* ctx = registry.Context();
-    auto* state = edit.State();
 
     bool open = ImGui::CollapsingHeader("Static Mesh Primitive", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -176,11 +173,11 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
         Engine::MaterialID pendingMat{};
         bool changed = false;
         bool clear = false;
-        if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "Material", component.materialOverride, "__synthesized__")) {
+        if (Engine::BeginMaterialCombo(ctx, state, registry, "Material", component.materialOverride, "__synthesized__")) {
             if (ImGui::Selectable("__synthesized__", !component.materialOverride.IsValid())) {
                 if (component.materialOverride.IsValid()) { clear = true; }
             }
-            const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, component.materialOverride);
+            const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, registry, state->editor.materialSelector, component.materialOverride);
             if (picked.IsValid() && picked != component.materialOverride) {
                 pendingMat = picked;
                 changed = true;
@@ -196,7 +193,7 @@ Engine::ComponentEditorResult StaticMeshPrimitiveComponent::DrawEditor(Core::Vie
             auto* pm = ctx->pipelineManager;
             Core::Span<const StringID> shadingPipelines = pm->GetShadingPipelines();
             Core::Arena& arena = ctx->editorArena.Get();
-            Core::ArenaFixedVector<StringID> lightingPipelines = pm->GetLightingPipelinesForMode(viewFamily.lightingMode, arena);
+            Core::ArenaFixedVector<StringID> lightingPipelines = pm->GetLightingPipelinesForMode(registry.Frame<Core::ViewFamilySettings>().lightingMode, arena);
 
             {
                 const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());

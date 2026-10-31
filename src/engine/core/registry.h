@@ -82,7 +82,7 @@ template<typename... T>
 void RegisterPools() { ((void)PoolRegistrar<std::remove_cv_t<T>>::bRegistered, ...); }
 }
 
-using RegistryHook = void(*)(SystemRegistry&, entt::entity);
+using RegistryHook = void(*)(EngineContext*, EngineState*, SystemRegistry&, entt::entity);
 
 /** Component storage. Everything reads and writes it through a SystemRegistry; only lifecycle and hook wiring are public. */
 class Registry
@@ -97,9 +97,6 @@ public:
         state = state_;
         context = context_;
     }
-
-    [[nodiscard]] EngineState* State() const { return state; }
-    [[nodiscard]] EngineContext* Context() const { return context; }
 
     void Reset() { raw = entt::registry{}; }
 
@@ -140,6 +137,9 @@ private:
     /** Defined in system_registry.h. */
     template<RegistryHook Fn>
     static void HookThunk(Registry& self, entt::registry&, entt::entity entity);
+
+    [[nodiscard]] EngineState* State() const { return state; }
+    [[nodiscard]] EngineContext* Context() const { return context; }
 
     [[nodiscard]] entt::entity Create() { return raw.create(); }
 

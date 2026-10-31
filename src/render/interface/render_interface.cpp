@@ -13,42 +13,42 @@ namespace Core
 {
 ViewFamily::ViewFamily(Arena& arena, const ViewFamilyWatermarks& wm)
 {
-    modelPayload = ArenaVector<Model>(&arena, wm.modelPayload);
-    modelRuns = ArenaVector<DirtyRun>(&arena, wm.modelRuns);
-    lightPayload = ArenaVector<LightInfo>(&arena, wm.lightPayload);
-    lightRuns = ArenaVector<DirtyRun>(&arena, wm.lightRuns);
-    reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
-    emissiveTriWork = ArenaFixedVector<EmissiveTriLightWork>(&arena, MAX_EMISSIVE_MESHES);
-    boundsChanges = ArenaFixedVector<glm::vec4>(&arena, MAX_BOUNDS_CHANGES);
-    probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
-    localDDGIVolumes = ArenaFixedVector<LocalDDGIVolume>(&arena, MAX_LOCAL_DDGI_VOLUMES);
+    renderables.modelPayload = ArenaVector<Model>(&arena, wm.modelPayload);
+    renderables.modelRuns = ArenaVector<DirtyRun>(&arena, wm.modelRuns);
+    lights.lightPayload = ArenaVector<LightInfo>(&arena, wm.lightPayload);
+    lights.lightRuns = ArenaVector<DirtyRun>(&arena, wm.lightRuns);
+    probes.reflectionProbes = ArenaFixedVector<ReflectionProbeGPU>(&arena, MAX_REFLECTION_PROBES);
+    lights.emissiveTriWork = ArenaFixedVector<EmissiveTriLightWork>(&arena, MAX_EMISSIVE_MESHES);
+    lights.boundsChanges = ArenaFixedVector<glm::vec4>(&arena, MAX_BOUNDS_CHANGES);
+    probes.probePreviews = ArenaFixedVector<ProbePreviewSphere>(&arena, MAX_REFLECTION_PROBES);
+    ddgiVolumes.localDDGIVolumes = ArenaFixedVector<LocalDDGIVolume>(&arena, MAX_LOCAL_DDGI_VOLUMES);
 
-    instancePayload = ArenaVector<Instance>(&arena, wm.instancePayload);
-    instanceRuns = ArenaVector<DirtyRun>(&arena, wm.instanceRuns);
-    worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
-    textInstances = ArenaVector<TextInstanceDataFull>(&arena, wm.textInstances);
+    renderables.instancePayload = ArenaVector<Instance>(&arena, wm.instancePayload);
+    renderables.instanceRuns = ArenaVector<DirtyRun>(&arena, wm.instanceRuns);
+    text.worldGlyphQuads = ArenaVector<WorldGlyphQuad>(&arena, wm.worldGlyphQuads);
+    text.textInstances = ArenaVector<TextInstanceDataFull>(&arena, wm.textInstances);
 
-    textDrawCalls = ArenaVector<TextDrawCall>(&arena, wm.textDrawCalls);
+    text.textDrawCalls = ArenaVector<TextDrawCall>(&arena, wm.textDrawCalls);
 
-    activeMaterials = ArenaVector<ActiveMaterial>(&arena, wm.activeMaterials);
-    materialPayload = ArenaVector<MaterialProperties>(&arena, wm.materialPayload);
-    materialRuns = ArenaVector<DirtyRun>(&arena, wm.materialRuns);
-    activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
-    textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);
+    renderables.activeMaterials = ArenaVector<ActiveMaterial>(&arena, wm.activeMaterials);
+    renderables.materialPayload = ArenaVector<MaterialProperties>(&arena, wm.materialPayload);
+    renderables.materialRuns = ArenaVector<DirtyRun>(&arena, wm.materialRuns);
+    text.activeTextMaterials = ArenaMap<Engine::TextMaterialID, uint32_t>(&arena, wm.activeTextMaterials);
+    text.textMaterials = ArenaVector<TextRenderMaterial>(&arena, wm.textMaterials);
 
-    debugLines = ArenaVector<DebugLine>(&arena, wm.debugLines);
-    debugBoxes = ArenaVector<DebugBox>(&arena, wm.debugBoxes);
-    debugSpheres = ArenaVector<DebugSphere>(&arena, wm.debugSpheres);
-    debugRects = ArenaVector<DebugRect>(&arena, wm.debugRects);
-    debugArrows = ArenaVector<DebugArrow>(&arena, wm.debugArrows);
-    debugCapsules = ArenaVector<DebugCapsule>(&arena, wm.debugCapsules);
-    debugCylinders = ArenaVector<DebugCylinder>(&arena, wm.debugCylinders);
+    debugDraws.debugLines = ArenaVector<DebugLine>(&arena, wm.debugLines);
+    debugDraws.debugBoxes = ArenaVector<DebugBox>(&arena, wm.debugBoxes);
+    debugDraws.debugSpheres = ArenaVector<DebugSphere>(&arena, wm.debugSpheres);
+    debugDraws.debugRects = ArenaVector<DebugRect>(&arena, wm.debugRects);
+    debugDraws.debugArrows = ArenaVector<DebugArrow>(&arena, wm.debugArrows);
+    debugDraws.debugCapsules = ArenaVector<DebugCapsule>(&arena, wm.debugCapsules);
+    debugDraws.debugCylinders = ArenaVector<DebugCylinder>(&arena, wm.debugCylinders);
 
-    uiDrawList = ArenaVector<UIDrawCommand>(&arena, wm.uiDrawCommands);
-    uiGlyphQuads = ArenaVector<UIGlyphQuad>(&arena, wm.uiGlyphQuads);
+    ui.uiDrawList = ArenaVector<UIDrawCommand>(&arena, wm.uiDrawCommands);
+    ui.uiGlyphQuads = ArenaVector<UIGlyphQuad>(&arena, wm.uiGlyphQuads);
 
-    sprites = ArenaVector<Sprite>(&arena, wm.sprites);
-    spriteBatches = ArenaVector<SpriteBatch>(&arena, wm.spriteBatches);
+    spriteDraws.sprites = ArenaVector<Sprite>(&arena, wm.sprites);
+    spriteDraws.spriteBatches = ArenaVector<SpriteBatch>(&arena, wm.spriteBatches);
 }
 
 void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char* name)
@@ -61,31 +61,31 @@ void FrameBuffer::Initialize(VirtualMemoryManager& vm, AllocTag tag, const char*
 static ViewFamilyWatermarks ObservedWatermarks(const ViewFamily& vf)
 {
     ViewFamilyWatermarks w{};
-    w.instancePayload = NextPowerOfTwo(vf.instancePayload.Size());
-    w.instanceRuns = NextPowerOfTwo(vf.instanceRuns.Size());
-    w.worldGlyphQuads = NextPowerOfTwo(vf.worldGlyphQuads.Size());
-    w.textInstances = NextPowerOfTwo(vf.textInstances.Size());
-    w.modelPayload = NextPowerOfTwo(vf.modelPayload.Size());
-    w.modelRuns = NextPowerOfTwo(vf.modelRuns.Size());
-    w.lightPayload = NextPowerOfTwo(vf.lightPayload.Size());
-    w.lightRuns = NextPowerOfTwo(vf.lightRuns.Size());
-    w.materialPayload = NextPowerOfTwo(vf.materialPayload.Size());
-    w.materialRuns = NextPowerOfTwo(vf.materialRuns.Size());
-    w.activeMaterials = vf.activeMaterials.Size();
-    w.activeTextMaterials = vf.activeTextMaterials.Size();
-    w.textMaterials = vf.textMaterials.Size();
-    w.debugLines = vf.debugLines.Size();
-    w.debugBoxes = vf.debugBoxes.Size();
-    w.debugSpheres = vf.debugSpheres.Size();
-    w.debugRects = vf.debugRects.Size();
-    w.debugArrows = vf.debugArrows.Size();
-    w.debugCapsules = vf.debugCapsules.Size();
-    w.debugCylinders = vf.debugCylinders.Size();
-    w.uiDrawCommands = vf.uiDrawList.Size();
-    w.uiGlyphQuads = vf.uiGlyphQuads.Size();
-    w.textDrawCalls = vf.textDrawCalls.Size();
-    w.sprites = vf.sprites.Size();
-    w.spriteBatches = vf.spriteBatches.Size();
+    w.instancePayload = NextPowerOfTwo(vf.renderables.instancePayload.Size());
+    w.instanceRuns = NextPowerOfTwo(vf.renderables.instanceRuns.Size());
+    w.worldGlyphQuads = NextPowerOfTwo(vf.text.worldGlyphQuads.Size());
+    w.textInstances = NextPowerOfTwo(vf.text.textInstances.Size());
+    w.modelPayload = NextPowerOfTwo(vf.renderables.modelPayload.Size());
+    w.modelRuns = NextPowerOfTwo(vf.renderables.modelRuns.Size());
+    w.lightPayload = NextPowerOfTwo(vf.lights.lightPayload.Size());
+    w.lightRuns = NextPowerOfTwo(vf.lights.lightRuns.Size());
+    w.materialPayload = NextPowerOfTwo(vf.renderables.materialPayload.Size());
+    w.materialRuns = NextPowerOfTwo(vf.renderables.materialRuns.Size());
+    w.activeMaterials = vf.renderables.activeMaterials.Size();
+    w.activeTextMaterials = vf.text.activeTextMaterials.Size();
+    w.textMaterials = vf.text.textMaterials.Size();
+    w.debugLines = vf.debugDraws.debugLines.Size();
+    w.debugBoxes = vf.debugDraws.debugBoxes.Size();
+    w.debugSpheres = vf.debugDraws.debugSpheres.Size();
+    w.debugRects = vf.debugDraws.debugRects.Size();
+    w.debugArrows = vf.debugDraws.debugArrows.Size();
+    w.debugCapsules = vf.debugDraws.debugCapsules.Size();
+    w.debugCylinders = vf.debugDraws.debugCylinders.Size();
+    w.uiDrawCommands = vf.ui.uiDrawList.Size();
+    w.uiGlyphQuads = vf.ui.uiGlyphQuads.Size();
+    w.textDrawCalls = vf.text.textDrawCalls.Size();
+    w.sprites = vf.spriteDraws.sprites.Size();
+    w.spriteBatches = vf.spriteDraws.spriteBatches.Size();
     return w;
 }
 

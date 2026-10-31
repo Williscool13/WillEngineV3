@@ -62,35 +62,36 @@ bool ProbeBakeInFlight(Engine::EngineState* state)
     return ProbeBakeGet(state).phase != ProbeBakeSystem::Phase::Idle;
 }
 
-void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void ProbeBakeTick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    ProbeBakeGet(state).Tick(ctx, state, registry, frameBuffer);
+    ProbeBakeGet(state).Tick(ctx, state, registry);
 }
 
-void ProbeBakeOverrideView(Engine::EngineState* state, Core::ViewFamily& viewFamily)
+void ProbeBakeOverrideView(Engine::EngineState* state, Core::RenderView& mainView)
 {
     const ProbeBakeSystem& bake = ProbeBakeGet(state);
     if (bake.bViewOverrideActive) {
-        viewFamily.mainView.currentViewData = bake.overrideView;
-        viewFamily.mainView.previousViewData = bake.overrideView;
+        mainView.currentViewData = bake.overrideView;
+        mainView.previousViewData = bake.overrideView;
     }
 }
 
-void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+void ProbeBakeScrubFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
+    Core::FrameBuffer& frameBuffer = registry.FrameMut<Core::FrameBuffer>();
     if (!ProbeBakeActive(state)) { return; }
 
-    Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
-    viewFamily.debugLines.Clear();
-    viewFamily.debugBoxes.Clear();
-    viewFamily.debugSpheres.Clear();
-    viewFamily.debugRects.Clear();
-    viewFamily.debugArrows.Clear();
-    viewFamily.debugCapsules.Clear();
-    viewFamily.debugCylinders.Clear();
+    Core::ViewFamily& viewFamily = registry.FrameMut<Core::ViewFamily>();
+    viewFamily.debugDraws.debugLines.Clear();
+    viewFamily.debugDraws.debugBoxes.Clear();
+    viewFamily.debugDraws.debugSpheres.Clear();
+    viewFamily.debugDraws.debugRects.Clear();
+    viewFamily.debugDraws.debugArrows.Clear();
+    viewFamily.debugDraws.debugCapsules.Clear();
+    viewFamily.debugDraws.debugCylinders.Clear();
 
-    frameBuffer->selectedStableId = 0;
-    frameBuffer->debug.bEnableGPUDebug = false;
+    frameBuffer.selectedStableId = 0;
+    frameBuffer.debug.bEnableGPUDebug = false;
 }
 
 void ProbeBakeSystem::Start(Engine::EngineContext* ctx, Engine::EngineState* state, entt::entity probe)
@@ -191,23 +192,24 @@ void ProbeBakeSystem::Cancel(Engine::EngineContext* ctx, Engine::EngineState* st
     phase = Phase::Idle;
 }
 
-void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
-    frameBuffer->bCaptureProbeFace = false;
-    frameBuffer->probeCaptureCropSize = bBakeActive ? bakeCropSize : 0;
+    Core::FrameBuffer& frameBuffer = registry.FrameMut<Core::FrameBuffer>();
+    frameBuffer.bCaptureProbeFace = false;
+    frameBuffer.probeCaptureCropSize = bBakeActive ? bakeCropSize : 0;
 
     if (bPendingExtentRestore) {
-        frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, stashedViewportWidth, stashedViewportHeight};
+        frameBuffer.viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, stashedViewportWidth, stashedViewportHeight};
         bPendingExtentRestore = false;
     }
 
     // A mid-bake panel drag is not blocked by the input lockout; re-stash the user's new viewport and keep the forced extent so the 90-degree crop stays exact
-    if (bBakeActive && bakeForcedExtent > 0 && frameBuffer->viewportResizeCommand.bEngineCommandsResize) {
-        stashedViewportOffsetX = frameBuffer->viewportResizeCommand.offsetX;
-        stashedViewportOffsetY = frameBuffer->viewportResizeCommand.offsetY;
-        stashedViewportWidth = frameBuffer->viewportResizeCommand.sizeX;
-        stashedViewportHeight = frameBuffer->viewportResizeCommand.sizeY;
-        frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
+    if (bBakeActive && bakeForcedExtent > 0 && frameBuffer.viewportResizeCommand.bEngineCommandsResize) {
+        stashedViewportOffsetX = frameBuffer.viewportResizeCommand.offsetX;
+        stashedViewportOffsetY = frameBuffer.viewportResizeCommand.offsetY;
+        stashedViewportWidth = frameBuffer.viewportResizeCommand.sizeX;
+        stashedViewportHeight = frameBuffer.viewportResizeCommand.sizeY;
+        frameBuffer.viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
     }
 
     switch (phase) {
@@ -304,7 +306,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
             // Force a square native-res render target so the exact-90-degree crop and fovY are aspect-independent.
             state->projectConfig.resolutionScale = 1.0f;
-            frameBuffer->viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
+            frameBuffer.viewportResizeCommand = {true, stashedViewportOffsetX, stashedViewportOffsetY, bakeForcedExtent, bakeForcedExtent};
 
             stashedGIFreeze = state->debug.bGIFreeze;
             state->debug.bGIFreeze = false;
@@ -365,7 +367,7 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
             if (ctx->IsProbeCaptureReady()) {
                 ctx->ConsumeProbeCapture();
             }
-            frameBuffer->bCaptureProbeFace = true;
+            frameBuffer.bCaptureProbeFace = true;
             phase = Phase::AwaitDelivery;
             return;
         }
@@ -510,15 +512,15 @@ void ProbeBakeSystem::Tick(Engine::EngineContext* ctx, Engine::EngineState* stat
 
 bool ProbeBakeActive(Engine::EngineState*) { return false; }
 bool ProbeBakeInFlight(Engine::EngineState*) { return false; }
-void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
-void ProbeBakeOverrideView(Engine::EngineState*, Core::ViewFamily&) {}
-void ProbeBakeScrubFrame(Engine::EngineContext*, Engine::EngineState*, Core::FrameBuffer*) {}
+void ProbeBakeTick(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&) {}
+void ProbeBakeOverrideView(Engine::EngineState*, Core::RenderView&) {}
+void ProbeBakeScrubFrame(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::Start(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
 void ProbeBakeSystem::StartDryRun(Engine::EngineContext*, Engine::EngineState*, entt::entity) {}
 void ProbeBakeSystem::EnqueueAllProbes(Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::EnqueueAllProbesInterbounce(Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::EnqueueProbeInterbounce(Engine::EngineState*, entt::entity) {}
-void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&, Core::FrameBuffer*) {}
+void ProbeBakeSystem::Tick(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&) {}
 void ProbeBakeSystem::Cancel(Engine::EngineContext*, Engine::EngineState*, Engine::SystemRegistry&) {}
 
 #endif

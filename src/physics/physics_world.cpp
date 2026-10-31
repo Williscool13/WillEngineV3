@@ -178,10 +178,10 @@ void JoltWorld::Step(float deltaTime)
     }
 }
 
-void JoltWorld::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter, bool bSleepColor)
+void JoltWorld::DrawDebug(Core::ViewFamilyDebugDraws* debugDraws, const glm::vec3& cameraPos, bool bUseFilter, bool bSleepColor)
 {
 #if JPH_DEBUG_RENDERER
-    debugRenderer->SetViewFamily(viewFamily);
+    debugRenderer->SetDebugDraws(debugDraws, cameraPos);
 
     JPH::BodyManager::DrawSettings settings;
     settings.mDrawShape = true;
@@ -225,9 +225,9 @@ void PhysicsWorld::ClearActivationEvents()
     jolt->ClearActivationEvents();
 }
 
-void PhysicsWorld::DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter, bool bSleepColor)
+void PhysicsWorld::DrawDebug(Core::ViewFamilyDebugDraws* debugDraws, const glm::vec3& cameraPos, bool bUseFilter, bool bSleepColor)
 {
-    jolt->DrawDebug(viewFamily, bUseFilter, bSleepColor);
+    jolt->DrawDebug(debugDraws, cameraPos, bUseFilter, bSleepColor);
 }
 
 Core::ArenaFixedVector<BodyHandle> PhysicsWorld::QueryBodiesInBox(Core::Arena* arena, const AABB& box) const

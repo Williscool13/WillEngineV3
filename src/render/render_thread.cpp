@@ -206,11 +206,11 @@ void RenderThread::ThreadMain()
                     renderGraph->InvalidateAllViewportAssociated();
                 }
 
-                if (frameBuffer.mainViewFamily.resolutionScale != lastResolutionScale) {
+                if (frameBuffer.mainViewFamily.settings.resolutionScale != lastResolutionScale) {
                     vkQueueWaitIdle(context->graphicsQueue);
                     gpuDispatcher->WaitAsyncComputeIdle();
-                    renderExtents->UpdateScale(frameBuffer.mainViewFamily.resolutionScale);
-                    lastResolutionScale = frameBuffer.mainViewFamily.resolutionScale;
+                    renderExtents->UpdateScale(frameBuffer.mainViewFamily.settings.resolutionScale);
+                    lastResolutionScale = frameBuffer.mainViewFamily.settings.resolutionScale;
                     renderGraph->InvalidateAllViewportAssociated();
                 }
 
@@ -839,34 +839,34 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     const HostBufferMapping sceneMapping = renderGraph->OpenHostBuffer(SCENE_DATA_BUFFER, SCENE_DATA_BUFFER_SIZE);
     scene.sceneData = sceneMapping.buffer;
     auto* sceneData = static_cast<SceneData*>(sceneMapping.data);
-    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.resolutionScale);
+    sceneData[0] = GenerateSceneData(viewFamily.mainView, viewFamily.settings.aaConfig, renderExtent, frameNumber, renderDeltaTime, viewFamily.settings.resolutionScale);
     sceneData[0].preExposure = preExposure;
     sceneData[0].prevPreExposure = prevPreExposure;
     sceneData[0].framerateScale = framerateScale;
 
-    const uint32_t analyticLightCount = viewFamily.analyticLightCount;
-    const uint32_t triLightCount = viewFamily.triLightCount;
+    const uint32_t analyticLightCount = viewFamily.lights.analyticLightCount;
+    const uint32_t triLightCount = viewFamily.lights.triLightCount;
     const uint32_t totalLightLimit = triLightCount > 0 ? static_cast<uint32_t>(MAX_ANALYTIC_LIGHTS) + triLightCount : analyticLightCount;
-    const size_t emissiveWorkCount = viewFamily.emissiveTriWork.Size();
+    const size_t emissiveWorkCount = viewFamily.lights.emissiveTriWork.Size();
 
     const HostBufferWrite lightDst = renderGraph->OpenHostBufferMirrored(LIGHT_DATA_BUFFER, LIGHT_DATA_BUFFER_SIZE);
     scene.lightData = lightDst.buffer;
     {
         ZoneScopedN("Lights");
-        const glm::vec3& dir = viewFamily.directionalLight.direction;
+        const glm::vec3& dir = viewFamily.lights.directionalLight.direction;
         DirectionalLightData directional{};
-        directional.directionIntensity = {dir, viewFamily.directionalLight.bEnabled ? viewFamily.directionalLight.intensity : 0.0f};
-        directional.angularRadius = glm::radians(viewFamily.directionalLight.angularRadiusDegrees);
-        directional.volumetricScale = viewFamily.directionalLight.volumetricScale;
-        directional.packedColor = PackColorRGB8(viewFamily.directionalLight.color);
+        directional.directionIntensity = {dir, viewFamily.lights.directionalLight.bEnabled ? viewFamily.lights.directionalLight.intensity : 0.0f};
+        directional.angularRadius = glm::radians(viewFamily.lights.directionalLight.angularRadiusDegrees);
+        directional.volumetricScale = viewFamily.lights.directionalLight.volumetricScale;
+        directional.packedColor = PackColorRGB8(viewFamily.lights.directionalLight.color);
         lightDst.Write(offsetof(LightData, directionalLight), &directional, sizeof(directional));
 
-        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.analyticLightCount), static_cast<int32_t>(viewFamily.emissiveMeshletCount), static_cast<int32_t>(viewFamily.emissiveMeshCount)};
+        const int32_t counts[4] = {static_cast<int32_t>(totalLightLimit), static_cast<int32_t>(viewFamily.lights.analyticLightCount), static_cast<int32_t>(viewFamily.lights.emissiveMeshletCount), static_cast<int32_t>(viewFamily.lights.emissiveMeshCount)};
         lightDst.Write(offsetof(LightData, lightCount), counts, sizeof(counts));
 
-        const LightInfo* payload = viewFamily.lightPayload.Data();
+        const LightInfo* payload = viewFamily.lights.lightPayload.Data();
         size_t cursor = 0;
-        for (const Core::DirtyRun& run : viewFamily.lightRuns) {
+        for (const Core::DirtyRun& run : viewFamily.lights.lightRuns) {
             lightDst.Write(offsetof(LightData, lights) + run.offset * sizeof(LightInfo), payload + cursor, run.count * sizeof(LightInfo));
             cursor += run.count;
         }
@@ -875,15 +875,15 @@ void RenderThread::UploadFrameUniforms(const Core::ViewFamily& viewFamily, const
     if (emissiveWorkCount > 0) {
         const HostBufferMapping work = renderGraph->OpenHostBuffer(EMISSIVE_TRI_WORK_BUFFER, emissiveWorkCount * sizeof(EmissiveTriLightWork));
         scene.emissiveTriWork = work.buffer;
-        memcpy(work.data, viewFamily.emissiveTriWork.Data(), emissiveWorkCount * sizeof(EmissiveTriLightWork));
+        memcpy(work.data, viewFamily.lights.emissiveTriWork.Data(), emissiveWorkCount * sizeof(EmissiveTriLightWork));
     }
 
     // Reflection probes
-    const auto probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
+    const auto probeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
     const HostBufferMapping probes = renderGraph->OpenHostBuffer(REFLECTION_PROBE_BUFFER, REFLECTION_PROBE_BUFFER_SIZE);
     scene.reflectionProbes = probes.buffer;
     if (probeCount > 0) {
-        memcpy(probes.data, viewFamily.reflectionProbes.Data(), probeCount * sizeof(ReflectionProbeGPU));
+        memcpy(probes.data, viewFamily.probes.reflectionProbes.Data(), probeCount * sizeof(ReflectionProbeGPU));
     }
 
 }
@@ -892,38 +892,38 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Scene
 {
     ZoneScoped;
 
-    if (viewFamily.instanceCount > 0) {
+    if (viewFamily.renderables.instanceCount > 0) {
         ZoneScopedN("Instances");
         const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_INSTANCE_BUFFER, bufferSizes.instanceBufferSize);
         scene.instances = dst.buffer;
-        const Instance* payload = viewFamily.instancePayload.Data();
+        const Instance* payload = viewFamily.renderables.instancePayload.Data();
         size_t cursor = 0;
-        for (const Core::DirtyRun& run : viewFamily.instanceRuns) {
+        for (const Core::DirtyRun& run : viewFamily.renderables.instanceRuns) {
             dst.Write(run.offset * sizeof(Instance), payload + cursor, run.count * sizeof(Instance));
             cursor += run.count;
         }
     }
 
-    if (viewFamily.modelCount > 0) {
+    if (viewFamily.renderables.modelCount > 0) {
         ZoneScopedN("Models");
         const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MODEL_BUFFER, bufferSizes.modelBufferSize);
         scene.models = dst.buffer;
-        const Model* payload = viewFamily.modelPayload.Data();
+        const Model* payload = viewFamily.renderables.modelPayload.Data();
         size_t cursor = 0;
-        for (const Core::DirtyRun& run : viewFamily.modelRuns) {
+        for (const Core::DirtyRun& run : viewFamily.renderables.modelRuns) {
             dst.Write(run.offset * sizeof(Model), payload + cursor, run.count * sizeof(Model));
             cursor += run.count;
         }
     }
 
-    if (viewFamily.materialCount > 0) {
+    if (viewFamily.renderables.materialCount > 0) {
         {
             ZoneScopedN("Materials");
             const HostBufferWrite dst = renderGraph->OpenHostBufferMirrored(GEOMETRY_MATERIAL_BUFFER, bufferSizes.materialBufferSize);
             scene.materials = dst.buffer;
-            const MaterialProperties* payload = viewFamily.materialPayload.Data();
+            const MaterialProperties* payload = viewFamily.renderables.materialPayload.Data();
             size_t cursor = 0;
-            for (const Core::DirtyRun& run : viewFamily.materialRuns) {
+            for (const Core::DirtyRun& run : viewFamily.renderables.materialRuns) {
                 dst.Write(run.offset * sizeof(MaterialProperties), payload + cursor, run.count * sizeof(MaterialProperties));
                 cursor += run.count;
             }
@@ -933,7 +933,7 @@ void RenderThread::UploadModelUniforms(Core::ViewFamily& viewFamily, const Scene
         const HostBufferMapping shadeDispatch = renderGraph->OpenHostBuffer(SHADING_DISPATCH_BUCKETING_BUFFER, bufferSizes.shadeDispatchBufferSize, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
         scene.shadingBucketingDispatches = shadeDispatch.buffer;
         auto* shadeDispatchBuffer = static_cast<BucketDispatchParameters*>(shadeDispatch.data);
-        for (uint32_t i = 0; i < viewFamily.materialCount; ++i) {
+        for (uint32_t i = 0; i < viewFamily.renderables.materialCount; ++i) {
             shadeDispatchBuffer[i] = {.xDispatch = 0, .yDispatch = 1, .zDispatch = 1, .bucketIndex = i};
         }
 
@@ -950,18 +950,18 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneB
 {
     ZoneScoped;
 
-    if (viewFamily.worldGlyphQuads.IsEmpty()) { return; }
+    if (viewFamily.text.worldGlyphQuads.IsEmpty()) { return; }
 
     const HostBufferMapping glyphs = renderGraph->OpenHostBuffer(TEXT_GLYPH_QUAD_BUFFER, bufferSizes.glyphQuadBufferSize);
     scene.textGlyphQuads = glyphs.buffer;
-    memcpy(glyphs.data, viewFamily.worldGlyphQuads.Data(), viewFamily.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
+    memcpy(glyphs.data, viewFamily.text.worldGlyphQuads.Data(), viewFamily.text.worldGlyphQuads.Size() * sizeof(WorldGlyphQuad));
 
-    const uint32_t instCount = viewFamily.textInstances.Size();
+    const uint32_t instCount = viewFamily.text.textInstances.Size();
     const HostBufferMapping textInstances = renderGraph->OpenHostBuffer(TEXT_INSTANCE_BUFFER, bufferSizes.textInstanceBufferSize);
     scene.textInstances = textInstances.buffer;
     auto* instDst = static_cast<TextInstanceData*>(textInstances.data);
     for (uint32_t i = 0; i < instCount; ++i) {
-        const Core::TextInstanceDataFull& src = viewFamily.textInstances[i];
+        const Core::TextInstanceDataFull& src = viewFamily.text.textInstances[i];
         instDst[i] = {
             .modelIndex = src.modelIndex,
             .stableIdLo = static_cast<uint32_t>(src.stableId & 0xFFFFFFFFu),
@@ -971,18 +971,18 @@ void RenderThread::UploadTextUniforms(Core::ViewFamily& viewFamily, const SceneB
 
     const HostBufferMapping textMaterials = renderGraph->OpenHostBuffer(TEXT_MATERIAL_BUFFER, bufferSizes.textMaterialBufferSize);
     scene.textMaterials = textMaterials.buffer;
-    memcpy(textMaterials.data, viewFamily.textMaterials.Data(), viewFamily.textMaterials.Size() * sizeof(TextRenderMaterial));
+    memcpy(textMaterials.data, viewFamily.text.textMaterials.Data(), viewFamily.text.textMaterials.Size() * sizeof(TextRenderMaterial));
 }
 
 void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily, SceneResources& scene) const
 {
     ZoneScoped;
 
-    if (viewFamily.spriteBatches.IsEmpty()) {
+    if (viewFamily.spriteDraws.spriteBatches.IsEmpty()) {
         return;
     }
 
-    const uint32_t spriteCount = static_cast<uint32_t>(viewFamily.sprites.Size());
+    const uint32_t spriteCount = static_cast<uint32_t>(viewFamily.spriteDraws.sprites.Size());
     const size_t uploadSize = spriteCount * sizeof(SpriteData);
 
     const HostBufferMapping sprites = renderGraph->OpenHostBuffer(SPRITE_BUFFER, uploadSize);
@@ -990,7 +990,7 @@ void RenderThread::UploadSpriteUniforms(const Core::ViewFamily& viewFamily, Scen
     auto* dst = static_cast<SpriteData*>(sprites.data);
 
     for (uint32_t i = 0; i < spriteCount; i++) {
-        const Core::Sprite& s = viewFamily.sprites[i];
+        const Core::Sprite& s = viewFamily.spriteDraws.sprites[i];
         dst[i] = {
             .worldPosition = s.worldPosition,
             .pixelSize = s.pixelSize,
@@ -1007,11 +1007,11 @@ void RenderThread::UploadUIUniforms(const Core::ViewFamily& viewFamily, const Sc
 {
     ZoneScoped;
 
-    if (!viewFamily.uiGlyphQuads.IsEmpty()) {
-        const uint32_t quadCount = viewFamily.uiGlyphQuads.Size();
+    if (!viewFamily.ui.uiGlyphQuads.IsEmpty()) {
+        const uint32_t quadCount = viewFamily.ui.uiGlyphQuads.Size();
         const HostBufferMapping quads = renderGraph->OpenHostBuffer(UI_GLYPH_QUAD_BUFFER, bufferSizes.uiGlyphQuadBufferSize);
         scene.uiGlyphQuads = quads.buffer;
-        memcpy(quads.data, viewFamily.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
+        memcpy(quads.data, viewFamily.ui.uiGlyphQuads.Data(), quadCount * sizeof(UIGlyphQuad));
     }
 }
 
@@ -1049,13 +1049,13 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
 #ifdef WDEBUG
     // Worst-case segment counts for buffer allocation
     size_t totalSegments = 0;
-    totalSegments += viewFamily.debugLines.Size(); // 1 segment per line
-    totalSegments += viewFamily.debugBoxes.Size() * 12; // 12 edges per box
-    totalSegments += viewFamily.debugSpheres.Size() * 96; // 32 segs * 3 circles (max LOD)
-    totalSegments += viewFamily.debugRects.Size() * 4; // 4 edges per rect
-    totalSegments += viewFamily.debugArrows.Size() * 20; // 4 head lines + 4 head base + 4 shaft edges + 4 start ring + 4 front ring
-    totalSegments += viewFamily.debugCylinders.Size() * 52; // 24 top + 24 bottom ring + 4 verticals
-    totalSegments += viewFamily.debugCapsules.Size() * 100; // 24 top + 24 bottom ring + 4 verticals + 4 cap arcs * 12
+    totalSegments += viewFamily.debugDraws.debugLines.Size(); // 1 segment per line
+    totalSegments += viewFamily.debugDraws.debugBoxes.Size() * 12; // 12 edges per box
+    totalSegments += viewFamily.debugDraws.debugSpheres.Size() * 96; // 32 segs * 3 circles (max LOD)
+    totalSegments += viewFamily.debugDraws.debugRects.Size() * 4; // 4 edges per rect
+    totalSegments += viewFamily.debugDraws.debugArrows.Size() * 20; // 4 head lines + 4 head base + 4 shaft edges + 4 start ring + 4 front ring
+    totalSegments += viewFamily.debugDraws.debugCylinders.Size() * 52; // 24 top + 24 bottom ring + 4 verticals
+    totalSegments += viewFamily.debugDraws.debugCapsules.Size() * 100; // 24 top + 24 bottom ring + 4 verticals + 4 cap arcs * 12
 
     if (totalSegments == 0) {
         return;
@@ -1073,7 +1073,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
     const glm::mat4 projMatrix = viewFamily.mainView.currentViewData.proj;
     Frustum mainViewFrustum = CreateFrustum(projMatrix * viewMatrix);
 
-    for (const auto& sphere : viewFamily.debugSpheres) {
+    for (const auto& sphere : viewFamily.debugDraws.debugSpheres) {
         if (!IntersectsSphere(mainViewFrustum, sphere.center, sphere.radius)) {
             continue;
         }
@@ -1100,7 +1100,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         }
     }
 
-    for (const auto& cyl : viewFamily.debugCylinders) {
+    for (const auto& cyl : viewFamily.debugDraws.debugCylinders) {
         const float bound = std::sqrt(cyl.radius * cyl.radius + cyl.halfHeight * cyl.halfHeight);
         if (!IntersectsSphere(mainViewFrustum, cyl.center, bound)) {
             continue;
@@ -1124,7 +1124,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         }
     }
 
-    for (const auto& cap : viewFamily.debugCapsules) {
+    for (const auto& cap : viewFamily.debugDraws.debugCapsules) {
         const float bound = cap.halfHeight + cap.radius;
         if (!IntersectsSphere(mainViewFrustum, cap.center, bound)) {
             continue;
@@ -1158,11 +1158,11 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         }
     }
 
-    for (const auto& line : viewFamily.debugLines) {
+    for (const auto& line : viewFamily.debugDraws.debugLines) {
         segments[segmentOffset++] = {.a = line.start, .width = line.width, .b = line.end, .pad = 0.0f, .color = line.color};
     }
 
-    for (const auto& box : viewFamily.debugBoxes) {
+    for (const auto& box : viewFamily.debugDraws.debugBoxes) {
         glm::mat3 rot = glm::mat3_cast(box.rotation);
         if (!IntersectsOBB(mainViewFrustum, box.center, box.extents, rot)) {
             continue;
@@ -1184,7 +1184,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         }
     }
 
-    for (const auto& rect : viewFamily.debugRects) {
+    for (const auto& rect : viewFamily.debugDraws.debugRects) {
         glm::vec3 cx = rect.axisX * rect.halfX;
         glm::vec3 cy = rect.axisY * rect.halfY;
         glm::vec3 corners[4] = {rect.center - cx - cy, rect.center + cx - cy, rect.center + cx + cy, rect.center - cx + cy};
@@ -1194,7 +1194,7 @@ void RenderThread::SetupDebugRender(RenderGraph& graph, const Core::ViewFamily& 
         segments[segmentOffset++] = {.a = corners[3], .width = rect.width, .b = corners[0], .pad = 0.0f, .color = rect.color};
     }
 
-    for (const auto& arrow : viewFamily.debugArrows) {
+    for (const auto& arrow : viewFamily.debugDraws.debugArrows) {
         glm::vec3 dir = arrow.end - arrow.start;
         const float len = glm::length(dir);
         if (len < DIVISION_EPSILON) { continue; }

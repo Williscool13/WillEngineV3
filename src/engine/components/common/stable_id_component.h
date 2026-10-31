@@ -12,7 +12,6 @@
 #include "engine/components/component_types.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -42,10 +41,10 @@ struct StableIdComponent
 
     WILL_REFLECT(StableIdComponent, WILL_FIELD(id), WILL_FIELD(sortOrder))
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnUpdate(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnUpdate(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 }

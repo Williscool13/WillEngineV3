@@ -26,12 +26,12 @@ static constexpr float LOST_SINK_DEPTH = 0.6f;
 static constexpr float LOST_DISSOLVE_SECONDS = 1.5f;
 static constexpr float LOST_TILT_DEGREES = 25.0f;
 
-static void ApplyRequestRebuild(Engine::SystemRegistry& registry, const entt::entity& cart)
+static void ApplyRequestRebuild(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& cart)
 {
     if (registry.Valid(cart)) { Component::PhysicsBodyDesc::RequestRebuild(registry, cart); }
 }
 
-static void ApplyResume(Engine::SystemRegistry& registry, const entt::entity& cart)
+static void ApplyResume(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& cart)
 {
     if (registry.Valid(cart)) { Component::PhysicsBodyDesc::Resume(registry, cart); }
 }

@@ -12,11 +12,6 @@
 #include "engine/core/origin.h"
 #include "engine/core/registry.h"
 
-namespace Core
-{
-struct ViewFamily;
-}
-
 namespace Engine
 {
 class TextWriter;
@@ -31,14 +26,14 @@ struct ComponentEditorResult {
 using SerializeFn = void(*)(const SystemRegistry&, entt::entity, TextWriter&);
 using DeserializeFn = void(*)(SystemRegistry&, entt::entity, const TextReader&);
 using HasComponentFn = bool(*)(const SystemRegistry&, entt::entity);
-using CanAddComponentFn = bool(*)(const SystemRegistry&, entt::entity);
+using CanAddComponentFn = bool(*)(const EngineContext*, const EngineState*, const SystemRegistry&, entt::entity);
 using EmplaceDefaultFn = void(*)(SystemRegistry&, entt::entity);
 using RemoveComponentFn = void(*)(SystemRegistry&, entt::entity);
 using CopyComponentFn = void(*)(const SystemRegistry&, entt::entity, SystemRegistry&, entt::entity);
-using DrawEditorFn = ComponentEditorResult(*)(Core::ViewFamily&, EditContext&, const char*);
-using RestoreFn = void(*)(SystemRegistry&, entt::entity, const TextReader&);
+using DrawEditorFn = ComponentEditorResult(*)(EngineContext*, EngineState*, SystemRegistry&, EditContext&, const char*);
+using RestoreFn = void(*)(EngineContext*, EngineState*, SystemRegistry&, entt::entity, const TextReader&);
 using FillDefaultsFn =void(*)(const TextReader&, TextWriter&);
-using PropagateFn = bool(*)(SystemRegistry&, entt::entity, const TextReader&, const TextReader&);
+using PropagateFn = bool(*)(EngineContext*, EngineState*, SystemRegistry&, entt::entity, const TextReader&, const TextReader&);
 /** Points each EntityRef naming from[i] at to[i]. */
 using RemapEntityRefsFn = void(*)(SystemRegistry&, entt::entity, Core::Span<const StringID> from, Core::Span<const StringID> to);
 

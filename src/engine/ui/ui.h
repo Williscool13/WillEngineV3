@@ -17,14 +17,9 @@ struct EngineState;
 class SystemRegistry;
 }
 
-namespace Core
-{
-struct FrameBuffer;
-}
-
 namespace Engine
 {
-void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
+void GatherUIRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 } // Engine
 
 namespace Engine::UI

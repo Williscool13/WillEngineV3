@@ -79,7 +79,7 @@ void StaticMeshOverridesComponent::SetMaterialOverride(uint32_t slot, Engine::Ma
     }
 }
 
-void StaticMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::entity entity)
+void StaticMeshComponent::OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.GetOrAdd<RenderFlagsComponent>(entity);
     auto& component = registry.GetMut<StaticMeshComponent>(entity);
@@ -89,7 +89,7 @@ void StaticMeshComponent::OnConstruct(Engine::SystemRegistry& registry, entt::en
     LoadStaticMesh(component, registry, entity);
 }
 
-void StaticMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void StaticMeshComponent::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     UnloadStaticMesh(registry, entity);
     registry.Remove<RenderTransformRuntime>(entity);
@@ -99,19 +99,19 @@ void StaticMeshComponent::OnDestroy(Engine::SystemRegistry& registry, entt::enti
 
 namespace Engine
 {
-bool Component::StaticMeshComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool Component::StaticMeshComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return MeshSources::NoneOtherThan<StaticMeshComponent>(registry, entity);
 }
 
-bool Component::StaticMeshOverridesComponent::CanAdd(const Engine::SystemRegistry& registry, entt::entity entity)
+bool Component::StaticMeshOverridesComponent::CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity)
 {
     return registry.Has<StaticMeshComponent>(entity);
 }
 
 
 
-void Component::StaticMeshComponent::OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::StaticMeshComponent::OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     const auto& component = registry.Get<StaticMeshComponent>(entity);
     if (auto* rt = registry.TryGetMut<RenderTransformRuntime>(entity)) {
@@ -121,7 +121,7 @@ void Component::StaticMeshComponent::OnEditPreview(Engine::SystemRegistry& regis
     }
 }
 
-void Component::StaticMeshComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::StaticMeshComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     auto& component = registry.GetMut<StaticMeshComponent>(entity);
     if (!component.modelId.IsValid()) {
@@ -134,7 +134,6 @@ void Component::StaticMeshComponent::OnEditCommit(Engine::SystemRegistry& regist
         LoadStaticMesh(component, registry, entity);
         return;
     }
-    auto* ctx = registry.Context();
     const auto* runtime = registry.TryGet<MeshRuntime>(entity);
     const Engine::StaticModel* current = nullptr;
     if (runtime) {
@@ -147,18 +146,17 @@ void Component::StaticMeshComponent::OnEditCommit(Engine::SystemRegistry& regist
     else {
         registry.Set<StaticMeshLoadingFlag>(entity);
     }
-    OnEditPreview(registry, entity);
+    OnEditPreview(ctx, state, registry, entity);
 }
 
-void Component::StaticMeshOverridesComponent::OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity)
+void Component::StaticMeshOverridesComponent::OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Set<StaticMeshLoadingFlag>(entity);
     PruneStaticMeshOverrides(registry, entity);
 }
 
-Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name)
+Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name)
 {
-    Engine::SystemRegistry& registry = edit.Registry();
     const entt::entity entity = edit.Primary();
     static entt::entity editEntity = entt::null;
     static bool bEditingOffset = false;
@@ -178,8 +176,6 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
         }
         return result;
     };
-    auto* ctx = registry.Context();
-    auto* state = edit.State();
 
     if (bEditingOffset) { state->editor.bExclusiveGizmoActive = true; }
 
@@ -331,14 +327,14 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
                     ImGui::Text("%s", slot.name.c_str());
                     ImGui::SameLine();
 
-                    if (Engine::BeginMaterialCombo(ctx, state, edit.Registry(), "##override", current, "__synthesized__")) {
+                    if (Engine::BeginMaterialCombo(ctx, state, registry, "##override", current, "__synthesized__")) {
                         if (ImGui::Selectable("__synthesized__", !current.IsValid())) {
                             if (current.IsValid()) {
                                 pendingChangeIdx = slot.origIdx;
                                 pendingChangeMat = Engine::MaterialID::INVALID;
                             }
                         }
-                        const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, edit.Registry(), state->editor.materialSelector, current);
+                        const Engine::MaterialID picked = Engine::DrawMaterialSelector(ctx, state, registry, state->editor.materialSelector, current);
                         if (picked.IsValid() && picked != current) {
                             pendingChangeIdx = slot.origIdx;
                             pendingChangeMat = picked;
@@ -365,7 +361,7 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             auto* pm = ctx->pipelineManager;
             Core::Span<const StringID> shadingPipelines = pm->GetShadingPipelines();
             Core::Arena& arena = ctx->editorArena.Get();
-            Core::ArenaFixedVector<StringID> lightingPipelines = pm->GetLightingPipelinesForMode(viewFamily.lightingMode, arena);
+            Core::ArenaFixedVector<StringID> lightingPipelines = pm->GetLightingPipelinesForMode(registry.Frame<Core::ViewFamilySettings>().lightingMode, arena);
 
             {
                 const int32_t pipelineCount = static_cast<int32_t>(shadingPipelines.Size());
@@ -469,8 +465,8 @@ Engine::ComponentEditorResult Component::StaticMeshComponent::DrawEditor(Core::V
             const Mat4 entityMatInv = glm::inverse(entityMat);
             const Vec3 pivotWorld = Vec3(entityMat * Vec4(component.renderOffset, 1.0f));
 
-            const Mat4 view = viewFamily.mainView.currentViewData.view;
-            const Mat4 proj = viewFamily.mainView.currentViewData.proj;
+            const Mat4 view = registry.Frame<Core::RenderView>().currentViewData.view;
+            const Mat4 proj = registry.Frame<Core::RenderView>().currentViewData.proj;
 
             float snapArr[3] = {};
             float* snap = nullptr;

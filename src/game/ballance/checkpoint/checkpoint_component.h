@@ -14,7 +14,6 @@
 #include "engine/reflection/reflection.h"
 #include "game/ballance/fwd_components.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Ballance::Component
 {
@@ -34,8 +33,8 @@ struct CheckpointComponent
         WILL_FIELD(spawnOffset, .speed = 0.1f),
         WILL_FIELD(spawnRotation, .speed = 0.5f))
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 }
 

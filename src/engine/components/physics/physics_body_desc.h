@@ -17,7 +17,6 @@
 #include "engine/component_registry.h"
 #include "engine/components/component_types.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -147,17 +146,17 @@ struct PhysicsBodyDesc
         WILL_FIELD(bLockTilt, .key = "lockTilt"),
         WILL_FIELD(shapes))
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
-    static void DeferredConstruct(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void DeferredConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
     /** Releases the runtime colliders and queues a DeferredConstruct. */
     static void RequestRebuild(Engine::SystemRegistry& registry, entt::entity entity);
     /** Removes the body and holds it off with a PhysicsSuspendedFlag; the desc stays. */
     static void Suspend(Engine::SystemRegistry& registry, entt::entity entity);
     /** Clears the suspension and rebuilds the body from the desc. */
     static void Resume(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /** A motion type set at runtime that wins over the desc's, e.g. a kinematic body let go to fall. Read through EffectiveMotionType. */

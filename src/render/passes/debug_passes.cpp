@@ -199,8 +199,8 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
                               const Core::ViewFamily& viewFamily)
 {
     ZoneScoped;
-    const Core::ProbePreviewSettings settings = viewFamily.probePreviewSettings;
-    if (!settings.bActive || viewFamily.probePreviews.IsEmpty() || !depthTarget.IsValid()) {
+    const Core::ProbePreviewSettings settings = viewFamily.probes.probePreviewSettings;
+    if (!settings.bActive || viewFamily.probes.probePreviews.IsEmpty() || !depthTarget.IsValid()) {
         return;
     }
 
@@ -209,7 +209,7 @@ void SetupProbePreviewSpheres(RenderGraph& graph, PipelineManager* pipelineManag
     pass.ReadWriteDepthAttachment(depthTarget);
     pass.ReadBuffer(scene.sceneData);
     // Arena-backed span; the frame's view family outlives graph execution
-    pass.Execute([&scene, pipelineManager, settings, spheres = viewFamily.probePreviews.Data(), sphereCount = viewFamily.probePreviews.Size(), renderExtent, depthTarget,
+    pass.Execute([&scene, pipelineManager, settings, spheres = viewFamily.probes.probePreviews.Data(), sphereCount = viewFamily.probes.probePreviews.Size(), renderExtent, depthTarget,
             targetImage](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
         const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("probe_preview_sphere"_sid);
         if (!pipelineEntry) {

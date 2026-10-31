@@ -63,9 +63,9 @@ void SetupFrustumBinningPass(RenderGraph& graph,
 void SetupEmissiveTriLightPass(RenderGraph& graph, PipelineManager* pipelineManager, const Core::ViewFamily& viewFamily, const SceneResources& scene, float emissiveTriRangeMultiplier)
 {
     ZoneScoped;
-    if (viewFamily.triLightCount == 0 || !scene.lightData.IsValid()) { return; }
+    if (viewFamily.lights.triLightCount == 0 || !scene.lightData.IsValid()) { return; }
 
-    const auto workCount = static_cast<uint32_t>(viewFamily.emissiveTriWork.Size());
+    const auto workCount = static_cast<uint32_t>(viewFamily.lights.emissiveTriWork.Size());
     if (workCount == 0 || !scene.emissiveTriWork.IsValid()) { return; }
 
     const bool bHasInstances = scene.instances.IsValid() && scene.models.IsValid() && scene.materials.IsValid();
@@ -149,7 +149,7 @@ WorldGridFrame SetupWorldGridBinningPass(RenderGraph& graph,
         });
     }
 
-    const uint32_t probeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size());
+    const uint32_t probeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size());
 
     RenderPass& binning = graph.AddPass("World Grid Binning"_sid, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, Render::RenderCategory::WorldGridBinning);
     binning.AsyncCompute();
@@ -405,7 +405,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
     lightingResolve.Execute([&viewFamily, &scene, pipelineManager, sceneIndex, frameNumber, renderExtent,
             visibility = targets.visibility, gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
-            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, iblIntensity = viewFamily.iblIntensity,
+            output = targets.colorOutput, skyboxIndex = viewFamily.settings.skyboxIndex, iblIntensity = viewFamily.settings.iblIntensity,
             tileList = geometry.lightingTileList, reservoirFinal = restir.reservoirFinal, ddgiCascades = ddgi.cascades,
             worldGridLightGrid = worldGrid.lightGrid, worldGridIndexList = worldGrid.indexList, worldGridProbeGrid = worldGrid.probeGrid,
             giResolved = gather.resolved, giData = gather.data, giSkyVis = gather.skyVisHistory,
@@ -417,7 +417,7 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
             for (const LightingPipelineInfo& entry : pipelineManager->GetLightingPipelines()) {
                 if (!entry.id) { continue; }
 
-                StringID shaderToUse = viewFamily.lightingShaderOverride ? viewFamily.lightingShaderOverride : entry.id;
+                StringID shaderToUse = viewFamily.settings.lightingShaderOverride ? viewFamily.settings.lightingShaderOverride : entry.id;
                 const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry(shaderToUse);
                 if (!pipelineEntry) { pipelineEntry = pipelineManager->GetPipelineEntry("default_unlit"_sid); }
                 if (!pipelineEntry) { continue; }
@@ -453,12 +453,12 @@ void SetupVisibilityLightingResolvePass(RenderGraph& graph,
                     .giGatherMode = bGIGather ? giGatherMode : 0u,
                     .reflectionRoughnessMax = reflectionRoughnessMax,
                     .lightSpecularFromReflectionsMax = lightSpecularFromReflectionsMax,
-                    .reflectionProbes = viewFamily.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(scene.reflectionProbes) : 0,
-                    .reflectionProbeCount = static_cast<uint32_t>(viewFamily.reflectionProbes.Size()),
+                    .reflectionProbes = viewFamily.probes.reflectionProbes.Size() > 0u ? graph.GetBufferAddress(scene.reflectionProbes) : 0,
+                    .reflectionProbeCount = static_cast<uint32_t>(viewFamily.probes.reflectionProbes.Size()),
                     .diffuseRatioIndex = ~0x0u,
-                    .worldGridProbeGrid = (!viewFamily.bReflectionProbeBruteForce && worldGridProbeGrid.IsValid()) ? graph.GetBufferAddress(worldGridProbeGrid) : 0,
+                    .worldGridProbeGrid = (!viewFamily.probes.bReflectionProbeBruteForce && worldGridProbeGrid.IsValid()) ? graph.GetBufferAddress(worldGridProbeGrid) : 0,
                     .tileCapacity = BucketTileCapacity(renderExtent.width, renderExtent.height),
-                    .indirectIntensity = viewFamily.indirectIntensity,
+                    .indirectIntensity = viewFamily.settings.indirectIntensity,
                     .skyVisIndex = bGIGather ? graph.GetSampledImageViewDescriptorIndex(giSkyVis) : ~0x0u,
                     .localShadows = localShadowData.IsValid() ? graph.GetBufferAddress(localShadowData) : 0,
                     .localShadowAtlasIndex = localShadowAtlas.IsValid() ? graph.GetSampledImageViewDescriptorIndex(localShadowAtlas) : ~0x0u,
@@ -515,7 +515,7 @@ void SetupGroundTruthLightingPass(RenderGraph& graph,
             visibility = targets.visibility,
             gbufferOne = targets.gbufferOne, gbufferTwo = targets.gbufferTwo,
             depth = targets.depthCopy, shadows = targets.shadows,
-            output = targets.colorOutput, skyboxIndex = viewFamily.skyboxIndex, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
+            output = targets.colorOutput, skyboxIndex = viewFamily.settings.skyboxIndex, renderExtent](VkCommandBuffer cmd, VulkanContext*, RenderGraph& graph) {
             const PipelineEntry* pipelineEntry = pipelineManager->GetPipelineEntry("lighting_ground_truth"_sid);
             if (!pipelineEntry) { return; }
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineEntry->pipeline);

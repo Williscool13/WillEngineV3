@@ -84,10 +84,10 @@ GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state
     Ballance::CollectSystems(graph);
 }
 
-GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer)
+GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state)
 {
     Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "Game/PrepareFrame"};
-    Ballance::PrepareFrame(ctx, state, registry, frameBuffer);
+    Ballance::PrepareFrame(ctx, state, registry);
 }
 
 GAME_API void GameEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state)

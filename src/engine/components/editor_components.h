@@ -13,7 +13,6 @@
 #include "engine/component_registry.h"
 #include "engine/reflection/reflection.h"
 
-namespace Core { struct ViewFamily; }
 
 namespace Engine::Component
 {
@@ -31,7 +30,7 @@ struct EntityFolderComponent
     WILL_REFLECT(EntityFolderComponent,
         WILL_FIELD(folderId))
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 };
 
 /**
@@ -51,7 +50,7 @@ struct SceneFolderComponent
         WILL_FIELD(parentFolder),
         WILL_FIELD(name))
 
-    static bool CanAdd(const Engine::SystemRegistry& registry, entt::entity entity);
+    static bool CanAdd(const Engine::EngineContext* ctx, const Engine::EngineState* state, const Engine::SystemRegistry& registry, entt::entity entity);
 };
 }
 

@@ -54,8 +54,8 @@ struct RenderFlagsComponent
         WILL_FIELD(bEmissiveLight, .key = "emissiveLight"),
         WILL_FIELD(bCameraMotionBlur, .key = "cameraMotionBlur"))
 
-    static void OnEditPreview(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnEditCommit(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditPreview(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnEditCommit(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 
 enum RenderFlagToggle : uint32_t
@@ -102,8 +102,8 @@ struct MeshRuntime
 
     uint64_t stableId{StableIdComponent::NO_ID};
 
-    static void OnConstruct(Engine::SystemRegistry& registry, entt::entity entity);
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnConstruct(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 }
 

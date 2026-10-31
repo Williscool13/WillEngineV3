@@ -17,7 +17,9 @@
 
 namespace Core
 {
-struct ViewFamily;
+struct ViewFamilyDebugDraws;
+struct ViewFamilyFog;
+struct ViewFamilySettings;
 }
 
 namespace Engine::Component
@@ -54,11 +56,11 @@ struct PostProcessVolumeComponent
 
     static void Sanitize(PostProcessVolumeComponent& comp);
 
-    static Engine::ComponentEditorResult DrawEditor(Core::ViewFamily& viewFamily, Engine::EditContext& edit, const char* name);
+    static Engine::ComponentEditorResult DrawEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Engine::EditContext& edit, const char* name);
 
     static float CameraWeight(const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, const Vec3& cameraPos);
 
-    static void DrawBounds(Core::ViewFamily& viewFamily, const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected);
+    static void DrawBounds(Core::ViewFamilyDebugDraws& debugDraws, const PostProcessVolumeComponent& volume, const Vec3& center, const Quat& rotation, const Vec3& scale, float lineWidth, bool bSelected);
 };
 
 enum class PostProcessOverrideKind : uint8_t { Float, Color, Bool, Enum };
@@ -72,16 +74,16 @@ struct PostProcessOverrideField
     float min;
     float max;
     float speed;
-    void* (*resolve)(Core::ViewFamily& viewFamily);
+    void* (*resolve)(Core::ViewFamilySettings& settings, Core::ViewFamilyFog& fog);
     Core::Span<const char* const> options;
     int32_t optionOffset;
 };
 
 const PostProcessOverrideField* FindPostProcessOverrideField(std::string_view name);
 
-Vec3 ReadPostProcessOverrideField(const PostProcessOverrideField& field, Core::ViewFamily& viewFamily);
+Vec3 ReadPostProcessOverrideField(const PostProcessOverrideField& field, Core::ViewFamilySettings& settings, Core::ViewFamilyFog& fog);
 
-void ApplyPostProcessOverride(const PostProcessOverrideField& field, Core::ViewFamily& viewFamily, const Vec3& value, float weight);
+void ApplyPostProcessOverride(const PostProcessOverrideField& field, Core::ViewFamilySettings& settings, Core::ViewFamilyFog& fog, const Vec3& value, float weight);
 }
 
 #endif //WILL_ENGINE_POST_PROCESS_VOLUME_COMPONENT_H

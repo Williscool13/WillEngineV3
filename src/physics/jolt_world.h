@@ -24,7 +24,7 @@
 
 namespace Core
 {
-struct ViewFamily;
+struct ViewFamilyDebugDraws;
 }
 
 namespace enki
@@ -66,7 +66,7 @@ public:
     DebugDrawFilter& GetDebugDrawFilter() const { return *debugDrawFilter; }
     void SetDebugDrawForceLowestLOD(bool bForce) const { debugRenderer->SetForceLowestLOD(bForce); }
 #endif
-    void DrawDebug(Core::ViewFamily* viewFamily, bool bUseFilter, bool bSleepColor);
+    void DrawDebug(Core::ViewFamilyDebugDraws* debugDraws, const glm::vec3& cameraPos, bool bUseFilter, bool bSleepColor);
 
 private:
     void RegisterPhysics() const;

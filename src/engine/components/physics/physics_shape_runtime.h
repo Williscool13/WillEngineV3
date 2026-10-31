@@ -23,7 +23,7 @@ struct PhysicsShapeRuntime
     // potentially also store its type (e.g. compound)
     JPH::ShapeRefC shapeRef;
 
-    static void OnDestroy(Engine::SystemRegistry& registry, entt::entity entity);
+    static void OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity);
 };
 }
 

@@ -69,7 +69,7 @@ static void ReleaseBreakableRuntime(Engine::IAssetLoader* assetLoader, Component
     runtime.colliders.Clear();
 }
 
-static void DropBreakableRuntime(Engine::SystemRegistry& registry, entt::entity entity)
+static void DropBreakableRuntime(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
     registry.Remove<Component::BreakableRuntime>(entity);
 }
@@ -191,11 +191,9 @@ static const Engine::StaticModel* FindBrokenModel(Engine::EngineContext* ctx, en
     return brokenModel && brokenModel->modelLoadState == Engine::StaticModel::ModelLoadState::Loaded ? brokenModel : nullptr;
 }
 
-static void ApplyBreak(Engine::SystemRegistry& registry, const entt::entity& entity)
+static void ApplyBreak(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const entt::entity& entity)
 {
     ZoneScoped;
-    Engine::EngineContext* ctx = registry.Context();
-    Engine::EngineState* state = registry.State();
     if (!registry.Valid(entity)) { return; }
     const Engine::StaticModel* brokenModel = FindBrokenModel(ctx, entity, registry);
     if (!brokenModel) { return; }
@@ -301,9 +299,8 @@ bool Break(Engine::EngineContext* ctx, entt::entity entity, Engine::SystemRegist
 
 namespace Ballance::Component
 {
-void BreakableRuntime::OnDestroy(Engine::SystemRegistry& registry, entt::entity entity)
+void BreakableRuntime::OnDestroy(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, entt::entity entity)
 {
-    auto* ctx = registry.Context();
     ReleaseBreakableRuntime(&registry.Assets(), registry.GetMut<BreakableRuntime>(entity));
 }
 } // Ballance::Component

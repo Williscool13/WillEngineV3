@@ -24,9 +24,9 @@
 namespace Engine
 {
 template<Reflected C>
-void DrawReflectedFields(EditContext& edit)
+void DrawReflectedFields(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, EditContext& edit)
 {
-    ForEachField<C>([&edit](const auto& f) {
+    ForEachField<C>([&](const auto& f) {
         using M = FieldMemberType<decltype(f)>;
         const float speed = f.attrs.speed > 0.0f ? f.attrs.speed : 0.01f;
         if constexpr (std::is_same_v<M, float>) {
@@ -62,7 +62,7 @@ void DrawReflectedFields(EditContext& edit)
             }
         }
         else if constexpr (std::is_same_v<M, EntityRef>) {
-            EditWidgets::EntityRefField(edit, f.name, f.member);
+            EditWidgets::EntityRefField(state, registry, edit, f.name, f.member);
         }
         else if constexpr (IdLike<M>) {
             ImGui::TextDisabled("%s: %" PRIu64, f.name, static_cast<uint64_t>((edit.Get<C>().*f.member).id));
@@ -77,7 +77,7 @@ void DrawReflectedFields(EditContext& edit)
 }
 
 template<Reflected C>
-ComponentEditorResult DrawReflectedComponentEditor(EditContext& edit, const char* name)
+ComponentEditorResult DrawReflectedComponentEditor(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, EditContext& edit, const char* name)
 {
     const bool bOpen = ImGui::CollapsingHeader(name, ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 10.f);
@@ -86,7 +86,7 @@ ComponentEditorResult DrawReflectedComponentEditor(EditContext& edit, const char
     ImGui::PopStyleColor();
     if (bOpen) {
         ImGui::PushID(name);
-        DrawReflectedFields<C>(edit);
+        DrawReflectedFields<C>(ctx, state, registry, edit);
         ImGui::PopID();
     }
     return {.bRequestRemoval = bRemove};

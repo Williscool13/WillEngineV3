@@ -15,13 +15,12 @@ class SystemGraph;
 
 namespace Core
 {
-struct FrameBuffer;
 
 using GameGetStateSizeFunc = size_t(*)();
 using GameStartUpFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameLoadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameCollectFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, Engine::SystemGraph&);
-using GamePrepareFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*, FrameBuffer*);
+using GamePrepareFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameEndFrameFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameUnloadFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
 using GameHotReloadSaveFunc = void(*)(Engine::EngineContext*, Engine::EngineState*);
@@ -36,7 +35,7 @@ void StubLoad(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StubCollect(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemGraph& graph);
 
-void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, FrameBuffer* frameBuffer);
+void StubPrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 void StubEndFrame(Engine::EngineContext* ctx, Engine::EngineState* state);
 
@@ -119,9 +118,8 @@ GAME_API void GameCollect(Engine::EngineContext* ctx, Engine::EngineState* state
  * Called before frame buffer is sent directly to the render thread to be drawn.
  * @param ctx
  * @param state
- * @param frameBuffer
  */
-GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state, Core::FrameBuffer* frameBuffer);
+GAME_API void GamePrepareFrame(Engine::EngineContext* ctx, Engine::EngineState* state);
 
 /**
  * Called after the frame buffer is swapped. Game resets its per-frame arenas here.
