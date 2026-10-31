@@ -34,6 +34,8 @@ struct VulkanContext
     static DeviceInfo deviceInfo;
     /** Set before context creation to make the device report no REBAR, so the staged upload path can be exercised on hardware that has it. */
     static bool bForceNoREBAR;
+    /** Set before context creation to run synchronization validation in validation builds. Off by default: it is slow and SDK 1.4.341 crashes in its queue tracking under our multi-queue load. */
+    static bool bEnableSyncValidation;
 
     VkInstance instance{};
     VkSurfaceKHR surface{};

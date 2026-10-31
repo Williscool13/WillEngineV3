@@ -11,6 +11,7 @@
 #include <type_traits>
 
 #include <enkiTS/src/TaskScheduler.h>
+#include <spdlog/spdlog.h>
 #include <tracy/Tracy.hpp>
 
 #include "core/string_id.h"
@@ -236,6 +237,10 @@ public:
                 for (uint32_t t = 0; t < waveCount; ++t) {
                     assert(!nodes[wave[t]].access.bExclusive && "Exclusive node in a multi-node wave");
                 }
+#if WILL_ACCESS_CHECK
+                uint32_t poolsBeforeWave = 0;
+                if (storage != nullptr) { storage->ForEachPool([&](std::string_view) { ++poolsBeforeWave; }); }
+#endif
                 enki::TaskSet waveTask(waveCount, [&](enki::TaskSetPartition range, uint32_t) {
                     for (uint32_t t = range.start; t < range.end; ++t) {
                         RunNode(nodes[wave[t]], ctx, state, frameBuffer, CommandsFor(begin, wave[t]));
@@ -243,6 +248,17 @@ public:
                 });
                 scheduler->AddTaskSetToPipe(&waveTask);
                 scheduler->WaitforTask(&waveTask);
+#if WILL_ACCESS_CHECK
+                if (storage != nullptr) {
+                    uint32_t poolIndex = 0;
+                    storage->ForEachPool([&](std::string_view poolName) {
+                        if (poolIndex++ >= poolsBeforeWave) { SPDLOG_ERROR("Component pool '{}' was created during a parallel wave", poolName); }
+                    });
+                    if (poolIndex != poolsBeforeWave) {
+                        for (uint32_t t = 0; t < waveCount; ++t) { SPDLOG_ERROR("  in wave with {}", nodes[wave[t]].name); }
+                    }
+                }
+#endif
             }
 
 #if WILL_ACCESS_CHECK

@@ -204,9 +204,9 @@ TEST_CASE("CompressVertex position round-trips within quantization step", "[math
         CHECK(std::fabs(decoded.y - v.position.y) <= bounds.aabbExtents.y / 65535.0f);
         CHECK(std::fabs(decoded.z - v.position.z) <= bounds.aabbExtents.z / 65535.0f);
 
-        // Oct-encoded normal survives 8-bit snorm quantization
-        const float nx = static_cast<float>(static_cast<int8_t>(packed.normalOct & 0xFF)) / 127.0f;
-        const float ny = static_cast<float>(static_cast<int8_t>(packed.normalOct >> 8 & 0xFF)) / 127.0f;
+        // Oct-encoded normal survives 16-bit snorm quantization
+        const float nx = static_cast<float>(static_cast<int16_t>(packed.normalOct & 0xFFFF)) / 32767.0f;
+        const float ny = static_cast<float>(static_cast<int16_t>(packed.normalOct >> 16 & 0xFFFF)) / 32767.0f;
         CHECK(glm::dot(OctDecode({nx, ny}), v.normal) > 0.99f);
     }
 }
@@ -229,10 +229,10 @@ TEST_CASE("CompressVertex color and tangent sign pack exactly", "[math][vertex]"
     CHECK((packed.color >> 8 & 0xFF) == 0);
     CHECK((packed.color >> 16 & 0xFF) == 127);
     CHECK((packed.color >> 24 & 0xFF) == 255);
-    CHECK((packed.tangentOct >> 16 & 0x1) == 0);
+    CHECK((packed.tangentOct >> 30 & 0x1) == 0);
 
     v.tangent.w = 1.0f;
-    CHECK((CompressVertex(v, bounds).tangentOct >> 16 & 0x1) == 1);
+    CHECK((CompressVertex(v, bounds).tangentOct >> 30 & 0x1) == 1);
 }
 
 // ================================================================================

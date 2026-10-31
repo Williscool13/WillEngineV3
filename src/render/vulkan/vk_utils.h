@@ -16,6 +16,11 @@ void ReportDeviceFault();
 void BeginGpuMarkerFrame();
 
 void WriteGpuPassMarker(VkCommandBuffer cmd, bool bAsync, bool bEnd, uint32_t passIndex, const char* passName);
+
+/** Records which mega buffer bytes a load touches until it finishes; loads overlapping in flight break, and syncval's copy/BLAS hazards are checked against these ranges. */
+void TrackGeometryLoadBegin(VkCommandBuffer transferCmd, VkCommandBuffer graphicsCmd, VkDeviceSize positionBegin, VkDeviceSize positionSize, VkDeviceSize indexBegin, VkDeviceSize indexSize, const char* model);
+
+void TrackGeometryLoadEnd(VkCommandBuffer transferCmd);
 #endif
 
 #define VK_CHECK(x)                                                          \

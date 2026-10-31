@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 
@@ -25,6 +26,7 @@ namespace Render
 {
 DeviceInfo VulkanContext::deviceInfo{};
 bool VulkanContext::bForceNoREBAR{false};
+bool VulkanContext::bEnableSyncValidation{false};
 
 static VkDevice gFaultReportDevice{VK_NULL_HANDLE};
 
@@ -41,7 +43,7 @@ struct AddressBindingEvent
 };
 
 static constexpr uint32_t ADDRESS_BINDING_CAPACITY = 1 << 16;
-static AddressBindingEvent gAddressBindings[ADDRESS_BINDING_CAPACITY];
+static Core::Array<AddressBindingEvent, ADDRESS_BINDING_CAPACITY> gAddressBindings;
 static std::atomic<uint32_t> gAddressBindingCount{0};
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL AddressBindingCallback(
@@ -74,7 +76,7 @@ static VkBuffer gGpuMarkerBuffer{VK_NULL_HANDLE};
 static VmaAllocation gGpuMarkerAllocation{VK_NULL_HANDLE};
 static volatile uint32_t* gGpuMarkerValues{nullptr};
 static uint32_t gGpuMarkerFrame{0};
-static const char* gGpuMarkerPassNames[GPU_MARKER_FRAME_HISTORY][GPU_MARKER_MAX_PASSES];
+static Core::Array<Core::Array<const char*, GPU_MARKER_MAX_PASSES>, GPU_MARKER_FRAME_HISTORY> gGpuMarkerPassNames;
 
 void BeginGpuMarkerFrame()
 {
@@ -181,15 +183,15 @@ void ReportDeviceFault()
         }
         LOG_ERROR(Engine, "Device fault: {} address info(s), {} vendor info(s), {} vendor binary bytes", counts.addressInfoCount, counts.vendorInfoCount, counts.vendorBinarySize);
 
-        VkDeviceFaultAddressInfoEXT addressInfos[MAX_ADDRESS_INFOS]{};
-        VkDeviceFaultVendorInfoEXT vendorInfos[MAX_VENDOR_INFOS]{};
+        Core::Array<VkDeviceFaultAddressInfoEXT, MAX_ADDRESS_INFOS> addressInfos{};
+        Core::Array<VkDeviceFaultVendorInfoEXT, MAX_VENDOR_INFOS> vendorInfos{};
         counts.addressInfoCount = std::min(counts.addressInfoCount, MAX_ADDRESS_INFOS);
         counts.vendorInfoCount = std::min(counts.vendorInfoCount, MAX_VENDOR_INFOS);
         counts.vendorBinarySize = 0;
 
         VkDeviceFaultInfoEXT info{.sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT};
-        info.pAddressInfos = addressInfos;
-        info.pVendorInfos = vendorInfos;
+        info.pAddressInfos = addressInfos.Data();
+        info.pVendorInfos = vendorInfos.Data();
         res = vkGetDeviceFaultInfoEXT(gFaultReportDevice, &counts, &info);
         if (res != VK_SUCCESS && res != VK_INCOMPLETE) {
             LOG_ERROR(Engine, "Device fault: info query failed: {}", string_VkResult(res));
@@ -242,21 +244,109 @@ static void VKAPI_PTR VmaDeviceFree(VmaAllocator, uint32_t, VkDeviceMemory, VkDe
 }
 #endif
 
-static bool IsKnownSyncvalFalsePositive(const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData)
+#ifdef WDEBUG
+struct GeometryLoadRecord
 {
-    if (!pCallbackData->pMessage) {
-        return false;
-    }
+    VkCommandBuffer transferCmd;
+    VkCommandBuffer graphicsCmd;
+    VkDeviceSize positionBegin;
+    VkDeviceSize positionEnd;
+    VkDeviceSize indexBegin;
+    VkDeviceSize indexEnd;
+    bool bInFlight;
+    char model[64];
+};
 
-    if (strstr(pCallbackData->pMessage, "READ_RACING_WRITE") != nullptr && strstr(pCallbackData->pMessage, "vkCmdBuildAccelerationStructuresKHR") != nullptr) {
-        return true;
-    }
-    if (strstr(pCallbackData->pMessage, "WRITE_RACING_READ") != nullptr && strstr(pCallbackData->pMessage, "vkCmdCopyBuffer") != nullptr) {
-        return true;
-    }
-    // syncval bug, fixed upstream past Vulkan-ValidationLayers@224a7356f9, remove once SDK catches up
-    return false;
+static constexpr uint32_t GEOMETRY_LOAD_RECORD_COUNT = 1024;
+static Core::Array<GeometryLoadRecord, GEOMETRY_LOAD_RECORD_COUNT> gGeometryLoads;
+static uint32_t gGeometryLoadCount{0};
+static std::mutex gGeometryLoadMutex;
+
+static bool RangesOverlap(VkDeviceSize aBegin, VkDeviceSize aEnd, VkDeviceSize bBegin, VkDeviceSize bEnd)
+{
+    return aBegin < bEnd && bBegin < aEnd;
 }
+
+void TrackGeometryLoadBegin(VkCommandBuffer transferCmd, VkCommandBuffer graphicsCmd, VkDeviceSize positionBegin, VkDeviceSize positionSize, VkDeviceSize indexBegin, VkDeviceSize indexSize, const char* model)
+{
+    std::lock_guard lock(gGeometryLoadMutex);
+    const uint32_t recorded = std::min(gGeometryLoadCount, GEOMETRY_LOAD_RECORD_COUNT);
+    for (uint32_t i = 0; i < recorded; ++i) {
+        const GeometryLoadRecord& other = gGeometryLoads[i];
+        if (!other.bInFlight) { continue; }
+        const bool bPosition = RangesOverlap(positionBegin, positionBegin + positionSize, other.positionBegin, other.positionEnd);
+        const bool bIndex = RangesOverlap(indexBegin, indexBegin + indexSize, other.indexBegin, other.indexEnd);
+        if (bPosition || bIndex) {
+            LOG_ERROR(Engine, "Geometry loads overlap: '{}' and in-flight '{}' share bytes (position {}, index {})", model, other.model, bPosition, bIndex);
+            __debugbreak();
+        }
+    }
+    GeometryLoadRecord& record = gGeometryLoads[gGeometryLoadCount++ % GEOMETRY_LOAD_RECORD_COUNT];
+    record = {transferCmd, graphicsCmd, positionBegin, positionBegin + positionSize, indexBegin, indexBegin + indexSize, true, {}};
+    strncpy_s(record.model, sizeof(record.model), model, _TRUNCATE);
+}
+
+void TrackGeometryLoadEnd(VkCommandBuffer transferCmd)
+{
+    std::lock_guard lock(gGeometryLoadMutex);
+    const uint32_t recorded = std::min(gGeometryLoadCount, GEOMETRY_LOAD_RECORD_COUNT);
+    for (uint32_t i = 0; i < recorded; ++i) {
+        GeometryLoadRecord& record = gGeometryLoads[(gGeometryLoadCount - 1 - i) % GEOMETRY_LOAD_RECORD_COUNT];
+        if (record.bInFlight && record.transferCmd == transferCmd) {
+            record.bInFlight = false;
+            return;
+        }
+    }
+}
+
+static const GeometryLoadRecord* FindGeometryLoad(uint64_t cmd)
+{
+    const uint32_t recorded = std::min(gGeometryLoadCount, GEOMETRY_LOAD_RECORD_COUNT);
+    for (uint32_t i = 0; i < recorded; ++i) {
+        const GeometryLoadRecord& record = gGeometryLoads[(gGeometryLoadCount - 1 - i) % GEOMETRY_LOAD_RECORD_COUNT];
+        if (reinterpret_cast<uint64_t>(record.transferCmd) == cmd || reinterpret_cast<uint64_t>(record.graphicsCmd) == cmd) { return &record; }
+    }
+    return nullptr;
+}
+
+enum class GeometryHazard : uint8_t
+{
+    NotGeometry,
+    Disjoint,
+    Overlap,
+    Unmatched,
+};
+
+/** Syncval flags copies and BLAS builds on different queues touching one mega buffer without looking at their byte ranges, so compare them here. */
+static GeometryHazard ClassifyGeometryHazard(const char* message)
+{
+    if (message == nullptr) { return GeometryHazard::NotGeometry; }
+    const bool bBuildReadsCopy = strstr(message, "READ_RACING_WRITE") != nullptr && strstr(message, "vkCmdBuildAccelerationStructuresKHR") != nullptr;
+    const bool bCopyWritesBuild = strstr(message, "WRITE_RACING_READ") != nullptr && strstr(message, "vkCmdCopyBuffer") != nullptr;
+    if (!bBuildReadsCopy && !bCopyWritesBuild) { return GeometryHazard::NotGeometry; }
+
+    constexpr const char* CMD_PREFIX = "VkCommandBuffer 0x";
+    const char* first = strstr(message, CMD_PREFIX);
+    const char* second = first ? strstr(first + 1, CMD_PREFIX) : nullptr;
+    const bool bPositionBuffer = strstr(message, "Mega Vertex Position") != nullptr;
+    const bool bIndexBuffer = strstr(message, "Mega Index") != nullptr;
+    if (first == nullptr || second == nullptr || (!bPositionBuffer && !bIndexBuffer)) { return GeometryHazard::Unmatched; }
+
+    std::lock_guard lock(gGeometryLoadMutex);
+    const GeometryLoadRecord* a = FindGeometryLoad(strtoull(first + strlen(CMD_PREFIX), nullptr, 16));
+    const GeometryLoadRecord* b = FindGeometryLoad(strtoull(second + strlen(CMD_PREFIX), nullptr, 16));
+    if (a == nullptr || b == nullptr) { return GeometryHazard::Unmatched; }
+
+    const VkDeviceSize aBegin = bIndexBuffer ? a->indexBegin : a->positionBegin;
+    const VkDeviceSize aEnd = bIndexBuffer ? a->indexEnd : a->positionEnd;
+    const VkDeviceSize bBegin = bIndexBuffer ? b->indexBegin : b->positionBegin;
+    const VkDeviceSize bEnd = bIndexBuffer ? b->indexEnd : b->positionEnd;
+    if (!RangesOverlap(aBegin, aEnd, bBegin, bEnd)) { return GeometryHazard::Disjoint; }
+
+    LOG_ERROR(Engine, "Geometry hazard overlaps: '{}' [{}, {}) and '{}' [{}, {})", a->model, aBegin, aEnd, b->model, bBegin, bEnd);
+    return GeometryHazard::Overlap;
+}
+#endif
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -267,6 +357,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     if (pCallbackData->pMessage && strstr(pCallbackData->pMessage, "vkGetQueryPoolResults") != nullptr && strstr(pCallbackData->pMessage, "VK_NOT_READY") != nullptr) {
         return VK_FALSE;
     }
+
+#ifdef WDEBUG
+    const GeometryHazard hazard = ClassifyGeometryHazard(pCallbackData->pMessage);
+    if (hazard == GeometryHazard::Disjoint) { return VK_FALSE; }
+#endif
 
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         LOG_ERROR(Engine, "[Vulkan] {}", pCallbackData->pMessage);
@@ -282,7 +377,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     }
 
 #ifdef WDEBUG
-    if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) && !IsKnownSyncvalFalsePositive(pCallbackData)) {
+    if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) && hazard != GeometryHazard::Unmatched) {
         __debugbreak();
     }
 #endif
@@ -364,7 +459,7 @@ VulkanContext::VulkanContext(SDL_Window* window, Core::MemoryManager& memoryMana
         };
         VkValidationFeaturesEXT validationFeatures{};
         validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-        validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(validationEnables.Size());
+            validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(validationEnables.Size()) - (bEnableSyncValidation ? 0u : 1u);
         validationFeatures.pEnabledValidationFeatures = validationEnables.Data();
 
         VkInstanceCreateInfo instanceInfo{};

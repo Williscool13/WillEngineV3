@@ -48,6 +48,7 @@ GAME_API void GameLoad(Engine::EngineContext* ctx, Engine::EngineState* state)
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
+    state->registry.CreateModulePools();
     Ballance::ConnectObservers(state->registry);
 
     ctx->playStartFn = Ballance::PlayStart;
@@ -69,6 +70,7 @@ GAME_API void GameHotReloadLoad(Engine::EngineContext* ctx, Engine::EngineState*
     Game::RegisterInputActions(state->input);
     Game::RegisterLogCategories(ctx->engineLogger);
     Game::RegisterMCPTools(state);
+    state->registry.CreateModulePools();
     Ballance::ConnectObservers(state->registry);
 
     ctx->playStartFn = Ballance::PlayStart;

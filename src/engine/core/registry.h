@@ -6,11 +6,14 @@
 #define WILL_ENGINE_REGISTRY_H
 
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <type_traits>
 #include <utility>
 
 #include <entt/entt.hpp>
 
+#include "core/containers/inline_vector.h"
 #include "engine/core/deferred_commands.h"
 
 namespace Engine
@@ -50,6 +53,33 @@ struct IsMut : std::false_type
 template<typename T>
 struct IsMut<Mut<T>> : std::true_type
 {};
+
+using PoolCreator = void(*)(entt::registry&);
+
+inline constexpr uint32_t MAX_MODULE_POOLS = 1024;
+
+inline Core::InlineVector<PoolCreator, MAX_MODULE_POOLS>& ModulePoolCreators()
+{
+    static Core::InlineVector<PoolCreator, MAX_MODULE_POOLS> creators;
+    return creators;
+}
+
+template<typename T>
+void CreatePool(entt::registry& raw) { (void)raw.storage<T>(); }
+
+template<typename T>
+struct PoolRegistrar
+{
+    inline static const bool bRegistered = [] {
+        Core::InlineVector<PoolCreator, MAX_MODULE_POOLS>& creators = ModulePoolCreators();
+        if (creators.Size() >= MAX_MODULE_POOLS) { std::abort(); }
+        creators.PushBack(&CreatePool<T>);
+        return true;
+    }();
+};
+
+template<typename... T>
+void RegisterPools() { ((void)PoolRegistrar<std::remove_cv_t<T>>::bRegistered, ...); }
 }
 
 using RegistryHook = void(*)(SystemRegistry&, entt::entity);
@@ -72,6 +102,21 @@ public:
     [[nodiscard]] EngineContext* Context() const { return context; }
 
     void Reset() { raw = entt::registry{}; }
+
+    /**
+     * Creates the pool of every component this DLL's code can touch. entt inserts a missing pool into a map that every lookup reads, so all of them must exist before parallel waves run. Call from each DLL, after startup and after Reset.
+     */
+    void CreateModulePools()
+    {
+        for (const RegistryDetail::PoolCreator create : RegistryDetail::ModulePoolCreators()) { create(raw); }
+    }
+
+    /** Fn: f(std::string_view typeName), in pool creation order. */
+    template<typename Fn>
+    void ForEachPool(Fn&& f) const
+    {
+        for (auto [id, pool] : std::as_const(raw).storage()) { f(std::string_view{pool.type().name()}); }
+    }
 
     template<typename T, RegistryHook Fn>
     void ConnectConstruct() { raw.on_construct<T>().template connect<&HookThunk<Fn>>(*this); }
@@ -108,26 +153,51 @@ private:
     void ClearAll() { raw.clear(); }
 
     template<typename T>
-    [[nodiscard]] const T& Get(entt::entity entity) const { return raw.get<T>(entity); }
+    [[nodiscard]] const T& Get(entt::entity entity) const
+    {
+        RegistryDetail::RegisterPools<T>();
+        return raw.get<T>(entity);
+    }
 
     template<typename T>
-    [[nodiscard]] const T* TryGet(entt::entity entity) const { return raw.try_get<T>(entity); }
+    [[nodiscard]] const T* TryGet(entt::entity entity) const
+    {
+        RegistryDetail::RegisterPools<T>();
+        return raw.try_get<T>(entity);
+    }
 
     template<typename T>
-    [[nodiscard]] T& GetMut(entt::entity entity) { return raw.get<T>(entity); }
+    [[nodiscard]] T& GetMut(entt::entity entity)
+    {
+        RegistryDetail::RegisterPools<T>();
+        return raw.get<T>(entity);
+    }
 
     template<typename T>
-    [[nodiscard]] T* TryGetMut(entt::entity entity) { return raw.try_get<T>(entity); }
+    [[nodiscard]] T* TryGetMut(entt::entity entity)
+    {
+        RegistryDetail::RegisterPools<T>();
+        return raw.try_get<T>(entity);
+    }
 
     template<typename... T>
-    [[nodiscard]] bool Has(entt::entity entity) const { return raw.all_of<T...>(entity); }
+    [[nodiscard]] bool Has(entt::entity entity) const
+    {
+        RegistryDetail::RegisterPools<T...>();
+        return raw.all_of<T...>(entity);
+    }
 
     template<typename... T>
-    [[nodiscard]] bool HasAny(entt::entity entity) const { return raw.any_of<T...>(entity); }
+    [[nodiscard]] bool HasAny(entt::entity entity) const
+    {
+        RegistryDetail::RegisterPools<T...>();
+        return raw.any_of<T...>(entity);
+    }
 
     template<typename... T, typename... Exclude>
     [[nodiscard]] auto View(entt::exclude_t<Exclude...> exclude = entt::exclude_t{})
     {
+        RegistryDetail::RegisterPools<typename RegistryDetail::ViewElement<T>::Type..., Exclude...>();
         return raw.view<typename RegistryDetail::ViewElement<T>::Type...>(exclude);
     }
 
@@ -135,26 +205,51 @@ private:
     [[nodiscard]] auto View(entt::exclude_t<Exclude...> exclude = entt::exclude_t{}) const
     {
         static_assert((!RegistryDetail::IsMut<T>::value && ...), "Mut<T> needs a non-const Registry");
+        RegistryDetail::RegisterPools<typename RegistryDetail::ViewElement<T>::Type..., Exclude...>();
         return raw.view<typename RegistryDetail::ViewElement<T>::Type...>(exclude);
     }
 
     template<typename T, typename... Args>
-    decltype(auto) Add(entt::entity entity, Args&&... args) { return raw.emplace<T>(entity, std::forward<Args>(args)...); }
+    decltype(auto) Add(entt::entity entity, Args&&... args)
+    {
+        RegistryDetail::RegisterPools<T>();
+        return raw.emplace<T>(entity, std::forward<Args>(args)...);
+    }
 
     template<typename T, typename... Args>
-    void Set(entt::entity entity, Args&&... args) { raw.emplace_or_replace<T>(entity, std::forward<Args>(args)...); }
+    void Set(entt::entity entity, Args&&... args)
+    {
+        RegistryDetail::RegisterPools<T>();
+        raw.emplace_or_replace<T>(entity, std::forward<Args>(args)...);
+    }
 
     template<typename T, typename... Args>
-    decltype(auto) GetOrAdd(entt::entity entity, Args&&... args) { return raw.get_or_emplace<T>(entity, std::forward<Args>(args)...); }
+    decltype(auto) GetOrAdd(entt::entity entity, Args&&... args)
+    {
+        RegistryDetail::RegisterPools<T>();
+        return raw.get_or_emplace<T>(entity, std::forward<Args>(args)...);
+    }
 
     template<typename T, typename... Other>
-    void Remove(entt::entity entity) { raw.remove<T, Other...>(entity); }
+    void Remove(entt::entity entity)
+    {
+        RegistryDetail::RegisterPools<T, Other...>();
+        raw.remove<T, Other...>(entity);
+    }
 
     template<typename T, typename... Other>
-    void Clear() { raw.clear<T, Other...>(); }
+    void Clear()
+    {
+        RegistryDetail::RegisterPools<T, Other...>();
+        raw.clear<T, Other...>();
+    }
 
     template<typename T, typename... Args>
-    void Sort(Args&&... args) { raw.sort<T>(std::forward<Args>(args)...); }
+    void Sort(Args&&... args)
+    {
+        RegistryDetail::RegisterPools<T>();
+        raw.sort<T>(std::forward<Args>(args)...);
+    }
 
     entt::registry raw;
     EngineState* state{nullptr};

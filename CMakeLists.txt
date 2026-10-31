@@ -378,6 +378,7 @@ if (WILL_ENGINE_ENABLE_PROFILER)
     )
     target_compile_definitions(tracy PRIVATE
             TRACY_ENABLE
+            TRACY_ON_DEMAND
             TRACY_EXPORTS
     )
 
@@ -385,6 +386,7 @@ if (WILL_ENGINE_ENABLE_PROFILER)
     target_link_libraries(tracy_interface INTERFACE tracy)
     target_compile_definitions(tracy_interface INTERFACE
             TRACY_ENABLE
+            TRACY_ON_DEMAND
             TRACY_IMPORTS
     )
 else ()

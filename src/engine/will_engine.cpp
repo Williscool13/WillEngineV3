@@ -414,6 +414,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
     {
         ZoneScopedN("CreateRenderThread");
         Render::VulkanContext::bForceNoREBAR = Args::GetBool(*launchArgs, ARG_NO_REBAR);
+        Render::VulkanContext::bEnableSyncValidation = Args::GetBool(*launchArgs, ARG_SYNCVAL);
         ImGui::SetAllocatorFunctions(ImGuiAlloc, ImGuiFree, &memoryManager);
         engineRenderSynchronization = new(memoryManager.PersistentAllocRaw(sizeof(Core::FrameSync), Core::AllocTag::FrameSync)) Core::FrameSync(memoryManager);
         renderThread = new(memoryManager.PersistentAllocRaw(sizeof(Render::RenderThread), Core::AllocTag::RenderThread)) Render::RenderThread(memoryManager, engineRenderSynchronization, scheduler, window, w, h);
@@ -667,6 +668,7 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
     }
 
     CreateDefaultCameras(engineState);
+    engineState->registry.CreateModulePools();
     ConnectEngineObservers(engineState->registry);
     LoadUIFont(engineContext, engineState);
     gameFunctions.gameLoad(engineContext, engineState);
@@ -727,6 +729,7 @@ void WillEngine::HotReloadGame()
 
     auto reloadResponse = gameDll.Reload();
 
+    engineState->registry.CreateModulePools();
     ConnectEngineObservers(engineState->registry);
 
     switch (reloadResponse) {

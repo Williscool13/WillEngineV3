@@ -179,7 +179,8 @@ void RenderThread::ThreadMain()
 
 
                 bEngineRequestsRecreate |= frameBuffer.swapchainRecreateCommand.bEngineCommandsRecreate;
-                if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bEngineRequestsRecreate) {
+                const bool bHasWindowExtent = frameBuffer.swapchainRecreateCommand.windowWidth > 0 && frameBuffer.swapchainRecreateCommand.windowHeight > 0;
+                if (!frameBuffer.swapchainRecreateCommand.bIsMinimized && bHasWindowExtent && bEngineRequestsRecreate) {
                     ZoneScopedN("SwapchainRecreate");
                     vkQueueWaitIdle(context->graphicsQueue);
                     gpuDispatcher->WaitAsyncComputeIdle();

@@ -111,6 +111,13 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
     loadSlot->PrepareUploadData();
 
+#ifdef WDEBUG
+    Render::TrackGeometryLoadBegin(loadSlot->transferSubmit.cmd, loadSlot->graphicsSubmit.cmd,
+                                   loadSlot->outputModel->modelData.vertexPositionAllocation.offset, loadSlot->rawData.vertices.Size() * sizeof(VertexPosition),
+                                   loadSlot->outputModel->modelData.indexAllocation.offset, loadSlot->rawData.indices.Size() * sizeof(uint32_t),
+                                   loadSlot->outputModel->name.c_str());
+#endif
+
     VkCommandBuffer cmd = loadSlot->transferSubmit.cmd;
     VkFence fence = loadSlot->transferSubmit.fence;
     VkSemaphore uploadCompleteSemaphore = loadSlot->uploadCompleteSemaphore;
@@ -175,6 +182,9 @@ void ProceduralModelLoadSlot::GenerateModelTask::ExecuteRange(enki::TaskSetParti
 
         loadSlot->graphicsSubmit.Reset(loadSlot->context);
 
+#ifdef WDEBUG
+        Render::TrackGeometryLoadEnd(cmd);
+#endif
         loadSlot->_notifyCallback(bBlasBuilt, loadSlot->slotHandle);
     }
 }
@@ -4300,7 +4310,7 @@ bool ProceduralModelLoadSlot::BuildBLAS(VkCommandBuffer cmd, const Core::InlineF
             blasTransients.buildInfos[buildIndex].dstAccelerationStructure = blas;
 
             if (bOversized) {
-                SPDLOG_WARN("[ProceduralModelLoadSlot] {} mesh {} primitive {} needs {} bytes of BLAS scratch ({} triangles), slot buffer is {}. Building it alone on a temporary buffer; split the primitive.",
+                SPDLOG_TRACE("[ProceduralModelLoadSlot] {} mesh {} primitive {} needs {} bytes of BLAS scratch ({} triangles), slot buffer is {}. Building it alone on a temporary buffer.",
                             outputModel->name.c_str(), j, i, scratchSize, blasTransients.primCounts[buildIndex], poolSize);
 
                 VkBufferCreateInfo oversizedBufInfo{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};

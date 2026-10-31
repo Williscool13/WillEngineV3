@@ -103,6 +103,13 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
     // Cannot fail past those first 2 checks
     loadSlot->PrepareUploadData();
 
+#ifdef WDEBUG
+    Render::TrackGeometryLoadBegin(loadSlot->transferSubmit.cmd, loadSlot->graphicsSubmit.cmd,
+                                   loadSlot->outputModel->modelData.vertexPositionAllocation.offset, loadSlot->rawData.vertices.Size() * sizeof(VertexPosition),
+                                   loadSlot->outputModel->modelData.indexAllocation.offset, loadSlot->rawData.indices.Size() * sizeof(uint32_t),
+                                   loadSlot->outputModel->name.c_str());
+#endif
+
     VkCommandBuffer cmd = loadSlot->transferSubmit.cmd;
     VkFence fence = loadSlot->transferSubmit.fence;
     VkSemaphore uploadCompleteSemaphore = loadSlot->uploadCompleteSemaphore;
@@ -169,6 +176,9 @@ void StaticModelLoadSlot::LoadModelTask::ExecuteRange(enki::TaskSetPartition ran
 
         loadSlot->graphicsSubmit.Reset(loadSlot->context);
 
+#ifdef WDEBUG
+        Render::TrackGeometryLoadEnd(cmd);
+#endif
         loadSlot->_notifyCallback(bBlasBuilt, loadSlot->modelSlotHandle);
     }
 }
