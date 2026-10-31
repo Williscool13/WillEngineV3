@@ -137,9 +137,6 @@ public:
     void DisconnectDestroy() { raw.on_destroy<T>().template disconnect<&HookThunk<Fn>>(*this); }
 
 private:
-    friend class SystemRegistry;
-    friend class DeferredCommands;
-
     /** Defined in system_registry.h. */
     template<RegistryHook Fn>
     static void HookThunk(Registry& self, entt::registry&, entt::entity entity);
@@ -254,6 +251,9 @@ private:
     entt::registry raw;
     EngineState* state{nullptr};
     EngineContext* context{nullptr};
+
+    friend class SystemRegistry;
+    friend class DeferredCommands;
 };
 
 template<typename T>

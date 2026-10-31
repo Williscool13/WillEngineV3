@@ -22,7 +22,7 @@ void VerifyAnalyticLightStore(Engine::EngineState* state, Engine::SystemRegistry
 {
     if (!state->debug.bVerifyStoresOnce) { return; }
     ZoneScoped;
-    const LightInfo* lights = state->analyticLightStore.Lights();
+    const LightInfo* lights = registry.Service<Engine::AnalyticLightStore>().Lights();
     uint32_t staleCount = 0;
     uint32_t firstStaleSlot = 0;
 
@@ -50,12 +50,14 @@ void VerifyAnalyticLightStore(Engine::EngineState* state, Engine::SystemRegistry
     }
 }
 
-void VerifyGeometryStores(Engine::EngineState* state)
+void VerifyGeometryStores(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     if (!state->debug.bVerifyStoresOnce) { return; }
     ZoneScoped;
 
-    const uint32_t stale = state->instanceStore.VerifyRecords();
+    Engine::InstanceStore& instanceStore = registry.ServiceMut<Engine::InstanceStore>();
+    Engine::TriLightStore& triLightStore = registry.ServiceMut<Engine::TriLightStore>();
+    const uint32_t stale = instanceStore.VerifyRecords(&triLightStore);
     if (stale > 0) {
         LOG_ERROR(Engine, "{} instance record(s) stale in the store; a source mutation did not go through WriteRecord", stale);
     }
@@ -63,9 +65,9 @@ void VerifyGeometryStores(Engine::EngineState* state)
         LOG_INFO(Engine, "Instance store clean");
     }
 
-    state->instanceStore.MarkAllDirty();
-    state->modelStore.MarkAllDirty();
-    state->triLightStore.MarkAllDirty();
+    instanceStore.MarkAllDirty();
+    registry.ServiceMut<Engine::ModelStore>().MarkAllDirty();
+    triLightStore.MarkAllDirty();
 }
 } // Engine
 

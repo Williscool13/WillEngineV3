@@ -550,15 +550,15 @@ void EvaluateInstanceRenderState(Engine::EngineState* state, entt::entity entity
     const bool bVisible = renderFlags->bVisible &&!registry.Has<Component::ProbeBakeHiddenFlag>(entity);
     const uint32_t flags = InstanceFlagsFrom(registry, entity, *renderFlags);
 
-    const Engine::InstanceSource& src = state->instanceStore[runtime->range.offset];
+    const Engine::InstanceSource& src = registry.ServiceMut<Engine::InstanceStore>()[runtime->range.offset];
     if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime->stableId) { return; }
-    state->instanceStore.SetRenderState(runtime->range, bVisible, flags, runtime->stableId);
+    registry.ServiceMut<Engine::InstanceStore>().SetRenderState(runtime->range, &registry.ServiceMut<Engine::TriLightStore>(), bVisible, flags, runtime->stableId);
 }
 
 void EvaluateAllInstanceRenderStates(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     ZoneScoped;
-    Engine::InstanceStore& store = state->instanceStore;
+    Engine::InstanceStore& store = registry.ServiceMut<Engine::InstanceStore>();
     const bool bAnyHideTags = registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
 
     for (auto [entity, renderFlags, runtime] : registry.View<Component::RenderFlagsComponent, Component::MeshRuntime>().each()) {
@@ -572,7 +572,7 @@ void EvaluateAllInstanceRenderStates(Engine::EngineState* state, Engine::SystemR
 
         const Engine::InstanceSource& src = store[runtime.range.offset];
         if (src.bVisible == bVisible && src.flags == flags && src.stableId == runtime.stableId) { continue; }
-        store.SetRenderState(runtime.range, bVisible, flags, runtime.stableId);
+        store.SetRenderState(runtime.range, &registry.ServiceMut<Engine::TriLightStore>(), bVisible, flags, runtime.stableId);
     }
 }
 
@@ -624,15 +624,15 @@ static void ApplyLightSurfaceResolve(Engine::SystemRegistry& registry, const ent
 
     registry.Remove<Component::LightSurfaceRequest>(entity);
     registry.Remove<Component::LightSurfaceRuntime>(entity); // frees any stale ranges via OnDestroy
-    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+    Engine::ModelStore::Range modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     if (!modelRange.IsValid()) { return; }
-    const Engine::InstanceStore::Range range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), model, materialID, modelRange.offset, false);
+    const Engine::InstanceStore::Range range = registry.ServiceMut<Engine::InstanceStore>().AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), model, materialID, modelRange.offset, false);
     if (!range.IsValid()) {
-        state->modelStore.Free(modelRange);
+        registry.ServiceMut<Engine::ModelStore>().Free(modelRange);
         return;
     }
-    state->modelStore.SetModel(modelRange.offset, {m, m});
-    state->instanceStore.SetLightIndex(range.offset, Component::FindLightSlot(registry, entity));
+    registry.ServiceMut<Engine::ModelStore>().SetModel(modelRange.offset, {m, m});
+    registry.ServiceMut<Engine::InstanceStore>().SetLightIndex(range.offset, &registry.ServiceMut<Engine::TriLightStore>(), Component::FindLightSlot(registry, entity));
     registry.Set<Component::LightSurfaceRuntime>(entity, range, modelRange, materialID);
 }
 
@@ -657,11 +657,11 @@ static void ApplyStaticMeshResolve(Engine::SystemRegistry& registry, const entt:
     Engine::EngineState* state = registry.State();
 
     Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
-    Engine::InstanceStore& store = state->instanceStore;
+    Engine::InstanceStore& store = registry.ServiceMut<Engine::InstanceStore>();
 
     auto releaseExisting = [&] {
-        store.ReleaseAndFree(materialManager,runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        store.ReleaseAndFree(materialManager, &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+        registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
     };
 
     auto model = registry.Assets().GetModel(TargetModel(*runtime));
@@ -725,7 +725,7 @@ static void ApplyStaticMeshResolve(Engine::SystemRegistry& registry, const entt:
 
     releaseExisting();
 
-    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(contributingNodes);
+    Engine::ModelStore::Range modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(contributingNodes);
     if (!modelRange.IsValid()) {
         registry.Remove<Component::StaticMeshLoadingFlag>(entity);
         return;
@@ -734,7 +734,7 @@ static void ApplyStaticMeshResolve(Engine::SystemRegistry& registry, const entt:
     Engine::InstanceStore::Range range = store.Allocate(totalPrimitives);
     if (!range.IsValid()) {
         LOG_ERROR(Engine, "Instance store full; cannot flatten model ({}) needing {} primitives", model->name.c_str(), totalPrimitives);
-        state->modelStore.Free(modelRange);
+        registry.ServiceMut<Engine::ModelStore>().Free(modelRange);
         registry.Remove<Component::StaticMeshLoadingFlag>(entity);
         return;
     }
@@ -782,7 +782,7 @@ static void ApplyStaticMeshResolve(Engine::SystemRegistry& registry, const entt:
                 }
             }
 
-            store.FillEntry(writeIndex, materialManager,model, primitive, {
+            store.FillEntry(writeIndex, materialManager, &registry.ServiceMut<Engine::TriLightStore>(), model, primitive, {
                                 .material = matID,
                                 .modelSlot = nodeModelSlot,
                                 .materialSlot = primitive.materialIndex,
@@ -842,8 +842,8 @@ static void ApplyStaticMeshPrimitiveResolve(Engine::SystemRegistry& registry, co
     Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
 
     auto releaseExisting = [&] {
-        state->instanceStore.ReleaseAndFree(materialManager,runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(materialManager, &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+        registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
     };
 
     auto model = registry.Assets().GetModel(TargetModel(*runtime));
@@ -903,8 +903,8 @@ static void ApplyStaticMeshPrimitiveResolve(Engine::SystemRegistry& registry, co
         matID = materialManager->CreateSynthesizedMaterial(applyShaderOverrides(model->modelData.materials[targetPrim->materialIndex]));
     }
 
-    Engine::InstanceStore& store = state->instanceStore;
-    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+    Engine::InstanceStore& store = registry.ServiceMut<Engine::InstanceStore>();
+    Engine::ModelStore::Range modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     if (!modelRange.IsValid()) {
         registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
         return;
@@ -912,12 +912,12 @@ static void ApplyStaticMeshPrimitiveResolve(Engine::SystemRegistry& registry, co
     Engine::InstanceStore::Range range = store.Allocate(1);
     if (!range.IsValid()) {
         LOG_ERROR(Engine, "Instance store full; cannot resolve split primitive");
-        state->modelStore.Free(modelRange);
+        registry.ServiceMut<Engine::ModelStore>().Free(modelRange);
         registry.Remove<Component::StaticMeshPrimitiveLoadingFlag>(entity);
         return;
     }
 
-    store.FillEntry(range.offset, materialManager,model, *targetPrim, {
+    store.FillEntry(range.offset, materialManager, &registry.ServiceMut<Engine::TriLightStore>(), model, *targetPrim, {
                         .material = matID,
                         .modelSlot = modelRange.offset,
                         .materialSlot = targetPrim->materialIndex,
@@ -961,8 +961,8 @@ static void ApplyProceduralMeshResolve(Engine::SystemRegistry& registry, const e
     Engine::EngineState* state = registry.State();
 
     auto releaseExisting = [&] {
-        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+        registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
     };
 
     auto model = registry.Assets().GetModel(TargetModel(*runtime));
@@ -982,9 +982,9 @@ static void ApplyProceduralMeshResolve(Engine::SystemRegistry& registry, const e
         matID = meshComponent.material;
     }
     releaseExisting();
-    runtime->modelRange = state->modelStore.Allocate(1);
+    runtime->modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     if (runtime->modelRange.IsValid()) {
-        runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+        runtime->range = registry.ServiceMut<Engine::InstanceStore>().AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
         EvaluateInstanceRenderState(state, entity, registry);
         registry.Set<Component::MultiframeDirtyRequest>(entity);
     }
@@ -1008,22 +1008,22 @@ void ProceduralMeshLoadResolve(Engine::EngineContext* ctx, Engine::EngineState* 
 
 static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Component::MeshRuntime* runtime, Engine::StaticModel* model, const Component::ModuleMeshComponent& meshComponent, bool bEmissiveLight)
 {
-    state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-    state->modelStore.Free(runtime->modelRange);
+    registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+    registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
 
     if (model->modelData.meshes.IsEmpty()) { return; }
     Engine::MeshInformation& mesh = model->modelData.meshes[0];
     const auto count = static_cast<uint32_t>(mesh.primitiveProperties.Size());
     if (count == 0) { return; }
 
-    Engine::ModelStore::Range modelRange = state->modelStore.Allocate(1);
+    Engine::ModelStore::Range modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     if (!modelRange.IsValid()) { return; }
 
-    Engine::InstanceStore& store = state->instanceStore;
+    Engine::InstanceStore& store = registry.ServiceMut<Engine::InstanceStore>();
     Engine::InstanceStore::Range range = store.Allocate(count);
     if (!range.IsValid()) {
         LOG_ERROR(Engine, "Instance store full; cannot resolve module runtime for model ({})", model->name.c_str());
-        state->modelStore.Free(modelRange);
+        registry.ServiceMut<Engine::ModelStore>().Free(modelRange);
         return;
     }
 
@@ -1038,7 +1038,7 @@ static void FillModuleMeshRange(Engine::EngineContext* ctx, Engine::EngineState*
                 matID = slotMat;
             }
         }
-        store.FillEntry(writeIndex, &registry.ServiceMut<Engine::MaterialManager>(),model, primitive, {
+        store.FillEntry(writeIndex, &registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), model, primitive, {
                             .material = matID,
                             .modelSlot = modelRange.offset,
                             .materialSlot = primitive.materialIndex,
@@ -1076,8 +1076,8 @@ static void ApplyModuleMeshResolve(Engine::SystemRegistry& registry, const entt:
     Engine::EngineState* state = registry.State();
 
     auto releaseExisting = [&] {
-        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+        registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
     };
 
     auto model = registry.Assets().GetModel(TargetModel(*runtime));
@@ -1139,8 +1139,8 @@ static void ApplySplineMeshResolve(Engine::SystemRegistry& registry, const entt:
     Engine::EngineState* state = registry.State();
 
     auto releaseExisting = [&] {
-        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+        registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
     };
 
     auto model = registry.Assets().GetModel(TargetModel(*runtime));
@@ -1160,9 +1160,9 @@ static void ApplySplineMeshResolve(Engine::SystemRegistry& registry, const entt:
         matID = meshComponent.material;
     }
     releaseExisting();
-    runtime->modelRange = state->modelStore.Allocate(1);
+    runtime->modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     if (runtime->modelRange.IsValid()) {
-        runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+        runtime->range = registry.ServiceMut<Engine::InstanceStore>().AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
         EvaluateInstanceRenderState(state, entity, registry);
         registry.Set<Component::MultiframeDirtyRequest>(entity);
     }
@@ -1206,8 +1206,8 @@ static void ApplyText3DResolve(Engine::SystemRegistry& registry, const entt::ent
     Engine::EngineState* state = registry.State();
 
     if (!TargetModel(*runtime).IsValid()) {
-        state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-        state->modelStore.Free(runtime->modelRange);
+        registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+        registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
         registry.Remove<Component::Text3DLoadingFlag>(entity); // nothing to resolve (e.g. empty text / no font); drop the tag
         return;
     }
@@ -1219,8 +1219,8 @@ static void ApplyText3DResolve(Engine::SystemRegistry& registry, const entt::ent
     }
     if (model->modelLoadState == Engine::StaticModel::ModelLoadState::FailedToLoad) {
         if (!DropPendingModel(ctx, state, registry, *runtime)) {
-            state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-            state->modelStore.Free(runtime->modelRange);
+            registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+            registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
         }
         registry.Remove<Component::Text3DLoadingFlag>(entity); // generation failed (e.g. empty/whitespace text); stop waiting so editing unlocks
         return;
@@ -1234,11 +1234,11 @@ static void ApplyText3DResolve(Engine::SystemRegistry& registry, const entt::ent
     if (AuthoredMaterialExists(registry, &registry.Service<Engine::MaterialManager>(), entity, textComponent.material)) {
         matID = textComponent.material;
     }
-    state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(),runtime->range);
-    state->modelStore.Free(runtime->modelRange);
-    runtime->modelRange = state->modelStore.Allocate(1);
+    registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), runtime->range);
+    registry.ServiceMut<Engine::ModelStore>().Free(runtime->modelRange);
+    runtime->modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     if (runtime->modelRange.IsValid()) {
-        runtime->range = state->instanceStore.AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(),model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
+        runtime->range = registry.ServiceMut<Engine::InstanceStore>().AllocateSingleMeshRange(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), model, matID, runtime->modelRange.offset, HasEmissiveLightFlag(registry, entity));
         EvaluateInstanceRenderState(state, entity, registry);
         registry.Set<Component::MultiframeDirtyRequest>(entity);
     }

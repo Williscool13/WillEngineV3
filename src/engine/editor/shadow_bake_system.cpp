@@ -70,7 +70,7 @@ static bool LightForBake(EngineState* state, entt::entity entity, uint64_t& outS
     }
     if (slot == AnalyticLightStore::INVALID_SLOT || outShadowId == 0) { return false; }
 
-    outLight = state->analyticLightStore.Lights()[slot];
+    outLight = registry.Service<Engine::AnalyticLightStore>().Lights()[slot];
     return outLight.range > 0.0f;
 }
 

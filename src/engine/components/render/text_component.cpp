@@ -35,7 +35,7 @@ void LoadTextComponent(TextComponent& comp, Engine::SystemRegistry& registry, en
     // Arm only; the load happens in ResolveTextFontPending (freeze-gated).
     auto& runtime = registry.GetOrAdd<TextRuntime>(entity);
     if (!runtime.modelRange.IsValid()) {
-        runtime.modelRange = state->modelStore.Allocate(1);
+        runtime.modelRange = registry.ServiceMut<Engine::ModelStore>().Allocate(1);
     }
     if (comp.fontId.IsValid()) {
         registry.Set<TextFontRequest>(entity);

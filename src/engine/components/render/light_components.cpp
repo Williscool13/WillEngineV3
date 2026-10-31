@@ -120,7 +120,7 @@ static void DrawShadowBakeControls(EditContext& edit, uint64_t shadowId)
     if (info == nullptr) {
         ImGui::TextDisabled("Not baked, using dynamic");
     }
-    else if (lightSlot != AnalyticLightStore::INVALID_SLOT && !IsShadowBakeCurrent(info->key, state->analyticLightStore.Lights()[lightSlot])) {
+    else if (lightSlot != AnalyticLightStore::INVALID_SLOT && !IsShadowBakeCurrent(info->key, registry.Service<AnalyticLightStore>().Lights()[lightSlot])) {
         ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Stale, using dynamic until rebaked");
     }
     else {

@@ -600,7 +600,7 @@ uint32_t SplitAllMeshPrimitives(Engine::EngineContext* ctx, Engine::EngineState*
     };
 
     for (uint32_t i = 0; i < range.count; ++i) {
-        const Engine::InstanceSource source = state->instanceStore[range.offset + i];
+        const Engine::InstanceSource source = registry.Service<Engine::InstanceStore>()[range.offset + i];
         if (source.sourceNodeIndex >= nodes.Size()) {
             continue;
         }

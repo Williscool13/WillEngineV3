@@ -19,6 +19,7 @@
 #include "engine/core/material_id.h"
 #include "engine/core/text_material_id.h"
 #include "engine/catalog_table.h"
+#include "engine/core/access_set.h"
 #include "engine/material_store.h"
 #include "render/render_config.h"
 #include "render/interface/render_params.h"
@@ -78,6 +79,7 @@ class MaterialManager final : public IMaterialStore
 {
 public:
     static constexpr const char* COMPONENT_NAME = "MaterialManager";
+    using ACCESS_PARTS = AccessParts<IMaterialStore, MaterialUploadDirty, MaterialChangedDirty>;
 
     /** Catalog record of a .wmaterial or .wtextmaterial; the definition itself lives in GetMaterials / GetTextMaterials. */
     struct CachedMaterialFile

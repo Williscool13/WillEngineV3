@@ -743,7 +743,7 @@ static void DrawMaterialTextureSlots(Engine::EngineContext* ctx, Engine::EngineS
 template<typename C, typename Tag>
 static void RetagIfUsingMaterial(Engine::EngineState* state, Engine::MaterialID id, Engine::SystemRegistry& registry)
 {
-    const Engine::InstanceStore& store = state->instanceStore;
+    const Engine::InstanceStore& store = registry.Service<Engine::InstanceStore>();
     for (const auto& [entity, component, runtime] : registry.View<C, Component::MeshRuntime>().each()) {
         if (!runtime.range.IsValid()) { continue; }
         for (uint32_t i = 0; i < runtime.range.count; ++i) {

@@ -22,7 +22,7 @@ namespace Engine
 /**
  * Draws the "Debug View" window: overlays, debug-view target buttons grouped by pipeline stage (only for paths that are running), culling toggles, and the hotkey reference.
  */
-void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state);
+void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
 /**
  * Draws the "Diagnostics" window: a checkbox and a fixed-height readout per zone.

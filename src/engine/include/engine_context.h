@@ -53,6 +53,15 @@ class MaterialManager;
 class IMaterialStore;
 class MaterialUploadDirty;
 class MaterialChangedDirty;
+class InstanceStore;
+class InstanceRecords;
+class InstanceWorldBounds;
+class InstanceBoundsChanges;
+class InstanceDirty;
+class ModelStore;
+class TriLightStore;
+class AnalyticLightStore;
+struct LocalShadowSelection;
 class EngineLogger;
 class AssetManager;
 class IAssetLoader;
@@ -225,17 +234,26 @@ private:
 /** Reached only through SystemRegistry::Service / ServiceMut, which check them against the caller's access set, and SystemRegistry::Assets. */
 class EngineServices
 {
-    friend class SystemRegistry;
-    friend class WillEngine;
-
     AssetManager* assetManager{nullptr};
     IAssetLoader* assetLoader{nullptr};
     MaterialManager* materialManager{nullptr};
     IMaterialStore* materialStore{nullptr};
     MaterialUploadDirty* materialUploadDirty{nullptr};
     MaterialChangedDirty* materialChangedDirty{nullptr};
+    InstanceStore* instanceStore{nullptr};
+    InstanceRecords* instanceRecords{nullptr};
+    InstanceWorldBounds* instanceWorldBounds{nullptr};
+    InstanceBoundsChanges* instanceBoundsChanges{nullptr};
+    InstanceDirty* instanceDirty{nullptr};
+    ModelStore* modelStore{nullptr};
+    TriLightStore* triLightStore{nullptr};
+    AnalyticLightStore* analyticLightStore{nullptr};
+    LocalShadowSelection* localShadowSelection{nullptr};
     Audio::AudioManager* audioManager{nullptr};
     Physics::PhysicsWorld* physicsWorld{nullptr};
+
+    friend class SystemRegistry;
+    friend class WillEngine;
 };
 
 struct EngineContext

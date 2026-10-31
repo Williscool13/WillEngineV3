@@ -317,7 +317,7 @@ enum class GeometryHazard : uint8_t
     Unmatched,
 };
 
-/** Syncval flags copies and BLAS builds on different queues touching one mega buffer without looking at their byte ranges, so compare them here. */
+/** A BLAS build declares the vertex buffer from its base to the model's last vertex because indices are global, so syncval sees it overlap copies to lower models. Compare the bytes each one actually uses. */
 static GeometryHazard ClassifyGeometryHazard(const char* message)
 {
     if (message == nullptr) { return GeometryHazard::NotGeometry; }

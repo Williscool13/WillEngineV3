@@ -21,7 +21,7 @@ void VerifyAnalyticLightStore(Engine::EngineState* state, Engine::SystemRegistry
  * Instances are checked by derivation: their record is a pure projection of InstanceSource, so a source mutated without WriteRecord shows up directly.
  * Model matrices are not derivable without duplicating RenderPrepareTransforms, so both stores instead re-send everything live. A missed mark shows as geometry correcting itself the moment this runs. No-op unless DebugState::bVerifyStoresOnce is raised.
  */
-void VerifyGeometryStores(Engine::EngineState* state);
+void VerifyGeometryStores(Engine::EngineState* state, Engine::SystemRegistry& registry);
 #endif
 } // Engine
 

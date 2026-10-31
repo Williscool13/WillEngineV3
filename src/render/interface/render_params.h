@@ -484,6 +484,8 @@ struct ReSTIRParams
 
 struct DDGIParams
 {
+    static constexpr const char* COMPONENT_NAME = "DDGIParams";
+
     bool bEnabled{true};
 
     // Count/spacing changes restart probe history

@@ -120,7 +120,7 @@ EngineState::EngineState(Core::TlsfAllocator* allocator, Core::VirtualMemoryMana
       editor(allocator)
 {
     triLightStore.Init(MAX_LIGHTS - MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
-    instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, virtualMemory, &triLightStore, Core::AllocTag::RenderMesh);
+    instanceStore.Init(MAX_INSTANCE_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);
     modelStore.Init(MAX_MODEL_SLOTS, allocator, virtualMemory, Core::AllocTag::RenderMesh);
     analyticLightStore.Init(MAX_ANALYTIC_LIGHTS, allocator, Core::AllocTag::Render);
     debug.emissive.entries = Core::Vector<EmissiveDebugEntry>(allocator, Core::AllocTag::EngineState);

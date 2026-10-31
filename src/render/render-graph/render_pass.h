@@ -90,8 +90,6 @@ public: // DAG compile-time fields
     Core::ArenaVector<uint32_t> outEdges;
 
 private:
-    friend class RenderGraph;
-    friend class RenderGraphInspector;
     RenderGraph& graph;
 
     Core::ArenaVector<uint32_t> colorAttachments;
@@ -127,6 +125,9 @@ private:
     Core::ArenaVector<ResourceReference> bufferReferences;
 
     Core::InlineFunction<void(VkCommandBuffer, VulkanContext*, RenderGraph&), 256> executeFunc;
+
+    friend class RenderGraph;
+    friend class RenderGraphInspector;
 };
 } // Render
 

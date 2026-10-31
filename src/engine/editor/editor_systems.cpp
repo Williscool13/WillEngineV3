@@ -580,7 +580,7 @@ void DrawEditorInterface(Engine::EngineContext* ctx, Engine::EngineState* state,
     const bool bJustSelected = HandleViewportSelection(ctx, state, registry);
     SyncActiveScene(ctx, state, registry);
 
-    DrawDebugViewWindow(ctx, state);
+    DrawDebugViewWindow(ctx, state, registry);
     DrawDiagnosticsWindow(ctx, state, registry);
     DrawProjectConfigWindow(ctx, state);
     DrawLightingWindow(ctx, state, registry);

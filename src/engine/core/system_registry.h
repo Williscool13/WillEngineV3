@@ -36,6 +36,15 @@ class MaterialManager;
 class IMaterialStore;
 class MaterialUploadDirty;
 class MaterialChangedDirty;
+class InstanceStore;
+class InstanceRecords;
+class InstanceWorldBounds;
+class InstanceBoundsChanges;
+class InstanceDirty;
+class ModelStore;
+class TriLightStore;
+class AnalyticLightStore;
+struct LocalShadowSelection;
 
 /**
  * Exclusive access applies immediately and is unchecked. Non-exclusive access defers Set/Remove/Destroy/PushCommand to the end of the wave
@@ -230,6 +239,15 @@ private:
         else if constexpr (std::is_same_v<T, IMaterialStore>) { return ctx.services.materialStore; }
         else if constexpr (std::is_same_v<T, MaterialUploadDirty>) { return ctx.services.materialUploadDirty; }
         else if constexpr (std::is_same_v<T, MaterialChangedDirty>) { return ctx.services.materialChangedDirty; }
+        else if constexpr (std::is_same_v<T, InstanceStore>) { return ctx.services.instanceStore; }
+        else if constexpr (std::is_same_v<T, InstanceRecords>) { return ctx.services.instanceRecords; }
+        else if constexpr (std::is_same_v<T, InstanceWorldBounds>) { return ctx.services.instanceWorldBounds; }
+        else if constexpr (std::is_same_v<T, InstanceBoundsChanges>) { return ctx.services.instanceBoundsChanges; }
+        else if constexpr (std::is_same_v<T, InstanceDirty>) { return ctx.services.instanceDirty; }
+        else if constexpr (std::is_same_v<T, ModelStore>) { return ctx.services.modelStore; }
+        else if constexpr (std::is_same_v<T, TriLightStore>) { return ctx.services.triLightStore; }
+        else if constexpr (std::is_same_v<T, AnalyticLightStore>) { return ctx.services.analyticLightStore; }
+        else if constexpr (std::is_same_v<T, LocalShadowSelection>) { return ctx.services.localShadowSelection; }
         else if constexpr (std::is_same_v<T, Audio::AudioManager>) { return ctx.services.audioManager; }
         else if constexpr (std::is_same_v<T, Physics::PhysicsWorld>) { return ctx.services.physicsWorld; }
         else { static_assert(sizeof(T) == 0, "not a service"); }

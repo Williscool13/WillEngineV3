@@ -601,7 +601,8 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
         return ToolResult::Complete;
     }
 
-    const InstanceStore& store = state->instanceStore;
+    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/pick_pixel"};
+    const InstanceStore& store = registry.Service<InstanceStore>();
     if (pick.instanceIndex >= store.GetWatermark()) {
         call.SetBool("hit", false);
         call.SetBool("stale", true);
@@ -621,7 +622,6 @@ static ToolResult PickPixel(EngineContext* ctx, EngineState* state, Call& call)
     call.End();
 
     call.SetString("stableId", HexId(source.stableId).c_str());
-    Engine::SystemRegistry registry{state->registry, Engine::AccessSet::EXCLUSIVE, nullptr, "MCP/pick_pixel"};
     const entt::entity entity = FindEntity(state, StringID(source.stableId), registry);
     if (entity != entt::null) {
         const auto* name = registry.TryGet<Component::NameComponent>(entity);

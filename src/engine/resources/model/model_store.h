@@ -24,6 +24,8 @@ inline constexpr uint32_t MAX_MODEL_SLOTS = 1024 * 1024;
 class ModelStore
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "ModelStore";
+
     using Range = Core::RangeAllocator::Range;
 
     void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);

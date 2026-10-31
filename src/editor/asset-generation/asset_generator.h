@@ -246,8 +246,6 @@ public:
     void SetFastMode(bool value) { bFastMode.store(value, std::memory_order_relaxed); }
 
 private:
-    friend class StaticModelGenerateSlot;
-
     struct RecoveredTextureIdentity
     {
         Engine::TextureID id{};
@@ -320,6 +318,8 @@ private:
 
     // todo access to this is not thread safe. Needs to be mutex locked (maybe within?). Path should be within, and mutex locked (should be fine)
     Core::Array<StaticModelGenerationProgress, MODEL_GENERATION_JOB_COUNT> modelGenerationProgress{};
+
+    friend class StaticModelGenerateSlot;
 };
 } // Render
 

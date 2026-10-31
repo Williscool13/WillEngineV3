@@ -544,6 +544,15 @@ void WillEngine::Initialize(Utils::Logger* logger, Args::LaunchArgs* launchArgs)
         engineContext->services.materialStore = materialManager;
         engineContext->services.materialUploadDirty = materialManager->GetUploadDirty();
         engineContext->services.materialChangedDirty = materialManager->GetChangedDirty();
+        engineContext->services.instanceStore = &engineState->instanceStore;
+        engineContext->services.instanceRecords = engineState->instanceStore.GetRecords();
+        engineContext->services.instanceWorldBounds = engineState->instanceStore.GetWorldBounds();
+        engineContext->services.instanceBoundsChanges = engineState->instanceStore.GetBoundsChanges();
+        engineContext->services.instanceDirty = engineState->instanceStore.GetDirty();
+        engineContext->services.modelStore = &engineState->modelStore;
+        engineContext->services.triLightStore = &engineState->triLightStore;
+        engineContext->services.analyticLightStore = &engineState->analyticLightStore;
+        engineContext->services.localShadowSelection = &engineState->localShadowSelection;
         engineContext->pipelineManager = renderThread->GetPipelineManager();
         engineContext->rendererStatistics = renderThread->GetStatisticsManager();
         MCP::RegisterEngineTools(engineState);

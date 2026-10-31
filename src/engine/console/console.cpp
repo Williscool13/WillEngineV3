@@ -665,11 +665,11 @@ static void SnapEditorCameraToGameCamera(Engine::EngineState* state, Engine::Sys
 static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     const Engine::PickPixelState& pick = state->debug.pick;
-    if (!pick.bHit || pick.instanceIndex >= state->instanceStore.GetWatermark()) {
+    if (!pick.bHit || pick.instanceIndex >= registry.Service<Engine::InstanceStore>().GetWatermark()) {
         Print(state, "  pick: nothing");
         return;
     }
-    const Engine::InstanceSource& source = state->instanceStore[pick.instanceIndex];
+    const Engine::InstanceSource& source = registry.Service<Engine::InstanceStore>()[pick.instanceIndex];
     const entt::entity found = Engine::FindEntity(state, StringID(source.stableId), registry);
     const auto* name = found != entt::null ? registry.TryGet<Engine::Component::NameComponent>(found) : nullptr;
     const Engine::Material* material = registry.Service<Engine::MaterialManager>().GetMaterial(source.materialID);
@@ -684,8 +684,8 @@ static void PrintPickResult(Engine::EngineContext* ctx, Engine::EngineState* sta
 static void VerifyLights(Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     using Engine::AnalyticLightStore;
-    const LightInfo* lights = state->analyticLightStore.Lights();
-    const uint32_t watermark = state->analyticLightStore.GetWatermark();
+    const LightInfo* lights = registry.Service<AnalyticLightStore>().Lights();
+    const uint32_t watermark = registry.Service<AnalyticLightStore>().GetWatermark();
     uint32_t owned[MAX_ANALYTIC_LIGHTS / 32] = {};
     uint32_t checked = 0;
     uint32_t stale = 0;

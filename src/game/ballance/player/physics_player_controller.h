@@ -22,6 +22,8 @@ namespace Ballance
 class PhysicsPlayerController
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "PhysicsPlayerController";
+
     void Initialize(Engine::EngineState* gameState, Engine::EngineContext* ctx, glm::vec3 spawnPosition, Engine::SystemRegistry& registry);
     void Update(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
     void Shutdown(const Physics::PhysicsWorld* physicsWorld, Engine::SystemRegistry& registry);

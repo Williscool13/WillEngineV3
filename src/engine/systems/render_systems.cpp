@@ -155,19 +155,21 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
 
     // Dirty entities write their node matrices into their stable model slots
     {
-        Engine::InstanceStore& store = state->instanceStore;
-        Engine::ModelStore& modelStore = state->modelStore;
-        Engine::TriLightStore& triLightStore = state->triLightStore;
+        const Engine::InstanceRecords& records = registry.Service<Engine::InstanceRecords>();
+        Engine::InstanceWorldBounds& worldBounds = registry.ServiceMut<Engine::InstanceWorldBounds>();
+        Engine::InstanceBoundsChanges& boundsChanges = registry.ServiceMut<Engine::InstanceBoundsChanges>();
+        Engine::ModelStore& modelStore = registry.ServiceMut<Engine::ModelStore>();
+        Engine::TriLightStore& triLightStore = registry.ServiceMut<Engine::TriLightStore>();
         for (auto [entity, runtime, renderTransform, dirty] : registry.View<Component::MeshRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
             if (!runtime.range.IsValid()) { continue; }
             uint32_t lastSlot = ~0u;
             for (uint32_t i = 0; i < runtime.range.count; ++i) {
                 const uint32_t slot = runtime.range.offset + i;
-                const Engine::InstanceSource& inst = store[slot];
+                const Engine::InstanceSource& inst = records[slot];
                 if (inst.emissiveMeshSlot != Engine::TriLightStore::INVALID_MESH_SLOT) { triLightStore.MarkDirty(inst.emissiveMeshSlot); }
                 const glm::mat4 model = renderTransform.modelMatrix * inst.modelSpaceTransform;
                 const float scale = glm::sqrt(glm::max(glm::dot(glm::vec3(model[0]), glm::vec3(model[0])), glm::max(glm::dot(glm::vec3(model[1]), glm::vec3(model[1])), glm::dot(glm::vec3(model[2]), glm::vec3(model[2])))));
-                store.SetWorldBounds(slot, glm::vec4(glm::vec3(model * glm::vec4(glm::vec3(inst.localBounds), 1.0f)), inst.localBounds.w * scale));
+                worldBounds.Set(slot, glm::vec4(glm::vec3(model * glm::vec4(glm::vec3(inst.localBounds), 1.0f)), inst.localBounds.w * scale), boundsChanges);
                 if (inst.modelSlot == lastSlot) { continue; }
                 lastSlot = inst.modelSlot;
                 modelStore.SetModel(inst.modelSlot, {model, renderTransform.previousMatrix * inst.modelSpaceTransform});
@@ -178,26 +180,28 @@ void RenderPrepareTransforms(Engine::EngineContext* ctx, Engine::EngineState* st
     // Area light emissive quads
     for (auto [entity, light, transform, surfaceRuntime, dirty] : registry.View<Component::AreaLightComponent, Component::RenderWorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>().each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
-        const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
-        state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
+        Engine::ModelStore& modelStore = registry.ServiceMut<Engine::ModelStore>();
+        const Model& previous = modelStore.GetModel(surfaceRuntime.modelRange.offset);
+        modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeAreaLightQuadMatrix(transform, light), previous.modelMatrix});
     }
 
     // Sphere light emissive meshes
     for (auto [entity, light, transform, surfaceRuntime, dirty] : registry.View<Component::SphereLightComponent, Component::RenderWorldTransformRuntime, Component::LightSurfaceRuntime, Component::MultiframeDirtyRequest>(entt::exclude<Component::AreaLightComponent>).each()) {
         if (!surfaceRuntime.modelRange.IsValid()) { continue; }
-        const Model& previous = state->modelStore.GetModel(surfaceRuntime.modelRange.offset);
-        state->modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
+        Engine::ModelStore& modelStore = registry.ServiceMut<Engine::ModelStore>();
+        const Model& previous = modelStore.GetModel(surfaceRuntime.modelRange.offset);
+        modelStore.SetModel(surfaceRuntime.modelRange.offset, {Component::ComputeSphereLightMatrix(transform, light), previous.modelMatrix});
     }
 
     // Text quads
     for (auto [entity, runtime, renderTransform, dirty] : registry.View<Component::TextRuntime, Component::RenderTransformRuntime, Component::MultiframeDirtyRequest>().each()) {
         if (!runtime.modelRange.IsValid()) { continue; }
-        state->modelStore.SetModel(runtime.modelRange.offset, {renderTransform.modelMatrix, renderTransform.previousMatrix});
+        registry.ServiceMut<Engine::ModelStore>().SetModel(runtime.modelRange.offset, {renderTransform.modelMatrix, renderTransform.previousMatrix});
     }
 
     // Analytic light payload. A bake-hidden light writes dead, so the store stays the only authority on what the GPU sees.
     {
-        Engine::AnalyticLightStore& lightStore = state->analyticLightStore;
+        Engine::AnalyticLightStore& lightStore = registry.ServiceMut<Engine::AnalyticLightStore>();
         const bool bAnyHidden = registry.View<Component::ProbeBakeHiddenFlag>().size() > 0;
         auto bHiddenLight = [&](entt::entity entity) { return bAnyHidden && registry.Has<Component::ProbeBakeHiddenFlag>(entity); };
 
@@ -224,7 +228,8 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state, E
 {
     ZoneScoped;
     Engine::MaterialManager* materialManager = &registry.ServiceMut<Engine::MaterialManager>();
-    Engine::InstanceStore& store = state->instanceStore;
+    Engine::InstanceStore& store = registry.ServiceMut<Engine::InstanceStore>();
+    Engine::TriLightStore* triLightStore = &registry.ServiceMut<Engine::TriLightStore>();
     Engine::Material emissiveMaterial = *materialManager->GetMaterial(materialManager->GetDefaultMaterialID());
     emissiveMaterial.props.colorFactor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // black albedo so only emission shows
     constexpr uint32_t SURFACE_FLAGS = INSTANCE_FLAG_MOTION_BLUR | INSTANCE_FLAG_ALPHA_CUTOUT | INSTANCE_FLAG_DDGI_VISIBLE | INSTANCE_FLAG_CAMERA_MOTION_BLUR;
@@ -247,14 +252,14 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state, E
                 materialManager->CreateSynthesizedMaterial(emissiveMaterial);
                 materialManager->AcquireMaterial(materialID);
                 materialManager->ReleaseMaterial(surfaceRuntime.materialID);
-                store.SetMaterial(surfaceRuntime.range.offset, materialManager, materialID);
+                store.SetMaterial(surfaceRuntime.range.offset, materialManager, triLightStore, materialID);
                 surfaceRuntime.materialID = materialID;
             }
         }
 
         const Engine::InstanceSource& src = store[surfaceRuntime.range.offset];
         if (src.bVisible != bDraw || src.flags != SURFACE_FLAGS || src.stableId != surfaceRuntime.stableId) {
-            store.SetRenderState(surfaceRuntime.range, bDraw, SURFACE_FLAGS, surfaceRuntime.stableId);
+            store.SetRenderState(surfaceRuntime.range, triLightStore, bDraw, SURFACE_FLAGS, surfaceRuntime.stableId);
         }
     };
 
@@ -285,11 +290,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
     //
     {
         ZoneScopedN("Instances");
-        const Instance* storeInstances = state->instanceStore.Instances();
-        vf.instanceCount = state->instanceStore.GetWatermark();
+        const Engine::InstanceRecords& records = registry.Service<Engine::InstanceRecords>();
+        const Instance* storeInstances = records.Instances();
+        vf.instanceCount = records.GetWatermark();
         vf.instancePayload.Clear();
         vf.instanceRuns.Clear();
-        state->instanceStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+        registry.ServiceMut<Engine::InstanceDirty>().Drain(static_cast<uint32_t>(ctx->currentRenderFrame), vf.instanceCount, [&](uint32_t offset, uint32_t count) {
             const size_t base = vf.instancePayload.Size();
             vf.instancePayload.ResizeUninitialized(base + count);
             memcpy(vf.instancePayload.Data() + base, storeInstances + offset, count * sizeof(Instance));
@@ -299,11 +305,12 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
     //
     {
         ZoneScopedN("ModelMatrices");
-        const Model* storeModels = state->modelStore.Models();
-        vf.modelCount = state->modelStore.GetWatermark();
+        Engine::ModelStore& modelStore = registry.ServiceMut<Engine::ModelStore>();
+        const Model* storeModels = modelStore.Models();
+        vf.modelCount = modelStore.GetWatermark();
         vf.modelPayload.Clear();
         vf.modelRuns.Clear();
-        state->modelStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+        modelStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
             const size_t base = vf.modelPayload.Size();
             vf.modelPayload.ResizeUninitialized(base + count);
             memcpy(vf.modelPayload.Data() + base, storeModels + offset, count * sizeof(Model));
@@ -350,8 +357,11 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
             vf.materialRuns.PushBack(Core::DirtyRun{offset, count});
         });
     }
+}
 
-    //
+void GatherSkyAndFog(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer)
+{
+    ZoneScoped;
     {
         ZoneScopedN("Skybox Selection");
         int32_t bestPriority = INT32_MIN;
@@ -373,7 +383,6 @@ void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, E
         }
     }
 
-    //
     {
         ZoneScopedN("Volumetric Fog Selection");
         int32_t bestPriority = INT32_MIN;
@@ -657,7 +666,7 @@ template<typename LightComponent, typename LightRuntime>
 static void ResolveBakedShadow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::ViewFamily& vf, const LightComponent& light, LightRuntime& runtime, bool bActive)
 {
     Engine::IAssetLoader& assets = registry.Assets();
-    const LightInfo* lights = state->analyticLightStore.Lights();
+    const LightInfo* lights = registry.Service<Engine::AnalyticLightStore>().Lights();
     const Engine::IAssetLoader::ShadowMapInfo* info = light.shadowMode == Component::LightShadowMode::Baked ? assets.GetShadowMapInfo(light.shadowId) : nullptr;
     const bool bUsable = info != nullptr && runtime.lightSlot != Engine::AnalyticLightStore::INVALID_SLOT && Engine::IsShadowBakeCurrent(info->key, lights[runtime.lightSlot]);
     if (!bUsable) {
@@ -690,7 +699,7 @@ void ResolveBakedShadows(Engine::EngineContext* ctx, Engine::EngineState* state,
     }
 }
 
-static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::InstanceStore& store, const LightInfo* lights, const Core::ViewFamily& vf, uint8_t* outFaces)
+static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, const LightInfo* lights, const Core::ViewFamily& vf, uint8_t* outFaces)
 {
     const auto bakedCount = static_cast<uint32_t>(vf.bakedShadowLights.Size());
     if (bakedCount == 0) { return; }
@@ -714,10 +723,12 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
         sphere[12] = light.range;
     }
 
-    const uint32_t watermark = store.GetWatermark();
+    const Engine::InstanceRecords& records = registry.Service<Engine::InstanceRecords>();
+    const Engine::InstanceWorldBounds& worldBounds = registry.Service<Engine::InstanceWorldBounds>();
+    const uint32_t watermark = records.GetWatermark();
     for (uint32_t slot = 0; slot < watermark; ++slot) {
-        const Engine::InstanceSource& inst = store[slot];
-        const Vec4& bounds = store.GetWorldBounds(slot);
+        const Engine::InstanceSource& inst = records[slot];
+        const Vec4& bounds = worldBounds.Get(slot);
         if (!inst.bVisible || bounds.w <= 0.0f || (inst.flags & INSTANCE_FLAG_BAKE_STATIC) != 0u) { continue; }
 
         const __m128 cx = _mm_set1_ps(bounds.x);
@@ -749,13 +760,13 @@ static void FindBakedLightMoverFaces(Engine::EngineContext* ctx, const Engine::I
     }
 }
 
-static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
+static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::ViewFamily& vf, const LightInfo* lights, uint32_t lightCount)
 {
     using Selection = Engine::LocalShadowSelection;
 
     const Engine::LightingState& lighting = state->lighting;
-    Selection& selection = state->localShadowSelection;
-    const Core::Span<const Vec4> changes = state->instanceStore.GetBoundsChanges();
+    Selection& selection = registry.ServiceMut<Engine::LocalShadowSelection>();
+    const Core::Span<const Vec4> changes = registry.Service<Engine::InstanceBoundsChanges>().Get();
     if (!lighting.localShadows.bEnabled || lighting.lightingMode != Core::LightingMode::Analytic) {
         selection = {};
     }
@@ -796,7 +807,7 @@ static void SelectLocalShadows(Engine::EngineContext* ctx, Engine::EngineState* 
             bakedMask[baked.lightIndex >> 5] |= 1u << (baked.lightIndex & 31u);
         }
         uint8_t moverFaces[MAX_ANALYTIC_LIGHTS] = {};
-        FindBakedLightMoverFaces(ctx, state->instanceStore, lights, vf, moverFaces);
+        FindBakedLightMoverFaces(ctx, state, registry, lights, vf, moverFaces);
         uint32_t skipMask[MAX_ANALYTIC_LIGHTS / 32];
         memcpy(skipMask, bakedMask, sizeof(skipMask));
         for (const Core::BakedShadowLight& baked : vf.bakedShadowLights) {
@@ -903,22 +914,25 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
     ZoneScoped;
     Core::ViewFamily& vf = frameBuffer->mainViewFamily;
 
-    state->analyticLightStore.Tick(ctx->currentRenderFrame);
-    state->triLightStore.Tick(ctx->currentRenderFrame);
+    Engine::AnalyticLightStore& analyticLightStore = registry.ServiceMut<Engine::AnalyticLightStore>();
+    Engine::TriLightStore& triLightStore = registry.ServiceMut<Engine::TriLightStore>();
+    Engine::InstanceBoundsChanges& instanceBoundsChanges = registry.ServiceMut<Engine::InstanceBoundsChanges>();
+    analyticLightStore.Tick(ctx->currentRenderFrame);
+    triLightStore.Tick(ctx->currentRenderFrame);
 
-    const uint32_t analyticWatermark = state->analyticLightStore.GetWatermark();
-    const LightInfo* storeLights = state->analyticLightStore.Lights();
+    const uint32_t analyticWatermark = analyticLightStore.GetWatermark();
+    const LightInfo* storeLights = analyticLightStore.Lights();
     vf.analyticLightCount = analyticWatermark;
     vf.lightRuns.Clear();
     vf.lightPayload.Clear();
 
-    state->analyticLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
+    analyticLightStore.DrainDirty(static_cast<uint32_t>(ctx->currentRenderFrame), [&](uint32_t offset, uint32_t count) {
         const size_t base = vf.lightPayload.Size();
         vf.lightPayload.ResizeUninitialized(base + count);
         memcpy(vf.lightPayload.Data() + base, storeLights + offset, count * sizeof(LightInfo));
         vf.lightRuns.PushBack(Core::DirtyRun{offset, count});
     });
-    const Core::Span<const Vec4> boundsChanges = state->instanceStore.GetBoundsChanges();
+    const Core::Span<const Vec4> boundsChanges = instanceBoundsChanges.Get();
     vf.boundsChanges.Clear();
     vf.bBoundsChangesOverflow = boundsChanges.Size() > Core::MAX_BOUNDS_CHANGES;
     if (!vf.bBoundsChangesOverflow) {
@@ -926,10 +940,9 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
             vf.boundsChanges.PushBack(change);
         }
     }
-    SelectLocalShadows(ctx, state, vf, storeLights, analyticWatermark);
-    state->instanceStore.ClearBoundsChanges();
+    SelectLocalShadows(ctx, state, registry, vf, storeLights, analyticWatermark);
+    instanceBoundsChanges.Clear();
 
-    Engine::TriLightStore& triLightStore = state->triLightStore;
     Engine::EmissiveDebugState& emissiveDebug = state->debug.emissive;
     emissiveDebug.entries.Clear();
     emissiveDebug.bEntriesTruncated = false;
@@ -968,7 +981,7 @@ void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine
     vf.emissiveMeshCount = triLightStore.GetMeshWatermark();
     if (state->debug.restir.bEmissiveTriangleLights) {
         ZoneScopedN("EmissiveTriangleLights");
-        Engine::InstanceStore& store = state->instanceStore;
+        const Engine::InstanceRecords& store = registry.Service<Engine::InstanceRecords>();
 
         const uint32_t meshWatermark = triLightStore.GetMeshWatermark();
         if (ctx->frameStatus.bEmissiveLightsPipelineReady) {
@@ -1482,7 +1495,7 @@ void GatherLocalShadowDebugDraws(Engine::EngineContext* ctx, Engine::EngineState
     ZoneScoped;
     if (!state->debug.localShadow.bDrawViews) { return; }
     Core::ViewFamily& viewFamily = frameBuffer->mainViewFamily;
-    const Engine::LocalShadowSelection& selection = state->localShadowSelection;
+    const Engine::LocalShadowSelection& selection = registry.Service<Engine::LocalShadowSelection>();
 
     static constexpr glm::vec4 TILE_COLORS[] = {{1.0f, 0.2f, 0.2f, 1.0f}, {0.2f, 1.0f, 0.2f, 1.0f}, {0.2f, 0.4f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.2f, 1.0f},
                                                 {1.0f, 0.2f, 1.0f, 1.0f}, {0.2f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.6f, 0.2f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};

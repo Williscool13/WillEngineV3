@@ -712,7 +712,7 @@ static void DebugViewButton(Engine::EngineState* state, const char* label, const
     }
 }
 
-void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
+void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry)
 {
     bool& bOpen = state->editor.windowOpen[EDITOR_WINDOW_DEBUG_VIEW];
     if (!bOpen) { return; }
@@ -963,7 +963,7 @@ void DrawDebugViewWindow(Engine::EngineContext* ctx, Engine::EngineState* state)
             Widgets::Checkbox("Freeze##localshadow", &state->debug.localShadow.bFreeze, "Holds the shadowed lights and their views so they can be inspected from elsewhere.");
             Widgets::Checkbox("Caster Change Bodies##localshadow", &state->debug.localShadow.bDrawCasterChangeBodies,
                               "Draws the physics shape of every mesh whose bounds are being rewritten (the caster changes), up to a few frames after it last moved. Meshes without a body are not drawn.");
-            const Engine::LocalShadowSelection& selection = state->localShadowSelection;
+            const Engine::LocalShadowSelection& selection = registry.Service<Engine::LocalShadowSelection>();
             ImGui::Text("Shadowed: %u lights, %d/%d views, %d redrawn, %u caster changes", selection.lightCount, std::popcount(selection.activeTiles), state->lighting.localShadows.viewBudget,
                         std::popcount(selection.dirtyTiles), selection.boundsChangeCount);
             Widgets::EndSection();

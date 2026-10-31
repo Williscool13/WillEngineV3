@@ -66,9 +66,9 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 const MeshReleasePayload& release = command.payload.meshRelease;
                 Core::RangeAllocator::Range range{release.rangeOffset, release.rangeCount};
                 Core::RangeAllocator::Range modelRange{release.modelRangeOffset, release.modelRangeCount};
-                state->instanceStore.ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), range);
+                registry.ServiceMut<Engine::InstanceStore>().ReleaseAndFree(&registry.ServiceMut<Engine::MaterialManager>(), &registry.ServiceMut<Engine::TriLightStore>(), range);
                 if (modelRange.IsValid()) {
-                    state->modelStore.Free(modelRange);
+                    registry.ServiceMut<Engine::ModelStore>().Free(modelRange);
                 }
                 if (release.modelHandle.IsValid()) {
                     registry.Assets().UnloadModel(release.modelHandle);
@@ -82,7 +82,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 if (registry.Valid(command.entity)) {
                     if (auto* runtime = registry.TryGetMut<Component::AreaLightRuntime>(command.entity)) {
                         if (runtime->lightSlot == AnalyticLightStore::INVALID_SLOT) {
-                            runtime->lightSlot = state->analyticLightStore.Allocate();
+                            runtime->lightSlot = registry.ServiceMut<Engine::AnalyticLightStore>().Allocate();
                         }
                     }
                 }
@@ -92,7 +92,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
                 if (registry.Valid(command.entity)) {
                     if (auto* runtime = registry.TryGetMut<Component::SphereLightRuntime>(command.entity)) {
                         if (runtime->lightSlot == AnalyticLightStore::INVALID_SLOT) {
-                            runtime->lightSlot = state->analyticLightStore.Allocate();
+                            runtime->lightSlot = registry.ServiceMut<Engine::AnalyticLightStore>().Allocate();
                         }
                     }
                 }
@@ -101,7 +101,7 @@ void PlaybackCommands(EngineContext* ctx, EngineState* state, SystemRegistry& re
             case CommandType::LightSlotFree: {
                 uint32_t slot = command.payload.lightSlot;
                 if (slot != AnalyticLightStore::INVALID_SLOT) {
-                    state->analyticLightStore.Free(slot);
+                    registry.ServiceMut<Engine::AnalyticLightStore>().Free(slot);
                 }
                 break;
             }

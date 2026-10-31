@@ -24,6 +24,8 @@ namespace Engine
 class AnalyticLightStore
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "AnalyticLightStore";
+
     static constexpr uint32_t INVALID_SLOT = ~0u;
     static constexpr uint32_t REUSE_DELAY_FRAMES = 4;
 

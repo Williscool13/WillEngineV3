@@ -56,6 +56,8 @@ enum class DebugViewAspect
 
 struct RenderView
 {
+    static constexpr const char* COMPONENT_NAME = "RenderView";
+
     ViewData currentViewData;
     ViewData previousViewData;
 
@@ -75,6 +77,8 @@ struct DirectionalLight
 
 struct VolumetricFog
 {
+    static constexpr const char* COMPONENT_NAME = "VolumetricFog";
+
     glm::vec3 albedo{1.0f, 1.0f, 1.0f};
     float density{0.005f}; // extinction per metre at baseHeight
     float heightFalloff{0.1f}; // per metre above baseHeight

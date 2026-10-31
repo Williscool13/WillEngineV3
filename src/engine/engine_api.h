@@ -74,6 +74,7 @@ struct PhysicsState
 /** This frame's shadowed local lights and their views  */
 struct LocalShadowSelection
 {
+    static constexpr const char* COMPONENT_NAME = "LocalShadowSelection";
     static constexpr uint32_t FREE_TILE = ~0u;
 
     Core::Array<Core::LocalShadowLight, LOCAL_SHADOW_MAX_VIEWS> lights{};
@@ -251,6 +252,8 @@ struct DDGIConvergeBoost
 
 struct FrameRequests
 {
+    static constexpr const char* COMPONENT_NAME = "FrameRequests";
+
     bool bWantsScreenshot{false};
     /** Empty means the renderer picks a timestamped name under the user screenshots folder. */
     Core::InlineString<512> screenshotPath{};
@@ -292,6 +295,8 @@ struct AssetLoadState
 
 struct SceneState
 {
+    static constexpr const char* COMPONENT_NAME = "SceneState";
+
     StringID currentSceneId{0};
     Core::InlineString<128> currentSceneName{};
     StringID currentCheckpointId{};
@@ -340,12 +345,14 @@ struct EngineState
     // todo: remove
     FontHandle uiFont{FontHandle::INVALID};
 
+private:
     InstanceStore instanceStore{};
     ModelStore modelStore{};
     AnalyticLightStore analyticLightStore{};
     LocalShadowSelection localShadowSelection{};
     TriLightStore triLightStore{};
 
+public:
     AssetLoadState assetLoad{};
     BuiltinAssets builtinAssets{};
 
@@ -369,6 +376,8 @@ struct EngineState
     Console::ConsoleState console{};
     ProjectConfig projectConfig{};
     Args::LaunchArgs* launchArgs{nullptr};
+
+    friend class WillEngine;
 };
 
 class EngineAPI

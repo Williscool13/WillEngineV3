@@ -27,6 +27,8 @@ struct StaticModel;
 class TriLightStore
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "TriLightStore";
+
     using Range = Core::RangeAllocator::Range;
 
     static constexpr uint32_t INVALID_MESH_SLOT = ~0u;

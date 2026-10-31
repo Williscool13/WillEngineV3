@@ -77,6 +77,9 @@ void SyncLightSurfaces(Engine::EngineContext* ctx, Engine::EngineState* state, E
 /** Serial pre-pass: kicks the lazy cubemap load for skybox components so the gathers never mutate. */
 void ResolveSkyboxCubemaps(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry);
 
+/** Picks the winning skybox and volumetric fog. Separate from GatherRenderables so the settings chain does not wait on its store drains. */
+void GatherSkyAndFog(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
+
 void GatherRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 void GatherTextRenderables(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);
 void GatherLights(Engine::EngineContext* ctx, Engine::EngineState* state, Engine::SystemRegistry& registry, Core::FrameBuffer* frameBuffer);

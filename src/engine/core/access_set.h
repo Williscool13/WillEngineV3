@@ -20,6 +20,7 @@ inline constexpr uint32_t MAX_AFTER_ENTRIES = 4;
 /**
  * Writes conflict with every other access to the same id. DeferredWrites apply after the wave in registration order, so they do not conflict
  * with each other, only with Reads and Writes. After names earlier-registered systems that must finish first.
+ * Engine state only needs a name if two systems in one phase touch it and one writes. State that only exclusive systems write stays undeclared; they run alone.
  */
 struct AccessSet
 {
@@ -34,34 +35,25 @@ struct AccessSet
 
 inline const AccessSet AccessSet::EXCLUSIVE{.bExclusive = true};
 
-/** Accessing a parent is accessing all of its parts. Declare a part instead to overlap with systems touching the others. */
-struct AccessGroup
-{
-    StringID parent;
-    StringID parts[3];
-};
+/** A type's `using ACCESS_PARTS = AccessParts<...>`: accessing it is accessing all of these. Declare a part instead to overlap with systems touching the others. */
+template<typename... T>
+struct AccessParts
+{};
 
-inline constexpr AccessGroup ACCESS_GROUPS[] = {
-    {"MaterialManager"_sid, {"MaterialStore"_sid, "MaterialUploadDirty"_sid, "MaterialChangedDirty"_sid}},
-};
+template<typename T>
+void PushAccess(Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& list);
 
-inline void ExpandAccessList(Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& list)
+template<typename... T>
+void PushAccessParts(Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& list, AccessParts<T...>)
 {
-    for (const AccessGroup& group : ACCESS_GROUPS) {
-        const uint32_t count = static_cast<uint32_t>(list.Size());
-        for (uint32_t i = 0; i < count; ++i) {
-            if (list[i] != group.parent) { continue; }
-            for (const StringID part : group.parts) { list.PushBack(part); }
-            break;
-        }
-    }
+    (PushAccess<T>(list), ...);
 }
 
-inline void ExpandAccessGroups(AccessSet& set)
+template<typename T>
+void PushAccess(Core::InlineVector<StringID, MAX_ACCESS_ENTRIES>& list)
 {
-    ExpandAccessList(set.reads);
-    ExpandAccessList(set.writes);
-    ExpandAccessList(set.deferredWrites);
+    list.PushBack(AccessId<T>());
+    if constexpr (requires { typename T::ACCESS_PARTS; }) { PushAccessParts(list, typename T::ACCESS_PARTS{}); }
 }
 
 template<typename... T>
@@ -90,19 +82,19 @@ const void* SystemId(Fn fn)
 template<typename... T>
 void AppendAccess(AccessSet& set, Reads<T...>)
 {
-    (set.reads.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
+    (PushAccess<std::remove_cv_t<T>>(set.reads), ...);
 }
 
 template<typename... T>
 void AppendAccess(AccessSet& set, Writes<T...>)
 {
-    (set.writes.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
+    (PushAccess<std::remove_cv_t<T>>(set.writes), ...);
 }
 
 template<typename... T>
 void AppendAccess(AccessSet& set, DeferredWrites<T...>)
 {
-    (set.deferredWrites.PushBack(AccessId<std::remove_cv_t<T>>()), ...);
+    (PushAccess<std::remove_cv_t<T>>(set.deferredWrites), ...);
 }
 
 template<auto... Fns>

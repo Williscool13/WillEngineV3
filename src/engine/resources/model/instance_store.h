@@ -13,6 +13,7 @@
 #include "core/memory/dirty_bits.h"
 #include "core/memory/range_allocator.h"
 #include "core/types/math.h"
+#include "engine/core/access_set.h"
 #include "engine/core/material_id.h"
 #include "render/shaders/flags_interop.h"
 #include "render/shaders/model_interop.h"
@@ -63,78 +64,148 @@ struct InstanceFill
     bool bEmissiveLight{false};
 };
 
+/** World spheres of everything added, moved, hidden, shown, re-materialed or removed since the last clear. */
+class InstanceBoundsChanges
+{
+public:
+    static constexpr const char* COMPONENT_NAME = "InstanceBoundsChanges";
+
+    void Push(const Vec4& sphere) { changes.PushBack(sphere); }
+
+    [[nodiscard]] Core::Span<const Vec4> Get() const { return {changes.Data(), changes.Size()}; }
+
+    void Clear() { changes.Clear(); }
+
+private:
+    Core::Vector<Vec4> changes{};
+
+    friend class InstanceStore;
+};
+
+/** Last world sphere per slot. */
+class InstanceWorldBounds
+{
+public:
+    static constexpr const char* COMPONENT_NAME = "InstanceWorldBounds";
+
+    [[nodiscard]] const Vec4& Get(uint32_t slot) const { return bounds[slot]; }
+
+    /** The previous sphere and the new one both join the bounds changes. */
+    void Set(uint32_t slot, const Vec4& sphere, InstanceBoundsChanges& changes)
+    {
+        PushChange(slot, changes);
+        bounds[slot] = sphere;
+        PushChange(slot, changes);
+    }
+
+private:
+    void PushChange(uint32_t slot, InstanceBoundsChanges& changes) const
+    {
+        if (bounds[slot].w > 0.0f) { changes.Push(bounds[slot]); }
+    }
+
+    Core::VirtualArray<Vec4> bounds{};
+
+    friend class InstanceStore;
+};
+
+/** Slots whose GPU Instance changed, one set per host buffer slot. */
+class InstanceDirty
+{
+public:
+    static constexpr const char* COMPONENT_NAME = "InstanceDirty";
+
+    /** Fn: emit(offset, count) */
+    template<typename Fn>
+    void Drain(uint32_t setIndex, uint32_t limit, Fn&& emit) { bits.Drain(setIndex, limit, std::forward<Fn>(emit)); }
+
+private:
+    Core::DirtyBits bits{};
+
+    friend class InstanceStore;
+};
+
+/**
+ * InstanceSource is the authority; the GPU Instance array is a projection of it rewritten on every mutation, dead while the slot is not visible. Nothing hands out a mutable InstanceSource.
+ */
+class InstanceRecords
+{
+public:
+    static constexpr const char* COMPONENT_NAME = "InstanceRecords";
+
+    const InstanceSource& operator[](uint32_t i) const { return sources[i]; }
+
+    [[nodiscard]] const Instance* Instances() const { return gpuInstances.Data(); }
+
+    [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges.GetStats(); }
+    [[nodiscard]] uint32_t GetWatermark() const { return ranges.GetWatermark(); }
+    [[nodiscard]] bool IsInitialized() const { return ranges.IsInitialized(); }
+
+private:
+    Core::VirtualArray<InstanceSource> sources{};
+    Core::VirtualArray<Instance> gpuInstances{};
+    Core::RangeAllocator ranges{};
+
+    friend class InstanceStore;
+};
 
 /**
  * The stable instance slot space: one slot per flattened mesh primitive (static, static-primitive, procedural, spline, text3d, light surfaces). A RangeAllocator hands out one contiguous run per entity; the slot index IS the GPU instance index. Raw Allocate/Free leave material lifetimes to callers; AllocateSingleMeshRange/ReleaseAndFree manage the per-entry material refs and tri-light reservations. Callers own GPU uploads. Not thread-safe.
- * InstanceSource is the authority; the GPU Instance array is a projection of it rewritten on every mutation, dead while the slot is not visible. Nothing hands out a mutable InstanceSource.
- * Every record write also dirties the slot's tri-light mesh.
+ * Every record write also dirties the slot's tri-light mesh, which is why those methods take the TriLightStore.
  */
 class InstanceStore
 {
 public:
+    static constexpr const char* COMPONENT_NAME = "InstanceStore";
+    using ACCESS_PARTS = AccessParts<InstanceRecords, InstanceWorldBounds, InstanceBoundsChanges, InstanceDirty>;
+
     using Range = Core::RangeAllocator::Range;
     static constexpr Instance DEAD_INSTANCE{.primitiveIndex = DEAD_SLOT_PRIMITIVE_INDEX};
 
-    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, TriLightStore* triLightStore, Core::AllocTag tag = Core::AllocTag::RenderMesh);
+    void Init(uint32_t capacity, Core::TlsfAllocator* alloc, Core::VirtualMemoryManager* vm, Core::AllocTag tag = Core::AllocTag::RenderMesh);
 
     Range Allocate(uint32_t count);
 
-    Range AllocateSingleMeshRange(MaterialManager* materialManager, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
+    Range AllocateSingleMeshRange(MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, MaterialID material, uint32_t modelSlot, bool bEmissiveLight);
 
-    void ReleaseAndFree(MaterialManager* materialManager, Range& range);
+    void ReleaseAndFree(MaterialManager* materialManager, TriLightStore* triLightStore, Range& range);
 
     // Writes
-    void FillEntry(uint32_t slot, MaterialManager* materialManager, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
+    void FillEntry(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, StaticModel* model, const PrimitiveProperty& primitive, const InstanceFill& fill);
 
-    void SetMaterial(uint32_t slot, MaterialManager* materialManager, MaterialID material);
+    void SetMaterial(uint32_t slot, MaterialManager* materialManager, TriLightStore* triLightStore, MaterialID material);
 
-    void SetLightIndex(uint32_t slot, uint32_t lightIndex);
+    void SetLightIndex(uint32_t slot, TriLightStore* triLightStore, uint32_t lightIndex);
 
-    void SetRenderState(Range range, bool bVisible, uint32_t flags, uint64_t stableId);
+    void SetRenderState(Range range, TriLightStore* triLightStore, bool bVisible, uint32_t flags, uint64_t stableId);
 
-    const InstanceSource& operator[](uint32_t i) const { return instances_[i]; }
+    const InstanceSource& operator[](uint32_t i) const { return records[i]; }
 
-    const Instance* Instances() const { return gpuInstances_.Data(); }
+    void MarkAllDirty() { dirty.bits.MarkRange(0, GetWatermark()); }
 
-    template<typename Fn>
-    void DrainDirty(uint32_t setIndex, Fn&& emit) { dirty_.Drain(setIndex, GetWatermark(), std::forward<Fn>(emit)); }
+    [[nodiscard]] uint32_t VerifyRecords(const TriLightStore* triLightStore) const;
 
-    void MarkAllDirty() { dirty_.MarkRange(0, GetWatermark()); }
+    [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return records.GetStats(); }
+    [[nodiscard]] uint32_t GetWatermark() const { return records.GetWatermark(); }
+    [[nodiscard]] bool IsInitialized() const { return records.IsInitialized(); }
 
-    [[nodiscard]] uint32_t VerifyRecords() const;
-
-    /** Records the slot's world bounding sphere. The previous sphere and the new one both join the bounds changes. */
-    void SetWorldBounds(uint32_t slot, const Vec4& bounds);
-
-    [[nodiscard]] const Vec4& GetWorldBounds(uint32_t slot) const { return worldBounds_[slot]; }
-
-    /** World spheres of everything added, moved, hidden, shown, re-materialed or removed since the last clear. */
-    [[nodiscard]] Core::Span<const Vec4> GetBoundsChanges() const { return {boundsChanges_.Data(), boundsChanges_.Size()}; }
-
-    void ClearBoundsChanges() { boundsChanges_.Clear(); }
-
-    [[nodiscard]] Core::RangeAllocator::Stats GetStats() const { return ranges_.GetStats(); }
-    [[nodiscard]] uint32_t GetWatermark() const { return ranges_.GetWatermark(); }
-    [[nodiscard]] bool IsInitialized() const { return ranges_.IsInitialized(); }
+    [[nodiscard]] InstanceRecords* GetRecords() { return &records; }
+    [[nodiscard]] InstanceWorldBounds* GetWorldBounds() { return &worldBounds; }
+    [[nodiscard]] InstanceBoundsChanges* GetBoundsChanges() { return &boundsChanges; }
+    [[nodiscard]] InstanceDirty* GetDirty() { return &dirty; }
 
 private:
     /** Private because it returns the slots without releasing their materials or tri-light runs. */
     void Free(Range range);
 
-    [[nodiscard]] Instance MakeRecord(uint32_t slot) const;
+    [[nodiscard]] Instance MakeRecord(uint32_t slot, const TriLightStore* triLightStore) const;
 
-    void WriteRecord(uint32_t slot);
+    void WriteRecord(uint32_t slot, TriLightStore* triLightStore);
 
-    void PushBoundsChange(uint32_t slot);
-
-    Core::VirtualArray<InstanceSource> instances_{};
-    Core::VirtualArray<Instance> gpuInstances_{};
-    // Last world sphere per slot
-    Core::VirtualArray<Vec4> worldBounds_{};
-    Core::Vector<Vec4> boundsChanges_{};
-    Core::RangeAllocator ranges_{};
-    Core::DirtyBits dirty_{};
-    TriLightStore* triLightStore_{nullptr};
+    InstanceRecords records{};
+    InstanceWorldBounds worldBounds{};
+    InstanceBoundsChanges boundsChanges{};
+    InstanceDirty dirty{};
 };
 } // Engine
 

@@ -291,9 +291,6 @@ public:
     GPUProfileSnapshot CollectGPUProfile(uint32_t frameIndex);
 
 private:
-    friend class RenderPass;
-    friend class RenderGraphInspector;
-
     void ValidatePassDeclaresTexture(uint32_t textureIndex);
     void ValidatePassDeclaresBuffer(uint32_t bufferIndex);
 
@@ -447,6 +444,9 @@ private:
     void ExportGraphviz();
 
     static void AppendUsageChain(PhysicalResource& phys, StringID resourceId, bool bCanAlias, bool debugLogging);
+
+    friend class RenderPass;
+    friend class RenderGraphInspector;
 };
 } // Render
 
